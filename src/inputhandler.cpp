@@ -163,6 +163,7 @@ bool TInputHandler::handleSetOption(TInputParser& parser) {
 bool TInputHandler::handleNewGame() {
     _fen = _defaultFen;
     engine()->newGame(_fen);
+	return true;
 }
 
 bool TInputHandler::handlePosition(TInputParser& parser) {
