@@ -16,12 +16,12 @@
 bool TInputHandler::handle(std::string cmd) {
     bool result = true;
     TInputParser parser(cmd);
-    
+
     //std::ofstream myfile;
     //myfile.open("uci.log", std::ios::app);
     //myfile << "> " << cmd << std::endl;
     //myfile.close();
-    
+
     std::string token;
     if (parser >> token) { // operator>>() skips any whitespace
         if (token == "quit" || token == "exit" || token == "bye") {
@@ -146,8 +146,8 @@ bool TInputHandler::handleSetOption(TInputParser& parser) {
                         //todo
                         _opponentString = value;
                     }
-                    
-                    
+
+
                 }
             } else {
                 //toggle option
@@ -163,7 +163,7 @@ bool TInputHandler::handleSetOption(TInputParser& parser) {
 bool TInputHandler::handleNewGame() {
     _fen = _defaultFen;
     engine()->newGame(_fen);
-	return true;
+    return true;
 }
 
 bool TInputHandler::handlePosition(TInputParser& parser) {

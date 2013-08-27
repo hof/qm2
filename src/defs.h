@@ -9,34 +9,25 @@
 #define	DEFS_H
 
 #include <assert.h>
+#include <stdint.h>
 
 /* Todo: optimize for 64 bits */
 
-typedef unsigned long long U64;
+typedef uint64_t U64;
 
-#define C64(x) x##ULL
+#define C64(x) x##UL
 
 static const U64 BIT32 = (C64(1) << 32);
 
 inline unsigned bitScanForward(U64 x) {
     assert(x);
-    if (x < BIT32) {
-        asm ("bsf %0, %0" : "=r" (x) : "0" (x));
-        return x;
-    }
-    x >>= 32;
-    asm ("bsf %0, %0" : "=r" (x) : "0" (x));
-    return x + 32;
+    asm ("bsfq %0, %0" : "=r" (x) : "0" (x));
+    return x;
 }
 
 inline unsigned bitScanReverse(U64 x) {
     assert(x);
-    if (x >= BIT32) {
-        x >>= 32;
-        asm ("bsr %0, %0" : "=r" (x) : "0" (x));
-        return x+32;
-    } 
-    asm ("bsr %0, %0" : "=r" (x) : "0" (x));
+    asm ("bsrq %0, %0" : "=r" (x) : "0" (x));
     return x;
 }
 
