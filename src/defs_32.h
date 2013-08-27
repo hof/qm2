@@ -10,8 +10,6 @@
 
 #include <assert.h>
 
-/* Todo: optimize for 64 bits */
-
 typedef unsigned long long U64;
 
 #define C64(x) x##ULL
