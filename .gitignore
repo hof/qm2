@@ -1,3 +1,9 @@
 /CMakeFiles/*
 /CMakeCache.txt
 /nbproject/*
+/Makefile
+/cmake_install.cmake
+/src/CMakeFiles/
+/src/Makefile
+/src/cmake_install.cmake
+/src/qm2.exe
