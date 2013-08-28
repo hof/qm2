@@ -11,8 +11,6 @@
 #include <assert.h>
 #include <stdint.h>
 
-/* Todo: optimize for 64 bits */
-
 typedef uint64_t U64;
 
 #define C64(x) x##UL
@@ -21,25 +19,24 @@ static const U64 BIT32 = (C64(1) << 32);
 
 inline unsigned bitScanForward(U64 x) {
     assert(x);
-    asm ("bsfq %0, %0" : "=r" (x) : "0" (x));
+    asm ("bsfq %0, %0" : "=r" (x) : "0" (x)); 
     return x;
 }
 
 inline unsigned bitScanReverse(U64 x) {
     assert(x);
-    asm ("bsrq %0, %0" : "=r" (x) : "0" (x));
+    asm ("bsrq %0, %0" : "=r" (x) : "0" (x)); 
     return x;
 }
 
 #define BSF(x) (bitScanForward(x))
 #define BSR(x) (bitScanReverse(x))
 
-inline unsigned popCount(U64 x) {
-    x = x - ((x >> 1) & C64(0x5555555555555555));
+inline unsigned popCount(U64 x) { 
+    x = (x & C64(0x5555555555555555)) + ((x >> 1) & C64(0x5555555555555555));
     x = (x & C64(0x3333333333333333)) + ((x >> 2) & C64(0x3333333333333333));
-    x = (x + (x >> 4)) & C64(0x0f0f0f0f0f0f0f0f);
-    x = (x * C64(0x0101010101010101)) >> 56;
-    return x;
+    x = (x & C64(0x0F0F0F0F0F0F0F0F)) + ((x >> 4) & C64(0x0F0F0F0F0F0F0F0F));
+    return (x * C64(0x0101010101010101)) >> 56;
 }
 
 inline unsigned popCount(U64 x, bool checkZero) {
