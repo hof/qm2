@@ -22,4 +22,5 @@ link_directories(${QM2_BINARY_DIR}/src)
 
 add_executable(qm2 main.cpp)
 
+target_link_libraries(QM2SRC pthread)
 target_link_libraries(qm2 QM2SRC)
