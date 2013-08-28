@@ -26,11 +26,19 @@ void TTimeManager::set(unsigned int myTime, int oppTime, int myInc, int oppInc, 
         timeForThisMove += (4*myInc)/5;
     }
     /*
-     * Bonus time when we have more time left than the opponent
+     * Bonus/Penalty time when we have more/less time left than the opponent
      */
     if (myTime > oppTime && myInc >= oppInc && movesToGo > 2 && timeForThisMove > 2000) {
         timeForThisMove += (myTime-oppTime)/4;
+    } else if (myTime < oppTime && movesToGo > 2) {
+        double factor = MAX(0.25, (1.0*myTime)/(1.0*oppTime));
+        double correction = MIN(timeForThisMove/3.0, (oppTime-myTime)/5);
+        timeForThisMove = factor*(timeForThisMove-correction);
     }
+    
+    /*
+     * 
+     */
     
     /*
      * Make sure the time never exceeds the limit
