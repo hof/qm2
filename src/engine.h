@@ -8,6 +8,7 @@
 #ifndef ENGINE_H
 #define	ENGINE_H
 
+#include <unistd.h>
 #include <sys/time.h>
 #include <threadsmanager.h>
 #include "board.h"
