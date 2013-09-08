@@ -253,6 +253,7 @@ void TBook::readPolyglotMove(TBoard* pos, TMove * move, int polyglotMove) {
     move->setMove(piece, ssq, tsq);
     move->capture = pos->Matrix[tsq];
     move->castle = 0;
+    move->en_passant = false;
     if (pos->boardFlags->epSquare && tsq == pos->boardFlags->epSquare) {
         if (piece == WPAWN) {
             move->capture = BPAWN;
@@ -272,17 +273,21 @@ void TBook::readPolyglotMove(TBoard* pos, TMove * move, int polyglotMove) {
         if (tsq == h8) {
             move->tsq = g8;
             move->castle = CASTLE_k;
+            move->capture = 0;
         } else if (tsq == a8) {
             move->tsq = c8;
             move->castle = CASTLE_q;
+            move->capture = 0;
         }
     } else if (piece == WKING && ssq == e1) {
         if (tsq == h1) {
             move->tsq = g1;
             move->castle = CASTLE_K;
+            move->capture = 0;
         } else if (tsq == a1) {
             move->tsq = c1;
             move->castle = CASTLE_Q;
+            move->capture = 0;
         }
     }
 }

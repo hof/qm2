@@ -112,10 +112,12 @@ struct TSearchStack {
 
     int materialScore;
     int pawnScore;
+    int kingScore;
+
     int shelterScoreW;
     int shelterScoreB;
     int gamePhase;
-    
+
     int reduce;
 
     U64 captureMask;
@@ -219,20 +221,24 @@ public:
         stack->pvCount = (stack + 1)->pvCount + 1;
     }
 
-    inline void getMaterialInfo() {
+    inline void getMaterialScore() {
         hashTable->mtLookup(this);
         if (stack->materialScore == SCORE_INVALID) {
             evaluateMaterial(this);
         }
     }
-    
-    inline void getPawnInfo() {
+
+    inline void getPawnScore() {
         hashTable->ptLookup(this);
         if (stack->pawnScore == SCORE_INVALID) {
             evaluatePawns(this);
         }
     }
- 
+
+    inline void getKingScore() {
+        evaluateKings(this);
+    }
+
     inline TSearchStack * getStack(int ply) {
         assert(ply >= 0 && ply <= MAX_PLY);
         return &_stack[ply];
@@ -245,8 +251,9 @@ public:
         stack->inCheck = false;
         stack->materialScore = (stack - 1)->materialScore;
         stack->pawnScore = (stack - 1)->pawnScore;
-        stack->shelterScoreW = (stack-1)->shelterScoreW;
-        stack->shelterScoreB = (stack-1)->shelterScoreB;
+        stack->shelterScoreW = (stack - 1)->shelterScoreW;
+        stack->shelterScoreB = (stack - 1)->shelterScoreB;
+        stack->kingScore = (stack - 1)->kingScore;
         stack->gamePhase = (stack - 1)->gamePhase;
         pos->forward();
         assert(stack == &_stack[pos->currentPly]);
@@ -265,21 +272,22 @@ public:
         stack->inCheck = givesCheck;
         pos->forward(move);
         if (move->capture || move->promotion) {
-            getMaterialInfo();
+            getMaterialScore();
         } else {
             stack->gamePhase = (stack - 1)->gamePhase;
             stack->materialScore = (stack - 1)->materialScore;
         }
-        if (move->piece != WPAWN && move->piece != BPAWN 
-                && move->piece != WKING && move->piece != BKING
-                && move->capture != WPAWN && move->capture != BPAWN
-                && pos->boardFlags->castlingFlags == (pos->boardFlags-1)->castlingFlags) {
-            stack->pawnScore = (stack-1)->pawnScore;
-            stack->shelterScoreW = (stack-1)->shelterScoreW;
-            stack->shelterScoreB = (stack-1)->shelterScoreB;
+        if (move->piece == WPAWN || move->piece == BPAWN
+                || move->piece == WKING || move->piece == BKING
+                || move->capture == WPAWN || move->capture == BPAWN
+                || pos->boardFlags->castlingFlags != (pos->boardFlags - 1)->castlingFlags) {
+            getPawnScore();
         } else {
-            getPawnInfo();
+            stack->pawnScore = (stack - 1)->pawnScore;
+            stack->shelterScoreW = (stack - 1)->shelterScoreW;
+            stack->shelterScoreB = (stack - 1)->shelterScoreB;
         }
+        getKingScore();
         assert(stack->gamePhase >= 0 && stack->gamePhase <= 16);
         assert(stack == &_stack[pos->currentPly]);
     }
@@ -312,6 +320,22 @@ public:
                 }
             }
         }
+    }
+
+    /*
+     * Helper function to reset the search stack. 
+     * This is used for self-playing games, where  
+     * MAX_PLY is not sufficient to hold a chess game. 
+     * Note: in UCI mode this is not an issue, because each position
+     * starts with a new stack. 
+     */
+    inline void resetStack() {
+        this->pos->currentPly = 0;
+        this->stack = this->rootStack;
+        this->pos->_boardFlags[0].copy(this->pos->boardFlags);
+        this->pos->boardFlags = &this->pos->_boardFlags[0];
+        this->nodes = 0;
+        this->stack->pvCount = 0;
     }
 
     std::string getPVString();

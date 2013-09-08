@@ -33,7 +33,6 @@ struct TGameSettings {
     int learnParam;
     double learnFactor;
 
-
     void clear() {
         maxDepth = MAX_PLY;
         maxTimePerMove = 0;
@@ -56,6 +55,7 @@ struct TGameSettings {
 class TEngine : public TThreadsManager {
 private:
     static void * _think(void * engineObjPtr);
+    static void * _learn(void * engineObjPtr);
     string _rootFen;
     THashTable * _hashTable;
     TInputHandler * _inputHandler;
@@ -96,7 +96,15 @@ public:
         }
         this->createThread(_think, this);
     }
-    
+
+    inline void learn() {
+        _engineStop = false;
+        if (_outputHandler) {
+            _outputHandler->engineStop = false;
+        }
+        this->createThread(_learn, this);
+    }
+
     inline void setPonder(bool doPonder) {
         _enginePonder = doPonder;
         if (_outputHandler) {
@@ -170,7 +178,7 @@ public:
             _hashTable->clear();
         }
     }
-    
+
 
     void analyse();
 };

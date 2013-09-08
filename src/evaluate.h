@@ -340,9 +340,13 @@ const char SHELTER_CASTLING_QUEENSIDE = 50;
 
 int evaluate(TSearchData * searchData, int alpha, int beta);
 
+int evaluateExp(TSearchData * searchData);
+
 void evaluateMaterial(TSearchData * searchData);
 
 void evaluatePawns(TSearchData * searchData);
+
+void evaluateKings(TSearchData * searchData);
 
 /*******************************************************************************
  * Helper functions

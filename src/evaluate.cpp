@@ -7,14 +7,25 @@ int evaluate(TSearchData * searchData, int alpha, int beta) {
     int result = searchData->stack->materialScore
             + searchData->stack->pawnScore
             + phasedScore(searchData->stack->gamePhase, pos->boardFlags->pctMG, pos->boardFlags->pctEG);
-    if (searchData->stack->shelterScoreW && pos->blackQueens) {
-        result += phasedScore(searchData->stack->gamePhase, searchData->stack->shelterScoreW, 0);
+    
+    
+    
+    if (searchData->learnParam == 1) {
+        //learning
+        result += evaluateExp(searchData); 
     }
-    if (searchData->stack->shelterScoreB && pos->whiteQueens) {
-        result -= phasedScore(searchData->stack->gamePhase, searchData->stack->shelterScoreB, 0);
-    }
+    
     result &= GRAIN;
     return pos->boardFlags->WTM ? result : -result;
+}
+
+/**
+ * Experimental evaluation for learning
+ * @param searchData search metadata object
+ * @return score the evaluation score
+ */
+int evaluateExp(TSearchData * searchData) {
+    return searchData->learnFactor * searchData->stack->kingScore;
 }
 
 /**
@@ -163,10 +174,6 @@ void evaluateMaterial(TSearchData * searchData) {
     searchData->hashTable->mtStore(searchData, value, phase);
 }
 
-/**
- * Evaluate pawn  score and king shelter
- * @param searchData search metadata object
- */
 
 void printBB(std::string msg, U64 bb) {
     std::cout << msg;
@@ -182,6 +189,11 @@ void printBB(std::string msg, U64 bb) {
     }
     std::cout << std::endl;
 }
+
+/**
+ * Evaluate pawn  score and king shelter
+ * @param searchData search metadata object
+ */
 
 void evaluatePawns(TSearchData * searchData) {
     TBoard * pos = searchData->pos;
@@ -325,5 +337,17 @@ void evaluatePawns(TSearchData * searchData) {
     searchData->stack->shelterScoreW = shelterScoreW;
     searchData->stack->shelterScoreB = shelterScoreB;
     searchData->hashTable->ptStore(searchData, pawnScore, shelterScoreW, shelterScoreB);
+}
+
+void evaluateKings(TSearchData * searchData) {
+    int score = 0;
+    TBoard * pos = searchData->pos;
+    if (searchData->stack->shelterScoreW && pos->blackQueens) {
+        score += phasedScore(searchData->stack->gamePhase, searchData->stack->shelterScoreW, 0);
+    }
+    if (searchData->stack->shelterScoreB && pos->whiteQueens) {
+        score -= phasedScore(searchData->stack->gamePhase, searchData->stack->shelterScoreB, 0);
+    }
+    searchData->stack->kingScore = score;
 }
 

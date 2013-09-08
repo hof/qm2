@@ -20,3 +20,6 @@
 /tests/testSearch.exe
 /tests/testPolyglot.exe
 /tests/testTT.exe
+/tests/testBits.exe
+/src/book.bin
+/src/qm2.exe.stackdump

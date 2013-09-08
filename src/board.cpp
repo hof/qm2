@@ -90,6 +90,7 @@ void TBoard::forward(TMove * move) {
         if (capture) {
             assert(capture != WKING && capture != BKING);
             if (move->en_passant) {
+                assert(move->piece == WPAWN || move->piece == BPAWN);
                 assert(Matrix[tsq] == EMPTY);
                 assert(boardFlags->epSquare == tsq);
                 assert(tsq >= a6 ? Matrix[tsq - 8] == BPAWN : Matrix[tsq + 8] == WPAWN);
