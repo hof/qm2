@@ -413,7 +413,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     std::cout << "\nGenerating game start positions" << std::endl;
 
     TBook * book = new TBook();
-    book->open("c:/work/ng/play/winboard/qm2/book.bin");
+    book->open("book.bin");
 
     TMoveList * bookMoves = &sd_root->stack->moveList;
     TMove actualMove;
