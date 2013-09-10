@@ -4,9 +4,12 @@
 
 int evaluate(TSearchData * searchData, int alpha, int beta) {
     TBoard * pos = searchData->pos;
-    int result = searchData->stack->materialScore
-            + searchData->stack->pawnScore
-            + phasedScore(searchData->stack->gamePhase, pos->boardFlags->pctMG, pos->boardFlags->pctEG);
+    int result = 0;
+    
+    result += searchData->stack->pawnScore;
+    result += searchData->stack->materialScore;
+    result += phasedScore(searchData->stack->gamePhase, pos->boardFlags->pctMG, pos->boardFlags->pctEG);
+    result += searchData->stack->kingScore;
     
     
     
@@ -25,7 +28,15 @@ int evaluate(TSearchData * searchData, int alpha, int beta) {
  * @return score the evaluation score
  */
 int evaluateExp(TSearchData * searchData) {
-    return searchData->learnFactor * searchData->stack->kingScore;
+    int result = 0;
+    int wrooks = searchData->pos->pieces[WROOK].count;
+    int brooks = searchData->pos->pieces[BROOK].count;
+    int wknights = searchData->pos->pieces[WKNIGHT].count;
+    int bknights = searchData->pos->pieces[BKNIGHT].count;
+    result += (wrooks-brooks) * (VKNIGHT-VROOK);
+    result += (wknights-bknights) * (VROOK-VKNIGHT);
+    result *= searchData->learnFactor;
+    return result;
 }
 
 /**

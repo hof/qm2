@@ -331,26 +331,35 @@ void TEngine::testPosition(TMove bestMove, int score, int maxTime, int maxDepth)
 
 /**
  * Learning by self-play. A factor for experimental evaluation is determined
- * by playing GAMECOUNT shallow fixed depth games, one side of the board has 
- * the experimental evaluation enabled, the other side not. 
- * 
- * This gives a (rough) indication if the exp. evaluation is plausible. It does
- * not replace engine testing under tournament conditions. 
+ * by playing GAMECOUNT shallow fixed depth games, one side of the board, 
+ * engine(learning), has the experimental evaluation enabled, the other side,
+ * engine(base), not. 
  * 
  * Typically, depth is set to <= 3 and the amount of games >= 1000 to obtain
  * significant results. 
  * 
  * A book.bin file is required to pre-calculate a set of random start positions
  * 
- * 1. Checks if the evaluation makes sense by giving the exp. evaluation the 
- *    exact opposite score (multiplied with factor -1). If there is no significant
- *    difference, the evaluation seems to not make any practical difference.
+ * 1. Checks if the evaluation seems plausible by giving the exp. evaluation the 
+ *    exact opposite score (multiplied with factor -1). 
+ *    Example: for testing king safety evaluation, the learning side will expose 
+ *    the king in stead of protecting it. This should result in many lost games 
+ *    and is much easier to measure than a positive multiplication factor. 
  * 
- * 2. Continues to find the most optimal factor, first in big steps (0.5), followed
- *    by a refined factor (0.25). 
+ *    If there is no significant difference in wins/losses, it's assumed the 
+ *    evaluation does not have any practical difference and the self-play is
+ *    canceled.
  * 
- * The end-result is the best multiplication factor for the exp. evaluation. 
- *    
+ * 2. Self-playing games of GAMECOUNT matches: engine(factor) vs engine(0) 
+ *    for the following multiplication factors: 0.25, 0.5, 0.75, 1.0, 1.25, 1.5 
+ *    and 1.75.
+ * 
+ * The end-result is the best multiplication factor for the exp. evaluation, and
+ * the median factor. The median factor indicates if the exp. evaluation score
+ * is correct or should be adjusted to a higher/lower value.
+ * 
+ * This learning method gives a (rough) indication if the exp. evaluation is 
+ * plausible. It does not replace engine testing under tournament conditions.   
  * 
  * @param engineObjPtr pointer to engine object
  * @return void
@@ -361,46 +370,34 @@ void * TEngine::_learn(void * engineObjPtr) {
      * Constants
      */
 
-    const int MAXDEPTH = 2;
-    const int GAMECOUNT = 10000; //Sample size, 920+ recommended. Use even numbers. 
+    const int MAXDEPTH = 1; //default: depth 2
+    const int GAMECOUNT = 5000; //Sample size, 920+ recommended. Use even numbers. 
 
     const int STOPSCORE = 300; //if the score is higher than this for both sides, the game is consider a win
     const int MAXPLIES = 200; //maximum game length in plies
-    const int MAJOR_LEARN_STEPS = 4; 
-    const int REFINED_LEARN_STEPS = 2;
-    const int HASH_SIZE_IN_MB = 0;
-    
-    double learnSteps[MAJOR_LEARN_STEPS] = {-1.0, 0.5, 1.0, 1.5};
-    double refinedSteps[MAJOR_LEARN_STEPS][REFINED_LEARN_STEPS] = {
-        {  -1.25, -0.75 },
-        {  0.25, 0.76 },
-        {  0.75, 1.25 },
-        { 1.25, 1.75 }
-    };
+    const int LEARN_STEPS = 8;
+    const int HASH_SIZE_IN_MB = 1;
+
+    const double LEARN_FACTOR[LEARN_STEPS] = {-1.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75};
 
     /*
      * Initialize, normally it's not needed to change anything from here
      */
-    
-    THashTable * hash1 = new THashTable(HASH_SIZE_IN_MB);
+
+    THashTable * hash1 = new THashTable(HASH_SIZE_IN_MB); //each side uses it's own hash table
     THashTable * hash2 = new THashTable(HASH_SIZE_IN_MB);
-
     TEngine * engine = (TEngine*) engineObjPtr;
-    TGameSettings game = engine->gameSettings;
-
     TSearchData * sd_root = new TSearchData(engine->_rootFen.c_str(),
             PIECE_SQUARE_TABLE, hash1, NULL);
 
     engine->gameSettings.maxDepth = MAXDEPTH;
     sd_root->timeManager->setEndTime(INFINITE_TIME);
-    
-    const int LEARNSTEPS[2] = {MAJOR_LEARN_STEPS, REFINED_LEARN_STEPS};
+
     int bestScore = 0;
     int bestStep = 0;
     int bestWins = 0;
     double bestFactor = 0.0;
-    int scores[MAX(MAJOR_LEARN_STEPS, REFINED_LEARN_STEPS)];
-    double* stepsTable[2] = {learnSteps, refinedSteps[1]};
+    int scores[LEARN_STEPS];
 
     /*
      * Prepare GAMECOUNT/2 starting positions, using the opening book
@@ -410,7 +407,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     std::cout << "\nLEARNING MODE" << std::endl;
     std::cout << "Depth: " << MAXDEPTH << std::endl;
     std::cout << "Games: " << GAMECOUNT << std::endl;
-    std::cout << "\nGenerating game start positions" << std::endl;
+    std::cout << "\nGenerating game start positions:" << std::endl;
 
     TBook * book = new TBook();
     book->open("book.bin");
@@ -467,158 +464,216 @@ void * TEngine::_learn(void * engineObjPtr) {
         }
     }
 
-    std::cout << "Created " << x / 2 << " random game start positions from book" << std::endl;
+    std::cout << "Generated " << (x / 2) - 2 << " random game start positions from book" << std::endl;
+
+
+    /*
+     * Self-play, using the generated start positions once for each side
+     */
 
     THashTable * hash_list[2] = {hash1, hash2};
     TSearchData * sd_game = sd_root;
     U64 gamesPlayed = 0;
-    U64 nodesPlayed = 0;
+    U64 totalNodes[2] = {0, 0};
+    double totalScore = 0.0;
+    double medianScore = 0.0;
     clock_t begin;
     begin = clock();
 
-    for (int phase = 0; phase < 2; phase++) {
-        double* steps = stepsTable[phase];
-        for (int step = 0; step < LEARNSTEPS[phase]; step++) {
-            int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
-            U64 nodes[2] = {0, 0}; //total node counts for both sides
-            scores[step] = 0;
-            sd_game->learnFactor = steps[step];
-            std::cout << "\nFactor: " << sd_game->learnFactor << " " << std::endl;
-            for (int game = 0; game < GAMECOUNT; game++) {
-                sd_game->pos->fromFen(start_positions[game].c_str());
-                hash1->clear();
-                hash2->clear();
-                int plyCount = 0;
-                int prevScore = 0;
-                bool gameover = false;
-                do {
-                    for (int side_to_move = 0; side_to_move < 2; side_to_move++) {
-                        /*
-                         * Toggle learnParam to 1 or 0 to enable/disable the learn subject. 
-                         * Play each position twice: 
-                         * 1) learning enabled for white only 
-                         * 2) learning enabled for black only
-                         */
-                        if (game % 2 == 0) {
-                            sd_game->learnParam = !side_to_move;
-                        } else {
-                            sd_game->learnParam = side_to_move;
-                        }
-                        bool learning_side = sd_game->learnParam == 1;
+    for (int step = 0; step < LEARN_STEPS; step++) {
+        int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
+        U64 nodes[2] = {0, 0}; //total node counts for both sides
+        scores[step] = 0;
+        sd_game->learnFactor = LEARN_FACTOR[step];
+        std::cout << "\nFactor " << sd_game->learnFactor << ": " << std::endl;
+        hash1->clear(); //clear hash: the evaluation scores changed.
+        hash2->clear(); 
+        for (int game = 0; game < GAMECOUNT; game++) {
+            sd_game->pos->fromFen(start_positions[game].c_str());
+            int plyCount = 0;
+            int prevScore = 0;
+            bool gameover = false;
+            do {
+                for (int side_to_move = 0; side_to_move < 2; side_to_move++) {
+                    /*
+                     * Toggle learnParam to 1 or 0 to enable/disable experimental evaluation
+                     * Play each position twice: 
+                     * 1) engine(learn) vs engine(base)
+                     * 2) engine(base) vs engine(learn)
+                     */
+                    if (game % 2 == 0) {
+                        sd_game->learnParam = !side_to_move;
+                    } else {
+                        sd_game->learnParam = side_to_move;
+                    }
+                    bool learning_side = sd_game->learnParam == 1;
 
-                        /*
-                         * Prepare search: cleanup and reset search stack. 
-                         */
-                        actualMove.clear();
-                        sd_game->resetStack();
-                        int moveCount = sd_game->initRootMoves();
-                        if (moveCount == 0) {
-                            if (sd_game->pos->inCheck()) { //current engine lost
-                                stats[1 + learning_side]++;
-                            } else {
-                                stats[0]++; //draw by stalemate. 
-                            }
-                            gameover = true;
-                            break;
-
-                        }
-                        sd_game->getMaterialScore();
-                        sd_game->getPawnScore();
-                        sd_game->getKingScore();
-                        sd_game->hashTable = hash_list[learning_side]; //each side has it's own hash
-                        int depth = ONE_PLY;
-                        int resultScore = 0;
-
-                        /*
-                         * Normal PVS search without aspiration windows
-                         */
-                        sd_game->stopSearch = false;
-                        while (depth <= (MAXDEPTH) * ONE_PLY && !sd_game->stopSearch) {
-                            int score = pvs_root(sd_game, -SCORE_INFINITE, SCORE_INFINITE, depth);
-                            if (!sd_game->stopSearch) {
-                                resultScore = score;
-                            }
-                            if (sd_game->stack->pvCount > 0) {
-                                TMove firstMove = sd_game->stack->pvMoves[0];
-                                if (firstMove.piece) {
-                                    actualMove.setMove(&firstMove);
-                                }
-                            }
-                            depth += ONE_PLY;
-                            sd_game->root.sortMoves();
-                        }
-
-                        nodes[side_to_move] += sd_game->nodes;
-
-                        //stop conditions
-                        if (sd_game->pos->boardFlags->fiftyCount >= 100 || sd_game->pos->isDraw()) {
-                            stats[0]++; //draw
-                            gameover = true;
-                            break;
-                        }
-
-                        if (resultScore > STOPSCORE && prevScore < -STOPSCORE) {
-                            //current engine won and both engines agree
-                            stats[2 - learning_side]++;
-                            gameover = true;
-                            break;
-                        }
-
-                        if (resultScore < -STOPSCORE && prevScore > STOPSCORE) {
-                            //current engine lost and both engines agree
+                    /*
+                     * Prepare search: cleanup and reset search stack. 
+                     */
+                    actualMove.clear();
+                    sd_game->resetStack();
+                    int moveCount = sd_game->initRootMoves();
+                    if (moveCount == 0) {
+                        if (sd_game->pos->inCheck()) { //current engine lost
                             stats[1 + learning_side]++;
-                            gameover = true;
-                            break;
+                        } else {
+                            stats[0]++; //draw by stalemate. 
                         }
+                        gameover = true;
+                        break;
 
-                        if (plyCount >= MAXPLIES) {
-                            //too long game, abort as draw
-                            stats[0]++; //draw
-                            gameover = true;
-                            break;
+                    }
+                    sd_game->getMaterialScore();
+                    sd_game->getPawnScore();
+                    sd_game->getKingScore();
+                    sd_game->hashTable = hash_list[learning_side]; //each side has it's own hash
+                    int depth = ONE_PLY;
+                    int resultScore = 0;
+
+                    /*
+                     * Normal PVS search without aspiration windows
+                     */
+                    sd_game->stopSearch = false;
+                    while (depth <= (MAXDEPTH) * ONE_PLY && !sd_game->stopSearch) {
+                        int score = pvs_root(sd_game, -SCORE_INFINITE, SCORE_INFINITE, depth);
+                        if (!sd_game->stopSearch) {
+                            resultScore = score;
                         }
-
-                        prevScore = resultScore;
-                        plyCount++;
-                        //std::cout << plyCount << ": " << actualMove.asString() << " " << sd_game->pos->asFen() << std::endl; //for debugging
-                        sd_game->forward(&actualMove, sd_game->pos->givesCheck(&actualMove));
+                        if (sd_game->stack->pvCount > 0) {
+                            TMove firstMove = sd_game->stack->pvMoves[0];
+                            if (firstMove.piece) {
+                                actualMove.setMove(&firstMove);
+                            }
+                        }
+                        depth += ONE_PLY;
+                        sd_game->root.sortMoves();
                     }
 
-                } while (gameover == false);
-                gamesPlayed++;
-            }
-            int points = stats[1]*2 + stats[0];
-            int maxPoints = GAMECOUNT * 2;
-            int wins = stats[1] - stats[2];
-            U64 totalNodes = MAX(1, nodes[0] + nodes[1]);
-            nodesPlayed += totalNodes;
-            int score = (100 * points) / maxPoints;
-            scores[step] = score;
+                    nodes[1 - learning_side] += sd_game->nodes;
 
-            int nodePct = (100 * nodes[0]) / totalNodes;
-            if (score >= bestScore && wins > bestWins) {
-                bestScore = score;
-                bestStep = step;
-                bestWins = wins;
-                bestFactor = steps[step];
-            }
-            std::cout << "Games:" << GAMECOUNT << " Win: " << stats[1] << " Loss: " << stats[2] << " Draw: " << stats[0] << " (" << score << "%, " << wins << ")" << " nodes balance: " << nodePct << "%" << std::endl;
+                    //stop conditions
+                    if (sd_game->pos->boardFlags->fiftyCount >= 100 || sd_game->pos->isDraw()) {
+                        stats[0]++; //draw
+                        gameover = true;
+                        break;
+                    }
+
+                    if (resultScore > STOPSCORE && prevScore < -STOPSCORE) {
+                        //current engine won and both engines agree
+                        stats[2 - learning_side]++;
+                        gameover = true;
+                        break;
+                    }
+
+                    if (resultScore < -STOPSCORE && prevScore > STOPSCORE) {
+                        //current engine lost and both engines agree
+                        stats[1 + learning_side]++;
+                        gameover = true;
+                        break;
+                    }
+
+                    if (plyCount >= MAXPLIES) {
+                        //too long game, abort as draw
+                        stats[0]++; //draw
+                        gameover = true;
+                        break;
+                    }
+
+                    prevScore = resultScore;
+                    plyCount++;
+                    //std::cout << plyCount << ": " << actualMove.asString() << " " << sd_game->pos->asFen() << std::endl; //for debugging
+                    sd_game->forward(&actualMove, sd_game->pos->givesCheck(&actualMove));
+                }
+
+            } while (gameover == false);
+            gamesPlayed++;
         }
-        if (phase == 0) {
-            stepsTable[1] = refinedSteps[bestStep];
+        int points = stats[1]*2 + stats[0];
+        int maxPoints = GAMECOUNT * 2;
+        int wins = stats[1] - stats[2];
+        totalNodes[0] += nodes[0];
+        totalNodes[1] += nodes[1];
+        int score = (100 * points) / maxPoints;
+        scores[step] = score;
+
+
+        if (LEARN_FACTOR[step] > 0) {
+            totalScore += points;
+            medianScore += LEARN_FACTOR[step] * points;
+        }
+        if (score >= bestScore && wins > bestWins) {
+            bestScore = score;
+            bestStep = step;
+            bestWins = wins;
+            bestFactor = LEARN_FACTOR[step];
+        }
+        std::cout << "Games: " << GAMECOUNT << " Win: " << stats[1] << " Loss: " << stats[2] << " Draw: " << stats[0] << " Score: " << points << "/" << maxPoints << " (" << score << "%, " << wins << ") " << std::endl;
+        if (LEARN_FACTOR[step] < 0) {
+            if (score >= 49) {
+                std::cout << "\nDid not detect any impact on playing strength. Aborting... " << std::endl;
+                break;
+            } else if (score > 45) {
+                std::cout << "\nThe experimental evaluation is of minor importance" << std::endl;
+            } else if (score > 40) {
+                std::cout << "\nThe experimental evaluation is important" << std::endl;
+            } else if (score > 30) {
+                std::cout << "\nThe experimental evaluation is very important" << std::endl;
+            } else if (score > 15) {
+                std::cout << "\nThe experimental evaluation is essential" << std::endl;
+            } else {
+                std::cout << "\nThe experimental evaluation is critical. Whoa!" << std::endl;
+            }
+
+        } else {
+            int deltaS = ABS(score-50);
+            std::cout << "Engine(learn) is";
+            if (deltaS < 2) {
+                std::cout << " equal to ";
+            } else if (deltaS < 4) {
+                std::cout << " a bit"; 
+            } else if (deltaS < 6) {
+                std::cout < "";
+            } else  {
+                std::cout << " much";
+            } 
+            if (score > 51) {
+                std::cout << " stronger than ";
+            } else if (score < 49) {
+                std::cout << " weaker than ";
+            }
+            std::cout << "engine(base)" << std::endl;
         }
     }
-    std::cout << "\nBest factor: " << bestFactor << " (" << bestScore << "%)" << std::endl;
+
+    if (bestFactor > 0) {
+        std::cout << "\nBest factor: " << bestFactor << " (" << bestScore << "%)" << std::endl;
+        double medianFactor = medianScore / totalScore;
+        std::cout << "Median factor: " << medianFactor << std::endl << std::endl;
+        if (medianFactor > 1.01) {
+            std::cout << "The score for the experimental evaluation is set too low." << std::endl;
+        } else if (medianFactor < 0.99) {
+            std::cout << "The score for the experimental evaluation is set too high." << std::endl;
+        } else {
+            std::cout << "The score for the experimental evaluation is right." << std::endl;
+        }
+    } else {
+        std::cout << "Did not detect increase in playing strength." << std::endl;
+    }
 
     clock_t end;
     end = clock();
-    
-    double elapsed = (1.0 + end - begin) / CLOCKS_PER_SEC;
-    std::cout << "Elapsed: " << elapsed << "s. " << std::endl;
-    std::cout << "Games played: " << gamesPlayed << " games. (" << gamesPlayed/elapsed << " games/sec)" << std::endl;
-    std::cout << "Nodes: " << nodesPlayed << " nodes. (" << nodesPlayed/elapsed << " nodes/sec)" << std::endl;
-    
 
+    double elapsed = (1.0 + end - begin) / CLOCKS_PER_SEC;
+    std::cout << "\nElapsed: " << elapsed << "s. " << std::endl;
+    std::cout << "Games played: " << gamesPlayed << " games. (" << gamesPlayed / elapsed << " games/sec)" << std::endl;
+
+
+    U64 nodesSum = MAX(1, totalNodes[0] + totalNodes[1]);
+    int nodePct = (100 * totalNodes[0]) / nodesSum;
+
+    std::cout << "Nodes Total: " << nodesSum << " nodes. (" << int(nodesSum / elapsed) << " nodes/sec) " << std::endl;
+    std::cout << "Node ratio engine(learn)/engine(base): " << nodePct << "%" << std::endl;
 
     /*
      * Clean up and terminate the learning thread
