@@ -301,7 +301,7 @@ TMove * TMovePicker::pickNextMove(TSearchData * searchData, int depth, int alpha
                     move->score = MVVLVA(move);
                 }
                 if (!searchData->stack->inCheck) {
-                    moveList->stage = STOP;
+                    moveList->stage = STOP;                   
                     result = popBest(pos, moveList);
                     return result;
                 }

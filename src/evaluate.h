@@ -27,6 +27,15 @@ enum EVALUATION_CONSTANTS {
     GRAIN = 0xFFFFFFFF & ~(GRAIN_SIZE - 1)
 };
 
+const int MAX_EVALUATION_COMPONENTS = 5;
+enum EVALUATION_COMPONENTS {
+    SCORE_MATERIAL,
+    SCORE_PAWNS,
+    SCORE_KINGS,
+    SCORE_SHELTERW,
+    SCORE_SHELTERB            
+};
+
 /*******************************************************************************
  * Generic evaluation bonuses
  *******************************************************************************/
@@ -342,11 +351,11 @@ int evaluate(TSearchData * searchData, int alpha, int beta);
 
 int evaluateExp(TSearchData * searchData);
 
-void evaluateMaterial(TSearchData * searchData);
+int evaluateMaterial(TSearchData * searchData);
 
-void evaluatePawns(TSearchData * searchData);
+int evaluatePawns(TSearchData * searchData);
 
-void evaluateKings(TSearchData * searchData);
+int evaluateKings(TSearchData * searchData);
 
 /*******************************************************************************
  * Helper functions

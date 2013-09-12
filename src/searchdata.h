@@ -96,6 +96,7 @@ struct TSearchStack {
     NodeType nodeType;
     TMove move;
     TMove bestMove;
+    
     U64 hashCode;
     bool inCheck;
 
@@ -105,18 +106,14 @@ struct TSearchStack {
 
     int pvCount;
     TMove pvMoves[MAX_PLY + 1];
-
+    
     int ttScore;
     TMove ttMove1;
     TMove ttMove2;
 
-    int materialScore;
-    int pawnScore;
-    int kingScore;
-
-    int shelterScoreW;
-    int shelterScoreB;
     int gamePhase;
+    int evaluationScore;
+    int scores[MAX_EVALUATION_COMPONENTS];
 
     int reduce;
 
@@ -151,6 +148,7 @@ public:
     TMove excludedMove;
     int selDepth;
     int learnParam;
+    int evaluationComponents;
     double learnFactor;
     TRoot root;
 
@@ -194,7 +192,9 @@ public:
         maxNodes = 0;
         selDepth = 0;
         learnFactor = 1.0;
+        evaluationComponents = MAX_EVALUATION_COMPONENTS;
         rootStack = stack = &_stack[0];
+        stack->evaluationScore = SCORE_UNKNOWN;
         stack->nodeType = PVNODE;
 #ifdef PRINTSEARCH
         examineSearch = 0;
@@ -221,23 +221,7 @@ public:
         stack->pvCount = (stack + 1)->pvCount + 1;
     }
 
-    inline void getMaterialScore() {
-        hashTable->mtLookup(this);
-        if (stack->materialScore == SCORE_INVALID) {
-            evaluateMaterial(this);
-        }
-    }
-
-    inline void getPawnScore() {
-        hashTable->ptLookup(this);
-        if (stack->pawnScore == SCORE_INVALID) {
-            evaluatePawns(this);
-        }
-    }
-
-    inline void getKingScore() {
-        evaluateKings(this);
-    }
+    
 
     inline TSearchStack * getStack(int ply) {
         assert(ply >= 0 && ply <= MAX_PLY);
@@ -249,12 +233,11 @@ public:
         stack->move.setMove(0);
         stack++;
         stack->inCheck = false;
-        stack->materialScore = (stack - 1)->materialScore;
-        stack->pawnScore = (stack - 1)->pawnScore;
-        stack->shelterScoreW = (stack - 1)->shelterScoreW;
-        stack->shelterScoreB = (stack - 1)->shelterScoreB;
-        stack->kingScore = (stack - 1)->kingScore;
+        stack->evaluationScore = (stack-1)->evaluationScore;
         stack->gamePhase = (stack - 1)->gamePhase;
+        for (int x = 0; x < evaluationComponents; x++) {
+            stack->scores[x] = (stack-1)->scores[x];
+        }
         pos->forward();
         assert(stack == &_stack[pos->currentPly]);
     }
@@ -270,24 +253,8 @@ public:
         stack->move.setMove(move);
         stack++;
         stack->inCheck = givesCheck;
+        stack->evaluationScore = SCORE_UNKNOWN;
         pos->forward(move);
-        if (move->capture || move->promotion) {
-            getMaterialScore();
-        } else {
-            stack->gamePhase = (stack - 1)->gamePhase;
-            stack->materialScore = (stack - 1)->materialScore;
-        }
-        if (move->piece == WPAWN || move->piece == BPAWN
-                || move->piece == WKING || move->piece == BKING
-                || move->capture == WPAWN || move->capture == BPAWN
-                || pos->boardFlags->castlingFlags != (pos->boardFlags - 1)->castlingFlags) {
-            getPawnScore();
-        } else {
-            stack->pawnScore = (stack - 1)->pawnScore;
-            stack->shelterScoreW = (stack - 1)->shelterScoreW;
-            stack->shelterScoreB = (stack - 1)->shelterScoreB;
-        }
-        getKingScore();
         assert(stack->gamePhase >= 0 && stack->gamePhase <= 16);
         assert(stack == &_stack[pos->currentPly]);
     }
@@ -330,12 +297,13 @@ public:
      * starts with a new stack. 
      */
     inline void resetStack() {
-        this->pos->currentPly = 0;
-        this->stack = this->rootStack;
-        this->pos->_boardFlags[0].copy(this->pos->boardFlags);
-        this->pos->boardFlags = &this->pos->_boardFlags[0];
-        this->nodes = 0;
-        this->stack->pvCount = 0;
+        pos->currentPly = 0;
+        stack = rootStack;
+        stack->evaluationScore = SCORE_UNKNOWN;
+        pos->_boardFlags[0].copy(this->pos->boardFlags);
+        pos->boardFlags = &this->pos->_boardFlags[0];
+        nodes = 0;
+        stack->pvCount = 0;
     }
 
     std::string getPVString();

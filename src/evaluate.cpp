@@ -3,21 +3,24 @@
 #include "defs.h"
 
 int evaluate(TSearchData * searchData, int alpha, int beta) {
-    TBoard * pos = searchData->pos;
+
+    if (searchData->stack->evaluationScore != SCORE_UNKNOWN) {
+        return searchData->stack->evaluationScore;
+    }
+
     int result = 0;
-    
-    result += searchData->stack->pawnScore;
-    result += searchData->stack->materialScore;
+    TBoard * pos = searchData->pos;
+    result += evaluateMaterial(searchData);
     result += phasedScore(searchData->stack->gamePhase, pos->boardFlags->pctMG, pos->boardFlags->pctEG);
-    result += searchData->stack->kingScore;
-    
-    
-    
+    result += evaluatePawns(searchData);
+    result += evaluateKings(searchData);
+
+
     if (searchData->learnParam == 1) {
         //learning
-        result += evaluateExp(searchData); 
+        result += evaluateExp(searchData);
     }
-    
+
     result &= GRAIN;
     return pos->boardFlags->WTM ? result : -result;
 }
@@ -29,12 +32,6 @@ int evaluate(TSearchData * searchData, int alpha, int beta) {
  */
 int evaluateExp(TSearchData * searchData) {
     int result = 0;
-    int wrooks = searchData->pos->pieces[WROOK].count;
-    int brooks = searchData->pos->pieces[BROOK].count;
-    int wknights = searchData->pos->pieces[WKNIGHT].count;
-    int bknights = searchData->pos->pieces[BKNIGHT].count;
-    result += (wrooks-brooks) * (VKNIGHT-VROOK);
-    result += (wknights-bknights) * (VROOK-VKNIGHT);
     result *= searchData->learnFactor;
     return result;
 }
@@ -43,9 +40,29 @@ int evaluateExp(TSearchData * searchData) {
  * Evaluate material score
  * @param searchData search metadata object
  */
-void evaluateMaterial(TSearchData * searchData) {
+int evaluateMaterial(TSearchData * searchData) {
+    
     /*
-     * Evaluate material and store in material hash table
+     * 1. Get the score from the last stack record if the previous move was quiet, 
+     *    so the material balance did not change. This is easy to verify with 
+     *    the material hash
+     */
+    if ((searchData->pos->boardFlags-1)->materialHash == searchData->pos->boardFlags->materialHash
+            && (searchData->stack-1)->evaluationScore != SCORE_UNKNOWN) {
+        searchData->stack->scores[SCORE_MATERIAL] = (searchData->stack-1)->scores[SCORE_MATERIAL];
+        return searchData->stack->scores[SCORE_MATERIAL];
+    }
+
+    /*
+     * 2. Probe the hash table for the material score
+     */
+    searchData->hashTable->mtLookup(searchData);
+    if (searchData->stack->scores[SCORE_MATERIAL] != SCORE_INVALID) {
+        return searchData->stack->scores[SCORE_MATERIAL];
+    }
+
+    /*
+     * 3. Calculate material value and store in material hash table
      */
     int value = 0;
     TBoard * pos = searchData->pos;
@@ -177,14 +194,15 @@ void evaluateMaterial(TSearchData * searchData) {
             - 2 * (wqueens + bqueens) /* max: 4 */;
     phase = MAX(0, phase);
     phase = (MAX_GAMEPHASES * phase) / MAX_PHASE_SCORE;
+    
     /*
      * Store and return
      */
-    searchData->stack->materialScore = value;
+    searchData->stack->scores[SCORE_MATERIAL] = value;
     searchData->stack->gamePhase = phase;
     searchData->hashTable->mtStore(searchData, value, phase);
+    return value;
 }
-
 
 void printBB(std::string msg, U64 bb) {
     std::cout << msg;
@@ -206,7 +224,32 @@ void printBB(std::string msg, U64 bb) {
  * @param searchData search metadata object
  */
 
-void evaluatePawns(TSearchData * searchData) {
+int evaluatePawns(TSearchData * searchData) {
+    
+    
+     /*
+     * 1. Get the score from the last stack record if the latest move did not
+     *    involve any pawns. This is easy to check with the pawn hash 
+     */
+    if (searchData->pos->boardFlags->pawnHash == (searchData->pos->boardFlags-1)->pawnHash 
+            && (searchData->stack-1)->evaluationScore != SCORE_UNKNOWN) {
+        searchData->stack->scores[SCORE_PAWNS] = (searchData->stack-1)->scores[SCORE_PAWNS];
+        searchData->stack->scores[SCORE_SHELTERW] = (searchData->stack-1)->scores[SCORE_SHELTERW];
+        searchData->stack->scores[SCORE_SHELTERB] = (searchData->stack-1)->scores[SCORE_SHELTERB];
+        return searchData->stack->scores[SCORE_PAWNS];
+    }
+
+    /*
+     * 2. Probe the hash table for the pawn score
+     */
+    searchData->hashTable->ptLookup(searchData);
+    if (searchData->stack->scores[SCORE_PAWNS] != SCORE_INVALID) {
+        return searchData->stack->scores[SCORE_PAWNS];
+    }
+    
+    /*
+     * 3. Calculate pawn evaluation score
+     */
     TBoard * pos = searchData->pos;
     int pawnScore = 0;
     int shelterScoreW = 0;
@@ -344,21 +387,24 @@ void evaluatePawns(TSearchData * searchData) {
             }
         }
     }
-    searchData->stack->pawnScore = pawnScore;
-    searchData->stack->shelterScoreW = shelterScoreW;
-    searchData->stack->shelterScoreB = shelterScoreB;
+    searchData->stack->scores[SCORE_PAWNS] = pawnScore;
+    searchData->stack->scores[SCORE_SHELTERW] = shelterScoreW;
+    searchData->stack->scores[SCORE_SHELTERB] = shelterScoreB;
     searchData->hashTable->ptStore(searchData, pawnScore, shelterScoreW, shelterScoreB);
+    return pawnScore;
 }
 
-void evaluateKings(TSearchData * searchData) {
+int evaluateKings(TSearchData * searchData) {
     int score = 0;
     TBoard * pos = searchData->pos;
-    if (searchData->stack->shelterScoreW && pos->blackQueens) {
-        score += phasedScore(searchData->stack->gamePhase, searchData->stack->shelterScoreW, 0);
+    if (searchData->stack->scores[SCORE_SHELTERW] && pos->blackQueens) {
+        score += phasedScore(searchData->stack->gamePhase, 2*searchData->stack->scores[SCORE_SHELTERW], 0);
     }
-    if (searchData->stack->shelterScoreB && pos->whiteQueens) {
-        score -= phasedScore(searchData->stack->gamePhase, searchData->stack->shelterScoreB, 0);
+    if (searchData->stack->scores[SCORE_SHELTERB] && pos->whiteQueens) {
+        score -= phasedScore(searchData->stack->gamePhase, 2*searchData->stack->scores[SCORE_SHELTERB], 0);
     }
-    searchData->stack->kingScore = score;
+    searchData->stack->scores[SCORE_KINGS] = score;
+
+    return score;
 }
 

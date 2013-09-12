@@ -13,6 +13,7 @@
 #include "timemanager.h"
 #include "inputhandler.h"
 #include "outputhandler.h"
+#include <math.h> 
 
 using namespace std;
 
@@ -136,9 +137,7 @@ void * TEngine::_think(void* engineObjPtr) {
             tm->setEndTime(2);
             tm->setMaxTime(1);
         }
-        searchData->getMaterialScore();
-        searchData->getPawnScore();
-        searchData->getKingScore();
+        searchData->stack->evaluationScore = evaluate(searchData, 0, 0);
         int alpha = -SCORE_INFINITE;
         int beta = SCORE_INFINITE;
         int prevScore = -SCORE_INFINITE;
@@ -275,15 +274,14 @@ void TEngine::analyse() {
 
     TSearchData * searchData = new TSearchData(_rootFen.c_str(), PIECE_SQUARE_TABLE, _hashTable, _outputHandler);
     std::cout << searchData->pos->asFen().c_str() << std::endl;
-    searchData->getMaterialScore();
-    searchData->getPawnScore();
-    std::cout << "1) Material score: " << searchData->stack->materialScore << std::endl;
+    searchData->stack->evaluationScore = evaluate(searchData, 0, 0);
+    std::cout << "1) Material score: " << searchData->stack->scores[SCORE_MATERIAL] << std::endl;
     std::cout << "2) Game phase: " << searchData->stack->gamePhase << std::endl;
     std::cout << "3) Piece Square tables: " << phasedScore(searchData->stack->gamePhase,
             searchData->pos->boardFlags->pctMG,
             searchData->pos->boardFlags->pctEG) << std::endl;
-    std::cout << "4) Shelter score for white: " << searchData->stack->shelterScoreW << std::endl;
-    std::cout << "5) Shelter score for black: " << searchData->stack->shelterScoreB << std::endl;
+    std::cout << "4) Shelter score for white: " << searchData->stack->scores[SCORE_SHELTERW] << std::endl;
+    std::cout << "5) Shelter score for black: " << searchData->stack->scores[SCORE_SHELTERB] << std::endl;
 
     std::cout << "6) Evaluation:" << evaluate(searchData, -SCORE_MATE, SCORE_MATE) << std::endl;
 
@@ -370,7 +368,7 @@ void * TEngine::_learn(void * engineObjPtr) {
      * Constants
      */
 
-    const int MAXDEPTH = 1; //default: depth 2
+    const int MAXDEPTH = 2; //default: depth 2
     const int GAMECOUNT = 5000; //Sample size, 920+ recommended. Use even numbers. 
 
     const int STOPSCORE = 300; //if the score is higher than this for both sides, the game is consider a win
@@ -393,7 +391,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     engine->gameSettings.maxDepth = MAXDEPTH;
     sd_root->timeManager->setEndTime(INFINITE_TIME);
 
-    int bestScore = 0;
+    double bestScore = 0;
     int bestStep = 0;
     int bestWins = 0;
     double bestFactor = 0.0;
@@ -415,10 +413,10 @@ void * TEngine::_learn(void * engineObjPtr) {
     TMoveList * bookMoves = &sd_root->stack->moveList;
     TMove actualMove;
 
-    string start_positions[GAMECOUNT];
+    string start_positions[GAMECOUNT+1];
 
     int x = 0;
-
+    
     //use the actual start position too
     start_positions[x++] = sd_root->pos->asFen();
     start_positions[x++] = sd_root->pos->asFen();
@@ -452,10 +450,7 @@ void * TEngine::_learn(void * engineObjPtr) {
 
         //add to search positions
         start_positions[x++] = sd_root->pos->asFen();
-        if (x < GAMECOUNT) {
-            start_positions[x++] = sd_root->pos->asFen();
-        }
-        //std::cout << sd_root->pos->asFen() << std::endl; //for debugging
+        start_positions[x++] = sd_root->pos->asFen();
 
         //revert to root
         while (sd_root->pos->currentPly > 0) {
@@ -463,8 +458,14 @@ void * TEngine::_learn(void * engineObjPtr) {
             sd_root->backward(move);
         }
     }
+    
+    /* for debugging 
+    for (int y = 0; y < GAMECOUNT; y++) {
+        std::cout << y << ": " << start_positions[y] << std::endl; //for debugging
+    }
+     */
 
-    std::cout << "Generated " << (x / 2) - 2 << " random game start positions from book" << std::endl;
+    std::cout << "Generated " << (GAMECOUNT/2-1) << " random game start positions from book" << std::endl;
 
 
     /*
@@ -507,6 +508,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                         sd_game->learnParam = side_to_move;
                     }
                     bool learning_side = sd_game->learnParam == 1;
+                    
 
                     /*
                      * Prepare search: cleanup and reset search stack. 
@@ -524,9 +526,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                         break;
 
                     }
-                    sd_game->getMaterialScore();
-                    sd_game->getPawnScore();
-                    sd_game->getKingScore();
+                    sd_game->stack->evaluationScore = evaluate(sd_game, 0, 0);
                     sd_game->hashTable = hash_list[learning_side]; //each side has it's own hash
                     int depth = ONE_PLY;
                     int resultScore = 0;
@@ -589,15 +589,14 @@ void * TEngine::_learn(void * engineObjPtr) {
             } while (gameover == false);
             gamesPlayed++;
         }
-        int points = stats[1]*2 + stats[0];
-        int maxPoints = GAMECOUNT * 2;
+        double points = stats[1] + 0.5*stats[0];
+        int maxPoints = GAMECOUNT;
         int wins = stats[1] - stats[2];
         totalNodes[0] += nodes[0];
         totalNodes[1] += nodes[1];
-        int score = (100 * points) / maxPoints;
+        double score = (100.0 * points) / maxPoints;
         scores[step] = score;
-
-
+        int elo = round(-400.0 * log(1 / (points/maxPoints) -1) / log(10));
         if (LEARN_FACTOR[step] > 0) {
             totalScore += points;
             medianScore += LEARN_FACTOR[step] * points;
@@ -608,7 +607,7 @@ void * TEngine::_learn(void * engineObjPtr) {
             bestWins = wins;
             bestFactor = LEARN_FACTOR[step];
         }
-        std::cout << "Games: " << GAMECOUNT << " Win: " << stats[1] << " Loss: " << stats[2] << " Draw: " << stats[0] << " Score: " << points << "/" << maxPoints << " (" << score << "%, " << wins << ") " << std::endl;
+        std::cout << "Games: " << GAMECOUNT << " Win: " << stats[1] << " Loss: " << stats[2] << " Draw: " << stats[0] << " Score: " << points << "/" << maxPoints << " (" << score << "%, " << wins << ", Elo: " << elo << ") " << std::endl;
         if (LEARN_FACTOR[step] < 0) {
             if (score >= 49) {
                 std::cout << "\nDid not detect any impact on playing strength. Aborting... " << std::endl;
@@ -626,20 +625,20 @@ void * TEngine::_learn(void * engineObjPtr) {
             }
 
         } else {
-            int deltaS = ABS(score-50);
+            int deltaS = ABS(score-50.0);
             std::cout << "Engine(learn) is";
-            if (deltaS < 2) {
+            if (deltaS < 2.0) {
                 std::cout << " equal to ";
-            } else if (deltaS < 4) {
+            } else if (deltaS < 4.0) {
                 std::cout << " a bit"; 
-            } else if (deltaS < 6) {
+            } else if (deltaS < 6.0) {
                 std::cout < "";
             } else  {
                 std::cout << " much";
             } 
-            if (score > 51) {
+            if (score >= 52.0) {
                 std::cout << " stronger than ";
-            } else if (score < 49) {
+            } else if (score <= 48.0) {
                 std::cout << " weaker than ";
             }
             std::cout << "engine(base)" << std::endl;
@@ -670,7 +669,7 @@ void * TEngine::_learn(void * engineObjPtr) {
 
 
     U64 nodesSum = MAX(1, totalNodes[0] + totalNodes[1]);
-    int nodePct = (100 * totalNodes[0]) / nodesSum;
+    double nodePct = (100.0 * totalNodes[0]) / nodesSum;
 
     std::cout << "Nodes Total: " << nodesSum << " nodes. (" << int(nodesSum / elapsed) << " nodes/sec) " << std::endl;
     std::cout << "Node ratio engine(learn)/engine(base): " << nodePct << "%" << std::endl;
