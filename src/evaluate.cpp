@@ -3,31 +3,30 @@
 #include "defs.h"
 
 int evaluate(TSearchData * searchData, int alpha, int beta) {
-
-    if (searchData->stack->evaluationScore != SCORE_UNKNOWN) {
-        return searchData->stack->evaluationScore;
+    if (searchData->stack->evaluationScore != SCORE_UNKNOWN) { 
+        return searchData->stack->evaluationScore; 
     }
-
+    
     int result = 0;
     TBoard * pos = searchData->pos;
+    
     result += evaluateMaterial(searchData);
     result += phasedScore(searchData->stack->gamePhase, pos->boardFlags->pctMG, pos->boardFlags->pctEG);
     result += evaluatePawns(searchData);
     result += evaluateKings(searchData);
-
-
-    if (searchData->learnParam == 1) {
-        //learning
+    if (searchData->learnParam == 1) { //learning
         result += evaluateExp(searchData);
     }
-
     result &= GRAIN;
-    return pos->boardFlags->WTM ? result : -result;
+    result = pos->boardFlags->WTM ? result : -result;
+    
+    searchData->stack->evaluationScore = result;
+    return result;
 }
 
 /**
  * Experimental evaluation for learning
- * @param searchData search metadata object
+ * @param searchData search meta-data object
  * @return score the evaluation score
  */
 int evaluateExp(TSearchData * searchData) {
@@ -37,8 +36,8 @@ int evaluateExp(TSearchData * searchData) {
 }
 
 /**
- * Evaluate material score
- * @param searchData search metadata object
+ * Evaluate material score and set the current game phase
+ * @param searchData search meta-data object
  */
 int evaluateMaterial(TSearchData * searchData) {
     
@@ -50,6 +49,7 @@ int evaluateMaterial(TSearchData * searchData) {
     if ((searchData->pos->boardFlags-1)->materialHash == searchData->pos->boardFlags->materialHash
             && (searchData->stack-1)->evaluationScore != SCORE_UNKNOWN) {
         searchData->stack->scores[SCORE_MATERIAL] = (searchData->stack-1)->scores[SCORE_MATERIAL];
+        searchData->stack->gamePhase = (searchData->stack-1)->gamePhase;
         return searchData->stack->scores[SCORE_MATERIAL];
     }
 

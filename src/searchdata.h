@@ -96,7 +96,7 @@ struct TSearchStack {
     NodeType nodeType;
     TMove move;
     TMove bestMove;
-    
+
     U64 hashCode;
     bool inCheck;
 
@@ -106,7 +106,7 @@ struct TSearchStack {
 
     int pvCount;
     TMove pvMoves[MAX_PLY + 1];
-    
+
     int ttScore;
     TMove ttMove1;
     TMove ttMove2;
@@ -221,8 +221,6 @@ public:
         stack->pvCount = (stack + 1)->pvCount + 1;
     }
 
-    
-
     inline TSearchStack * getStack(int ply) {
         assert(ply >= 0 && ply <= MAX_PLY);
         return &_stack[ply];
@@ -233,11 +231,7 @@ public:
         stack->move.setMove(0);
         stack++;
         stack->inCheck = false;
-        stack->evaluationScore = (stack-1)->evaluationScore;
-        stack->gamePhase = (stack - 1)->gamePhase;
-        for (int x = 0; x < evaluationComponents; x++) {
-            stack->scores[x] = (stack-1)->scores[x];
-        }
+        stack->evaluationScore = SCORE_UNKNOWN;
         pos->forward();
         assert(stack == &_stack[pos->currentPly]);
     }
@@ -255,7 +249,6 @@ public:
         stack->inCheck = givesCheck;
         stack->evaluationScore = SCORE_UNKNOWN;
         pos->forward(move);
-        assert(stack->gamePhase >= 0 && stack->gamePhase <= 16);
         assert(stack == &_stack[pos->currentPly]);
     }
 

@@ -211,7 +211,7 @@ int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
     assert(type == PVNODE || alpha + 1 == beta);
     bool inCheck = searchData->stack->inCheck;
     int extendNode = 0;
-    int eval = inCheck ? -SCORE_INFINITE : evaluate(searchData, alpha, beta);
+    int eval = evaluate(searchData, alpha, beta);
 
     if (!searchData->skipNull
             && type != PVNODE
@@ -277,6 +277,7 @@ int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
      * Endgame extension: 
      * Increase depth with two ply when reaching pawns/kings endgame
      */
+    assert(searchData->stack->gamePhase >= 0 && searchData->stack->gamePhase <= 16);
     TMove * previous = &(searchData->stack - 1)->move;
     if (searchData->stack->gamePhase == 16
             && previous->capture

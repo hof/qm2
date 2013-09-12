@@ -60,7 +60,7 @@ void test_wac(TEngine * engine) {
     results[current++] = testForMove(engine, "1r3r1k/3p4/1p1Nn1R1/4Pp1q/pP3P1p/P7/5Q1P/6RK w - - 0 1", "f2e2", -SCORE_MATE);
     results[current++] = testForMove(engine, "1nbq1r1k/3rbp1p/p1p1pp1Q/1p6/P1pPN3/5NP1/1P2PPBP/R4RK1 w - - 0 1", "f3g5", -SCORE_MATE);
     results[current++] = testForMove(engine, "2kr3r/pp1q1ppp/5n2/1Nb5/2Pp1B2/7Q/P4PPP/1R3RK1 w - - 0 1", "b5a7", -SCORE_MATE);
-    results[current++] = testForMove(engine, "8/8/8/1p5r/p1p1k1pN/P2pBpP1/1P1K1P2/8 b - - 0 1", "h5h4", -SCORE_MATE);
+    results[current++] = testForMove(engine, "8/8/8/1p5r/p1p1k1pN/P2pBpP1/1P1K1P2/8 b - - 0 1", "b5b4", -SCORE_MATE);
     results[current++] = testForMove(engine, "8/7p/5k2/5p2/p1p2P2/Pr1pPK2/1P1R3P/8 b - - 0 1", "b3b2", -SCORE_MATE);
     results[current++] = testForMove(engine, "8/p3k1p1/4r3/2ppNpp1/PP1P4/2P3KP/5P2/8 b - - 0 1 ", "e6e5", -SCORE_MATE);
     results[current++] = testForMove(engine, "r4rk1/1p2ppbp/p2pbnp1/q7/3BPPP1/2N2B2/PPP4P/R2Q1RK1 b - - 0 1", "e6g4", -SCORE_MATE);
@@ -77,7 +77,7 @@ void test_wac(TEngine * engine) {
     results[current++] = testForMove(engine, "nrq4r/2k1p3/1p1pPnp1/pRpP1p2/P1P2P2/2P1BB2/1R2Q1P1/6K1 w - - 0 1", "e3c5", -SCORE_MATE);
     results[current++] = testForMove(engine, "5r1k/3b2p1/p6p/1pRpR3/1P1P2q1/P4pP1/5QnP/1B4K1 w - - 0 1", "h2h3", -SCORE_MATE);
     results[current++] = testForMove(engine, "4r1k1/p1qr1p2/2pb1Bp1/1p5p/3P1n1R/1B3P2/PP3PK1/2Q4R w - - 0 1", "c1f4", -SCORE_MATE);
-    results[current++] = testForMove(engine, "5r2/1p1RRrk1/4Qq1p/1PP3p1/8/4B3/1b3P1P/6K1 w - - 0 1", "e7f7", -SCORE_MATE);
+    results[current++] = testForMove(engine, "5r2/1p1RRrk1/4Qq1p/1PP3p1/8/4B3/1b3P1P/6K1 w - - 0 1", "e6f7", -SCORE_MATE);
 
     for (int i = 0; i < TEST_SIZE; i++) {
         std::cout << "Position " << (i + 1) << ": " << (results[i] ? "Passed" : "Failed") << std::endl;
