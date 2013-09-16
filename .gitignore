@@ -23,3 +23,4 @@
 /tests/testBits.exe
 /src/book.bin
 /src/qm2.exe.stackdump
+/src/CMakeCache.txt

@@ -128,7 +128,7 @@ TMove * TMovePicker::pickNextMove(TSearchData * searchData, int depth, int alpha
                     //or the search was aborted
                     assert(iid_score == -SCORE_MATE + pos->currentPly
                             || iid_score == SCORE_DRAW
-                            || (iid_score == alpha && searchData->stopSearch == true));
+                            || searchData->stopSearch);
                     moveList->stage = STOP;
                     return NULL;
                 }
@@ -301,7 +301,7 @@ TMove * TMovePicker::pickNextMove(TSearchData * searchData, int depth, int alpha
                     move->score = MVVLVA(move);
                 }
                 if (!searchData->stack->inCheck) {
-                    moveList->stage = STOP;                   
+                    moveList->stage = STOP;
                     result = popBest(pos, moveList);
                     return result;
                 }

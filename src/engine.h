@@ -179,7 +179,6 @@ public:
         }
     }
 
-
     void analyse();
 };
 

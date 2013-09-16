@@ -3,13 +3,13 @@
 #include "defs.h"
 
 int evaluate(TSearchData * searchData, int alpha, int beta) {
-    if (searchData->stack->evaluationScore != SCORE_UNKNOWN) { 
-        return searchData->stack->evaluationScore; 
+    if (searchData->stack->evaluationScore != SCORE_UNKNOWN) {
+        return searchData->stack->evaluationScore;
     }
-    
+
     int result = 0;
     TBoard * pos = searchData->pos;
-    
+
     result += evaluateMaterial(searchData);
     result += phasedScore(searchData->stack->gamePhase, pos->boardFlags->pctMG, pos->boardFlags->pctEG);
     result += evaluatePawns(searchData);
@@ -17,9 +17,9 @@ int evaluate(TSearchData * searchData, int alpha, int beta) {
     if (searchData->learnParam == 1) { //learning
         result += evaluateExp(searchData);
     }
+    
     result &= GRAIN;
     result = pos->boardFlags->WTM ? result : -result;
-    
     searchData->stack->evaluationScore = result;
     return result;
 }
@@ -40,16 +40,16 @@ int evaluateExp(TSearchData * searchData) {
  * @param searchData search meta-data object
  */
 int evaluateMaterial(TSearchData * searchData) {
-    
+
     /*
      * 1. Get the score from the last stack record if the previous move was quiet, 
      *    so the material balance did not change. This is easy to verify with 
      *    the material hash
      */
-    if ((searchData->pos->boardFlags-1)->materialHash == searchData->pos->boardFlags->materialHash
-            && (searchData->stack-1)->evaluationScore != SCORE_UNKNOWN) {
-        searchData->stack->scores[SCORE_MATERIAL] = (searchData->stack-1)->scores[SCORE_MATERIAL];
-        searchData->stack->gamePhase = (searchData->stack-1)->gamePhase;
+    if ((searchData->pos->boardFlags - 1)->materialHash == searchData->pos->boardFlags->materialHash
+            && (searchData->stack - 1)->evaluationScore != SCORE_UNKNOWN) {
+        searchData->stack->scores[SCORE_MATERIAL] = (searchData->stack - 1)->scores[SCORE_MATERIAL];
+        searchData->stack->gamePhase = (searchData->stack - 1)->gamePhase;
         return searchData->stack->scores[SCORE_MATERIAL];
     }
 
@@ -194,7 +194,7 @@ int evaluateMaterial(TSearchData * searchData) {
             - 2 * (wqueens + bqueens) /* max: 4 */;
     phase = MAX(0, phase);
     phase = (MAX_GAMEPHASES * phase) / MAX_PHASE_SCORE;
-    
+
     /*
      * Store and return
      */
@@ -225,17 +225,17 @@ void printBB(std::string msg, U64 bb) {
  */
 
 int evaluatePawns(TSearchData * searchData) {
-    
-    
-     /*
+
+
+    /*
      * 1. Get the score from the last stack record if the latest move did not
      *    involve any pawns. This is easy to check with the pawn hash 
      */
-    if (searchData->pos->boardFlags->pawnHash == (searchData->pos->boardFlags-1)->pawnHash 
-            && (searchData->stack-1)->evaluationScore != SCORE_UNKNOWN) {
-        searchData->stack->scores[SCORE_PAWNS] = (searchData->stack-1)->scores[SCORE_PAWNS];
-        searchData->stack->scores[SCORE_SHELTERW] = (searchData->stack-1)->scores[SCORE_SHELTERW];
-        searchData->stack->scores[SCORE_SHELTERB] = (searchData->stack-1)->scores[SCORE_SHELTERB];
+    if (searchData->pos->boardFlags->pawnHash == (searchData->pos->boardFlags - 1)->pawnHash
+            && (searchData->stack - 1)->evaluationScore != SCORE_UNKNOWN) {
+        searchData->stack->scores[SCORE_PAWNS] = (searchData->stack - 1)->scores[SCORE_PAWNS];
+        searchData->stack->scores[SCORE_SHELTERW] = (searchData->stack - 1)->scores[SCORE_SHELTERW];
+        searchData->stack->scores[SCORE_SHELTERB] = (searchData->stack - 1)->scores[SCORE_SHELTERB];
         return searchData->stack->scores[SCORE_PAWNS];
     }
 
@@ -246,7 +246,7 @@ int evaluatePawns(TSearchData * searchData) {
     if (searchData->stack->scores[SCORE_PAWNS] != SCORE_INVALID) {
         return searchData->stack->scores[SCORE_PAWNS];
     }
-    
+
     /*
      * 3. Calculate pawn evaluation score
      */
@@ -398,10 +398,10 @@ int evaluateKings(TSearchData * searchData) {
     int score = 0;
     TBoard * pos = searchData->pos;
     if (searchData->stack->scores[SCORE_SHELTERW] && pos->blackQueens) {
-        score += phasedScore(searchData->stack->gamePhase, 2*searchData->stack->scores[SCORE_SHELTERW], 0);
+        score += phasedScore(searchData->stack->gamePhase, 2 * searchData->stack->scores[SCORE_SHELTERW], 0);
     }
     if (searchData->stack->scores[SCORE_SHELTERB] && pos->whiteQueens) {
-        score -= phasedScore(searchData->stack->gamePhase, 2*searchData->stack->scores[SCORE_SHELTERB], 0);
+        score -= phasedScore(searchData->stack->gamePhase, 2 * searchData->stack->scores[SCORE_SHELTERB], 0);
     }
     searchData->stack->scores[SCORE_KINGS] = score;
 

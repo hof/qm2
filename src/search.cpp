@@ -72,12 +72,10 @@ int pvs_root(TSearchData *searchData, int alpha, int beta, int depth) {
             searchData->pos->boardFlags->checkers = rMove->checkers;
         }
         int score = -pvs(searchData, -alpha - 1, -alpha, depth - ONE_PLY + extend);
-
-        if (score > alpha && score < beta) {
+        if (score > alpha && score < beta && searchData->stopSearch == false) {
             score = -pvs(searchData, -beta, -alpha, depth - ONE_PLY + extend);
         }
         searchData->backward(&rMove->Move);
-
         rMove->Nodes += searchData->nodes - nodesBeforeMove;
         rMove->Value = score;
         if (searchData->stopSearch) {
@@ -124,6 +122,11 @@ int pvs_root(TSearchData *searchData, int alpha, int beta, int depth) {
  */
 int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
 
+    if (searchData->stopSearch) {
+        return alpha;
+    }
+
+
     TBoard * pos = searchData->pos;
     /* 
      * 1. Mate distance pruning: 
@@ -133,14 +136,12 @@ int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
     if ((SCORE_MATE - pos->currentPly) < beta) {
         beta = SCORE_MATE - pos->currentPly;
         if (alpha >= (SCORE_MATE - pos->currentPly)) {
-
             return SCORE_MATE - pos->currentPly;
         }
     }
     if ((-SCORE_MATE + pos->currentPly) > alpha) {
         alpha = -SCORE_MATE + pos->currentPly;
         if (beta <= (-SCORE_MATE + pos->currentPly)) {
-
             return -SCORE_MATE + pos->currentPly;
         }
     }
@@ -157,11 +158,8 @@ int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
         return score;
     }
     searchData->nodes++;
-    if (--searchData->nodesUntilPoll <= 0 && !searchData->stopSearch) {
+    if (--searchData->nodesUntilPoll <= 0) {
         searchData->poll();
-        if (searchData->stopSearch) {
-            return alpha;
-        }
     }
 
 
@@ -248,16 +246,12 @@ int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
         int nullDepth = MAX(0, depth - ONE_PLY - NullReduction(depth, eval - beta));
         int score = -pvs(searchData, -beta, -alpha, nullDepth);
         searchData->backward();
-        if (searchData->stopSearch) {
-            return alpha;
-        }
         if (score >= beta) {
             if (score >= SCORE_MATE - MAX_PLY) {
                 score = beta; //do not return unproven mate scores
             }
             return score;
-        }
-        if (alpha > (-SCORE_MATE + MAX_PLY) && score < (-SCORE_MATE + MAX_PLY)) {
+        } else if (alpha > (-SCORE_MATE + MAX_PLY) && score < (-SCORE_MATE + MAX_PLY)) {
             extendNode = HALF_PLY; //mate threat extension
         }
 
@@ -390,9 +384,7 @@ int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
     searchData->forward(firstMove, givesCheck);
     int bestScore = -pvs(searchData, -beta, -alpha, depth - ONE_PLY + extendNode + extendMove);
     searchData->backward(firstMove);
-    if (searchData->stopSearch) {
-        return alpha;
-    } else if (bestScore > alpha) {
+    if (bestScore > alpha) {
         if (bestScore >= beta) {
             searchData->hashTable->ttStore(searchData, firstMove->asInt(), bestScore, depth, alpha, beta);
             if (!firstMove->capture && !firstMove->promotion) {
@@ -512,9 +504,7 @@ int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
             score = -pvs(searchData, -beta, -alpha, depth - ONE_PLY + extendMove + extendNode);
         }
         searchData->backward(move);
-        if (searchData->stopSearch) {
-            return alpha;
-        } else if (score > bestScore) {
+        if (score > bestScore) {
             searchData->stack->bestMove.setMove(move);
             if (score >= beta) {
                 searchData->hashTable->ttStore(searchData, move->asInt(), score, depth, alpha, beta);
@@ -557,12 +547,12 @@ static const int MAXPOSGAIN = 2 * VPAWN;
 
 int qsearch(TSearchData * searchData, int alpha, int beta, int qPly) {
 
+    if (searchData->stopSearch) {
+        return alpha;
+    }
     searchData->nodes++;
-    if (--searchData->nodesUntilPoll <= 0 && !searchData->stopSearch) {
+    if (--searchData->nodesUntilPoll <= 0) {
         searchData->poll();
-        if (searchData->stopSearch) {
-            return alpha;
-        }
     }
     TBoard * pos = searchData->pos;
 
@@ -626,9 +616,7 @@ int qsearch(TSearchData * searchData, int alpha, int beta, int qPly) {
             searchData->forward(move, givesCheck);
             score = -qsearch(searchData, -beta, -alpha, qPly + 1);
             searchData->backward(move);
-            if (searchData->stopSearch) {
-                return alpha;
-            } else if (score >= beta) {
+            if (score >= beta) {
                 searchData->stack->bestMove.setMove(move);
                 return beta;
             } else if (score > alpha) {
@@ -654,9 +642,7 @@ int qsearch(TSearchData * searchData, int alpha, int beta, int qPly) {
             searchData->forward(move, givesCheck);
             score = -qsearch(searchData, -beta, -alpha, qPly + 1);
             searchData->backward(move);
-            if (searchData->stopSearch) {
-                return alpha;
-            } else if (score >= beta) {
+            if (score >= beta) {
                 searchData->stack->bestMove.setMove(move);
                 return beta;
             } else if (score > alpha) {

@@ -23,8 +23,8 @@ enum EVALUATION_CONSTANTS {
     PHASE_OPENING = 0, //two phases are used: middlegame and endgame
     PHASE_MIDDLEGAME = 0,
     PHASE_ENDGAME = 1,
-    GRAIN_SIZE = (1 << 3), //2^3==8, giving eval steps of 8 centipawns
-    GRAIN = 0xFFFFFFFF & ~(GRAIN_SIZE - 1)
+    GRAIN_SIZE = 1, //powers of 2, used for rounding evaluation score down (and hopefully get more cutoffs)
+    GRAIN = 0xFFFFFFFF & ~((1 << GRAIN_SIZE) - 1)    
 };
 
 const int MAX_EVALUATION_COMPONENTS = 5;
