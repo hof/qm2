@@ -22,8 +22,6 @@ struct TMaterialTableEntry {
 struct TPawnTableEntry {
     U64 key;
     short pawnScore;
-    short shelterScoreW;
-    short shelterScoreB;
 };
 
 enum TranspositionTableEntryType {
@@ -97,7 +95,7 @@ public:
     static void mtStore(TSearchData * searchData, int value, int gamePhase);
     static void repStore(TSearchData * searchData, U64 hashCode, int fiftyCount);
     static void ptLookup(TSearchData * searchData);
-    static void ptStore(TSearchData * searchData, int pawnScore, int shelterScoreW, int shelterScoreB);
+    static void ptStore(TSearchData * searchData, int pawnScore);
 
     void clear();
 

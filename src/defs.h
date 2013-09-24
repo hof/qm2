@@ -10,8 +10,14 @@
 
 #include <assert.h>
 #include <stdint.h>
+#include <iostream>
+#include <string.h>
+
+#include "score.h"
+
 
 typedef uint64_t U64;
+
 
 #define C64(x) x##UL
 
@@ -19,20 +25,21 @@ static const U64 BIT32 = (C64(1) << 32);
 
 inline unsigned bitScanForward(U64 x) {
     assert(x);
-    asm ("bsfq %0, %0" : "=r" (x) : "0" (x)); 
+    asm ("bsfq %0, %0" : "=r" (x) : "0" (x));
     return x;
 }
 
 inline unsigned bitScanReverse(U64 x) {
     assert(x);
-    asm ("bsrq %0, %0" : "=r" (x) : "0" (x)); 
+    asm ("bsrq %0, %0" : "=r" (x) : "0" (x));
     return x;
 }
 
 #define BSF(x) (bitScanForward(x))
 #define BSR(x) (bitScanReverse(x))
+#define BIT(sq) (C64(1) << (sq))
 
-inline unsigned popCount(U64 x) { 
+inline unsigned popCount(U64 x) {
     x = (x & C64(0x5555555555555555)) + ((x >> 1) & C64(0x5555555555555555));
     x = (x & C64(0x3333333333333333)) + ((x >> 2) & C64(0x3333333333333333));
     x = (x & C64(0x0F0F0F0F0F0F0F0F)) + ((x >> 4) & C64(0x0F0F0F0F0F0F0F0F));
@@ -42,8 +49,6 @@ inline unsigned popCount(U64 x) {
 inline unsigned popCount(U64 x, bool checkZero) {
     return (checkZero && (!x)) ? 0 : popCount(x);
 }
-
-#define BIT(sq) (C64(1) << (sq))
 
 inline unsigned popFirst(U64 & x) {
     assert(x);
@@ -59,7 +64,32 @@ inline unsigned popLast(U64 & x) {
     return sq;
 }
 
-#define POP(x)              (popFirst(x))
+inline U64 northFill(U64 x) {
+    x |= (x <<  8);
+    x |= (x << 16);
+    x |= (x << 32);
+    return x;
+}
+
+inline U64 southFill(U64 x) {
+    x |= (x >> 8);
+    x |= (x >> 16);
+    x |= (x >> 32);
+    return x;
+}
+
+#define POP(x) (popFirst(x))
+
+#define FRONTFILL(x) (northFill(x))
+#define FRONTFILL_B(x) (southFill(x))
+#define BACKFILL(x) (southFill(x))
+#define BACKFILL_B(x) (northFill(x))
+#define FILEFILL(x) ((northFill(x)) | (southFill(x)))
+
+#define NORTH1(x) ((x) << 8)
+#define SOUTH1(x) ((x) >> 8)
+#define NORTH2(x) ((x) << 16)
+#define SOUTH2(x) ((x) >> 16)
 
 #define FILE(sq)            ((sq)&7)
 #define RANK(sq)            ((sq)>>3)
@@ -193,6 +223,7 @@ const U64 BACKWARD_RANKS[8] = {
     RANK_1 | RANK_2 | RANK_3 | RANK_4 | RANK_5 | RANK_6 | RANK_7
 };
 
+
 const U64 WHITE_SQUARES = C64(0x55AA55AA55AA55AA);
 const U64 BLACK_SQUARES = C64(0xAA55AA55AA55AA55);
 
@@ -206,6 +237,27 @@ const U64 EDGE = U64(RANK_8 | RANK_1 | FILE_A | FILE_H);
 const U64 OUTER = U64(RANK_7 | RANK_2 | FILE_B | FILE_G | EDGE);
 const U64 LARGE_CENTER = U64(FULL_BOARD^OUTER);
 const U64 CENTER = U64(LARGE_CENTER & ~(RANK_6 | RANK_3 | FILE_C | FILE_F));
+
+
+/*
+ * For debugging
+ */
+inline void printBB(std::string title, U64 bb) {
+    std::cout << title << std::endl;
+    for (int sq = 0; sq < 64; sq++) {
+        int rsq = FLIP_SQUARE(sq);
+        if (FILE(rsq) == 0) {
+            std::cout << std::endl;
+        }
+        if (BIT(rsq) & bb) {
+            std::cout << "x";
+        } else {
+            std::cout << ".";
+        }
+    }
+    std::cout << std::endl << std::endl;
+}
+
 
 #endif	/* DEFS_H */
 

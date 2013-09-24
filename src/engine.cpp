@@ -233,7 +233,7 @@ void * TEngine::_think(void* engineObjPtr) {
          * Update and output search statistics
          */
         engine->setNodesSearched(searchData->nodes);
-        bool sendDebugInfo = false;
+        bool sendDebugInfo = true;
         if (searchData->nodes && sendDebugInfo && searchData->outputHandler) {
 
             int hashHits = searchData->hashProbes ? U64(searchData->hashHits * 100) / searchData->hashProbes : 0;
@@ -265,7 +265,6 @@ void * TEngine::_think(void* engineObjPtr) {
  * - evaluation function
  * - quiescence search
  * - scoring each move using a minimal depth 0 search
- * - shallow depth 3 search for the best move
  * 
  * This function is mainly useful for testing the above components and the 
  * move ordering by visual inspection of the output.
@@ -275,18 +274,19 @@ void TEngine::analyse() {
     TSearchData * searchData = new TSearchData(_rootFen.c_str(), PIECE_SQUARE_TABLE, _hashTable, _outputHandler);
     std::cout << searchData->pos->asFen().c_str() << std::endl;
     searchData->stack->evaluationScore = evaluate(searchData, 0, 0);
-    std::cout << "1) Material score: " << searchData->stack->scores[SCORE_MATERIAL] << std::endl;
-    std::cout << "2) Game phase: " << searchData->stack->gamePhase << std::endl;
-    std::cout << "3) Piece Square tables: " << phasedScore(searchData->stack->gamePhase,
-            searchData->pos->boardFlags->pctMG,
-            searchData->pos->boardFlags->pctEG) << std::endl;
-    std::cout << "4) Shelter score for white: " << searchData->stack->scores[SCORE_SHELTERW] << std::endl;
-    std::cout << "5) Shelter score for black: " << searchData->stack->scores[SCORE_SHELTERB] << std::endl;
+    int phase = searchData->stack->gamePhase;
+    std::cout << "1) Material score: " << searchData->stack->scores[SCORE_MATERIAL].mg << std::endl;
+    std::cout << "2) Game phase: " << phase << std::endl;
+    std::cout << "3) Piece Square tables: " << searchData->pos->boardFlags->pct.get(phase) << std::endl;
+    std::cout << "4) Pawn score: " << searchData->stack->scores[SCORE_PAWNS].get(phase) << std::endl;
+    std::cout << "5) Shelter score for white: " << searchData->stack->scores[SCORE_SHELTER_W].get(phase) << std::endl;
+    std::cout << "6) Shelter score for black: " << searchData->stack->scores[SCORE_SHELTER_B].get(phase) << std::endl;
+    
 
-    std::cout << "6) Evaluation:" << evaluate(searchData, -SCORE_MATE, SCORE_MATE) << std::endl;
+    std::cout << "8) Evaluation:" << searchData->stack->evaluationScore << std::endl;
 
-    std::cout << "7) Quiescence:" << qsearch(searchData, -SCORE_MATE, SCORE_MATE, 0) << std::endl;
-    std::cout << "8) Best move:" << std::endl;
+    std::cout << "9) Quiescence:" << qsearch(searchData, -SCORE_MATE, SCORE_MATE, 0) << std::endl;
+    std::cout << "10) Best move:" << std::endl;
     //TBook * book = new TBook();
     /*
      * Analyse best move doing a shallow search

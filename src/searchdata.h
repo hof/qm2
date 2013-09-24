@@ -113,7 +113,7 @@ struct TSearchStack {
 
     int gamePhase;
     int evaluationScore;
-    int scores[MAX_EVALUATION_COMPONENTS];
+    TScore scores[MAX_EVALUATION_COMPONENTS];
 
     int reduce;
 
@@ -166,7 +166,7 @@ public:
             THashTable * globalHashTable,
             TOutputHandler * outputH) {
         pos = new TBoard();
-        pos->setPieceSquareTables(pieceSquareTables);
+        pos->setPieceSquareTable(pieceSquareTables);
         pos->fromFen(fen);
         memset(history, 0, sizeof (history));
         hashTable = globalHashTable;
@@ -194,7 +194,7 @@ public:
         learnFactor = 1.0;
         evaluationComponents = MAX_EVALUATION_COMPONENTS;
         rootStack = stack = &_stack[0];
-        stack->evaluationScore = SCORE_UNKNOWN;
+        stack->evaluationScore = SCORE_INVALID;
         stack->nodeType = PVNODE;
 #ifdef PRINTSEARCH
         examineSearch = 0;
@@ -231,7 +231,7 @@ public:
         stack->move.setMove(0);
         stack++;
         stack->inCheck = false;
-        stack->evaluationScore = SCORE_UNKNOWN;
+        stack->evaluationScore = SCORE_INVALID;
         pos->forward();
         assert(stack == &_stack[pos->currentPly]);
     }
@@ -247,7 +247,7 @@ public:
         stack->move.setMove(move);
         stack++;
         stack->inCheck = givesCheck;
-        stack->evaluationScore = SCORE_UNKNOWN;
+        stack->evaluationScore = SCORE_INVALID;
         pos->forward(move);
         assert(stack == &_stack[pos->currentPly]);
     }
@@ -292,7 +292,7 @@ public:
     inline void resetStack() {
         pos->currentPly = 0;
         stack = rootStack;
-        stack->evaluationScore = SCORE_UNKNOWN;
+        stack->evaluationScore = SCORE_INVALID;
         pos->_boardFlags[0].copy(this->pos->boardFlags);
         pos->boardFlags = &this->pos->_boardFlags[0];
         nodes = 0;

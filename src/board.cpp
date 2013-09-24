@@ -53,7 +53,11 @@ void TBoard::clear() {
     memset(pieces, 0, sizeof (pieces));
 }
 
-void TBoard::setPieceSquareTables(const short pieceSquareTableValues[WKING][2][64]) {
+void TBoard::clearPieceSquareTable() {
+    memset(pieceSquareTable, 0, sizeof(pieceSquareTable));
+}
+
+void TBoard::setPieceSquareTable(const short pieceSquareTableValues[WKING][2][64]) {
     for (int pc = 0; pc < WKING; pc++) {
         for (int sq = 0; sq < 64; sq++) {
             int mgScore = pieceSquareTableValues[pc][0][sq];
@@ -156,22 +160,18 @@ void TBoard::forward(TMove * move) {
         if (castleRight(CASTLE_K) && (ssq == h1 || ssq == e1 || tsq == h1)) {
             boardFlags->castlingFlags ^= CASTLE_K;
             HASH_CASTLE_K(boardFlags->hashCode);
-            HASH_CASTLE_K(boardFlags->pawnHash);
         }
         if (castleRight(CASTLE_Q) && (ssq == a1 || ssq == e1 || tsq == a1)) {
             boardFlags->castlingFlags ^= CASTLE_Q;
             HASH_CASTLE_Q(boardFlags->hashCode);
-            HASH_CASTLE_Q(boardFlags->pawnHash);
         }
         if (castleRight(CASTLE_k) && (ssq == h8 || ssq == e8 || tsq == h8)) {
             boardFlags->castlingFlags ^= CASTLE_k;
             HASH_CASTLE_k(boardFlags->hashCode);
-            HASH_CASTLE_k(boardFlags->pawnHash);
         }
         if (castleRight(CASTLE_q) && (ssq == a8 || ssq == e8 || tsq == a8)) {
             boardFlags->castlingFlags ^= CASTLE_q;
             HASH_CASTLE_q(boardFlags->hashCode);
-            HASH_CASTLE_q(boardFlags->pawnHash);
         }
 
     }

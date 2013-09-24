@@ -41,8 +41,9 @@ private:
     bool handleNewGame();
     bool handlePosition(TInputParser &parser);
     bool handleForward(TInputParser &parser);
-    bool handleTestrun(TInputParser &parser);
     bool handlePonderHit();
+    bool handleLearn(TInputParser &parser);
+    bool handleTestEval(TInputParser &parser);
     TEngine * _engine;
     THashTable * _hashTable;
     TOutputHandler * _outputHandler;

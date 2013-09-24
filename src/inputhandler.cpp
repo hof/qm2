@@ -45,11 +45,14 @@ bool TInputHandler::handle(std::string cmd) {
             result = handleForward(parser);
         } else if (token == "setoption") {
             result = handleSetOption(parser);
-        } else if (token == "testrun") {
-            result = handleTestrun(parser);
         } else if (token == "ponderhit") {
             result = handlePonderHit();
+        } else if (token == "testeval") {
+            result = handleTestEval(parser);
+        } else if (token == "learn") {
+            result = handleLearn(parser);
         }
+
     }
     return result;
 }
@@ -185,6 +188,7 @@ bool TInputHandler::handlePosition(TInputParser& parser) {
             parser >> token;
         }
         TBoard pos;
+        pos.clearPieceSquareTable();
         pos.fromFen(_fen.c_str());
         if (token == "moves") {
             THashTable * hash = hashTable();
@@ -220,11 +224,11 @@ bool TInputHandler::handleForward(TInputParser& parser) {
 }
 
 /*
- * testrun can be used to determine if a new evaluation or search 
+ * XLearn can be used to determine if a new evaluation or search 
  * feature gives better performance, and what is the ideal score
  * 
  */
-bool TInputHandler::handleTestrun(TInputParser& parser) {
+bool TInputHandler::handleLearn(TInputParser& parser) {
     bool result = true;
     engine()->gameSettings.clear();
     engine()->setHashTable(hashTable());
@@ -235,3 +239,32 @@ bool TInputHandler::handleTestrun(TInputParser& parser) {
     engine()->learn();
     return result;
 }
+
+/*
+ * XAnalyse can be used to test the evaluation function by analysing
+ * a position and displaying the evaluation score for each evaluation
+ * component
+ */
+bool TInputHandler::handleTestEval(TInputParser& parser) {
+    bool result = true;
+    engine()->gameSettings.clear();
+    engine()->setHashTable(hashTable());
+    engine()->setPonder(false);
+    engine()->setInputHandler(this);
+    engine()->setOutputHandler(outputHandler());
+    engine()->gameSettings.maxDepth = 1;
+    std::string token;
+    _fen = "";
+    while (parser >> token) {
+        _fen += token;
+        _fen += ' ';
+    }
+    if (_fen == "") {
+        _fen = _defaultFen;
+    }
+    engine()->newGame(_fen);
+    engine()->analyse();
+    engine()->think();
+    return result;
+}
+

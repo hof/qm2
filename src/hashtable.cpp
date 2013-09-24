@@ -210,15 +210,13 @@ void THashTable::ptLookup(TSearchData * searchData) {
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
     if ((entry->key ^ entry->pawnScore) == pawnHash) {
         searchData->stack->scores[SCORE_PAWNS] = entry->pawnScore;
-        searchData->stack->scores[SCORE_SHELTERW] = entry->shelterScoreW;
-        searchData->stack->scores[SCORE_SHELTERB] = entry->shelterScoreB;
         searchData->pawnTableHits++;
     } else {
         searchData->stack->scores[SCORE_PAWNS] = SCORE_INVALID;
     }
 }
 
-void THashTable::ptStore(TSearchData * searchData, int pawnScore, int shelterScoreW, int shelterScoreB) {
+void THashTable::ptStore(TSearchData * searchData, int pawnScore) {
     if (searchData->stopSearch) {
         return;
     }
@@ -226,8 +224,6 @@ void THashTable::ptStore(TSearchData * searchData, int pawnScore, int shelterSco
     U64 pawnHash = searchData->pos->boardFlags->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
     entry->pawnScore = pawnScore;
-    entry->shelterScoreB = shelterScoreB;
-    entry->shelterScoreW = shelterScoreW;
     entry->key = (pawnHash ^ pawnScore);
 }
 

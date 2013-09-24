@@ -57,7 +57,7 @@ int TSearchData::initRootMoves() {
     root.InCheck = pos->inCheck();
     stack->hashCode = pos->boardFlags->hashCode;
     stack->reduce = 0;
-    stack->evaluationScore = SCORE_UNKNOWN;
+    stack->evaluationScore = SCORE_INVALID;
     result = root.MoveCount;
     return result;
 }
