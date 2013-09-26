@@ -271,9 +271,6 @@ struct TBoard {
         }
         boardFlags->pct.mg += pieceSquareTable[piece][0][sq];
         boardFlags->pct.eg += pieceSquareTable[piece][1][sq];
-        if (currentPly == 0) {
-            std::cout << piece << " @ " << sq << ": " << pieceSquareTable[piece][0][sq] << std::endl;
-        }
         addPiece(piece, sq);
     }
 

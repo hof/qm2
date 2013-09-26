@@ -45,9 +45,9 @@ struct TScore {
         return *this;
     }
 
-    inline TScore& operator=(const int & s) {
-        mg = s;
-        eg = s;
+    inline TScore& operator=(const short x) {
+        mg = x;
+        eg = x;
         return *this;
     }
 
@@ -56,10 +56,40 @@ struct TScore {
         eg += s.eg;
         return *this;
     }
+    
+    inline TScore& operator+=(const TScore & s) {
+        mg += s.mg;
+        eg += s.eg;
+        return *this;
+    }
+
+    inline TScore& operator+(const short x) {
+        mg += x;
+        eg += x;
+        return *this;
+    }
+
+    inline TScore& operator+=(const short x) {
+        mg += x;
+        eg += x;
+        return *this;
+    }
 
     inline TScore& operator-(const TScore & s) {
         mg -= s.mg;
         eg -= s.eg;
+        return *this;
+    }
+
+    inline TScore& operator-(const short x) {
+        mg -= x;
+        eg -= x;
+        return *this;
+    }
+
+    inline TScore& operator-=(const short x) {
+        mg -= x;
+        eg -= x;
         return *this;
     }
 
@@ -74,10 +104,29 @@ struct TScore {
         eg *= x;
         return *this;
     }
-    
-     inline TScore& operator*(const double x) {
+
+    inline TScore& operator*=(const short x) {
         mg *= x;
         eg *= x;
+        return *this;
+    }
+
+    inline TScore& operator*(const double x) {
+        mg *= x;
+        eg *= x;
+        return *this;
+    }
+
+    inline TScore& operator*=(const double x) {
+        mg *= x;
+        eg *= x;
+        return *this;
+    }
+    
+    inline TScore& operator/(const short x) {
+        assert(x!=0);
+        mg = mg/x;
+        eg = eg/x;
         return *this;
     }
 
@@ -98,7 +147,7 @@ struct TScore {
         eg += (*table)[1];
     }
 
-    inline int get(int phase) {
+    inline int get(short phase) {
         assert(phase >= 0 && phase <= MAX_GAMEPHASES);
         return (mg * (MAX_GAMEPHASES - phase) + eg * phase) >> GAMEPHASE_SCORE_BSR;
     }

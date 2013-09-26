@@ -253,38 +253,6 @@ TMove * TMovePicker::pickNextMove(TSearchData * searchData, int depth, int alpha
                 mask = pos->allPieces;
                 if (searchData->stack->inCheck) {
                     mask &= pos->boardFlags->checkers;
-                } else if (gap) {
-                    if (pos->boardFlags->WTM) {
-                        U64 reserved = mask & (KingMoves[*pos->blackKingPos] | KnightMoves[*pos->blackKingPos]);
-                        if (gap > VPAWN) {
-                            mask ^= pos->blackPawns;
-                            if (gap > VKNIGHT) {
-                                mask ^= (pos->blackBishops | pos->blackKnights);
-                                if (gap > VROOK) {
-                                    mask ^= pos->blackRooks;
-                                    if (gap > VQUEEN) {
-                                        mask ^= pos->blackQueens;
-                                    }
-                                }
-                            }
-                            mask |= reserved;
-                        }
-                    } else {
-                        U64 reserved = mask & (KingMoves[*pos->whiteKingPos] | KnightMoves[*pos->whiteKingPos]);
-                        if (gap > VPAWN) {
-                            mask ^= pos->whitePawns;
-                            if (gap > VKNIGHT) {
-                                mask ^= (pos->whiteBishops | pos->whiteKnights);
-                                if (gap > VROOK) {
-                                    mask ^= pos->whiteRooks;
-                                    if (gap > VQUEEN) {
-                                        mask ^= pos->whiteQueens;
-                                    }
-                                }
-                            }
-                            mask |= reserved;
-                        }
-                    }
                 }
                 genCaptures(pos, moveList, mask);
                 for (TMove * move = moveList->current; move != moveList->last; move++) {
@@ -300,8 +268,29 @@ TMove * TMovePicker::pickNextMove(TSearchData * searchData, int depth, int alpha
                 for (TMove * move = moveList->current; move != moveList->last; move++) {
                     move->score = MVVLVA(move);
                 }
-                if (!searchData->stack->inCheck) {
+                result = popBest(pos, moveList);
+                if (searchData->stack->inCheck) {
+                    moveList->stage = Q_EVASIONS;
+                } else if (depth < 1 && alpha+1 < beta) {
+                    moveList->stage = Q_QUIET_CHECKS;
+                } else {
                     moveList->stage = STOP;
+                    return result;
+                }
+                if (result) {
+                    return result;
+                }
+            case Q_QUIET_CHECKS:
+                if (moveList->stage == Q_QUIET_CHECKS) {
+                    moveList->stage = STOP;
+                    genQuietChecks(pos, moveList);
+                    for (TMove * move = moveList->current; move != moveList->last; move++) {
+                        move->score = move->piece;
+                        int kpos = pos->boardFlags->WTM ? *pos->blackKingPos : *pos->whiteKingPos;
+                        if (KingMoves[kpos] & BIT(move->tsq)) { //contact check
+                            move->score <<= 1;
+                        }
+                    }
                     result = popBest(pos, moveList);
                     return result;
                 }
@@ -310,18 +299,6 @@ TMove * TMovePicker::pickNextMove(TSearchData * searchData, int depth, int alpha
                 genEvasions(pos, moveList);
                 for (TMove * move = moveList->first; move != moveList->last; move++) {
                     move->score = searchData->history[move->piece][move->tsq];
-                }
-                moveList->stage = STOP;
-                result = popBest(pos, moveList);
-                return result;
-            case Q_QUIET_CHECKS:
-                genQuietChecks(pos, moveList);
-                for (TMove * move = moveList->current; move != moveList->last; move++) {
-                    move->score = move->piece;
-                    int kpos = pos->boardFlags->WTM ? *pos->blackKingPos : *pos->whiteKingPos;
-                    if (KingMoves[kpos] & BIT(move->tsq)) { //contact check
-                        move->score <<= 1;
-                    }
                 }
                 moveList->stage = STOP;
                 result = popBest(pos, moveList);

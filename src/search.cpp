@@ -623,7 +623,7 @@ int qsearch(TSearchData * searchData, int alpha, int beta, int qPly) {
                 searchData->stack->bestMove.setMove(move);
                 alpha = score;
             }
-        } while (move = mp->pickNextMove(searchData, qPly, alpha, beta, 0));
+        } while (move = mp->pickNextMove(searchData, qPly, alpha, beta, alpha-base));
     } else { // in check
         if (pos->currentPly >= MAX_PLY) {
             return alpha;

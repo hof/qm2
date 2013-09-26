@@ -14,6 +14,7 @@ target_link_libraries(testSearch QM2SRC)
 target_link_libraries(testPolyglot QM2SRC)
 target_link_libraries(testTT QM2SRC)
 
+
 #performance analyzing tests: 
 add_executable(testDepth test_depth.cpp)
 add_executable(testBK test_bratkokopec.cpp)
@@ -26,4 +27,8 @@ target_link_libraries(testWAC QM2SRC)
 target_link_libraries(testBK QM2SRC)
 target_link_libraries(testPrintSearch QM2SRC)
 target_link_libraries(testEvaluation QM2SRC)
+
+#pct generation
+add_executable(genPct generate_pct.cpp)
+target_link_libraries(genPct QM2SRC)
 

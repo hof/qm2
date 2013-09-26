@@ -181,7 +181,7 @@ void THashTable::mtLookup(TSearchData * searchData) {
     TMaterialTableEntry * materialTable = hashTable->materialTable;
     U64 materialHash = searchData->pos->boardFlags->materialHash;
     TMaterialTableEntry entry = materialTable[hashTable->getMaterialHashKey(materialHash)];
-    if ((entry.key^entry.value) == materialHash) {
+    if ((entry.key ^ entry.value) == materialHash) {
         searchData->materialTableHits++;
         searchData->stack->scores[SCORE_MATERIAL] = entry.value;
         searchData->stack->gamePhase = entry.gamePhase;
@@ -201,9 +201,6 @@ void THashTable::mtStore(TSearchData * searchData, int value, int gamePhase) {
 }
 
 void THashTable::ptLookup(TSearchData * searchData) {
-    if (searchData->stopSearch) {
-        return;
-    }
     searchData->pawnTableProbes++;
     THashTable * hashTable = searchData->hashTable;
     U64 pawnHash = searchData->pos->boardFlags->pawnHash;
@@ -217,9 +214,6 @@ void THashTable::ptLookup(TSearchData * searchData) {
 }
 
 void THashTable::ptStore(TSearchData * searchData, int pawnScore) {
-    if (searchData->stopSearch) {
-        return;
-    }
     THashTable * hashTable = searchData->hashTable;
     U64 pawnHash = searchData->pos->boardFlags->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];

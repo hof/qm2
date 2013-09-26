@@ -369,7 +369,7 @@ void * TEngine::_learn(void * engineObjPtr) {
      */
 
     const int MAXDEPTH = 2; //default: depth 2
-    const int GAMECOUNT = 3000; //Sample size, 920+ recommended. Use even numbers. 
+    const int GAMECOUNT = 1000; //Sample size, 920+ recommended. Use even numbers. 
 
     const int STOPSCORE = 300; //if the score is higher than this for both sides, the game is consider a win
     const int MAXPLIES = 200; //maximum game length in plies

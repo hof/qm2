@@ -36,11 +36,11 @@ static const int FUTILITY_MARGIN[7] = {
  */
 static inline int NullReduction(int depth, int plusScore) {
     int R = 2*ONE_PLY
-            + ONE_PLY * (depth > 7 * ONE_PLY)
-            + ONE_PLY * (depth > 14 * ONE_PLY);
-    if (plusScore > 50) {
+            + HALF_PLY * (depth > 7 * ONE_PLY)
+            + HALF_PLY * (depth > 14 * ONE_PLY);
+    if (plusScore > VPAWN/2) {
         R += HALF_PLY;
-        if (plusScore > 100) {
+        if (plusScore > VPAWN) {
             R += HALF_PLY;
         }
     }

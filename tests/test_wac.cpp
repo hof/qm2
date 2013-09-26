@@ -26,7 +26,7 @@ bool testForMove(TEngine * engine, string fen, string move, int targetScore) {
     pos.fromFen(fen.c_str());
     bm.fromString(&pos, move.c_str());
 
-    engine->testPosition(bm, targetScore, 10 * 1000, 0);
+    engine->testPosition(bm, targetScore, 30 * 1000, 0);
     engine->newGame(pos.asFen());
     std::cout << "Position: " << pos.asFen() << " best move: " << bm.asString() << std::endl;
 
@@ -53,6 +53,7 @@ void test_wac(TEngine * engine) {
     1nbq1r1k/3rbp1p/p1p1pp1Q/1p6/P1pPN3/5NP1/1P2PPBP/R4RK1 w - - bm Nfg5; id "WAC.293";
      */
 
+    results[current++] = testForMove(engine, "r4rk1/p5p1/1p2p2p/3pPn1P/b1p3Bq/P1P3P1/2PN1P2/R2Q1RK1 b - - 0 19", "f5g3",30);    
     results[current++] = testForMove(engine, "2rr2k1/pb3pp1/1p1ppq1p/1P6/2PNP3/P2Q1P2/6PP/3R1RK1 b - - 1 1", "f6g5",30);    
     results[current++] = testForMove(engine, "2r2rk1/1p2pnb1/p2p3p/q2P2p1/5p1P/2P5/PP3PPB/1K1RQB1R b - -0 21", "c8c3", -SCORE_MATE);
     results[current++] = testForMove(engine, "rq2rbk1/6p1/p2p2Pp/1p1Rn3/4PB2/6Q1/PPP1B3/2K3R1 w - - 0 1", "f4h6", -SCORE_MATE);

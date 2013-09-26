@@ -7,7 +7,10 @@
 /src/Makefile
 /src/cmake_install.cmake
 /src/qm2.exe
-/qm2.exe.stackdump
+/src/book.bin
+/src/*.exe.stackdump
+/src/CMakeCache.txt
+/*.exe.stackdump
 /tests/Makefile
 /tests/cmake_install.cmake
 /tests/testDepth.exe
@@ -21,6 +24,6 @@
 /tests/testPolyglot.exe
 /tests/testTT.exe
 /tests/testBits.exe
-/src/book.bin
-/src/qm2.exe.stackdump
-/src/CMakeCache.txt
+/tests/*.exe.stackdump
+/mdebug.bat
+/mrelease.bat
