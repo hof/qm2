@@ -105,7 +105,6 @@ TScore * evaluateMaterial(TSearchData * searchData) {
 
     // Knights
     if (wknights != bknights) {
-        value += VKNIGHT * (wknights - bknights);
         value += factor(wknights, bknights, FKNIGHT_OPPOSING_PAWNS, bpawns, wpawns);
         value += cond(wknights >= 2, bknights >= 2, VKNIGHT_PAIR);
         value += factor(wknights, bknights, KNIGHT_X_PIECECOUNT, wpieces + bpieces);
@@ -113,7 +112,6 @@ TScore * evaluateMaterial(TSearchData * searchData) {
 
     //Bishops
     if (wbishops != bbishops) {
-        value += VBISHOP * (wbishops - bbishops);
         bool wPair = wbishops > 1 && pos->whiteBishopPair(); //note: material hash includes bishop colors
         bool bPair = bbishops > 1 && pos->blackBishopPair();
         value += cond(wPair, bPair, VBISHOPPAIR);
@@ -131,14 +129,12 @@ TScore * evaluateMaterial(TSearchData * searchData) {
 
     //Rooks
     if (wrooks != brooks) {
-        value += VROOK * (wrooks - brooks);
         value += cond(wrooks >= 2, brooks >= 2, VROOKPAIR);
         value += factor(wrooks, brooks, ROOK_OPPOSING_PAWNS, bpawns, wpawns);
     }
 
     //Queens
     if (wqueens != bqueens) {
-        value += VQUEEN * (wqueens - bqueens);
         value += cond(wqueens && wrooks, bqueens && brooks, VQUEEN_AND_ROOKS);
         value += factor(wqueens, bqueens, QUEEN_MINORCOUNT, wminors + bminors);
     }
@@ -153,8 +149,7 @@ TScore * evaluateMaterial(TSearchData * searchData) {
 
     //Pawns
     if (wpawns != bpawns) {
-        int pawnValue = phasedScore(phase, VPAWN * (wpawns - bpawns), VPAWN_EG * (wpawns - bpawns));
-        pawnValue += cond(!wpawns, !bpawns, VNOPAWNS); //penalty for not having pawns (difficult to win)
+        int pawnValue = cond(!wpawns, !bpawns, VNOPAWNS); //penalty for not having pawns (difficult to win)
         value += pawnValue;
     }
 
@@ -212,6 +207,175 @@ TScore * evaluateMaterial(TSearchData * searchData) {
     searchData->stack->gamePhase = phase;
     searchData->hashTable->mtStore(searchData, value, phase);
     return &searchData->stack->scores[SCORE_MATERIAL];
+}
+
+void init_pct(TSCORE_PCT & pct) {
+    TScore scores[64];
+    TScore vpawn(VPAWN-10, VPAWN);
+    TScore vknight(VKNIGHT, VKNIGHT-5);
+    TScore vbishop(VBISHOP, VBISHOP);
+    TScore vrook(VROOK, VROOK);
+    TScore vqueen(VQUEEN, VQUEEN);
+    TScore vking(VKING, VKING);
+    TScore PAWN_OFFSET(-6, -8);
+    TScore KNIGHT_OFFSET(-35, -30);
+    TScore BISHOP_OFFSET(-20, -12);
+    TScore ROOK_OFFSET(-15, -15);
+    TScore QUEEN_OFFSET(-10, -15);
+    TScore KING_OFFSET(0, -10);
+
+    const short mobility_scale[2][64] = {
+        {
+            6, 7, 8, 9, 9, 8, 7, 6,
+            5, 6, 7, 8, 8, 7, 6, 5,
+            4, 5, 7, 7, 7, 7, 5, 4,
+            3, 4, 6, 8, 8, 6, 4, 3,
+            2, 3, 5, 7, 7, 5, 3, 2,
+            2, 3, 4, 5, 5, 4, 3, 2,
+            2, 3, 4, 5, 5, 4, 3, 2,
+            1, 2, 3, 4, 4, 3, 2, 1
+        },
+        {
+            4, 5, 7, 7, 7, 7, 5, 4,
+            4, 5, 7, 7, 7, 7, 5, 4,
+            3, 4, 5, 7, 7, 5, 4, 3,
+            2, 3, 5, 7, 7, 5, 3, 2,
+            2, 3, 5, 7, 7, 5, 3, 2,
+            2, 3, 4, 5, 5, 4, 3, 2,
+            2, 3, 4, 5, 5, 4, 3, 2,
+            1, 2, 3, 4, 4, 3, 2, 1
+        }
+    };
+
+    //Pawn
+    for (int sq = a1; sq < 64; sq++) {
+        U64 bbsq = BIT(sq);
+        scores[sq].set(0);
+        if ((bbsq & RANK_1) || (bbsq & RANK_8)) {
+            continue;
+        }
+        if (bbsq & RANK_2) { //extra mobility
+            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(FILE(sq) + 16));
+        }
+        if (bbsq & (FILE_A | FILE_H)) {
+            scores[sq].add(-10);
+        }
+        int rank = RANK(sq) - 1;
+        scores[sq].eg += 2 * rank*rank; //moving pawns forward to promote
+
+        if (sq == e2 || sq == d2) {
+            scores[sq].mg -= 10;
+        }
+        if (sq == c2 || sq == f2) {
+            scores[sq].mg -= 5;
+        }
+        if (bbsq & FRONTFILL(CENTER)) {
+            scores[sq].add(5);
+        }
+        U64 caps = WPawnCaptures[sq] | WPawnMoves[sq];
+        while (caps) {
+            int ix = POP(caps);
+            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
+        }
+        scores[sq].add(vpawn);
+        scores[sq].add(PAWN_OFFSET);
+        scores[sq].round();
+        pct[WPAWN][sq].set(scores[sq]);
+        pct[BPAWN][FLIP_SQUARE(sq)].nset(scores[sq]);
+    }
+
+    //Knight
+    for (int sq = a1; sq < 64; sq++) {
+        scores[sq].set(0);
+        U64 caps = KnightMoves[sq];
+        while (caps) {
+            int ix = POP(caps);
+            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
+        }
+        scores[sq].mul(1.5); //mobility is extra important because knights move slow
+        scores[sq].add(vknight);
+        scores[sq].add(KNIGHT_OFFSET);
+        scores[sq].round();
+        pct[WKNIGHT][sq].set(scores[sq]);
+        pct[BKNIGHT][FLIP_SQUARE(sq)].nset(scores[sq]);
+    }
+
+    //Bishop
+    for (int sq = a1; sq < 64; sq++) {
+        scores[sq].set(0);
+        U64 caps = BishopMoves[sq];
+        while (caps) {
+            int ix = POP(caps);
+            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
+        }
+        scores[sq].mul(0.5); //mobility is less important because bishops move fast
+        scores[sq].add(vbishop);
+        scores[sq].add(BISHOP_OFFSET);
+        scores[sq].round();
+        pct[WBISHOP][sq].set(scores[sq]);
+        pct[BBISHOP][FLIP_SQUARE(sq)].nset(scores[sq]);
+    }
+
+    //Rook
+    for (int sq = a1; sq < 64; sq++) {
+        scores[sq].set(0);
+        U64 bbsq = BIT(sq);
+        U64 caps = RookMoves[sq];
+        while (caps) {
+            int ix = POP(caps);
+            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
+        }
+        scores[sq].mg *= 0.25; //mobility is less important because rooks move fast
+        scores[sq].eg *= 0.5; //mobility is less important because rooks move fast
+
+        if (bbsq & (RANK_7 | RANK_8)) {
+            scores[sq].mg += 20; //extra bonus for 7th / 8th rank
+            scores[sq].eg += 5;
+        }
+        if (bbsq & (RANK_6)) {
+            scores[sq].mg += 5;
+            scores[sq].eg += 2;
+        }
+        scores[sq].add(vrook);
+        scores[sq].add(ROOK_OFFSET);
+        scores[sq].round();
+        pct[WROOK][sq].set(scores[sq]);
+        pct[BROOK][FLIP_SQUARE(sq)].nset(scores[sq]);
+    }
+
+    //Queen
+    for (int sq = a1; sq < 64; sq++) {
+        scores[sq].set(0);
+        U64 caps = QueenMoves[sq];
+        while (caps) {
+            int ix = POP(caps);
+            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
+        }
+        scores[sq].mg *= 0.15; //mobility is less important because queens move fast
+        scores[sq].eg *= 0.25; //mobility is less important because queens move fast
+        scores[sq].add(vqueen);
+        scores[sq].add(QUEEN_OFFSET);
+        scores[sq].round();
+        pct[WQUEEN][sq].set(scores[sq]);
+        pct[BQUEEN][FLIP_SQUARE(sq)].nset(scores[sq]);
+    }
+
+
+    //King
+    for (int sq = a1; sq < 64; sq++) {
+        scores[sq].set(0);
+        U64 caps = KingMoves[sq];
+        while (caps) {
+            int ix = POP(caps);
+            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
+        }
+        scores[sq].mg = 0;
+        scores[sq].add(vking);
+        scores[sq].add(KING_OFFSET);
+        scores[sq].round();
+        pct[WKING][sq].set(scores[sq]);
+        pct[BKING][FLIP_SQUARE(sq)].nset(scores[sq]);
+    }
 }
 
 /**
@@ -272,16 +436,16 @@ TScore * evaluatePawns(TSearchData * searchData) {
         }
         if (isolated) {
             if (open) {
-                pawnScore += ISOLATED_OPEN_PAWN[tSq];
+                pawnScore.add(ISOLATED_OPEN_PAWN[tSq]);
             } else {
-                pawnScore += ISOLATED_PAWN[tSq];
+                pawnScore.add(ISOLATED_PAWN[tSq]);
             }
         }
         if (doubled) {
-            pawnScore += DOUBLED_PAWN[tSq];
+            pawnScore.add(DOUBLED_PAWN[tSq]);
         }
         if (passed) {
-            pawnScore += PASSED_PAWN[tSq];
+            pawnScore.add(PASSED_PAWN[tSq]);
             passers |= sqBit;
         }
     }
@@ -306,16 +470,16 @@ TScore * evaluatePawns(TSearchData * searchData) {
         }
         if (isolated) {
             if (open) {
-                pawnScore -= ISOLATED_OPEN_PAWN[tSq];
+                pawnScore.add(-ISOLATED_OPEN_PAWN[tSq]);
             } else {
-                pawnScore -= ISOLATED_PAWN[tSq];
+                pawnScore.add(-ISOLATED_PAWN[tSq]);
             }
         }
         if (doubled) {
-            pawnScore -= DOUBLED_PAWN[tSq];
+            pawnScore.add(-DOUBLED_PAWN[tSq]);
         }
         if (passed) {
-            pawnScore -= PASSED_PAWN[tSq];
+            pawnScore.add(-PASSED_PAWN[tSq]);
             passers |= sqBit;
         }
 
@@ -327,7 +491,7 @@ TScore * evaluatePawns(TSearchData * searchData) {
             int sq = POP(passersW);
             U64 mask = passers & pos->whitePawns & KingMoves[sq] & NEIGHBOUR_FILES[FILE(sq)];
             if (mask) {
-                pawnScore += CONNECED_PASSED_PAWN[FLIP_SQUARE(sq)];
+                pawnScore.add(CONNECED_PASSED_PAWN[FLIP_SQUARE(sq)]);
 
             }
         }
@@ -336,7 +500,7 @@ TScore * evaluatePawns(TSearchData * searchData) {
             int sq = POP(passersB);
             U64 mask = passers & pos->blackPawns & KingMoves[sq] & NEIGHBOUR_FILES[FILE(sq)];
             if (mask) {
-                pawnScore -= CONNECED_PASSED_PAWN[sq];
+                pawnScore.add(-CONNECED_PASSED_PAWN[sq]);
             }
         }
     }
@@ -408,7 +572,7 @@ void evaluateKingShelter(TSearchData * searchData) {
             score_w.add_ix4(&SHELTER_OPEN_FILES, pc);
         }
         //store score in eval table
-        
+
     }
 BLACK:
     if (pos->whiteQueens) {

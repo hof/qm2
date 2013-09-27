@@ -183,10 +183,10 @@ void THashTable::mtLookup(TSearchData * searchData) {
     TMaterialTableEntry entry = materialTable[hashTable->getMaterialHashKey(materialHash)];
     if ((entry.key ^ entry.value) == materialHash) {
         searchData->materialTableHits++;
-        searchData->stack->scores[SCORE_MATERIAL] = entry.value;
+        searchData->stack->scores[SCORE_MATERIAL].set(entry.value);
         searchData->stack->gamePhase = entry.gamePhase;
     } else {
-        searchData->stack->scores[SCORE_MATERIAL] = SCORE_INVALID;
+        searchData->stack->scores[SCORE_MATERIAL].set(SCORE_INVALID);
     }
 }
 
@@ -206,10 +206,10 @@ void THashTable::ptLookup(TSearchData * searchData) {
     U64 pawnHash = searchData->pos->boardFlags->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
     if ((entry->key ^ entry->pawnScore.mg) == pawnHash) {
-        searchData->stack->scores[SCORE_PAWNS] = entry->pawnScore;
+        searchData->stack->scores[SCORE_PAWNS].set(entry->pawnScore);
         searchData->pawnTableHits++;
     } else {
-        searchData->stack->scores[SCORE_PAWNS] = SCORE_INVALID;
+        searchData->stack->scores[SCORE_PAWNS].set(SCORE_INVALID);
     }
 }
 

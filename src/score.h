@@ -35,99 +35,13 @@ struct TScore {
     short mg; //middle game value
     short eg; //end game value
 
-    TScore() {
-        clear();
-    }
-
-    inline TScore& operator=(const TScore & s) {
-        mg = s.mg;
-        eg = s.eg;
-        return *this;
-    }
-
-    inline TScore& operator=(const short x) {
-        mg = x;
-        eg = x;
-        return *this;
-    }
-
-    inline TScore& operator+(const TScore & s) {
-        mg += s.mg;
-        eg += s.eg;
-        return *this;
-    }
+    TScore(): mg(0), eg(0) { }
+    TScore(const TScore & s) { mg = s.mg; eg = s.eg; }
+    TScore(short x, short y) { mg = x; eg = y; }
+    TScore(short x) { mg = x; eg = x; }
     
-    inline TScore& operator+=(const TScore & s) {
-        mg += s.mg;
-        eg += s.eg;
-        return *this;
-    }
-
-    inline TScore& operator+(const short x) {
-        mg += x;
-        eg += x;
-        return *this;
-    }
-
-    inline TScore& operator+=(const short x) {
-        mg += x;
-        eg += x;
-        return *this;
-    }
-    
-    inline TScore& operator-(const TScore & s) {
-        mg -= s.mg;
-        eg -= s.eg;
-        return *this;
-    }
-
-    inline TScore& operator-(const short x) {
-        mg -= x;
-        eg -= x;
-        return *this;
-    }
-
-    inline TScore& operator-=(const short x) {
-        mg -= x;
-        eg -= x;
-        return *this;
-    }
-
-    inline TScore& operator*(const TScore & s) {
-        mg *= s.mg;
-        eg *= s.eg;
-        return *this;
-    }
-
-    inline TScore& operator*(const short x) {
-        mg *= x;
-        eg *= x;
-        return *this;
-    }
-
-    inline TScore& operator*=(const short x) {
-        mg *= x;
-        eg *= x;
-        return *this;
-    }
-
-    inline TScore& operator*(const double x) {
-        mg *= x;
-        eg *= x;
-        return *this;
-    }
-
-    inline TScore& operator*=(const double x) {
-        mg *= x;
-        eg *= x;
-        return *this;
-    }
-    
-    inline TScore& operator/(const short x) {
-        assert(x!=0);
-        mg = mg/x;
-        eg = eg/x;
-        return *this;
+    void print () {
+        std::cout << "(" << mg << ", " << eg << ") ";
     }
 
     inline void add_ix64(TSCORE_TABLE_64 * table, char ix) {
@@ -147,9 +61,65 @@ struct TScore {
         eg += (*table)[1];
     }
 
-    inline int get(short phase) {
+    inline short get(short phase) {
         assert(phase >= 0 && phase <= MAX_GAMEPHASES);
         return (mg * (MAX_GAMEPHASES - phase) + eg * phase) >> GAMEPHASE_SCORE_BSR;
+    }
+    
+    inline void set(const TScore & s) {
+        mg = s.mg;
+        eg = s.eg;
+    }
+    
+    inline void nset(const TScore & s) {
+        mg = -s.mg;
+        eg = -s.eg;
+    }
+    
+    inline void set(const short x, const short y) {
+        mg = x;
+        eg = y;
+    }
+    
+    inline void set(const short x) {
+        mg = x;
+        eg = x;
+    }
+    
+    inline void add(const short x) {
+        mg += x;
+        eg += x;
+    }
+    
+    inline void add(const short x, const short y) {
+        mg += x;
+        eg += y;
+    }
+    
+    inline void add(const TScore & s) {
+        mg += s.mg;
+        eg += s.eg;
+    }
+    
+    inline void sub(const TScore & s) {
+        mg -= s.mg;
+        eg -= s.eg;
+    }
+    
+    inline void mul(const double x) {
+        mg *= x;
+        eg *= x;
+    }
+    
+    inline void mul(const double & x, const double & y) {
+        mg *= x;
+        eg *= y;
+    }
+    
+    inline void round() {
+        static const short GRAIN = 0xFFFF & ~((1 << 1) - 1);
+        mg &= GRAIN;
+        eg &= GRAIN;
     }
 
     inline void clear() {
@@ -161,8 +131,9 @@ struct TScore {
         return mg != SCORE_INVALID && eg != SCORE_INVALID;
     }
 
-
 };
+
+typedef TScore TSCORE_PCT[13][64];
 
 
 #endif	/* SCORE_H */

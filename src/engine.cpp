@@ -32,9 +32,9 @@ void * TEngine::_think(void* engineObjPtr) {
      */
     TEngine * engine = (TEngine*) engineObjPtr;
     TGameSettings game = engine->gameSettings;
-
+    
     TSearchData * searchData = new TSearchData(engine->_rootFen.c_str(),
-            PIECE_SQUARE_TABLE,
+            engine->_pct,
             engine->_hashTable,
             engine->_outputHandler);
 
@@ -271,7 +271,7 @@ void * TEngine::_think(void* engineObjPtr) {
  */
 void TEngine::analyse() {
 
-    TSearchData * searchData = new TSearchData(_rootFen.c_str(), PIECE_SQUARE_TABLE, _hashTable, _outputHandler);
+    TSearchData * searchData = new TSearchData(_rootFen.c_str(), _pct, _hashTable, _outputHandler);
     std::cout << searchData->pos->asFen().c_str() << std::endl;
     searchData->stack->evaluationScore = evaluate(searchData, 0, 0);
     int phase = searchData->stack->gamePhase;
@@ -386,7 +386,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     THashTable * hash2 = new THashTable(HASH_SIZE_IN_MB);
     TEngine * engine = (TEngine*) engineObjPtr;
     TSearchData * sd_root = new TSearchData(engine->_rootFen.c_str(),
-            PIECE_SQUARE_TABLE, hash1, NULL);
+            engine->_pct, hash1, NULL);
 
     engine->gameSettings.maxDepth = MAXDEPTH;
     sd_root->timeManager->setEndTime(INFINITE_TIME);

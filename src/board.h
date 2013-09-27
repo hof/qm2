@@ -218,10 +218,10 @@ struct TBoard {
     TPiecePlacement pieces[BKING + 1];
     const unsigned char * whiteKingPos;
     const unsigned char * blackKingPos;
-    short pieceSquareTable[BKING + 1][2][64];
+    TSCORE_PCT pieceSquareTable;
 
     void clear();
-    void setPieceSquareTable(const short pieceSquareTableValues[WKING][2][64]);
+    void setPieceSquareTable(const TSCORE_PCT & pct);
     void clearPieceSquareTable();
 
     inline int topPiece(bool white) {
@@ -269,8 +269,7 @@ struct TBoard {
         if (piece == WPAWN || piece == BPAWN) {
             HASH_ADD_PIECE(boardFlags->pawnHash, piece, sq);
         }
-        boardFlags->pct.mg += pieceSquareTable[piece][0][sq];
-        boardFlags->pct.eg += pieceSquareTable[piece][1][sq];
+        boardFlags->pct.add(pieceSquareTable[piece][sq]);
         addPiece(piece, sq);
     }
 
@@ -290,8 +289,7 @@ struct TBoard {
 
     inline void removePieceFull(int piece, int sq) {
         removePiece(piece, sq);
-        boardFlags->pct.mg -= pieceSquareTable[piece][0][sq];
-        boardFlags->pct.eg -= pieceSquareTable[piece][1][sq];
+        boardFlags->pct.sub(pieceSquareTable[piece][sq]);
         HASH_REMOVE_PIECE(boardFlags->materialHash, piece, pieces[piece].count + BISHOP_IX(piece, sq));
         HASH_REMOVE_PIECE(boardFlags->hashCode, piece, sq);
         if (piece == WPAWN || piece == BPAWN) {
@@ -321,8 +319,8 @@ struct TBoard {
         if (piece == WPAWN || piece == BPAWN) {
             HASH_MOVE_PIECE(boardFlags->pawnHash, piece, ssq, tsq);
         }
-        boardFlags->pct.mg += pieceSquareTable[piece][0][tsq] - pieceSquareTable[piece][0][ssq];
-        boardFlags->pct.eg += pieceSquareTable[piece][1][tsq] - pieceSquareTable[piece][1][ssq];
+        boardFlags->pct.add(pieceSquareTable[piece][tsq]);
+        boardFlags->pct.sub(pieceSquareTable[piece][ssq]);
     }
 
 

@@ -162,7 +162,7 @@ public:
     TMoveList tempList;
 
     TSearchData(const char * fen,
-            const short pieceSquareTables[WKING][2][64],
+            TSCORE_PCT & pieceSquareTables,
             THashTable * globalHashTable,
             TOutputHandler * outputH) {
         pos = new TBoard();

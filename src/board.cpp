@@ -57,15 +57,10 @@ void TBoard::clearPieceSquareTable() {
     memset(pieceSquareTable, 0, sizeof(pieceSquareTable));
 }
 
-void TBoard::setPieceSquareTable(const short pieceSquareTableValues[WKING][2][64]) {
-    for (int pc = 0; pc < WKING; pc++) {
+void TBoard::setPieceSquareTable(const TSCORE_PCT & pct) {
+    for (int pc = 0; pc <= BKING; pc++) {
         for (int sq = 0; sq < 64; sq++) {
-            int mgScore = pieceSquareTableValues[pc][0][sq];
-            int egScore = pieceSquareTableValues[pc][1][sq];
-            pieceSquareTable[pc + WPAWN][0][FLIP_SQUARE(sq)] = mgScore; //white midgame
-            pieceSquareTable[pc + WPAWN][1][FLIP_SQUARE(sq)] = egScore; //white endgame
-            pieceSquareTable[pc + BPAWN][0][sq] = -mgScore; //black midgame
-            pieceSquareTable[pc + BPAWN][1][sq] = -egScore; //black endgame          
+            pieceSquareTable[pc][sq].set(pct[pc][sq]);
         }
     }
 }

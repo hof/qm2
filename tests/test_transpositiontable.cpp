@@ -27,7 +27,9 @@ void test_tt() {
     
     //testing the Lasker-Reichhelm Position
     TOutputHandler oh;
-    TSearchData * searchData = new TSearchData("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", PIECE_SQUARE_TABLE, hashTable, &oh); 
+    TSCORE_PCT pct;
+    init_pct(pct);
+    TSearchData * searchData = new TSearchData("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", pct, hashTable, &oh); 
     
     //test storing and retrieving
     TMove * move = searchData->movePicker->pickFirstMove(searchData, 0, -SCORE_INFINITE, SCORE_INFINITE, 0);
