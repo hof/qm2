@@ -74,7 +74,7 @@ struct TScore {
         eg += x;
         return *this;
     }
-
+    
     inline TScore& operator-(const TScore & s) {
         mg -= s.mg;
         eg -= s.eg;

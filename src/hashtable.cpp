@@ -205,7 +205,7 @@ void THashTable::ptLookup(TSearchData * searchData) {
     THashTable * hashTable = searchData->hashTable;
     U64 pawnHash = searchData->pos->boardFlags->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
-    if ((entry->key ^ entry->pawnScore) == pawnHash) {
+    if ((entry->key ^ entry->pawnScore.mg) == pawnHash) {
         searchData->stack->scores[SCORE_PAWNS] = entry->pawnScore;
         searchData->pawnTableHits++;
     } else {
@@ -213,12 +213,12 @@ void THashTable::ptLookup(TSearchData * searchData) {
     }
 }
 
-void THashTable::ptStore(TSearchData * searchData, int pawnScore) {
+void THashTable::ptStore(TSearchData * searchData, const TScore & pawnScore) {
     THashTable * hashTable = searchData->hashTable;
     U64 pawnHash = searchData->pos->boardFlags->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
     entry->pawnScore = pawnScore;
-    entry->key = (pawnHash ^ pawnScore);
+    entry->key = (pawnHash ^ pawnScore.mg);
 }
 
 void THashTable::clear() {

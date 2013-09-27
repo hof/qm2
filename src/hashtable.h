@@ -21,8 +21,10 @@ struct TMaterialTableEntry {
 
 struct TPawnTableEntry {
     U64 key;
-    short pawnScore;
+    TScore pawnScore;
 };
+
+
 
 enum TranspositionTableEntryType {
     TT_LOWERBOUND = 1,
@@ -95,7 +97,7 @@ public:
     static void mtStore(TSearchData * searchData, int value, int gamePhase);
     static void repStore(TSearchData * searchData, U64 hashCode, int fiftyCount);
     static void ptLookup(TSearchData * searchData);
-    static void ptStore(TSearchData * searchData, int pawnScore);
+    static void ptStore(TSearchData * searchData, const TScore & pawnScore);
 
     void clear();
 

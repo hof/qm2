@@ -42,6 +42,8 @@ int evaluate(TSearchData * searchData, int alpha, int beta) {
  */
 TScore * evaluateExp(TSearchData * searchData) {
     TScore * result = &searchData->stack->scores[SCORE_EXP];
+    result->clear();
+
     return result;
 }
 
@@ -152,7 +154,6 @@ TScore * evaluateMaterial(TSearchData * searchData) {
     //Pawns
     if (wpawns != bpawns) {
         int pawnValue = phasedScore(phase, VPAWN * (wpawns - bpawns), VPAWN_EG * (wpawns - bpawns));
-        pawnValue = searchData->learnFactor * VPAWN * (wpawns - bpawns);
         pawnValue += cond(!wpawns, !bpawns, VNOPAWNS); //penalty for not having pawns (difficult to win)
         value += pawnValue;
     }
@@ -204,8 +205,6 @@ TScore * evaluateMaterial(TSearchData * searchData) {
     value += cond(value > MATERIAL_AHEAD_TRESHOLD, value < -MATERIAL_AHEAD_TRESHOLD, TRADEDOWN_PIECES, bpieces, wpieces);
     value += cond(value > MATERIAL_AHEAD_TRESHOLD, value < -MATERIAL_AHEAD_TRESHOLD, TRADEDOWN_PAWNS, wpawns, bpawns);
 
-
-
     /*
      * Store and return
      */
@@ -246,7 +245,8 @@ TScore * evaluatePawns(TSearchData * searchData) {
      * 3. Calculate pawn evaluation score
      */
     TBoard * pos = searchData->pos;
-    int pawnScore = 0;
+    TScore pawnScore;
+    pawnScore = 0;
 
     U64 passers = 0;
     U64 openW = FULL_BOARD;
@@ -407,8 +407,8 @@ void evaluateKingShelter(TSearchData * searchData) {
             int pc = popCount(open);
             score_w.add_ix4(&SHELTER_OPEN_FILES, pc);
         }
-
-
+        //store score in eval table
+        
     }
 BLACK:
     if (pos->whiteQueens) {
@@ -457,11 +457,11 @@ BLACK:
         }
 
         //3. penalize (half)open files on the king
-        U64 open = ~FILEFILL(pos->whitePawns) & kingFront & RANK_1;
-        if (open) {
-            int pc = popCount(open);
-            score_b.add_ix4(&SHELTER_OPEN_FILES, pc);
+        U64 open = (~FILEFILL(pos->whitePawns)) & kingFront & RANK_1;
+        if (open) { //half open
+            score_b.add_ix4(&SHELTER_OPEN_FILES, popCount(open));
         }
+
 
     }
 RETURN:

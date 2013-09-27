@@ -162,8 +162,8 @@ int main(int argc, char** argv) {
         scores[sq] *= 0.5; //mobility is less important because rooks move fast
         
         if (bbsq & (RANK_7 | RANK_8)) {
-            scores[sq] += 20; //extra bonus for 7th / 8th rank
-            scores[sq].eg -= 10;
+            scores[sq].mg += 20; //extra bonus for 7th / 8th rank
+            scores[sq].eg += 5;
         }
         if (bbsq & (RANK_6)) {
             scores[sq].mg += 5; 
@@ -203,25 +203,9 @@ int main(int argc, char** argv) {
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
         scores[sq].mg *= 0; 
-        int protection = -20*RANK(sq);
-        if (bbsq & CENTER) {
-           protection -= 20;
-        }
-        if (bbsq & FILEFILL(CENTER)) {
-           protection -= 10;
-        }
-        if (bbsq & LARGE_CENTER) {
-           protection -= 10;
-        }
-        if (bbsq & FILEFILL(LARGE_CENTER)) {
-           protection -= 5;
-        }
-        if (bbsq & EDGE) {
-            protection += 5;
-        }
-        scores[sq].mg += protection;
+        total += scores[sq];
     }
-    print_scores("King", scores, total/64);
+    print_scores("King", scores, total/64+20);
 
     return (EXIT_SUCCESS);
 }
