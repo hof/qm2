@@ -103,8 +103,11 @@ TScore * evaluateMaterial(TSearchData * searchData) {
     phase = MAX(0, phase);
     phase = (MAX_GAMEPHASES * phase) / MAX_GAMEPHASES;
 
+    int piecepower = 0;
+
     // Knights
     if (wknights != bknights) {
+        piecepower += (wknights - bknights) * VKNIGHT;
         value += factor(wknights, bknights, FKNIGHT_OPPOSING_PAWNS, bpawns, wpawns);
         value += cond(wknights >= 2, bknights >= 2, VKNIGHT_PAIR);
         value += factor(wknights, bknights, KNIGHT_X_PIECECOUNT, wpieces + bpieces);
@@ -112,6 +115,7 @@ TScore * evaluateMaterial(TSearchData * searchData) {
 
     //Bishops
     if (wbishops != bbishops) {
+        piecepower += (wbishops - bbishops) * VBISHOP;
         bool wPair = wbishops > 1 && pos->whiteBishopPair(); //note: material hash includes bishop colors
         bool bPair = bbishops > 1 && pos->blackBishopPair();
         value += cond(wPair, bPair, VBISHOPPAIR);
@@ -129,28 +133,29 @@ TScore * evaluateMaterial(TSearchData * searchData) {
 
     //Rooks
     if (wrooks != brooks) {
+        piecepower += (wrooks - brooks) * VROOK;
         value += cond(wrooks >= 2, brooks >= 2, VROOKPAIR);
         value += factor(wrooks, brooks, ROOK_OPPOSING_PAWNS, bpawns, wpawns);
     }
 
     //Queens
     if (wqueens != bqueens) {
+        piecepower += (wqueens - bqueens) * VQUEEN;
         value += cond(wqueens && wrooks, bqueens && brooks, VQUEEN_AND_ROOKS);
         value += factor(wqueens, bqueens, QUEEN_MINORCOUNT, wminors + bminors);
     }
 
     //Bonus for having more "piece power" (excluding pawns)
-    int piecePower = value;
-    value += cond(wpawns && piecePower > MATERIAL_AHEAD_TRESHOLD,
-            bpawns && piecePower < -MATERIAL_AHEAD_TRESHOLD,
+    piecepower += value;
+    value += cond(wpawns && piecepower > MATERIAL_AHEAD_TRESHOLD,
+            bpawns && piecepower < -MATERIAL_AHEAD_TRESHOLD,
             PIECEPOWER_AHEAD,
-            piecePower / VPAWN,
-            -piecePower / VPAWN);
+            piecepower / VPAWN,
+            -piecepower / VPAWN);
 
     //Pawns
     if (wpawns != bpawns) {
-        int pawnValue = cond(!wpawns, !bpawns, VNOPAWNS); //penalty for not having pawns (difficult to win)
-        value += pawnValue;
+        value += cond(!wpawns, !bpawns, VNOPAWNS); //penalty for not having pawns (difficult to win)
     }
 
     /* 
@@ -158,13 +163,13 @@ TScore * evaluateMaterial(TSearchData * searchData) {
      * 1)If ahead, but no pawns and no mating material the score is draw
      */
     if (!wpawns || !bpawns) {
-        if (!wpawns && value > 0 && (piecePower < 2 * VPAWN
+        if (!wpawns && value > 0 && (piecepower < 2 * VPAWN
                 || (wpieces == 1 && wminors == 1)
                 || (wpieces == 2 && wknights == 2)
                 || (wpieces == wminors && bpieces == bminors && wminors < 3 && bminors < 3 && wminors && bminors))) {
             value = SCORE_DRAW;
         }
-        if (!bpawns && value < 0 && (piecePower > -2 * VPAWN
+        if (!bpawns && value < 0 && (piecepower > -2 * VPAWN
                 || (bpieces == 1 && bminors == 1)
                 || (bpieces == 2 && bknights == 2)
                 || (bpieces == bminors && wpieces == wminors && bminors < 3 && wminors < 3 && bminors && wminors))) {
@@ -177,7 +182,7 @@ TScore * evaluateMaterial(TSearchData * searchData) {
      * 2) Rooks and queen endgames are drawish. Reduce any small material advantage.
      */
     if (value
-            && piecePower == 0
+            && piecepower == 0
             && wpieces <= 3
             && wpieces == bpieces
             && wminors < 2
@@ -211,8 +216,8 @@ TScore * evaluateMaterial(TSearchData * searchData) {
 
 void init_pct(TSCORE_PCT & pct) {
     TScore scores[64];
-    TScore vpawn(VPAWN-10, VPAWN);
-    TScore vknight(VKNIGHT, VKNIGHT-5);
+    TScore vpawn(VPAWN - 10, VPAWN);
+    TScore vknight(VKNIGHT, VKNIGHT - 5);
     TScore vbishop(VBISHOP, VBISHOP);
     TScore vrook(VROOK, VROOK);
     TScore vqueen(VQUEEN, VQUEEN);

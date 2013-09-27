@@ -267,6 +267,7 @@ int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
         searchData->skipNull = false;
     }
 
+    
     /*
      * Endgame extension: 
      * Increase depth with two ply when reaching pawns/kings endgame
@@ -302,10 +303,10 @@ int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
         TMove * move2 = mp->pickNextMove(searchData, depth, alpha, beta, 0);
         if (!move2) {
             extendNode = ONE_PLY;
-        } else if (extendNode < HALF_PLY) {
+        } else {
             TMove * move3 = mp->pickNextMove(searchData, depth, alpha, beta, 0);
             if (!move3) {
-                extendNode = HALF_PLY;
+                extendNode = ONE_PLY;
             } else {
                 mp->push(searchData, move3, SCORE_INFINITE - 3); //push move back on the list
             }
@@ -460,6 +461,9 @@ int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
          * 13. Pruning and reductions 
          */
         int reduce = 0;
+        
+        
+        
         if (phase >= STOP
                 && givesCheck == 0
                 && !inCheck
@@ -489,8 +493,6 @@ int pvs(TSearchData *searchData, int alpha, int beta, int depth) {
                 || move->promotion
                 || type == PVNODE
                 || pos->SEE(move) >= 0);
-
-
 
         searchData->stack->reduce = reduce;
         searchData->forward(move, givesCheck);
