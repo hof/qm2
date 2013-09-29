@@ -31,7 +31,8 @@ enum EVALUATION_COMPONENTS {
     SCORE_PAWNS = 1,
     SCORE_SHELTER_W = 2,
     SCORE_SHELTER_B = 3,
-    SCORE_EXP = 4
+    SCORE_EXP = 4,
+    SCORE_ROOKS = 5
 };
 
 /*******************************************************************************
@@ -69,6 +70,7 @@ enum MaterialValues {
     VROOKPAIR = -8,
     VQUEEN_AND_ROOKS = -8,
     DRAWISH_QR_ENDGAME = -30,
+    DRAWISH_OPP_BISHOPS = -50
 };
 
 const short TRADEDOWN_PIECES[MAX_PIECES + 1] = {
@@ -80,7 +82,7 @@ const short TRADEDOWN_PAWNS[9] = {
 };
 
 const short PIECEPOWER_AHEAD[] = {//in amount of pawns
-    25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 250, 250, 250, 250, 250, 250, 250,
+    15, 25, 35, 45, 60, 75, 90, 105, 120, 135, 150, 165, 190, 205, 220, 235, 250,
     250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250
 };
 
@@ -97,7 +99,7 @@ const short BISHOPPAIR_X_PIECECOUNT[MAX_PIECES + 1] = {
 };
 
 const short BISHOPPAIR_MINOR_OPPOSITION[10] = {
-    0, 0, -5, -10, -15, -20, -20, -20, -20, -20
+    15, 10, 5, 0, -10, -15, -20, -20, -20, -20
 };
 
 const short BISHOPPAIR_OPPOSING_PAWNS[9] = {
@@ -248,6 +250,8 @@ TScore * evaluateExp(TSearchData * searchData);
 TScore * evaluateMaterial(TSearchData * searchData);
 
 TScore * evaluatePawns(TSearchData * searchData);
+
+TScore * evaluateRooks(TSearchData * searchData);
 
 void evaluateKingShelter(TSearchData * searchData);
 

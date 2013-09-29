@@ -78,7 +78,7 @@ void test_wac(TEngine * engine) {
     results[current++] = testForMove(engine, "nrq4r/2k1p3/1p1pPnp1/pRpP1p2/P1P2P2/2P1BB2/1R2Q1P1/6K1 w - - 0 1", "e3c5", -SCORE_MATE);
     results[current++] = testForMove(engine, "5r1k/3b2p1/p6p/1pRpR3/1P1P2q1/P4pP1/5QnP/1B4K1 w - - 0 1", "h2h3", -SCORE_MATE);
     results[current++] = testForMove(engine, "4r1k1/p1qr1p2/2pb1Bp1/1p5p/3P1n1R/1B3P2/PP3PK1/2Q4R w - - 0 1", "c1f4", -SCORE_MATE);
-    results[current++] = testForMove(engine, "5r2/1p1RRrk1/4Qq1p/1PP3p1/8/4B3/1b3P1P/6K1 w - - 0 1", "e6f7", -SCORE_MATE);
+    results[current++] = testForMove(engine, "5r2/1p1RRrk1/4Qq1p/1PP3p1/8/4B3/1b3P1P/6K1 w - - 0 1", "e7f7", -SCORE_MATE);
 
     for (int i = 0; i < TEST_SIZE; i++) {
         std::cout << "Position " << (i + 1) << ": " << (results[i] ? "Passed" : "Failed") << std::endl;

@@ -32,7 +32,7 @@ void * TEngine::_think(void* engineObjPtr) {
      */
     TEngine * engine = (TEngine*) engineObjPtr;
     TGameSettings game = engine->gameSettings;
-    
+
     TSearchData * searchData = new TSearchData(engine->_rootFen.c_str(),
             engine->_pct,
             engine->_hashTable,
@@ -275,18 +275,34 @@ void TEngine::analyse() {
     std::cout << searchData->pos->asFen().c_str() << std::endl;
     searchData->stack->evaluationScore = evaluate(searchData, 0, 0);
     int phase = searchData->stack->gamePhase;
-    std::cout << "1) Material score: " << searchData->stack->scores[SCORE_MATERIAL].mg << std::endl;
-    std::cout << "2) Game phase: " << phase << std::endl;
-    std::cout << "3) Piece Square tables: " << searchData->pos->boardFlags->pct.get(phase) << std::endl;
+    std::cout << "1) Piece Square tables: " << searchData->pos->boardFlags->pct.get(phase) << std::endl;
+    std::cout << "2) Material balance: " << searchData->stack->scores[SCORE_MATERIAL].mg << std::endl;
+    std::cout << "3) Game phase: " << phase << std::endl;
     std::cout << "4) Pawn score: " << searchData->stack->scores[SCORE_PAWNS].get(phase) << std::endl;
-    std::cout << "5) Shelter score for white: " << searchData->stack->scores[SCORE_SHELTER_W].get(phase) << std::endl;
-    std::cout << "6) Shelter score for black: " << searchData->stack->scores[SCORE_SHELTER_B].get(phase) << std::endl;
-    
-
+    std::cout << "5) Rook score: " << searchData->stack->scores[SCORE_ROOKS].get(phase) << std::endl;
+    std::cout << "6) Shelter score for white: " << searchData->stack->scores[SCORE_SHELTER_W].get(phase) << std::endl;
+    std::cout << "7) Shelter score for black: " << searchData->stack->scores[SCORE_SHELTER_B].get(phase) << std::endl;
     std::cout << "8) Evaluation:" << searchData->stack->evaluationScore << std::endl;
-
     std::cout << "9) Quiescence:" << qsearch(searchData, -SCORE_MATE, SCORE_MATE, 0) << std::endl;
     std::cout << "10) Best move:" << std::endl;
+
+    //loop through piece square tables
+    int pct_score = 0;
+    const std::string PIECE_NAME[13] = {"X", "WP", "WN",
+        "WB", "WR", "WQ", "WK", "BP",
+        "NB", "BB", "BR", "BQ", "BK"};
+    for (int sq = a1; sq <= h8; sq++) {
+        int pc = searchData->pos->Matrix[sq];
+        if (pc) {
+            TScore * score = &_pct[pc][sq];
+            std::cout << PIECE_NAME[pc] << "@" << sq << ": ";
+            score->print();
+            pct_score += score->get(phase);
+            std::cout << score->get(phase) << " tot: " << pct_score << std::endl;
+        }
+
+    }
+
     //TBook * book = new TBook();
     /*
      * Analyse best move doing a shallow search
@@ -413,10 +429,10 @@ void * TEngine::_learn(void * engineObjPtr) {
     TMoveList * bookMoves = &sd_root->stack->moveList;
     TMove actualMove;
 
-    string start_positions[GAMECOUNT+1];
+    string start_positions[GAMECOUNT + 1];
 
     int x = 0;
-    
+
     //use the actual start position too
     start_positions[x++] = sd_root->pos->asFen();
     start_positions[x++] = sd_root->pos->asFen();
@@ -458,14 +474,14 @@ void * TEngine::_learn(void * engineObjPtr) {
             sd_root->backward(move);
         }
     }
-    
+
     /* for debugging 
     for (int y = 0; y < GAMECOUNT; y++) {
         std::cout << y << ": " << start_positions[y] << std::endl; //for debugging
     }
      */
 
-    std::cout << "Generated " << (GAMECOUNT/2-1) << " random game start positions from book" << std::endl;
+    std::cout << "Generated " << (GAMECOUNT / 2 - 1) << " random game start positions from book" << std::endl;
 
 
     /*
@@ -488,7 +504,7 @@ void * TEngine::_learn(void * engineObjPtr) {
         sd_game->learnFactor = LEARN_FACTOR[step];
         std::cout << "\nFactor " << sd_game->learnFactor << ": " << std::endl;
         hash1->clear(); //clear hash: the evaluation scores changed.
-        hash2->clear(); 
+        hash2->clear();
         for (int game = 0; game < GAMECOUNT; game++) {
             sd_game->pos->fromFen(start_positions[game].c_str());
             int plyCount = 0;
@@ -508,7 +524,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                         sd_game->learnParam = side_to_move;
                     }
                     bool learning_side = sd_game->learnParam == 1;
-                    
+
 
                     /*
                      * Prepare search: cleanup and reset search stack. 
@@ -589,14 +605,14 @@ void * TEngine::_learn(void * engineObjPtr) {
             } while (gameover == false);
             gamesPlayed++;
         }
-        double points = stats[1] + 0.5*stats[0];
+        double points = stats[1] + 0.5 * stats[0];
         int maxPoints = GAMECOUNT;
         int wins = stats[1] - stats[2];
         totalNodes[0] += nodes[0];
         totalNodes[1] += nodes[1];
         double score = (100.0 * points) / maxPoints;
         scores[step] = score;
-        int elo = round(-400.0 * log(1 / (points/maxPoints) -1) / log(10));
+        int elo = round(-400.0 * log(1 / (points / maxPoints) - 1) / log(10));
         if (LEARN_FACTOR[step] > 0) {
             totalScore += points;
             medianScore += LEARN_FACTOR[step] * points;
@@ -625,17 +641,17 @@ void * TEngine::_learn(void * engineObjPtr) {
             }
 
         } else {
-            int deltaS = ABS(score-50.0);
+            int deltaS = ABS(score - 50.0);
             std::cout << "Engine(learn) is";
             if (deltaS < 2.0) {
                 std::cout << " equal to ";
             } else if (deltaS < 4.0) {
-                std::cout << " a bit"; 
+                std::cout << " a bit";
             } else if (deltaS < 6.0) {
                 std::cout < "";
-            } else  {
+            } else {
                 std::cout << " much";
-            } 
+            }
             if (score >= 52.0) {
                 std::cout << " stronger than ";
             } else if (score <= 48.0) {

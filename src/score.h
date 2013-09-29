@@ -106,6 +106,16 @@ struct TScore {
         eg -= s.eg;
     }
     
+    inline void sub(const short x) {
+        mg -= x;
+        eg -= x;
+    }
+  
+    inline void sub(const short x, const short y) {
+        mg -= x;
+        eg -= y;
+    }
+    
     inline void mul(const double x) {
         mg *= x;
         eg *= x;

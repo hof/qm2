@@ -30,7 +30,7 @@ void test1() {
     
     engine->setOutputHandler(&oh);
     //engine->newGame("1r4k1/2Q2pp1/4p3/4Pn1p/qr1PR3/5BPP/P2R2K1/8 b - - 2 30");
-    engine->newGame("r4rk1/p5p1/1p2p2p/3pPn1P/b1p3Bq/P1P3P1/2PN1P2/R2Q1RK1 b - - 0 19");   
+    engine->newGame("3R4/k7/2K5/8/8/8/5b2/8 w - - 79 111");   
     engine->analyse();
 
     delete engine;

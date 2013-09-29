@@ -20,6 +20,8 @@ int evaluate(TSearchData * searchData, int alpha, int beta) {
     result += searchData->stack->scores[SCORE_SHELTER_W].get(searchData->stack->gamePhase);
     result -= searchData->stack->scores[SCORE_SHELTER_B].get(searchData->stack->gamePhase);
 
+    result += evaluateRooks(searchData)->get(searchData->stack->gamePhase);
+    
     if (searchData->learnParam == 1) { //learning
         result += evaluateExp(searchData)->get(searchData->stack->gamePhase);
     }
@@ -43,6 +45,15 @@ int evaluate(TSearchData * searchData, int alpha, int beta) {
 TScore * evaluateExp(TSearchData * searchData) {
     TScore * result = &searchData->stack->scores[SCORE_EXP];
     result->clear();
+    TBoard * pos = searchData->pos;
+    if (pos->whiteRooks) {
+        U64 open = ~FILEFILL(pos->whitePawns) & pos->whiteRooks;
+        result->add(searchData->learnFactor*10*popCount(open, true));
+    }
+    if (pos->blackRooks) {
+        U64 open = ~FILEFILL(pos->blackPawns) & pos->blackRooks;
+        result->sub(searchData->learnFactor*20*popCount(open, true));
+    }
 
     return result;
 }
@@ -124,7 +135,6 @@ TScore * evaluateMaterial(TSearchData * searchData) {
         value += cond(wPair, bPair,
                 BISHOPPAIR_OPPOSING_PAWNS, bpawns, wpawns);
         value += factor(wPair, bPair, BISHOPPAIR_X_PIECECOUNT, wpieces + bpieces, wpieces + bpieces);
-
         value += factor(wbishops && !wPair, bbishops && !bPair, BISHOP_X_PIECECOUNT, wpieces + bpieces, wpieces + bpieces);
         value += cond(wbishops == wpieces && brooks && brooks == bpieces,
                 bbishops == bpieces && wrooks && wrooks == wpieces, VBISHOP_VS_ROOK_ENDGAME);
@@ -153,26 +163,27 @@ TScore * evaluateMaterial(TSearchData * searchData) {
             piecepower / VPAWN,
             -piecepower / VPAWN);
 
-    //Pawns
-    if (wpawns != bpawns) {
-        value += cond(!wpawns, !bpawns, VNOPAWNS); //penalty for not having pawns (difficult to win)
-    }
+
 
     /* 
      * Endgame adjustment: 
-     * 1)If ahead, but no pawns and no mating material the score is draw
+     * 1)Not having pawns makes it hard to win
+     * 2)If ahead, but no pawns and no mating material the score is draw
      */
     if (!wpawns || !bpawns) {
+        value += cond(!wpawns, !bpawns, VNOPAWNS); //penalty for not having pawns (difficult to win)
         if (!wpawns && value > 0 && (piecepower < 2 * VPAWN
                 || (wpieces == 1 && wminors == 1)
                 || (wpieces == 2 && wknights == 2)
-                || (wpieces == wminors && bpieces == bminors && wminors < 3 && bminors < 3 && wminors && bminors))) {
+                || (wpieces == wminors && bpieces == bminors && wminors < 3
+                && bminors < 3 && wminors && bminors))) {
             value = SCORE_DRAW;
         }
         if (!bpawns && value < 0 && (piecepower > -2 * VPAWN
                 || (bpieces == 1 && bminors == 1)
                 || (bpieces == 2 && bknights == 2)
-                || (bpieces == bminors && wpieces == wminors && bminors < 3 && wminors < 3 && bminors && wminors))) {
+                || (bpieces == bminors && wpieces == wminors && bminors < 3
+                && wminors < 3 && bminors && wminors))) {
             value = SCORE_DRAW;
         }
     }
@@ -195,15 +206,15 @@ TScore * evaluateMaterial(TSearchData * searchData) {
      * Endgame adjustment:
      * Opposite  bishop ending is drawish
      */
-    if (value && wpieces == 1 && bpieces == 1 && wbishops && bbishops) {
+    if (value && wpieces == 1 && bpieces == 1 && wbishops && bbishops && wpawns != bpawns) {
         if ((pos->whiteBishops & BLACK_SQUARES) != (pos->blackBishops & BLACK_SQUARES)) {
-            value >>= 1;
+            value += cond(wpawns>bpawns, bpawns>wpawns, DRAWISH_OPP_BISHOPS);
         }
     }
 
     //trade down bonus: trade pieces but not pawns when ahead
-    value += cond(value > MATERIAL_AHEAD_TRESHOLD, value < -MATERIAL_AHEAD_TRESHOLD, TRADEDOWN_PIECES, bpieces, wpieces);
-    value += cond(value > MATERIAL_AHEAD_TRESHOLD, value < -MATERIAL_AHEAD_TRESHOLD, TRADEDOWN_PAWNS, wpawns, bpawns);
+    value += cond(piecepower > MATERIAL_AHEAD_TRESHOLD, value < -MATERIAL_AHEAD_TRESHOLD, TRADEDOWN_PIECES, bpieces, wpieces);
+    value += cond(piecepower > MATERIAL_AHEAD_TRESHOLD, value < -MATERIAL_AHEAD_TRESHOLD, TRADEDOWN_PAWNS, wpawns, bpawns);
 
     /*
      * Store and return
@@ -216,13 +227,13 @@ TScore * evaluateMaterial(TSearchData * searchData) {
 
 void init_pct(TSCORE_PCT & pct) {
     TScore scores[64];
-    TScore vpawn(VPAWN - 10, VPAWN);
+    TScore vpawn(VPAWN , VPAWN);
     TScore vknight(VKNIGHT, VKNIGHT - 5);
     TScore vbishop(VBISHOP, VBISHOP);
     TScore vrook(VROOK, VROOK);
     TScore vqueen(VQUEEN, VQUEEN);
     TScore vking(VKING, VKING);
-    TScore PAWN_OFFSET(-6, -8);
+    TScore PAWN_OFFSET(-20, -20);
     TScore KNIGHT_OFFSET(-35, -30);
     TScore BISHOP_OFFSET(-20, -12);
     TScore ROOK_OFFSET(-15, -15);
@@ -266,7 +277,7 @@ void init_pct(TSCORE_PCT & pct) {
             scores[sq].add(-10);
         }
         int rank = RANK(sq) - 1;
-        scores[sq].eg += 2 * rank*rank; //moving pawns forward to promote
+        scores[sq].eg += rank*rank; //moving pawns forward to promote
 
         if (sq == e2 || sq == d2) {
             scores[sq].mg -= 10;
@@ -340,6 +351,9 @@ void init_pct(TSCORE_PCT & pct) {
         if (bbsq & (RANK_6)) {
             scores[sq].mg += 5;
             scores[sq].eg += 2;
+        }
+        if (bbsq & RANK_1) { //protection
+            scores[sq].mg += 8;
         }
         scores[sq].add(vrook);
         scores[sq].add(ROOK_OFFSET);
@@ -636,5 +650,22 @@ BLACK:
 RETURN:
     searchData->stack->scores[SCORE_SHELTER_W] = score_w;
     searchData->stack->scores[SCORE_SHELTER_B] = score_b;
+}
+
+TScore * evaluateRooks(TSearchData * searchData) {
+    TScore * result = &searchData->stack->scores[SCORE_ROOKS];
+    result->clear();
+    TBoard * pos = searchData->pos;
+    if (pos->whiteRooks) {
+        U64 open = ~FILEFILL(pos->whitePawns) & pos->whiteRooks;
+        int count = popCount(open, true);
+        result->add(10*count, 20*count);
+    }
+    if (pos->blackRooks) {
+        U64 open = ~FILEFILL(pos->blackPawns) & pos->blackRooks;
+        int count = popCount(open, true);
+        result->sub(10*count, 20*count);
+    }
+    return result;
 }
 
