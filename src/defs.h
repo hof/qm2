@@ -35,6 +35,35 @@ inline unsigned bitScanReverse(U64 x) {
     return x;
 }
 
+#ifdef COMPILE_32BITS
+
+static const U64 BIT32 = (C64(1) << 32);
+
+inline unsigned bitScanForward(U64 x) {
+    assert(x);
+    if (x < BIT32) {
+        asm ("bsf %0, %0" : "=r" (x) : "0" (x));
+        return x;
+    }
+    x >>= 32;
+    asm ("bsf %0, %0" : "=r" (x) : "0" (x));
+    return x + 32;
+}
+
+inline unsigned bitScanReverse(U64 x) {
+    assert(x);
+    if (x >= BIT32) {
+        x >>= 32;
+        asm ("bsr %0, %0" : "=r" (x) : "0" (x));
+        return x+32;
+    } 
+    asm ("bsr %0, %0" : "=r" (x) : "0" (x));
+    return x;
+}
+
+
+#endif
+
 #define BSF(x) (bitScanForward(x))
 #define BSR(x) (bitScanReverse(x))
 #define BIT(sq) (C64(1) << (sq))
