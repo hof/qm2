@@ -7,7 +7,7 @@
 #include "book.h"
 #include "evaluate.h"
 #include "search.h"
-#include "searchdata.h"
+#include "search.h"
 #include <time.h>
 #include "bbmoves.h"
 #include "timemanager.h"
@@ -33,7 +33,7 @@ void * TEngine::_think(void* engineObjPtr) {
     TEngine * engine = (TEngine*) engineObjPtr;
     TGameSettings game = engine->gameSettings;
 
-    TSearchData * searchData = new TSearchData(engine->_rootFen.c_str(),
+    TSearch * searchData = new TSearch(engine->_rootFen.c_str(),
             engine->_pct,
             engine->_hashTable,
             engine->_outputHandler);
@@ -153,7 +153,7 @@ void * TEngine::_think(void* engineObjPtr) {
         int depth = ONE_PLY;
         int resultScore = 0;
         while (depth <= maxDepth * ONE_PLY && !searchData->stopSearch) {
-            int score = pvs_root(searchData, alpha, beta, depth);
+            int score = searchData->pvs_root(alpha, beta, depth);
             int type = score <= alpha ? FAILLOW : score >= beta ? FAILHIGH : EXACT;
 
             /*
@@ -271,7 +271,7 @@ void * TEngine::_think(void* engineObjPtr) {
  */
 void TEngine::analyse() {
 
-    TSearchData * searchData = new TSearchData(_rootFen.c_str(), _pct, _hashTable, _outputHandler);
+    TSearch * searchData = new TSearch(_rootFen.c_str(), _pct, _hashTable, _outputHandler);
     std::cout << searchData->pos->asFen().c_str() << std::endl;
     searchData->stack->evaluationScore = evaluate(searchData, 0, 0);
     int phase = searchData->stack->gamePhase;
@@ -283,7 +283,7 @@ void TEngine::analyse() {
     std::cout << "6) Shelter score for white: " << searchData->stack->scores[SCORE_SHELTER_W].get(phase) << std::endl;
     std::cout << "7) Shelter score for black: " << searchData->stack->scores[SCORE_SHELTER_B].get(phase) << std::endl;
     std::cout << "8) Evaluation:" << searchData->stack->evaluationScore << std::endl;
-    std::cout << "9) Quiescence:" << qsearch(searchData, -SCORE_MATE, SCORE_MATE, 0) << std::endl;
+    std::cout << "9) Quiescence:" << searchData->qsearch(-SCORE_MATE, SCORE_MATE, 0) << std::endl;
     std::cout << "10) Best move:" << std::endl;
 
     //loop through piece square tables
@@ -320,7 +320,7 @@ void TEngine::analyse() {
     }
     while (move) {
         searchData->forward(move, root->givesCheck(move));
-        std::cout << move->asString().c_str() << ": " << -pvs(searchData, -beta, -alpha, 0) << std::endl;
+        std::cout << move->asString().c_str() << ": " << -searchData->pvs(-beta, -alpha, 0) << std::endl;
         searchData->backward(move);
         move = mp->pickNextMove(searchData, 0, alpha, beta, 0);
     }
@@ -401,7 +401,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     THashTable * hash1 = new THashTable(HASH_SIZE_IN_MB); //each side uses it's own hash table
     THashTable * hash2 = new THashTable(HASH_SIZE_IN_MB);
     TEngine * engine = (TEngine*) engineObjPtr;
-    TSearchData * sd_root = new TSearchData(engine->_rootFen.c_str(),
+    TSearch * sd_root = new TSearch(engine->_rootFen.c_str(),
             engine->_pct, hash1, NULL);
 
     engine->gameSettings.maxDepth = MAXDEPTH;
@@ -489,7 +489,7 @@ void * TEngine::_learn(void * engineObjPtr) {
      */
 
     THashTable * hash_list[2] = {hash1, hash2};
-    TSearchData * sd_game = sd_root;
+    TSearch * sd_game = sd_root;
     U64 gamesPlayed = 0;
     U64 totalNodes[2] = {0, 0};
     double totalScore = 0.0;
@@ -552,7 +552,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                      */
                     sd_game->stopSearch = false;
                     while (depth <= (MAXDEPTH) * ONE_PLY && !sd_game->stopSearch) {
-                        int score = pvs_root(sd_game, -SCORE_INFINITE, SCORE_INFINITE, depth);
+                        int score = sd_game->pvs_root(-SCORE_INFINITE, SCORE_INFINITE, depth);
                         if (!sd_game->stopSearch) {
                             resultScore = score;
                         }

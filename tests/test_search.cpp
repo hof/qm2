@@ -18,14 +18,14 @@
 #include "bbmoves.h"
 #include "evaluate.h"
 #include "hashtable.h"
-#include "searchdata.h"
+#include "search.h"
 #include "movegen.h"
 
 /*
  * Simple C++ Test Suite
  */
 
-U64 searchPerft(TSearchData *searchData, int depth, int alpha, int beta) {
+U64 searchPerft(TSearch *searchData, int depth, int alpha, int beta) {
     U64 result = 0;
     TMovePicker * mp = searchData->movePicker;
     TBoard * pos = searchData->pos;
@@ -43,7 +43,7 @@ U64 searchPerft(TSearchData *searchData, int depth, int alpha, int beta) {
     return result;
 }
 
-U64 rootPerft(TSearchData *searchData, int depth) {
+U64 rootPerft(TSearch *searchData, int depth) {
     U64 result = 0;
     for (int i = 0; i < searchData->root.MoveCount; i++) {
         TRootMove * rMove = &searchData->root.Moves[i];
@@ -62,7 +62,7 @@ U64 rootPerft(TSearchData *searchData, int depth) {
     return result;
 }
 
-void divide(TSearchData * searchData, int depth) {
+void divide(TSearch * searchData, int depth) {
     TMoveList * moveList = &searchData->stack->moveList;
     TBoard * pos = searchData->pos;
     std::cout << pos->asFen() << std::endl;
@@ -86,7 +86,7 @@ void testMoveGeneration(string fen, int targetValues[], int maxDepth, THashTable
     TOutputHandler outputHandler;
     TSCORE_PCT pct;
     init_pct(pct);
-    TSearchData * searchData = new TSearchData(fen.c_str(), pct, hashTable, &outputHandler);
+    TSearch * searchData = new TSearch(fen.c_str(), pct, hashTable, &outputHandler);
     std::string fen2 = searchData->pos->asFen();
     if (fen2 != fen) {
         std::cout << "%TEST_FAILED% time=0 testname=testMoveGeneration (test_genmoves) message=basic fen mismatch " << fen2 << std::endl;

@@ -15,14 +15,14 @@
 #include "bbmoves.h"
 #include "evaluate.h"
 #include "hashtable.h"
-#include "searchdata.h"
+#include "search.h"
 #include "movegen.h"
 
 /*
  * Simple C++ Test Suite
  */
 
-U64 moveGenerationPerft(TSearchData *searchData, int depth) {
+U64 moveGenerationPerft(TSearch *searchData, int depth) {
     U64 result = 0;
     TBoard * pos = searchData->pos;
     TMoveList * moveList = &searchData->stack->moveList;
@@ -48,7 +48,7 @@ U64 moveGenerationPerft(TSearchData *searchData, int depth) {
     return result;
 }
 
-void movePerftDivide(TSearchData * searchData, int depth) {
+void movePerftDivide(TSearch * searchData, int depth) {
     TMoveList * moveList = &searchData->stack->moveList;
     TBoard * pos = searchData->pos;
     std::cout << pos->asFen() << std::endl;
@@ -77,7 +77,7 @@ void movePerftDivide(TSearchData * searchData, int depth) {
 /**
  * Move generaration test (perft test)
  */
-void testMoveGeneration(string fen, int targetValues[], int maxDepth, TSearchData * searchData) {
+void testMoveGeneration(string fen, int targetValues[], int maxDepth, TSearch * searchData) {
     std::cout << "\n\ntest_genmoves test testMoveGeneration " << fen << std::endl;
     searchData->pos->fromFen(fen.c_str());
     for (int i = 0; i < maxDepth; i++) {
@@ -109,7 +109,7 @@ int main(int argc, char** argv) {
     TOutputHandler outputHandler;
     TSCORE_PCT pct;
     init_pct(pct);
-    TSearchData * searchData = new TSearchData("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", pct, hashTable, &outputHandler);
+    TSearch * searchData = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", pct, hashTable, &outputHandler);
 
 
 

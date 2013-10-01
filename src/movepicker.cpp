@@ -1,8 +1,8 @@
 #include "movepicker.h"
-#include "searchdata.h"
+#include "search.h"
 #include "move.h"
 
-void TMovePicker::push(TSearchData * searchData, TMove * move, int score) {
+void TMovePicker::push(TSearch * searchData, TMove * move, int score) {
     TMoveList * list = &searchData->stack->moveList;
     for (TMove * m = list->first; m != list->last; m++) {
         if (move->equals(m)) {
@@ -40,7 +40,7 @@ inline TMove * TMovePicker::popBest(TBoard * pos, TMoveList * list) {
     return NULL;
 }
 
-TMove * TMovePicker::pickFirstMove(TSearchData * searchData, int depth, int alpha, int beta, int gap) {
+TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, int beta, int gap) {
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
     moveList->stage = HASH1;
@@ -51,7 +51,7 @@ TMove * TMovePicker::pickFirstMove(TSearchData * searchData, int depth, int alph
     return pickNextMove(searchData, depth, alpha, beta, gap);
 }
 
-TMove * TMovePicker::pickFirstQuiescenceMove(TSearchData * searchData, int qPly, int alpha, int beta, int gap) {
+TMove * TMovePicker::pickFirstQuiescenceMove(TSearch * searchData, int qPly, int alpha, int beta, int gap) {
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
     moveList->stage = Q_CAPTURES;
@@ -59,7 +59,7 @@ TMove * TMovePicker::pickFirstQuiescenceMove(TSearchData * searchData, int qPly,
     return pickNextMove(searchData, qPly, alpha, beta, gap);
 }
 
-TMove * TMovePicker::pickNextMove(TSearchData * searchData, int depth, int alpha, int beta, int gap) {
+TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, int beta, int gap) {
     U64 mask;
     TMoveList * moveList = &searchData->stack->moveList;
     TBoard * pos = searchData->pos;
@@ -108,7 +108,7 @@ TMove * TMovePicker::pickNextMove(TSearchData * searchData, int depth, int alpha
                     bool skipNull = searchData->skipNull;
                     searchData->skipNull = true;
                     int iid_depth = MAX(ONE_PLY, depth - 3 * ONE_PLY - ONE_PLY * (depth > 5 * ONE_PLY) - ONE_PLY * (depth > 7 * ONE_PLY));
-                    int iid_score = pvs(searchData, alpha, beta, iid_depth);
+                    int iid_score = searchData->pvs(alpha, beta, iid_depth);
                     searchData->skipNull = skipNull;
                     searchData->hashTable->ttLookup(searchData, iid_depth, alpha, beta);
                     moveList->clear();
@@ -271,7 +271,7 @@ TMove * TMovePicker::pickNextMove(TSearchData * searchData, int depth, int alpha
                 result = popBest(pos, moveList);
                 if (searchData->stack->inCheck) {
                     moveList->stage = Q_EVASIONS;
-                } else if (depth < 1 && alpha+1 < beta) {
+                } else if (depth < 1) {
                     moveList->stage = Q_QUIET_CHECKS;
                 } else {
                     moveList->stage = STOP;

@@ -1,9 +1,9 @@
 #include "evaluate.h"
-#include "searchdata.h"
+#include "search.h"
 #include "defs.h"
 #include "score.h"
 
-int evaluate(TSearchData * searchData, int alpha, int beta) {
+int evaluate(TSearch * searchData, int alpha, int beta) {
 
     if (searchData->stack->evaluationScore != SCORE_INVALID) {
         return searchData->stack->evaluationScore;
@@ -14,6 +14,7 @@ int evaluate(TSearchData * searchData, int alpha, int beta) {
 
     result += evaluateMaterial(searchData)->get(searchData->stack->gamePhase);
     result += pos->boardFlags->pct.get(searchData->stack->gamePhase);
+
     result += evaluatePawns(searchData)->get(searchData->stack->gamePhase);
 
     evaluateKingShelter(searchData);
@@ -21,14 +22,14 @@ int evaluate(TSearchData * searchData, int alpha, int beta) {
     result -= searchData->stack->scores[SCORE_SHELTER_B].get(searchData->stack->gamePhase);
 
     result += evaluateRooks(searchData)->get(searchData->stack->gamePhase);
-    
+
     if (searchData->learnParam == 1) { //learning
         result += evaluateExp(searchData)->get(searchData->stack->gamePhase);
     }
+
     result &= GRAIN;
     result = pos->boardFlags->WTM ? result : -result;
     searchData->stack->evaluationScore = result;
-
 
     assert(searchData->stack->scores[SCORE_PAWNS].mg > -VQUEEN && searchData->stack->scores[SCORE_PAWNS].mg < VQUEEN);
     assert(searchData->stack->scores[SCORE_MATERIAL].mg > -VKING && searchData->stack->scores[SCORE_PAWNS].mg < VKING);
@@ -42,17 +43,17 @@ int evaluate(TSearchData * searchData, int alpha, int beta) {
  * @param searchData search meta-data object
  * @return score the evaluation score
  */
-TScore * evaluateExp(TSearchData * searchData) {
+TScore * evaluateExp(TSearch * searchData) {
     TScore * result = &searchData->stack->scores[SCORE_EXP];
     result->clear();
     TBoard * pos = searchData->pos;
     if (pos->whiteRooks) {
         U64 open = ~FILEFILL(pos->whitePawns) & pos->whiteRooks;
-        result->add(searchData->learnFactor*10*popCount(open, true));
+        result->add(searchData->learnFactor * 10 * popCount(open, true));
     }
     if (pos->blackRooks) {
         U64 open = ~FILEFILL(pos->blackPawns) & pos->blackRooks;
-        result->sub(searchData->learnFactor*20*popCount(open, true));
+        result->sub(searchData->learnFactor * 20 * popCount(open, true));
     }
 
     return result;
@@ -62,7 +63,7 @@ TScore * evaluateExp(TSearchData * searchData) {
  * Evaluate material score and set the current game phase
  * @param searchData search meta-data object
  */
-TScore * evaluateMaterial(TSearchData * searchData) {
+TScore * evaluateMaterial(TSearch * searchData) {
 
     /*
      * 1. Get the score from the last stack record if the previous move was quiet, 
@@ -104,7 +105,6 @@ TScore * evaluateMaterial(TSearchData * searchData) {
     int bminors = bknights + bbishops;
     int wpieces = wminors + wrooks + wqueens;
     int bpieces = bminors + brooks + bqueens;
-
 
     // Calculate game phase
     int phase = MAX_GAMEPHASES
@@ -167,24 +167,24 @@ TScore * evaluateMaterial(TSearchData * searchData) {
 
     /* 
      * Endgame adjustment: 
-     * 1)Not having pawns makes it hard to win
-     * 2)If ahead, but no pawns and no mating material the score is draw
+     * 1) Not having pawns makes it hard to win
+     * 2) If ahead, but no pawns and no mating material the score is draw
      */
     if (!wpawns || !bpawns) {
         value += cond(!wpawns, !bpawns, VNOPAWNS); //penalty for not having pawns (difficult to win)
-        if (!wpawns && value > 0 && (piecepower < 2 * VPAWN
+        if (!wpawns && piecepower > 0 && (piecepower < 2 * VPAWN
                 || (wpieces == 1 && wminors == 1)
                 || (wpieces == 2 && wknights == 2)
                 || (wpieces == wminors && bpieces == bminors && wminors < 3
                 && bminors < 3 && wminors && bminors))) {
-            value = SCORE_DRAW;
+            value = SCORE_DRAW - piecepower >> 1;;
         }
-        if (!bpawns && value < 0 && (piecepower > -2 * VPAWN
+        if (!bpawns && piecepower < 0 && (piecepower > -2 * VPAWN
                 || (bpieces == 1 && bminors == 1)
                 || (bpieces == 2 && bknights == 2)
                 || (bpieces == bminors && wpieces == wminors && bminors < 3
                 && wminors < 3 && bminors && wminors))) {
-            value = SCORE_DRAW;
+            value = SCORE_DRAW + piecepower >> 1;
         }
     }
 
@@ -227,7 +227,7 @@ TScore * evaluateMaterial(TSearchData * searchData) {
 
 void init_pct(TSCORE_PCT & pct) {
     TScore scores[64];
-    TScore vpawn(VPAWN , VPAWN);
+    TScore vpawn(VPAWN, VPAWN);
     TScore vknight(VKNIGHT, VKNIGHT - 5);
     TScore vbishop(VBISHOP, VBISHOP);
     TScore vrook(VROOK, VROOK);
@@ -402,7 +402,7 @@ void init_pct(TSCORE_PCT & pct) {
  * @param searchData search metadata object
  */
 
-TScore * evaluatePawns(TSearchData * searchData) {
+TScore * evaluatePawns(TSearch * searchData) {
 
     /*
      * 1. Get the score from the last stack record if the latest move did not
@@ -529,7 +529,7 @@ TScore * evaluatePawns(TSearchData * searchData) {
     return &searchData->stack->scores[SCORE_PAWNS];
 }
 
-void evaluateKingShelter(TSearchData * searchData) {
+void evaluateKingShelter(TSearch * searchData) {
 
     TScore score_w;
     TScore score_b;
@@ -652,19 +652,19 @@ RETURN:
     searchData->stack->scores[SCORE_SHELTER_B] = score_b;
 }
 
-TScore * evaluateRooks(TSearchData * searchData) {
+TScore * evaluateRooks(TSearch * searchData) {
     TScore * result = &searchData->stack->scores[SCORE_ROOKS];
     result->clear();
     TBoard * pos = searchData->pos;
     if (pos->whiteRooks) {
         U64 open = ~FILEFILL(pos->whitePawns) & pos->whiteRooks;
         int count = popCount(open, true);
-        result->add(10*count, 20*count);
+        result->add(10 * count, 20 * count);
     }
     if (pos->blackRooks) {
         U64 open = ~FILEFILL(pos->blackPawns) & pos->blackRooks;
         int count = popCount(open, true);
-        result->sub(10*count, 20*count);
+        result->sub(10 * count, 20 * count);
     }
     return result;
 }

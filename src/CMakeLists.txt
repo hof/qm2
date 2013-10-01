@@ -12,7 +12,6 @@ add_library(QM2SRC
 	book.cpp
 	evaluate.cpp
 	search.cpp
-	searchdata.cpp
 	threadsmanager.cpp
 	timemanager.cpp
 )

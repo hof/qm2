@@ -10,7 +10,7 @@
 
 #include "bbmoves.h"
 #include "hashtable.h"
-#include "searchdata.h"
+#include "search.h"
 #include "search.h"
 #include "engine.h"
 #include "evaluate.h"
@@ -29,7 +29,7 @@ void test_tt() {
     TOutputHandler oh;
     TSCORE_PCT pct;
     init_pct(pct);
-    TSearchData * searchData = new TSearchData("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", pct, hashTable, &oh); 
+    TSearch * searchData = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", pct, hashTable, &oh); 
     
     //test storing and retrieving
     TMove * move = searchData->movePicker->pickFirstMove(searchData, 0, -SCORE_INFINITE, SCORE_INFINITE, 0);

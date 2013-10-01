@@ -269,8 +269,8 @@ struct TBoard {
         if (piece == WPAWN || piece == BPAWN) {
             HASH_ADD_PIECE(boardFlags->pawnHash, piece, sq);
         }
-        boardFlags->pct.add(pieceSquareTable[piece][sq]);
         addPiece(piece, sq);
+        boardFlags->pct.add(pieceSquareTable[piece][sq]);
     }
 
     /**
@@ -288,8 +288,8 @@ struct TBoard {
     }
 
     inline void removePieceFull(int piece, int sq) {
-        removePiece(piece, sq);
         boardFlags->pct.sub(pieceSquareTable[piece][sq]);
+        removePiece(piece, sq);
         HASH_REMOVE_PIECE(boardFlags->materialHash, piece, pieces[piece].count + BISHOP_IX(piece, sq));
         HASH_REMOVE_PIECE(boardFlags->hashCode, piece, sq);
         if (piece == WPAWN || piece == BPAWN) {

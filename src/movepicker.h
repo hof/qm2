@@ -11,8 +11,7 @@
 #include <cstdlib>
 
 #include "movegen.h"
-#include "search.h"
-class TSearchData;
+class TSearch;
 
 enum MovePickingStage {
     HASH1,
@@ -42,12 +41,12 @@ protected:
 
 public:
 
-    TMove * pickNextMove(TSearchData * searchData, int depth, int alpha, int beta, int gap);
+    TMove * pickNextMove(TSearch * searchData, int depth, int alpha, int beta, int gap);
 
-    TMove * pickFirstMove(TSearchData * searchData, int depth, int alpha, int beta, int gap);
-    TMove * pickFirstQuiescenceMove(TSearchData * searchData, int qPly, int alpha, int beta, int gap);
+    TMove * pickFirstMove(TSearch * searchData, int depth, int alpha, int beta, int gap);
+    TMove * pickFirstQuiescenceMove(TSearch * searchData, int qPly, int alpha, int beta, int gap);
     
-    void push(TSearchData * searchData, TMove * move, int score);
+    void push(TSearch * searchData, TMove * move, int score);
     
 };
 

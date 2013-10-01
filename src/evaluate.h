@@ -14,7 +14,7 @@
 #include "score.h"
 
 
-class TSearchData;
+class TSearch;
 
 enum EVALUATION_CONSTANTS {
     MAX_PIECES = 16,
@@ -241,19 +241,19 @@ const short SHELTER_OPEN_FILES[GAME_PHASES][4] = {
 const short SHELTER_CASTLING_KINGSIDE[GAME_PHASES] = {50, 10};
 const short SHELTER_CASTLING_QUEENSIDE[GAME_PHASES] = {40, 10};
 
-int evaluate(TSearchData * searchData, int alpha, int beta);
+int evaluate(TSearch * searchData, int alpha, int beta);
 
 void init_pct(TSCORE_PCT & pct);
 
-TScore * evaluateExp(TSearchData * searchData);
+TScore * evaluateExp(TSearch * searchData);
 
-TScore * evaluateMaterial(TSearchData * searchData);
+TScore * evaluateMaterial(TSearch * searchData);
 
-TScore * evaluatePawns(TSearchData * searchData);
+TScore * evaluatePawns(TSearch * searchData);
 
-TScore * evaluateRooks(TSearchData * searchData);
+TScore * evaluateRooks(TSearch * searchData);
 
-void evaluateKingShelter(TSearchData * searchData);
+void evaluateKingShelter(TSearch * searchData);
 
 /*******************************************************************************
  * Helper functions

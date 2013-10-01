@@ -1,5 +1,5 @@
 #include "hashtable.h"
-#include "searchdata.h"
+#include "search.h"
 #include "search.h"
 
 THashTable::THashTable(int totalSizeInMb) {
@@ -42,7 +42,7 @@ THashTable::~THashTable() {
     delete[] pawnTable;
 }
 
-void THashTable::ttLookup(TSearchData * searchData, int depth, int alpha, int beta) {
+void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) {
     bool hashHit = false;
     int hashedDepth1 = 0;
     searchData->stack->ttScore = TT_EMPTY;
@@ -125,13 +125,13 @@ void THashTable::ttLookup(TSearchData * searchData, int depth, int alpha, int be
     searchData->hashHits += hashHit;
 }
 
-void THashTable::repStore(TSearchData * searchData, U64 hashCode, int fiftyCount) {
+void THashTable::repStore(TSearch * searchData, U64 hashCode, int fiftyCount) {
     if (fiftyCount < 100 && fiftyCount >= 0) {
         searchData->hashTable->repTable[fiftyCount] = hashCode;
     }
 }
 
-void THashTable::ttStore(TSearchData * searchData, int move, int score, int depth, int alpha, int beta) {
+void THashTable::ttStore(TSearch * searchData, int move, int score, int depth, int alpha, int beta) {
     if (searchData->stopSearch || score == SCORE_INVALID || score == -SCORE_INVALID || depth >= MAX_PLY) {
         return;
     }
@@ -175,7 +175,7 @@ void THashTable::ttStore(TSearchData * searchData, int move, int score, int dept
     ttEntry->value = newHashValue;
 }
 
-void THashTable::mtLookup(TSearchData * searchData) {
+void THashTable::mtLookup(TSearch * searchData) {
     searchData->materialTableProbes++;
     THashTable * hashTable = searchData->hashTable;
     TMaterialTableEntry * materialTable = hashTable->materialTable;
@@ -190,7 +190,7 @@ void THashTable::mtLookup(TSearchData * searchData) {
     }
 }
 
-void THashTable::mtStore(TSearchData * searchData, int value, int gamePhase) {
+void THashTable::mtStore(TSearch * searchData, int value, int gamePhase) {
     THashTable * hashTable = searchData->hashTable;
     TMaterialTableEntry * materialTable = hashTable->materialTable;
     U64 materialHash = searchData->pos->boardFlags->materialHash;
@@ -200,7 +200,7 @@ void THashTable::mtStore(TSearchData * searchData, int value, int gamePhase) {
     entry->key = materialHash^value;
 }
 
-void THashTable::ptLookup(TSearchData * searchData) {
+void THashTable::ptLookup(TSearch * searchData) {
     searchData->pawnTableProbes++;
     THashTable * hashTable = searchData->hashTable;
     U64 pawnHash = searchData->pos->boardFlags->pawnHash;
@@ -213,7 +213,7 @@ void THashTable::ptLookup(TSearchData * searchData) {
     }
 }
 
-void THashTable::ptStore(TSearchData * searchData, const TScore & pawnScore) {
+void THashTable::ptStore(TSearch * searchData, const TScore & pawnScore) {
     THashTable * hashTable = searchData->hashTable;
     U64 pawnHash = searchData->pos->boardFlags->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];

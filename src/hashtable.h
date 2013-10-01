@@ -11,7 +11,7 @@
 #include "defs.h"
 #include "move.h"
 
-class TSearchData;
+class TSearch;
 
 struct TMaterialTableEntry {
     U64 key;
@@ -91,13 +91,13 @@ public:
         return pawnHashCode & _pawnMaxHashKey;
     }
 
-    static void ttLookup(TSearchData * searchData, int depth, int alpha, int beta);
-    static void ttStore(TSearchData * searchData, int move, int score, int depth, int alpha, int beta);
-    static void mtLookup(TSearchData * searchData);
-    static void mtStore(TSearchData * searchData, int value, int gamePhase);
-    static void repStore(TSearchData * searchData, U64 hashCode, int fiftyCount);
-    static void ptLookup(TSearchData * searchData);
-    static void ptStore(TSearchData * searchData, const TScore & pawnScore);
+    static void ttLookup(TSearch * searchData, int depth, int alpha, int beta);
+    static void ttStore(TSearch * searchData, int move, int score, int depth, int alpha, int beta);
+    static void mtLookup(TSearch * searchData);
+    static void mtStore(TSearch * searchData, int value, int gamePhase);
+    static void repStore(TSearch * searchData, U64 hashCode, int fiftyCount);
+    static void ptLookup(TSearch * searchData);
+    static void ptStore(TSearch * searchData, const TScore & pawnScore);
 
     void clear();
 
