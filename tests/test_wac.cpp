@@ -19,8 +19,15 @@
  * Simple C++ Test Suite
  */
 
+struct TTestResult {
+    bool solved;
+    int nodes;
+    int score;
+    TMove move;
+};
 
-bool testForMove(TEngine * engine, string fen, string move, int targetScore) {
+TTestResult testForMove(TEngine * engine, string fen, string move, int targetScore) {
+    TTestResult result;
     TMove bm;
     TBoard pos;
     pos.fromFen(fen.c_str());
@@ -32,7 +39,11 @@ bool testForMove(TEngine * engine, string fen, string move, int targetScore) {
 
     engine->think();
     engine->stopAllThreads();
-    return engine->getTestResult();
+    result.solved = engine->getTestResult();
+    result.nodes = engine->getNodesSearched();
+    result.move = engine->getMove();
+    result.score = engine->getScore();
+    return result;
 }
 
 void test_wac(TEngine * engine) {
@@ -40,9 +51,9 @@ void test_wac(TEngine * engine) {
 
     static const int TEST_SIZE = 25;
     int solved = 0;
-    int targetScore = 25;
+    int targetScore = TEST_SIZE;
 
-    int results[TEST_SIZE];
+    TTestResult results[TEST_SIZE];
     int current = 0;
     memset(results, 0, sizeof (results));
 
@@ -53,8 +64,8 @@ void test_wac(TEngine * engine) {
     1nbq1r1k/3rbp1p/p1p1pp1Q/1p6/P1pPN3/5NP1/1P2PPBP/R4RK1 w - - bm Nfg5; id "WAC.293";
      */
 
-    results[current++] = testForMove(engine, "r4rk1/p5p1/1p2p2p/3pPn1P/b1p3Bq/P1P3P1/2PN1P2/R2Q1RK1 b - - 0 19", "f5g3",30);    
-    results[current++] = testForMove(engine, "2rr2k1/pb3pp1/1p1ppq1p/1P6/2PNP3/P2Q1P2/6PP/3R1RK1 b - - 1 1", "f6g5",30);    
+    results[current++] = testForMove(engine, "r4rk1/p5p1/1p2p2p/3pPn1P/b1p3Bq/P1P3P1/2PN1P2/R2Q1RK1 b - - 0 19", "f5g3", 30);
+    results[current++] = testForMove(engine, "2rr2k1/pb3pp1/1p1ppq1p/1P6/2PNP3/P2Q1P2/6PP/3R1RK1 b - - 1 1", "f6g5", 30);
     results[current++] = testForMove(engine, "2r2rk1/1p2pnb1/p2p3p/q2P2p1/5p1P/2P5/PP3PPB/1K1RQB1R b - -0 21", "c8c3", -SCORE_MATE);
     results[current++] = testForMove(engine, "rq2rbk1/6p1/p2p2Pp/1p1Rn3/4PB2/6Q1/PPP1B3/2K3R1 w - - 0 1", "f4h6", -SCORE_MATE);
     results[current++] = testForMove(engine, "1br2rk1/1pqb1ppp/p3pn2/8/1P6/P1N1PN1P/1B3PP1/1QRR2K1 w - - 0 1", "c3e4", 175);
@@ -78,14 +89,18 @@ void test_wac(TEngine * engine) {
     results[current++] = testForMove(engine, "nrq4r/2k1p3/1p1pPnp1/pRpP1p2/P1P2P2/2P1BB2/1R2Q1P1/6K1 w - - 0 1", "e3c5", -SCORE_MATE);
     results[current++] = testForMove(engine, "5r1k/3b2p1/p6p/1pRpR3/1P1P2q1/P4pP1/5QnP/1B4K1 w - - 0 1", "h2h3", -SCORE_MATE);
     results[current++] = testForMove(engine, "4r1k1/p1qr1p2/2pb1Bp1/1p5p/3P1n1R/1B3P2/PP3PK1/2Q4R w - - 0 1", "c1f4", -SCORE_MATE);
-    results[current++] = testForMove(engine, "5r2/1p1RRrk1/4Qq1p/1PP3p1/8/4B3/1b3P1P/6K1 w - - 0 1", "e7f7", -SCORE_MATE);
-
+    
+    U64 totalNodes = 0;
     for (int i = 0; i < TEST_SIZE; i++) {
-        std::cout << "Position " << (i + 1) << ": " << (results[i] ? "Passed" : "Failed") << std::endl;
-        solved += results[i];
+        std::cout << "Position " << (i + 1) << ": " << (results[i].solved ? "Passed" : "Failed")
+                << " " << results[i].move.asString() 
+                << " score: " << results[i].score
+                << " nodes: " << results[i].nodes / 1000 << "K" << std::endl;
+        solved += results[i].solved;
+        totalNodes += results[i].nodes;
     }
     std::cout << "Solved " << solved << " positions out of " << TEST_SIZE << std::endl;
-
+    std::cout << "Nodes " << totalNodes / 1000 << "K " << std::endl;
     if (solved < targetScore) {
         std::cout << "%TEST_FAILED% time=0 testname=wac (test_wac) message=solved: " << solved << " out of " << TEST_SIZE << std::endl;
     }
@@ -112,8 +127,8 @@ int main(int argc, char** argv) {
 
     std::cout << "%SUITE_FINISHED% time=" << elapsed << std::endl;
 
-    delete engine;
     delete globalHashTable;
+    delete engine;
 
     return (EXIT_SUCCESS);
 }

@@ -48,6 +48,8 @@ public:
     
     void push(TSearch * searchData, TMove * move, int score);
     
+    int q_check_depth(TSearch * search, int alpha, int beta);
+    
 };
 
 #endif	/* MOVEPICKER_H */

@@ -271,7 +271,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 result = popBest(pos, moveList);
                 if (searchData->stack->inCheck) {
                     moveList->stage = Q_EVASIONS;
-                } else if (depth < 1) {
+                } else if (depth < q_check_depth(searchData, alpha, beta)) {
                     moveList->stage = Q_QUIET_CHECKS;
                 } else {
                     moveList->stage = STOP;
@@ -309,5 +309,22 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
 
         }
     }
+    return result;
+}
+
+
+int TMovePicker::q_check_depth(TSearch* search, int alpha, int beta) {
+    int result = 0;
+    int type = search->setNodeType(alpha, beta);
+    if (type == PVNODE) {
+        result++;
+    } 
+    if (search->pos->whiteQueens && search->stack->scores[SCORE_SHELTER_B].mg < 50) {
+        result++;
+    } 
+    if (search->pos->blackQueens && search->stack->scores[SCORE_SHELTER_W].mg < 50 ) {
+        result++;
+    }
+    
     return result;
 }

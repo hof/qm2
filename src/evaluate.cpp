@@ -11,21 +11,21 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
 
     int result = 0;
     TBoard * pos = searchData->pos;
-
-    result += evaluateMaterial(searchData)->get(searchData->stack->gamePhase);
     result += pos->boardFlags->pct.get(searchData->stack->gamePhase);
 
+    if (searchData->learnParam == 1) { //learning
+        result += searchData->learnFactor * evaluateMaterial(searchData)->get(searchData->stack->gamePhase);
+        //result += evaluateExp(searchData)->get(searchData->stack->gamePhase);
+    } else {
+        result += evaluateMaterial(searchData)->get(searchData->stack->gamePhase);
+    }
+
     result += evaluatePawns(searchData)->get(searchData->stack->gamePhase);
-
     evaluateKingShelter(searchData);
-    result += searchData->stack->scores[SCORE_SHELTER_W].get(searchData->stack->gamePhase);
     result -= searchData->stack->scores[SCORE_SHELTER_B].get(searchData->stack->gamePhase);
-
     result += evaluateRooks(searchData)->get(searchData->stack->gamePhase);
 
-    if (searchData->learnParam == 1) { //learning
-        result += evaluateExp(searchData)->get(searchData->stack->gamePhase);
-    }
+
 
     result &= GRAIN;
     result = pos->boardFlags->WTM ? result : -result;
@@ -46,15 +46,7 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
 TScore * evaluateExp(TSearch * searchData) {
     TScore * result = &searchData->stack->scores[SCORE_EXP];
     result->clear();
-    TBoard * pos = searchData->pos;
-    if (pos->whiteRooks) {
-        U64 open = ~FILEFILL(pos->whitePawns) & pos->whiteRooks;
-        result->add(searchData->learnFactor * 10 * popCount(open, true));
-    }
-    if (pos->blackRooks) {
-        U64 open = ~FILEFILL(pos->blackPawns) & pos->blackRooks;
-        result->sub(searchData->learnFactor * 20 * popCount(open, true));
-    }
+    
 
     return result;
 }
@@ -177,7 +169,8 @@ TScore * evaluateMaterial(TSearch * searchData) {
                 || (wpieces == 2 && wknights == 2)
                 || (wpieces == wminors && bpieces == bminors && wminors < 3
                 && bminors < 3 && wminors && bminors))) {
-            value = SCORE_DRAW - piecepower >> 1;;
+            value = SCORE_DRAW - piecepower >> 1;
+            ;
         }
         if (!bpawns && piecepower < 0 && (piecepower > -2 * VPAWN
                 || (bpieces == 1 && bminors == 1)
@@ -489,16 +482,16 @@ TScore * evaluatePawns(TSearch * searchData) {
         }
         if (isolated) {
             if (open) {
-                pawnScore.add(-ISOLATED_OPEN_PAWN[tSq]);
+                pawnScore.sub(ISOLATED_OPEN_PAWN[tSq]);
             } else {
-                pawnScore.add(-ISOLATED_PAWN[tSq]);
+                pawnScore.sub(ISOLATED_PAWN[tSq]);
             }
         }
         if (doubled) {
-            pawnScore.add(-DOUBLED_PAWN[tSq]);
+            pawnScore.sub(DOUBLED_PAWN[tSq]);
         }
         if (passed) {
-            pawnScore.add(-PASSED_PAWN[tSq]);
+            pawnScore.sub(PASSED_PAWN[tSq]);
             passers |= sqBit;
         }
 
@@ -519,7 +512,7 @@ TScore * evaluatePawns(TSearch * searchData) {
             int sq = POP(passersB);
             U64 mask = passers & pos->blackPawns & KingMoves[sq] & NEIGHBOUR_FILES[FILE(sq)];
             if (mask) {
-                pawnScore.add(-CONNECED_PASSED_PAWN[sq]);
+                pawnScore.sub(CONNECED_PASSED_PAWN[sq]);
             }
         }
     }
@@ -561,18 +554,18 @@ void evaluateKingShelter(TSearch * searchData) {
          * Calculate king shelter score
          */
         int kpos = *pos->whiteKingPos;
-        score_w.add_ix64(&SHELTER_KPOS, FLIP_SQUARE(kpos));
+        score_w.add(SHELTER_KPOS[FLIP_SQUARE(kpos)]);
 
         //1. reward having the right to castle
         if (pos->boardFlags->castlingFlags & CASTLE_K
                 && ((pos->Matrix[h2] == WPAWN && pos->Matrix[g2] == WPAWN)
                 || (pos->Matrix[f2] == WPAWN && pos->Matrix[h2] == WPAWN && pos->Matrix[g3] == WPAWN)
                 || (pos->Matrix[h3] == WPAWN && pos->Matrix[g2] == WPAWN && pos->Matrix[f2] == WPAWN))) {
-            score_w.add(&SHELTER_CASTLING_KINGSIDE);
+            score_w.add(SHELTER_CASTLING_KINGSIDE);
         } else if (pos->boardFlags->castlingFlags & CASTLE_Q
                 && ((pos->Matrix[a2] == WPAWN && pos->Matrix[b2] == WPAWN && pos->Matrix[c2] == WPAWN)
                 || (pos->Matrix[a2] == WPAWN && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN))) {
-            score_w.add(&SHELTER_CASTLING_QUEENSIDE);
+            score_w.add(SHELTER_CASTLING_QUEENSIDE);
         }
 
         //2. reward having pawns in front of the king
@@ -581,14 +574,13 @@ void evaluateKingShelter(TSearch * searchData) {
 
         while (shelterPawns) {
             int sq = POP(shelterPawns);
-            score_w.add_ix64(&SHELTER_PAWN, FLIP_SQUARE(sq));
+            score_w.add(SHELTER_PAWN[FLIP_SQUARE(sq)]);
         }
 
         //3. penalize (half)open files on the king
         U64 open = ~FILEFILL(pos->blackPawns) & kingFront & RANK_8;
         if (open) {
-            int pc = popCount(open);
-            score_w.add_ix4(&SHELTER_OPEN_FILES, pc);
+            score_w.add(SHELTER_OPEN_FILES[popCount(open)]);
         }
         //store score in eval table
 
@@ -617,18 +609,18 @@ BLACK:
          * Calculate king shelter score
          */
         int kpos = *pos->blackKingPos;
-        score_b.add_ix64(&SHELTER_KPOS, kpos);
+        score_b.add(SHELTER_KPOS[kpos]);
 
         //1. reward having the right to castle safely
         if (pos->boardFlags->castlingFlags & CASTLE_k
                 && ((pos->Matrix[h7] == BPAWN && pos->Matrix[g7] == BPAWN)
                 || (pos->Matrix[f7] == BPAWN && pos->Matrix[h7] == BPAWN && pos->Matrix[g6] == BPAWN)
                 || (pos->Matrix[h6] == BPAWN && pos->Matrix[g7] == BPAWN && pos->Matrix[f7] == BPAWN))) {
-            score_b.add(&SHELTER_CASTLING_KINGSIDE);
+            score_b.add(SHELTER_CASTLING_KINGSIDE);
         } else if (pos->boardFlags->castlingFlags & CASTLE_q
                 && ((pos->Matrix[a7] == BPAWN && pos->Matrix[b7] == BPAWN && pos->Matrix[c7] == BPAWN)
                 || (pos->Matrix[a7] == BPAWN && pos->Matrix[b6] == BPAWN && pos->Matrix[c7] == BPAWN))) {
-            score_b.add(&SHELTER_CASTLING_QUEENSIDE);
+            score_b.add(SHELTER_CASTLING_QUEENSIDE);
         }
 
         //2. reward having pawns in front of the king
@@ -636,13 +628,13 @@ BLACK:
         U64 shelterPawns = kingFront & pos->blackPawns;
         while (shelterPawns) {
             int sq = POP(shelterPawns);
-            score_b.add_ix64(&SHELTER_PAWN, sq);
+            score_b.add(SHELTER_PAWN[sq]);
         }
 
         //3. penalize (half)open files on the king
         U64 open = (~FILEFILL(pos->whitePawns)) & kingFront & RANK_1;
         if (open) { //half open
-            score_b.add_ix4(&SHELTER_OPEN_FILES, popCount(open));
+            score_b.add(SHELTER_OPEN_FILES[popCount(open)]);
         }
 
 

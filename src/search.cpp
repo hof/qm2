@@ -453,6 +453,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 
     stack->reduce = 0;
     forward(firstMove, givesCheck);
+        
     int bestScore = -pvs(-beta, -alpha, depth - ONE_PLY + extendNode + extendMove);
     backward(firstMove);
     if (bestScore > alpha) {
@@ -533,7 +534,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 
 
 
-        if (phase >= STOP
+        if (phase >= STOP /* remaining moves (no captures, castling, promotions) */
                 && givesCheck == 0
                 && !inCheck
                 && !(move->piece == WPAWN && move->tsq >= a7 && move->tsq <= h7)
@@ -548,11 +549,10 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 reduce += type == CUTNODE;
                 reduce += singular;
                 if (reduce > 0 && pos->active(move)) {
-                    //reduce = MAX(reduce, ONE_PLY);
-                    reduce--;
+                    reduce = MAX(reduce, ONE_PLY);
+                } else {
+                    reduce = MIN(2 * ONE_PLY + reduce, BSR(searchedMoves + 1) + reduce);
                 }
-                reduce = MIN(2 * ONE_PLY + reduce, BSR(searchedMoves + 1) + reduce);
-
             }
         }
 

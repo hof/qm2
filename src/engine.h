@@ -18,6 +18,8 @@
 #include "evaluate.h"
 
 class TInputHandler;
+class TBook;
+class TSearch;
 
 struct TGameSettings {
     int maxDepth;
@@ -71,6 +73,8 @@ private:
 
 public:
     TGameSettings gameSettings;
+    void _create_start_positions(TSearch * root, TBook * book, string * pos, int &x, const int max);
+    
 
     TEngine() : TThreadsManager() {
         gameSettings.clear();
@@ -183,6 +187,8 @@ public:
     }
 
     void analyse();
+    
+   
 };
 
 #endif	/* ENGINE_H */

@@ -233,7 +233,7 @@ void * TEngine::_think(void* engineObjPtr) {
          * Update and output search statistics
          */
         engine->setNodesSearched(searchData->nodes);
-        bool sendDebugInfo = true;
+        bool sendDebugInfo = false;
         if (searchData->nodes && sendDebugInfo && searchData->outputHandler) {
 
             int hashHits = searchData->hashProbes ? U64(searchData->hashHits * 100) / searchData->hashProbes : 0;
@@ -385,14 +385,15 @@ void * TEngine::_learn(void * engineObjPtr) {
      */
 
     const int MAXDEPTH = 2; //default: depth 2
-    const int GAMECOUNT = 1000; //Sample size, 920+ recommended. Use even numbers. 
-
+    const int MAXGAMECOUNT = 5000; //Sample size, 920+ recommended. Use even numbers. 
+    double START_GRAIN = 2;
+    int MAX_PASSES = 5;
     const int STOPSCORE = 300; //if the score is higher than this for both sides, the game is consider a win
     const int MAXPLIES = 200; //maximum game length in plies
-    const int LEARN_STEPS = 8;
+    const int LEARN_STEPS = MAX_PASSES * 2;
     const int HASH_SIZE_IN_MB = 1;
 
-    const double LEARN_FACTOR[LEARN_STEPS] = {-1.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75};
+
 
     /*
      * Initialize, normally it's not needed to change anything from here
@@ -403,110 +404,76 @@ void * TEngine::_learn(void * engineObjPtr) {
     TEngine * engine = (TEngine*) engineObjPtr;
     TSearch * sd_root = new TSearch(engine->_rootFen.c_str(),
             engine->_pct, hash1, NULL);
+    TSearch * sd_game = new TSearch(engine->_rootFen.c_str(),
+            engine->_pct, hash1, NULL);
 
     engine->gameSettings.maxDepth = MAXDEPTH;
     sd_root->timeManager->setEndTime(INFINITE_TIME);
+    sd_game->timeManager->setEndTime(INFINITE_TIME);
+    sd_game->learnParam = 1;
 
-    double bestScore = 0;
-    int bestStep = 0;
-    int bestWins = 0;
-    double bestFactor = 0.0;
+    double grain = START_GRAIN;
+    int pass = 1;
+    int passtype = 1;
+    int x = 0;
+    double bestFactor = 1.0;
     int scores[LEARN_STEPS];
 
     /*
      * Prepare GAMECOUNT/2 starting positions, using the opening book
-     * Each starting position is played by both sides, with and without learning.
+     * Each starting position is played twice, with the engine colors reversed
      */
 
     std::cout << "\nLEARNING MODE" << std::endl;
     std::cout << "Depth: " << MAXDEPTH << std::endl;
-    std::cout << "Games: " << GAMECOUNT << std::endl;
-    std::cout << "\nGenerating game start positions:" << std::endl;
+    std::cout << "Games: " << MAXGAMECOUNT << std::endl;
 
     TBook * book = new TBook();
     book->open("book.bin");
-
-    TMoveList * bookMoves = &sd_root->stack->moveList;
-    TMove actualMove;
-
-    string start_positions[GAMECOUNT + 1];
-
-    int x = 0;
-
-    //use the actual start position too
-    start_positions[x++] = sd_root->pos->asFen();
-    start_positions[x++] = sd_root->pos->asFen();
-
-    srand(time(NULL));
-    while (x < GAMECOUNT) {
-        while (sd_root->pos->currentPly < MAX_PLY) {
-            actualMove.setMove(0);
-            int count = book->findMoves(sd_root->pos, bookMoves);
-            if (count > 0) {
-                int randomScore = 0;
-                int totalBookScore = 1;
-                for (int pickMove = 0; pickMove < 2; pickMove++) {
-                    int totalScore = 0;
-                    for (TMove * bookMove = bookMoves->first; bookMove != bookMoves->last; bookMove++) {
-                        totalScore += bookMove->score;
-                        if (pickMove && totalScore >= randomScore) {
-                            actualMove.setMove(bookMove);
-                            break;
-                        }
-                    }
-                    totalBookScore = totalScore;
-                    randomScore = (rand() % totalScore) + 1;
-                }
-            }
-            if (actualMove.piece == 0) {
-                break;
-            }
-            sd_root->forward(&actualMove, sd_root->pos->givesCheck(&actualMove));
-        };
-
-        //add to search positions
-        start_positions[x++] = sd_root->pos->asFen();
-        start_positions[x++] = sd_root->pos->asFen();
-
-        //revert to root
-        while (sd_root->pos->currentPly > 0) {
-            TMove * move = &(sd_root->stack - 1)->move;
-            sd_root->backward(move);
-        }
+    string start_positions[MAXGAMECOUNT + 1];
+    for (int p = 0; p < MAXGAMECOUNT + 1; p++) {
+        start_positions[p] = "";
     }
 
-    /* for debugging 
-    for (int y = 0; y < GAMECOUNT; y++) {
-        std::cout << y << ": " << start_positions[y] << std::endl; //for debugging
-    }
-     */
-
-    std::cout << "Generated " << (GAMECOUNT / 2 - 1) << " random game start positions from book" << std::endl;
-
+    //create a bunch of start positions (more will be added later if needed))
+    start_positions[x++] = sd_root->pos->asFen();
+    start_positions[x++] = sd_root->pos->asFen();
+    engine->_create_start_positions(sd_root, book, start_positions, x, MAXGAMECOUNT);
 
     /*
      * Self-play, using the generated start positions once for each side
      */
-
     THashTable * hash_list[2] = {hash1, hash2};
-    TSearch * sd_game = sd_root;
+    TMove actualMove;
     U64 gamesPlayed = 0;
+    U64 batch = 0;
     U64 totalNodes[2] = {0, 0};
-    double totalScore = 0.0;
-    double medianScore = 0.0;
     clock_t begin;
     begin = clock();
+    std::string fen = "";
+    srand(time(NULL));
 
-    for (int step = 0; step < LEARN_STEPS; step++) {
+    int step = 0;
+    while (pass <= MAX_PASSES) {
         int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
         U64 nodes[2] = {0, 0}; //total node counts for both sides
         scores[step] = 0;
-        sd_game->learnFactor = LEARN_FACTOR[step];
-        std::cout << "\nFactor " << sd_game->learnFactor << ": " << std::endl;
+        double strongest = bestFactor;
+        double opponent = strongest - grain;
+        if (passtype == 2) {
+            opponent = strongest + grain;
+        }
+        std::cout << "\nEngine(" << strongest << ") vs Engine(" << opponent << ")" << std::endl;
         hash1->clear(); //clear hash: the evaluation scores changed.
         hash2->clear();
-        for (int game = 0; game < GAMECOUNT; game++) {
-            sd_game->pos->fromFen(start_positions[game].c_str());
+        batch = 0;
+        for (int game = 0; game < MAXGAMECOUNT; game++) {
+            fen = start_positions[game];
+            if (fen == "") {
+                engine->_create_start_positions(sd_root, book, start_positions, x, MAXGAMECOUNT);
+                fen = start_positions[game];
+            }
+            sd_game->pos->fromFen(fen.c_str());
             int plyCount = 0;
             int prevScore = 0;
             bool gameover = false;
@@ -519,11 +486,11 @@ void * TEngine::_learn(void * engineObjPtr) {
                      * 2) engine(base) vs engine(learn)
                      */
                     if (game % 2 == 0) {
-                        sd_game->learnParam = !side_to_move;
+                        sd_game->learnFactor = side_to_move ? strongest : opponent;
                     } else {
-                        sd_game->learnParam = side_to_move;
+                        sd_game->learnFactor = side_to_move ? opponent : strongest;
                     }
-                    bool learning_side = sd_game->learnParam == 1;
+                    bool learning_side = sd_game->learnFactor == strongest;
 
 
                     /*
@@ -604,77 +571,70 @@ void * TEngine::_learn(void * engineObjPtr) {
 
             } while (gameover == false);
             gamesPlayed++;
+            batch++;
+            if (gamesPlayed % 50 == 0) {
+                std::cout << ".";
+                std::cout.flush();
+                //check if the result if significant enough before finishing the full batch
+                double tp = stats[1] + 0.5 * stats[0];
+                double tmax = batch;
+                double tscore = tp / tmax;
+                double max_sd = 1.1 / pow(batch, 0.48); //safe(?) standard deviation
+                if ((tscore + max_sd) < 0.5) {
+                    std::cout << "<";
+                    break;
+                } else if ((tscore - max_sd > 0.5)) {
+                    std::cout << ">";
+                    break;
+                }
+
+            }
         }
         double points = stats[1] + 0.5 * stats[0];
-        int maxPoints = GAMECOUNT;
+        int maxPoints = batch;
         int wins = stats[1] - stats[2];
         totalNodes[0] += nodes[0];
         totalNodes[1] += nodes[1];
         double score = (100.0 * points) / maxPoints;
         scores[step] = score;
         int elo = round(-400.0 * log(1 / (points / maxPoints) - 1) / log(10));
-        if (LEARN_FACTOR[step] > 0) {
-            totalScore += points;
-            medianScore += LEARN_FACTOR[step] * points;
-        }
-        if (score >= bestScore && wins > bestWins) {
-            bestScore = score;
-            bestStep = step;
-            bestWins = wins;
-            bestFactor = LEARN_FACTOR[step];
-        }
-        std::cout << "Games: " << GAMECOUNT << " Win: " << stats[1] << " Loss: " << stats[2] << " Draw: " << stats[0] << " Score: " << points << "/" << maxPoints << " (" << score << "%, " << wins << ", Elo: " << elo << ") " << std::endl;
-        if (LEARN_FACTOR[step] < 0) {
-            if (score >= 49) {
-                std::cout << "\nDid not detect any impact on playing strength. Aborting... " << std::endl;
-                break;
-            } else if (score > 45) {
-                std::cout << "\nThe experimental evaluation is of minor importance" << std::endl;
-            } else if (score > 40) {
-                std::cout << "\nThe experimental evaluation is important" << std::endl;
-            } else if (score > 30) {
-                std::cout << "\nThe experimental evaluation is very important" << std::endl;
-            } else if (score > 15) {
-                std::cout << "\nThe experimental evaluation is essential" << std::endl;
-            } else {
-                std::cout << "\nThe experimental evaluation is critical. Whoa!" << std::endl;
-            }
+        std::cout << "\nGames: " << batch << " Win: " << stats[1] << " Loss: " << stats[2] << " Draw: " << stats[0] << " Score: " << points << "/" << maxPoints << " (" << score << "%, " << wins << ", Elo: " << elo << ") " << std::endl;
 
+        double sdev = 1.1 / pow(batch, 0.48); //safe(?) standard deviation
+        double fscore = score / 100.0;
+        
+        if (score >= 50.0) {
+            bestFactor = strongest;
         } else {
-            int deltaS = ABS(score - 50.0);
-            std::cout << "Engine(learn) is";
-            if (deltaS < 2.0) {
-                std::cout << " equal to ";
-            } else if (deltaS < 4.0) {
-                std::cout << " a bit";
-            } else if (deltaS < 6.0) {
-                std::cout < "";
-            } else {
-                std::cout << " much";
-            }
-            if (score >= 52.0) {
-                std::cout << " stronger than ";
-            } else if (score <= 48.0) {
-                std::cout << " weaker than ";
-            }
-            std::cout << "engine(base)" << std::endl;
+            bestFactor = opponent;
+        }
+
+        bool dopass = false;
+        if ((fscore - sdev) > 0.5) {
+            //we have a winner!
+            std::cout << "Engine(" << strongest << ") is significantly stronger than engine(" << opponent << ")" << std::endl;
+            dopass = true;
+        } else if ((fscore + sdev) < 0.5) {
+            //we have a winner!
+            std::cout << "Engine(" << strongest << ") is significantly weaker than engine(" << opponent << ")" << std::endl;
+            dopass = true;
+        } else {
+            std::cout << "Engine(" << strongest << ") is equal in strength to engine(" << opponent << ")" << std::endl;
+            dopass = passtype > 1;
+        }
+        if (dopass) {
+            pass++;
+            passtype = 1;
+            grain = grain/2.0;
+        } else {
+            passtype = 2;
         }
     }
+
 
     if (bestFactor > 0) {
-        std::cout << "\nBest factor: " << bestFactor << " (" << bestScore << "%)" << std::endl;
-        double medianFactor = medianScore / totalScore;
-        std::cout << "Median factor: " << medianFactor << std::endl << std::endl;
-        if (medianFactor > 1.01) {
-            std::cout << "The score for the experimental evaluation is set too low." << std::endl;
-        } else if (medianFactor < 0.99) {
-            std::cout << "The score for the experimental evaluation is set too high." << std::endl;
-        } else {
-            std::cout << "The score for the experimental evaluation is right." << std::endl;
-        }
-    } else {
-        std::cout << "Did not detect increase in playing strength." << std::endl;
-    }
+        std::cout << "\nBest factor: " << bestFactor << std::endl;
+    } 
 
     clock_t end;
     end = clock();
@@ -685,19 +645,67 @@ void * TEngine::_learn(void * engineObjPtr) {
 
 
     U64 nodesSum = MAX(1, totalNodes[0] + totalNodes[1]);
-    double nodePct = (100.0 * totalNodes[0]) / nodesSum;
-
     std::cout << "Nodes Total: " << nodesSum << " nodes. (" << int(nodesSum / elapsed) << " nodes/sec) " << std::endl;
-    std::cout << "Node ratio engine(learn)/engine(base): " << nodePct << "%" << std::endl;
+   
 
     /*
      * Clean up and terminate the learning thread
      */
     delete sd_root;
+    delete sd_game;
     delete book;
     delete hash1;
     delete hash2;
 
     pthread_exit(NULL);
     return NULL;
+}
+
+void TEngine::_create_start_positions(TSearch * sd_root, TBook * book, string * poslist, int &x, const int max) {
+
+    TMoveList * bookMoves = &sd_root->stack->moveList;
+    TMove actualMove;
+    int gen = 0;
+    while (x < max) {
+        gen++;
+        while (sd_root->pos->currentPly < MAX_PLY) {
+            actualMove.setMove(0);
+            int count = book->findMoves(sd_root->pos, bookMoves);
+            if (count > 0) {
+                int randomScore = 0;
+                int totalBookScore = 1;
+                for (int pickMove = 0; pickMove < 2; pickMove++) {
+                    int totalScore = 0;
+                    for (TMove * bookMove = bookMoves->first; bookMove != bookMoves->last; bookMove++) {
+                        totalScore += bookMove->score;
+                        if (pickMove && totalScore >= randomScore) {
+                            actualMove.setMove(bookMove);
+                            break;
+                        }
+                    }
+                    totalBookScore = totalScore;
+                    randomScore = (rand() % totalScore) + 1;
+                }
+            }
+            if (actualMove.piece == 0) {
+                break;
+            }
+            sd_root->forward(&actualMove, sd_root->pos->givesCheck(&actualMove));
+        };
+
+        //add to search positions
+        poslist[x++] = sd_root->pos->asFen();
+        poslist[x++] = sd_root->pos->asFen();
+
+        //revert to root
+        while (sd_root->pos->currentPly > 0) {
+            TMove * move = &(sd_root->stack - 1)->move;
+            sd_root->backward(move);
+        }
+        if (x > 0 && x % 250 == 0) {
+            std::cout << "b";
+            std::cout.flush();
+            break;
+        }
+    }
 }
