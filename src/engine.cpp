@@ -275,16 +275,23 @@ void TEngine::analyse() {
     std::cout << searchData->pos->asFen().c_str() << std::endl;
     searchData->stack->evaluationScore = evaluate(searchData, 0, 0);
     int phase = searchData->stack->gamePhase;
-    std::cout << "1) Piece Square tables: " << searchData->pos->boardFlags->pct.get(phase) << std::endl;
-    std::cout << "2) Material balance: " << searchData->stack->scores[SCORE_MATERIAL].mg << std::endl;
-    std::cout << "3) Game phase: " << phase << std::endl;
-    std::cout << "4) Pawn score: " << searchData->stack->scores[SCORE_PAWNS].get(phase) << std::endl;
-    std::cout << "5) Rook score: " << searchData->stack->scores[SCORE_ROOKS].get(phase) << std::endl;
-    std::cout << "6) Shelter score for white: " << searchData->stack->scores[SCORE_SHELTER_W].get(phase) << std::endl;
-    std::cout << "7) Shelter score for black: " << searchData->stack->scores[SCORE_SHELTER_B].get(phase) << std::endl;
-    std::cout << "8) Evaluation:" << searchData->stack->evaluationScore << std::endl;
-    std::cout << "9) Quiescence:" << searchData->qsearch(-SCORE_MATE, SCORE_MATE, 0) << std::endl;
-    std::cout << "10) Best move:" << std::endl;
+    std::cout << "\n1) Piece Square tables: ";
+    searchData->pos->boardFlags->pct.print(phase);
+    std::cout << "\n2) Material balance: ";
+    searchData->stack->scores[SCORE_MATERIAL].print(phase);
+    std::cout << "\n3) Game phase: " << phase;
+    std::cout << "\n4) Pawn score: ";
+    searchData->stack->scores[SCORE_PAWNS].print(phase);
+    std::cout << "\n5) Rook score: ";
+    searchData->stack->scores[SCORE_ROOKS].print(phase);
+    std::cout << "\n6) Shelter score for white: ";
+    searchData->stack->scores[SCORE_SHELTER_W].print(phase);
+    std::cout << "\n7) Shelter score for black: ";
+    searchData->stack->scores[SCORE_SHELTER_B].print(phase);
+    std::cout << "\n8) Evaluation:" << searchData->stack->evaluationScore;
+    std::cout << "\n9) Quiescence:" << searchData->qsearch(-SCORE_MATE, SCORE_MATE, 0) << std::endl;
+    std::cout << "\n10) Best move:" << std::endl;
+    
 
     //loop through piece square tables
     int pct_score = 0;
@@ -385,12 +392,11 @@ void * TEngine::_learn(void * engineObjPtr) {
      */
 
     const int MAXDEPTH = 2; //default: depth 2
-    const int MAXGAMECOUNT = 5000; //Sample size, 920+ recommended. Use even numbers. 
+    const int MAXGAMECOUNT = 20000; //Sample size, 920+ recommended. Use even numbers. 
     double START_GRAIN = 2;
-    int MAX_PASSES = 5;
+    double STOP_GRAIN = 0.125;
     const int STOPSCORE = 300; //if the score is higher than this for both sides, the game is consider a win
     const int MAXPLIES = 200; //maximum game length in plies
-    const int LEARN_STEPS = MAX_PASSES * 2;
     const int HASH_SIZE_IN_MB = 1;
 
 
@@ -413,11 +419,12 @@ void * TEngine::_learn(void * engineObjPtr) {
     sd_game->learnParam = 1;
 
     double grain = START_GRAIN;
-    int pass = 1;
     int passtype = 1;
     int x = 0;
     double bestFactor = 1.0;
-    int scores[LEARN_STEPS];
+    double prevFactor = 0.0; //to start, it needs to be different than bestFactor
+    int prevtype = 0;
+    int scores[1024]; //1024 should be sufficient
 
     /*
      * Prepare GAMECOUNT/2 starting positions, using the opening book
@@ -434,11 +441,8 @@ void * TEngine::_learn(void * engineObjPtr) {
     for (int p = 0; p < MAXGAMECOUNT + 1; p++) {
         start_positions[p] = "";
     }
-
-    //create a bunch of start positions (more will be added later if needed))
     start_positions[x++] = sd_root->pos->asFen();
     start_positions[x++] = sd_root->pos->asFen();
-    engine->_create_start_positions(sd_root, book, start_positions, x, MAXGAMECOUNT);
 
     /*
      * Self-play, using the generated start positions once for each side
@@ -454,15 +458,12 @@ void * TEngine::_learn(void * engineObjPtr) {
     srand(time(NULL));
 
     int step = 0;
-    while (pass <= MAX_PASSES) {
+    while (grain >= STOP_GRAIN) {
         int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
         U64 nodes[2] = {0, 0}; //total node counts for both sides
         scores[step] = 0;
         double strongest = bestFactor;
-        double opponent = strongest - grain;
-        if (passtype == 2) {
-            opponent = strongest + grain;
-        }
+        double opponent = passtype == 1 ? strongest - grain : strongest + grain;
         std::cout << "\nEngine(" << strongest << ") vs Engine(" << opponent << ")" << std::endl;
         hash1->clear(); //clear hash: the evaluation scores changed.
         hash2->clear();
@@ -572,7 +573,7 @@ void * TEngine::_learn(void * engineObjPtr) {
             } while (gameover == false);
             gamesPlayed++;
             batch++;
-            if (gamesPlayed % 50 == 0) {
+            if (gamesPlayed % 50 == 0 && gamesPlayed > 50) {
                 std::cout << ".";
                 std::cout.flush();
                 //check if the result if significant enough before finishing the full batch
@@ -602,39 +603,45 @@ void * TEngine::_learn(void * engineObjPtr) {
 
         double sdev = 1.1 / pow(batch, 0.48); //safe(?) standard deviation
         double fscore = score / 100.0;
-        
-        if (score >= 50.0) {
-            bestFactor = strongest;
-        } else {
-            bestFactor = opponent;
-        }
 
-        bool dopass = false;
+        bool grain_reduced = false;
         if ((fscore - sdev) > 0.5) {
             //we have a winner!
             std::cout << "Engine(" << strongest << ") is significantly stronger than engine(" << opponent << ")" << std::endl;
-            dopass = true;
+            prevtype = 1;
+            bestFactor = strongest;
         } else if ((fscore + sdev) < 0.5) {
             //we have a winner!
             std::cout << "Engine(" << strongest << ") is significantly weaker than engine(" << opponent << ")" << std::endl;
-            dopass = true;
+            prevtype = -1;
+            bestFactor = opponent;
         } else {
             std::cout << "Engine(" << strongest << ") is equal in strength to engine(" << opponent << ")" << std::endl;
-            dopass = passtype > 1;
+            if (bestFactor == prevFactor && prevtype == 0) {
+                break;
+            }
+            if (passtype == 2) {
+                grain = grain / 2;
+                grain_reduced = true;
+            }
+            prevtype = 0;
         }
-        if (dopass) {
-            pass++;
-            passtype = 1;
-            grain = grain/2.0;
+        if (passtype == 1) {
+            passtype++; //always run the high pass
         } else {
-            passtype = 2;
+            passtype = 1;
+            if (bestFactor == prevFactor && grain_reduced == false) {
+                grain = grain / 2; //reduce the grain size if the best factor 
+            }
         }
+        prevFactor = bestFactor;
+
     }
 
 
     if (bestFactor > 0) {
         std::cout << "\nBest factor: " << bestFactor << std::endl;
-    } 
+    }
 
     clock_t end;
     end = clock();
@@ -646,7 +653,7 @@ void * TEngine::_learn(void * engineObjPtr) {
 
     U64 nodesSum = MAX(1, totalNodes[0] + totalNodes[1]);
     std::cout << "Nodes Total: " << nodesSum << " nodes. (" << int(nodesSum / elapsed) << " nodes/sec) " << std::endl;
-   
+
 
     /*
      * Clean up and terminate the learning thread

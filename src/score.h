@@ -43,6 +43,11 @@ struct TScore {
     void print () {
         std::cout << "(" << mg << ", " << eg << ") ";
     }
+    
+    void print(int phase) {
+        print();
+        std::cout << "-> " << get(phase);
+    }
 
     inline void add_ix64(TSCORE_TABLE_64 * table, char ix) {
         assert(ix >= 0 && ix < 64);
@@ -144,6 +149,8 @@ struct TScore {
 };
 
 typedef TScore TSCORE_PCT[13][64];
+
+#define S(x,y) TScore(x,y)
 
 
 #endif	/* SCORE_H */

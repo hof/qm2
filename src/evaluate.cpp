@@ -4,28 +4,24 @@
 #include "score.h"
 
 int evaluate(TSearch * searchData, int alpha, int beta) {
-
     if (searchData->stack->evaluationScore != SCORE_INVALID) {
         return searchData->stack->evaluationScore;
     }
-
     int result = 0;
     TBoard * pos = searchData->pos;
     result += pos->boardFlags->pct.get(searchData->stack->gamePhase);
-
-    if (searchData->learnParam == 1) { //learning
-        result += searchData->learnFactor * evaluateMaterial(searchData)->get(searchData->stack->gamePhase);
-        //result += evaluateExp(searchData)->get(searchData->stack->gamePhase);
-    } else {
-        result += evaluateMaterial(searchData)->get(searchData->stack->gamePhase);
-    }
-
+    result += evaluateMaterial(searchData)->get(searchData->stack->gamePhase);
     result += evaluatePawns(searchData)->get(searchData->stack->gamePhase);
     evaluateKingShelter(searchData);
-    result -= searchData->stack->scores[SCORE_SHELTER_B].get(searchData->stack->gamePhase);
+    if (searchData->learnParam == 1) { //learning
+        //result += evaluateExp(searchData)->get(searchData->stack->gamePhase);
+        result += searchData->learnFactor * searchData->stack->scores[SCORE_SHELTER_W].get(searchData->stack->gamePhase);
+        result -= searchData->learnFactor * searchData->stack->scores[SCORE_SHELTER_B].get(searchData->stack->gamePhase);
+    } else {
+        result += searchData->stack->scores[SCORE_SHELTER_W].get(searchData->stack->gamePhase);
+        result -= searchData->stack->scores[SCORE_SHELTER_B].get(searchData->stack->gamePhase);
+    }
     result += evaluateRooks(searchData)->get(searchData->stack->gamePhase);
-
-
 
     result &= GRAIN;
     result = pos->boardFlags->WTM ? result : -result;
@@ -46,8 +42,12 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
 TScore * evaluateExp(TSearch * searchData) {
     TScore * result = &searchData->stack->scores[SCORE_EXP];
     result->clear();
-    
-
+    int w = searchData->pos->pieces[WBISHOP].count;
+    int b = searchData->pos->pieces[BBISHOP].count;
+    if (w != b) {
+        result->sub((w - b) * VBISHOP);
+        result->add(searchData->learnFactor * (w - b) * VPAWN);
+    }
     return result;
 }
 
@@ -524,11 +524,9 @@ TScore * evaluatePawns(TSearch * searchData) {
 
 void evaluateKingShelter(TSearch * searchData) {
 
-    TScore score_w;
-    TScore score_b;
-    assert(score_w.mg == 0 && score_w.eg == 0);
-    assert(score_b.mg == 0 && score_b.eg == 0);
-
+    TScore score_w = 0;
+    TScore score_b = 0;
+    
     TBoard * pos = searchData->pos;
     if (pos->blackQueens) {
         /* 
