@@ -236,6 +236,26 @@ struct TBoard {
         return whiteKings | blackKings | whitePawns | blackPawns;
     }
 
+    inline U64 pawns() {
+        return whitePawns | blackPawns;
+    }
+
+    inline U64 closedFiles() {
+        return FILEFILL(whitePawns) & FILEFILL(blackPawns);
+    }
+
+    inline U64 openFiles() {
+        return ~(FILEFILL(whitePawns) | FILEFILL(blackPawns));
+    }
+    
+    inline U64 halfOpenOrOpenFile(bool white) {
+        return white? ~FILEFILL(whitePawns) : ~FILEFILL(blackPawns);
+    }
+    
+    inline U64 halfOpenFiles(bool white) {
+        return halfOpenOrOpenFile(white) ^ openFiles();
+    }
+
     inline U64 hasPieces(bool wtm) {
         return wtm ? whiteRooks | whiteKnights | whiteBishops | whiteQueens :
                 blackRooks | blackKnights | blackBishops | blackQueens;
@@ -266,7 +286,7 @@ struct TBoard {
     inline void addPieceFull(int piece, int sq) {
         HASH_ADD_PIECE(boardFlags->materialHash, piece, pieces[piece].count + BISHOP_IX(piece, sq));
         HASH_ADD_PIECE(boardFlags->hashCode, piece, sq);
-        if (piece == WPAWN || piece == BPAWN) {
+        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
             HASH_ADD_PIECE(boardFlags->pawnHash, piece, sq);
         }
         addPiece(piece, sq);
@@ -292,7 +312,7 @@ struct TBoard {
         removePiece(piece, sq);
         HASH_REMOVE_PIECE(boardFlags->materialHash, piece, pieces[piece].count + BISHOP_IX(piece, sq));
         HASH_REMOVE_PIECE(boardFlags->hashCode, piece, sq);
-        if (piece == WPAWN || piece == BPAWN) {
+        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
             HASH_REMOVE_PIECE(boardFlags->pawnHash, piece, sq);
         }
     }

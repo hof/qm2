@@ -31,6 +31,9 @@ typedef const short TSCORE_TABLE_64[GAME_PHASES][64];
 typedef const short TSCORE_TABLE_4[GAME_PHASES][4];
 typedef const short TSCORE_TABLE[GAME_PHASES];
 
+#define MATE_IN_PLY(s) ((s)>SCORE_MATE-MAX_PLY? SCORE_MATE-s : 0)
+#define MATED_IN_PLY(s) ((s)<-SCORE_MATE+MAX_PLY? SCORE_MATE+s : 0)
+
 struct TScore {
     short mg; //middle game value
     short eg; //end game value

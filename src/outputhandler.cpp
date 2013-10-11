@@ -59,13 +59,16 @@ void TOutputHandler::sendEvalStats(int evaluations, int pawnEvaluations, int ful
     }
 }
 
-void TOutputHandler::sendHashTableStats(int ttHits, int ptHits, int mtHits) {
+void TOutputHandler::sendHashTableStats(int ttHits, int ptHits, int mtHits, int etHits) {
     std::string outputString = "info string tt:";
     outputString += ntos(ttHits);
     outputString += "% pt:";
     outputString += ntos(ptHits);
     outputString += "% mt:";
     outputString += ntos(mtHits);
+    outputString += "%";
+    outputString += "% et:";
+    outputString += ntos(etHits);
     outputString += "%";
     output(outputString);
 }

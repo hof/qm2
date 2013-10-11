@@ -6,8 +6,9 @@ THashTable::THashTable(int totalSizeInMb) {
     const int ttEntrySize = sizeof (TTranspositionTableEntry);
     const int ttTableCount = 2;
     const int sizeOfTranspositionTable = totalSizeInMb;
-    const int sizeOfMaterialTable = 16;
-    const int sizeOfPawnTable = 32;
+    const int sizeOfMaterialTable = 8;
+    const int sizeOfPawnTable = 16;
+    const int sizeOfEvalTable = 1;
     const int maxEntriesPerTranspositionTable = (sizeOfTranspositionTable * 1024 * 1024) / (ttTableCount * ttEntrySize);
     const int ttTableSize = maxEntriesPerTranspositionTable ? bitScanReverse(maxEntriesPerTranspositionTable) : 0;
     const int materialTableEntrySize = sizeof (TMaterialTableEntry);
@@ -16,6 +17,9 @@ THashTable::THashTable(int totalSizeInMb) {
     const int pawnTableEntrySize = sizeof (TPawnTableEntry);
     const int maxEntriesPawnTable = (sizeOfPawnTable * 1024 * 1024) / pawnTableEntrySize;
     const int pawnTableSize = maxEntriesPawnTable ? bitScanReverse(maxEntriesPawnTable) : 0;
+    const int evalTableEntrySize = sizeof (TEvalTableEntry);
+    const int maxEntriesEvalTable = (sizeOfEvalTable * 1024 * 1024) / evalTableEntrySize;
+    const int evalTableSize = maxEntriesEvalTable ? bitScanReverse(maxEntriesEvalTable) : 0;
 
     _ttSize = 1 << ttTableSize;
     alwaysReplaceTable = new TTranspositionTableEntry[_ttSize];
@@ -27,9 +31,14 @@ THashTable::THashTable(int totalSizeInMb) {
     _ptSize = 1 << pawnTableSize;
     pawnTable = new TPawnTableEntry[_ptSize];
 
+    _etSize = 1 << evalTableSize;
+    evalTable = new TEvalTableEntry[_etSize];
+
     _ttMaxHashKey = _ttSize - 1;
     _materialMaxHashKey = _mtSize - 1;
     _pawnMaxHashKey = _ptSize - 1;
+    _evalMaxHashKey = _etSize - 1;
+
 
     _repTableSize = 100;
 
@@ -40,6 +49,7 @@ THashTable::~THashTable() {
     delete[] alwaysReplaceTable;
     delete[] depthPrefTable;
     delete[] pawnTable;
+    delete[] evalTable;
 }
 
 void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) {
@@ -207,18 +217,45 @@ void THashTable::ptLookup(TSearch * searchData) {
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
     if ((entry->key ^ entry->pawnScore.mg) == pawnHash) {
         searchData->stack->scores[SCORE_PAWNS].set(entry->pawnScore);
+        searchData->stack->scores[SCORE_SHELTER_W].set(entry->shelterScoreW);
+        searchData->stack->scores[SCORE_SHELTER_B].set(entry->shelterScoreB);
         searchData->pawnTableHits++;
     } else {
         searchData->stack->scores[SCORE_PAWNS].set(SCORE_INVALID);
     }
 }
 
-void THashTable::ptStore(TSearch * searchData, const TScore & pawnScore) {
+void THashTable::ptStore(TSearch * searchData, const TScore & pawnScore, const TScore & shelter_w, const TScore & shelter_b) {
     THashTable * hashTable = searchData->hashTable;
     U64 pawnHash = searchData->pos->boardFlags->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
-    entry->pawnScore = pawnScore;
+    entry->pawnScore.set(pawnScore);
+    entry->shelterScoreW.set(shelter_w);
+    entry->shelterScoreB.set(shelter_b);
     entry->key = (pawnHash ^ pawnScore.mg);
+}
+
+void THashTable::etLookup(TSearch * searchData, const short piece, const short square) {
+    searchData->evalTableProbes++;
+    THashTable * hashTable = searchData->hashTable;
+    U64 evalHash = searchData->pos->boardFlags->pawnHash;
+    HASH_ADD_PIECE(evalHash, piece, square);
+    TEvalTableEntry * entry = &hashTable->evalTable[hashTable->getEvalHashKey(evalHash)];
+    if ((entry->key ^ entry->score.mg) == evalHash) {
+        searchData->stack->scores[SCORE_EVAL].set(entry->score);
+        searchData->evalTableHits++;
+    } else {
+        searchData->stack->scores[SCORE_EVAL].set(SCORE_INVALID);
+    }
+}
+
+void THashTable::etStore(TSearch * searchData, const TScore & score, const short piece, const short square) {
+    THashTable * hashTable = searchData->hashTable;
+    U64 evalHash = searchData->pos->boardFlags->pawnHash;
+    HASH_ADD_PIECE(evalHash, piece, square);
+    TEvalTableEntry * entry = &hashTable->evalTable[hashTable->getEvalHashKey(evalHash)];
+    entry->score.set(score);
+    entry->key = (evalHash ^ score.mg);
 }
 
 void THashTable::clear() {
@@ -226,5 +263,6 @@ void THashTable::clear() {
     memset(alwaysReplaceTable, 0, sizeof (TTranspositionTableEntry) * _ttSize);
     memset(materialTable, 0, sizeof (TMaterialTableEntry) * _mtSize);
     memset(pawnTable, 0, sizeof (TPawnTableEntry) * _ptSize);
+    memset(evalTable, 0, sizeof (TEvalTableEntry) * _etSize);
     memset(repTable, 0, sizeof (U64) * _repTableSize);
 }

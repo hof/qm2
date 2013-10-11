@@ -155,18 +155,22 @@ void TBoard::forward(TMove * move) {
         if (castleRight(CASTLE_K) && (ssq == h1 || ssq == e1 || tsq == h1)) {
             boardFlags->castlingFlags ^= CASTLE_K;
             HASH_CASTLE_K(boardFlags->hashCode);
+            HASH_CASTLE_K(boardFlags->pawnHash);
         }
         if (castleRight(CASTLE_Q) && (ssq == a1 || ssq == e1 || tsq == a1)) {
             boardFlags->castlingFlags ^= CASTLE_Q;
             HASH_CASTLE_Q(boardFlags->hashCode);
+            HASH_CASTLE_Q(boardFlags->pawnHash);
         }
         if (castleRight(CASTLE_k) && (ssq == h8 || ssq == e8 || tsq == h8)) {
             boardFlags->castlingFlags ^= CASTLE_k;
             HASH_CASTLE_k(boardFlags->hashCode);
+            HASH_CASTLE_k(boardFlags->pawnHash);
         }
         if (castleRight(CASTLE_q) && (ssq == a8 || ssq == e8 || tsq == a8)) {
             boardFlags->castlingFlags ^= CASTLE_q;
             HASH_CASTLE_q(boardFlags->hashCode);
+            HASH_CASTLE_q(boardFlags->pawnHash);
         }
 
     }
@@ -901,21 +905,25 @@ void TBoard::fromFen(const char* fen) {
                 castleDash = false;
                 boardFlags->castlingFlags |= CASTLE_k;
                 HASH_CASTLE_k(boardFlags->hashCode);
+                HASH_CASTLE_k(boardFlags->pawnHash);
                 break;
             case 'q':
                 castleDash = false;
                 boardFlags->castlingFlags |= CASTLE_q;
                 HASH_CASTLE_q(boardFlags->hashCode);
+                HASH_CASTLE_q(boardFlags->pawnHash);
                 break;
             case 'K':
                 castleDash = false;
                 boardFlags->castlingFlags |= CASTLE_K;
                 HASH_CASTLE_K(boardFlags->hashCode);
+                HASH_CASTLE_K(boardFlags->pawnHash);
                 break;
             case 'Q':
                 castleDash = false;
                 boardFlags->castlingFlags |= CASTLE_Q;
                 HASH_CASTLE_Q(boardFlags->hashCode);
+                HASH_CASTLE_Q(boardFlags->pawnHash);
                 break;
             case ' ':
                 break;

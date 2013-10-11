@@ -86,7 +86,7 @@ public:
 
     void sendEvalStats(int evaluations, int pawnEvaluations, int fullEvaluations);
 
-    void sendHashTableStats(int ttHits, int ptHits, int mtHits);
+    void sendHashTableStats(int ttHits, int ptHits, int mtHits, int etHits);
 
 
 

@@ -30,11 +30,13 @@ const int MAX_EVALUATION_COMPONENTS = 16;
 
 enum EVALUATION_COMPONENTS {
     SCORE_MATERIAL = 0,
-    SCORE_PAWNS = 1,
-    SCORE_SHELTER_W = 2,
-    SCORE_SHELTER_B = 3,
-    SCORE_EXP = 4,
-    SCORE_ROOKS = 5
+    SCORE_PAWNS,
+    SCORE_SHELTER_W,
+    SCORE_SHELTER_B,
+    SCORE_EXP,
+    SCORE_ROOKS,
+    SCORE_MOBILITY,
+    SCORE_EVAL
 };
 
 /*******************************************************************************
@@ -208,7 +210,7 @@ const TScore SHELTER_PAWN[64] = {
 };
 
 const TScore SHELTER_OPEN_FILES[4] = {
-    S(10, 0), S(-30, -5), S(-70, -10), S(-120, -15)
+    S(10, 0), S(-20, -5), S(-50, -10), S(-100, -15)
 };
 
 const TScore SHELTER_CASTLING_KINGSIDE = S(50, 10);
@@ -226,7 +228,7 @@ TScore * evaluatePawns(TSearch * searchData);
 
 TScore * evaluateRooks(TSearch * searchData);
 
-void evaluateKingShelter(TSearch * searchData);
+TScore * evaluateMobility(TSearch * searchData);
 
 /*******************************************************************************
  * Helper functions

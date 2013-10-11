@@ -180,7 +180,10 @@ void * TEngine::_think(void* engineObjPtr) {
             /* 
              * Stop conditions
              */
-            if (searchData->stopSearch || (maxNodes > 0 && searchData->nodes > maxNodes)) {
+            searchData->poll();
+            if (searchData->stopSearch || (maxNodes > 0 && searchData->nodes > maxNodes) 
+                    || (MATE_IN_PLY(resultScore) && depth/ONE_PLY > MATE_IN_PLY(resultScore))
+                    || (MATED_IN_PLY(resultScore)) && depth/ONE_PLY > MATED_IN_PLY(resultScore)) {
                 break;
             } else if (targetScore && targetMove.piece && targetMove.equals(&resultMove) && score >= targetScore) {
                 engine->setTestResult(true);
@@ -239,12 +242,13 @@ void * TEngine::_think(void* engineObjPtr) {
             int hashHits = searchData->hashProbes ? U64(searchData->hashHits * 100) / searchData->hashProbes : 0;
             int ptHits = searchData->pawnTableProbes ? U64(searchData->pawnTableHits * 100) / searchData->pawnTableProbes : 0;
             int mtHits = searchData->materialTableProbes ? U64(searchData->materialTableHits * 100) / searchData->materialTableProbes : 0;
+            int etHits = searchData->evalTableProbes ? U64(searchData->evalTableHits * 100) / searchData->evalTableProbes : 0;
 
             searchData->outputHandler->sendEvalStats(
                     searchData->evaluations,
                     searchData->pawnEvals,
                     searchData->fullEvaluations);
-            searchData->outputHandler->sendHashTableStats(hashHits, ptHits, mtHits);
+            searchData->outputHandler->sendHashTableStats(hashHits, ptHits, mtHits, etHits);
         }
     }
     if (searchData->outputHandler) {

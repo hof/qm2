@@ -155,6 +155,8 @@ public:
     U64 materialTableProbes;
     U64 pawnTableHits;
     U64 pawnTableProbes;
+    U64 evalTableHits;
+    U64 evalTableProbes;
 
     bool ponder;
     bool stopSearch;
@@ -198,6 +200,8 @@ public:
         materialTableProbes = 0;
         pawnTableHits = 0;
         pawnTableProbes = 0;
+        evalTableHits = 0;
+        pawnTableHits = 0;
         learnParam = 0;
         stopSearch = false;
         ponder = false;

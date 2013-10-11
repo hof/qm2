@@ -24,7 +24,6 @@ void test_tt() {
     
     THashTable * hashTable = new THashTable(36);
     
-    
     //testing the Lasker-Reichhelm Position
     TOutputHandler oh;
     TSCORE_PCT pct;

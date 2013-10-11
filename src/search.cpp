@@ -86,7 +86,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
      * otherwise search the first move with full alpha beta window.
      */
 
-    assert(searchData->root.MoveCount > 0);
+    assert(root.MoveCount > 0);
     int nodesBeforeMove = nodes;
     TRootMove * rMove = &root.Moves[0];
     int extend = 0;
@@ -343,7 +343,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * Endgame extension: 
      * Increase depth with two ply when reaching pawns/kings endgame
      */
-    assert(searchData->stack->gamePhase >= 0 && searchData->stack->gamePhase <= 16);
+    assert(stack->gamePhase >= 0 && stack->gamePhase <= 16);
     TMove * previous = &(stack - 1)->move;
     if (stack->gamePhase == 16
             && previous->capture
@@ -506,7 +506,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     while (TMove * move = movePicker->pickNextMove(this, depth, alpha, beta, fGap)) {
 
 
-        assert(searchData->stack->bestMove.equals(move) == false);
+        assert(stack->bestMove.equals(move) == false);
         assert(firstMove->equals(move) == false);
 
         /*

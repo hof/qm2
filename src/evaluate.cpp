@@ -8,20 +8,22 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
         return searchData->stack->evaluationScore;
     }
     int result = 0;
+    int phase = searchData->stack->gamePhase;
     TBoard * pos = searchData->pos;
-    result += pos->boardFlags->pct.get(searchData->stack->gamePhase);
-    result += evaluateMaterial(searchData)->get(searchData->stack->gamePhase);
-    result += evaluatePawns(searchData)->get(searchData->stack->gamePhase);
-    evaluateKingShelter(searchData);
-    if (searchData->learnParam == 1) { //learning
-        //result += evaluateExp(searchData)->get(searchData->stack->gamePhase);
-        result += searchData->learnFactor * searchData->stack->scores[SCORE_SHELTER_W].get(searchData->stack->gamePhase);
-        result -= searchData->learnFactor * searchData->stack->scores[SCORE_SHELTER_B].get(searchData->stack->gamePhase);
-    } else {
-        result += searchData->stack->scores[SCORE_SHELTER_W].get(searchData->stack->gamePhase);
-        result -= searchData->stack->scores[SCORE_SHELTER_B].get(searchData->stack->gamePhase);
+    result += pos->boardFlags->pct.get(phase);
+    result += evaluateMaterial(searchData)->get(phase);
+    result += evaluatePawns(searchData)->get(phase);
+    if (pos->blackQueens) {
+        result += searchData->stack->scores[SCORE_SHELTER_W].get(phase);
     }
-    result += evaluateRooks(searchData)->get(searchData->stack->gamePhase);
+    if (pos->whiteQueens) {
+        result -= searchData->stack->scores[SCORE_SHELTER_B].get(phase);
+    }
+    if (searchData->learnParam == 1) { //learning
+        result += evaluateExp(searchData)->get(phase);
+    }
+
+    result += evaluateRooks(searchData)->get(phase);
 
     result &= GRAIN;
     result = pos->boardFlags->WTM ? result : -result;
@@ -41,13 +43,9 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
  */
 TScore * evaluateExp(TSearch * searchData) {
     TScore * result = &searchData->stack->scores[SCORE_EXP];
-    result->clear();
-    int w = searchData->pos->pieces[WBISHOP].count;
-    int b = searchData->pos->pieces[BBISHOP].count;
-    if (w != b) {
-        result->sub((w - b) * VBISHOP);
-        result->add(searchData->learnFactor * (w - b) * VPAWN);
-    }
+    TScore * mob = evaluateMobility(searchData);
+    result->set(*mob);
+    result->mul(searchData->learnFactor);
     return result;
 }
 
@@ -405,7 +403,9 @@ TScore * evaluatePawns(TSearch * searchData) {
             && searchData->pos->boardFlags->pawnHash == (searchData->pos->boardFlags - 1)->pawnHash
             && (searchData->stack - 1)->evaluationScore != SCORE_INVALID) {
         assert(searchData->stack != searchData->rootStack);
-        searchData->stack->scores[SCORE_PAWNS] = (searchData->stack - 1)->scores[SCORE_PAWNS];
+        searchData->stack->scores[SCORE_PAWNS].set((searchData->stack - 1)->scores[SCORE_PAWNS]);
+        searchData->stack->scores[SCORE_SHELTER_W].set((searchData->stack - 1)->scores[SCORE_SHELTER_W]);
+        searchData->stack->scores[SCORE_SHELTER_B].set((searchData->stack - 1)->scores[SCORE_SHELTER_B]);
         return &searchData->stack->scores[SCORE_PAWNS];
     }
 
@@ -517,129 +517,75 @@ TScore * evaluatePawns(TSearch * searchData) {
         }
     }
 
-    searchData->stack->scores[SCORE_PAWNS] = pawnScore;
-    searchData->hashTable->ptStore(searchData, pawnScore);
-    return &searchData->stack->scores[SCORE_PAWNS];
-}
-
-void evaluateKingShelter(TSearch * searchData) {
+    /*
+     * 4. Evaluate King shelter score
+     */
 
     TScore score_w = 0;
     TScore score_b = 0;
-    
-    TBoard * pos = searchData->pos;
-    if (pos->blackQueens) {
-        /* 
-         * Get the score from the stack if
-         * - the previous position was evaluated
-         * - the king did not move
-         * - castling rights for white are the same
-         * - previous position also had a black queen
-         * - pawn structure did not change
-         */
-        if (searchData->pos->currentPly > 0
-                && (searchData->stack - 1)->evaluationScore != SCORE_INVALID
-                && searchData->pos->boardFlags->pawnHash == (searchData->pos->boardFlags - 1)->pawnHash) {
-            TMove * prevMove = &(searchData->stack - 1)->move;
-            if (prevMove->piece != WKING && prevMove->promotion != BQUEEN &&
-                    (pos->boardFlags->castlingFlags & CASTLE_WHITE) == ((searchData->pos->boardFlags - 1)->castlingFlags & CASTLE_WHITE)) {
-                score_w = (searchData->stack - 1)->scores[SCORE_SHELTER_W];
-                goto BLACK;
-            }
-        }
 
-        /*
-         * Calculate king shelter score
-         */
-        int kpos = *pos->whiteKingPos;
-        score_w.add(SHELTER_KPOS[FLIP_SQUARE(kpos)]);
-
-        //1. reward having the right to castle
-        if (pos->boardFlags->castlingFlags & CASTLE_K
-                && ((pos->Matrix[h2] == WPAWN && pos->Matrix[g2] == WPAWN)
-                || (pos->Matrix[f2] == WPAWN && pos->Matrix[h2] == WPAWN && pos->Matrix[g3] == WPAWN)
-                || (pos->Matrix[h3] == WPAWN && pos->Matrix[g2] == WPAWN && pos->Matrix[f2] == WPAWN))) {
-            score_w.add(SHELTER_CASTLING_KINGSIDE);
-        } else if (pos->boardFlags->castlingFlags & CASTLE_Q
-                && ((pos->Matrix[a2] == WPAWN && pos->Matrix[b2] == WPAWN && pos->Matrix[c2] == WPAWN)
-                || (pos->Matrix[a2] == WPAWN && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN))) {
-            score_w.add(SHELTER_CASTLING_QUEENSIDE);
-        }
-
-        //2. reward having pawns in front of the king
-        U64 kingFront = FORWARD_RANKS[RANK(kpos)] & PAWN_SCOPE[FILE(kpos)];
-        U64 shelterPawns = kingFront & pos->whitePawns;
-
-        while (shelterPawns) {
-            int sq = POP(shelterPawns);
-            score_w.add(SHELTER_PAWN[FLIP_SQUARE(sq)]);
-        }
-
-        //3. penalize (half)open files on the king
-        U64 open = ~FILEFILL(pos->blackPawns) & kingFront & RANK_8;
-        if (open) {
-            score_w.add(SHELTER_OPEN_FILES[popCount(open)]);
-        }
-        //store score in eval table
-
+    int kpos = *pos->whiteKingPos;
+    score_w.add(SHELTER_KPOS[FLIP_SQUARE(kpos)]);
+    //1. reward having the right to castle
+    if (pos->boardFlags->castlingFlags & CASTLE_K
+            && ((pos->Matrix[h2] == WPAWN && pos->Matrix[g2] == WPAWN)
+            || (pos->Matrix[f2] == WPAWN && pos->Matrix[h2] == WPAWN && pos->Matrix[g3] == WPAWN)
+            || (pos->Matrix[h3] == WPAWN && pos->Matrix[g2] == WPAWN && pos->Matrix[f2] == WPAWN))) {
+        score_w.add(SHELTER_CASTLING_KINGSIDE);
+    } else if (pos->boardFlags->castlingFlags & CASTLE_Q
+            && ((pos->Matrix[a2] == WPAWN && pos->Matrix[b2] == WPAWN && pos->Matrix[c2] == WPAWN)
+            || (pos->Matrix[a2] == WPAWN && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN))) {
+        score_w.add(SHELTER_CASTLING_QUEENSIDE);
     }
-BLACK:
-    if (pos->whiteQueens) {
-        /* 
-         * Get the score from the stack if
-         * - the previous position was evaluated
-         * - the king did not move
-         * - castling rights for black are the same
-         * - previous position also had a white queen
-         * - pawn structure did not change
-         */
-        if (searchData->pos->currentPly > 0
-                && (searchData->stack - 1)->evaluationScore != SCORE_INVALID
-                && searchData->pos->boardFlags->pawnHash == (searchData->pos->boardFlags - 1)->pawnHash) {
-            TMove * prevMove = &(searchData->stack - 1)->move;
-            if (prevMove->piece != BKING && prevMove->promotion != WQUEEN &&
-                    (pos->boardFlags->castlingFlags & CASTLE_BLACK) == ((searchData->pos->boardFlags - 1)->castlingFlags & CASTLE_BLACK)) {
-                score_b = (searchData->stack - 1)->scores[SCORE_SHELTER_B];
-                goto RETURN;
-            }
-        }
-        /*
-         * Calculate king shelter score
-         */
-        int kpos = *pos->blackKingPos;
-        score_b.add(SHELTER_KPOS[kpos]);
 
-        //1. reward having the right to castle safely
-        if (pos->boardFlags->castlingFlags & CASTLE_k
-                && ((pos->Matrix[h7] == BPAWN && pos->Matrix[g7] == BPAWN)
-                || (pos->Matrix[f7] == BPAWN && pos->Matrix[h7] == BPAWN && pos->Matrix[g6] == BPAWN)
-                || (pos->Matrix[h6] == BPAWN && pos->Matrix[g7] == BPAWN && pos->Matrix[f7] == BPAWN))) {
-            score_b.add(SHELTER_CASTLING_KINGSIDE);
-        } else if (pos->boardFlags->castlingFlags & CASTLE_q
-                && ((pos->Matrix[a7] == BPAWN && pos->Matrix[b7] == BPAWN && pos->Matrix[c7] == BPAWN)
-                || (pos->Matrix[a7] == BPAWN && pos->Matrix[b6] == BPAWN && pos->Matrix[c7] == BPAWN))) {
-            score_b.add(SHELTER_CASTLING_QUEENSIDE);
-        }
+    //2. reward having pawns in front of the king
+    U64 kingFront = FORWARD_RANKS[RANK(kpos)] & PAWN_SCOPE[FILE(kpos)];
+    U64 shelterPawns = kingFront & pos->whitePawns;
 
-        //2. reward having pawns in front of the king
-        U64 kingFront = BACKWARD_RANKS[RANK(kpos)] & PAWN_SCOPE[FILE(kpos)];
-        U64 shelterPawns = kingFront & pos->blackPawns;
-        while (shelterPawns) {
-            int sq = POP(shelterPawns);
-            score_b.add(SHELTER_PAWN[sq]);
-        }
-
-        //3. penalize (half)open files on the king
-        U64 open = (~FILEFILL(pos->whitePawns)) & kingFront & RANK_1;
-        if (open) { //half open
-            score_b.add(SHELTER_OPEN_FILES[popCount(open)]);
-        }
-
-
+    while (shelterPawns) {
+        int sq = POP(shelterPawns);
+        score_w.add(SHELTER_PAWN[FLIP_SQUARE(sq)]);
     }
-RETURN:
-    searchData->stack->scores[SCORE_SHELTER_W] = score_w;
-    searchData->stack->scores[SCORE_SHELTER_B] = score_b;
+
+    //3. penalize (half)open files on the king
+    U64 open = pos->halfOpenOrOpenFile(false) & kingFront & RANK_8;
+    if (open) {
+        score_w.add(SHELTER_OPEN_FILES[popCount(open)]);
+    }
+
+    //black king shelter
+    kpos = *pos->blackKingPos;
+    score_b.add(SHELTER_KPOS[kpos]);
+    //1. reward having the right to castle safely
+    if (pos->boardFlags->castlingFlags & CASTLE_k
+            && ((pos->Matrix[h7] == BPAWN && pos->Matrix[g7] == BPAWN)
+            || (pos->Matrix[f7] == BPAWN && pos->Matrix[h7] == BPAWN && pos->Matrix[g6] == BPAWN)
+            || (pos->Matrix[h6] == BPAWN && pos->Matrix[g7] == BPAWN && pos->Matrix[f7] == BPAWN))) {
+        score_b.add(SHELTER_CASTLING_KINGSIDE);
+    } else if (pos->boardFlags->castlingFlags & CASTLE_q
+            && ((pos->Matrix[a7] == BPAWN && pos->Matrix[b7] == BPAWN && pos->Matrix[c7] == BPAWN)
+            || (pos->Matrix[a7] == BPAWN && pos->Matrix[b6] == BPAWN && pos->Matrix[c7] == BPAWN))) {
+        score_b.add(SHELTER_CASTLING_QUEENSIDE);
+    }
+
+    //2. reward having pawns in front of the king
+    kingFront = BACKWARD_RANKS[RANK(kpos)] & PAWN_SCOPE[FILE(kpos)];
+    shelterPawns = kingFront & pos->blackPawns;
+    while (shelterPawns) {
+        int sq = POP(shelterPawns);
+        score_b.add(SHELTER_PAWN[sq]);
+    }
+
+    //3. penalize (half)open files on the king
+    open = pos->halfOpenOrOpenFile(true) & kingFront & RANK_1;
+    if (open) { //half open
+        score_b.add(SHELTER_OPEN_FILES[popCount(open)]); 
+    }
+    searchData->stack->scores[SCORE_PAWNS].set(pawnScore);
+    searchData->stack->scores[SCORE_SHELTER_W].set(score_w);
+    searchData->stack->scores[SCORE_SHELTER_B].set(score_b);
+    searchData->hashTable->ptStore(searchData, pawnScore, score_w, score_b);
+    return &searchData->stack->scores[SCORE_PAWNS];
 }
 
 TScore * evaluateRooks(TSearch * searchData) {
@@ -655,6 +601,34 @@ TScore * evaluateRooks(TSearch * searchData) {
         U64 open = ~FILEFILL(pos->blackPawns) & pos->blackRooks;
         int count = popCount(open, true);
         result->sub(10 * count, 20 * count);
+    }
+    return result;
+}
+
+TScore * evaluateMobility(TSearch * searchData) {
+    TScore * result = &searchData->stack->scores[SCORE_MOBILITY];
+    result->clear();
+    TBoard * pos = searchData->pos;
+    U64 occ = pos->pawnsAndKings();
+    TPiecePlacement * pc = &pos->pieces[WROOK];
+    for (int i = 0; i < pc->count; i++) {
+        int sq = pc->squares[i];
+        U64 moves = MagicRookMoves(sq, occ);
+        int count = popCount(moves, true);
+        if (count < 3) {
+            result->sub(20);
+        }
+        result->add(3 * count);
+    }
+    pc = &pos->pieces[BROOK];
+    for (int i = 0; i < pc->count; i++) {
+        int sq = pc->squares[i];
+        U64 moves = MagicRookMoves(sq, occ);
+        int count = popCount(moves, true);
+        if (count < 3) {
+            result->add(20);
+        }
+        result->sub(3 * count);
     }
     return result;
 }
