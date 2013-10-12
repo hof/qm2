@@ -155,6 +155,8 @@ typedef TScore TSCORE_PCT[13][64];
 
 #define S(x,y) TScore(x,y)
 
+#define PHASED_SHORT(mg,eg,phase) (((mg) * (MAX_GAMEPHASES - phase) + (eg) * (phase)) >> GAMEPHASE_SCORE_BSR)
+#define PHASED_SCORE(s,phase) (((s.mg) * (MAX_GAMEPHASES - phase) + (s.eg) * (phase)) >> GAMEPHASE_SCORE_BSR)
 
 #endif	/* SCORE_H */
 

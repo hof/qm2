@@ -32,7 +32,7 @@ enum MovePickingStage {
     STOP
 };
 
-#define MVVLVA(m) (PIECE_VALUE[m->capture]+PIECE_VALUE[m->promotion]-m->piece)
+#define MVVLVA(m) (PIECE_VALUE[m->capture] + PIECE_VALUE[m->promotion] - m->piece)
 
 class TMovePicker {
 protected:

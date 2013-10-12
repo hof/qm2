@@ -43,9 +43,16 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
  */
 TScore * evaluateExp(TSearch * searchData) {
     TScore * result = &searchData->stack->scores[SCORE_EXP];
-    TScore * mob = evaluateMobility(searchData);
-    result->set(*mob);
-    result->mul(searchData->learnFactor);
+    result->clear();
+    //TScore * mob = evaluateMobility(searchData);
+    //result->set(*mob);
+    int wp = searchData->pos->pieces[WROOK].count;
+    int bp = searchData->pos->pieces[BROOK].count;
+    if (wp != bp) {
+        int delta = wp - bp;
+        result->sub(0,delta * VROOK);
+        result->add(0,delta * VPAWN * searchData->learnFactor);
+    }
     return result;
 }
 
@@ -104,11 +111,9 @@ TScore * evaluateMaterial(TSearch * searchData) {
     phase = MAX(0, phase);
     phase = (MAX_GAMEPHASES * phase) / MAX_GAMEPHASES;
 
-    int piecepower = 0;
-
     // Knights
     if (wknights != bknights) {
-        piecepower += (wknights - bknights) * VKNIGHT;
+        value += (wknights - bknights) * VKNIGHT;
         value += factor(wknights, bknights, FKNIGHT_OPPOSING_PAWNS, bpawns, wpawns);
         value += cond(wknights >= 2, bknights >= 2, VKNIGHT_PAIR);
         value += factor(wknights, bknights, KNIGHT_X_PIECECOUNT, wpieces + bpieces);
@@ -116,7 +121,7 @@ TScore * evaluateMaterial(TSearch * searchData) {
 
     //Bishops
     if (wbishops != bbishops) {
-        piecepower += (wbishops - bbishops) * VBISHOP;
+        value += (wbishops - bbishops) * VBISHOP;
         bool wPair = wbishops > 1 && pos->whiteBishopPair(); //note: material hash includes bishop colors
         bool bPair = bbishops > 1 && pos->blackBishopPair();
         value += cond(wPair, bPair, VBISHOPPAIR);
@@ -133,20 +138,20 @@ TScore * evaluateMaterial(TSearch * searchData) {
 
     //Rooks
     if (wrooks != brooks) {
-        piecepower += (wrooks - brooks) * VROOK;
+        value += (wrooks - brooks) * VROOK;
         value += cond(wrooks >= 2, brooks >= 2, VROOKPAIR);
         value += factor(wrooks, brooks, ROOK_OPPOSING_PAWNS, bpawns, wpawns);
     }
 
     //Queens
     if (wqueens != bqueens) {
-        piecepower += (wqueens - bqueens) * VQUEEN;
+        value += (wqueens - bqueens) * PHASED_SCORE(SVQUEEN, phase);
         value += cond(wqueens && wrooks, bqueens && brooks, VQUEEN_AND_ROOKS);
         value += factor(wqueens, bqueens, QUEEN_MINORCOUNT, wminors + bminors);
     }
 
     //Bonus for having more "piece power" (excluding pawns)
-    piecepower += value;
+    int piecepower = value;
     value += cond(wpawns && piecepower > MATERIAL_AHEAD_TRESHOLD,
             bpawns && piecepower < -MATERIAL_AHEAD_TRESHOLD,
             PIECEPOWER_AHEAD,
@@ -160,6 +165,10 @@ TScore * evaluateMaterial(TSearch * searchData) {
      * 1) Not having pawns makes it hard to win
      * 2) If ahead, but no pawns and no mating material the score is draw
      */
+    
+    if (wpawns != bpawns) {
+        value += (wpawns - bpawns) * VPAWN;
+    }
     if (!wpawns || !bpawns) {
         value += cond(!wpawns, !bpawns, VNOPAWNS); //penalty for not having pawns (difficult to win)
         if (!wpawns && piecepower > 0 && (piecepower < 2 * VPAWN
@@ -168,7 +177,6 @@ TScore * evaluateMaterial(TSearch * searchData) {
                 || (wpieces == wminors && bpieces == bminors && wminors < 3
                 && bminors < 3 && wminors && bminors))) {
             value = SCORE_DRAW - piecepower >> 1;
-            ;
         }
         if (!bpawns && piecepower < 0 && (piecepower > -2 * VPAWN
                 || (bpieces == 1 && bminors == 1)
@@ -218,12 +226,6 @@ TScore * evaluateMaterial(TSearch * searchData) {
 
 void init_pct(TSCORE_PCT & pct) {
     TScore scores[64];
-    TScore vpawn(VPAWN, VPAWN);
-    TScore vknight(VKNIGHT, VKNIGHT - 5);
-    TScore vbishop(VBISHOP, VBISHOP);
-    TScore vrook(VROOK, VROOK);
-    TScore vqueen(VQUEEN, VQUEEN);
-    TScore vking(VKING, VKING);
     TScore PAWN_OFFSET(-20, -20);
     TScore KNIGHT_OFFSET(-35, -30);
     TScore BISHOP_OFFSET(-20, -12);
@@ -284,7 +286,6 @@ void init_pct(TSCORE_PCT & pct) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].add(vpawn);
         scores[sq].add(PAWN_OFFSET);
         scores[sq].round();
         pct[WPAWN][sq].set(scores[sq]);
@@ -300,7 +301,6 @@ void init_pct(TSCORE_PCT & pct) {
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
         scores[sq].mul(1.5); //mobility is extra important because knights move slow
-        scores[sq].add(vknight);
         scores[sq].add(KNIGHT_OFFSET);
         scores[sq].round();
         pct[WKNIGHT][sq].set(scores[sq]);
@@ -316,7 +316,6 @@ void init_pct(TSCORE_PCT & pct) {
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
         scores[sq].mul(0.5); //mobility is less important because bishops move fast
-        scores[sq].add(vbishop);
         scores[sq].add(BISHOP_OFFSET);
         scores[sq].round();
         pct[WBISHOP][sq].set(scores[sq]);
@@ -346,7 +345,6 @@ void init_pct(TSCORE_PCT & pct) {
         if (bbsq & RANK_1) { //protection
             scores[sq].mg += 8;
         }
-        scores[sq].add(vrook);
         scores[sq].add(ROOK_OFFSET);
         scores[sq].round();
         pct[WROOK][sq].set(scores[sq]);
@@ -363,7 +361,6 @@ void init_pct(TSCORE_PCT & pct) {
         }
         scores[sq].mg *= 0.15; //mobility is less important because queens move fast
         scores[sq].eg *= 0.25; //mobility is less important because queens move fast
-        scores[sq].add(vqueen);
         scores[sq].add(QUEEN_OFFSET);
         scores[sq].round();
         pct[WQUEEN][sq].set(scores[sq]);
@@ -380,7 +377,6 @@ void init_pct(TSCORE_PCT & pct) {
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
         scores[sq].mg = 0;
-        scores[sq].add(vking);
         scores[sq].add(KING_OFFSET);
         scores[sq].round();
         pct[WKING][sq].set(scores[sq]);
@@ -579,7 +575,7 @@ TScore * evaluatePawns(TSearch * searchData) {
     //3. penalize (half)open files on the king
     open = pos->halfOpenOrOpenFile(true) & kingFront & RANK_1;
     if (open) { //half open
-        score_b.add(SHELTER_OPEN_FILES[popCount(open)]); 
+        score_b.add(SHELTER_OPEN_FILES[popCount(open)]);
     }
     searchData->stack->scores[SCORE_PAWNS].set(pawnScore);
     searchData->stack->scores[SCORE_SHELTER_W].set(score_w);

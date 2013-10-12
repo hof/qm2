@@ -43,14 +43,20 @@ enum EVALUATION_COMPONENTS {
  * Generic evaluation bonuses
  *******************************************************************************/
 
-enum PIECE_VALUES {
-    VPAWN = 100,
-    VKNIGHT = 325,
-    VBISHOP = 320,
-    VROOK = 500,
-    VQUEEN = 975,
-    VKING = 20000
-};
+const short VPAWN = 100;
+const short VKNIGHT = 320;
+const short VBISHOP = 325;
+const short VROOK = 465;
+const short VQUEEN = 925;
+const short VKING = 20000;
+
+const TScore SVPAWN = S(100, 100);
+const TScore SVKNIGHT = S(320, 320);
+const TScore SVBISHOP = S(325, 325);
+const TScore SVROOK = S(465, 465);
+const TScore SVQUEEN = S(925, 875);
+const TScore SVKING = S(20000, 20000);
+
 
 const short PIECE_VALUE[13] = {
     0,

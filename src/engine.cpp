@@ -181,9 +181,9 @@ void * TEngine::_think(void* engineObjPtr) {
              * Stop conditions
              */
             searchData->poll();
-            if (searchData->stopSearch || (maxNodes > 0 && searchData->nodes > maxNodes) 
-                    || (MATE_IN_PLY(resultScore) && depth/ONE_PLY > MATE_IN_PLY(resultScore))
-                    || (MATED_IN_PLY(resultScore)) && depth/ONE_PLY > MATED_IN_PLY(resultScore)) {
+            if (searchData->stopSearch || (maxNodes > 0 && searchData->nodes > maxNodes)
+                    || (MATE_IN_PLY(resultScore) && type == EXACT && depth / ONE_PLY > MATE_IN_PLY(resultScore))
+                    || (MATED_IN_PLY(resultScore)) && type == EXACT && depth / ONE_PLY > MATED_IN_PLY(resultScore)) {
                 break;
             } else if (targetScore && targetMove.piece && targetMove.equals(&resultMove) && score >= targetScore) {
                 engine->setTestResult(true);
@@ -295,7 +295,7 @@ void TEngine::analyse() {
     std::cout << "\n8) Evaluation:" << searchData->stack->evaluationScore;
     std::cout << "\n9) Quiescence:" << searchData->qsearch(-SCORE_MATE, SCORE_MATE, 0) << std::endl;
     std::cout << "\n10) Best move:" << std::endl;
-    
+
 
     //loop through piece square tables
     int pct_score = 0;
@@ -397,9 +397,10 @@ void * TEngine::_learn(void * engineObjPtr) {
 
     const int MAXDEPTH = 2; //default: depth 2
     const int MAXGAMECOUNT = 20000; //Sample size, 920+ recommended. Use even numbers. 
-    double START_GRAIN = 2;
-    double STOP_GRAIN = 0.125;
-    const int STOPSCORE = 300; //if the score is higher than this for both sides, the game is consider a win
+
+    double MAX_WINDOW = 2.0; //maximum adjustment step for lower/upper bound
+    double STOP_WINDOW = 0.2; //stop if the difference between lower and upperbound is <= this value
+    const int STOPSCORE = 150; //if the score is higher than this for both sides, the game is consider a win
     const int MAXPLIES = 200; //maximum game length in plies
     const int HASH_SIZE_IN_MB = 1;
 
@@ -422,12 +423,11 @@ void * TEngine::_learn(void * engineObjPtr) {
     sd_game->timeManager->setEndTime(INFINITE_TIME);
     sd_game->learnParam = 1;
 
-    double grain = START_GRAIN;
-    int passtype = 1;
     int x = 0;
     double bestFactor = 1.0;
     double prevFactor = 0.0; //to start, it needs to be different than bestFactor
-    int prevtype = 0;
+    double upperBound = SCORE_INFINITE;
+    double lowerBound = -SCORE_INFINITE;
     int scores[1024]; //1024 should be sufficient
 
     /*
@@ -460,14 +460,14 @@ void * TEngine::_learn(void * engineObjPtr) {
     begin = clock();
     std::string fen = "";
     srand(time(NULL));
+    double strongest = +bestFactor;
+    double opponent = -bestFactor;
 
     int step = 0;
-    while (grain >= STOP_GRAIN) {
+    while (ABS(upperBound - lowerBound) > STOP_WINDOW) {
         int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
         U64 nodes[2] = {0, 0}; //total node counts for both sides
         scores[step] = 0;
-        double strongest = bestFactor;
-        double opponent = passtype == 1 ? strongest - grain : strongest + grain;
         std::cout << "\nEngine(" << strongest << ") vs Engine(" << opponent << ")" << std::endl;
         hash1->clear(); //clear hash: the evaluation scores changed.
         hash2->clear();
@@ -570,14 +570,14 @@ void * TEngine::_learn(void * engineObjPtr) {
 
                     prevScore = resultScore;
                     plyCount++;
-                    //std::cout << plyCount << ": " << actualMove.asString() << " " << sd_game->pos->asFen() << std::endl; //for debugging
+                    //std::cout << plyCount << ": " << resultScore << " " << actualMove.asString() << " " << sd_game->pos->asFen() << std::endl; //for debugging
                     sd_game->forward(&actualMove, sd_game->pos->givesCheck(&actualMove));
                 }
 
             } while (gameover == false);
             gamesPlayed++;
             batch++;
-            if (gamesPlayed % 50 == 0 && gamesPlayed > 50) {
+            if (gamesPlayed % 50 == 0 && batch > 50) {
                 std::cout << ".";
                 std::cout.flush();
                 //check if the result if significant enough before finishing the full batch
@@ -607,46 +607,67 @@ void * TEngine::_learn(void * engineObjPtr) {
 
         double sdev = 1.1 / pow(batch, 0.48); //safe(?) standard deviation
         double fscore = score / 100.0;
-
-        bool grain_reduced = false;
         if ((fscore - sdev) > 0.5) {
             //we have a winner!
             std::cout << "Engine(" << strongest << ") is significantly stronger than engine(" << opponent << ")" << std::endl;
-            prevtype = 1;
-            bestFactor = strongest;
+            if (strongest > opponent) {
+                lowerBound = MAX(lowerBound, opponent);
+            } else {
+                upperBound = MIN(upperBound, opponent);
+            }
         } else if ((fscore + sdev) < 0.5) {
             //we have a winner!
             std::cout << "Engine(" << strongest << ") is significantly weaker than engine(" << opponent << ")" << std::endl;
-            prevtype = -1;
             bestFactor = opponent;
+            if (strongest < opponent) {
+                lowerBound = MAX(lowerBound, strongest);
+            } else {
+                upperBound = MIN(upperBound, strongest);
+            }
+            opponent = strongest;
+            strongest = bestFactor;
         } else {
-            std::cout << "Engine(" << strongest << ") is equal in strength to engine(" << opponent << ")" << std::endl;
-            if (bestFactor == prevFactor && prevtype == 0) {
-                break;
-            }
-            if (passtype == 2) {
-                grain = grain / 2;
-                grain_reduced = true;
-            }
-            prevtype = 0;
-        }
-        if (passtype == 1) {
-            passtype++; //always run the high pass
-        } else {
-            passtype = 1;
-            if (bestFactor == prevFactor && grain_reduced == false) {
-                grain = grain / 2; //reduce the grain size if the best factor 
+            if (fscore > 0.5) {
+                std::cout << "Engine(" << strongest << ") is a bit stronger than engine(" << opponent << ")" << std::endl;
+                if (strongest < opponent) {
+                    upperBound = MIN(upperBound, opponent);
+                } else if (strongest > opponent) {
+                    lowerBound = MAX(lowerBound, opponent);
+                }
+            } else if (fscore < 0.5) {
+                std::cout << "Engine(" << strongest << ") is a bit weaker than engine(" << opponent << ")" << std::endl;
+                bestFactor += (opponent - strongest) / 2;
+                opponent = strongest;
+                strongest = bestFactor;
+            } else {
+                std::cout << "Engine(" << strongest << ") is equal in strength to engine(" << opponent << ")" << std::endl;
             }
         }
-        prevFactor = bestFactor;
-
-    }
-
-
-    if (bestFactor > 0) {
         std::cout << "\nBest factor: " << bestFactor << std::endl;
-    }
+        std::cout << "Lower bound: " << lowerBound << std::endl;
+        std::cout << "Upper bound: " << upperBound << std::endl;
 
+
+        //determine opponent
+        double delta_a = ABS(opponent - lowerBound);
+        double delta_b = ABS(opponent - upperBound);
+        if (delta_b > delta_a) {
+            //find better upperbound
+            double window = MIN(MAX_WINDOW, (upperBound - bestFactor) / 2);
+            window = MAX(window, STOP_WINDOW / 2);
+            opponent = MAX(opponent, strongest);
+            opponent += window;
+            opponent = MIN(opponent, upperBound);
+        } else {
+            double window = MIN(MAX_WINDOW, (bestFactor - lowerBound) / 2);
+            window = MAX(window, STOP_WINDOW / 2);
+            opponent = MIN(opponent, strongest);
+            opponent -= window;
+            opponent = MAX(opponent, lowerBound);
+        }
+
+        prevFactor = bestFactor;
+    }
     clock_t end;
     end = clock();
 

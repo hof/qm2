@@ -220,7 +220,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     /*
      * 2. If no more depth remaining, return quiescence value
      */
-    if (depth <= HALF_PLY) {
+    if (depth < HALF_PLY || (!stack->inCheck && depth <= HALF_PLY)) {
         stack->pvCount = 0;
         if (pos->currentPly > selDepth) {
             selDepth = pos->currentPly;
@@ -394,7 +394,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     int extendMove = 0;
     bool singular = false;
     if (!extendNode) {
-        int see = pos->SEE(firstMove);
         if (givesCheck > 0) {
             extendMove = HALF_PLY;
             if (givesCheck == 2 || firstMove->capture || type == PVNODE) {
@@ -409,7 +408,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             if (depth >= HIGH_DEPTH || type == PVNODE) {
                 extendMove = ONE_PLY;
             }
-        } else if (depth > LOW_DEPTH && firstMove->capture && see < 0) { //sacrifice
+        } else if (depth > LOW_DEPTH && firstMove->capture && pos->SEE(firstMove) < 0) { //sacrifice
             extendMove = HALF_PLY;
             if (depth >= HIGH_DEPTH || type == PVNODE) {
                 extendMove = ONE_PLY;
@@ -417,7 +416,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         } else if (type == PVNODE
                 && depth >= HIGH_DEPTH
                 && stack->moveList.stage < CAPTURES
-                && see == 0
+                && pos->SEE(firstMove) == 0
                 && excludedMove.piece == EMPTY) { //singular extension 
             if (firstMove->capture || firstMove->promotion || givesCheck || pos->checksPiece(firstMove)) {
                 extendMove = HALF_PLY;
@@ -447,7 +446,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 }
             }
         }
-        singular = singular || ((firstMove->capture || firstMove->promotion) && see > 0);
+        singular = singular || ((firstMove->capture || firstMove->promotion) && pos->SEE(firstMove) > 0);
 
     }
 
@@ -567,6 +566,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 
         stack->reduce = reduce;
         forward(move, givesCheck);
+        
         int score = -pvs(-alpha - 1, -alpha, depth - ONE_PLY - reduce + extendMove + extendNode);
         if (score > alpha && reduce) { //full depth research
             (stack - 1)->reduce = 0;

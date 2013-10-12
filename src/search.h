@@ -42,8 +42,8 @@ enum SEARCH_CONSTANTS {
     HIGH_DEPTH = ONE_PLY * 8
 };
 
-static const int FUTILITY_MARGIN[7] = {
-    2 * VPAWN,
+static const short FUTILITY_MARGIN[7] = {
+    2*VPAWN,
     VKNIGHT, VKNIGHT,
     VROOK, VROOK,
     VQUEEN, VQUEEN
