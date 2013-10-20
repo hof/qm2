@@ -44,12 +44,10 @@ public:
     TMove * pickNextMove(TSearch * searchData, int depth, int alpha, int beta, int gap);
 
     TMove * pickFirstMove(TSearch * searchData, int depth, int alpha, int beta, int gap);
-    TMove * pickFirstQuiescenceMove(TSearch * searchData, int qPly, int alpha, int beta, int gap);
+    TMove * pickFirstQuiescenceMove(TSearch * searchData, int qCheckDepth, int alpha, int beta, int gap);
+    short countEvasions(TSearch * sd, TMove * firstMove);
     
     void push(TSearch * searchData, TMove * move, int score);
-    
-    int q_check_depth(TSearch * search, int alpha, int beta);
-    
 };
 
 #endif	/* MOVEPICKER_H */

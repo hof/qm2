@@ -44,26 +44,28 @@ enum EVALUATION_COMPONENTS {
  *******************************************************************************/
 
 const short VPAWN = 100;
-const short VKNIGHT = 320;
-const short VBISHOP = 325;
+const short VKNIGHT = 315;
+const short VBISHOP = 340;
 const short VROOK = 465;
 const short VQUEEN = 925;
 const short VKING = 20000;
 
-const TScore SVPAWN = S(100, 100);
-const TScore SVKNIGHT = S(320, 320);
-const TScore SVBISHOP = S(325, 325);
+const TScore SVPAWN = S(95, 110);
+const TScore SVKNIGHT = S(315, 300);
+const TScore SVBISHOP = S(345, 330);
 const TScore SVROOK = S(465, 465);
 const TScore SVQUEEN = S(925, 875);
 const TScore SVKING = S(20000, 20000);
 
 
 const short PIECE_VALUE[13] = {
-    0,
-    VPAWN, VKNIGHT, VBISHOP,
-    VROOK, VQUEEN, VKING,
-    VPAWN, VKNIGHT, VBISHOP,
-    VROOK, VQUEEN, VKING
+    0, VPAWN, VKNIGHT, VBISHOP, VROOK, VQUEEN, VKING,
+    VPAWN, VKNIGHT, VBISHOP, VROOK, VQUEEN, VKING
+};
+
+const TScore PIECE_SCORE[13] = {
+    S(0,0), SVPAWN, SVKNIGHT, SVBISHOP, SVROOK, SVQUEEN, SVKING,
+    SVPAWN, SVKNIGHT, SVBISHOP, SVROOK, SVQUEEN, SVKING
 };
 
 /*******************************************************************************
@@ -227,6 +229,7 @@ int evaluate(TSearch * searchData, int alpha, int beta);
 void init_pct(TSCORE_PCT & pct);
 
 TScore * evaluateExp(TSearch * searchData);
+bool skipExp(TSearch * sd);
 
 TScore * evaluateMaterial(TSearch * searchData);
 

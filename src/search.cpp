@@ -85,26 +85,20 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
      * If no move is returned, the position is either MATE or STALEMATE, 
      * otherwise search the first move with full alpha beta window.
      */
-
     assert(root.MoveCount > 0);
     int nodesBeforeMove = nodes;
     TRootMove * rMove = &root.Moves[0];
-    int extend = 0;
-
     forward(&rMove->Move, rMove->GivesCheck);
     if (rMove->GivesCheck) {
-        extend = HALF_PLY;
         pos->boardFlags->checkerSq = rMove->checkerSq;
         pos->boardFlags->checkers = rMove->checkers;
     }
-    int bestScore = -pvs(-beta, -alpha, depth - ONE_PLY + extend);
+    int bestScore = -pvs(-beta, -alpha, depth - ONE_PLY);
     backward(&rMove->Move);
-
     int sortBaseScoreForPV = 1000 * depth / ONE_PLY;
     rMove->Nodes += nodes - nodesBeforeMove;
     rMove->PV = sortBaseScoreForPV;
     rMove->Value = bestScore;
-
     if (stopSearch) {
         return alpha;
     } else if (bestScore > alpha) {
@@ -128,25 +122,21 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
         alpha = bestScore;
     }
 
-
     /*
      * Search remaining moves with a zero width window
      */
     stack->bestMove.setMove(&rMove->Move);
     for (int i = 1; i < root.MoveCount; i++) {
         rMove = &root.Moves[i];
-
-        extend = rMove->GivesCheck;
         nodesBeforeMove = nodes;
-
         forward(&rMove->Move, rMove->GivesCheck);
         if (rMove->GivesCheck) {
             pos->boardFlags->checkerSq = rMove->checkerSq;
             pos->boardFlags->checkers = rMove->checkers;
         }
-        int score = -pvs(-alpha - 1, -alpha, depth - ONE_PLY + extend);
+        int score = -pvs(-alpha - 1, -alpha, depth - ONE_PLY);
         if (score > alpha && score < beta && stopSearch == false) {
-            score = -pvs(-beta, -alpha, depth - ONE_PLY + extend);
+            score = -pvs(-beta, -alpha, depth - ONE_PLY);
         }
         backward(&rMove->Move);
         rMove->Nodes += nodes - nodesBeforeMove;
@@ -165,7 +155,6 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
             bestScore = score;
             stack->bestMove.setMove(&rMove->Move);
             updatePV(&rMove->Move);
-
             if (!stack->bestMove.equals(&stack->pvMoves[0]) && outputHandler) {
                 outputHandler->sendPV(bestScore,
                         depth / ONE_PLY,
@@ -195,10 +184,6 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
  */
 int TSearch::pvs(int alpha, int beta, int depth) {
 
-    if (stopSearch) {
-        return alpha;
-    }
-
     /* 
      * 1. Mate distance pruning: 
      * if we already know we will win/loose by mate in n, 
@@ -220,45 +205,46 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     /*
      * 2. If no more depth remaining, return quiescence value
      */
-    if (depth < HALF_PLY || (!stack->inCheck && depth <= HALF_PLY)) {
+    if (depth < HALF_PLY) {
         stack->pvCount = 0;
         if (pos->currentPly > selDepth) {
             selDepth = pos->currentPly;
+            //debug_print_search();
         }
-        int score = qsearch(alpha, beta, 0);
+        int score = qsearch(alpha, beta, 0, QCHECKDEPTH);
         return score;
     }
+
     nodes++;
     if (nodesUntilPoll <= 0) {
         poll();
     }
-
+    if (stopSearch || pos->currentPly >= MAX_PLY) {
+        return alpha;
+    }
 
     /*
      * 3. Abort and return obvious draws 
      */
     if (pos->boardFlags->fiftyCount > 1) {
         if (pos->boardFlags->fiftyCount >= 100) {
-            return SCORE_DRAW;
+            return drawScore();
         }
         int stopPly = pos->currentPly - pos->boardFlags->fiftyCount;
         for (int ply = pos->currentPly - 4; ply >= stopPly; ply -= 2) {
             if (ply >= 0 && getStack(ply)->hashCode == pos->boardFlags->hashCode) {
-                return SCORE_DRAW;
+                return drawScore();
             } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->boardFlags->hashCode) {
-                return SCORE_DRAW;
+                return drawScore();
 
             }
         }
     }
 
-    if (pos->isDraw()) {
+    bool inCheck = stack->inCheck;
+    if (pos->isDraw() && !inCheck) {
         stack->pvCount = 0;
-        return SCORE_DRAW;
-    }
-
-    if (pos->currentPly >= MAX_PLY) {
-        return alpha;
+        return drawScore();
     }
 
     /*
@@ -278,20 +264,17 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     stack->hashCode = pos->boardFlags->hashCode;
     assert(type != UNKNOWN);
     assert(type == PVNODE || alpha + 1 == beta);
-    bool inCheck = stack->inCheck;
-    int extendNode = 0;
     int eval = evaluate(this, alpha, beta);
-
     if (!skipNull
             && type != PVNODE
             && depth <= LOW_DEPTH
             && !inCheck
             && eval < beta - FUTILITY_MARGIN[depth]
-            && beta < SCORE_MATE - MAX_PLY
-            && pos->hasPieces(pos->boardFlags->WTM)
+            && ABS(beta) < SCORE_MATE - MAX_PLY
+            //&& pos->hasPieces(pos->boardFlags->WTM)
             && !pos->promotingPawns(pos->boardFlags->WTM)) {
         int rbeta = beta - FUTILITY_MARGIN[depth];
-        int qvalue = qsearch(alpha, beta, 0);
+        int qvalue = qsearch(alpha, beta, 0, QCHECKDEPTH);
         if (qvalue < rbeta) {
             return qvalue;
         }
@@ -302,19 +285,21 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && depth <= LOW_DEPTH
             && !inCheck
             && eval >= beta
-            && beta < SCORE_MATE - MAX_PLY
+            && ABS(beta) < SCORE_MATE - MAX_PLY
             && pos->hasPieces(pos->boardFlags->WTM)
             && eval - FUTILITY_MARGIN[depth] > beta) {
         return eval - FUTILITY_MARGIN[depth];
     }
+
+    int extendNode = 0;
     if (!skipNull
             && depth > ONE_PLY
             && !inCheck
             && eval >= beta
-            && beta < SCORE_MATE - MAX_PLY
+            && ABS(beta) < SCORE_MATE - MAX_PLY
             && pos->hasPieces(pos->boardFlags->WTM)) {
         forward();
-        int nullDepth = MAX(0, depth - ONE_PLY - NullReduction(depth, eval - beta));
+        int nullDepth = MAX(0, depth - NullReduction(depth, eval - beta));
         int score = -pvs(-beta, -alpha, nullDepth);
         backward();
         if (score >= beta) {
@@ -325,7 +310,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         } else if (alpha > (-SCORE_MATE + MAX_PLY) && score < (-SCORE_MATE + MAX_PLY)) {
             extendNode = HALF_PLY; //mate threat extension
         }
-
         if ((stack - 1)->reduce && (eval - score) > VPAWN) {
             TMove * prevMove = &(stack - 1)->move;
             TMove * threatMove = &(stack + 1)->bestMove;
@@ -363,24 +347,19 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     TMove * firstMove = movePicker->pickFirstMove(this, depth, alpha, beta, 0);
     if (!firstMove) {
         stack->pvCount = 0;
-        return inCheck ? -SCORE_MATE + pos->currentPly : SCORE_DRAW;
+        return inCheck ? -SCORE_MATE + pos->currentPly : drawScore() / 2;
     }
 
     /*
-     * 8. Single reply to check extension.
+     * 8. Check extension
      */
-    if (inCheck && !firstMove->capture && extendNode < ONE_PLY) {
-        TMove * move2 = movePicker->pickNextMove(this, depth, alpha, beta, 0);
-        if (!move2) {
-            extendNode = ONE_PLY;
-        } else {
-            TMove * move3 = movePicker->pickNextMove(this, depth, alpha, beta, 0);
-            if (!move3) {
+    if (inCheck && extendNode < ONE_PLY) {
+        extendNode = HALF_PLY;
+        if (!firstMove->capture) {
+            int evasions = movePicker->countEvasions(this, firstMove);
+            if (evasions < 3) {
                 extendNode = ONE_PLY;
-            } else {
-                movePicker->push(this, move3, SCORE_INFINITE - 3); //push move back on the list
             }
-            movePicker->push(this, move2, SCORE_INFINITE - 2); //push move back on the list
         }
     }
 
@@ -452,7 +431,11 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 
     stack->reduce = 0;
     forward(firstMove, givesCheck);
-        
+
+    //temp: disable extensions
+    //extendNode = 0;
+    extendMove = 0; // MAX(extendMove, HALF_PLY);
+
     int bestScore = -pvs(-beta, -alpha, depth - ONE_PLY + extendNode + extendMove);
     backward(firstMove);
     if (bestScore > alpha) {
@@ -566,7 +549,11 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 
         stack->reduce = reduce;
         forward(move, givesCheck);
-        
+
+        //temp: disable extensions
+        //extendNode = 0;
+        extendMove = 0;
+
         int score = -pvs(-alpha - 1, -alpha, depth - ONE_PLY - reduce + extendMove + extendNode);
         if (score > alpha && reduce) { //full depth research
             (stack - 1)->reduce = 0;
@@ -618,53 +605,63 @@ int TSearch::pvs(int alpha, int beta, int depth) {
  */
 static const int MAXPOSGAIN = 2 * VPAWN;
 
-int TSearch::qsearch(int alpha, int beta, int qPly) {
+int TSearch::qsearch(int alpha, int beta, int qPly, int maxCheckPly) {
 
-    if (stopSearch) {
-        return alpha;
-    }
     nodes++;
     if (--nodesUntilPoll <= 0) {
         poll();
     }
+    if (stopSearch || pos->currentPly >= MAX_PLY) {
+        return alpha;
+    }
 
     //return obvious draws
-
     if (pos->boardFlags->fiftyCount > 1) {
         if (pos->boardFlags->fiftyCount >= 100) {
-            return SCORE_DRAW;
+            return drawScore();
         }
         int stopPly = pos->currentPly - pos->boardFlags->fiftyCount;
         for (int ply = pos->currentPly - 4; ply >= stopPly; ply -= 2) {
             if (ply >= 0 && getStack(ply)->hashCode == pos->boardFlags->hashCode) {
-                return SCORE_DRAW;
+                return drawScore();
             } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->boardFlags->hashCode) {
-                return SCORE_DRAW;
+                return drawScore();
             }
+        }
+    }
+
+    //mate distance pruning
+    if (qPly > 0 && (SCORE_MATE - pos->currentPly) < beta) {
+        beta = SCORE_MATE - pos->currentPly;
+        if (alpha >= (SCORE_MATE - pos->currentPly)) {
+            return SCORE_MATE - pos->currentPly;
+        }
+    }
+    if (qPly > 0 && (-SCORE_MATE + pos->currentPly) > alpha) {
+        alpha = -SCORE_MATE + pos->currentPly;
+        if (beta <= (-SCORE_MATE + pos->currentPly)) {
+            return -SCORE_MATE + pos->currentPly;
         }
     }
 
     if (!stack->inCheck) {
         if (pos->isDraw()) {
-            return SCORE_DRAW;
+            return drawScore();
         }
         int score = evaluate(this, alpha, beta); //stand-pat score
-        if (score >= beta || pos->currentPly >= MAX_PLY) { //fail high
+        if (score >= beta) { //fail high
             return score;
         }
-
-        TMove * move = movePicker->pickFirstQuiescenceMove(this, qPly, alpha, beta, 0);
+        TMove * move = movePicker->pickFirstQuiescenceMove(this, qPly < maxCheckPly, alpha, beta, 0);
         if (!move) {
             return score;
         }
         alpha = MAX(score, alpha);
         stack->hashCode = pos->boardFlags->hashCode;
-
         int base = score;
-
         do {
             int givesCheck = pos->givesCheck(move);
-            if (givesCheck == 0 && alpha + 1 >= beta) {
+            if (alpha + 1 >= beta) {
                 //1. delta futility pruning: the captured piece + max. positional gain should raise alpha
                 int gain = PIECE_VALUE[move->capture];
                 if (move->promotion) {
@@ -673,18 +670,28 @@ int TSearch::qsearch(int alpha, int beta, int qPly) {
                     }
                     gain += PIECE_VALUE[move->promotion] - VPAWN;
                 }
-                if (base + gain + MAXPOSGAIN < alpha) {
+                if (givesCheck == 0 && base + gain + MAXPOSGAIN < alpha) {
                     continue;
                 }
 
                 //2. prune moves when SEE is negative
-                if (pos->SEE(move) < 0) {
+                if ((!givesCheck || qPly >= maxCheckPly) && pos->SEE(move) < 0) {
                     continue;
                 }
             }
-
+            int newMaxChecks = maxCheckPly;
+            if (newMaxChecks > 0) {
+                if (!givesCheck) {
+                    //stop searching for deep mates 
+                    newMaxChecks = 1;
+                } else if ((pos->boardFlags->WTM && pos->whiteQueens == 0)
+                        || (pos->boardFlags->WTM == 0 && pos->blackQueens == 0)) {
+                    //greatly reduce searching deep mates if the site lacks queens
+                    newMaxChecks >>= (1 + NOTPV(alpha, beta));
+                }
+            }
             forward(move, givesCheck);
-            score = -qsearch(-beta, -alpha, qPly + 1);
+            score = -qsearch(-beta, -alpha, qPly + 1, newMaxChecks);
             backward(move);
             if (score >= beta) {
                 stack->bestMove.setMove(move);
@@ -693,23 +700,27 @@ int TSearch::qsearch(int alpha, int beta, int qPly) {
                 stack->bestMove.setMove(move);
                 alpha = score;
             }
-        } while (move = movePicker->pickNextMove(this, qPly, alpha, beta, alpha - base));
+        } while (move = movePicker->pickNextMove(this, qPly < maxCheckPly, alpha, beta, alpha - base));
     } else { // in check
-        if (pos->currentPly >= MAX_PLY) {
-            return alpha;
-        }
         assert(pos->boardFlags->checkers);
         int score = -SCORE_INFINITE;
-
-        TMove * move = movePicker->pickFirstQuiescenceMove(this, qPly, alpha, beta, 0);
+        TMove * move = movePicker->pickFirstQuiescenceMove(this, qPly < maxCheckPly, alpha, beta, 0);
         if (!move) {
             return -SCORE_MATE + pos->currentPly;
+        }
+        int newMaxChecks = maxCheckPly;
+        if (newMaxChecks > 0) {
+            if (move->capture && pos->SEE(move) >= 0) {
+                newMaxChecks = 1;
+            } else if (movePicker->countEvasions(this, move) > 2) {
+                newMaxChecks >>= (1 + NOTPV(alpha, beta));
+            }
         }
         stack->hashCode = pos->boardFlags->hashCode;
         do {
             bool givesCheck = pos->givesCheck(move);
             forward(move, givesCheck);
-            score = -qsearch(-beta, -alpha, qPly + 1);
+            score = -qsearch(-beta, -alpha, qPly + 1, newMaxChecks);
             backward(move);
             if (score >= beta) {
                 stack->bestMove.setMove(move);
@@ -718,8 +729,22 @@ int TSearch::qsearch(int alpha, int beta, int qPly) {
                 stack->bestMove.setMove(move);
                 alpha = score;
             }
-        } while (move = movePicker->pickNextMove(this, qPly, alpha, beta, 0));
+        } while (move = movePicker->pickNextMove(this, qPly < maxCheckPly, alpha, beta, 0));
     }
     return alpha;
 }
 
+void TSearch::debug_print_search(int alpha, int beta) {
+    std::cout << "print search (" << alpha << ", " << beta << "): ";
+    TBoard pos2;
+    memcpy(&pos2, pos, sizeof (TBoard));
+    while (pos2.currentPly > 0) {
+        TMove * move = &getStack(pos2.currentPly - 1)->move;
+        pos2.backward(move);
+    }
+    std::cout << pos2.asFen();
+    for (int i = 0; i < pos->currentPly; i++) {
+        std::cout << " " << getStack(i)->move.asString();
+    }
+    std::cout << std::endl;
+}

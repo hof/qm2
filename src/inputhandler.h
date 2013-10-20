@@ -21,6 +21,7 @@
 #include "bbmoves.h"
 #include "engine.h"
 #include "hashtable.h"
+#include "opponent.h"
 
 class TInputHandler {
 private:
@@ -52,6 +53,7 @@ private:
     int _hashSizeRequest;
     std::string _defaultFen;
     std::string _opponentString;
+    TOpponent _opponent;
     std::string _fen;
 public:
 
@@ -64,6 +66,7 @@ public:
         _defaultFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         _fen = _defaultFen;
         _opponentString = "";
+        _opponent.clear();
     }
 
     ~TInputHandler() {

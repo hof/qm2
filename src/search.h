@@ -43,13 +43,18 @@ enum SEARCH_CONSTANTS {
 };
 
 static const short FUTILITY_MARGIN[7] = {
-    2*VPAWN,
+    2 * VPAWN,
     VKNIGHT, VKNIGHT,
     VROOK, VROOK,
     VQUEEN, VQUEEN
 };
 
 #define HISTORY_MAX 5000
+
+#define NOTPV(a,b) (((a) + 1) >= (b))
+#define ISPV(a,b) (((a) + 1) < (b))
+
+const short QCHECKDEPTH = 14;
 
 class TRootMove {
 public:
@@ -131,7 +136,7 @@ struct TSearchStack {
     TScore scores[MAX_EVALUATION_COMPONENTS];
 
     int reduce;
-
+    
     U64 captureMask;
 
 };
@@ -168,7 +173,8 @@ public:
     int evaluationComponents;
     double learnFactor;
     TRoot root;
-
+    
+    int drawContempt;
 
     TMovePicker * movePicker;
     THashTable * hashTable;
@@ -195,6 +201,7 @@ public:
         hashHits = 0;
         evaluations = 0;
         fullEvaluations = 0;
+        drawContempt = -50;
         pawnEvals = 0;
         materialTableHits = 0;
         materialTableProbes = 0;
@@ -321,16 +328,14 @@ public:
     int initRootMoves();
     void debugPrint();
 
-        /**
+    /**
      * Null Move Reduction Depth (R)
      * @param depth current search depth left
      * @param plusScore eval - beta
      * @return R
      */
     inline int NullReduction(int depth, int plusScore) {
-        int R = 2 * ONE_PLY
-                + HALF_PLY * (depth > 7 * ONE_PLY)
-                + HALF_PLY * (depth > 14 * ONE_PLY);
+        int R = (3 * ONE_PLY) + (depth >> 2);
         if (plusScore > VPAWN / 2) {
             R += HALF_PLY;
             if (plusScore > VPAWN) {
@@ -344,10 +349,16 @@ public:
         return (score >= -SCORE_MATE && score <= -SCORE_MATE + MAX_PLY)
                 || (score >= SCORE_MATE - MAX_PLY && score <= SCORE_MATE);
     }
-
     int pvs_root(int alpha, int beta, int depth);
     int pvs(int alpha, int beta, int depth);
-    int qsearch(int alpha, int beta, int qPly);
+    int qsearch(int alpha, int beta, int qPly, int maxCheckPly);
+    
+    inline int drawScore() {
+        return pos->boardFlags->WTM? drawContempt 
+                : -drawContempt;
+    }
+
+    void debug_print_search(int alpha, int beta);
 };
 
 

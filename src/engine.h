@@ -16,12 +16,14 @@
 #include "move.h"
 #include "outputhandler.h"
 #include "evaluate.h"
+#include "opponent.h"
 
 class TInputHandler;
 class TBook;
 class TSearch;
 
 struct TGameSettings {
+    TOpponent opponent;
     int maxDepth;
     int maxNodes;
     TMove targetMove;
@@ -37,6 +39,7 @@ struct TGameSettings {
     double learnFactor;
 
     void clear() {
+        opponent.clear();
         maxDepth = MAX_PLY;
         maxTimePerMove = 0;
         targetScore = 0;
@@ -134,6 +137,10 @@ public:
         _resultScore = 0;
         setPosition(fen);
         clearHash();
+    }
+    
+    inline void setOpponent(TOpponent * opponent) {
+        gameSettings.opponent.copy(opponent);
     }
 
     inline void setPosition(string fen) {

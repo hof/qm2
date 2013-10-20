@@ -23,6 +23,7 @@ void countNodes(TEngine * engine, TStats * stats, const char * fen) {
     TBoard pos;
     pos.fromFen(fen);
     engine->newGame(pos.asFen());
+    //std::cout << pos.asFen() << std::endl;
     clock_t start = clock();
     engine->think();
     engine->stopAllThreads();

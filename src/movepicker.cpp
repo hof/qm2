@@ -51,12 +51,12 @@ TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, i
     return pickNextMove(searchData, depth, alpha, beta, gap);
 }
 
-TMove * TMovePicker::pickFirstQuiescenceMove(TSearch * searchData, int qPly, int alpha, int beta, int gap) {
+TMove * TMovePicker::pickFirstQuiescenceMove(TSearch * searchData, int qCheckDepth, int alpha, int beta, int gap) {
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
     moveList->stage = Q_CAPTURES;
     searchData->stack->captureMask = searchData->pos->allPieces;
-    return pickNextMove(searchData, qPly, alpha, beta, gap);
+    return pickNextMove(searchData, qCheckDepth, alpha, beta, gap);
 }
 
 TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, int beta, int gap) {
@@ -271,7 +271,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 result = popBest(pos, moveList);
                 if (searchData->stack->inCheck) {
                     moveList->stage = Q_EVASIONS;
-                } else if (depth < q_check_depth(searchData, alpha, beta)) {
+                } else if (depth > 0) {
                     moveList->stage = Q_QUIET_CHECKS;
                 } else {
                     moveList->stage = STOP;
@@ -312,19 +312,26 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
     return result;
 }
 
-
-int TMovePicker::q_check_depth(TSearch* search, int alpha, int beta) {
-    int result = 0;
-    int type = search->setNodeType(alpha, beta);
-    if (type == PVNODE) {
-        result++;
-    } 
-    if (search->pos->whiteQueens && search->stack->scores[SCORE_SHELTER_B].mg < 50) {
-        result++;
-    } 
-    if (search->pos->blackQueens && search->stack->scores[SCORE_SHELTER_W].mg < 50 ) {
-        result++;
+short TMovePicker::countEvasions(TSearch * sd, TMove * firstMove) {
+    assert(firstMove != NULL);
+    int result = 1;
+    const short MAXLEGALCOUNT = 3;
+    TMove * pushback[MAXLEGALCOUNT];
+    
+    //get and count legal moves
+    while (result < MAXLEGALCOUNT) {
+        TMove * m = pickNextMove(sd, 1, -SCORE_INFINITE, SCORE_INFINITE, 0);
+        if (m == NULL) {
+            break;
+        }
+        pushback[result++] = m;   
+    }
+    
+    //push moves back on the list
+    for (int i = firstMove != NULL; i < result; i++) { 
+        push(sd, pushback[i], SCORE_INFINITE - i); 
     }
     
     return result;
 }
+

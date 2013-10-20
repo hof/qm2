@@ -41,19 +41,26 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
  * @param searchData search meta-data object
  * @return score the evaluation score
  */
-TScore * evaluateExp(TSearch * searchData) {
-    TScore * result = &searchData->stack->scores[SCORE_EXP];
+TScore * evaluateExp(TSearch * sd) {
+    TScore * result = &sd->stack->scores[SCORE_EXP];
     result->clear();
-    //TScore * mob = evaluateMobility(searchData);
-    //result->set(*mob);
-    int wp = searchData->pos->pieces[WROOK].count;
-    int bp = searchData->pos->pieces[BROOK].count;
+    /* learn piece value:
+    int pc = WBISHOP;
+    int wp = sd->pos->pieces[pc].count;
+    int bp = sd->pos->pieces[pc + WKING].count;
     if (wp != bp) {
         int delta = wp - bp;
-        result->sub(0,delta * VROOK);
-        result->add(0,delta * VPAWN * searchData->learnFactor);
+        result->sub(0, delta * PIECE_SCORE[pc].eg);
+        result->add(0, delta * 100.0 * sd->learnFactor);
     }
+     */
     return result;
+}
+
+bool skipExp(TSearch * sd) {
+    return false;
+    int pc = WBISHOP;
+    return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
 }
 
 /**
@@ -113,7 +120,7 @@ TScore * evaluateMaterial(TSearch * searchData) {
 
     // Knights
     if (wknights != bknights) {
-        value += (wknights - bknights) * VKNIGHT;
+        value += (wknights - bknights) * PHASED_SCORE(SVKNIGHT, phase);
         value += factor(wknights, bknights, FKNIGHT_OPPOSING_PAWNS, bpawns, wpawns);
         value += cond(wknights >= 2, bknights >= 2, VKNIGHT_PAIR);
         value += factor(wknights, bknights, KNIGHT_X_PIECECOUNT, wpieces + bpieces);
@@ -121,7 +128,7 @@ TScore * evaluateMaterial(TSearch * searchData) {
 
     //Bishops
     if (wbishops != bbishops) {
-        value += (wbishops - bbishops) * VBISHOP;
+        value += (wbishops - bbishops) * PHASED_SCORE(SVBISHOP, phase);
         bool wPair = wbishops > 1 && pos->whiteBishopPair(); //note: material hash includes bishop colors
         bool bPair = bbishops > 1 && pos->blackBishopPair();
         value += cond(wPair, bPair, VBISHOPPAIR);
@@ -138,7 +145,7 @@ TScore * evaluateMaterial(TSearch * searchData) {
 
     //Rooks
     if (wrooks != brooks) {
-        value += (wrooks - brooks) * VROOK;
+        value += (wrooks - brooks) * PHASED_SCORE(SVROOK, phase);
         value += cond(wrooks >= 2, brooks >= 2, VROOKPAIR);
         value += factor(wrooks, brooks, ROOK_OPPOSING_PAWNS, bpawns, wpawns);
     }
@@ -165,9 +172,9 @@ TScore * evaluateMaterial(TSearch * searchData) {
      * 1) Not having pawns makes it hard to win
      * 2) If ahead, but no pawns and no mating material the score is draw
      */
-    
+
     if (wpawns != bpawns) {
-        value += (wpawns - bpawns) * VPAWN;
+        value += (wpawns - bpawns) * PHASED_SCORE(SVPAWN, phase);
     }
     if (!wpawns || !bpawns) {
         value += cond(!wpawns, !bpawns, VNOPAWNS); //penalty for not having pawns (difficult to win)
