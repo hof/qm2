@@ -35,7 +35,6 @@ enum EVALUATION_COMPONENTS {
     SCORE_SHELTER_B,
     SCORE_EXP,
     SCORE_ROOKS,
-    SCORE_MOBILITY,
     SCORE_EVAL
 };
 
@@ -45,14 +44,14 @@ enum EVALUATION_COMPONENTS {
 
 const short VPAWN = 100;
 const short VKNIGHT = 315;
-const short VBISHOP = 340;
+const short VBISHOP = 330;
 const short VROOK = 465;
 const short VQUEEN = 925;
 const short VKING = 20000;
 
 const TScore SVPAWN = S(95, 110);
 const TScore SVKNIGHT = S(315, 300);
-const TScore SVBISHOP = S(345, 330);
+const TScore SVBISHOP = S(330, 320);
 const TScore SVROOK = S(465, 465);
 const TScore SVQUEEN = S(925, 875);
 const TScore SVKING = S(20000, 20000);
@@ -64,7 +63,7 @@ const short PIECE_VALUE[13] = {
 };
 
 const TScore PIECE_SCORE[13] = {
-    S(0,0), SVPAWN, SVKNIGHT, SVBISHOP, SVROOK, SVQUEEN, SVKING,
+    S(0, 0), SVPAWN, SVKNIGHT, SVBISHOP, SVROOK, SVQUEEN, SVKING,
     SVPAWN, SVKNIGHT, SVBISHOP, SVROOK, SVQUEEN, SVKING
 };
 
@@ -74,13 +73,8 @@ const TScore PIECE_SCORE[13] = {
 
 enum MaterialValues {
     MATERIAL_AHEAD_TRESHOLD = 80,
-    VNOPAWNS = -50,
-    VKNIGHT_PAIR = -12,
-    VBISHOPPAIR = 40,
-    VBISHOP_VS_ROOK_ENDGAME = 10,
-    VBISHOP_VS_PAWNS_ENDGAME = 10,
-    VROOKPAIR = -8,
-    VQUEEN_AND_ROOKS = -8,
+    VNOPAWNS = -80,
+    VBISHOPPAIR = 25,
     DRAWISH_QR_ENDGAME = -30,
     DRAWISH_OPP_BISHOPS = -50
 };
@@ -98,38 +92,6 @@ const short PIECEPOWER_AHEAD[] = {//in amount of pawns
     250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250
 };
 
-const short KNIGHT_X_PIECECOUNT[MAX_PIECES + 1] = {
-    -16, -12, -10, -8, -4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
-
-const short FKNIGHT_OPPOSING_PAWNS[9] = {
-    -16, -12, -8, -4, 0, 2, 4, 8, 12
-};
-
-const short BISHOPPAIR_X_PIECECOUNT[MAX_PIECES + 1] = {
-    15, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
-
-const short BISHOPPAIR_MINOR_OPPOSITION[10] = {
-    10, 5, 0, -5, -10, -15, -20, -20, -20, -20
-};
-
-const short BISHOPPAIR_OPPOSING_PAWNS[9] = {
-    15, 10, 5, 0, 0, 0, -5, -10, -15
-};
-
-const short BISHOP_X_PIECECOUNT[MAX_PIECES + 1] = {
-    -16, -12, -8, -6, -4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
-
-const short ROOK_OPPOSING_PAWNS[9] = {//rooks get stronger against less pawns
-    16, 8, 4, 2, 0, -2, -4, -8, -16
-};
-
-const short QUEEN_MINORCOUNT[MAX_PIECES + 1] = {//queens are stronger when combined with minor pieces
-    -32, -16, 0, 4, 8, 16, 24, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32
-};
-
 /******************************************
  * Pawns
  *****************************************/
@@ -137,22 +99,22 @@ const short QUEEN_MINORCOUNT[MAX_PIECES + 1] = {//queens are stronger when combi
 const TScore ISOLATED_OPEN_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10),
-    S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10),
-    S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10),
-    S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10),
-    S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10),
+    S(-12, -24), S(-14, -26), S(-16, -28), S(-18, -30), S(-18, -30), S(-16, -28), S(-14, -26), S(-12, -24),
+    S(-12, -24), S(-14, -26), S(-16, -28), S(-18, -30), S(-18, -30), S(-16, -28), S(-14, -26), S(-12, -24),
+    S(-12, -24), S(-14, -26), S(-16, -28), S(-18, -30), S(-18, -30), S(-16, -28), S(-14, -26), S(-12, -24),
+    S(-12, -24), S(-14, -26), S(-16, -28), S(-18, -30), S(-18, -30), S(-16, -28), S(-14, -26), S(-12, -24),
+    S(-12, -24), S(-14, -26), S(-16, -28), S(-18, -30), S(-18, -30), S(-16, -28), S(-14, -26), S(-12, -24),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0)
 };
 
 const TScore ISOLATED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10),
-    S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10),
-    S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10),
-    S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10),
-    S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10), S(-5, -10),
+    S(-8, -20), S(-10, -22), S(-12, -24), S(-14, -26), S(-14, -26), S(-12, -24), S(-10, -22), S(-8, -20),
+    S(-8, -20), S(-10, -22), S(-12, -24), S(-14, -26), S(-14, -26), S(-12, -24), S(-10, -22), S(-8, -20),
+    S(-8, -20), S(-10, -22), S(-12, -24), S(-14, -26), S(-14, -26), S(-12, -24), S(-10, -22), S(-8, -20),
+    S(-8, -20), S(-10, -22), S(-12, -24), S(-14, -26), S(-14, -26), S(-12, -24), S(-10, -22), S(-8, -20),
+    S(-8, -20), S(-10, -22), S(-12, -24), S(-14, -26), S(-14, -26), S(-12, -24), S(-10, -22), S(-8, -20),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0)
 };
 
@@ -170,12 +132,12 @@ const TScore DOUBLED_PAWN[64] = {
 
 const TScore PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(40, 65), S(40, 65), S(40, 65), S(40, 65), S(40, 65), S(40, 65), S(40, 65), S(40, 65),
-    S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(25, 50),
-    S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40),
-    S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(15, 30),
-    S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20),
-    S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20),
+    S(50, 75), S(40, 65), S(40, 65), S(40, 65), S(40, 65), S(40, 65), S(40, 65), S(50, 75),
+    S(35, 60), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(35, 60),
+    S(30, 50), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(30, 50),
+    S(25, 40), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(25, 40),
+    S(20, 30), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(20, 30),
+    S(20, 30), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(20, 30),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
 };
 
@@ -211,18 +173,33 @@ const TScore SHELTER_PAWN[64] = {
     S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
     S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
     S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
-    S(5, 4), S(5, 4), S(5, 4), S(5, 4), S(5, 4), S(5, 4), S(5, 4), S(5, 4),
-    S(15, 4), S(15, 4), S(10, 4), S(2, 4), S(2, 4), S(10, 4), S(15, 4), S(15, 4),
-    S(30, 4), S(30, 4), S(25, 4), S(5, 4), S(5, 4), S(25, 4), S(30, 4), S(30, 4),
+    S(5, 6), S(5, 6), S(5, 4), S(5, 4), S(5, 4), S(5, 4), S(15, 6), S(15, 6),
+    S(25, 8), S(25, 8), S(20, 4), S(2, 4), S(2, 4), S(10, 4), S(25, 8), S(25, 8),
+    S(40, 10), S(40, 10), S(35, 4), S(5, 4), S(5, 4), S(25, 4), S(40, 10), S(40, 10),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
 };
+
+const TScore STORM_PAWN[64] = {
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+    S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2),
+    S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2),
+    S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
+    S(4, 4), S(4, 4), S(4, 4), S(4, 4), S(4, 4), S(4, 4), S(4, 4), S(4, 4),
+    S(10, 4), S(10, 4), S(10, 4), S(10, 4), S(10, 4), S(10, 4), S(10, 4), S(10, 4),
+    S(20, 4), S(20, 4), S(20, 4), S(20, 4), S(20, 4), S(20, 4), S(20, 4), S(20, 4),
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+};
+
 
 const TScore SHELTER_OPEN_FILES[4] = {
     S(10, 0), S(-20, -5), S(-50, -10), S(-100, -15)
 };
 
+const TScore SHELTER_OPEN_EDGE_FILE = S(-110, -10);
+
 const TScore SHELTER_CASTLING_KINGSIDE = S(50, 10);
 const TScore SHELTER_CASTLING_QUEENSIDE = S(40, 10);
+
 
 int evaluate(TSearch * searchData, int alpha, int beta);
 
@@ -236,8 +213,6 @@ TScore * evaluateMaterial(TSearch * searchData);
 TScore * evaluatePawns(TSearch * searchData);
 
 TScore * evaluateRooks(TSearch * searchData);
-
-TScore * evaluateMobility(TSearch * searchData);
 
 /*******************************************************************************
  * Helper functions

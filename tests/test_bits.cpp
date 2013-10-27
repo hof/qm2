@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 #include <iostream>
+#include <stdio.h>
 
 #include "engine.h"
 
@@ -108,7 +109,7 @@ int main(int argc, char** argv) {
     if (popCount(x1) != 6) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popCount(x1) != 6: " << popCount(x1) << std::endl;
     }
-     if (popCount(x2) != 4) {
+    if (popCount(x2) != 4) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popCount(x2) != 4: " << popCount(x2) << std::endl;
     }
     if (popCount(x3) != 2) {
@@ -122,28 +123,28 @@ int main(int argc, char** argv) {
     }
     std::cout << "   done" << std::endl << std::endl;
 
-    
+
     /*
      * North / South fill tests
      */
-    
+
     U64 bb = BIT(a4);
     int sq = BSF(bb);
     if (sq != a4) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bb=SQ2BB(a4);BB2SQ(bb) != a4: " << sq << std::endl;
     }
     bb |= BIT(b7) | BIT(g6) | BIT(h1);
-    
+
     U64 nfill = FRONTFILL(bb);
     U64 nfill_expected = BIT(a4) | BIT(a5) | BIT(a6) | BIT(a7) | BIT(a8)
-                | BIT(b7) | BIT(b8) | BIT(g6) | BIT(g7) | BIT(g8) | (FILE_H);
-    
+            | BIT(b7) | BIT(b8) | BIT(g6) | BIT(g7) | BIT(g8) | (FILE_H);
+
     if (nfill != nfill_expected) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=nfill != nfill_expected: " << nfill << " != " << nfill_expected << std::endl;
         printBB("nfill", nfill);
         printBB("nfill_expected", nfill_expected);
     }
-    
+
     U64 sfill = FRONTFILL_B(bb);
     U64 sfill_expected = BIT(a4) | BIT(a3) | BIT(a2) | BIT(a1) | (FILE_B ^ BIT(b8))
             | BIT(h1) | (FILE_G ^ BIT(g7) ^ BIT(g8));
@@ -152,40 +153,39 @@ int main(int argc, char** argv) {
         printBB("sfill", sfill);
         printBB("sfill_expected", sfill_expected);
     }
-    
+
     U64 ffill = FILEFILL(bb);
     U64 ffill_expected = FILE_A | FILE_B | FILE_G | FILE_H;
-    
+
     if (ffill != ffill_expected) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=sfill != sfill_expected: " << ffill << " != " << ffill_expected << std::endl;
         printBB("ffill", ffill);
         printBB("ffill_expected", ffill_expected);
     }
-    
+
     U64 openf = ~FILEFILL(bb);
     U64 openf_expected = FILE_C | FILE_D | FILE_E | FILE_F;
-    
+
     if (openf != openf_expected) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=openf != openf_expected: " << openf << " != " << openf_expected << std::endl;
         printBB("openf", openf);
         printBB("openf_expected", openf_expected);
     }
-    
+
     U64 nshift = NORTH1(RANK_8 | RANK_1);
     if (nshift != RANK_2) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=nshift != nshift_expected: " << nshift << " != " << RANK_2 << std::endl;
         printBB("nshift", nshift);
         printBB("nshift_expected", RANK_2);
     }
-    
+
     U64 sshift = SOUTH1(RANK_8 | RANK_1);
     if (sshift != RANK_7) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=sshift != sshift_expected: " << sshift << " != " << RANK_7 << std::endl;
         printBB("sshift", nshift);
         printBB("sshift_expected", RANK_2);
     }
-    
-    
+
     /*
      * Finalize 
      */

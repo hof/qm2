@@ -14,6 +14,7 @@
 #include "defs.h"
 
 extern const U64 KingMoves[64];
+extern const U64 KingZone[64];
 extern const U64 QueenMoves[64];
 extern const U64 RookMoves[64];
 extern const U64 BishopMoves[64];

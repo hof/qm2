@@ -42,7 +42,7 @@ enum SEARCH_CONSTANTS {
     HIGH_DEPTH = ONE_PLY * 8
 };
 
-static const short FUTILITY_MARGIN[7] = {
+static const short FUTILITY_MARGIN[LOW_DEPTH+1] = {
     2 * VPAWN,
     VKNIGHT, VKNIGHT,
     VROOK, VROOK,
@@ -54,7 +54,7 @@ static const short FUTILITY_MARGIN[7] = {
 #define NOTPV(a,b) (((a) + 1) >= (b))
 #define ISPV(a,b) (((a) + 1) < (b))
 
-const short QCHECKDEPTH = 14;
+const short QCHECKDEPTH = 10;
 
 class TRootMove {
 public:
@@ -133,6 +133,7 @@ struct TSearchStack {
 
     int gamePhase;
     int evaluationScore;
+    bool equalPawnHash;
     TScore scores[MAX_EVALUATION_COMPONENTS];
 
     int reduce;

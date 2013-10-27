@@ -401,6 +401,11 @@ struct TBoard {
     int givesCheck(TMove * move);
     bool active(TMove * move);
     bool checksPiece(TMove * move);
+    
+    inline bool push7th(TMove * move) {
+        return (move->piece == WPAWN && move->tsq >= h7) 
+                || (move->piece == BPAWN && move->tsq <= h2);
+    }
 
     inline U64 promotingWhitePawns() {
         return whitePawns & RANK_7;

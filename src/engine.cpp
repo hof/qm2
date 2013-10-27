@@ -38,7 +38,7 @@ void * TEngine::_think(void* engineObjPtr) {
     TEngine * engine = (TEngine*) engineObjPtr;
     TGameSettings game = engine->gameSettings;
     game.opponent.copy(&engine->gameSettings.opponent);
-    
+
     TSearch * searchData = new TSearch(engine->_rootFen.c_str(),
             engine->_pct,
             engine->_hashTable,
@@ -62,13 +62,13 @@ void * TEngine::_think(void* engineObjPtr) {
     double learnFactor = game.learnFactor;
     evaluate(searchData, -SCORE_INFINITE, SCORE_INFINITE);
     int phase = searchData->stack->gamePhase;
-    searchData->drawContempt = PHASED_SHORT(game.opponent.DrawContempt(), 
-            game.opponent.DrawContempt()/2, phase);
+    searchData->drawContempt = PHASED_SHORT(game.opponent.DrawContempt(),
+            game.opponent.DrawContempt() / 2, phase);
     if (root->boardFlags->WTM == false) {
-        searchData->drawContempt = - searchData->drawContempt;
+        searchData->drawContempt = -searchData->drawContempt;
     }
     searchData->drawContempt &= GRAIN;
-    
+
     tm->setStartTime();
     int myTime = root->boardFlags->WTM ? whiteTime : blackTime;
     int oppTime = root->boardFlags->WTM ? blackTime : whiteTime;
@@ -312,6 +312,7 @@ void TEngine::analyse() {
 
 
     //loop through piece square tables
+    /*
     int pct_score = 0;
     const std::string PIECE_NAME[13] = {"X", "WP", "WN",
         "WB", "WR", "WQ", "WK", "BP",
@@ -327,6 +328,7 @@ void TEngine::analyse() {
         }
 
     }
+     **/
 
     //TBook * book = new TBook();
     /*
@@ -409,15 +411,14 @@ void * TEngine::_learn(void * engineObjPtr) {
      * Constants
      */
 
-    const int MAXDEPTH = 4; //default: depth 2
-    const int MAXGAMECOUNT = 20000; //Sample size, 920+ recommended. Use even numbers. 
+    const int MAXDEPTH = 2; //default: depth 2
+    const int MAXGAMECOUNT = 50000; //Sample size, 920+ recommended. Use even numbers. 
 
     double MAX_WINDOW = 2.0; //maximum adjustment step for lower/upper bound
     double STOP_WINDOW = 0.2; //stop if the difference between lower and upperbound is <= this value
-    const int STOPSCORE = 150; //if the score is higher than this for both sides, the game is consider a win
+    const int STOPSCORE = 120; //if the score is higher than this for both sides, the game is consider a win
     const int MAXPLIES = 200; //maximum game length in plies
     const int HASH_SIZE_IN_MB = 1;
-
 
 
     /*
@@ -441,7 +442,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     double bestFactor = 1.0;
     double upperBound = SCORE_INFINITE;
     double lowerBound = -SCORE_INFINITE;
-    int scores[1024]; //1024 should be sufficient
+
 
     /*
      * Prepare GAMECOUNT/2 starting positions, using the opening book
@@ -478,7 +479,6 @@ void * TEngine::_learn(void * engineObjPtr) {
     while (ABS(upperBound - lowerBound) > STOP_WINDOW) {
         int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
         U64 nodes[2] = {0, 0}; //total node counts for both sides
-        scores[step] = 0;
         std::cout << "\nEngine(" << strongest << ") vs Engine(" << opponent << ")" << std::endl;
         hash1->clear(); //clear hash: the evaluation scores changed.
         hash2->clear();
@@ -558,7 +558,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                     nodes[1 - learning_side] += sd_game->nodes;
 
                     //stop conditions
-                    if (sd_game->pos->boardFlags->fiftyCount >= 100 || sd_game->pos->isDraw()) {
+                    if (sd_game->pos->boardFlags->fiftyCount >= 20 || sd_game->pos->isDraw()) {
                         stats[0]++; //draw
                         gameover = true;
                         break;
@@ -604,9 +604,10 @@ void * TEngine::_learn(void * engineObjPtr) {
                 double tp = stats[1] + 0.5 * stats[0];
                 double tmax = batch;
                 double tscore = tp / tmax;
-                if (tscore > 0.5) {
+                double max_sd = 1.1 / pow(batch, 0.48); //safe(?) standard deviation
+                if (tscore > 0.5 + max_sd / 2) {
                     std::cout << "+";
-                } else if (tscore < 0.5) {
+                } else if (tscore < 0.5 - max_sd / 2) {
                     std::cout << "-";
                 } else {
                     std::cout << "=";
@@ -614,7 +615,6 @@ void * TEngine::_learn(void * engineObjPtr) {
                 std::cout.flush();
                 //check if the result if significant enough before finishing the full batch
                 if (batch > 200) {
-                    double max_sd = 1.1 / pow(batch, 0.48); //safe(?) standard deviation
                     if ((tscore + max_sd) < 0.5) {
                         std::cout << "<";
                         break;
@@ -632,7 +632,6 @@ void * TEngine::_learn(void * engineObjPtr) {
         totalNodes[0] += nodes[0];
         totalNodes[1] += nodes[1];
         double score = (100.0 * points) / maxPoints;
-        scores[step] = score;
         int elo = round(-400.0 * log(1 / (points / maxPoints) - 1) / log(10));
         std::cout << "\nGames: " << batch << " Win: " << stats[1] << " Loss: " << stats[2] << " Draw: " << stats[0] << " Score: " << points << "/" << maxPoints << " (" << score << "%, " << wins << ", Elo: " << elo << ") " << std::endl;
 
@@ -664,7 +663,11 @@ void * TEngine::_learn(void * engineObjPtr) {
                 std::cout << "Engine(" << strongest << ") is a bit stronger than engine(" << opponent << ")" << std::endl;
             } else if (fscore < 0.5) {
                 std::cout << "Engine(" << strongest << ") is a bit weaker than engine(" << opponent << ")" << std::endl;
-                bestFactor += (opponent - strongest) * adjust;
+                if (opponent < bestFactor) {
+                    bestFactor = opponent; //prefer the lowest factor
+                } else {
+                    bestFactor += (opponent - strongest) * adjust; //carefully adjust to a higher best
+                }
                 opponent = strongest;
                 strongest = bestFactor;
             } else {
@@ -680,15 +683,26 @@ void * TEngine::_learn(void * engineObjPtr) {
                 upperBound -= MAX(STOP_WINDOW / 2, ABS(upperBound - opponent) * adjust);
             } else if (strongest > opponent) {
                 lowerBound += MAX(STOP_WINDOW / 2, ABS(lowerBound - opponent) * adjust);
-
             }
+            if (step < 2) {
+                //cancel altogether if the results are not significant in early, obvious steps (-1 vs 1) and (1 vs 0) or (-1 vs 0)
+                std::cout << "Canceling. The evaluation component does not work or more games are needed to detect significance." << std::endl;
+                break;
+            }
+
         }
         std::cout << "\nBest factor: " << bestFactor << std::endl;
-        std::cout << "Lower bound: " << lowerBound << std::endl;
-        std::cout << "Upper bound: " << upperBound << std::endl;
+        std::cout << "Lower bound: " << MIN(bestFactor, lowerBound) << std::endl;
+        std::cout << "Upper bound: " << MAX(bestFactor, upperBound) << std::endl;
 
 
         //determine opponent
+        step++;
+        if (step == 1) {
+            opponent = 0;
+            continue;
+        }
+
         double delta_a = ABS(bestFactor - lowerBound);
         double delta_b = ABS(bestFactor - upperBound);
         if (delta_b > delta_a) {
