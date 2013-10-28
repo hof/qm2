@@ -180,14 +180,15 @@ TScore * evaluateMaterial(TSearch * searchData) {
      * Endgame adjustment: 
      * 2) Rooks and queen endgames are drawish. Reduce any small material advantage.
      */
-    if (value
+    if (value 
+            && ABS(value) > DRAWISH_QR_ENDGAME
             && wpieces <= 3
             && wpieces == bpieces
             && wminors < 2
             && bminors < 2
             && ABS(value) < 2 * VPAWN
             && ABS(piecepower) < VPAWN / 2) {
-        value += MAX(-(value>>1), DRAWISH_QR_ENDGAME);
+        value += cond(value > 0, value < 0, DRAWISH_QR_ENDGAME);
     }
     
     /*
@@ -271,7 +272,13 @@ void init_pct(TSCORE_PCT & pct) {
             scores[sq].mg -= 5;
         }
         if (bbsq & FRONTFILL(CENTER)) {
-            scores[sq].add(5);
+            scores[sq].add(10, 0);
+        }
+        if (bbsq & CENTER) {
+            scores[sq].add(10, 0);
+        }
+        if (bbsq & LARGE_CENTER) {
+            scores[sq].add(10, 0);
         }
         U64 caps = WPawnCaptures[sq] | WPawnMoves[sq];
         while (caps) {
@@ -412,7 +419,6 @@ TScore * evaluatePawns(TSearch * searchData) {
     U64 passers = 0;
     U64 openW = ~FILEFILL(pos->blackPawns);
     U64 openB = ~FILEFILL(pos->whitePawns);
-    U64 allPawns = pos->whitePawns | pos->blackPawns;
     TPiecePlacement * wPawns = &pos->pieces[WPAWN];
     for (int i = 0; i < wPawns->count; i++) {
         int sq = wPawns->squares[i];

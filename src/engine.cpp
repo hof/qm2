@@ -155,18 +155,18 @@ void * TEngine::_think(void* engineObjPtr) {
         int alpha = -SCORE_INFINITE;
         int beta = SCORE_INFINITE;
         int prevScore = -SCORE_INFINITE;
-        int aspirationWindows[] = {
-            ((VPAWN / 4) & GRAIN) + 1,
-            ((VROOK / 1) & GRAIN) + 1,
-            ((VQUEEN / 1) & GRAIN) + 1,
-            SCORE_INFINITE,
-            SCORE_INFINITE,
-            SCORE_INFINITE
-        };
-        int window = 0;
+        const int aspirationWindows[] = {8, 25, 125, 525, 950, SCORE_INFINITE,
+            SCORE_INFINITE, SCORE_INFINITE};
+        int alpha_window = 0;
+        int beta_window = 0;
+        int lowest = SCORE_INFINITE;
+        int highest = -SCORE_INFINITE;
         int depth = ONE_PLY;
         int resultScore = 0;
         while (depth <= maxDepth * ONE_PLY && !searchData->stopSearch) {
+
+            //std::cout << "pvs (" << alpha << ", " << beta << ", " << depth << ")" << std::endl;
+
             int score = searchData->pvs_root(alpha, beta, depth);
             int type = score <= alpha ? FAILLOW : score >= beta ? FAILHIGH : EXACT;
 
@@ -209,23 +209,29 @@ void * TEngine::_think(void* engineObjPtr) {
              * - Otherwise open the aspiration window further and research 
              *   on the same depth. Open it fully in case of mate-scores.
              */
+            lowest = MIN(score, lowest);
+            highest = MAX(score, highest);
             int diffScore = ABS(score - prevScore);
             if (score <= alpha) {
-                window = diffScore < VPAWN ? window + 2 : window + 3;
+                alpha_window++;
+                alpha = MIN(lowest, score - aspirationWindows[alpha_window] - diffScore);
             } else if (score >= beta) {
-                window = diffScore < VPAWN ? window + 1 : window + 2;
+                beta_window++;
+                beta = MAX(highest, score + aspirationWindows[beta_window] + diffScore);
             } else {
-                window = 0;
-                if (score > VKNIGHT) {
-                    window = 1 + (score > VROOK);
-                }
+                alpha_window = 0; //reset aspiration windows
+                beta_window = 0;
                 depth += ONE_PLY;
+                alpha = lowest - 1;
+                beta = highest + 1;
+                if (depth > 20) {
+                    lowest = MAX(lowest, score - 16 - 1);
+                    highest = MIN(highest, score + 16 + 1);
+                }
             }
 
-            if (score < SCORE_MATE - MAX_PLY) {
-                alpha = MAX(-SCORE_INFINITE, score - aspirationWindows[window]);
-                beta = MIN(SCORE_INFINITE, score + aspirationWindows[window]);
-            } else {
+
+            if (score >= SCORE_MATE - MAX_PLY) {
                 alpha = -SCORE_MATE;
                 beta = SCORE_MATE;
             }

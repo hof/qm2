@@ -171,12 +171,12 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         stack->pvCount = 0;
         if (pos->currentPly > selDepth) {
             selDepth = pos->currentPly;
-            //debug_print_search();
         }
         int score = qsearch(alpha, beta, 0, QCHECKDEPTH);
         return score;
     }
 
+   
     nodes++;
 
     /* 
@@ -355,11 +355,24 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         };
     }
 
+    /*
+     * 9. Move based extensions.
+     * These are applied to the first (and supposedly best) move only.
+     */
+    int extendMove = 0;
+    int givesCheck = pos->givesCheck(firstMove);
+    if (extend < ONE_PLY) {
+        if (givesCheck) {
+            extendMove = HALF_PLY;
+        } else if (pos->push7th(firstMove)) {
+            extendMove = HALF_PLY; //promotion or pawn push to 7th rank
+        }    
+    }
+   
     stack->bestMove.setMove(firstMove);
     stack->reduce = 0;
-    int givesCheck = pos->givesCheck(firstMove);
     forward(firstMove, givesCheck);
-    int bestScore = -pvs(-beta, -alpha, depth - ONE_PLY + extend);
+    int bestScore = -pvs(-beta, -alpha, depth - ONE_PLY + extend + extendMove);
     backward(firstMove);
     if (bestScore > alpha) {
         if (bestScore >= beta) {
@@ -431,18 +444,15 @@ int TSearch::pvs(int alpha, int beta, int depth) {
          */
         if (stack->moveList.stage >= STOP) {
             /* remaining moves (no captures, castling, promotions) */
-            bool active = givesCheck || pos->active(move);
+            bool active = givesCheck || pos->active(move) || pos->push7th(move);
             if (fGap && !active) {
                 continue;
             } else if (depth > ONE_PLY) {
                 reduce += type != PVNODE;
                 reduce += type == CUTNODE;
                 reduce += pos->SEE(move) < 0;
-                if (reduce > 0 && active) {
-                    reduce = MIN(ONE_PLY, reduce - HALF_PLY - pos->push7th(move));
-                } else {
-                    reduce = MIN(2 * ONE_PLY + reduce, BSR(searchedMoves + 1) + reduce);
-                }
+                reduce += BSR(searchedMoves + 1 - (type == PVNODE) - active);
+                reduce >>= active;
             }
         }
         stack->reduce = reduce;
@@ -629,14 +639,14 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int maxCheckPly) {
 
 void TSearch::debug_print_search(int alpha, int beta) {
     std::cout << "print search (" << alpha << ", " << beta << "): " << std::endl;
-    
+
     TBoard pos2;
     memcpy(&pos2, pos, sizeof (TBoard));
     while (pos2.currentPly > 0) {
         TMove * move = &getStack(pos2.currentPly - 1)->move;
         pos2.backward(move);
     }
-    
+
     std::cout << "ROOT FEN: " << pos2.asFen() << std::endl;
     std::cout << "Path ";
     for (int i = 0; i < pos->currentPly; i++) {
@@ -649,6 +659,6 @@ void TSearch::debug_print_search(int alpha, int beta) {
     std::cout << "Hash: " << pos->boardFlags->hashCode << std::endl;
     std::cout << "Nodes: " << nodes << std::endl;
     std::cout << "Skip nullmove: " << this->skipNull << std::endl;
-    
+
     std::cout << std::endl;
 }
