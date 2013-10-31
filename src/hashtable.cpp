@@ -5,10 +5,10 @@
 THashTable::THashTable(int totalSizeInMb) {
     const int ttEntrySize = sizeof (TTranspositionTableEntry);
     const int ttTableCount = 2;
-    const int sizeOfTranspositionTable = totalSizeInMb;
-    const int sizeOfMaterialTable = 8;
-    const int sizeOfPawnTable = 16;
+    const int sizeOfMaterialTable = 1;
+    const int sizeOfPawnTable = MIN(256, totalSizeInMb >> 2);
     const int sizeOfEvalTable = 1;
+    const int sizeOfTranspositionTable = MAX(1, totalSizeInMb - sizeOfMaterialTable - sizeOfPawnTable - sizeOfEvalTable);
     const int maxEntriesPerTranspositionTable = (sizeOfTranspositionTable * 1024 * 1024) / (ttTableCount * ttEntrySize);
     const int ttTableSize = maxEntriesPerTranspositionTable ? bitScanReverse(maxEntriesPerTranspositionTable) : 0;
     const int materialTableEntrySize = sizeof (TMaterialTableEntry);

@@ -69,7 +69,6 @@ void TOutputHandler::sendHashTableStats(int ttHits, int ptHits, int mtHits, int 
     outputString += ntos(ptHits);
     outputString += "% mt:";
     outputString += ntos(mtHits);
-    outputString += "%";
     outputString += "% et:";
     outputString += ntos(etHits);
     outputString += "%";
