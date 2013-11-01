@@ -176,7 +176,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         return score;
     }
 
-   
+
     nodes++;
 
     /* 
@@ -366,9 +366,9 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             extendMove = HALF_PLY;
         } else if (pos->push7th(firstMove)) {
             extendMove = HALF_PLY; //promotion or pawn push to 7th rank
-        }    
+        }
     }
-   
+
     stack->bestMove.setMove(firstMove);
     stack->reduce = 0;
     forward(firstMove, givesCheck);
@@ -450,11 +450,15 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             } else if (depth > ONE_PLY) {
                 reduce += type != PVNODE;
                 reduce += type == CUTNODE;
-                reduce += pos->SEE(move) < 0;
-                reduce += BSR(searchedMoves + 1 - (type == PVNODE) - active);
+                reduce += reduce > 0 && pos->SEE(move) < 0;
+                reduce += BSR(searchedMoves + 1);
                 reduce >>= active;
+                if (reduce > 0) {
+                    reduce -= type == PVNODE;
+                }
             }
         }
+
         stack->reduce = reduce;
         forward(move, givesCheck);
         int score = -pvs(-alpha - 1, -alpha, depth - ONE_PLY - reduce + extend);
@@ -644,7 +648,7 @@ void TSearch::debug_print_search(int alpha, int beta) {
     memcpy(&pos2, pos, sizeof (TBoard));
     while (pos2.currentPly > 0) {
         TMove * move = &getStack(pos2.currentPly - 1)->move;
-        pos2.backward(move);
+        move->piece ? pos2.backward(move) : pos2.backward();
     }
 
     std::cout << "ROOT FEN: " << pos2.asFen() << std::endl;
@@ -661,4 +665,5 @@ void TSearch::debug_print_search(int alpha, int beta) {
     std::cout << "Skip nullmove: " << this->skipNull << std::endl;
 
     std::cout << std::endl;
+    exit(0);
 }

@@ -155,8 +155,7 @@ void * TEngine::_think(void* engineObjPtr) {
         int alpha = -SCORE_INFINITE;
         int beta = SCORE_INFINITE;
         int prevScore = -SCORE_INFINITE;
-        const int aspirationWindows[] = {8, 25, 125, 525, 950, SCORE_INFINITE,
-            SCORE_INFINITE, SCORE_INFINITE};
+        const int windows[] = {(1<<GRAIN_SIZE)+1, 30, 120, 350, 550, 950, SCORE_INFINITE };
         int alpha_window = 0;
         int beta_window = 0;
         int lowest = SCORE_INFINITE;
@@ -214,26 +213,31 @@ void * TEngine::_think(void* engineObjPtr) {
             int diffScore = ABS(score - prevScore);
             if (score <= alpha) {
                 alpha_window++;
-                alpha = MIN(lowest, score - aspirationWindows[alpha_window] - diffScore);
+                alpha = MIN(lowest, score - windows[alpha_window] - diffScore);
             } else if (score >= beta) {
                 beta_window++;
-                beta = MAX(highest, score + aspirationWindows[beta_window] + diffScore);
+                beta = MAX(highest, score + windows[beta_window] + diffScore);
             } else {
-                alpha_window = 0; //reset aspiration windows
-                beta_window = 0;
-                depth += ONE_PLY;
-                alpha = lowest - 1;
-                beta = highest + 1;
-                if (depth > 20) {
-                    lowest = MAX(lowest, score - 16 - 1);
-                    highest = MIN(highest, score + 16 + 1);
+                alpha = MIN(lowest, score - windows[0]);
+                beta = MAX(highest, score + windows[0]);
+                alpha_window = beta_window = 0;
+                //reset highest and lowest every 5 ply
+                if (depth % 10 == 0) {
+                    lowest = MAX(lowest, score - windows[1]);
+                    highest = MIN(highest, score + windows[1]);
                 }
+                depth += ONE_PLY;  
             }
 
 
             if (score >= SCORE_MATE - MAX_PLY) {
                 alpha = -SCORE_MATE;
                 beta = SCORE_MATE;
+            } else {
+                //make sure alpha and beta are uneven to distinguish bound scores 
+                //(always uneven) from real scores (always even)
+                alpha = ((alpha+1) & ~1) - 1;
+                beta = ((beta-1) & ~1) + 1;
             }
 
             /*
@@ -302,7 +306,7 @@ void TEngine::analyse() {
     std::cout << "\n1) Piece Square tables: ";
     searchData->pos->boardFlags->pct.print(phase);
     std::cout << "\n2) Material balance: ";
-    searchData->stack->scores[SCORE_MATERIAL].print(phase);
+    std::cout << searchData->stack->scores[SCORE_MATERIAL].mg;
     std::cout << "\n3) Game phase: " << phase;
     std::cout << "\n4) Pawn score: ";
     searchData->stack->scores[SCORE_PAWNS].print(phase);
@@ -318,7 +322,7 @@ void TEngine::analyse() {
 
 
     //loop through piece square tables
-    /*
+    
     int pct_score = 0;
     const std::string PIECE_NAME[13] = {"X", "WP", "WN",
         "WB", "WR", "WQ", "WK", "BP",
@@ -334,8 +338,7 @@ void TEngine::analyse() {
         }
 
     }
-     **/
-
+    
     //TBook * book = new TBook();
     /*
      * Analyse best move doing a shallow search

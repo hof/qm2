@@ -12,7 +12,7 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
     int phase = stack->gamePhase;
     TBoard * pos = searchData->pos;
     result += pos->boardFlags->pct.get(phase);
-    result += evaluateMaterial(searchData)->get(phase);
+    result += evaluateMaterial(searchData);
 
     stack->equalPawnHash = pos->currentPly > 0
             && (searchData->stack - 1)->evaluationScore != SCORE_INVALID
@@ -56,7 +56,7 @@ TScore * evaluateExp(TSearch * sd) {
 }
 
 bool skipExp(TSearch * sd) {
-    //return false;
+    return false;
     int pc = WROOK;
     return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
 }
@@ -65,7 +65,7 @@ bool skipExp(TSearch * sd) {
  * Evaluate material score and set the current game phase
  * @param searchData search meta-data object
  */
-TScore * evaluateMaterial(TSearch * searchData) {
+short evaluateMaterial(TSearch * searchData) {
 
     /*
      * 1. Get the score from the last stack record if the previous move was quiet, 
@@ -77,7 +77,7 @@ TScore * evaluateMaterial(TSearch * searchData) {
             && (searchData->stack - 1)->evaluationScore != SCORE_INVALID) {
         searchData->stack->scores[SCORE_MATERIAL] = (searchData->stack - 1)->scores[SCORE_MATERIAL];
         searchData->stack->gamePhase = (searchData->stack - 1)->gamePhase;
-        return &searchData->stack->scores[SCORE_MATERIAL];
+        return searchData->stack->scores[SCORE_MATERIAL].mg;
     }
 
     /*
@@ -85,7 +85,7 @@ TScore * evaluateMaterial(TSearch * searchData) {
      */
     searchData->hashTable->mtLookup(searchData);
     if (searchData->stack->scores[SCORE_MATERIAL].valid()) {
-        return &searchData->stack->scores[SCORE_MATERIAL];
+        return searchData->stack->scores[SCORE_MATERIAL].mg;
     }
 
     /*
@@ -151,46 +151,55 @@ TScore * evaluateMaterial(TSearch * searchData) {
         value += (wpawns - bpawns) * PHASED_SCORE(SVPAWN, phase);
     }
 
+
+
     /* 
      * Endgame adjustment: 
      * 1) Not having pawns makes it hard to win
      * 2) If ahead, but no pawns and no mating material the score is draw
      */
 
-    if (!wpawns || !bpawns) {
-        if (!wpawns && piecepower > 0 && (piecepower < 2 * VPAWN
-                || (wpieces == 1 && wminors == 1)
-                || (wpieces == 2 && wminors == 1 && piecepower < 4 * VPAWN)
-                || (wpieces == 2 && wknights == 2)
-                || (wpieces == wminors && bpieces == bminors && wminors < 3
-                && bminors < 3 && wminors && bminors))) {
-            value = piecepower >> 1;
-        } else if (!bpawns && piecepower < 0 && (piecepower > -2 * VPAWN
-                || (bpieces == 1 && bminors == 1)
-                || (bpieces == 2 && bknights == 2)
-                || (bpieces == 2 && bminors == 1 && piecepower > -4 * VPAWN)
-                || (bpieces == bminors && wpieces == wminors && bminors < 3
-                && wminors < 3 && bminors && wminors))) {
-            value = piecepower >> 1;
+    if (!wpawns && bpawns) {
+        if (value > 0 && piecepower > 0 && piecepower < 4 * VPAWN) {
+            if (wminors < 2 && wrooks == brooks && wqueens == bqueens) {
+                value >>= 2;
+            } else {
+                value >>= 1;
+            }
         }
-        value += cond(!wpawns, !bpawns, VNOPAWNS); //penalty for not having pawns (difficult to win)
+        value += VNOPAWNS;
+    } else if (!bpawns && wpawns) {
+        if (piecepower > -4 * VPAWN && piecepower < 0) {
+            if (value < 0 && piecepower < 0 && piecepower > -4 * VPAWN) {
+                if (bminors < 2 && wrooks == brooks && wqueens == bqueens) {
+                    value >>= 2;
+                } else {
+                    value >>= 1;
+                }
+            }
+        }
+        value -= VNOPAWNS;
+    } else if (!wpawns && !bpawns) {
+        if (ABS(piecepower) < 4 * VPAWN) {
+            value >>= 3;
+        }
     }
 
     /* 
      * Endgame adjustment: 
      * 2) Rooks and queen endgames are drawish. Reduce any small material advantage.
      */
-    if (value 
-            && ABS(value) > DRAWISH_QR_ENDGAME
-            && wpieces <= 3
-            && wpieces == bpieces
+    if (value
             && wminors < 2
             && bminors < 2
+            && wpieces <= 3
+            && wpieces == bpieces
+            && ABS(value) > ABS(DRAWISH_QR_ENDGAME)
             && ABS(value) < 2 * VPAWN
             && ABS(piecepower) < VPAWN / 2) {
         value += cond(value > 0, value < 0, DRAWISH_QR_ENDGAME);
     }
-    
+
     /*
      * Endgame adjustment:
      * Opposite  bishop ending is drawish
@@ -211,10 +220,10 @@ TScore * evaluateMaterial(TSearch * searchData) {
 
 
 
-    searchData->stack->scores[SCORE_MATERIAL] = value;
+    searchData->stack->scores[SCORE_MATERIAL].set(value);
     searchData->stack->gamePhase = phase;
     searchData->hashTable->mtStore(searchData, value, phase);
-    return &searchData->stack->scores[SCORE_MATERIAL];
+    return value;
 }
 
 void init_pct(TSCORE_PCT & pct) {
@@ -238,9 +247,9 @@ void init_pct(TSCORE_PCT & pct) {
             1, 2, 3, 4, 4, 3, 2, 1
         },
         {
-            4, 5, 7, 7, 7, 7, 5, 4,
-            4, 5, 7, 7, 7, 7, 5, 4,
-            3, 4, 5, 7, 7, 5, 4, 3,
+            1, 2, 3, 4, 4, 3, 2, 1,
+            2, 3, 3, 5, 5, 3, 3, 2,
+            3, 3, 4, 6, 6, 4, 3, 3,
             2, 3, 5, 7, 7, 5, 3, 2,
             2, 3, 5, 7, 7, 5, 3, 2,
             2, 3, 4, 5, 5, 4, 3, 2,
@@ -358,8 +367,8 @@ void init_pct(TSCORE_PCT & pct) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].mg *= 0.15; //mobility is less important because queens move fast
-        scores[sq].eg *= 0.25; //mobility is less important because queens move fast
+        scores[sq].mg *= 0.15;
+        scores[sq].eg *= 0.50;
         scores[sq].add(QUEEN_OFFSET);
         scores[sq].round();
         pct[WQUEEN][sq].set(scores[sq]);
@@ -415,6 +424,8 @@ TScore * evaluatePawns(TSearch * searchData) {
     TBoard * pos = searchData->pos;
     TScore pawnScore;
     pawnScore = 0;
+    int wkpos = *pos->whiteKingPos;
+    int bkpos = *pos->blackKingPos;
 
     U64 passers = 0;
     U64 openW = ~FILEFILL(pos->blackPawns);
@@ -447,9 +458,12 @@ TScore * evaluatePawns(TSearch * searchData) {
         if (passed) {
             pawnScore.add(PASSED_PAWN[tSq]);
             passers |= sqBit;
+            if (beforeMe & pos->blackKings) { //blocked by king
+                pawnScore.sub(PASSED_PAWN[sq].mg >> 1, PASSED_PAWN[sq].eg >> 1);
+            }
         }
     }
-
+    
     TPiecePlacement * bPawns = &pos->pieces[BPAWN];
     for (int i = 0; i < bPawns->count; i++) {
         int sq = bPawns->squares[i];
@@ -478,9 +492,16 @@ TScore * evaluatePawns(TSearch * searchData) {
         if (passed) {
             pawnScore.sub(PASSED_PAWN[tSq]);
             passers |= sqBit;
+            if (beforeMe & pos->whiteKings) { //blocked by king
+                pawnScore.add(PASSED_PAWN[sq].mg >> 1, PASSED_PAWN[sq].eg >> 1);
+            }
         }
 
     }
+
+    //support and attack pawns with king in the EG
+    pawnScore.add(0, popCount(KingZone[wkpos] & pos->pawns(), true) * 24);
+    pawnScore.sub(0, popCount(KingZone[bkpos] & pos->pawns(), true) * 24);
 
     if (passers) {
         U64 passersW = passers & pos->whitePawns;
@@ -489,7 +510,6 @@ TScore * evaluatePawns(TSearch * searchData) {
             U64 mask = passers & pos->whitePawns & KingMoves[sq] & NEIGHBOUR_FILES[FILE(sq)];
             if (mask) {
                 pawnScore.add(CONNECED_PASSED_PAWN[FLIP_SQUARE(sq)]);
-
             }
         }
         U64 passersB = passers & pos->blackPawns;
@@ -509,8 +529,8 @@ TScore * evaluatePawns(TSearch * searchData) {
     TScore score_w = 0;
     TScore score_b = 0;
 
-    int kpos = *pos->whiteKingPos;
-    score_w.add(SHELTER_KPOS[FLIP_SQUARE(kpos)]);
+
+    score_w.add(SHELTER_KPOS[FLIP_SQUARE(wkpos)]);
     //1. reward having the right to castle
     if (pos->boardFlags->castlingFlags & CASTLE_K
             && ((pos->Matrix[h2] == WPAWN && pos->Matrix[g2] == WPAWN)
@@ -524,7 +544,7 @@ TScore * evaluatePawns(TSearch * searchData) {
     }
 
     //2. reward having pawns in front of the king
-    U64 kingFront = FORWARD_RANKS[RANK(kpos)] & PAWN_SCOPE[FILE(kpos)];
+    U64 kingFront = FORWARD_RANKS[RANK(wkpos)] & PAWN_SCOPE[FILE(wkpos)];
     U64 shelterPawns = kingFront & pos->whitePawns;
 
     while (shelterPawns) {
@@ -532,7 +552,7 @@ TScore * evaluatePawns(TSearch * searchData) {
         score_w.add(SHELTER_PAWN[FLIP_SQUARE(sq)]);
     }
 
-    U64 stormPawns = kingFront & KingZone[kpos] & pos->blackPawns;
+    U64 stormPawns = kingFront & KingZone[wkpos] & pos->blackPawns;
     while (stormPawns) {
         int sq = POP(stormPawns);
         score_w.sub(STORM_PAWN[sq]);
@@ -549,8 +569,7 @@ TScore * evaluatePawns(TSearch * searchData) {
     }
 
     //black king shelter
-    kpos = *pos->blackKingPos;
-    score_b.add(SHELTER_KPOS[kpos]);
+    score_b.add(SHELTER_KPOS[bkpos]);
     //1. reward having the right to castle safely
     if (pos->boardFlags->castlingFlags & CASTLE_k
             && ((pos->Matrix[h7] == BPAWN && pos->Matrix[g7] == BPAWN)
@@ -564,14 +583,14 @@ TScore * evaluatePawns(TSearch * searchData) {
     }
 
     //2. reward having pawns in front of the king
-    kingFront = BACKWARD_RANKS[RANK(kpos)] & PAWN_SCOPE[FILE(kpos)];
+    kingFront = BACKWARD_RANKS[RANK(bkpos)] & PAWN_SCOPE[FILE(bkpos)];
     shelterPawns = kingFront & pos->blackPawns;
     while (shelterPawns) {
         int sq = POP(shelterPawns);
         score_b.add(SHELTER_PAWN[sq]);
     }
 
-    stormPawns = kingFront & KingZone[kpos] & pos->whitePawns;
+    stormPawns = kingFront & KingZone[bkpos] & pos->whitePawns;
     while (stormPawns) {
         int sq = POP(stormPawns);
         score_b.sub(STORM_PAWN[sq]);
@@ -602,7 +621,7 @@ TScore * evaluateRooks(TSearch * searchData) {
     };
 
     static const TScore ROOK_SEMIOPEN_FILE = S(10, 24);
-    static const TScore ROOK_OPEN_FILE = S(18, 40);
+    static const TScore ROOK_OPEN_FILE = S(18, 32);
 
     TScore * result = &searchData->stack->scores[SCORE_ROOKS];
     /*

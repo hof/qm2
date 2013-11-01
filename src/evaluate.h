@@ -132,9 +132,9 @@ const TScore DOUBLED_PAWN[64] = {
 
 const TScore PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(50, 75), S(40, 65), S(40, 65), S(40, 65), S(40, 65), S(40, 65), S(40, 65), S(50, 75),
+    S(50, 85), S(40, 75), S(40, 75), S(40, 75), S(40, 75), S(40, 75), S(40, 75), S(50, 85),
+    S(50, 70), S(40, 60), S(40, 60), S(40, 60), S(40, 60), S(40, 60), S(40, 60), S(50, 70),
     S(35, 60), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(35, 60),
-    S(30, 50), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(30, 50),
     S(25, 40), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(25, 40),
     S(20, 30), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(20, 30),
     S(20, 30), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(20, 30),
@@ -208,7 +208,7 @@ void init_pct(TSCORE_PCT & pct);
 TScore * evaluateExp(TSearch * searchData);
 bool skipExp(TSearch * sd);
 
-TScore * evaluateMaterial(TSearch * searchData);
+short evaluateMaterial(TSearch * searchData);
 
 TScore * evaluatePawns(TSearch * searchData);
 
