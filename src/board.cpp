@@ -629,7 +629,7 @@ bool TBoard::active(TMove * move) {
             return move->tsq >= a4
                     || (WPawnCaptures[move->tsq] & blackPieces);
         case WKNIGHT:
-            return KnightMoves[move->tsq] & (blackBishops | blackRooks | blackQueens);
+            return KnightMoves[move->tsq] & (blackRooks | blackQueens);
         case WBISHOP:
             return BishopMoves[move->tsq] & (blackRooks | blackQueens | blackKings);
         case WROOK:
@@ -642,7 +642,7 @@ bool TBoard::active(TMove * move) {
             return move->tsq <= h5
                     || (BPawnCaptures[move->tsq] & whitePieces);
         case BKNIGHT:
-            return KnightMoves[move->tsq] & (whiteBishops | whiteRooks | whiteQueens);
+            return KnightMoves[move->tsq] & (whiteRooks | whiteQueens);
         case BBISHOP:
             return BishopMoves[move->tsq] & (whiteRooks | whiteQueens | whiteKings);
         case BROOK:
@@ -758,7 +758,6 @@ int TBoard::SEE(TMove * move) {
             attacks |= MagicRookMoves(tsq, occupied) & occupied & horVerSliders;
         }
         fromBit = getSmallestAttacker(attacks, wtm, movingPiece);
-
         wtm = !wtm;
     } while (fromBit);
     while (--depth) {

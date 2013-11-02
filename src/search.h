@@ -39,6 +39,7 @@ enum SEARCH_CONSTANTS {
     ONE_PLY = 2,
     HALF_PLY = 1,
     LOW_DEPTH = ONE_PLY * 3,
+    MEDIUM_DEPTH = ONE_PLY * 5,
     HIGH_DEPTH = ONE_PLY * 8
 };
 
@@ -327,7 +328,6 @@ public:
     void poll();
     void printMovePath();
     int initRootMoves();
-    void debugPrint();
 
     /**
      * Null Move Reduction Depth (R)

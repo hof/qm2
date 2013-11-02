@@ -301,6 +301,7 @@ void TEngine::analyse() {
 
     TSearch * searchData = new TSearch(_rootFen.c_str(), _pct, _hashTable, _outputHandler);
     std::cout << searchData->pos->asFen().c_str() << std::endl;
+    searchData->learnParam = 0;
     searchData->stack->evaluationScore = evaluate(searchData, 0, 0);
     int phase = searchData->stack->gamePhase;
     std::cout << "\n1) Piece Square tables: ";
@@ -310,15 +311,17 @@ void TEngine::analyse() {
     std::cout << "\n3) Game phase: " << phase;
     std::cout << "\n4) Pawn score: ";
     searchData->stack->scores[SCORE_PAWNS].print(phase);
-    std::cout << "\n5) Rook score: ";
+    std::cout << "\n5) Bishop score: ";
+    searchData->stack->scores[SCORE_BISHOPS].print(phase);
+    std::cout << "\n6) Rook score: ";
     searchData->stack->scores[SCORE_ROOKS].print(phase);
-    std::cout << "\n6) Shelter score for white: ";
+    std::cout << "\n7) Shelter score for white: ";
     searchData->stack->scores[SCORE_SHELTER_W].print(phase);
-    std::cout << "\n7) Shelter score for black: ";
+    std::cout << "\n8) Shelter score for black: ";
     searchData->stack->scores[SCORE_SHELTER_B].print(phase);
-    std::cout << "\n8) Evaluation:" << searchData->stack->evaluationScore;
-    std::cout << "\n9) Quiescence:" << searchData->qsearch(-SCORE_MATE, SCORE_MATE, 0, QCHECKDEPTH) << std::endl;
-    std::cout << "\n10) Best move:" << std::endl;
+    std::cout << "\n9) Evaluation:" << searchData->stack->evaluationScore;
+    std::cout << "\n10) Quiescence:" << searchData->qsearch(-SCORE_MATE, SCORE_MATE, 0, QCHECKDEPTH) << std::endl;
+    std::cout << "\n11) Best move:" << std::endl;
 
 
     //loop through piece square tables

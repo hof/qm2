@@ -35,6 +35,7 @@ enum EVALUATION_COMPONENTS {
     SCORE_SHELTER_B,
     SCORE_EXP,
     SCORE_ROOKS,
+    SCORE_BISHOPS,
     SCORE_EVAL
 };
 
@@ -45,17 +46,16 @@ enum EVALUATION_COMPONENTS {
 const short VPAWN = 100;
 const short VKNIGHT = 315;
 const short VBISHOP = 330;
-const short VROOK = 465;
+const short VROOK = 500;
 const short VQUEEN = 925;
 const short VKING = 20000;
 
 const TScore SVPAWN = S(95, 110);
 const TScore SVKNIGHT = S(315, 300);
 const TScore SVBISHOP = S(330, 320);
-const TScore SVROOK = S(465, 465);
+const TScore SVROOK = S(465, 500);
 const TScore SVQUEEN = S(925, 875);
 const TScore SVKING = S(20000, 20000);
-
 
 const short PIECE_VALUE[13] = {
     0, VPAWN, VKNIGHT, VBISHOP, VROOK, VQUEEN, VKING,
@@ -132,7 +132,7 @@ const TScore DOUBLED_PAWN[64] = {
 
 const TScore PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(50, 85), S(40, 75), S(40, 75), S(40, 75), S(40, 75), S(40, 75), S(40, 75), S(50, 85),
+    S(100, 120), S(60, 80), S(60, 80), S(60, 80), S(60, 80), S(60, 80), S(60, 80), S(100, 120),
     S(50, 70), S(40, 60), S(40, 60), S(40, 60), S(40, 60), S(40, 60), S(40, 60), S(50, 70),
     S(35, 60), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(25, 50), S(35, 60),
     S(25, 40), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(15, 30), S(25, 40),
@@ -213,6 +213,8 @@ short evaluateMaterial(TSearch * searchData);
 TScore * evaluatePawns(TSearch * searchData);
 
 TScore * evaluateRooks(TSearch * searchData);
+
+TScore * evaluateBishops(TSearch * searchData);
 
 /*******************************************************************************
  * Helper functions

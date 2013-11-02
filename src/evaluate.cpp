@@ -8,18 +8,18 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
     if (stack->evaluationScore != SCORE_INVALID) {
         return stack->evaluationScore;
     }
-    int result = 0;
+    int result = evaluateMaterial(searchData);
     int phase = stack->gamePhase;
     TBoard * pos = searchData->pos;
     result += pos->boardFlags->pct.get(phase);
-    result += evaluateMaterial(searchData);
-
+    
     stack->equalPawnHash = pos->currentPly > 0
             && (searchData->stack - 1)->evaluationScore != SCORE_INVALID
             && pos->boardFlags->pawnHash == (searchData->pos->boardFlags - 1)->pawnHash;
 
     result += evaluatePawns(searchData)->get(phase);
     result += evaluateRooks(searchData)->get(phase);
+    result += evaluateBishops(searchData)->get(phase);
 
     if (pos->blackQueens) {
         result += searchData->stack->scores[SCORE_SHELTER_W].get(phase);
@@ -35,6 +35,7 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
     result = pos->boardFlags->WTM ? result : -result;
     searchData->stack->evaluationScore = result;
 
+    
     assert(searchData->stack->scores[SCORE_PAWNS].mg > -VQUEEN && searchData->stack->scores[SCORE_PAWNS].mg < VQUEEN);
     assert(searchData->stack->scores[SCORE_MATERIAL].mg > -VKING && searchData->stack->scores[SCORE_PAWNS].mg < VKING);
     assert(result > -VKING && result < VKING);
@@ -51,13 +52,49 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
 
 TScore * evaluateExp(TSearch * sd) {
     TScore * result = &sd->stack->scores[SCORE_EXP];
+
+
+    static const TScore BISHOP_MOBILITY[15] = {
+        S(0, 0), S(0, 0),
+        S(-30, -60), S(-15, -35), S(-5, -20), S(0, 0), S(2, 4), S(3, 6), S(4, 8), S(5, 10),
+        S(6, 12), S(7, 14), S(8, 16), S(10, 20), S(12, 24)
+    };
+
+
+
+    /*
+     * 2. Calculate the score and store on the stack
+     */
     result->clear();
+    TBoard * pos = sd->pos;
+    U64 occ = pos->pawnsAndKings();
+    TPiecePlacement * pc = &pos->pieces[WBISHOP];
+    for (int i = 0; i < pc->count; i++) {
+        int sq = pc->squares[i];
+        U64 moves = MagicBishopMoves(sq, occ);
+        int count = popCount(moves);
+        assert(count >= 2);
+        result->add(BISHOP_MOBILITY[count]);
+        U64 attack = popCount(moves & KingZone[*pos->blackKingPos], true);
+        result->add(attack << 1, 0);
+    }
+    pc = &pos->pieces[BBISHOP];
+    for (int i = 0; i < pc->count; i++) {
+        int sq = pc->squares[i];
+        U64 moves = MagicBishopMoves(sq, occ);
+        int count = popCount(moves);
+        assert(count >= 2);
+        result->sub(BISHOP_MOBILITY[count]);
+        U64 attack = popCount(moves & KingZone[*pos->whiteKingPos], true);
+        result->sub(attack << 1, 0);
+    }
+
+    result->mul(sd->learnFactor);
     return result;
 }
 
 bool skipExp(TSearch * sd) {
-    return false;
-    int pc = WROOK;
+    int pc = WBISHOP;
     return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
 }
 
@@ -137,6 +174,7 @@ short evaluateMaterial(TSearch * searchData) {
     //Queens
     if (wqueens != bqueens) {
         value += (wqueens - bqueens) * PHASED_SCORE(SVQUEEN, phase);
+        //value += (wqueens - bqueens) * PHASED_SHORT((int)searchData->learnFactor * 100, SVQUEEN.eg, phase);
     }
 
     //Bonus for having more "piece power" (excluding pawns)
@@ -151,14 +189,11 @@ short evaluateMaterial(TSearch * searchData) {
         value += (wpawns - bpawns) * PHASED_SCORE(SVPAWN, phase);
     }
 
-
-
     /* 
      * Endgame adjustment: 
      * 1) Not having pawns makes it hard to win
      * 2) If ahead, but no pawns and no mating material the score is draw
      */
-
     if (!wpawns && bpawns) {
         if (value > 0 && piecepower > 0 && piecepower < 4 * VPAWN) {
             if (wminors < 2 && wrooks == brooks && wqueens == bqueens) {
@@ -217,8 +252,6 @@ short evaluateMaterial(TSearch * searchData) {
     /*
      * Store and return
      */
-
-
 
     searchData->stack->scores[SCORE_MATERIAL].set(value);
     searchData->stack->gamePhase = phase;
@@ -463,7 +496,7 @@ TScore * evaluatePawns(TSearch * searchData) {
             }
         }
     }
-    
+
     TPiecePlacement * bPawns = &pos->pieces[BPAWN];
     for (int i = 0; i < bPawns->count; i++) {
         int sq = bPawns->squares[i];
@@ -496,12 +529,11 @@ TScore * evaluatePawns(TSearch * searchData) {
                 pawnScore.add(PASSED_PAWN[sq].mg >> 1, PASSED_PAWN[sq].eg >> 1);
             }
         }
-
     }
 
     //support and attack pawns with king in the EG
-    pawnScore.add(0, popCount(KingZone[wkpos] & pos->pawns(), true) * 24);
-    pawnScore.sub(0, popCount(KingZone[bkpos] & pos->pawns(), true) * 24);
+    pawnScore.add(0, popCount(KingZone[wkpos] & pos->pawns(), true) * 12);
+    pawnScore.sub(0, popCount(KingZone[bkpos] & pos->pawns(), true) * 12);
 
     if (passers) {
         U64 passersW = passers & pos->whitePawns;
@@ -680,6 +712,58 @@ TScore * evaluateRooks(TSearch * searchData) {
         U64 attack = popCount(moves & KingZone[*pos->whiteKingPos], true);
         result->sub(attack << 3, 0);
     }
+    return result;
+}
+
+TScore * evaluateBishops(TSearch * sd) {
+    static const TScore BISHOP_MOBILITY[15] = {
+        S(0, 0), S(0, 0),
+        S(-30, -60), S(-15, -35), S(-5, -20), S(0, 0), S(4, 4), S(8, 8), S(12, 12), S(16, 16),
+        S(20, 20), S(24, 24), S(28, 28), S(32, 32), S(38, 38)
+    };
+
+    TScore * result = &sd->stack->scores[SCORE_BISHOPS];
+    /*
+     * 1. Get the score from the last stack record if the previous move 
+     *   a) did not change the pawn+kings structure (pawn hash) 
+     *   b) did not move or capture any rook
+     */
+    if (sd->stack->equalPawnHash) {
+        TMove * prevMove = &(sd->stack - 1)->move;
+        if (prevMove->piece != WBISHOP && prevMove->piece != BBISHOP
+                && prevMove->capture != WBISHOP && prevMove->capture != BBISHOP) {
+            result->set((sd->stack - 1)->scores[SCORE_BISHOPS]);
+            return result;
+        }
+    }
+
+    /*
+     * 2. Calculate the score and store on the stack
+     */
+    result->clear();
+    TBoard * pos = sd->pos;
+    U64 occ = pos->pawnsAndKings();
+    TPiecePlacement * pc = &pos->pieces[WBISHOP];
+    for (int i = 0; i < pc->count; i++) {
+        int sq = pc->squares[i];
+        U64 moves = MagicBishopMoves(sq, occ);
+        int count = popCount(moves);
+        assert(count >= 2);
+        result->add(BISHOP_MOBILITY[count]);
+        U64 attack = popCount(moves & KingZone[*pos->blackKingPos], true);
+        result->add(attack << 1, 0);
+    }
+    pc = &pos->pieces[BBISHOP];
+    for (int i = 0; i < pc->count; i++) {
+        int sq = pc->squares[i];
+        U64 moves = MagicBishopMoves(sq, occ);
+        int count = popCount(moves);
+        assert(count >= 2);
+        result->sub(BISHOP_MOBILITY[count]);
+        U64 attack = popCount(moves & KingZone[*pos->whiteKingPos], true);
+        result->sub(attack << 1, 0);
+    }
+
     return result;
 }
 
