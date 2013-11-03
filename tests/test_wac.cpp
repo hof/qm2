@@ -77,7 +77,7 @@ void test_wac(TEngine * engine) {
     results[current++] = testForMove(engine, "8/p3k1p1/4r3/2ppNpp1/PP1P4/2P3KP/5P2/8 b - - 0 1", "e6e5", -SCORE_MATE);
     results[current++] = testForMove(engine, "5rk1/2p4p/2p4r/3P4/4p1b1/1Q2NqPp/PP3P1K/R4R2 b - - 0 1", "f3g2", -SCORE_MATE); 
     results[current++] = testForMove(engine, "r4rk1/1p2ppbp/p2pbnp1/q7/3BPPP1/2N2B2/PPP4P/R2Q1RK1 b - - 0 1", "e6g4", -SCORE_MATE);
-    results[current++] = testForMove(engine, "8/k1b5/P4p2/1Pp2p1p/K1P2P1P/8/3B4/8 w - - 0 1", "d2e3", -SCORE_MATE);
+    results[current++] = testForMove(engine, "8/k1b5/P4p2/1Pp2p1p/K1P2P1P/8/3B4/8 w - - 0 1", "b5b6", -SCORE_MATE);
     results[current++] = testForMove(engine, "2rq1bk1/p4p1p/1p4p1/3b4/3B1Q2/8/P4PpP/3RR1K1 w - - 0 1", "e1e8", -SCORE_MATE);
     results[current++] = testForMove(engine, "r1bq3r/ppppR1p1/5n1k/3P4/6pP/3Q4/PP1N1PP1/5K1R w - - 0 1", "h4h5", -SCORE_MATE);
     results[current++] = testForMove(engine, "5bk1/1rQ4p/5pp1/2pP4/3n1PP1/7P/1q3BB1/4R1K1 w - - 0 1", "d5d6", -SCORE_MATE);

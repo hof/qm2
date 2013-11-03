@@ -376,12 +376,13 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             bool active = givesCheck || pos->push7th(move) || pos->active(move);
             reduce += type != PVNODE;
             reduce += type == CUTNODE;
-            reduce += reduce > 0 && pos->SEE(move) < 0;
-            reduce += BSR(searchedMoves + 1);
+            reduce += BSR(searchedMoves);
+            reduce += BSR(new_depth);
             reduce >>= active;
+
         }
+
         stack->reduce = reduce;
-        
         forward(move, givesCheck);
         int score = -pvs(-alpha - 1, -alpha, new_depth - reduce);
         if (score > alpha && reduce) { //full depth research without reductions

@@ -187,8 +187,8 @@ int main(int argc, char** argv) {
     }
     
     
-    for (int i = 0; i < 64; i++) {
-        std::cout << "Reduction move  " << (i+1) << ": " << BSR(i+2) << std::endl;
+    for (int i = 1; i <= 128; i++) {
+        std::cout << "BSR(" << (i) << ") = " << BSR(i) << std::endl;
     }
     
 
