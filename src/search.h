@@ -329,23 +329,6 @@ public:
     void printMovePath();
     int initRootMoves();
 
-    /**
-     * Null Move Reduction Depth (R)
-     * @param depth current search depth left
-     * @param plusScore eval - beta
-     * @return R
-     */
-    inline int NullReduction(int depth, int plusScore) {
-        int R = (3 * ONE_PLY) + (depth >> 2);
-        if (plusScore > VPAWN / 2) {
-            R += HALF_PLY;
-            if (plusScore > VPAWN) {
-                R += HALF_PLY;
-            }
-        }
-        return R;
-    }
-
     inline int MateScore(int score) {
         return (score >= -SCORE_MATE && score <= -SCORE_MATE + MAX_PLY)
                 || (score >= SCORE_MATE - MAX_PLY && score <= SCORE_MATE);

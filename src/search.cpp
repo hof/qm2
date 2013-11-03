@@ -253,9 +253,14 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && eval >= beta
             && ABS(beta) < SCORE_MATE - MAX_PLY
             && pos->hasPieces(pos->boardFlags->WTM)) {
+        int rdepth = depth - (3 * ONE_PLY) - (depth >> 2);
+        rdepth -= (eval-beta) > (VPAWN / 2);
+        rdepth -= (eval-beta) > VPAWN;
+        if (stack->gamePhase >= 14) {
+            rdepth = depth - 2 * ONE_PLY - (depth >> 3);
+        }
         forward();
-        int nullDepth = MAX(0, depth - NullReduction(depth, eval - beta));
-        int score = -pvs(-beta, -alpha, nullDepth);
+        int score = -pvs(-beta, -alpha, rdepth);
         backward();
         if (score >= beta) {
             if (score >= SCORE_MATE - MAX_PLY) {
@@ -379,7 +384,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             reduce += BSR(searchedMoves);
             reduce += BSR(new_depth);
             reduce >>= active;
-
         }
 
         stack->reduce = reduce;
