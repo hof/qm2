@@ -587,7 +587,7 @@ TScore * evaluatePawns(TSearch * searchData) {
     U64 stormPawns = kingFront & KingZone[wkpos] & pos->blackPawns;
     while (stormPawns) {
         int sq = POP(stormPawns);
-        score_w.sub(STORM_PAWN[sq]);
+        score_w.sub(STORM_PAWN[FLIP_SQUARE(sq)]);
     }
 
     //3. penalize (half)open files on the king
