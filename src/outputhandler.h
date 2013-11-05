@@ -54,7 +54,7 @@ public:
     }
 
     void sendID() {
-        output("id name QM2");
+        output("id name QM2 Dev");
         output("id author QM2 team");
     }
 

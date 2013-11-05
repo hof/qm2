@@ -21,15 +21,18 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
     result += evaluateRooks(searchData)->get(phase);
     result += evaluateBishops(searchData)->get(phase);
 
+    if (searchData->learnParam == 1) { //learning
+        result += evaluateExp(searchData)->get(phase);
+    }
+    
     if (pos->blackQueens) {
         result += searchData->stack->scores[SCORE_SHELTER_W].get(phase);
     }
     if (pos->whiteQueens) {
         result -= searchData->stack->scores[SCORE_SHELTER_B].get(phase);
     }
-    if (searchData->learnParam == 1) { //learning
-        result += evaluateExp(searchData)->get(phase);
-    }
+    
+    
 
     result &= GRAIN;
     result = pos->boardFlags->WTM ? result : -result;
@@ -52,49 +55,12 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
 
 TScore * evaluateExp(TSearch * sd) {
     TScore * result = &sd->stack->scores[SCORE_EXP];
-
-
-    static const TScore BISHOP_MOBILITY[15] = {
-        S(0, 0), S(0, 0),
-        S(-30, -60), S(-15, -35), S(-5, -20), S(0, 0), S(2, 4), S(3, 6), S(4, 8), S(5, 10),
-        S(6, 12), S(7, 14), S(8, 16), S(10, 20), S(12, 24)
-    };
-
-
-
-    /*
-     * 2. Calculate the score and store on the stack
-     */
     result->clear();
-    TBoard * pos = sd->pos;
-    U64 occ = pos->pawnsAndKings();
-    TPiecePlacement * pc = &pos->pieces[WBISHOP];
-    for (int i = 0; i < pc->count; i++) {
-        int sq = pc->squares[i];
-        U64 moves = MagicBishopMoves(sq, occ);
-        int count = popCount(moves);
-        assert(count >= 2);
-        result->add(BISHOP_MOBILITY[count]);
-        U64 attack = popCount(moves & KingZone[*pos->blackKingPos], true);
-        result->add(attack << 1, 0);
-    }
-    pc = &pos->pieces[BBISHOP];
-    for (int i = 0; i < pc->count; i++) {
-        int sq = pc->squares[i];
-        U64 moves = MagicBishopMoves(sq, occ);
-        int count = popCount(moves);
-        assert(count >= 2);
-        result->sub(BISHOP_MOBILITY[count]);
-        U64 attack = popCount(moves & KingZone[*pos->whiteKingPos], true);
-        result->sub(attack << 1, 0);
-    }
-
-    result->mul(sd->learnFactor);
     return result;
 }
 
 bool skipExp(TSearch * sd) {
-    int pc = WBISHOP;
+    int pc = WQUEEN;
     return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
 }
 
@@ -174,7 +140,6 @@ short evaluateMaterial(TSearch * searchData) {
     //Queens
     if (wqueens != bqueens) {
         value += (wqueens - bqueens) * PHASED_SCORE(SVQUEEN, phase);
-        //value += (wqueens - bqueens) * PHASED_SHORT((int)searchData->learnFactor * 100, SVQUEEN.eg, phase);
     }
 
     //Bonus for having more "piece power" (excluding pawns)
@@ -302,7 +267,7 @@ void init_pct(TSCORE_PCT & pct) {
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(FILE(sq) + 16));
         }
         if (bbsq & (FILE_A | FILE_H)) {
-            scores[sq].add(-10);
+            scores[sq].add(-10, 0);
         }
         int rank = RANK(sq) - 1;
         scores[sq].eg += rank*rank; //moving pawns forward to promote
@@ -461,8 +426,8 @@ TScore * evaluatePawns(TSearch * searchData) {
     int bkpos = *pos->blackKingPos;
 
     U64 passers = 0;
-    U64 openW = ~FILEFILL(pos->blackPawns);
-    U64 openB = ~FILEFILL(pos->whitePawns);
+    U64 openW = ~FILEFILL(pos->whitePawns);
+    U64 openB = ~FILEFILL(pos->blackPawns);
     TPiecePlacement * wPawns = &pos->pieces[WPAWN];
     for (int i = 0; i < wPawns->count; i++) {
         int sq = wPawns->squares[i];
@@ -475,7 +440,7 @@ TScore * evaluatePawns(TSearch * searchData) {
         U64 beforeMe = FORWARD_RANKS[rank] & myScope;
         bool isolated = !(besideMe & pos->whitePawns);
         bool doubled = myFile & beforeMe & pos->whitePawns;
-        bool open = sqBit & openW;
+        bool open = sqBit & openB;
         bool passed = !doubled && !(beforeMe & pos->blackPawns);
         int tSq = FLIP_SQUARE(sq);
         if (isolated) {
@@ -492,7 +457,7 @@ TScore * evaluatePawns(TSearch * searchData) {
             pawnScore.add(PASSED_PAWN[tSq]);
             passers |= sqBit;
             if (beforeMe & pos->blackKings) { //blocked by king
-                pawnScore.sub(PASSED_PAWN[sq].mg >> 1, PASSED_PAWN[sq].eg >> 1);
+                pawnScore.sub(PASSED_PAWN[tSq].mg >> 1, PASSED_PAWN[tSq].eg >> 1);
             }
         }
     }
@@ -509,7 +474,7 @@ TScore * evaluatePawns(TSearch * searchData) {
         U64 sqBit = BIT(sq);
         bool isolated = !(besideMe & pos->blackPawns);
         bool doubled = myFile & beforeMe & pos->blackPawns;
-        bool open = sqBit & openB;
+        bool open = sqBit & openW;
         bool passed = !doubled && !(beforeMe & pos->whitePawns);
         int tSq = sq;
         if (isolated) {
@@ -526,7 +491,7 @@ TScore * evaluatePawns(TSearch * searchData) {
             pawnScore.sub(PASSED_PAWN[tSq]);
             passers |= sqBit;
             if (beforeMe & pos->whiteKings) { //blocked by king
-                pawnScore.add(PASSED_PAWN[sq].mg >> 1, PASSED_PAWN[sq].eg >> 1);
+                pawnScore.add(PASSED_PAWN[tSq].mg >> 1, PASSED_PAWN[tSq].eg >> 1);
             }
         }
     }
@@ -555,7 +520,7 @@ TScore * evaluatePawns(TSearch * searchData) {
     }
 
     /*
-     * 4. Evaluate King shelter score
+     * 4. Evaluate King shelter score. 
      */
 
     TScore score_w = 0;
@@ -591,14 +556,15 @@ TScore * evaluatePawns(TSearch * searchData) {
     }
 
     //3. penalize (half)open files on the king
-    U64 open = pos->halfOpenOrOpenFile(false) & kingFront & RANK_8;
+    U64 open = (openW | openB) & kingFront & RANK_8;
     if (open) {
-        score_w.add(SHELTER_OPEN_FILES[popCount(open)]);
-        open &= pos->openFiles() & (FILE_A | FILE_B | FILE_H | FILE_G);
-        if (open) {
+        score_w.add(SHELTER_OPEN_FILES[popCount(open & openW, true)]);
+        score_b.sub(SHELTER_OPEN_ATTACK_FILES[popCount(open & openB, true)]);
+        if (open & openW & openB & (FILE_A | FILE_B | FILE_H | FILE_G)) {
             score_w.add(SHELTER_OPEN_EDGE_FILE);
         }
     }
+    
 
     //black king shelter
     score_b.add(SHELTER_KPOS[bkpos]);
@@ -629,14 +595,15 @@ TScore * evaluatePawns(TSearch * searchData) {
     }
 
     //3. penalize (half)open files on the king
-    open = pos->halfOpenOrOpenFile(true) & kingFront & RANK_1;
-    if (open) { //half open
-        score_b.add(SHELTER_OPEN_FILES[popCount(open)]);
-        open &= pos->openFiles() & (FILE_A | FILE_B | FILE_H | FILE_G);
-        if (open) {
+    open = (openW | openB) & kingFront & RANK_1;
+    if (open) {
+        score_b.add(SHELTER_OPEN_FILES[popCount(open & openB, true)]);
+        score_w.sub(SHELTER_OPEN_ATTACK_FILES[popCount(open & openW, true)]);
+        if (open & openB & openW & (FILE_A | FILE_B | FILE_H | FILE_G)) {
             score_b.add(SHELTER_OPEN_EDGE_FILE);
         }
     }
+    
     searchData->stack->scores[SCORE_PAWNS].set(pawnScore);
     searchData->stack->scores[SCORE_SHELTER_W].set(score_w);
     searchData->stack->scores[SCORE_SHELTER_B].set(score_b);
@@ -654,6 +621,7 @@ TScore * evaluateRooks(TSearch * searchData) {
 
     static const TScore ROOK_SEMIOPEN_FILE = S(10, 24);
     static const TScore ROOK_OPEN_FILE = S(18, 32);
+    static const TScore ROOK_SHELTER_PROTECT = S(24, 16);
 
     TScore * result = &searchData->stack->scores[SCORE_ROOKS];
     /*
@@ -694,6 +662,9 @@ TScore * evaluateRooks(TSearch * searchData) {
         result->add(ROOK_MOBILITY[count]);
         U64 attack = popCount(moves & KingZone[*pos->blackKingPos], true);
         result->add(attack << 3, 0);
+        if (sq <= h1 && *pos->whiteKingPos <= h2) {
+            searchData->stack->scores[SCORE_SHELTER_W].add(ROOK_SHELTER_PROTECT);
+        }
     }
     pc = &pos->pieces[BROOK];
     for (int i = 0; i < pc->count; i++) {
@@ -711,22 +682,26 @@ TScore * evaluateRooks(TSearch * searchData) {
         result->sub(ROOK_MOBILITY[count]);
         U64 attack = popCount(moves & KingZone[*pos->whiteKingPos], true);
         result->sub(attack << 3, 0);
+        if (sq >= a8 && *pos->blackKingPos >= a7) {
+            searchData->stack->scores[SCORE_SHELTER_B].add(ROOK_SHELTER_PROTECT);
+        }
     }
     return result;
 }
 
 TScore * evaluateBishops(TSearch * sd) {
     static const TScore BISHOP_MOBILITY[15] = {
-        S(0, 0), S(0, 0),
+        S(0, 0), S(-50, -80),
         S(-30, -60), S(-15, -35), S(-5, -20), S(0, 0), S(4, 4), S(8, 8), S(12, 12), S(16, 16),
         S(20, 20), S(24, 24), S(28, 28), S(32, 32), S(38, 38)
     };
+    static const TScore TRAPPED_BISHOP = S(-90, -120);
 
     TScore * result = &sd->stack->scores[SCORE_BISHOPS];
     /*
      * 1. Get the score from the last stack record if the previous move 
      *   a) did not change the pawn+kings structure (pawn hash) 
-     *   b) did not move or capture any rook
+     *   b) did not move or capture any bishop
      */
     if (sd->stack->equalPawnHash) {
         TMove * prevMove = &(sd->stack - 1)->move;
@@ -748,20 +723,34 @@ TScore * evaluateBishops(TSearch * sd) {
         int sq = pc->squares[i];
         U64 moves = MagicBishopMoves(sq, occ);
         int count = popCount(moves);
-        assert(count >= 2);
+        assert(count >= 1);
         result->add(BISHOP_MOBILITY[count]);
         U64 attack = popCount(moves & KingZone[*pos->blackKingPos], true);
         result->add(attack << 1, 0);
+        
+        //trapped bishop
+        if (sq == h7 && pos->Matrix[g6] == BPAWN && pos->Matrix[f7] == BPAWN) {
+            result->add(TRAPPED_BISHOP);
+        } else if (sq == a7 && pos->Matrix[b6] == BPAWN && pos->Matrix[c7] == BPAWN) {
+            result->sub(TRAPPED_BISHOP);
+        }
     }
     pc = &pos->pieces[BBISHOP];
     for (int i = 0; i < pc->count; i++) {
         int sq = pc->squares[i];
         U64 moves = MagicBishopMoves(sq, occ);
         int count = popCount(moves);
-        assert(count >= 2);
+        assert(count >= 1);
         result->sub(BISHOP_MOBILITY[count]);
         U64 attack = popCount(moves & KingZone[*pos->whiteKingPos], true);
         result->sub(attack << 1, 0);
+        
+        //trapped bishop
+        if (sq == h2 && pos->Matrix[g3] == WPAWN && pos->Matrix[f2] == WPAWN) {
+            result->sub(TRAPPED_BISHOP);
+        } else if (sq == a2 && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN) {
+            result->sub(TRAPPED_BISHOP);
+        }
     }
 
     return result;

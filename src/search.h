@@ -55,7 +55,7 @@ static const short FUTILITY_MARGIN[LOW_DEPTH+1] = {
 #define NOTPV(a,b) (((a) + 1) >= (b))
 #define ISPV(a,b) (((a) + 1) < (b))
 
-const short QCHECKDEPTH = 10;
+const short QCHECKDEPTH = 7;
 
 class TRootMove {
 public:
