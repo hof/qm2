@@ -18,6 +18,30 @@ std::string TSearch::getPVString() {
     return result;
 }
 
+void TSearch::initLMR() {
+    for (int move = 0; move < 256; move++) {
+        for (int depth = 0; depth < 256; depth++) {
+            int r = BSR(move);
+            r += BSR((depth >> 1) + 1);
+            int rpv = r >> 1;
+            int rall = 1 + r;
+            int rcut = 2 + r;
+            int rmax = depth < 3 ? 0 : (depth - 2);
+            if (move < 2) {
+                rmax = MIN(rmax, 2);
+            }
+            LMR[0][move][depth][0] = 0;
+            LMR[0][move][depth][1] = 0;
+            LMR[PVNODE][move][depth][0] = MIN(rmax, rpv);
+            LMR[CUTNODE][move][depth][0] = MIN(rmax, rcut);
+            LMR[ALLNODE][move][depth][0] = MIN(rmax, rall);
+            LMR[PVNODE][move][depth][1] = MIN(rmax, (rpv - 1) >> 1);
+            LMR[CUTNODE][move][depth][1] = MIN(rmax, (rcut - 1) >> 1);
+            LMR[ALLNODE][move][depth][1] = MIN(rmax, (rall - 1) >> 1);
+        }
+    }
+}
+
 int TSearch::initRootMoves() {
     int result = 0;
     root.MoveCount = 0;
@@ -90,7 +114,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
             return bestScore;
         }
         updatePV(&rMove->Move);
-        if (!rMove->Move.equals(&stack->pvMoves[0]) && outputHandler) {
+        if (outputHandler && !rMove->Move.equals(&stack->pvMoves[0])) {
             outputHandler->sendPV(bestScore,
                     depth / ONE_PLY,
                     selDepth,
@@ -268,7 +292,16 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             }
             return score;
         } else if (alpha > (-SCORE_MATE + MAX_PLY) && score < (-SCORE_MATE + MAX_PLY)) {
-            extend = HALF_PLY; //mate threat extension (not moving gets us mated)
+            extend = (stack - 1)->reduce + HALF_PLY; //mate threat extension (not moving gets us mated)
+        } else if ((stack - 1)->reduce > 0) {
+            TMove * threat = &(stack + 1)->bestMove;
+            TMove * prev = &(stack - 1)->move;
+            if (prev->ssq && threat->tsq || prev->tsq == threat->ssq) {
+                //std::cout << threat->asString() << " --> " << prev->asString() << std::endl;
+                //debug_print_search(0, 0);
+                //return alpha; 
+                extend = (stack - 1)->reduce >> 1;
+            }
         }
     }
 
@@ -309,16 +342,16 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     /*
      * 9. Move based extensions.
      * These are applied to the first (mostly best) move only.
+     * a) checks
+     * b) pawn push to 7th and promotions
      */
     int extendMove = 0;
     int givesCheck = pos->givesCheck(firstMove);
     if (extend < ONE_PLY) {
         if (givesCheck) {
-            extendMove = HALF_PLY + (type == PVNODE);
+            extendMove = HALF_PLY + (extend == 0 && type == PVNODE);
         } else if (pos->push7th(firstMove)) {
-            extendMove = HALF_PLY + (type == PVNODE); //promotion or pawn push to 7th rank
-        } else if (type == PVNODE && firstMove->capture && depth >= HIGH_DEPTH) {
-            extendMove = HALF_PLY;
+            extendMove = HALF_PLY + (extend == 0 && type == PVNODE); //promotion or pawn push to 7th rank
         }
     }
 
@@ -377,16 +410,16 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         /*
          * 12. Late Move Reductions (LMR) 
          */
-        if (stack->moveList.stage >= STOP && new_depth > HALF_PLY) {
-            reduce += type != PVNODE;
-            reduce += type == CUTNODE;
-            reduce += BSR(searchedMoves);
-            reduce += BSR((new_depth >> 1) + 1); 
-            reduce >>= pos->active(move);
-            reduce >>= givesCheck;
-            reduce >>= pos->push7th(move);
-            reduce >>= bool(move->capture);
-            reduce >>= (type == PVNODE);
+        if (stack->moveList.stage >= STOP
+                && !move->capture
+                && !inCheck
+                && new_depth > ONE_PLY
+                && !move->promotion) {
+            bool active = givesCheck || pos->active(move);
+            reduce += LMR[type][MIN(255, searchedMoves)][new_depth][active];
+            reduce += reduce < new_depth && history[move->piece][move->tsq] < 0;
+            reduce += reduce < new_depth && stack->gamePhase < 4;
+            reduce -= (reduce > 0 && stack->gamePhase > 12);
         }
 
         stack->reduce = reduce;

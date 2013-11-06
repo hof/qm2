@@ -32,3 +32,7 @@ target_link_libraries(testEvaluation QM2SRC)
 add_executable(genPct generate_pct.cpp)
 target_link_libraries(genPct QM2SRC)
 
+#LMR table generation
+add_executable(genLMR generate_lmr.cpp)
+target_link_libraries(genLMR QM2SRC)
+

@@ -183,6 +183,8 @@ public:
     TOutputHandler * outputHandler;
     TTimeManager * timeManager;
     int history[BKING + 1][64];
+    
+    short LMR[4][256][256][2]; //node type, move number, depth, active
 
     TMoveList tempList;
 
@@ -194,6 +196,7 @@ public:
         pos->setPieceSquareTable(pieceSquareTables);
         pos->fromFen(fen);
         memset(history, 0, sizeof (history));
+        initLMR();
         hashTable = globalHashTable;
         outputHandler = outputH;
         movePicker = new TMovePicker();
@@ -233,6 +236,8 @@ public:
         delete timeManager;
     }
 
+    void initLMR();
+    
     inline void updateKillers(TMove * move) {
         if (!stack->killer1.equals(move)) {
             stack->killer2.setMove(&stack->killer1);

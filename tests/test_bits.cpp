@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 #include <iostream>
+#include <iomanip>  //setw
 #include <stdio.h>
 
 #include "engine.h"
@@ -185,12 +186,7 @@ int main(int argc, char** argv) {
         printBB("sshift", nshift);
         printBB("sshift_expected", RANK_2);
     }
-    
-    
-    for (int i = 1; i <= 128; i++) {
-        std::cout << "BSR(" << (i) << ") = " << BSR(i) << std::endl;
-    }
-    
+
 
     /*
      * Finalize 

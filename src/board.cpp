@@ -631,9 +631,9 @@ bool TBoard::active(TMove * move) {
         case WKNIGHT:
             return KnightMoves[move->tsq] & (blackRooks | blackQueens);
         case WBISHOP:
-            return BishopMoves[move->tsq] & (blackRooks | blackQueens | blackKings);
+            return MagicBishopMoves(move->tsq, allPieces) /*BishopMoves[move->tsq]*/ & (blackRooks | blackQueens/* | blackKings*/);
         case WROOK:
-            return RookMoves[move->tsq] & (blackQueens | blackKings);
+            return MagicRookMoves(move->tsq, allPieces) /*RookMoves[move->tsq]*/ & (blackQueens/* | blackKings*/);
         case WQUEEN:
             return false;
         case WKING:
@@ -644,9 +644,9 @@ bool TBoard::active(TMove * move) {
         case BKNIGHT:
             return KnightMoves[move->tsq] & (whiteRooks | whiteQueens);
         case BBISHOP:
-            return BishopMoves[move->tsq] & (whiteRooks | whiteQueens | whiteKings);
+            return MagicBishopMoves(move->tsq, allPieces) /*BishopMoves[move->tsq]*/ & (whiteRooks | whiteQueens/* | whiteKings*/);
         case BROOK:
-            return RookMoves[move->tsq] & (whiteQueens | whiteKings);
+            return MagicRookMoves(move->tsq, allPieces) /*RookMoves[move->tsq]*/ & (whiteQueens/* | whiteKings*/);
         case BQUEEN:
             return false;
         case BKING:

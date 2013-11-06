@@ -12,7 +12,7 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
     int phase = stack->gamePhase;
     TBoard * pos = searchData->pos;
     result += pos->boardFlags->pct.get(phase);
-    
+
     stack->equalPawnHash = pos->currentPly > 0
             && (searchData->stack - 1)->evaluationScore != SCORE_INVALID
             && pos->boardFlags->pawnHash == (searchData->pos->boardFlags - 1)->pawnHash;
@@ -24,21 +24,21 @@ int evaluate(TSearch * searchData, int alpha, int beta) {
     if (searchData->learnParam == 1) { //learning
         result += evaluateExp(searchData)->get(phase);
     }
-    
-    if (pos->blackQueens) {
+
+    if (pos->blackQueens && result < VKNIGHT) {
         result += searchData->stack->scores[SCORE_SHELTER_W].get(phase);
     }
-    if (pos->whiteQueens) {
+    if (pos->whiteQueens && result > -VKNIGHT) {
         result -= searchData->stack->scores[SCORE_SHELTER_B].get(phase);
     }
-    
-    
+
+
 
     result &= GRAIN;
     result = pos->boardFlags->WTM ? result : -result;
     searchData->stack->evaluationScore = result;
 
-    
+
     assert(searchData->stack->scores[SCORE_PAWNS].mg > -VQUEEN && searchData->stack->scores[SCORE_PAWNS].mg < VQUEEN);
     assert(searchData->stack->scores[SCORE_MATERIAL].mg > -VKING && searchData->stack->scores[SCORE_PAWNS].mg < VKING);
     assert(result > -VKING && result < VKING);
@@ -341,11 +341,11 @@ void init_pct(TSCORE_PCT & pct) {
         scores[sq].eg *= 0.5; //mobility is less important because rooks move fast
 
         if (bbsq & (RANK_7 | RANK_8)) {
-            scores[sq].mg += 20; //extra bonus for 7th / 8th rank
+            scores[sq].mg += 40; //extra bonus for 7th / 8th rank
             scores[sq].eg += 5;
         }
         if (bbsq & (RANK_6)) {
-            scores[sq].mg += 5;
+            scores[sq].mg += 10;
             scores[sq].eg += 2;
         }
         if (bbsq & RANK_1) { //protection
@@ -564,7 +564,7 @@ TScore * evaluatePawns(TSearch * searchData) {
             score_w.add(SHELTER_OPEN_EDGE_FILE);
         }
     }
-    
+
 
     //black king shelter
     score_b.add(SHELTER_KPOS[bkpos]);
@@ -603,7 +603,7 @@ TScore * evaluatePawns(TSearch * searchData) {
             score_b.add(SHELTER_OPEN_EDGE_FILE);
         }
     }
-    
+
     searchData->stack->scores[SCORE_PAWNS].set(pawnScore);
     searchData->stack->scores[SCORE_SHELTER_W].set(score_w);
     searchData->stack->scores[SCORE_SHELTER_B].set(score_b);
@@ -614,9 +614,9 @@ TScore * evaluatePawns(TSearch * searchData) {
 TScore * evaluateRooks(TSearch * searchData) {
 
     static const TScore ROOK_MOBILITY[15] = {
-        S(0, 0), S(0, 0),
-        S(-30, -60), S(-15, -35), S(-5, -20), S(0, 0), S(2, 4), S(3, 6), S(4, 8), S(5, 10),
-        S(6, 12), S(7, 14), S(8, 16), S(10, 20), S(12, 24)
+        S(-30, -40), S(-20, -30),
+        S(-10, -20), S(0, -10), S(4, 0), S(8, 5), S(12, 10), S(16, 15), S(20, 20), S(24, 25),
+        S(26, 30), S(28, 35), S(30, 40), S(32, 42), S(36, 44)
     };
 
     static const TScore ROOK_SEMIOPEN_FILE = S(10, 24);
@@ -642,10 +642,13 @@ TScore * evaluateRooks(TSearch * searchData) {
      * 2. Calculate the score and store on the stack
      */
     result->clear();
+
     TBoard * pos = searchData->pos;
     U64 occ = pos->pawnsAndKings();
     U64 wFill = FILEFILL(pos->whitePawns);
     U64 bFill = FILEFILL(pos->blackPawns);
+    U64 wMask = ~(pos->whitePawns | pos->whiteKings | (pos->blackPawns & pos->blackPawnAttacks()));
+    U64 bMask = ~(pos->blackPawns | pos->blackKings | (pos->whitePawns & pos->whitePawnAttacks()));
     TPiecePlacement * pc = &pos->pieces[WROOK];
     for (int i = 0; i < pc->count; i++) {
         int sq = pc->squares[i];
@@ -656,12 +659,11 @@ TScore * evaluateRooks(TSearch * searchData) {
                 result->add(ROOK_OPEN_FILE);
             }
         }
-        U64 moves = MagicRookMoves(sq, occ);
+        U64 moves = MagicRookMoves(sq, occ) & wMask;
         int count = popCount(moves);
-        assert(count >= 2);
         result->add(ROOK_MOBILITY[count]);
-        U64 attack = popCount(moves & KingZone[*pos->blackKingPos], true);
-        result->add(attack << 3, 0);
+        U64 attack = popCount(moves & (pos->blackPawns | RANK_7 | KingZone[*pos->blackKingPos]), true);
+        result->add(attack << 3, attack << 1);
         if (sq <= h1 && *pos->whiteKingPos <= h2) {
             searchData->stack->scores[SCORE_SHELTER_W].add(ROOK_SHELTER_PROTECT);
         }
@@ -676,12 +678,12 @@ TScore * evaluateRooks(TSearch * searchData) {
                 result->sub(ROOK_OPEN_FILE);
             }
         }
-        U64 moves = MagicRookMoves(sq, occ);
+        U64 moves = MagicRookMoves(sq, occ) & bMask;
         int count = popCount(moves);
         assert(count >= 2);
         result->sub(ROOK_MOBILITY[count]);
-        U64 attack = popCount(moves & KingZone[*pos->whiteKingPos], true);
-        result->sub(attack << 3, 0);
+        U64 attack = popCount(moves & (pos->whitePawns | RANK_2 | KingZone[*pos->whiteKingPos]), true);
+        result->sub(attack << 3, attack << 1);
         if (sq >= a8 && *pos->blackKingPos >= a7) {
             searchData->stack->scores[SCORE_SHELTER_B].add(ROOK_SHELTER_PROTECT);
         }
@@ -727,7 +729,7 @@ TScore * evaluateBishops(TSearch * sd) {
         result->add(BISHOP_MOBILITY[count]);
         U64 attack = popCount(moves & KingZone[*pos->blackKingPos], true);
         result->add(attack << 1, 0);
-        
+
         //trapped bishop
         if (sq == h7 && pos->Matrix[g6] == BPAWN && pos->Matrix[f7] == BPAWN) {
             result->add(TRAPPED_BISHOP);
@@ -744,7 +746,7 @@ TScore * evaluateBishops(TSearch * sd) {
         result->sub(BISHOP_MOBILITY[count]);
         U64 attack = popCount(moves & KingZone[*pos->whiteKingPos], true);
         result->sub(attack << 1, 0);
-        
+
         //trapped bishop
         if (sq == h2 && pos->Matrix[g3] == WPAWN && pos->Matrix[f2] == WPAWN) {
             result->sub(TRAPPED_BISHOP);
