@@ -106,8 +106,9 @@ using std::string;
 #define ALLPIECES   0
 
 #define WHITEPIECE(pc) ((pc)<=WKING)
-const bool BLACK = 0;
-const bool WHITE = 1;
+
+#define BLACK 0
+#define WHITE 1
 
 #define CASTLE_K    1 //white kingside castle
 #define CASTLE_Q    2 //white queenside castle
@@ -247,11 +248,11 @@ struct TBoard {
     inline U64 openFiles() {
         return ~(FILEFILL(whitePawns) | FILEFILL(blackPawns));
     }
-    
+
     inline U64 halfOpenOrOpenFile(bool white) {
-        return white? ~FILEFILL(whitePawns) : ~FILEFILL(blackPawns);
+        return white ? ~FILEFILL(whitePawns) : ~FILEFILL(blackPawns);
     }
-    
+
     inline U64 halfOpenFiles(bool white) {
         return halfOpenOrOpenFile(white) ^ openFiles();
     }
@@ -401,9 +402,9 @@ struct TBoard {
     int givesCheck(TMove * move);
     bool active(TMove * move);
     bool checksPiece(TMove * move);
-    
+
     inline bool push7th(TMove * move) {
-        return (move->piece == WPAWN && move->tsq >= h7) 
+        return (move->piece == WPAWN && move->tsq >= h7)
                 || (move->piece == BPAWN && move->tsq <= h2);
     }
 
@@ -433,27 +434,11 @@ struct TBoard {
     }
 
     inline U64 whitePawnAttacks() {
-        return ((whitePawns << 9) & ~FILE_A) | ((whitePawns << 7) & ~FILE_H);
+        return (UPLEFT1(whitePawns) | UPRIGHT1(whitePawns));
     }
 
     inline U64 blackPawnAttacks() {
-        return ((blackPawns >> 7) & ~FILE_A) | ((blackPawns >> 9) & ~FILE_H);
-    }
-
-    inline U64 blockedWhitePawns() {
-        return (((whitePawns << 8) & blackPawns) >> 8) & ~blackPawnAttacks();
-    }
-
-    inline U64 blockedBlackPawns() {
-        return (((blackPawns >> 8) & whitePawns) << 8) & ~whitePawnAttacks();
-    }
-
-    inline U64 stopSquaresWhitePawns() {
-        return (whitePawns << 8) & ~whitePawnAttacks();
-    }
-
-    inline U64 stopSquaresBlackPawns() {
-        return (blackPawns >> 8) & ~blackPawnAttacks();
+        return (DOWNLEFT1(blackPawns) | DOWNRIGHT1(blackPawns));
     }
 
     U64 getSmallestAttacker(U64 attacks, bool wtm, int &piece);

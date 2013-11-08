@@ -132,11 +132,27 @@ struct TSearchStack {
     TMove ttMove1;
     TMove ttMove2;
 
-    int gamePhase;
-    int evaluationScore;
-    bool equalPawnHash;
-    TScore scores[MAX_EVALUATION_COMPONENTS];
-
+    //eval info
+    short phase;
+    bool equal_pawns; //false if a pawn or king has moved
+    short eval_result;
+    TScore eval_score;
+    short material_score;
+    TScore pawn_score;
+    TScore knight_score;
+    TScore bishop_score;
+    TScore rook_score;
+    TScore rook_score_w;
+    TScore rook_score_b;
+    TScore queen_score;
+    TScore king_score;
+    TScore shelter_score_w;
+    TScore shelter_score_b;
+    TScore exp_score;
+    U64 occ;
+    U64 fill[2];
+    U64 mobMask[2];
+    
     int reduce;
     
     U64 captureMask;
@@ -184,7 +200,7 @@ public:
     TTimeManager * timeManager;
     int history[BKING + 1][64];
     
-    short LMR[4][256][256][2]; //node type, move number, depth, active
+    short LMR[2][2][64][256]; //active, pv, move number, depth
 
     TMoveList tempList;
 
@@ -225,7 +241,7 @@ public:
         learnFactor = 1.0;
         evaluationComponents = MAX_EVALUATION_COMPONENTS;
         rootStack = stack = &_stack[0];
-        stack->evaluationScore = SCORE_INVALID;
+        stack->eval_result = SCORE_INVALID;
         stack->nodeType = PVNODE;
         assert(hashTable);
     }
@@ -261,7 +277,7 @@ public:
         stack->move.setMove(0);
         stack++;
         stack->inCheck = false;
-        stack->evaluationScore = SCORE_INVALID;
+        stack->eval_result = SCORE_INVALID;
         pos->forward();
         assert(stack == &_stack[pos->currentPly]);
     }
@@ -277,7 +293,7 @@ public:
         stack->move.setMove(move);
         stack++;
         stack->inCheck = givesCheck;
-        stack->evaluationScore = SCORE_INVALID;
+        stack->eval_result = SCORE_INVALID;
         pos->forward(move);
         assert(stack == &_stack[pos->currentPly]);
     }
@@ -322,7 +338,7 @@ public:
     inline void resetStack() {
         pos->currentPly = 0;
         stack = rootStack;
-        stack->evaluationScore = SCORE_INVALID;
+        stack->eval_result = SCORE_INVALID;
         pos->_boardFlags[0].copy(this->pos->boardFlags);
         pos->boardFlags = &this->pos->_boardFlags[0];
         nodes = 0;

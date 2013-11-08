@@ -68,6 +68,11 @@ struct TScore {
         mg += (*table)[0];
         eg += (*table)[1];
     }
+    
+    inline void add(const TScore * s) {
+        mg += s->mg;
+        eg += s->eg;
+    }
 
     inline short get(short phase) {
         assert(phase >= 0 && phase <= MAX_GAMEPHASES);
@@ -79,6 +84,11 @@ struct TScore {
         eg = s.eg;
     }
     
+    inline void set(const TScore * s) {
+        mg = s->mg;
+        eg = s->eg;
+    }
+    
     inline void nset(const TScore & s) {
         mg = -s.mg;
         eg = -s.eg;
@@ -87,16 +97,6 @@ struct TScore {
     inline void set(const short x, const short y) {
         mg = x;
         eg = y;
-    }
-    
-    inline void set(const short x) {
-        mg = x;
-        eg = x;
-    }
-    
-    inline void add(const short x) {
-        mg += x;
-        eg += x;
     }
     
     inline void add(const short x, const short y) {
@@ -114,11 +114,11 @@ struct TScore {
         eg -= s.eg;
     }
     
-    inline void sub(const short x) {
-        mg -= x;
-        eg -= x;
+    inline void sub(const TScore * s) {
+        mg -= s->mg;
+        eg -= s->eg;
     }
-  
+    
     inline void sub(const short x, const short y) {
         mg -= x;
         eg -= y;
@@ -157,6 +157,8 @@ typedef TScore TSCORE_PCT[13][64];
 
 #define PHASED_SHORT(mg,eg,phase) (((mg) * (MAX_GAMEPHASES - phase) + (eg) * (phase)) >> GAMEPHASE_SCORE_BSR)
 #define PHASED_SCORE(s,phase) (((s.mg) * (MAX_GAMEPHASES - phase) + (s.eg) * (phase)) >> GAMEPHASE_SCORE_BSR)
+
+#define PRINT_SCORE(s) "(" << (int)(s).mg << ", " << (int)(s).eg << ") "
 
 #endif	/* SCORE_H */
 

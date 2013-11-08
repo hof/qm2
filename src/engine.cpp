@@ -61,7 +61,7 @@ void * TEngine::_think(void* engineObjPtr) {
     int learnParam = game.learnParam;
     double learnFactor = game.learnFactor;
     evaluate(searchData, -SCORE_INFINITE, SCORE_INFINITE);
-    int phase = searchData->stack->gamePhase;
+    int phase = searchData->stack->phase;
     searchData->drawContempt = PHASED_SHORT(game.opponent.DrawContempt(),
             game.opponent.DrawContempt() / 2, phase);
     if (root->boardFlags->WTM == false) {
@@ -151,7 +151,7 @@ void * TEngine::_think(void* engineObjPtr) {
             tm->setEndTime(2);
             tm->setMaxTime(1);
         }
-        searchData->stack->evaluationScore = evaluate(searchData, 0, 0);
+        searchData->stack->eval_result = evaluate(searchData, 0, 0);
         int alpha = -SCORE_INFINITE;
         int beta = SCORE_INFINITE;
         int prevScore = -SCORE_INFINITE;
@@ -302,24 +302,26 @@ void TEngine::analyse() {
     TSearch * searchData = new TSearch(_rootFen.c_str(), _pct, _hashTable, _outputHandler);
     std::cout << searchData->pos->asFen().c_str() << std::endl;
     searchData->learnParam = 0;
-    searchData->stack->evaluationScore = evaluate(searchData, 0, 0);
-    int phase = searchData->stack->gamePhase;
+    searchData->stack->eval_result = evaluate(searchData, 0, 0);
+    int phase = searchData->stack->phase;
     std::cout << "\n1) Piece Square tables: ";
     searchData->pos->boardFlags->pct.print(phase);
     std::cout << "\n2) Material balance: ";
-    std::cout << searchData->stack->scores[SCORE_MATERIAL].mg;
+    std::cout << searchData->stack->material_score;
     std::cout << "\n3) Game phase: " << phase;
     std::cout << "\n4) Pawn score: ";
-    searchData->stack->scores[SCORE_PAWNS].print(phase);
+    searchData->stack->pawn_score.print(phase);
     std::cout << "\n5) Bishop score: ";
-    searchData->stack->scores[SCORE_BISHOPS].print(phase);
+    searchData->stack->bishop_score.print(phase);
     std::cout << "\n6) Rook score: ";
-    searchData->stack->scores[SCORE_ROOKS].print(phase);
+    searchData->stack->rook_score.print(phase);
     std::cout << "\n7) Shelter score for white: ";
-    searchData->stack->scores[SCORE_SHELTER_W].print(phase);
+    searchData->stack->shelter_score_w.print(phase);
     std::cout << "\n8) Shelter score for black: ";
-    searchData->stack->scores[SCORE_SHELTER_B].print(phase);
-    std::cout << "\n9) Evaluation:" << searchData->stack->evaluationScore;
+    searchData->stack->shelter_score_b.print(phase);
+    std::cout << "\n9) Evaluation:" << searchData->stack->eval_result;
+    
+    /*
     std::cout << "\n10) Quiescence:" << searchData->qsearch(-SCORE_MATE, SCORE_MATE, 0, QCHECKDEPTH) << std::endl;
     std::cout << "\n11) Best move:" << std::endl;
 
@@ -341,11 +343,14 @@ void TEngine::analyse() {
         }
 
     }
+     */
     
     //TBook * book = new TBook();
     /*
      * Analyse best move doing a shallow search
      */
+    
+    /*
     TMoveList * rootMoves = &searchData->stack->moveList;
     TBoard * root = searchData->pos;
     TMovePicker * mp = searchData->movePicker;
@@ -363,6 +368,7 @@ void TEngine::analyse() {
         searchData->backward(move);
         move = mp->pickNextMove(searchData, 0, alpha, beta, 0);
     }
+     */
     delete searchData;
 }
 
@@ -543,7 +549,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                         break;
 
                     }
-                    sd_game->stack->evaluationScore = evaluate(sd_game, 0, 0);
+                    sd_game->stack->eval_result = evaluate(sd_game, 0, 0);
                     sd_game->hashTable = hash_list[learning_side]; //each side has it's own hash
                     int depth = ONE_PLY;
                     int resultScore = 0;

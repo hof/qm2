@@ -173,14 +173,14 @@ int main(int argc, char** argv) {
         printBB("openf_expected", openf_expected);
     }
 
-    U64 nshift = NORTH1(RANK_8 | RANK_1);
+    U64 nshift = UP1(RANK_8 | RANK_1);
     if (nshift != RANK_2) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=nshift != nshift_expected: " << nshift << " != " << RANK_2 << std::endl;
         printBB("nshift", nshift);
         printBB("nshift_expected", RANK_2);
     }
 
-    U64 sshift = SOUTH1(RANK_8 | RANK_1);
+    U64 sshift = DOWN1(RANK_8 | RANK_1);
     if (sshift != RANK_7) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=sshift != sshift_expected: " << sshift << " != " << RANK_7 << std::endl;
         printBB("sshift", nshift);

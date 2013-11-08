@@ -29,8 +29,8 @@ U64 searchPerft(TSearch *searchData, int depth, int alpha, int beta) {
     U64 result = 0;
     TMovePicker * mp = searchData->movePicker;
     TBoard * pos = searchData->pos;
-    for (TMove * move = mp->pickFirstMove(searchData, depth, alpha, beta, 0); move;
-            move = mp->pickNextMove(searchData, depth, alpha, beta, 0)) {
+    for (TMove * move = mp->pickFirstMove(searchData, depth, alpha, beta); move;
+            move = mp->pickNextMove(searchData, depth, alpha, beta)) {
         if (depth <= 1) {
             result += 1;
         } else {
@@ -68,8 +68,8 @@ void divide(TSearch * searchData, int depth) {
     std::cout << pos->asFen() << std::endl;
     moveList->clear();
     TMovePicker * mp = searchData->movePicker;
-    for (TMove * move = mp->pickFirstMove(searchData, depth, -32000, 32000, 0); move;
-            move = mp->pickNextMove(searchData, depth, -32000, 32000, 0)) {
+    for (TMove * move = mp->pickFirstMove(searchData, depth, -32000, 32000); move;
+            move = mp->pickNextMove(searchData, depth, -32000, 32000)) {
         std::cout << move->asString() << " ";
         searchData->forward(move, pos->givesCheck(move));
         std::cout << searchPerft(searchData, depth, -32000, 32000) << std::endl;

@@ -281,7 +281,7 @@ bool TInputHandler::handleTestEval(TInputParser& parser) {
     }
     engine()->newGame(_fen);
     engine()->analyse();
-    engine()->think();
+    //engine()->think();
     return result;
 }
 

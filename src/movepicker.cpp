@@ -40,7 +40,7 @@ inline TMove * TMovePicker::popBest(TBoard * pos, TMoveList * list) {
     return NULL;
 }
 
-TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, int beta, int gap) {
+TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, int beta) {
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
     moveList->stage = HASH1;
@@ -48,18 +48,18 @@ TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, i
     if (searchData->excludedMove.piece != EMPTY) {
         moveList->lastX++->setMove(&searchData->excludedMove);
     }
-    return pickNextMove(searchData, depth, alpha, beta, gap);
+    return pickNextMove(searchData, depth, alpha, beta);
 }
 
-TMove * TMovePicker::pickFirstQuiescenceMove(TSearch * searchData, int qCheckDepth, int alpha, int beta, int gap) {
+TMove * TMovePicker::pickFirstQuiescenceMove(TSearch * searchData, int qCheckDepth, int alpha, int beta) {
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
     moveList->stage = Q_CAPTURES;
     searchData->stack->captureMask = searchData->pos->allPieces;
-    return pickNextMove(searchData, qCheckDepth, alpha, beta, gap);
+    return pickNextMove(searchData, qCheckDepth, alpha, beta);
 }
 
-TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, int beta, int gap) {
+TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, int beta) {
     U64 mask;
     TMoveList * moveList = &searchData->stack->moveList;
     TBoard * pos = searchData->pos;
@@ -101,13 +101,15 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     return result;
                 }
             case IID:
-                if (depth > 3 * ONE_PLY && moveList->firstX == moveList->lastX
-                        && searchData->stack->nodeType != ALLNODE) {
+                if (depth > LOW_DEPTH && moveList->firstX == moveList->lastX) {
                     //no good first move to try and lots of searching ahead:
                     //find a good first move to try by doing a shallow search
                     bool skipNull = searchData->skipNull;
                     searchData->skipNull = true;
-                    int iid_depth = MAX(ONE_PLY, depth - 3 * ONE_PLY - ONE_PLY * (depth > 5 * ONE_PLY) - ONE_PLY * (depth > 7 * ONE_PLY));
+                    int iid_depth = depth - (2 * ONE_PLY) - (depth >> 2);//(3 * ONE_PLY);
+                    iid_depth -= searchData->stack->nodeType != PVNODE;
+                    iid_depth -= searchData->stack->nodeType == ALLNODE;
+                    iid_depth = MAX(ONE_PLY, iid_depth);
                     int iid_score = searchData->pvs(alpha, beta, iid_depth);
                     searchData->skipNull = skipNull;
                     searchData->hashTable->ttLookup(searchData, iid_depth, alpha, beta);
@@ -154,7 +156,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                         if (moveList->excluded(move)) {
                             move->score = MOVE_EXCLUDED;
                         } else {
-                            move->score = pos->SEE(move);
+                            move->score = depth > LOW_DEPTH? pos->SEE(move) : MVVLVA(move);
                         }
                     }
                     result = popBest(pos, moveList);
@@ -232,12 +234,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 }
             case NON_CAPTURES:
                 moveList->minimumScore = -MOVE_INFINITY;
-                if (gap < 2 * VPAWN) {
-                    genMoves(pos, moveList);
-                    assert(moveList->current && moveList->first != moveList->last);
-                } else {
-                    genQuietChecks(pos, moveList);
-                }
+                genMoves(pos, moveList);
                 for (TMove * move = moveList->current; move != moveList->last; move++) {
                     if (moveList->excluded(move)) {
                         move->score = MOVE_EXCLUDED;
@@ -320,7 +317,7 @@ short TMovePicker::countEvasions(TSearch * sd, TMove * firstMove) {
     
     //get and count legal moves
     while (result < MAXLEGALCOUNT) {
-        TMove * m = pickNextMove(sd, 1, -SCORE_INFINITE, SCORE_INFINITE, 0);
+        TMove * m = pickNextMove(sd, 1, -SCORE_INFINITE, SCORE_INFINITE);
         if (m == NULL) {
             break;
         }

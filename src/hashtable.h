@@ -16,7 +16,7 @@ class TSearch;
 struct TMaterialTableEntry {
     U64 key;
     short value;
-    unsigned char gamePhase;
+    uint8_t phase;
 };
 
 struct TPawnTableEntry {
@@ -25,13 +25,6 @@ struct TPawnTableEntry {
     TScore shelterScoreW;
     TScore shelterScoreB;
 };
-
-struct TEvalTableEntry {
-    U64 key;
-    TScore score;
-};
-
-
 
 enum TranspositionTableEntryType {
     TT_LOWERBOUND = 1,
@@ -72,11 +65,9 @@ protected:
     int _ttMaxHashKey;
     int _materialMaxHashKey;
     int _pawnMaxHashKey;
-    int _evalMaxHashKey;
     int _ttSize;
     int _mtSize;
     int _ptSize;
-    int _etSize;
     int _repTableSize;
 public:
     THashTable(int totalSizeInMb);
@@ -86,7 +77,6 @@ public:
     TTranspositionTableEntry * alwaysReplaceTable;
     TMaterialTableEntry * materialTable;
     TPawnTableEntry * pawnTable;
-    TEvalTableEntry * evalTable;
     U64 repTable[100];
 
     inline int getTTHashKey(U64 hashCode) {
@@ -100,21 +90,14 @@ public:
     inline int getPawnHashKey(U64 pawnHashCode) {
         return pawnHashCode & _pawnMaxHashKey;
     }
-    
-    inline int getEvalHashKey(U64 evalHashCode) {
-        return evalHashCode & _evalMaxHashKey;
-    }
-
+   
     static void ttLookup(TSearch * searchData, int depth, int alpha, int beta);
     static void ttStore(TSearch * searchData, int move, int score, int depth, int alpha, int beta);
     static void mtLookup(TSearch * searchData);
-    static void mtStore(TSearch * searchData, int value, int gamePhase);
+    static void mtStore(TSearch * searchData, int value, int phase);
     static void repStore(TSearch * searchData, U64 hashCode, int fiftyCount);
     static void ptLookup(TSearch * searchData);
-    static void ptStore(TSearch * searchData, const TScore & ps, const TScore & sw, const TScore & wb);
-    static void etLookup(TSearch * searchData, const short piece, const short square);
-    static void etStore(TSearch * searchData, const TScore & score, const short piece, const short square);
-
+    static void ptStore(TSearch * searchData, const TScore * ps, const TScore * sw, const TScore * wb);
     void clear();
 
 

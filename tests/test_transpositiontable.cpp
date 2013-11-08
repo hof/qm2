@@ -31,7 +31,7 @@ void test_tt() {
     TSearch * searchData = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", pct, hashTable, &oh); 
     
     //test storing and retrieving
-    TMove * move = searchData->movePicker->pickFirstMove(searchData, 0, -SCORE_INFINITE, SCORE_INFINITE, 0);
+    TMove * move = searchData->movePicker->pickFirstMove(searchData, 0, -SCORE_INFINITE, SCORE_INFINITE);
     searchData->hashTable->ttStore(searchData, move->asInt(), -12345, 127, -SCORE_INFINITE, SCORE_INFINITE);
     searchData->hashTable->ttLookup(searchData, 127, -SCORE_INFINITE, SCORE_INFINITE);
     if (searchData->stack->ttScore == TT_EMPTY) {
