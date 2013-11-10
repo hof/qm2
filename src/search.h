@@ -40,7 +40,8 @@ enum SEARCH_CONSTANTS {
     HALF_PLY = 1,
     LOW_DEPTH = ONE_PLY * 3,
     MEDIUM_DEPTH = ONE_PLY * 5,
-    HIGH_DEPTH = ONE_PLY * 8
+    HIGH_DEPTH = ONE_PLY * 8,
+    VERY_HIGH_DEPTH = ONE_PLY * 16
 };
 
 static const short FUTILITY_MARGIN[LOW_DEPTH+1] = {
@@ -56,6 +57,8 @@ static const short FUTILITY_MARGIN[LOW_DEPTH+1] = {
 #define ISPV(a,b) (((a) + 1) < (b))
 
 const short QCHECKDEPTH = 7;
+
+const short FMARGIN[9] = { 150, 150, 150, 350, 350, 550, 550, 1200, 1200 };
 
 class TRootMove {
 public:

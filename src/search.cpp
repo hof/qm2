@@ -279,12 +279,10 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && !inCheck
             && eval >= beta
             && ABS(beta) < SCORE_MATE - MAX_PLY
-            && pos->hasPieces(pos->boardFlags->WTM)) {
-        int rdepth = depth - (3 * ONE_PLY) - (depth >> 2);
-        rdepth -= (eval - beta) > (VPAWN / 2);
-        rdepth -= (eval - beta) > VPAWN;
-        if (stack->phase >= 14) {
-            rdepth = depth - 2 * ONE_PLY - (depth >> 3);
+            && pos->getPieces(pos->boardFlags->WTM)) {
+        int rdepth = rdepth = depth - 3 * ONE_PLY - (depth >> 2);
+        if (max_1(pos->getPieces(pos->boardFlags->WTM))) {
+            rdepth += (depth >> 2);
         }
         forward();
         int score = -pvs(-beta, -alpha, rdepth);
@@ -353,7 +351,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     int givesCheck = pos->givesCheck(firstMove);
     int extendMove = (bool)givesCheck && extend < ONE_PLY;
     extendMove += extend == 0 && extendMove == 0 && pos->push7th(firstMove);
-    extendMove += extend == 0 && extendMove == 0 && type == PVNODE && bool(firstMove->capture);
+    //extendMove += extend == 0 && extendMove == 0 && type == PVNODE && bool(firstMove->capture);
 
     stack->bestMove.setMove(firstMove);
     stack->reduce = 0;
@@ -408,19 +406,32 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         int reduce = 0;
 
         /*
+         * 11. forward futility pruning at low depths
+         * (moves without potential are skipped)
+         */
+        if (!move->capture
+                && !inCheck
+                && !givesCheck
+                && new_depth <= LOW_DEPTH
+                && !pos->push7th(move)
+                && eval + FMARGIN[new_depth] <= alpha) {
+            continue;
+        }
+
+        /*
          * 12. Late Move Reductions (LMR) 
          */
         if (stack->moveList.stage >= STOP
                 && !move->capture
                 && !inCheck
-                && !givesCheck
                 && new_depth > ONE_PLY
-                && !move->promotion) {
+                && !pos->push7th(move)) {
             assert(new_depth < 256);
-            bool active = pos->active(move);
+            bool active = givesCheck || pos->active(move);
             reduce += LMR[active][type == PVNODE][MIN(63, searchedMoves)][new_depth];
             reduce += (reduce < (new_depth - 2) && type != PVNODE && history[move->piece][move->tsq] < 0);
             reduce += (reduce < (new_depth - 4) && type == CUTNODE) * ONE_PLY;
+            reduce -= (reduce > 0 && givesCheck);
         }
 
         stack->reduce = reduce;
@@ -472,7 +483,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 /*
  * Quiescence search
  */
-static const int MAXPOSGAIN = 2 * VPAWN;
+static const int MAXPOSGAIN = 200;
 
 int TSearch::qsearch(int alpha, int beta, int qPly, int maxCheckPly) {
 

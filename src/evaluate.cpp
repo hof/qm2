@@ -711,7 +711,7 @@ inline TScore * evaluateBishops(TSearch * sd) {
         int count = popCount(moves);
         result->add(BISHOP_MOBILITY[count]);
         if (count < 2 && (sq == h7 && pos->Matrix[g6] == BPAWN && pos->Matrix[f7] == BPAWN)
-                || (sq == a7 && pos->Matrix[a6] == BPAWN && pos->Matrix[c7] == BPAWN)) {
+                || (sq == a7 && pos->Matrix[b6] == BPAWN && pos->Matrix[c7] == BPAWN)) {
             result->add(TRAPPED_BISHOP);
         }
     }
@@ -722,7 +722,7 @@ inline TScore * evaluateBishops(TSearch * sd) {
         int count = popCount(moves);
         result->sub(BISHOP_MOBILITY[count]);
         if (count < 2 && (sq == h2 && pos->Matrix[g3] == WPAWN && pos->Matrix[f3] == WPAWN)
-                || (sq == a2 && pos->Matrix[a3] == WPAWN && pos->Matrix[c2] == WPAWN)) {
+                || (sq == a2 && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN)) {
             result->add(TRAPPED_BISHOP);
         }
     }

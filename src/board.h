@@ -257,11 +257,11 @@ struct TBoard {
         return halfOpenOrOpenFile(white) ^ openFiles();
     }
 
-    inline U64 hasPieces(bool wtm) {
-        return wtm ? whiteRooks | whiteKnights | whiteBishops | whiteQueens :
-                blackRooks | blackKnights | blackBishops | blackQueens;
+    inline U64 getPieces(bool wtm) {
+        return wtm ? whiteRooks | whiteKnights | whiteBishops | whiteQueens 
+                : blackRooks | blackKnights | blackBishops | blackQueens;
     }
-
+    
     inline U64 queensOrMinorsAndRooks(bool white) {
         return white ? (whiteQueens || (whiteKnights && whiteBishops && whiteRooks))
                 : (blackQueens || (whiteKnights && whiteBishops && whiteRooks));
