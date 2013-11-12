@@ -207,8 +207,8 @@ void THashTable::ptLookup(TSearch * searchData) {
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
     if ((entry->key ^ entry->pawnScore.mg) == pawnHash) {
         searchData->stack->pawn_score.set(entry->pawnScore);
-        searchData->stack->shelter_score_w.set(entry->shelterScoreW);
-        searchData->stack->shelter_score_b.set(entry->shelterScoreB);
+        searchData->stack->shelter_score[WHITE].set(entry->shelterScoreW);
+        searchData->stack->shelter_score[BLACK].set(entry->shelterScoreB);
         searchData->pawnTableHits++;
     } else {
         searchData->stack->pawn_score.set(SCORE_INVALID);

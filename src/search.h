@@ -58,7 +58,7 @@ static const short FUTILITY_MARGIN[LOW_DEPTH+1] = {
 
 const short QCHECKDEPTH = 7;
 
-const short FMARGIN[9] = { 150, 150, 150, 350, 350, 550, 550, 1200, 1200 };
+const short FMARGIN[9] = { 200, 200, 200, 450, 450, 600, 600, 1200, 1200 };
 
 class TRootMove {
 public:
@@ -143,14 +143,11 @@ struct TSearchStack {
     short material_score;
     TScore pawn_score;
     TScore knight_score;
-    TScore bishop_score;
-    TScore rook_score;
-    TScore rook_score_w;
-    TScore rook_score_b;
-    TScore queen_score;
+    TScore bishop_score[2];
+    TScore rook_score[2];
+    TScore queen_score[2];
     TScore king_score;
-    TScore shelter_score_w;
-    TScore shelter_score_b;
+    TScore shelter_score[2];
     TScore exp_score;
     U64 occ;
     U64 fill[2];

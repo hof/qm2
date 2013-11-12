@@ -312,13 +312,15 @@ void TEngine::analyse() {
     std::cout << "\n4) Pawn score: ";
     searchData->stack->pawn_score.print(phase);
     std::cout << "\n5) Bishop score: ";
-    searchData->stack->bishop_score.print(phase);
+    searchData->stack->bishop_score[WHITE].print(phase);
+    searchData->stack->bishop_score[BLACK].print(phase);
     std::cout << "\n6) Rook score: ";
-    searchData->stack->rook_score.print(phase);
+    searchData->stack->rook_score[WHITE].print(phase);
+    searchData->stack->rook_score[BLACK].print(phase);
     std::cout << "\n7) Shelter score for white: ";
-    searchData->stack->shelter_score_w.print(phase);
+    searchData->stack->shelter_score[WHITE].print(phase);
     std::cout << "\n8) Shelter score for black: ";
-    searchData->stack->shelter_score_b.print(phase);
+    searchData->stack->shelter_score[BLACK].print(phase);
     std::cout << "\n9) Evaluation:" << searchData->stack->eval_result;
     
     /*

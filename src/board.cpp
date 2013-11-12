@@ -19,6 +19,8 @@ void TBoard::clear() {
     rootPly = 0;
     whiteKingPos = &pieces[WKING].squares[0];
     blackKingPos = &pieces[BKING].squares[0];
+    kingPos[WHITE] = whiteKingPos;
+    kingPos[BLACK] = blackKingPos;
     whitePawns = 0;
     blackPawns = 0;
     whiteKnights = 0;
@@ -34,6 +36,14 @@ void TBoard::clear() {
     whitePieces = 0;
     blackPieces = 0;
     allPieces = 0;
+    queens[WHITE] = &whiteQueens;
+    queens[BLACK] = &blackQueens;
+    rooks[WHITE] = &whiteRooks;
+    rooks[BLACK] = &blackRooks;
+    bishops[WHITE] = &whiteBishops;
+    bishops[BLACK] = &blackBishops;
+    pawns[WHITE] = &whitePawns;
+    pawns[BLACK] = &blackPawns;
     boards[WPAWN] = &whitePawns;
     boards[WKNIGHT] = &whiteKnights;
     boards[WBISHOP] = &whiteBishops;

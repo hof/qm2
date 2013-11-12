@@ -351,8 +351,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     int givesCheck = pos->givesCheck(firstMove);
     int extendMove = (bool)givesCheck && extend < ONE_PLY;
     extendMove += extend == 0 && extendMove == 0 && pos->push7th(firstMove);
-    //extendMove += extend == 0 && extendMove == 0 && type == PVNODE && bool(firstMove->capture);
-
+    
     stack->bestMove.setMove(firstMove);
     stack->reduce = 0;
     forward(firstMove, givesCheck);

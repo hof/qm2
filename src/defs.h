@@ -89,6 +89,11 @@ const U64 RANK_6 = RANK_1 << (5 * 8);
 const U64 RANK_7 = RANK_1 << (6 * 8);
 const U64 RANK_8 = RANK_1 << (7 * 8);
 
+const U64 RANK[2][9] = {
+    { 0, RANK_8, RANK_7, RANK_6, RANK_5, RANK_4, RANK_3, RANK_2, RANK_1 }, //blacks point of view
+    { 0, RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8 } //whites point of view
+};
+
 const U64 FILES[8] = {
     FILE_A,
     FILE_B,

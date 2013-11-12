@@ -181,7 +181,7 @@ const TScore ROOK_MOBILITY[15] = {
 
 const TScore ROOK_SEMIOPEN_FILE = S(12, 12);
 const TScore ROOK_OPEN_FILE = S(24, 24);
-const TScore ROOK_SHELTER_PROTECT = S(16, 0);
+const TScore ROOK_SHELTER_PROTECT = S(10, 0);
 
 const TScore BISHOP_MOBILITY[15] = {
     S(-40, -50), S(-20, -30), S(-10, -20), S(0, -10),

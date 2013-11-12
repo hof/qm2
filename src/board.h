@@ -101,6 +101,10 @@ using std::string;
 #define BQUEEN  11
 #define BKING   12
 
+const uint8_t QUEEN[2] = {BQUEEN, WQUEEN};
+const uint8_t ROOK[2] = {BROOK, WROOK};
+const uint8_t BISHOP[2] = {BBISHOP, WBISHOP};
+
 #define WPIECES 13
 #define BPIECES 14
 #define ALLPIECES   0
@@ -214,11 +218,16 @@ struct TBoard {
     U64 blackPieces;
     U64 allPieces;
     U64 * boards[BPIECES + 1];
+    U64 * bishops[2];
+    U64 * rooks[2];
+    U64 * pawns[2];
+    U64 * queens[2];
 
     unsigned char Matrix[64];
     TPiecePlacement pieces[BKING + 1];
     const unsigned char * whiteKingPos;
     const unsigned char * blackKingPos;
+    const uint8_t * kingPos[2];
     TSCORE_PCT pieceSquareTable;
 
     void clear();
@@ -237,7 +246,7 @@ struct TBoard {
         return whiteKings | blackKings | whitePawns | blackPawns;
     }
 
-    inline U64 pawns() {
+    inline U64 allPawns() {
         return whitePawns | blackPawns;
     }
 
