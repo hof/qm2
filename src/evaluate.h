@@ -169,12 +169,12 @@ const TScore SHELTER_OPEN_ATTACK_FILES[4] = {
 
 const TScore SHELTER_OPEN_EDGE_FILE = S(-110, -10);
 
-const TScore SHELTER_CASTLING_KINGSIDE = S(50, 10);
+const TScore SHELTER_CASTLING_KINGSIDE = S(70, 20);
 
-const TScore SHELTER_CASTLING_QUEENSIDE = S(40, 10);
+const TScore SHELTER_CASTLING_QUEENSIDE = S(60, 20);
 
 const TScore ROOK_MOBILITY[15] = {
-    S(-30, -40), S(-20, -30), S(-10, -20), S(0, -10),
+    S(-40, -40), S(-30, -30), S(-20, -20), S(0, -10),
     S(2, 0), S(4, 4), S(6, 6), S(8, 8), S(10, 10),
     S(12, 12), S(14, 14), S(16, 16), S(18, 18), S(20, 20), S(22, 22)
 };

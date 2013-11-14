@@ -36,6 +36,10 @@ void TBoard::clear() {
     whitePieces = 0;
     blackPieces = 0;
     allPieces = 0;
+    knights[WHITE] = &whiteKnights;
+    knights[BLACK] = &blackKnights;
+    //kings[WHITE] = &whiteKings;
+    //kings[BLACK] = &blackKings;
     queens[WHITE] = &whiteQueens;
     queens[BLACK] = &blackQueens;
     rooks[WHITE] = &whiteRooks;

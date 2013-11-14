@@ -21,6 +21,7 @@ struct TMaterialTableEntry {
 
 struct TPawnTableEntry {
     U64 key;
+    U64 passers;
     TScore pawnScore;
     TScore shelterScoreW;
     TScore shelterScoreB;
@@ -97,7 +98,7 @@ public:
     static void mtStore(TSearch * searchData, int value, int phase);
     static void repStore(TSearch * searchData, U64 hashCode, int fiftyCount);
     static void ptLookup(TSearch * searchData);
-    static void ptStore(TSearch * searchData, const TScore * ps, const TScore * sw, const TScore * wb);
+    static void ptStore(TSearch * searchData, const TScore * ps, const TScore * sw, const TScore * wb, const U64 &passers);
     void clear();
 
 

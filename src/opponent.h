@@ -21,7 +21,7 @@ struct TOpponent {
     void clear() {
         Title = "";
         Name = "Unknown";
-        Computer = false;
+        Computer = true;
         Rating = 0;
     }
 
@@ -40,7 +40,7 @@ struct TOpponent {
             result = MIN(result, 250);
             result = MAX(result, -250);
         } else {
-            result = Computer? 0: -50;
+            result = Computer? -16: -60;
         }
         return result;
     }

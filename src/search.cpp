@@ -121,7 +121,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
             outputHandler->sendPV(bestScore,
                     depth / ONE_PLY,
                     selDepth,
-                    nodes,
+                    nodes + pruned_nodes,
                     timeManager->elapsed(),
                     getPVString().c_str(),
                     bestScore <= alpha ? FAILLOW : bestScore >= beta ? FAILHIGH : EXACT);
@@ -166,7 +166,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
                 outputHandler->sendPV(bestScore,
                         depth / ONE_PLY,
                         selDepth,
-                        nodes,
+                        nodes + pruned_nodes,
                         timeManager->elapsed(),
                         getPVString().c_str(),
                         bestScore <= alpha ? FAILLOW : bestScore >= beta ? FAILHIGH : EXACT);
@@ -235,7 +235,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      */
     if (pos->boardFlags->fiftyCount > 1) {
         if (pos->boardFlags->fiftyCount >= 100) {
-            return drawScore(); //draw by 50 reversible moves
+            return drawScore(-8); //draw by 50 reversible moves
         }
         int stopPly = pos->currentPly - pos->boardFlags->fiftyCount;
         for (int ply = pos->currentPly - 4; ply >= stopPly; ply -= 2) { //draw by repetition
@@ -316,7 +316,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     TMove * firstMove = movePicker->pickFirstMove(this, depth, alpha, beta);
     if (!firstMove) { //no legal move: it's checkmate or stalemate
         stack->pvCount = 0;
-        return inCheck ? -SCORE_MATE + pos->currentPly : drawScore();
+        return inCheck ? -SCORE_MATE + pos->currentPly : drawScore(8);
     }
 
     /*
@@ -398,6 +398,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             TMove * myLastMove = &(stack - 2)->move;
             if (myLastMove->tsq == move->ssq
                     && myLastMove->ssq == move->tsq) {
+                pruned_nodes++;
                 continue;
             }
         }
@@ -408,12 +409,14 @@ int TSearch::pvs(int alpha, int beta, int depth) {
          * 11. forward futility pruning at low depths
          * (moves without potential are skipped)
          */
-        if (!move->capture
+        if (stack->moveList.stage >= NON_CAPTURES
+                && !move->capture //exclude hash & killers from pruning?
                 && !inCheck
                 && !givesCheck
                 && new_depth <= LOW_DEPTH
                 && !pos->push7th(move)
                 && eval + FMARGIN[new_depth] <= alpha) {
+            pruned_nodes++;
             continue;
         }
 
@@ -499,7 +502,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int maxCheckPly) {
     //return obvious draws
     if (pos->boardFlags->fiftyCount > 1) {
         if (pos->boardFlags->fiftyCount >= 100) {
-            return drawScore();
+            return drawScore(-8);
         }
         int stopPly = pos->currentPly - pos->boardFlags->fiftyCount;
         for (int ply = pos->currentPly - 4; ply >= stopPly; ply -= 2) {
@@ -554,16 +557,19 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int maxCheckPly) {
                 int gain = PIECE_VALUE[move->capture];
                 if (move->promotion) {
                     if (move->promotion != WQUEEN && move->promotion != BQUEEN) {
+                        pruned_nodes++;
                         continue;
                     }
                     gain += PIECE_VALUE[move->promotion] - VPAWN;
                 }
                 if (base + gain + MAXPOSGAIN < alpha) {
+                    pruned_nodes++;
                     continue;
                 }
 
                 //2. prune moves when SEE is negative
                 if (pos->SEE(move) < 0) {
+                    pruned_nodes++;
                     continue;
                 }
             }

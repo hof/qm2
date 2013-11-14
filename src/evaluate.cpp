@@ -9,7 +9,7 @@ inline TScore * evaluatePawns(TSearch * sd);
 inline TScore * evaluateBishops(TSearch * sd, bool white);
 inline TScore * evaluateRooks(TSearch * sd, bool white);
 inline TScore * evaluateQueens(TSearch * sd, bool white);
-inline TScore * evaluateExp(TSearch * sd);
+inline TScore * evaluatePassers(TSearch * sd, bool white);
 
 int evaluate(TSearch * sd, int alpha, int beta) {
     if (sd->stack->eval_result != SCORE_INVALID) {
@@ -38,6 +38,10 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     score->sub(evaluateRooks(sd, BLACK));
     score->add(evaluateQueens(sd, WHITE));
     score->sub(evaluateQueens(sd, BLACK));
+    //score->add(evaluatePassers(sd, WHITE));
+    //score->sub(evaluatePassers(sd, BLACK));
+
+
     result += score->get(sd->stack->phase);
     result &= GRAIN;
     result = sd->pos->boardFlags->WTM ? result : -result;
@@ -48,24 +52,10 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     return result;
 }
 
-/**
- * Experimental evaluation for learning
- * @param sd search meta-data object
- * @return score the evaluation score
- */
-
-
-TScore * evaluateExp(TSearch * sd) {
-    TScore * result = &sd->stack->exp_score;
-    result->clear();
-    return result;
-}
-
 bool skipExp(TSearch * sd) {
-    int pc = WQUEEN;
+    int pc = WBISHOP;
     return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
 }
-
 
 const short TRADEDOWN_PIECES[MAX_PIECES + 1] = {
     100, 80, 60, 40, 20, 0, -10, -20, -20, -20, -20, -20, -20, -20, -20, -20, -20
@@ -422,6 +412,7 @@ inline TScore * evaluatePawns(TSearch * sd) {
         sd->stack->pawn_score.set((sd->stack - 1)->pawn_score);
         sd->stack->shelter_score[WHITE].set((sd->stack - 1)->shelter_score[WHITE]);
         sd->stack->shelter_score[BLACK].set((sd->stack - 1)->shelter_score[BLACK]);
+        sd->stack->passers = (sd->stack - 1)->passers;
         return &sd->stack->pawn_score;
     }
 
@@ -440,8 +431,8 @@ inline TScore * evaluatePawns(TSearch * sd) {
     TScore * shelter_score_w = &sd->stack->shelter_score[WHITE];
     TScore * shelter_score_b = &sd->stack->shelter_score[BLACK];
     pawn_score->clear();
-    shelter_score_w->set(-150, -50);
-    shelter_score_b->set(-150, -50);
+    shelter_score_w->set(-130, -50);
+    shelter_score_b->set(-130, -50);
     TBoard * pos = sd->pos;
 
     int wkpos = *pos->whiteKingPos;
@@ -672,7 +663,8 @@ inline TScore * evaluatePawns(TSearch * sd) {
             shelter_score_b->add(SHELTER_OPEN_EDGE_FILE);
         }
     }
-    sd->hashTable->ptStore(sd, pawn_score, shelter_score_w, shelter_score_b);
+    sd->stack->passers = passers;
+    sd->hashTable->ptStore(sd, pawn_score, shelter_score_w, shelter_score_b, passers);
     return &sd->stack->pawn_score;
 }
 
@@ -716,6 +708,10 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
                 || (sq == a2 && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN)) {
             result->add(TRAPPED_BISHOP);
         }
+        
+        //if (pos->attackedByPawn(sq, us)) {
+        //    result->add(8*sd->learnFactor); //defended piece
+        //}
     }
     return result;
 }
@@ -764,7 +760,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         U64 attack = popCount(moves & (*pos->pawns[them] | RANK[us][7] | KingZone[*pos->kingPos[them]]), true);
         result->add(attack << 3, attack << 1);
         if ((bitSq & RANK[us][1]) && (BIT(*pos->kingPos[us]) & (RANK[us][1] | RANK[us][2]))) {
-           result->add(ROOK_SHELTER_PROTECT);
+            result->add(ROOK_SHELTER_PROTECT);
         }
     }
     return result;
@@ -780,6 +776,31 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
     }
     bool them = !us;
     result->sub(sd->stack->shelter_score[them]);
+    return result;
+}
+
+inline TScore * evaluatePassers(TSearch * sd, bool us) {
+    TScore * result = &sd->stack->passer_score[us];
+    result->clear();
+    bool them = !us;
+    U64 passers = sd->stack->passers & *sd->pos->pawns[us] & SIDE[them];
+    while (passers) {
+        int sq = POP(passers);
+        int ix = us == WHITE ? FLIP_SQUARE(sq) : sq;
+        int from = sq;
+        int to = forwardSq(sq, us);
+        do {
+
+            if (BIT(to) & sd->pos->allPieces) {
+                break;
+            }
+            U64 attacks = sd->pos->attacksTo(to);
+            //if (attacks & pos->pieces[them]) {
+            //    break;
+            //}
+            //result->add(PASSED_PAWN[ix]);
+        } while (to >= a1 && to <= h8);
+    }
     return result;
 }
 

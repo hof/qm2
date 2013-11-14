@@ -132,6 +132,8 @@ struct TSearchStack {
     TMove pvMoves[MAX_PLY + 1];
 
     int ttScore;
+    int ttDepth1;
+    int ttDepth2;
     TMove ttMove1;
     TMove ttMove2;
 
@@ -149,9 +151,11 @@ struct TSearchStack {
     TScore king_score;
     TScore shelter_score[2];
     TScore exp_score;
+    TScore passer_score[2];
     U64 occ;
     U64 fill[2];
     U64 mobMask[2];
+    U64 passers;
     
     int reduce;
     
@@ -168,6 +172,7 @@ public:
     TSearchStack * rootStack;
 
     U64 nodes;
+    U64 pruned_nodes;
     U64 maxNodes;
     U64 hashProbes;
     U64 hashHits;
@@ -218,6 +223,7 @@ public:
         movePicker = new TMovePicker();
         timeManager = new TTimeManager();
         nodes = 0;
+        pruned_nodes = 0;
         hashProbes = 0;
         hashHits = 0;
         evaluations = 0;
@@ -253,6 +259,11 @@ public:
     }
 
     void initLMR();
+    
+    inline void clearHistory() {
+        memset(history, 0, sizeof (history));
+        
+    }
     
     inline void updateKillers(TMove * move) {
         if (!stack->killer1.equals(move)) {
@@ -342,6 +353,7 @@ public:
         pos->_boardFlags[0].copy(this->pos->boardFlags);
         pos->boardFlags = &this->pos->_boardFlags[0];
         nodes = 0;
+        pruned_nodes = 0;
         stack->pvCount = 0;
     }
 
@@ -358,9 +370,9 @@ public:
     int pvs(int alpha, int beta, int depth);
     int qsearch(int alpha, int beta, int qPly, int maxCheckPly);
     
-    inline int drawScore() {
-        return pos->boardFlags->WTM? drawContempt 
-                : -drawContempt;
+    inline int drawScore(int adjust=0) {
+        return pos->boardFlags->WTM? drawContempt+adjust 
+                : -drawContempt-adjust;
     }
 
     void debug_print_search(int alpha, int beta);

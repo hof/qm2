@@ -102,7 +102,6 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 }
             case IID:
                 if (depth > LOW_DEPTH && moveList->firstX == moveList->lastX) {
-                    //no good first move to try and lots of searching ahead:
                     //find a good first move to try by doing a shallow search
                     bool skipNull = searchData->skipNull;
                     searchData->skipNull = true;

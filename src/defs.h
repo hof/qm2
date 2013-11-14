@@ -253,6 +253,11 @@ inline bool max_1(U64 x) {
 #define DOWNRIGHT1(x) (((x) >> 7) & NOT_FILE_A)
 #define DOWNLEFT1(x) (((x) >> 9) & NOT_FILE_H)
 
+const uint8_t PAWNDIRECTION[2] = {-8, 8};
+inline int forwardSq(int sq, bool white) {
+    return sq + PAWNDIRECTION[white];
+}
+
 #define FILE(sq)            ((sq)&7)
 #define RANK(sq)            ((sq)>>3)
 

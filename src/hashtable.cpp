@@ -69,6 +69,7 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
             searchData->stack->ttMove1.setMove(&move);
             int nodeType = TTFLAG(hashedData);
             hashedDepth1 = TTDEPTH(hashedData);
+            searchData->stack->ttDepth1 = hashedDepth1;
             int hashedScore = TTSCORE(hashedData);
             if (hashedDepth1 >= depth &&
                     ((nodeType == TT_EXACT)
@@ -90,6 +91,7 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
      */
     ttEntry = &hashTable->alwaysReplaceTable[hashKey];
     U64 hashedData2 = ttEntry->value;
+    int hashedDepth2 = 0;
     hashedKey = ttEntry->key;
     if ((hashedKey ^ hashedData2) == hashCode) {
         TMove move;
@@ -103,7 +105,8 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
                 searchData->stack->ttMove2.setMove(&move);
             }
             int nodeType = TTFLAG(hashedData2);
-            int hashedDepth2 = TTDEPTH(hashedData2);
+            hashedDepth2 = TTDEPTH(hashedData2);
+            searchData->stack->ttDepth2 = hashedDepth2;
             int hashedScore = TTSCORE(hashedData2);
             if (hashedDepth2 >= depth &&
                     ((nodeType == TT_EXACT)
@@ -121,7 +124,6 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
             }
         }
     }
-
     searchData->hashHits += hashHit;
 }
 
@@ -209,19 +211,21 @@ void THashTable::ptLookup(TSearch * searchData) {
         searchData->stack->pawn_score.set(entry->pawnScore);
         searchData->stack->shelter_score[WHITE].set(entry->shelterScoreW);
         searchData->stack->shelter_score[BLACK].set(entry->shelterScoreB);
+        searchData->stack->passers = entry->passers;
         searchData->pawnTableHits++;
     } else {
         searchData->stack->pawn_score.set(SCORE_INVALID);
     }
 }
 
-void THashTable::ptStore(TSearch * searchData, const TScore * pawnScore, const TScore * shelter_w, const TScore * shelter_b) {
+void THashTable::ptStore(TSearch * searchData, const TScore * pawnScore, const TScore * shelter_w, const TScore * shelter_b, const U64 &passers) {
     THashTable * hashTable = searchData->hashTable;
     U64 pawnHash = searchData->pos->boardFlags->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
     entry->pawnScore.set(pawnScore);
     entry->shelterScoreW.set(shelter_w);
     entry->shelterScoreB.set(shelter_b);
+    entry->passers = passers;
     entry->key = (pawnHash ^ pawnScore->mg);
 }
 

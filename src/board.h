@@ -222,6 +222,7 @@ struct TBoard {
     U64 * rooks[2];
     U64 * pawns[2];
     U64 * queens[2];
+    U64 * knights[2];
 
     unsigned char Matrix[64];
     TPiecePlacement pieces[BKING + 1];
@@ -390,6 +391,10 @@ struct TBoard {
 
     inline bool attackedByBlackPawn(int sq) {
         return WPawnCaptures[sq] & blackPawns;
+    }
+    
+    inline bool attackedByPawn(int sq, bool white) {
+        return white? attackedByWhitePawn(sq) : attackedByBlackPawn(sq);
     }
 
     inline bool attackedByOpponentPawn(int sq) {

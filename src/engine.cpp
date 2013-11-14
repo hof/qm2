@@ -155,7 +155,7 @@ void * TEngine::_think(void* engineObjPtr) {
         int alpha = -SCORE_INFINITE;
         int beta = SCORE_INFINITE;
         int prevScore = -SCORE_INFINITE;
-        const int windows[] = {(1<<GRAIN_SIZE)+1, 30, 120, 350, 550, 950, SCORE_INFINITE };
+        const int windows[] = { 20, 80, 140, 350, 550, 950, SCORE_INFINITE, SCORE_INFINITE };
         int alpha_window = 0;
         int beta_window = 0;
         int lowest = SCORE_INFINITE;
@@ -187,7 +187,8 @@ void * TEngine::_think(void* engineObjPtr) {
                     engine->setScore(resultScore);
                 }
                 if (searchData->outputHandler) {
-                    searchData->outputHandler->sendPV(resultScore, depth / ONE_PLY, searchData->selDepth, searchData->nodes, tm->elapsed(), searchData->getPVString().c_str(), type);
+                    searchData->outputHandler->sendPV(resultScore, depth / ONE_PLY, searchData->selDepth, 
+                            searchData->nodes + searchData->pruned_nodes, tm->elapsed(), searchData->getPVString().c_str(), type);
                 }
             }
             /* 
@@ -213,10 +214,10 @@ void * TEngine::_think(void* engineObjPtr) {
             int diffScore = ABS(score - prevScore);
             if (score <= alpha) {
                 alpha_window++;
-                alpha = MIN(lowest, score - windows[alpha_window] - diffScore);
+                alpha = MIN(lowest, score - windows[alpha_window]);
             } else if (score >= beta) {
                 beta_window++;
-                beta = MAX(highest, score + windows[beta_window] + diffScore);
+                beta = MAX(highest, score + windows[beta_window]);
             } else {
                 alpha = MIN(lowest, score - windows[0]);
                 beta = MAX(highest, score + windows[0]);
@@ -247,7 +248,7 @@ void * TEngine::_think(void* engineObjPtr) {
              * - PV or pondermove is not set
              */
             if ((tm->elapsed() > 1500)
-                    && ((type != EXACT && diffScore > VPAWN / 4)
+                    && ((type != EXACT && diffScore > (VPAWN / 4))
                     || ponderMove.piece == EMPTY)) {
                 tm->requestMoreTime();
             }
