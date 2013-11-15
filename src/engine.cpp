@@ -155,7 +155,7 @@ void * TEngine::_think(void* engineObjPtr) {
         int alpha = -SCORE_INFINITE;
         int beta = SCORE_INFINITE;
         int prevScore = -SCORE_INFINITE;
-        const int windows[] = { 20, 80, 140, 350, 550, 950, SCORE_INFINITE, SCORE_INFINITE };
+        const int windows[] = { 20, 40, 80, 160, 320, 640, 1280, SCORE_INFINITE, SCORE_INFINITE };
         int alpha_window = 0;
         int beta_window = 0;
         int lowest = SCORE_INFINITE;
@@ -318,9 +318,12 @@ void TEngine::analyse() {
     std::cout << "\n6) Rook score: ";
     searchData->stack->rook_score[WHITE].print(phase);
     searchData->stack->rook_score[BLACK].print(phase);
-    std::cout << "\n7) Shelter score for white: ";
+    std::cout << "\n7) Passer score: ";
+    searchData->stack->passer_score[WHITE].print(phase);
+    searchData->stack->passer_score[BLACK].print(phase);
+    std::cout << "\n8) Shelter score for white: ";
     searchData->stack->shelter_score[WHITE].print(phase);
-    std::cout << "\n8) Shelter score for black: ";
+    std::cout << "\n9) Shelter score for black: ";
     searchData->stack->shelter_score[BLACK].print(phase);
     std::cout << "\n9) Evaluation:" << searchData->stack->eval_result;
     

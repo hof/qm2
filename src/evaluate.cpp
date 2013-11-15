@@ -5,7 +5,7 @@
 
 inline short evaluateMaterial(TSearch * sd);
 
-inline TScore * evaluatePawns(TSearch * sd);
+inline TScore * evaluatePawnsAndKings(TSearch * sd);
 inline TScore * evaluateBishops(TSearch * sd, bool white);
 inline TScore * evaluateRooks(TSearch * sd, bool white);
 inline TScore * evaluateQueens(TSearch * sd, bool white);
@@ -31,15 +31,15 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     sd->stack->mobMask[WHITE] = ~(pos->whitePawns | pos->whiteKings | pos->blackPawnAttacks());
     sd->stack->mobMask[BLACK] = ~(pos->blackPawns | pos->blackKings | pos->whitePawnAttacks());
 
-    score->add(evaluatePawns(sd));
+    score->add(evaluatePawnsAndKings(sd));
     score->add(evaluateBishops(sd, WHITE));
     score->sub(evaluateBishops(sd, BLACK));
     score->add(evaluateRooks(sd, WHITE));
     score->sub(evaluateRooks(sd, BLACK));
     score->add(evaluateQueens(sd, WHITE));
     score->sub(evaluateQueens(sd, BLACK));
-    //score->add(evaluatePassers(sd, WHITE));
-    //score->sub(evaluatePassers(sd, BLACK));
+    score->add(evaluatePassers(sd, WHITE));
+    score->sub(evaluatePassers(sd, BLACK));
 
 
     result += score->get(sd->stack->phase);
@@ -54,7 +54,7 @@ int evaluate(TSearch * sd, int alpha, int beta) {
 
 bool skipExp(TSearch * sd) {
     int pc = WBISHOP;
-    return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
+    return false && sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
 }
 
 const short TRADEDOWN_PIECES[MAX_PIECES + 1] = {
@@ -399,10 +399,7 @@ void init_pct(TSCORE_PCT & pct) {
  * @param sd search metadata object
  */
 
-inline TScore * evaluatePawns(TSearch * sd) {
-
-
-
+inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
     /*
      * 1. Get the score from the last stack record if the latest move did not
@@ -431,8 +428,8 @@ inline TScore * evaluatePawns(TSearch * sd) {
     TScore * shelter_score_w = &sd->stack->shelter_score[WHITE];
     TScore * shelter_score_b = &sd->stack->shelter_score[BLACK];
     pawn_score->clear();
-    shelter_score_w->set(-130, -50);
-    shelter_score_b->set(-130, -50);
+    shelter_score_w->set(-120, -50);
+    shelter_score_b->set(-120, -50);
     TBoard * pos = sd->pos;
 
     int wkpos = *pos->whiteKingPos;
@@ -581,12 +578,13 @@ inline TScore * evaluatePawns(TSearch * sd) {
     pawn_score->add(0, popCount(KingZone[wkpos] & pos->allPawns(), true) * 12);
     pawn_score->sub(0, popCount(KingZone[bkpos] & pos->allPawns(), true) * 12);
 
-
+    //support and attack passed pawns even more
+    pawn_score->add(0, popCount(KingZone[wkpos] & passers, true) * 12);
+    pawn_score->sub(0, popCount(KingZone[bkpos] & passers, true) * 12);
 
     /*
      * 4. Evaluate King shelter score. 
      */
-
     shelter_score_w->add(SHELTER_KPOS[FLIP_SQUARE(wkpos)]);
     //1. reward having the right to castle
     if (pos->boardFlags->castlingFlags & CASTLE_K
@@ -619,7 +617,7 @@ inline TScore * evaluatePawns(TSearch * sd) {
     U64 open = (openW | openB) & kingFront & RANK_8;
     if (open) {
         shelter_score_w->add(SHELTER_OPEN_FILES[popCount(open & openW, true)]);
-        shelter_score_b->sub(SHELTER_OPEN_ATTACK_FILES[popCount(open & openB, true)]);
+        shelter_score_w->add(SHELTER_OPEN_ATTACK_FILES[popCount(open & openB, true)]);
         if (open & openW & openB & (FILE_A | FILE_B | FILE_H | FILE_G)) {
             shelter_score_w->add(SHELTER_OPEN_EDGE_FILE);
         }
@@ -658,7 +656,7 @@ inline TScore * evaluatePawns(TSearch * sd) {
     open = (openW | openB) & kingFront & RANK_1;
     if (open) {
         shelter_score_b->add(SHELTER_OPEN_FILES[popCount(open & openB, true)]);
-        shelter_score_w->sub(SHELTER_OPEN_ATTACK_FILES[popCount(open & openW, true)]);
+        shelter_score_b->add(SHELTER_OPEN_ATTACK_FILES[popCount(open & openW, true)]);
         if (open & openB & openW & (FILE_A | FILE_B | FILE_H | FILE_G)) {
             shelter_score_b->add(SHELTER_OPEN_EDGE_FILE);
         }
@@ -708,7 +706,7 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
                 || (sq == a2 && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN)) {
             result->add(TRAPPED_BISHOP);
         }
-        
+
         //if (pos->attackedByPawn(sq, us)) {
         //    result->add(8*sd->learnFactor); //defended piece
         //}
@@ -754,14 +752,34 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
                 result->add(ROOK_OPEN_FILE);
             }
         }
-        U64 moves = MagicRookMoves(sq, sd->stack->occ) & sd->stack->mobMask[us];
-        int count = popCount(moves);
+        U64 moves = MagicRookMoves(sq, sd->stack->occ);
+        U64 mobmask = moves & sd->stack->mobMask[us];
+        int count = popCount(mobmask);
         result->add(ROOK_MOBILITY[count]);
-        U64 attack = popCount(moves & (*pos->pawns[them] | RANK[us][7] | KingZone[*pos->kingPos[them]]), true);
+        U64 attack = popCount(mobmask & (*pos->pawns[them] | RANK[us][7] | KingZone[*pos->kingPos[them]]), true);
         result->add(attack << 3, attack << 1);
         if ((bitSq & RANK[us][1]) && (BIT(*pos->kingPos[us]) & (RANK[us][1] | RANK[us][2]))) {
             result->add(ROOK_SHELTER_PROTECT);
         }
+        //Tarrasch rule: place rook behind passers
+        if (moves & sd->stack->passers) {
+            U64 front[2];
+            front[BLACK] = southFill(bitSq) & moves & sd->stack->passers & (WHITE_SIDE | RANK_5);
+            front[WHITE] = northFill(bitSq) & moves & sd->stack->passers & (BLACK_SIDE | RANK_4);
+            if (front[us] & *pos->pawns[us]) { //supporting a passer from behind
+                result->add(ROOK_TARRASCH_SUPPORT);
+            }
+            if (front[them] & *pos->pawns[them]) { //attacking a passer from behind
+                result->add(ROOK_TARRASCH_ATTACK);
+            }
+            if (front[them] & *pos->pawns[us]) { //supporting from the wrong side
+                result->add(ROOK_WRONG_TARRASCH_SUPPORT);
+            }
+            if (front[us] & *pos->pawns[them]) { //attacking from the wrong side
+                result->add(ROOK_WRONG_TARRASCH_ATTACK);
+            }
+        }
+
     }
     return result;
 }
@@ -787,18 +805,22 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
     while (passers) {
         int sq = POP(passers);
         int ix = us == WHITE ? FLIP_SQUARE(sq) : sq;
-        int from = sq;
         int to = forwardSq(sq, us);
+        int i = 0;
         do {
-
             if (BIT(to) & sd->pos->allPieces) {
-                break;
+                break; //blocked
             }
             U64 attacks = sd->pos->attacksTo(to);
-            //if (attacks & pos->pieces[them]) {
-            //    break;
-            //}
-            //result->add(PASSED_PAWN[ix]);
+            if ((attacks & sd->pos->getPieces(them)) 
+                    && !(attacks & sd->pos->getPieces(us))) {
+                break;
+            }
+            result->add(PASSED_PAWN[ix]);
+            to = forwardSq(to, us);
+            if (i++ > 8) {
+                sd->debug_print_search(0,0);
+            }
         } while (to >= a1 && to <= h8);
     }
     return result;

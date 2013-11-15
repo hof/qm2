@@ -44,21 +44,10 @@ enum SEARCH_CONSTANTS {
     VERY_HIGH_DEPTH = ONE_PLY * 16
 };
 
-static const short FUTILITY_MARGIN[LOW_DEPTH+1] = {
-    2 * VPAWN,
-    VKNIGHT, VKNIGHT,
-    VROOK, VROOK,
-    VQUEEN, VQUEEN
-};
-
 #define HISTORY_MAX 5000
 
 #define NOTPV(a,b) (((a) + 1) >= (b))
 #define ISPV(a,b) (((a) + 1) < (b))
-
-const short QCHECKDEPTH = 7;
-
-const short FMARGIN[9] = { 200, 200, 200, 450, 450, 600, 600, 1200, 1200 };
 
 class TRootMove {
 public:
@@ -373,6 +362,10 @@ public:
     inline int drawScore(int adjust=0) {
         return pos->boardFlags->WTM? drawContempt+adjust 
                 : -drawContempt-adjust;
+    }
+    
+    inline bool passedPawn(TMove * move) {
+        return BIT(move->ssq) & stack->passers;
     }
 
     void debug_print_search(int alpha, int beta);

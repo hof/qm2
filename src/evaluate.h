@@ -53,14 +53,14 @@ const short VPAWN = 100;
 const short VKNIGHT = 315;
 const short VBISHOP = 330;
 const short VROOK = 500;
-const short VQUEEN = 950;
+const short VQUEEN = 925;
 const short VKING = 20000;
 
 const TScore SVPAWN = S(100, 100);
 const TScore SVKNIGHT = S(315, 300);
 const TScore SVBISHOP = S(330, 320);
 const TScore SVROOK = S(465, 465);
-const TScore SVQUEEN = S(950, 900);
+const TScore SVQUEEN = S(950, 875);
 const TScore SVKING = S(20000, 20000);
 
 const short PIECE_VALUE[13] = {
@@ -142,8 +142,8 @@ const TScore SHELTER_PAWN[64] = {
     S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
     S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
     S(5, 6), S(5, 6), S(5, 4), S(5, 4), S(5, 4), S(5, 4), S(15, 6), S(15, 6),
-    S(25, 8), S(25, 8), S(20, 4), S(2, 4), S(2, 4), S(10, 4), S(25, 8), S(25, 8),
-    S(40, 10), S(40, 10), S(35, 4), S(10, 4), S(5, 4), S(25, 4), S(40, 10), S(40, 10),
+    S(15, 8), S(15, 8), S(10, 4), S(2, 4), S(2, 4), S(10, 4), S(15, 8), S(15, 8),
+    S(30, 10), S(30, 10), S(25, 4), S(10, 4), S(5, 4), S(15, 4), S(30, 10), S(30, 10),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
 };
 
@@ -160,18 +160,18 @@ const TScore STORM_PAWN[64] = {
 
 
 const TScore SHELTER_OPEN_FILES[4] = {
-    S(20, 0), S(-30, -5), S(-60, -10), S(-120, -15)
+    S(0, 0), S(-30, -5), S(-60, -10), S(-120, -15)
 };
 
 const TScore SHELTER_OPEN_ATTACK_FILES[4] = {
-    S(10, 0), S(-10, 0), S(-20, -5), S(-40, -10)
+    S(0, 0), S(-10, 0), S(-20, -5), S(-40, -10)
 };
 
 const TScore SHELTER_OPEN_EDGE_FILE = S(-110, -10);
 
-const TScore SHELTER_CASTLING_KINGSIDE = S(70, 20);
+const TScore SHELTER_CASTLING_KINGSIDE = S(60, 20);
 
-const TScore SHELTER_CASTLING_QUEENSIDE = S(60, 20);
+const TScore SHELTER_CASTLING_QUEENSIDE = S(50, 20);
 
 const TScore ROOK_MOBILITY[15] = {
     S(-40, -40), S(-30, -30), S(-20, -20), S(0, -10),
@@ -182,6 +182,10 @@ const TScore ROOK_MOBILITY[15] = {
 const TScore ROOK_SEMIOPEN_FILE = S(12, 12);
 const TScore ROOK_OPEN_FILE = S(24, 24);
 const TScore ROOK_SHELTER_PROTECT = S(10, 0);
+const TScore ROOK_TARRASCH_SUPPORT = S(0, 20);
+const TScore ROOK_TARRASCH_ATTACK = S(0, 20);
+const TScore ROOK_WRONG_TARRASCH_SUPPORT = S(0, -10);
+const TScore ROOK_WRONG_TARRASCH_ATTACK = S(0, -10);
 
 const TScore BISHOP_MOBILITY[15] = {
     S(-40, -50), S(-20, -30), S(-10, -20), S(0, -10),

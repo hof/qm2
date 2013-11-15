@@ -127,9 +127,6 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     }
                     //at this point, the position must be (stale)mate as no move was found
                     //or the search was aborted
-                    assert(iid_score == -SCORE_MATE + pos->currentPly
-                            || iid_score == SCORE_DRAW
-                            || searchData->stopSearch);
                     moveList->stage = STOP;
                     return NULL;
                 }
