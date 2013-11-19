@@ -17,7 +17,8 @@ const short DO_UNDO_LMR = true;
 const short DO_EXTEND_CHECKS = true;
 const short DO_EXTEND_MATE_THREAT = true;
 const short DO_EXTEND_PK = true;
-const short DO_EXTEND_PROMOTION_THREAT = false;
+const short DO_EXTEND_PROMOTION_THREAT = true;
+const short DO_EXTEND_HIGH_DEPTH_ONLY = true;
 
 void TSearch::poll() {
     nodesUntilPoll = NODESBETWEENPOLLS;

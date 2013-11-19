@@ -558,6 +558,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
             }
             if (KingMoves[sq] & passers & pos->blackPawns) {
                 pawn_score->sub(CONNECED_PASSED_PAWN[sq]);
+                //std::cout << "passer connected: " << PRINT_SCORE(CONNECED_PASSED_PAWN[sq]);
             }
         }
         //std::cout << std::endl;
@@ -789,7 +790,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
 inline TScore * evaluatePassers(TSearch * sd, bool us) {
     TScore * result = &sd->stack->passer_score[us];
     result->clear();
-    if (sd->stack->phase < 12) {
+    if (sd->stack->phase <= 10) {
         return result;
     }
     bool them = !us;
