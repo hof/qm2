@@ -66,7 +66,7 @@ const short TRADEDOWN_PAWNS[9] = {
 };
 
 const short PIECEPOWER_AHEAD[] = {//in amount of pawns
-    20, 40, 60, 80, 100, 125, 150, 175, 200, 225, 250, 250, 250, 250, 250, 250, 250,
+    0, 10, 20, 40, 60, 100, 150, 175, 200, 225, 250, 250, 250, 250, 250, 250, 250,
     250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250
 };
 
@@ -464,7 +464,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     for (int i = 0; i < wPawns->count; i++) {
         int sq = wPawns->squares[i];
         int isq = FLIP_SQUARE(sq);
-
         U64 sqBit = BIT(sq);
         U64 up = northFill(sqBit);
         bool open = sqBit & openB;
@@ -476,16 +475,15 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         bool push_double_defend = !blocked && (UP2(sqBit & RANK_2) & wMoves & wAttackRange);
         bool lost = sqBit & ~wAttackRange;
         bool weak = !defended && lost && !push_defend && !push_double_defend;
-        bool passed = open && !doubled && !(up & bAttacks);
+        bool passed = !doubled && !(up & (bAttacks | pos->blackPawns));
         bool candidate = open && !doubled && !passed && !(up & ~wSafe);
-
 
         //std::cout << "WP " << PRINT_SQUARE(sq) << ": ";
         if (isolated) {
             pawn_score->add(ISOLATED_PAWN[open]);
             //std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
         } else if (weak) {
-            pawn_score->add(WEAK_PAWN[open]);
+            pawn_score->add(WEAK_PAWN[open]); //elo vs-1:+22, elo vs0:1
             //std::cout << "weak: " << PRINT_SCORE(WEAK_PAWN[open]);
         }
         if (doubled) {
@@ -500,17 +498,15 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
             pawn_score->add(CANDIDATE[isq]);
             //std::cout << "candidate: " << PRINT_SCORE(CANDIDATE[isq]);
         } else if (passed) {
-            pawn_score->add(PASSED_PAWN[isq]);
+            pawn_score->add(PASSED_PAWN[isq]); //elo vs-1: +21, elo vs0: +6
             //std::cout << "passed: " << PRINT_SCORE(PASSED_PAWN[isq]);
             passers |= sqBit;
             if (up & pos->blackKings) { //blocked by king
                 pawn_score->sub(PASSED_PAWN[isq].mg >> 1, PASSED_PAWN[isq].eg >> 1);
                 //std::cout << "passer blocked: (" << short(-PASSED_PAWN[isq].mg >> 1) << ", " << short(-PASSED_PAWN[isq].eg >> 1) << ") ";
             }
-            bool connected = pos->whitePawns & passers & KingMoves[sq];
-            if (connected) {
-                pawn_score->add(CONNECED_PASSED_PAWN[isq]);
-                //std::cout << "connected: " << PRINT_SCORE(CONNECED_PASSED_PAWN[isq]);
+            if (KingMoves[sq] & passers & pos->whitePawns) {
+                pawn_score->add(CONNECED_PASSED_PAWN[sq]);
             }
         }
         //std::cout << std::endl;
@@ -519,7 +515,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     TPiecePlacement * bPawns = &pos->pieces[BPAWN];
     for (int i = 0; i < bPawns->count; i++) {
         int sq = bPawns->squares[i];
-
         U64 sqBit = BIT(sq);
         U64 down = southFill(sqBit);
         bool open = sqBit & openW;
@@ -531,13 +526,13 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         bool push_double_defend = !blocked && (DOWN2(sqBit & RANK_7) & bMoves & bAttackRange);
         bool lost = sqBit & ~bAttackRange;
         bool weak = !defended && lost && !push_defend && !push_double_defend;
-        bool passed = open && !doubled && !(down & wAttacks);
+        bool passed = !doubled && !(down & (wAttacks | pos->whitePawns));
         bool candidate = open && !doubled && !passed && !(down & ~bSafe);
 
         //std::cout << "BP " << PRINT_SQUARE(sq) << ": ";
         if (isolated) {
             pawn_score->sub(ISOLATED_PAWN[open]);
-            //  std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
+            //std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
         } else if (weak) {
             pawn_score->sub(WEAK_PAWN[open]);
             //std::cout << "weak: " << PRINT_SCORE(WEAK_PAWN[open]);
@@ -552,19 +547,17 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         }
         if (candidate) {
             pawn_score->sub(CANDIDATE[sq]);
-            // std::cout << "candidate: " << PRINT_SCORE(CANDIDATE[sq]);
+            //std::cout << "candidate: " << PRINT_SCORE(CANDIDATE[sq]);
         } else if (passed) {
-            pawn_score->sub(PASSED_PAWN[sq]);
-            // std::cout << "passed: " << PRINT_SCORE(PASSED_PAWN[sq]);
+            pawn_score->sub(PASSED_PAWN[sq]); //elo vs-1: +21, elo vs0: +6
+            //std::cout << "passed: " << PRINT_SCORE(PASSED_PAWN[sq]);
             passers |= sqBit;
             if (down & pos->whiteKings) { //blocked by king
                 pawn_score->add(PASSED_PAWN[sq].mg >> 1, PASSED_PAWN[sq].eg >> 1);
                 //std::cout << "passer blocked: (" << short(-PASSED_PAWN[sq].mg >> 1) << ", " << short(-PASSED_PAWN[sq].eg >> 1) << ") ";
             }
-            bool connected = pos->blackPawns & passers & KingMoves[sq];
-            if (connected) {
+            if (KingMoves[sq] & passers & pos->blackPawns) {
                 pawn_score->sub(CONNECED_PASSED_PAWN[sq]);
-                //    std::cout << "connected: " << PRINT_SCORE(CONNECED_PASSED_PAWN[sq]);
             }
         }
         //std::cout << std::endl;
@@ -706,10 +699,6 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
                 || (sq == a2 && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN)) {
             result->add(TRAPPED_BISHOP);
         }
-
-        //if (pos->attackedByPawn(sq, us)) {
-        //    result->add(8*sd->learnFactor); //defended piece
-        //}
     }
     return result;
 }
@@ -800,27 +789,34 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
 inline TScore * evaluatePassers(TSearch * sd, bool us) {
     TScore * result = &sd->stack->passer_score[us];
     result->clear();
+    if (sd->stack->phase < 12) {
+        return result;
+    }
     bool them = !us;
     U64 passers = sd->stack->passers & *sd->pos->pawns[us] & SIDE[them];
     while (passers) {
         int sq = POP(passers);
         int ix = us == WHITE ? FLIP_SQUARE(sq) : sq;
+        int bonus = PASSED_PAWN[ix].eg >> 1;
         int to = forwardSq(sq, us);
-        int i = 0;
         do {
             if (BIT(to) & sd->pos->allPieces) {
                 break; //blocked
             }
+            result->add(0, bonus);
             U64 attacks = sd->pos->attacksTo(to);
-            if ((attacks & sd->pos->getPieces(them)) 
-                    && !(attacks & sd->pos->getPieces(us))) {
-                break;
+            U64 defend = attacks & sd->pos->all(them);
+            U64 support = attacks & sd->pos->all(us);
+            if (defend) {
+                if (support == 0) {
+                    break;
+                }
+                if (is_1(defend)) { 
+                    break;
+                }
             }
-            result->add(PASSED_PAWN[ix]);
+            result->add(0, bonus);
             to = forwardSq(to, us);
-            if (i++ > 8) {
-                sd->debug_print_search(0,0);
-            }
         } while (to >= a1 && to <= h8);
     }
     return result;

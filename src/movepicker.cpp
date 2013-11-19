@@ -105,7 +105,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     //find a good first move to try by doing a shallow search
                     bool skipNull = searchData->skipNull;
                     searchData->skipNull = true;
-                    int iid_depth = depth - (2 * ONE_PLY) - (depth >> 2);//(3 * ONE_PLY);
+                    int iid_depth = depth - (2 * ONE_PLY) - (depth >> 2); //(3 * ONE_PLY);
                     iid_depth -= searchData->stack->nodeType != PVNODE;
                     iid_depth -= searchData->stack->nodeType == ALLNODE;
                     iid_depth = MAX(ONE_PLY, iid_depth);
@@ -152,7 +152,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                         if (moveList->excluded(move)) {
                             move->score = MOVE_EXCLUDED;
                         } else {
-                            move->score = depth > LOW_DEPTH? pos->SEE(move) : MVVLVA(move);
+                            move->score = depth > LOW_DEPTH ? pos->SEE(move) : MVVLVA(move);
                         }
                     }
                     result = popBest(pos, moveList);
@@ -276,13 +276,15 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
             case Q_QUIET_CHECKS:
                 if (moveList->stage == Q_QUIET_CHECKS) {
                     moveList->stage = STOP;
-                    genQuietChecks(pos, moveList);
+                    //genQuietChecks(pos, moveList);
+                    genMoves(pos, moveList);
                     for (TMove * move = moveList->current; move != moveList->last; move++) {
-                        move->score = move->piece;
-                        int kpos = pos->boardFlags->WTM ? *pos->blackKingPos : *pos->whiteKingPos;
-                        if (KingMoves[kpos] & BIT(move->tsq)) { //contact check
-                            move->score <<= 1;
-                        }
+                        move->score = searchData->history[move->piece][move->tsq];
+                        //move->score = move->piece;
+                        //int kpos = pos->boardFlags->WTM ? *pos->blackKingPos : *pos->whiteKingPos;
+                        //if (KingMoves[kpos] & BIT(move->tsq)) { //contact check
+                        //    move->score <<= 1;
+                        //}
                     }
                     result = popBest(pos, moveList);
                     return result;
@@ -310,21 +312,21 @@ short TMovePicker::countEvasions(TSearch * sd, TMove * firstMove) {
     int result = 1;
     const short MAXLEGALCOUNT = 3;
     TMove * pushback[MAXLEGALCOUNT];
-    
+
     //get and count legal moves
     while (result < MAXLEGALCOUNT) {
         TMove * m = pickNextMove(sd, 1, -SCORE_INFINITE, SCORE_INFINITE);
         if (m == NULL) {
             break;
         }
-        pushback[result++] = m;   
+        pushback[result++] = m;
     }
-    
+
     //push moves back on the list
-    for (int i = firstMove != NULL; i < result; i++) { 
-        push(sd, pushback[i], SCORE_INFINITE - i); 
+    for (int i = firstMove != NULL; i < result; i++) {
+        push(sd, pushback[i], SCORE_INFINITE - i);
     }
-    
+
     return result;
 }
 

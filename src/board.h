@@ -250,6 +250,10 @@ struct TBoard {
     inline U64 allPawns() {
         return whitePawns | blackPawns;
     }
+    
+    inline bool stmHasQueen() {
+        return *queens[boardFlags->WTM] != 0;
+    }
 
     inline U64 closedFiles() {
         return FILEFILL(whitePawns) & FILEFILL(blackPawns);
@@ -267,6 +271,9 @@ struct TBoard {
         return halfOpenOrOpenFile(white) ^ openFiles();
     }
 
+    inline U64 all(bool wtm) {
+        return wtm? whitePieces : blackPieces;
+    }
     inline U64 getPieces(bool wtm) {
         return wtm ? whiteRooks | whiteKnights | whiteBishops | whiteQueens 
                 : blackRooks | blackKnights | blackBishops | blackQueens;
