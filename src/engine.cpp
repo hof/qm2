@@ -155,7 +155,8 @@ void * TEngine::_think(void* engineObjPtr) {
         int alpha = -SCORE_INFINITE;
         int beta = SCORE_INFINITE;
         int prevScore = -SCORE_INFINITE;
-        const int windows[] = { 20, 40, 80, 160, 320, 640, 1280, SCORE_INFINITE, SCORE_INFINITE };
+        const int windows[] = {20, 40, 80, 160, 320, 640, 1280, SCORE_INFINITE, SCORE_INFINITE};
+        const int MAX_WINDOW = 2 * VQUEEN;
         int alpha_window = 0;
         int beta_window = 0;
         int lowest = SCORE_INFINITE;
@@ -187,7 +188,7 @@ void * TEngine::_think(void* engineObjPtr) {
                     engine->setScore(resultScore);
                 }
                 if (searchData->outputHandler) {
-                    searchData->outputHandler->sendPV(resultScore, depth / ONE_PLY, searchData->selDepth, 
+                    searchData->outputHandler->sendPV(resultScore, depth / ONE_PLY, searchData->selDepth,
                             searchData->nodes + searchData->pruned_nodes, tm->elapsed(), searchData->getPVString().c_str(), type);
                 }
             }
@@ -227,20 +228,20 @@ void * TEngine::_think(void* engineObjPtr) {
                     lowest = MAX(lowest, score - windows[1]);
                     highest = MIN(highest, score + windows[1]);
                 }
-                depth += ONE_PLY;  
+                depth += ONE_PLY;
             }
 
-
-            if (score >= SCORE_MATE - MAX_PLY) {
-                alpha = -SCORE_MATE;
-                beta = SCORE_MATE;
+            if (alpha < -MAX_WINDOW) {
+                alpha = -SCORE_INFINITE;
             } else {
-                //make sure alpha and beta are uneven to distinguish bound scores 
-                //(always uneven) from real scores (always even)
-                alpha = ((alpha+1) & ~1) - 1;
-                beta = ((beta-1) & ~1) + 1;
+                alpha = ((alpha + 1) & ~1) - 1; //make uneven
             }
-
+            if (beta > MAX_WINDOW) {
+                beta = SCORE_INFINITE;
+            } else {
+                 beta = ((beta - 1) & ~1) + 1; //make uneven
+            }
+ 
             /*
              * Increase time for time based search when 
              * - We opened the aspiration window on high depths
@@ -326,7 +327,7 @@ void TEngine::analyse() {
     std::cout << "\n9) Shelter score for black: ";
     searchData->stack->shelter_score[BLACK].print(phase);
     std::cout << "\n9) Evaluation:" << searchData->stack->eval_result;
-    
+
     /*
     std::cout << "\n10) Quiescence:" << searchData->qsearch(-SCORE_MATE, SCORE_MATE, 0, QCHECKDEPTH) << std::endl;
     std::cout << "\n11) Best move:" << std::endl;
@@ -350,12 +351,12 @@ void TEngine::analyse() {
 
     }
      */
-    
+
     //TBook * book = new TBook();
     /*
      * Analyse best move doing a shallow search
      */
-    
+
     /*
     TMoveList * rootMoves = &searchData->stack->moveList;
     TBoard * root = searchData->pos;

@@ -258,6 +258,10 @@ inline int forwardSq(int sq, bool white) {
     return sq + PAWNDIRECTION[white];
 }
 
+inline U64 forwardFill(int sq, bool white) {
+    return white? FRONTFILL(BIT(sq)) : BACKFILL(BIT(sq));
+}
+
 #define FILE(sq)            ((sq)&7)
 #define RANK(sq)            ((sq)>>3)
 

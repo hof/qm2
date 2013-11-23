@@ -57,10 +57,10 @@ const short VQUEEN = 925;
 const short VKING = 20000;
 
 const TScore SVPAWN = S(100, 100);
-const TScore SVKNIGHT = S(315, 300);
-const TScore SVBISHOP = S(330, 320);
-const TScore SVROOK = S(465, 465);
-const TScore SVQUEEN = S(950, 875);
+const TScore SVKNIGHT = S(325, 325);
+const TScore SVBISHOP = S(325, 325);
+const TScore SVROOK = S(500, 500);
+const TScore SVQUEEN = S(950, 950);
 const TScore SVKING = S(20000, 20000);
 
 const short PIECE_VALUE[13] = {
@@ -79,8 +79,8 @@ const TScore PIECE_SCORE[13] = {
 
 enum MaterialValues {
     MATERIAL_AHEAD_TRESHOLD = 80,
-    VNOPAWNS = -80,
-    VBISHOPPAIR = 25,
+    VNOPAWNS = -40,
+    VBISHOPPAIR = 50,
     DRAWISH_QR_ENDGAME = -20,
     DRAWISH_OPP_BISHOPS = -50
 };
@@ -92,12 +92,12 @@ const TScore DOUBLED_PAWN = S(-4, -8);
 
 const TScore PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(60, 200), S(60, 200), S(60, 200), S(60, 200), S(60, 200), S(60, 200), S(60, 200), S(60, 200),
-    S(40, 60), S(40, 60), S(40, 60), S(40, 60), S(40, 60), S(40, 60), S(40, 60), S(40, 60),
-    S(30, 40), S(30, 40), S(30, 40), S(30, 40), S(30, 40), S(30, 40), S(30, 40), S(30, 40),
+    S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150),
+    S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80),
+    S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50),
+    S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30),
     S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20),
-    S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10),
-    S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10),
+    S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
 };
 
@@ -181,10 +181,10 @@ const TScore ROOK_MOBILITY[15] = {
 const TScore ROOK_SEMIOPEN_FILE = S(12, 12);
 const TScore ROOK_OPEN_FILE = S(24, 24);
 const TScore ROOK_SHELTER_PROTECT = S(10, 0);
-const TScore ROOK_TARRASCH_SUPPORT = S(0, 20);
-const TScore ROOK_TARRASCH_ATTACK = S(0, 20);
-const TScore ROOK_WRONG_TARRASCH_SUPPORT = S(0, -10);
-const TScore ROOK_WRONG_TARRASCH_ATTACK = S(0, -10);
+const TScore ROOK_TARRASCH_SUPPORT = S(10, 30);
+const TScore ROOK_TARRASCH_ATTACK = S(10, 20);
+const TScore ROOK_WRONG_TARRASCH_SUPPORT = S(-10, -20);
+const TScore ROOK_WRONG_TARRASCH_ATTACK = S(-10, -20);
 
 const TScore BISHOP_MOBILITY[15] = {
     S(-40, -50), S(-20, -30), S(-10, -20), S(0, -10),

@@ -461,6 +461,10 @@ struct TBoard {
     inline U64 blackPawnAttacks() {
         return (DOWNLEFT1(blackPawns) | DOWNRIGHT1(blackPawns));
     }
+    
+    inline U64 pawnAttacks(bool white) {
+        return white? whitePawnAttacks() : blackPawnAttacks();
+    }
 
     U64 getSmallestAttacker(U64 attacks, bool wtm, int &piece);
     int SEE(TMove * capture);

@@ -180,7 +180,6 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                         return result;
                     }
                 }
-
             case KILLER1:
                 result = &searchData->stack->killer1;
                 if (result->piece
@@ -224,11 +223,11 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     }
                     result = popBest(pos, moveList);
                     if (result) {
-                        moveList->stage = NON_CAPTURES;
+                        moveList->stage = QUIET_MOVES;
                         return result;
                     }
                 }
-            case NON_CAPTURES:
+            case QUIET_MOVES:
                 moveList->minimumScore = -MOVE_INFINITY;
                 genMoves(pos, moveList);
                 for (TMove * move = moveList->current; move != moveList->last; move++) {
@@ -280,11 +279,6 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     genMoves(pos, moveList);
                     for (TMove * move = moveList->current; move != moveList->last; move++) {
                         move->score = searchData->history[move->piece][move->tsq];
-                        //move->score = move->piece;
-                        //int kpos = pos->boardFlags->WTM ? *pos->blackKingPos : *pos->whiteKingPos;
-                        //if (KingMoves[kpos] & BIT(move->tsq)) { //contact check
-                        //    move->score <<= 1;
-                        //}
                     }
                     result = popBest(pos, moveList);
                     return result;

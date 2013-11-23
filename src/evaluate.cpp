@@ -8,8 +8,9 @@ inline short evaluateMaterial(TSearch * sd);
 inline TScore * evaluatePawnsAndKings(TSearch * sd);
 inline TScore * evaluateBishops(TSearch * sd, bool white);
 inline TScore * evaluateRooks(TSearch * sd, bool white);
-inline TScore * evaluateQueens(TSearch * sd, bool white);
+inline TScore * evaluateShelter(TSearch * sd, bool white);
 inline TScore * evaluatePassers(TSearch * sd, bool white);
+inline int evaluatePasserVsK(TSearch * sd, bool white, int sq);
 
 int evaluate(TSearch * sd, int alpha, int beta) {
     if (sd->stack->eval_result != SCORE_INVALID) {
@@ -21,26 +22,18 @@ int evaluate(TSearch * sd, int alpha, int beta) {
             && (sd->stack - 1)->eval_result != SCORE_INVALID;
 
     int result = evaluateMaterial(sd); //sets stack->phase
+
     TScore * score = &sd->stack->eval_score;
-    TBoard * pos = sd->pos;
     score->set(sd->pos->boardFlags->pct);
-
-    sd->stack->occ = pos->pawnsAndKings();
-    sd->stack->fill[WHITE] = FILEFILL(pos->whitePawns);
-    sd->stack->fill[BLACK] = FILEFILL(pos->blackPawns);
-    sd->stack->mobMask[WHITE] = ~(pos->whitePawns | pos->whiteKings | pos->blackPawnAttacks());
-    sd->stack->mobMask[BLACK] = ~(pos->blackPawns | pos->blackKings | pos->whitePawnAttacks());
-
     score->add(evaluatePawnsAndKings(sd));
     score->add(evaluateBishops(sd, WHITE));
     score->sub(evaluateBishops(sd, BLACK));
     score->add(evaluateRooks(sd, WHITE));
     score->sub(evaluateRooks(sd, BLACK));
-    score->add(evaluateQueens(sd, WHITE));
-    score->sub(evaluateQueens(sd, BLACK));
+    score->add(evaluateShelter(sd, WHITE));
+    score->sub(evaluateShelter(sd, BLACK));
     score->add(evaluatePassers(sd, WHITE));
     score->sub(evaluatePassers(sd, BLACK));
-
 
     result += score->get(sd->stack->phase);
     result &= GRAIN;
@@ -53,21 +46,16 @@ int evaluate(TSearch * sd, int alpha, int beta) {
 }
 
 bool skipExp(TSearch * sd) {
-    int pc = WBISHOP;
-    return false && sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
+    int pc = WROOK;
+    return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
 }
 
 const short TRADEDOWN_PIECES[MAX_PIECES + 1] = {
-    100, 80, 60, 40, 20, 0, -10, -20, -20, -20, -20, -20, -20, -20, -20, -20, -20
+    80, 60, 40, 20, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
 const short TRADEDOWN_PAWNS[9] = {
-    -80, -60, -30, 0, 10, 15, 20, 25, 30
-};
-
-const short PIECEPOWER_AHEAD[] = {//in amount of pawns
-    0, 10, 20, 40, 60, 100, 150, 175, 200, 225, 250, 250, 250, 250, 250, 250, 250,
-    250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250
+    -60, -40, -20, -10, -5, 0, 5, 10, 15
 };
 
 /**
@@ -100,7 +88,8 @@ inline short evaluateMaterial(TSearch * sd) {
     /*
      * 3. Calculate material value and store in material hash table
      */
-    int value = 0;
+    TScore result;
+    result.clear();
     TBoard * pos = sd->pos;
     int wpawns = pos->pieces[WPAWN].count;
     int bpawns = pos->pieces[BPAWN].count;
@@ -118,149 +107,150 @@ inline short evaluateMaterial(TSearch * sd) {
     int bpieces = bminors + brooks + bqueens;
 
     // Calculate game phase
-    int phase = MAX_GAMEPHASES
+    int phase = MAX_GAMEPHASES /* 16 */
             - (wminors + bminors) /* max: 8 */
             - (wrooks + brooks) /* max:4 */
             - 2 * (wqueens + bqueens) /* max: 4 */;
     phase = MAX(0, phase);
-    phase = (MAX_GAMEPHASES * phase) / MAX_GAMEPHASES;
 
-    // Knights
-    if (wknights != bknights) {
-        value += (wknights - bknights) * PHASED_SCORE(SVKNIGHT, phase);
+    // Piece values 
+    result.mg += (wknights - bknights) * SVKNIGHT.mg;
+    result.eg += (wknights - bknights) * SVKNIGHT.eg;
+    result.mg += (wbishops - bbishops) * SVBISHOP.mg;
+    result.eg += (wbishops - bbishops) * SVBISHOP.eg;
+    result.mg += (wrooks - brooks) * SVROOK.mg;
+    result.eg += (wrooks - brooks) * SVROOK.eg;
+    result.mg += (wqueens - bqueens) * SVQUEEN.mg;
+    result.eg += (wqueens - bqueens) * SVQUEEN.eg;
+    if (wbishops > 1 && pos->whiteBishopPair()) {
+        result.add(VBISHOPPAIR);
+    }
+    if (bbishops > 1 && pos->blackBishopPair()) {
+        result.sub(VBISHOPPAIR);
     }
 
-    //Bishops
-    if (wbishops != bbishops) {
-        value += (wbishops - bbishops) * PHASED_SCORE(SVBISHOP, phase);
-        bool wPair = wbishops > 1 && pos->whiteBishopPair(); //note: material hash includes bishop colors
-        bool bPair = bbishops > 1 && pos->blackBishopPair();
-        value += cond(wPair, bPair, VBISHOPPAIR);
+    int piecePower = result.get(phase);
+    result.mg += (wpawns - bpawns) * SVPAWN.mg;
+    result.eg += (wpawns - bpawns) * SVPAWN.eg;
+
+    // when ahead in material, reduce opponent's pieces (simplify) and keep pawns
+    if (piecePower > MATERIAL_AHEAD_TRESHOLD) {
+        result.add(TRADEDOWN_PIECES[bpieces]);
+        result.add(TRADEDOWN_PAWNS[wpawns]);
+    } else if (piecePower < -MATERIAL_AHEAD_TRESHOLD) {
+        result.sub(TRADEDOWN_PIECES[wpieces]);
+        result.sub(TRADEDOWN_PAWNS[bpawns]);
     }
 
-    //Rooks
-    if (wrooks != brooks) {
-        value += (wrooks - brooks) * PHASED_SCORE(SVROOK, phase);
+    // penalty for not having pawns - makes it hard to win
+    if (wpawns == 0) {
+        result.add(VNOPAWNS);
+    }
+    if (bpawns == 0) {
+        result.sub(VNOPAWNS);
     }
 
-    //Queens
-    if (wqueens != bqueens) {
-        value += (wqueens - bqueens) * PHASED_SCORE(SVQUEEN, phase);
-    }
+    int value = result.get(phase);
 
-    //Bonus for having more "piece power" (excluding pawns)
-    int piecepower = value;
-    value += cond(wpawns && piecepower > MATERIAL_AHEAD_TRESHOLD,
-            bpawns && piecepower < -MATERIAL_AHEAD_TRESHOLD,
-            PIECEPOWER_AHEAD,
-            piecepower / VPAWN,
-            -piecepower / VPAWN);
-
-    if (wpawns != bpawns) {
-        value += (wpawns - bpawns) * PHASED_SCORE(SVPAWN, phase);
-    }
-
-    /* 
-     * Endgame adjustment: 
-     * 1) Not having pawns makes it hard to win
-     * 2) If ahead, but no pawns and no mating material the score is draw
-     */
-    if (!wpawns && bpawns) {
-        if (value > 0 && piecepower > 0 && piecepower < 4 * VPAWN) {
-            if (wminors < 2 && wrooks == brooks && wqueens == bqueens) {
-                value >>= 2;
-            } else {
-                value >>= 1;
-            }
-        }
-        value += VNOPAWNS;
-    } else if (!bpawns && wpawns) {
-        if (piecepower > -4 * VPAWN && piecepower < 0) {
-            if (value < 0 && piecepower < 0 && piecepower > -4 * VPAWN) {
-                if (bminors < 2 && wrooks == brooks && wqueens == bqueens) {
-                    value >>= 2;
-                } else {
-                    value >>= 1;
-                }
-            }
-        }
-        value -= VNOPAWNS;
-    } else if (!wpawns && !bpawns) {
-        if (ABS(piecepower) < 4 * VPAWN) {
-            value >>= 3;
-        }
-    }
-
-    /* 
-     * Endgame adjustment: 
-     * 2) Rooks and queen endgames are drawish. Reduce any small material advantage.
-     */
+    //Rooks and queen endgames are drawish. Reduce any small material advantage.
     if (value
             && wminors < 2
             && bminors < 2
             && wpieces <= 3
+            && (wrooks || wqueens)
+            && (brooks || bqueens)
             && wpieces == bpieces
             && ABS(value) > ABS(DRAWISH_QR_ENDGAME)
             && ABS(value) < 2 * VPAWN
-            && ABS(piecepower) < VPAWN / 2) {
+            && ABS(piecePower) < VPAWN / 2) {
         value += cond(value > 0, value < 0, DRAWISH_QR_ENDGAME);
     }
 
-    /*
-     * Endgame adjustment:
-     * Opposite  bishop ending is drawish
-     */
+    // Opposite  bishop ending is drawish
     if (value && wpieces == 1 && bpieces == 1 && wpawns != bpawns && wbishops && bbishops) {
-        if ((pos->whiteBishops & BLACK_SQUARES) != (pos->blackBishops & BLACK_SQUARES)) {
+        if (bool(pos->whiteBishops & BLACK_SQUARES) != bool(pos->blackBishops & BLACK_SQUARES)) {
+            //set drawflag 
             value += cond(wpawns>bpawns, bpawns>wpawns, MAX(-(ABS(value) >> 1), DRAWISH_OPP_BISHOPS));
         }
     }
 
-    //trade down bonus: trade pieces but not pawns when ahead
-    value += cond(piecepower > MATERIAL_AHEAD_TRESHOLD, piecepower < -MATERIAL_AHEAD_TRESHOLD, TRADEDOWN_PIECES, bpieces, wpieces);
-    value += cond(piecepower > MATERIAL_AHEAD_TRESHOLD, piecepower < -MATERIAL_AHEAD_TRESHOLD, TRADEDOWN_PAWNS, wpawns, bpawns);
+    //winning edge?
+    if (piecePower >= VROOK && value > 2 * VPAWN) {
+        value += (value >> 2);
+    } else if (piecePower <= -VROOK && value < -2 * VPAWN) {
+        value -= (value >> 2);
+    }
+
+    //ahead but no mating material?
+    if (value > 0 && piecePower < VROOK && !wpawns) {
+        value >>= 2;
+    } else if (value < 0 && piecePower > -VROOK && !bpawns) {
+        value >>= 2;
+    }
+
+    //ahead with only pawns? 
+    if (value > 0 && piecePower < 0) {
+        value -= 50;
+        if (value < VPAWN && bminors > wminors) {
+            //set drawflag
+        }
+    } else if (value < 0 && piecePower > 0) {
+        if (value > -VPAWN && wminors > bminors) {
+            //set drawflag
+        }
+        value += 50;
+
+    }
 
     /*
      * Store and return
      */
-
     sd->stack->material_score = value;
     sd->stack->phase = phase;
     sd->hashTable->mtStore(sd, value, phase);
     return value;
 }
 
+void init_pct_store(TSCORE_PCT & pct, TScore scores[], int wpiece) {
+    int tot_mg = 0;
+    int tot_eg = 0;
+    for (int sq = a1; sq <= h8; sq++) {
+        tot_mg += scores[sq].mg;
+        tot_eg += scores[sq].eg;
+    }
+    int avg_mg = tot_mg / 64;
+    int avg_eg = tot_eg / 64;
+    for (int sq = a1; sq <= h8; sq++) {
+        scores[sq].mg -= avg_mg;
+        scores[sq].eg -= avg_eg;
+        scores[sq].round();
+        pct[wpiece][sq].set(scores[sq]);
+        pct[wpiece + WKING][FLIP_SQUARE(sq)].nset(scores[sq]);
+    }
+}
+
 void init_pct(TSCORE_PCT & pct) {
     TScore scores[64];
-    TScore PAWN_OFFSET(-20, -20);
-    TScore KNIGHT_OFFSET(-35, -30);
-    TScore BISHOP_OFFSET(-20, -12);
-    TScore ROOK_OFFSET(-15, -15);
-    TScore QUEEN_OFFSET(-10, -15);
-    TScore KING_OFFSET(0, -10);
-
-    const short mobility_scale[2][64] = {
-        {
-            6, 7, 8, 9, 9, 8, 7, 6,
-            5, 6, 7, 8, 8, 7, 6, 5,
-            4, 5, 7, 7, 7, 7, 5, 4,
-            3, 4, 6, 8, 8, 6, 4, 3,
-            2, 3, 5, 7, 7, 5, 3, 2,
-            2, 3, 4, 5, 5, 4, 3, 2,
-            2, 3, 4, 5, 5, 4, 3, 2,
-            1, 2, 3, 4, 4, 3, 2, 1
-        },
-        {
-            1, 2, 3, 4, 4, 3, 2, 1,
-            2, 3, 3, 5, 5, 3, 3, 2,
-            3, 3, 4, 6, 6, 4, 3, 3,
-            2, 3, 5, 7, 7, 5, 3, 2,
-            2, 3, 5, 7, 7, 5, 3, 2,
-            2, 3, 4, 5, 5, 4, 3, 2,
-            2, 3, 4, 5, 5, 4, 3, 2,
-            1, 2, 3, 4, 4, 3, 2, 1
-        }
-    };
+    const short mobility_scale[2][64] = {{
+        1, 2, 3, 4, 4, 3, 2, 1,
+        2, 3, 4, 5, 5, 4, 3, 2,
+        3, 4, 5, 6, 6, 5, 4, 3,
+        4, 5, 6, 7, 7, 6, 5, 4,
+        4, 5, 6, 7, 7, 6, 5, 4,
+        3, 4, 5, 6, 6, 5, 4, 3,
+        2, 3, 4, 5, 5, 4, 3, 2,
+        1, 2, 3, 4, 4, 3, 2, 1
+    },
+            {
+        1, 2, 3, 4, 4, 3, 2, 1,
+        2, 3, 4, 5, 5, 4, 3, 2,
+        3, 4, 5, 6, 6, 5, 4, 3,
+        4, 5, 6, 7, 7, 6, 5, 4,
+        4, 5, 6, 7, 7, 6, 5, 4,
+        3, 4, 5, 6, 6, 5, 4, 3,
+        2, 3, 4, 5, 5, 4, 3, 2,
+        1, 2, 3, 4, 4, 3, 2, 1
+    }};
 
     //Pawn
     for (int sq = a1; sq < 64; sq++) {
@@ -269,40 +259,14 @@ void init_pct(TSCORE_PCT & pct) {
         if ((bbsq & RANK_1) || (bbsq & RANK_8)) {
             continue;
         }
-        if (bbsq & RANK_2) { //extra mobility
-            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(FILE(sq) + 16));
-        }
-        if (bbsq & (FILE_A | FILE_H)) {
-            scores[sq].add(-10, 0);
-        }
-        int rank = RANK(sq) - 1;
-        scores[sq].eg += rank*rank; //moving pawns forward to promote
-
-        if (sq == e2 || sq == d2) {
-            scores[sq].mg -= 10;
-        }
-        if (sq == c2 || sq == f2) {
-            scores[sq].mg -= 5;
-        }
-        if (bbsq & FRONTFILL(CENTER)) {
-            scores[sq].add(10, 0);
-        }
-        if (bbsq & CENTER) {
-            scores[sq].add(10, 0);
-        }
-        if (bbsq & LARGE_CENTER) {
-            scores[sq].add(10, 0);
-        }
         U64 caps = WPawnCaptures[sq] | WPawnMoves[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].add(PAWN_OFFSET);
-        scores[sq].round();
-        pct[WPAWN][sq].set(scores[sq]);
-        pct[BPAWN][FLIP_SQUARE(sq)].nset(scores[sq]);
+        scores[sq].mul(3); //pawns are the most powerful to control squares
     }
+    init_pct_store(pct, scores, WPAWN);
 
     //Knight
     for (int sq = a1; sq < 64; sq++) {
@@ -313,11 +277,8 @@ void init_pct(TSCORE_PCT & pct) {
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
         scores[sq].mul(1.5); //mobility is extra important because knights move slow
-        scores[sq].add(KNIGHT_OFFSET);
-        scores[sq].round();
-        pct[WKNIGHT][sq].set(scores[sq]);
-        pct[BKNIGHT][FLIP_SQUARE(sq)].nset(scores[sq]);
     }
+    init_pct_store(pct, scores, WKNIGHT);
 
     //Bishop
     for (int sq = a1; sq < 64; sq++) {
@@ -327,12 +288,8 @@ void init_pct(TSCORE_PCT & pct) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].mul(0.5); //mobility is less important because bishops move fast
-        scores[sq].add(BISHOP_OFFSET);
-        scores[sq].round();
-        pct[WBISHOP][sq].set(scores[sq]);
-        pct[BBISHOP][FLIP_SQUARE(sq)].nset(scores[sq]);
     }
+    init_pct_store(pct, scores, WBISHOP);
 
     //Rook
     for (int sq = a1; sq < 64; sq++) {
@@ -343,40 +300,22 @@ void init_pct(TSCORE_PCT & pct) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].mg *= 0.25; //mobility is less important because rooks move fast
-        scores[sq].eg *= 0.5; //mobility is less important because rooks move fast
-
-        if (bbsq & (RANK_7 | RANK_8)) {
-            scores[sq].mg += 40; //extra bonus for 7th / 8th rank
-        }
-        if (bbsq & (RANK_6)) {
-            scores[sq].mg += 10;
-        }
-        if (bbsq & RANK_1) { //protection
-            scores[sq].mg += 8;
-        }
-        scores[sq].add(ROOK_OFFSET);
-        scores[sq].round();
-        pct[WROOK][sq].set(scores[sq]);
-        pct[BROOK][FLIP_SQUARE(sq)].nset(scores[sq]);
+        scores[sq].half(); //square control by rook is less powerful than by bishop/knight/pawn
     }
+    init_pct_store(pct, scores, WROOK);
 
     //Queen
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
         U64 caps = QueenMoves[sq];
+        U64 bbsq = BIT(sq);
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].mg *= 0.15;
-        scores[sq].eg *= 0.50;
-        scores[sq].add(QUEEN_OFFSET);
-        scores[sq].round();
-        pct[WQUEEN][sq].set(scores[sq]);
-        pct[BQUEEN][FLIP_SQUARE(sq)].nset(scores[sq]);
+        scores[sq].mul(0.25);
     }
-
+    init_pct_store(pct, scores, WQUEEN);
 
     //King
     for (int sq = a1; sq < 64; sq++) {
@@ -387,11 +326,9 @@ void init_pct(TSCORE_PCT & pct) {
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
         scores[sq].mg = 0;
-        scores[sq].add(KING_OFFSET);
-        scores[sq].round();
-        pct[WKING][sq].set(scores[sq]);
-        pct[BKING][FLIP_SQUARE(sq)].nset(scores[sq]);
+        scores[sq].eg *= 1.5; // kings move slow
     }
+    init_pct_store(pct, scores, WKING);
 }
 
 /**
@@ -435,8 +372,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     int wkpos = *pos->whiteKingPos;
     int bkpos = *pos->blackKingPos;
     U64 passers = 0;
-    U64 openW = ~sd->stack->fill[WHITE];
-    U64 openB = ~sd->stack->fill[BLACK];
+    U64 openW = ~FILEFILL(pos->whitePawns);
+    U64 openB = ~FILEFILL(pos->blackPawns);
     U64 wUp = UP1(pos->whitePawns);
     U64 bDown = DOWN1(pos->blackPawns);
     U64 upLeftW = UPLEFT1(pos->whitePawns);
@@ -506,7 +443,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
                 //std::cout << "passer blocked: (" << short(-PASSED_PAWN[isq].mg >> 1) << ", " << short(-PASSED_PAWN[isq].eg >> 1) << ") ";
             }
             if (KingMoves[sq] & passers & pos->whitePawns) {
-                pawn_score->add(CONNECED_PASSED_PAWN[sq]);
+                //std::cout << "connected: " << PRINT_SCORE(PASSED_PAWN[isq]);
+                pawn_score->add(CONNECED_PASSED_PAWN[isq]);
             }
         }
         //std::cout << std::endl;
@@ -687,10 +625,13 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
      * 3. Calculate the score and store on the stack
      */
     TPiecePlacement * pc = &pos->pieces[BISHOP[us]];
+    U64 occ = pos->pawnsAndKings();
+    bool them = !us;
+    U64 mobMask = ~(*pos->pawns[us] | pos->pawnAttacks(them));
     for (int i = 0; i < pc->count; i++) {
         int sq = pc->squares[i];
-        U64 moves = MagicBishopMoves(sq, sd->stack->occ) & sd->stack->mobMask[us];
-        int count = popCount(moves);
+        U64 moves = MagicBishopMoves(sq, occ);
+        int count = popCount(moves & mobMask);
         result->add(BISHOP_MOBILITY[count]);
         if (us == WHITE && count < 2 && (sq == h7 && pos->Matrix[g6] == BPAWN && pos->Matrix[f7] == BPAWN)
                 || (sq == a7 && pos->Matrix[b6] == BPAWN && pos->Matrix[c7] == BPAWN)) {
@@ -732,25 +673,30 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
      */
     TPiecePlacement * pc = &pos->pieces[ROOK[us]];
     bool them = !us;
+    U64 fill[2] = {FILEFILL(pos->blackPawns), FILEFILL(pos->whitePawns)};
+    U64 occ = pos->pawnsAndKings();
+    U64 mobMask = ~(*pos->pawns[us] | pos->pawnAttacks(them));
     for (int i = 0; i < pc->count; i++) {
         int sq = pc->squares[i];
         U64 bitSq = BIT(sq);
-        if (bitSq & (~sd->stack->fill[us])) {
-            if (bitSq & sd->stack->fill[them]) {
+        if (bitSq & (~fill[us])) {
+            if (bitSq & fill[them]) {
                 result->add(ROOK_SEMIOPEN_FILE);
             } else {
                 result->add(ROOK_OPEN_FILE);
             }
         }
-        U64 moves = MagicRookMoves(sq, sd->stack->occ);
-        U64 mobmask = moves & sd->stack->mobMask[us];
-        int count = popCount(mobmask);
+        U64 moves = MagicRookMoves(sq, occ);
+        int count = popCount(moves & mobMask);
         result->add(ROOK_MOBILITY[count]);
-        U64 attack = popCount(mobmask & (*pos->pawns[them] | RANK[us][7] | KingZone[*pos->kingPos[them]]), true);
-        result->add(attack << 3, attack << 1);
+
         if ((bitSq & RANK[us][1]) && (BIT(*pos->kingPos[us]) & (RANK[us][1] | RANK[us][2]))) {
             result->add(ROOK_SHELTER_PROTECT);
         }
+        if (bitSq & RANK[us][7] && (BIT(*pos->kingPos[them]) & RANK[us][8])) {
+            result->add(20, 40);
+        }
+
         //Tarrasch rule: place rook behind passers
         if (moves & sd->stack->passers) {
             U64 front[2];
@@ -774,10 +720,9 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     return result;
 }
 
-inline TScore * evaluateQueens(TSearch * sd, bool us) {
+inline TScore * evaluateShelter(TSearch * sd, bool us) {
     TScore * result = &sd->stack->queen_score[us];
     result->clear();
-
     TBoard * pos = sd->pos;
     if (*pos->queens[us] == 0) {
         return result;
@@ -790,13 +735,22 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
 inline TScore * evaluatePassers(TSearch * sd, bool us) {
     TScore * result = &sd->stack->passer_score[us];
     result->clear();
-    if (sd->stack->phase <= 10) {
+    if (sd->stack->phase <= 10 || sd->stack->passers == 0
+            || (sd->stack->passers & *sd->pos->pawns[us]) == 0) {
         return result;
     }
     bool them = !us;
-    U64 passers = sd->stack->passers & *sd->pos->pawns[us] & SIDE[them];
+    U64 passers = sd->stack->passers & *sd->pos->pawns[us];
+    int unstoppable = 0;
+    bool pVsK = sd->pos->getPieces(them) == 0;
     while (passers) {
         int sq = POP(passers);
+        if (pVsK) {
+            unstoppable = MAX(unstoppable, evaluatePasserVsK(sd, us, sq));
+        }
+        if (BIT(sq) & SIDE[us]) {
+            continue;
+        }
         int ix = us == WHITE ? FLIP_SQUARE(sq) : sq;
         int bonus = PASSED_PAWN[ix].eg >> 1;
         int to = forwardSq(sq, us);
@@ -805,14 +759,16 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
                 break; //blocked
             }
             result->add(0, bonus);
+            sd->pos->allPieces ^= BIT(sq); //to include rook/queen xray attacks from behind
             U64 attacks = sd->pos->attacksTo(to);
+            sd->pos->allPieces ^= BIT(sq);
             U64 defend = attacks & sd->pos->all(them);
             U64 support = attacks & sd->pos->all(us);
             if (defend) {
                 if (support == 0) {
                     break;
                 }
-                if (is_1(defend)) { 
+                if (is_1(defend)) {
                     break;
                 }
             }
@@ -820,7 +776,54 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
             to = forwardSq(to, us);
         } while (to >= a1 && to <= h8);
     }
+    result->add(0, unstoppable); //add the best unstoppable passer score
     return result;
 }
 
+int evaluatePasserVsK(TSearch * sd, bool us, int sq) {
+
+    //is the pawn unstoppable by the nme king?
+    U64 path = forwardFill(sq, us) ^ BIT(sq);
+    if (path & sd->pos->allPieces) {
+        return 0; //no, the path is blocked
+    }
+    bool them = !us;
+    int kingThem = *sd->pos->kingPos[them];
+    int queening_square = FILE(sq) + us * 56;
+    if (us == WHITE) {
+        if (sq <= h2) {
+            sq += 8;
+        }
+        if (sd->pos->boardFlags->WTM && sq <= h6) {
+            sq += 8;
+        }
+    } else if (us == BLACK) {
+        if (sq >= a7) {
+            sq -= 8;
+        }
+        if (sd->pos->boardFlags->WTM == false && sq >= a3) {
+            sq -= 8;
+        }
+    }
+    int prank = RANK(sq);
+    int qrank = RANK(queening_square);
+    int qfile = FILE(queening_square);
+    int pdistance = 1 + ABS(qrank - prank);
+    int kingUs = *sd->pos->kingPos[us];
+    if ((path & KingMoves[kingUs]) == path) {
+        //yes, the promotion path is fully defended and not blocked by our own King
+        return 700 - pdistance;
+    }
+
+    int krank = RANK(kingThem);
+    int kfile = FILE(kingThem);
+    int kdistance1 = ABS(qrank - krank);
+    int kdistance2 = ABS(qfile - kfile);
+    int kdistance = MAX(kdistance1, kdistance2);
+    if (pdistance < kdistance) {
+        //yes, the nme king is too far away
+        return 700 - pdistance;
+    }
+    return 0;
+}
 

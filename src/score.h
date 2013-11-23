@@ -139,10 +139,25 @@ struct TScore {
         mg &= GRAIN;
         eg &= GRAIN;
     }
+    
+    inline void max(const TScore & s) {
+        mg = mg >= s.mg? mg : s.mg;
+        eg = eg >= s.eg? eg : s.eg;
+    }
+    
+    inline void min(const TScore & s) {
+        mg = mg <= s.mg? mg : s.mg;
+        eg = eg <= s.eg? eg : s.eg;
+    }
 
     inline void clear() {
         mg = 0;
         eg = 0;
+    }
+    
+    inline void half() {
+        mg >>= 1;
+        eg >>= 1;
     }
 
     inline bool valid() {

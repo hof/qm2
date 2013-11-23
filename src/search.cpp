@@ -3,22 +3,12 @@
 #include <iostream>
 #include <string.h>
 
-const short QCHECKDEPTH[2][17] = {//has queens, game phase
-    { 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 0},
-    { 7, 7, 7, 7, 5, 5, 5, 3, 3, 3, 3, 3, 3, 1, 1, 1, 0},
-};
-
+const short QCHECKDEPTH = 1;
 const short FMARGIN[9] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200};
-
 const short DO_NULL = true;
 const short DO_FP = true;
 const short DO_LMR = true;
 const short DO_UNDO_LMR = true;
-const short DO_EXTEND_CHECKS = true;
-const short DO_EXTEND_MATE_THREAT = true;
-const short DO_EXTEND_PK = true;
-const short DO_EXTEND_PROMOTION_THREAT = true;
-const short DO_EXTEND_HIGH_DEPTH_ONLY = true;
 
 void TSearch::poll() {
     nodesUntilPoll = NODESBETWEENPOLLS;
@@ -117,7 +107,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
         pos->boardFlags->checkerSq = rMove->checkerSq;
         pos->boardFlags->checkers = rMove->checkers;
     }
-    int bestScore = -pvs(-beta, -alpha, depth - ONE_PLY);
+    int bestScore = -pvs(-beta, -alpha, depth - ONE_PLY + (bool)rMove->GivesCheck);
     backward(&rMove->Move);
     int sortBaseScoreForPV = 1000 * depth / ONE_PLY;
     rMove->Nodes += nodes - nodesBeforeMove;
@@ -158,7 +148,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
             pos->boardFlags->checkerSq = rMove->checkerSq;
             pos->boardFlags->checkers = rMove->checkers;
         }
-        int score = -pvs(-alpha - 1, -alpha, depth - ONE_PLY);
+        int score = -pvs(-alpha - 1, -alpha, depth - ONE_PLY + (bool)rMove->GivesCheck);
         if (score > alpha && score < beta && stopSearch == false) {
             score = -pvs(-beta, -alpha, depth - ONE_PLY);
         }
@@ -216,9 +206,10 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         if (pos->currentPly > selDepth) {
             selDepth = pos->currentPly;
         }
-        int score = qsearch(alpha, beta, 0, QCHECKDEPTH[pos->stmHasQueen()][stack->phase]);
+        int score = qsearch(alpha, beta, 0, QCHECKDEPTH);
         return score;
     }
+
     nodes++;
 
     /* 
@@ -302,6 +293,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         return eval - FMARGIN[depth];
     }
 
+    bool mateThreat = false;
     if (!skipNull
             && DO_NULL
             && depth > ONE_PLY
@@ -309,7 +301,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && eval >= beta
             && ABS(beta) < SCORE_MATE - MAX_PLY
             && pos->getPieces(pos->boardFlags->WTM)) {
-        int rdepth = rdepth = depth - 3 * ONE_PLY - (depth >> 2);
+        int rdepth = depth - 3 * ONE_PLY - (depth >> 2);
         forward();
         int score = -pvs(-beta, -alpha, rdepth);
         backward();
@@ -319,13 +311,19 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             }
             return score;
         } else if (alpha > (-SCORE_MATE + MAX_PLY) && score < (-SCORE_MATE + MAX_PLY)) {
+            TMove * threat = &(stack + 1)->bestMove;
+            if (!threat->capture && !threat->promotion) {
+                updateHistoryScore(threat, rdepth);
+            }
             if ((stack - 1)->reduce > 0 && DO_UNDO_LMR) {
-                //return alpha; //fully undo the reduction
                 undo_lmr = (stack - 1)->reduce; //fully undo the reduction
             }
-            extend = DO_EXTEND_MATE_THREAT;
+            mateThreat = true;
         } else if ((stack - 1)->reduce > 0 && DO_UNDO_LMR) {
             TMove * threat = &(stack + 1)->bestMove;
+            if (!threat->capture && !threat->promotion) {
+                updateHistoryScore(threat, rdepth);
+            }
             TMove * prev = &(stack - 1)->move;
             if (prev->ssq && threat->tsq || prev->tsq == threat->ssq) {
                 undo_lmr = ((stack - 1)->reduce >> 1) + HALF_PLY; //(partly) undo the reduction
@@ -349,47 +347,53 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 
     /*
      * 8. Node extensions
-     * a) Endgame extension: increase depth with two ply when reaching pawns/kings endgame
-     * b) check extension
      */
+    if (inCheck && extend < ONE_PLY) {
+        extend++;
+        if (extend < ONE_PLY && movePicker->countEvasions(this, firstMove) <= 2) {
+            extend++; //only one or two replies to check
+        }
+    }
+
+    if (depth >= HIGH_DEPTH && extend > 0 && type != PVNODE) {
+        extend--;
+    }
+    if (depth >= LOW_DEPTH && extend > 0 && type != PVNODE) {
+        extend--;
+    }
+    
     assert(stack->phase >= 0 && stack->phase <= 16);
     if (stack->phase == 16
-            && DO_EXTEND_PK
             && pos->boardFlags->fiftyCount == 0
             && pos->pawnsAndKings() == pos->allPieces) {
         TMove * previous = &(stack - 1)->move;
         if (previous->capture && previous->capture != WPAWN && previous->capture != BPAWN) {
-            extend += 2 * ONE_PLY;
+            extend = 2 * ONE_PLY;
         }
-    }
-    
-    if (stack->phase >= 12 
-            && extend < ONE_PLY
-            && DO_EXTEND_PROMOTION_THREAT
-            && pos->promotingPawn()) {
-        extend++;
     }
 
-    if (inCheck && extend < ONE_PLY && DO_EXTEND_CHECKS) {
-        extend++;
-        if (extend < ONE_PLY && movePicker->countEvasions(this, firstMove) <= 2) {
-            extend++;
-        }
-    }
-    
-    if (depth < HIGH_DEPTH && extend) {
-        extend = 0;
-    }
-    
     extend += undo_lmr;
-
     int givesCheck = pos->givesCheck(firstMove);
+    bool extendMove = extend == 0 && givesCheck;
+
+    //make the pv longer
+    if (type == PVNODE && depth > LOW_DEPTH) {
+        extendMove += extendMove == 1 && extend == 0;
+        extend += extendMove == 0 && extend == 1;
+        extend += extendMove == 0 && extend == 0 && pos->push7th(firstMove);
+        if (depth >= HIGH_DEPTH && extendMove == 0 && extend == 0) {
+            extend += firstMove->capture
+                    || (stack->phase > 10 && passedPawn(firstMove));
+        }
+    }
+
 
     stack->bestMove.setMove(firstMove);
     stack->reduce = 0;
     forward(firstMove, givesCheck);
-    int bestScore = -pvs(-beta, -alpha, depth - ONE_PLY + extend);
+    int bestScore = -pvs(-beta, -alpha, depth - ONE_PLY + extend + extendMove);
     backward(firstMove);
+
     if (bestScore > alpha) {
         if (bestScore >= beta) {
             hashTable->ttStore(this, firstMove->asInt(), bestScore, depth, alpha, beta);
@@ -422,14 +426,14 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         assert(firstMove->equals(move) == false);
 
         givesCheck = pos->givesCheck(move);
-        int reduce = 0;
 
         /*
          * 11. forward futility pruning at low depths
          * (moves without potential are skipped)
          */
-        if (stack->moveList.stage >= NON_CAPTURES
+        if (stack->moveList.stage >= QUIET_MOVES
                 && DO_FP
+                && type != PVNODE
                 && !move->capture
                 && !inCheck
                 && !givesCheck
@@ -443,7 +447,8 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         /*
          * 12. Late Move Reductions (LMR) 
          */
-        if (stack->moveList.stage >= STOP
+        int reduce = 0;
+        if (stack->moveList.stage >= QUIET_MOVES
                 && DO_LMR
                 && !move->capture
                 && !inCheck
@@ -458,8 +463,9 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         }
 
         stack->reduce = reduce;
+        bool extendMove = extend == 0 && givesCheck;
         forward(move, givesCheck);
-        int score = -pvs(-alpha - 1, -alpha, new_depth - reduce);
+        int score = -pvs(-alpha - 1, -alpha, new_depth - reduce + extendMove);
         if (score > alpha && reduce) { //full depth research without reductions
             (stack - 1)->reduce = 0;
             score = -pvs(-alpha - 1, -alpha, new_depth);
@@ -572,7 +578,8 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
             int givesCheck = pos->givesCheck(move);
             int qcheck_depth = checkDepth;
 
-            if (!move->capture && !move->promotion && (!givesCheck || pos->SEE(move) < 0)) {
+            if (!move->capture && !move->promotion &&
+                    (givesCheck == 0 || (givesCheck == 1 && pos->SEE(move) < 0))) {
                 pruned_nodes++;
                 continue;
             }
@@ -602,7 +609,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
 
             }
             qcheck_depth -= givesCheck == 0;
-            
+
             forward(move, givesCheck);
             score = -qsearch(-beta, -alpha, qPly + 1, qcheck_depth);
             backward(move);
