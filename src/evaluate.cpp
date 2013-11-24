@@ -5,10 +5,13 @@
 
 inline short evaluateMaterial(TSearch * sd);
 
+TSCORE_PST PST;
+
 inline TScore * evaluatePawnsAndKings(TSearch * sd);
+inline TScore * evaluateKnights(TSearch * sd, bool white);
 inline TScore * evaluateBishops(TSearch * sd, bool white);
 inline TScore * evaluateRooks(TSearch * sd, bool white);
-inline TScore * evaluateShelter(TSearch * sd, bool white);
+inline TScore * evaluateQueens(TSearch * sd, bool white);
 inline TScore * evaluatePassers(TSearch * sd, bool white);
 inline int evaluatePasserVsK(TSearch * sd, bool white, int sq);
 
@@ -24,14 +27,16 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     int result = evaluateMaterial(sd); //sets stack->phase
 
     TScore * score = &sd->stack->eval_score;
-    score->set(sd->pos->boardFlags->pct);
-    score->add(evaluatePawnsAndKings(sd));
+    score->set(evaluatePawnsAndKings(sd));
+    
+    score->add(evaluateKnights(sd, WHITE));
+    score->sub(evaluateKnights(sd, BLACK));
     score->add(evaluateBishops(sd, WHITE));
     score->sub(evaluateBishops(sd, BLACK));
     score->add(evaluateRooks(sd, WHITE));
     score->sub(evaluateRooks(sd, BLACK));
-    score->add(evaluateShelter(sd, WHITE));
-    score->sub(evaluateShelter(sd, BLACK));
+    score->add(evaluateQueens(sd, WHITE));
+    score->sub(evaluateQueens(sd, BLACK));
     score->add(evaluatePassers(sd, WHITE));
     score->sub(evaluatePassers(sd, BLACK));
 
@@ -214,43 +219,55 @@ inline short evaluateMaterial(TSearch * sd) {
 void init_pct_store(TSCORE_PCT & pct, TScore scores[], int wpiece) {
     int tot_mg = 0;
     int tot_eg = 0;
+    int count = 0;
     for (int sq = a1; sq <= h8; sq++) {
+        if (wpiece == WPAWN && (sq < a2 || sq > h7)) {
+            continue;
+        }
         tot_mg += scores[sq].mg;
         tot_eg += scores[sq].eg;
+        count++;
     }
-    int avg_mg = tot_mg / 64;
-    int avg_eg = tot_eg / 64;
+    int avg_mg = tot_mg / count;
+    int avg_eg = tot_eg / count;
     for (int sq = a1; sq <= h8; sq++) {
-        scores[sq].mg -= avg_mg;
-        scores[sq].eg -= avg_eg;
-        scores[sq].round();
+        if (wpiece == WPAWN && (sq < a2 || sq > h7)) {
+            scores[sq].clear();
+        } else {
+            scores[sq].mg -= avg_mg;
+            scores[sq].eg -= avg_eg;
+            scores[sq].round();
+        }
         pct[wpiece][sq].set(scores[sq]);
         pct[wpiece + WKING][FLIP_SQUARE(sq)].nset(scores[sq]);
+        PST[wpiece][FLIP_SQUARE(sq)].set(scores[sq]);
     }
 }
 
 void init_pct(TSCORE_PCT & pct) {
     TScore scores[64];
-    const short mobility_scale[2][64] = {{
-        1, 2, 3, 4, 4, 3, 2, 1,
-        2, 3, 4, 5, 5, 4, 3, 2,
-        3, 4, 5, 6, 6, 5, 4, 3,
-        4, 5, 6, 7, 7, 6, 5, 4,
-        4, 5, 6, 7, 7, 6, 5, 4,
-        3, 4, 5, 6, 6, 5, 4, 3,
-        2, 3, 4, 5, 5, 4, 3, 2,
-        1, 2, 3, 4, 4, 3, 2, 1
-    },
-            {
-        1, 2, 3, 4, 4, 3, 2, 1,
-        2, 3, 4, 5, 5, 4, 3, 2,
-        3, 4, 5, 6, 6, 5, 4, 3,
-        4, 5, 6, 7, 7, 6, 5, 4,
-        4, 5, 6, 7, 7, 6, 5, 4,
-        3, 4, 5, 6, 6, 5, 4, 3,
-        2, 3, 4, 5, 5, 4, 3, 2,
-        1, 2, 3, 4, 4, 3, 2, 1
-    }};
+    const short mobility_scale[2][64] = {
+        {
+            2, 3, 4, 5, 5, 4, 3, 2,
+            3, 4, 5, 6, 6, 5, 4, 3,
+            4, 5, 6, 7, 7, 6, 5, 4,
+            4, 5, 6, 7, 7, 6, 5, 4,
+            4, 5, 6, 7, 7, 6, 5, 4,
+            3, 4, 5, 6, 6, 5, 4, 3,
+            2, 3, 4, 5, 5, 4, 3, 2,
+            1, 2, 3, 4, 4, 3, 2, 1
+        },
+        {
+            1, 2, 3, 4, 4, 3, 2, 1,
+            2, 3, 4, 5, 5, 4, 3, 2,
+            3, 4, 5, 6, 6, 5, 4, 3,
+            4, 5, 6, 7, 7, 6, 5, 4,
+            4, 5, 6, 7, 7, 6, 5, 4,
+            3, 4, 5, 6, 6, 5, 4, 3,
+            2, 3, 4, 5, 5, 4, 3, 2,
+            1, 2, 3, 4, 4, 3, 2, 1
+        }
+    };
 
     //Pawn
     for (int sq = a1; sq < 64; sq++) {
@@ -416,6 +433,9 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         bool candidate = open && !doubled && !passed && !(up & ~wSafe);
 
         //std::cout << "WP " << PRINT_SQUARE(sq) << ": ";
+        
+        
+        pawn_score->add(PST[WPAWN][isq]);
         if (isolated) {
             pawn_score->add(ISOLATED_PAWN[open]);
             //std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
@@ -468,6 +488,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         bool candidate = open && !doubled && !passed && !(down & ~bSafe);
 
         //std::cout << "BP " << PRINT_SQUARE(sq) << ": ";
+        
+        pawn_score->sub(PST[WPAWN][sq]);
         if (isolated) {
             pawn_score->sub(ISOLATED_PAWN[open]);
             //std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
@@ -506,6 +528,10 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     //pawn_score->print();
     //std::cout << std::endl;
 
+    
+    pawn_score->add(PST[WKING][ISQ(wkpos, WHITE)]);
+    pawn_score->sub(PST[WKING][ISQ(bkpos, BLACK)]);
+    
     //support and attack pawns with king in the EG
     pawn_score->add(0, popCount(KingZone[wkpos] & pos->allPawns(), true) * 12);
     pawn_score->sub(0, popCount(KingZone[bkpos] & pos->allPawns(), true) * 12);
@@ -598,13 +624,47 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     return &sd->stack->pawn_score;
 }
 
+inline TScore * evaluateKnights(TSearch * sd, bool us) {
+
+    TScore * result = &sd->stack->knight_score[us];
+    TBoard * pos = sd->pos;
+    if (*pos->knights[us] == 0) {
+        result->clear();
+        return result;
+    }
+
+    /*
+     * 2. Get the score from the last stack record if the previous move 
+     *   a) did not change the pawn+kings structure (pawn hash) 
+     *   b) did not move or capture any bishop
+     */
+    if (sd->stack->equal_pawns) {
+        TMove * prevMove = &(sd->stack - 1)->move;
+        if (prevMove->piece != KNIGHT[us] && prevMove->capture != KNIGHT[us]) {
+            result->set((sd->stack - 1)->knight_score[us]);
+            return result;
+        }
+    }
+
+    /*
+     * 3. Calculate the score and store on the stack
+     */
+    result->clear();
+    TPiecePlacement * pp = &pos->pieces[KNIGHT[us]];
+    for (int i = 0; i < pp->count; i++) {
+        int sq = pp->squares[i];
+        result->add(PST[WKNIGHT][ISQ(sq, us)]);
+    }
+    return result;
+}
+
 inline TScore * evaluateBishops(TSearch * sd, bool us) {
 
     TScore * result = &sd->stack->bishop_score[us];
-    result->clear();
 
     TBoard * pos = sd->pos;
     if (*pos->bishops[us] == 0) {
+        result->clear();
         return result;
     }
 
@@ -624,12 +684,14 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     /*
      * 3. Calculate the score and store on the stack
      */
+    result->clear();
     TPiecePlacement * pc = &pos->pieces[BISHOP[us]];
     U64 occ = pos->pawnsAndKings();
     bool them = !us;
     U64 mobMask = ~(*pos->pawns[us] | pos->pawnAttacks(them));
     for (int i = 0; i < pc->count; i++) {
         int sq = pc->squares[i];
+        result->add(PST[WBISHOP][ISQ(sq, us)]);
         U64 moves = MagicBishopMoves(sq, occ);
         int count = popCount(moves & mobMask);
         result->add(BISHOP_MOBILITY[count]);
@@ -648,10 +710,10 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
 inline TScore * evaluateRooks(TSearch * sd, bool us) {
 
     TScore * result = &sd->stack->rook_score[us];
-    result->clear();
 
     TBoard * pos = sd->pos;
     if (*pos->rooks[us] == 0) {
+        result->clear();
         return result;
     }
 
@@ -671,6 +733,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     /*
      * 3. Calculate the score and store on the stack
      */
+    result->clear();
     TPiecePlacement * pc = &pos->pieces[ROOK[us]];
     bool them = !us;
     U64 fill[2] = {FILEFILL(pos->blackPawns), FILEFILL(pos->whitePawns)};
@@ -678,6 +741,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     U64 mobMask = ~(*pos->pawns[us] | pos->pawnAttacks(them));
     for (int i = 0; i < pc->count; i++) {
         int sq = pc->squares[i];
+        result->add(PST[WROOK][ISQ(sq, us)]);
         U64 bitSq = BIT(sq);
         if (bitSq & (~fill[us])) {
             if (bitSq & fill[them]) {
@@ -720,15 +784,40 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     return result;
 }
 
-inline TScore * evaluateShelter(TSearch * sd, bool us) {
+inline TScore * evaluateQueens(TSearch * sd, bool us) {
+
     TScore * result = &sd->stack->queen_score[us];
-    result->clear();
+    
     TBoard * pos = sd->pos;
     if (*pos->queens[us] == 0) {
+        result->clear();
         return result;
     }
+
+    /*
+     * 2. Get the score from the last stack record if the previous move 
+     *   a) did not change the pawn+kings structure (pawn hash) 
+     *   b) did not move or capture any bishop
+     */
+    if (sd->stack->equal_pawns) {
+        TMove * prevMove = &(sd->stack - 1)->move;
+        if (prevMove->piece != QUEEN[us] && prevMove->capture != QUEEN[us]) {
+            result->set((sd->stack - 1)->queen_score[us]);
+            return result;
+        }
+    }
+
+    /*
+     * 3. Calculate the score and store on the stack
+     */
     bool them = !us;
+    result->clear();
     result->sub(sd->stack->shelter_score[them]);
+    TPiecePlacement * pp = &pos->pieces[QUEEN[us]];
+    for (int i = 0; i < pp->count; i++) {
+        int sq = pp->squares[i];
+        result->add(PST[WQUEEN][ISQ(sq, us)]);
+    }
     return result;
 }
 

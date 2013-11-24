@@ -104,6 +104,7 @@ using std::string;
 const uint8_t QUEEN[2] = {BQUEEN, WQUEEN};
 const uint8_t ROOK[2] = {BROOK, WROOK};
 const uint8_t BISHOP[2] = {BBISHOP, WBISHOP};
+const uint8_t KNIGHT[2] = {BKNIGHT, WKNIGHT};
 
 #define WPIECES 13
 #define BPIECES 14
@@ -354,7 +355,7 @@ struct TBoard {
     inline void movePieceFull(int piece, int ssq, int tsq) {
         movePiece(piece, ssq, tsq);
         HASH_MOVE_PIECE(boardFlags->hashCode, piece, ssq, tsq);
-        if (piece == WPAWN || piece == BPAWN) {
+        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
             HASH_MOVE_PIECE(boardFlags->pawnHash, piece, ssq, tsq);
         }
         boardFlags->pct.add(pieceSquareTable[piece][tsq]);

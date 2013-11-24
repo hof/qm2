@@ -274,6 +274,8 @@ inline U64 forwardFill(int sq, bool white) {
 #define ABS(x)              ((x)>=0?(x):(-(x)))    
 #define FLIP_SQUARE(sq)     (((sq)^56))
 
+#define ISQ(sq,w)           (((sq)^(bool(w)*56)))
+
 #define PRINT_SQUARE(sq)    FILE_SYMBOL(sq) << RANK_SYMBOL(sq)
 
 /**

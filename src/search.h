@@ -133,13 +133,12 @@ struct TSearchStack {
     TScore eval_score;
     short material_score;
     TScore pawn_score;
-    TScore knight_score;
+    TScore knight_score[2];
     TScore bishop_score[2];
     TScore rook_score[2];
     TScore queen_score[2];
-    TScore king_score;
+    TScore king_score[2];
     TScore shelter_score[2];
-    TScore exp_score;
     TScore passer_score[2];
     U64 passers;
     int reduce;

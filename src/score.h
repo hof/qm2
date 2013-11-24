@@ -167,6 +167,7 @@ struct TScore {
 };
 
 typedef TScore TSCORE_PCT[13][64];
+typedef TScore TSCORE_PST[7][64];
 
 #define S(x,y) TScore(x,y)
 
