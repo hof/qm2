@@ -216,7 +216,7 @@ inline short evaluateMaterial(TSearch * sd) {
     return value;
 }
 
-void init_pct_store(TSCORE_PCT & pct, TScore scores[], int wpiece) {
+void init_pct_store(TScore scores[], int wpiece) {
     int tot_mg = 0;
     int tot_eg = 0;
     int count = 0;
@@ -238,13 +238,11 @@ void init_pct_store(TSCORE_PCT & pct, TScore scores[], int wpiece) {
             scores[sq].eg -= avg_eg;
             scores[sq].round();
         }
-        pct[wpiece][sq].set(scores[sq]);
-        pct[wpiece + WKING][FLIP_SQUARE(sq)].nset(scores[sq]);
         PST[wpiece][FLIP_SQUARE(sq)].set(scores[sq]);
     }
 }
 
-void init_pct(TSCORE_PCT & pct) {
+void init_pct() {
     TScore scores[64];
     const short mobility_scale[2][64] = {
         {
@@ -283,7 +281,7 @@ void init_pct(TSCORE_PCT & pct) {
         }
         scores[sq].mul(3); //pawns are the most powerful to control squares
     }
-    init_pct_store(pct, scores, WPAWN);
+    init_pct_store(scores, WPAWN);
 
     //Knight
     for (int sq = a1; sq < 64; sq++) {
@@ -295,7 +293,7 @@ void init_pct(TSCORE_PCT & pct) {
         }
         scores[sq].mul(1.5); //mobility is extra important because knights move slow
     }
-    init_pct_store(pct, scores, WKNIGHT);
+    init_pct_store(scores, WKNIGHT);
 
     //Bishop
     for (int sq = a1; sq < 64; sq++) {
@@ -306,7 +304,7 @@ void init_pct(TSCORE_PCT & pct) {
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
     }
-    init_pct_store(pct, scores, WBISHOP);
+    init_pct_store(scores, WBISHOP);
 
     //Rook
     for (int sq = a1; sq < 64; sq++) {
@@ -319,7 +317,7 @@ void init_pct(TSCORE_PCT & pct) {
         }
         scores[sq].half(); //square control by rook is less powerful than by bishop/knight/pawn
     }
-    init_pct_store(pct, scores, WROOK);
+    init_pct_store(scores, WROOK);
 
     //Queen
     for (int sq = a1; sq < 64; sq++) {
@@ -332,7 +330,7 @@ void init_pct(TSCORE_PCT & pct) {
         }
         scores[sq].mul(0.25);
     }
-    init_pct_store(pct, scores, WQUEEN);
+    init_pct_store(scores, WQUEEN);
 
     //King
     for (int sq = a1; sq < 64; sq++) {
@@ -345,7 +343,7 @@ void init_pct(TSCORE_PCT & pct) {
         scores[sq].mg = 0;
         scores[sq].eg *= 1.5; // kings move slow
     }
-    init_pct_store(pct, scores, WKING);
+    init_pct_store(scores, WKING);
 }
 
 /**

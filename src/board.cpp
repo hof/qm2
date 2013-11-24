@@ -67,18 +67,6 @@ void TBoard::clear() {
     memset(pieces, 0, sizeof (pieces));
 }
 
-void TBoard::clearPieceSquareTable() {
-    memset(pieceSquareTable, 0, sizeof(pieceSquareTable));
-}
-
-void TBoard::setPieceSquareTable(const TSCORE_PCT & pct) {
-    for (int pc = 0; pc <= BKING; pc++) {
-        for (int sq = 0; sq < 64; sq++) {
-            pieceSquareTable[pc][sq].set(pct[pc][sq]);
-        }
-    }
-}
-
 void TBoard::forward(TMove * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;

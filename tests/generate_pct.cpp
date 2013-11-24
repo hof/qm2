@@ -37,7 +37,7 @@ void print_score(short score, int sq) {
     }
 }
 
-void print_pct(TSCORE_PCT & pct) {
+void print_pct(TSCORE_PST & pct) {
     const std::string PIECE_NAME[13] = {"EMTPY", "White Pawn", "White Knight",
         "White Bishop", "White Rook", "White Queen", "White King", "Black Pawn",
         "Black Knight", "Black Bishop", "Black Rook", "Black Queen", "Black King"};
@@ -59,9 +59,8 @@ void print_pct(TSCORE_PCT & pct) {
 
 int main(int argc, char** argv) {
     InitMagicMoves();
-    TSCORE_PCT pct;
-    init_pct(pct);
-    print_pct(pct);
+    init_pct();
+    print_pct(PST);
     return (EXIT_SUCCESS);
 }
 

@@ -72,7 +72,6 @@ private:
     int _resultScore;
     volatile bool _engineStop;
     volatile bool _enginePonder;
-    TSCORE_PCT _pct;
 
 public:
     TGameSettings gameSettings;
@@ -91,7 +90,6 @@ public:
         _rootFen = "";
         _resultMove.setMove(0);
         _resultScore = 0;
-        init_pct(_pct);
     }
 
     inline int CPUCount() {

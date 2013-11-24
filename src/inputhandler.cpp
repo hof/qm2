@@ -205,7 +205,6 @@ bool TInputHandler::handlePosition(TInputParser& parser) {
             parser >> token;
         }
         TBoard pos;
-        pos.clearPieceSquareTable();
         pos.fromFen(_fen.c_str());
         if (token == "moves") {
             THashTable * hash = hashTable();

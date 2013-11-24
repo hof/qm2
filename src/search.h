@@ -193,15 +193,14 @@ public:
 
     TMoveList tempList;
 
-    TSearch(const char * fen,
-            TSCORE_PCT & pieceSquareTables,
+    TSearch(const char * fen,       
             THashTable * globalHashTable,
             TOutputHandler * outputH) {
         pos = new TBoard();
-        pos->setPieceSquareTable(pieceSquareTables);
         pos->fromFen(fen);
         memset(history, 0, sizeof (history));
         initLMR();
+        init_pct();
         hashTable = globalHashTable;
         outputHandler = outputH;
         movePicker = new TMovePicker();

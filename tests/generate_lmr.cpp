@@ -21,9 +21,7 @@
 
 int main(int argc, char** argv) {
     std::string fen = "";
-    TSCORE_PCT pct;
-    TSearch * s = new TSearch(fen.c_str(), pct, NULL, NULL);
-    s->initLMR();
+    TSearch * s = new TSearch(fen.c_str(), NULL, NULL);
     for (int depth = 1; depth <= 60; depth++) {
         std::cout << "\ndepth | move | pv | nonpv | pv+ | nonpv+" << std::endl;
         for (int move = 1; move <= 60; move++) {

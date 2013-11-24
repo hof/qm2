@@ -20,7 +20,8 @@ class TSearch;
 
 int evaluate(TSearch * searchData, int alpha, int beta);
 
-void init_pct(TSCORE_PCT & pct);
+void init_pct();
+extern TSCORE_PST PST;
 
 bool skipExp(TSearch * sd);
 

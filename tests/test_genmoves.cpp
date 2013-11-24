@@ -107,9 +107,7 @@ int main(int argc, char** argv) {
 
     THashTable * hashTable = new THashTable(0);
     TOutputHandler outputHandler;
-    TSCORE_PCT pct;
-    init_pct(pct);
-    TSearch * searchData = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", pct, hashTable, &outputHandler);
+    TSearch * searchData = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", hashTable, &outputHandler);
 
 
 
