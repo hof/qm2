@@ -174,23 +174,23 @@ const TScore SHELTER_CASTLING_KINGSIDE = S(60, 20);
 const TScore SHELTER_CASTLING_QUEENSIDE = S(50, 20);
 
 const TScore ROOK_MOBILITY[15] = {
-    S(-40, -40), S(-30, -30), S(-20, -20), S(0, -10),
-    S(2, 0), S(4, 4), S(6, 6), S(8, 8), S(10, 10),
-    S(12, 12), S(14, 14), S(16, 16), S(18, 18), S(20, 20), S(22, 22)
+    S(-40, -40), S(-20, -20), S(-10, -10), S(-4, -4),
+    S(-3, -3), S(-2, -2), S(-1, -1), S(0, 0), S(1, 1),
+    S(2, 2), S(3, 3), S(4, 4), S(5, 5), S(6, 6), S(8, 8)
 };
 
 const TScore ROOK_SEMIOPEN_FILE = S(12, 12);
 const TScore ROOK_OPEN_FILE = S(24, 24);
 const TScore ROOK_SHELTER_PROTECT = S(10, 0);
 const TScore ROOK_TARRASCH_SUPPORT = S(10, 30);
-const TScore ROOK_TARRASCH_ATTACK = S(10, 20);
+const TScore ROOK_TARRASCH_ATTACK = S(10, 30);
 const TScore ROOK_WRONG_TARRASCH_SUPPORT = S(-10, -20);
 const TScore ROOK_WRONG_TARRASCH_ATTACK = S(-10, -20);
 
 const TScore BISHOP_MOBILITY[15] = {
-    S(-40, -50), S(-20, -30), S(-10, -20), S(0, -10),
-    S(2, 0), S(4, 4), S(6, 6), S(8, 8), S(10, 10),
-    S(12, 12), S(14, 14), S(16, 16), S(18, 18), S(20, 20), S(22, 22)
+    S(-40, -40), S(-20, -20), S(-10, -10), S(-5, -5),
+    S(0, 0), S(2, 2), S(4, 4), S(6, 6), S(8, 8),
+    S(10, 10), S(12, 12), S(14, 14), S(16, 16), S(18, 18), S(20, 20)
 };
 
 const TScore TRAPPED_BISHOP(-80, -120);
@@ -215,19 +215,6 @@ inline int cond(bool whiteCondition, bool blackCondition, const short values[], 
         return whiteCondition ? values[indexW] : -values[indexB];
     }
     return 0;
-}
-
-inline int factor(char wFactor, char bFactor, const short values[], unsigned char indexW, unsigned char indexB) {
-    return wFactor * values[indexW] - bFactor * values[indexB];
-}
-
-inline int factor(char wFactor, char bFactor, const short values[], unsigned char index) {
-    return factor(wFactor, bFactor, values, index, index);
-}
-
-inline int phasedScore(int gameProgress, int middleGameValue, int endGameValue) {
-    assert(gameProgress >= 0 && gameProgress <= MAX_GAMEPHASES);
-    return (middleGameValue * (MAX_GAMEPHASES - gameProgress) + endGameValue * gameProgress) >> GAMEPHASE_SCORE_BSR;
 }
 
 #endif	/* EVALUATE_H */

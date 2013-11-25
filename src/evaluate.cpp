@@ -51,7 +51,7 @@ int evaluate(TSearch * sd, int alpha, int beta) {
 }
 
 bool skipExp(TSearch * sd) {
-    int pc = WROOK;
+    int pc = WKING;
     return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
 }
 
@@ -830,12 +830,13 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
     U64 passers = sd->stack->passers & *sd->pos->pawns[us];
     int unstoppable = 0;
     bool pVsK = sd->pos->getPieces(them) == 0;
+    U64 exclude = SIDE[us] & ~(RANK_4 | RANK_5);
     while (passers) {
         int sq = POP(passers);
         if (pVsK) {
             unstoppable = MAX(unstoppable, evaluatePasserVsK(sd, us, sq));
         }
-        if (BIT(sq) & SIDE[us]) {
+        if (BIT(sq) & exclude) {
             continue;
         }
         int ix = us == WHITE ? FLIP_SQUARE(sq) : sq;
