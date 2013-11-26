@@ -187,11 +187,9 @@ int evaluate(TSearch * sd, int alpha, int beta) {
             && sd->pos->boardFlags->pawnHash == (sd->pos->boardFlags - 1)->pawnHash
             && (sd->stack - 1)->eval_result != SCORE_INVALID;
 
-    int result = evaluateMaterial(sd); //sets stack->phase
-
+    int result = evaluateMaterial(sd); //sets stack->phase (required)
     TScore * score = &sd->stack->eval_score;
-    score->set(evaluatePawnsAndKings(sd));
-
+    score->set(evaluatePawnsAndKings(sd)); //sets mobility masks (required)
     score->add(evaluateKnights(sd, WHITE));
     score->sub(evaluateKnights(sd, BLACK));
     score->add(evaluateBishops(sd, WHITE));
@@ -290,7 +288,7 @@ inline short evaluateMaterial(TSearch * sd) {
     }
 
     int piecePower = result.get(phase);
-    
+
     result.mg += (wpawns - bpawns) * SVPAWN.mg;
     result.eg += (wpawns - bpawns) * SVPAWN.eg;
 
@@ -342,7 +340,7 @@ inline short evaluateMaterial(TSearch * sd) {
     if (piecePower >= VROOK && value > 2 * VPAWN) {
         value += value >> 2;
     } else if (piecePower <= -VROOK && value < -2 * VPAWN) {
-        value -= (-value) >> 2; 
+        value -= (-value) >> 2;
     }
 
     //ahead but no mating material?
@@ -354,7 +352,7 @@ inline short evaluateMaterial(TSearch * sd) {
 
     //ahead with pawns and behind with pieces? 
     if (value > 0 && piecePower < 0) {
-        value -= 20 + (value >> 2); 
+        value -= 20 + (value >> 2);
         //testeval r3r1k1/5p1p/2pbbBp1/q2p4/p2P4/1P1Q2N1/P1P1RPPP/R5K1 b - - 5 1
         if (value < VPAWN && bminors > wminors) {
             //set drawflag  
@@ -521,8 +519,15 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         sd->stack->shelter_score[WHITE].set((sd->stack - 1)->shelter_score[WHITE]);
         sd->stack->shelter_score[BLACK].set((sd->stack - 1)->shelter_score[BLACK]);
         sd->stack->passers = (sd->stack - 1)->passers;
+        sd->stack->mob[WHITE] = (sd->stack - 1)->mob[WHITE];
+        sd->stack->mob[BLACK] = (sd->stack - 1)->mob[BLACK];
         return &sd->stack->pawn_score;
     }
+
+    //set mobility masks
+    TBoard * pos = sd->pos;
+    sd->stack->mob[WHITE] = ~(*pos->pawns[WHITE] | pos->pawnAttacks(BLACK) | *pos->kings[WHITE]);
+    sd->stack->mob[BLACK] = ~(*pos->pawns[BLACK] | pos->pawnAttacks(WHITE) | *pos->kings[BLACK]);
 
     /*
      * 2. Probe the hash table for the pawn score
@@ -541,7 +546,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     pawn_score->clear();
     shelter_score_w->set(-120, -50);
     shelter_score_b->set(-120, -50);
-    TBoard * pos = sd->pos;
 
     int wkpos = *pos->whiteKingPos;
     int bkpos = *pos->blackKingPos;
@@ -690,12 +694,12 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     pawn_score->sub(PST[WKING][ISQ(bkpos, BLACK)]);
 
     //support and attack pawns with king in the EG
-    pawn_score->add(0, popCount(KingZone[wkpos] & pos->allPawns(), true) * 8);
-    pawn_score->sub(0, popCount(KingZone[bkpos] & pos->allPawns(), true) * 8);
+    pawn_score->add(0, popCount0(KingZone[wkpos] & pos->allPawns()) * 8);
+    pawn_score->sub(0, popCount0(KingZone[bkpos] & pos->allPawns()) * 8);
 
     //support and attack passed pawns even more
-    pawn_score->add(0, popCount(KingZone[wkpos] & passers, true) * 12);
-    pawn_score->sub(0, popCount(KingZone[bkpos] & passers, true) * 12);
+    pawn_score->add(0, popCount0(KingZone[wkpos] & passers) * 12);
+    pawn_score->sub(0, popCount0(KingZone[bkpos] & passers) * 12);
 
     /*
      * 4. Evaluate King shelter score. 
@@ -731,8 +735,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     //3. penalize (half)open files on the king
     U64 open = (openW | openB) & kingFront & RANK_8;
     if (open) {
-        shelter_score_w->add(SHELTER_OPEN_FILES[popCount(open & openW, true)]);
-        shelter_score_w->add(SHELTER_OPEN_ATTACK_FILES[popCount(open & openB, true)]);
+        shelter_score_w->add(SHELTER_OPEN_FILES[popCount0(open & openW)]);
+        shelter_score_w->add(SHELTER_OPEN_ATTACK_FILES[popCount0(open & openB)]);
         if (open & openW & openB & (FILE_A | FILE_B | FILE_H | FILE_G)) {
             shelter_score_w->add(SHELTER_OPEN_EDGE_FILE);
         }
@@ -770,8 +774,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     //3. penalize (half)open files on the king
     open = (openW | openB) & kingFront & RANK_1;
     if (open) {
-        shelter_score_b->add(SHELTER_OPEN_FILES[popCount(open & openB, true)]);
-        shelter_score_b->add(SHELTER_OPEN_ATTACK_FILES[popCount(open & openW, true)]);
+        shelter_score_b->add(SHELTER_OPEN_FILES[popCount0(open & openB)]);
+        shelter_score_b->add(SHELTER_OPEN_ATTACK_FILES[popCount0(open & openW)]);
         if (open & openB & openW & (FILE_A | FILE_B | FILE_H | FILE_G)) {
             shelter_score_b->add(SHELTER_OPEN_EDGE_FILE);
         }
@@ -807,14 +811,12 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
      * 3. Calculate the score and store on the stack
      */
     result->clear();
-    bool them = !us;
-    U64 mobMask = ~(*pos->pawns[us] | pos->pawnAttacks(them));
     TPiecePlacement * pp = &pos->pieces[KNIGHT[us]];
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
         result->add(PST[WKNIGHT][ISQ(sq, us)]);
-        U64 moves = KnightMoves[sq] & mobMask;
-        result->add(KNIGHT_MOBILITY[popCount(moves, true)]);
+        U64 moves = KnightMoves[sq] & sd->stack->mob[us];
+        result->add(KNIGHT_MOBILITY[popCount0(moves)]);
     }
     return result;
 }
@@ -848,13 +850,11 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     result->clear();
     TPiecePlacement * pc = &pos->pieces[BISHOP[us]];
     U64 occ = pos->pawnsAndKings();
-    bool them = !us;
-    U64 mobMask = ~(*pos->pawns[us] | pos->pawnAttacks(them));
     for (int i = 0; i < pc->count; i++) {
         int sq = pc->squares[i];
         result->add(PST[WBISHOP][ISQ(sq, us)]);
         U64 moves = MagicBishopMoves(sq, occ);
-        int count = popCount(moves & mobMask);
+        int count = popCount0(moves & sd->stack->mob[us]);
         result->add(BISHOP_MOBILITY[count]);
         if (us == WHITE && count < 2 && (sq == h7 && pos->Matrix[g6] == BPAWN && pos->Matrix[f7] == BPAWN)
                 || (sq == a7 && pos->Matrix[b6] == BPAWN && pos->Matrix[c7] == BPAWN)) {
@@ -899,7 +899,6 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     bool them = !us;
     U64 fill[2] = {FILEFILL(pos->blackPawns), FILEFILL(pos->whitePawns)};
     U64 occ = pos->pawnsAndKings();
-    U64 mobMask = ~(*pos->pawns[us] | pos->pawnAttacks(them) | *pos->kings[us]);
     for (int i = 0; i < pc->count; i++) {
         int sq = pc->squares[i];
         result->add(PST[WROOK][ISQ(sq, us)]);
@@ -912,16 +911,16 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
             }
         }
         U64 moves = MagicRookMoves(sq, occ);
-        int count = popCount(moves & mobMask, true);
+        int count = popCount0(moves & sd->stack->mob[us]);
         result->add(ROOK_MOBILITY[count]);
-        
+
         if ((bitSq & RANK[us][1]) && (BIT(*pos->kingPos[us]) & (RANK[us][1] | RANK[us][2]))) {
             result->add(ROOK_1ST);
         }
         if (bitSq & RANK[us][7] && (BIT(*pos->kingPos[them]) & RANK[us][8])) {
             result->add(ROOK_7TH);
         }
-        
+
         //Tarrasch rule: place rook behind passers
         if (moves & sd->stack->passers) {
             U64 front[2];
@@ -937,7 +936,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
                 result->add(ROOK_WRONG_SIDE);
             }
         }
-        
+
     }
     return result;
 }

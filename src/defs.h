@@ -194,8 +194,8 @@ inline unsigned popCount(U64 x) {
     return (x * C64(0x0101010101010101)) >> 56;
 }
 
-inline unsigned popCount(U64 x, bool checkZero) {
-    return (checkZero && (!x)) ? 0 : popCount(x);
+inline unsigned popCount0(U64 x) {
+    return (x == 0) ? 0 : popCount(x);
 }
 
 inline unsigned popFirst(U64 & x) {

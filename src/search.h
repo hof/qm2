@@ -141,10 +141,9 @@ struct TSearchStack {
     TScore shelter_score[2];
     TScore passer_score[2];
     U64 passers;
+    U64 mob[2];
     int reduce;
-    
     U64 captureMask;
-
 };
 
 class TSearch {
