@@ -177,7 +177,6 @@ public:
     TMove excludedMove;
     int selDepth;
     int learnParam;
-    int evaluationComponents;
     double learnFactor;
     TRoot root;
     
@@ -228,7 +227,6 @@ public:
         maxNodes = 0;
         selDepth = 0;
         learnFactor = 1.0;
-        evaluationComponents = MAX_EVALUATION_COMPONENTS;
         rootStack = stack = &_stack[0];
         stack->eval_result = SCORE_INVALID;
         stack->nodeType = PVNODE;

@@ -1,6 +1,12 @@
 #include <cstdlib>
 #include <iostream>
 #include <unistd.h>
+#include <time.h>
+#include <istream>
+#include <sstream>
+#include <iomanip>  //setw
+#include <math.h> 
+
 #include "engine.h"
 #include "board.h"
 #include "movegen.h"
@@ -8,17 +14,13 @@
 #include "evaluate.h"
 #include "search.h"
 #include "search.h"
-#include <time.h>
 #include "bbmoves.h"
 #include "timemanager.h"
 #include "inputhandler.h"
 #include "outputhandler.h"
 #include "score.h"
 
-#include <istream>
-#include <sstream>
 
-#include <math.h> 
 
 using namespace std;
 
@@ -298,84 +300,62 @@ void * TEngine::_think(void* engineObjPtr) {
  * This function is mainly useful for testing the above components and the 
  * move ordering by visual inspection of the output.
  */
+
+void print_row(std::string cap, short score) {
+    std::cout << std::setw(14);
+    std::cout << cap;
+    std::cout << " | ";
+    std::cout << std::setw(44);
+    std::cout << " | ";
+    std::cout << std::setw(6) << score;
+    std::cout << std::endl;
+}
+
+void print_row(std::string cap, TScore & w, TScore & b, int phase) {
+    TScore total;
+    total.clear();
+    total.add(w);
+    total.sub(b);
+    std::cout << std::setw(14);
+    std::cout << cap;
+    std::cout << " | ";
+    std::cout << std::setw(8) << w.mg;
+    std::cout << "   ";
+    std::cout << std::setw(8) << w.eg;
+    std::cout << "   ";
+    std::cout << std::setw(8) << b.mg;
+    std::cout << "   ";
+    std::cout << std::setw(8) << b.eg;
+    std::cout << " | ";
+    std::cout << std::setw(6) << total.get(phase);
+    std::cout << std::endl;
+}
+
 void TEngine::analyse() {
 
-    TSearch * searchData = new TSearch(_rootFen.c_str(), _hashTable, _outputHandler);
-    std::cout << searchData->pos->asFen().c_str() << std::endl;
-    searchData->learnParam = 0;
-    searchData->stack->eval_result = evaluate(searchData, 0, 0);
-    int phase = searchData->stack->phase;
-    std::cout << "\n1) Piece Square tables: ";
-    searchData->pos->boardFlags->pct.print(phase);
-    std::cout << "\n2) Material balance: ";
-    std::cout << searchData->stack->material_score;
-    std::cout << "\n3) Game phase: " << phase;
-    std::cout << "\n4) Pawn score: ";
-    searchData->stack->pawn_score.print(phase);
-    std::cout << "\n5) Bishop score: ";
-    searchData->stack->bishop_score[WHITE].print(phase);
-    searchData->stack->bishop_score[BLACK].print(phase);
-    std::cout << "\n6) Rook score: ";
-    searchData->stack->rook_score[WHITE].print(phase);
-    searchData->stack->rook_score[BLACK].print(phase);
-    std::cout << "\n7) Passer score: ";
-    searchData->stack->passer_score[WHITE].print(phase);
-    searchData->stack->passer_score[BLACK].print(phase);
-    std::cout << "\n8) Shelter score for white: ";
-    searchData->stack->shelter_score[WHITE].print(phase);
-    std::cout << "\n9) Shelter score for black: ";
-    searchData->stack->shelter_score[BLACK].print(phase);
-    std::cout << "\n9) Evaluation:" << searchData->stack->eval_result;
-
-    /*
-    std::cout << "\n10) Quiescence:" << searchData->qsearch(-SCORE_MATE, SCORE_MATE, 0, QCHECKDEPTH) << std::endl;
-    std::cout << "\n11) Best move:" << std::endl;
-
-
-    //loop through piece square tables
+    TSearch * s = new TSearch(_rootFen.c_str(), _hashTable, _outputHandler);
+    s->learnParam = 0;
+    s->stack->eval_result = evaluate(s, 0, 0);
+    int phase = s->stack->phase;
+    TScore w, b, t;
+    w.clear();
+    b.clear();
     
-    int pct_score = 0;
-    const std::string PIECE_NAME[13] = {"X", "WP", "WN",
-        "WB", "WR", "WQ", "WK", "BP",
-        "NB", "BB", "BR", "BQ", "BK"};
-    for (int sq = a1; sq <= h8; sq++) {
-        int pc = searchData->pos->Matrix[sq];
-        if (pc) {
-            TScore * score = &_pct[pc][sq];
-            std::cout << PIECE_NAME[pc] << "@" << sq << ": ";
-            score->print();
-            pct_score += score->get(phase);
-            std::cout << score->get(phase) << " tot: " << pct_score << std::endl;
-        }
-
-    }
-     */
-
-    //TBook * book = new TBook();
-    /*
-     * Analyse best move doing a shallow search
-     */
-
-    /*
-    TMoveList * rootMoves = &searchData->stack->moveList;
-    TBoard * root = searchData->pos;
-    TMovePicker * mp = searchData->movePicker;
-    int alpha = -SCORE_INFINITE;
-    int beta = SCORE_INFINITE;
-    TMove * move = mp->pickFirstMove(searchData, 0, alpha, beta, 0);
-    bool inCheck = root->inCheck();
-    if (!move) {
-        bool score = inCheck ? -SCORE_MATE + root->currentPly : SCORE_DRAW;
-        std::cout << "No legal moves: " << score << std::endl;
-    }
-    while (move) {
-        searchData->forward(move, root->givesCheck(move));
-        std::cout << move->asString().c_str() << ": " << -searchData->pvs(-beta, -alpha, 0) << std::endl;
-        searchData->backward(move);
-        move = mp->pickNextMove(searchData, 0, alpha, beta, 0);
-    }
-     */
-    delete searchData;
+    std::cout << s->pos->asFen().c_str() << std::endl;
+    std::cout << "Game phase: " << phase << "\n\n";
+    
+    std::cout << "Eval Component | White MG | White EG | Black MG | Black EG |  Total\n";
+    std::cout << "---------------+----------+----------+----------+----------+-------\n";
+    print_row("Material", s->stack->material_score);
+    print_row("Pawns & Kings", s->stack->pawn_score.get(phase));
+    print_row("Knights", s->stack->knight_score[WHITE], s->stack->knight_score[BLACK], phase);
+    print_row("Bishops", s->stack->bishop_score[WHITE], s->stack->bishop_score[BLACK], phase);
+    print_row("Rooks", s->stack->rook_score[WHITE], s->stack->rook_score[BLACK], phase);
+    print_row("Queens", s->stack->queen_score[WHITE], s->stack->queen_score[BLACK], phase);
+    print_row("Passers", s->stack->passer_score[WHITE], s->stack->passer_score[BLACK], phase);
+    std::cout << "---------------+----------+----------+----------+----------+-------\n";
+    print_row("Total", s->pos->boardFlags->WTM? s->stack->eval_result : -s->stack->eval_result);
+    delete s;
 }
 
 void TEngine::setInputHandler(TInputHandler * inputHandler) {
@@ -509,9 +489,11 @@ void * TEngine::_learn(void * engineObjPtr) {
         batch = 0;
         x = 0;
         for (int game = 0; game < MAXGAMECOUNT; game++) {
+            //go par
             if (x <= game) {
                 engine->_create_start_positions(sd_root, book, start_positions, x, MAXGAMECOUNT);
             }
+            
             fen = start_positions[game];
             if (fen == "") {
                 upperBound = 0;
@@ -622,6 +604,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                 }
 
             } while (gameover == false);
+            //end go par
             gamesPlayed++;
             batch++;
             if (gamesPlayed % 50 == 0) {

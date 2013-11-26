@@ -169,8 +169,6 @@ struct TBoardFlags {
     U64 pawnHash;
     U64 checkers;
 
-    TScore pct;
-
     void clear() {
         epSquare = 0;
         castlingFlags = 0;
@@ -179,7 +177,6 @@ struct TBoardFlags {
         hashCode = 0;
         materialHash = 0;
         pawnHash = 0;
-        pct.clear();
         checkers = 0;
     }
 
@@ -191,7 +188,6 @@ struct TBoardFlags {
         hashCode = bFlags->hashCode;
         materialHash = bFlags->materialHash;
         pawnHash = bFlags->pawnHash;
-        pct = bFlags->pct;
     }
 };
 
@@ -224,6 +220,7 @@ struct TBoard {
     U64 * pawns[2];
     U64 * queens[2];
     U64 * knights[2];
+    U64 * kings[2];
 
     unsigned char Matrix[64];
     TPiecePlacement pieces[BKING + 1];

@@ -38,20 +38,19 @@ void print_score(short score, int sq) {
 }
 
 void print_pct(TSCORE_PST & pct) {
-    const std::string PIECE_NAME[13] = {"EMTPY", "White Pawn", "White Knight",
-        "White Bishop", "White Rook", "White Queen", "White King", "Black Pawn",
-        "Black Knight", "Black Bishop", "Black Rook", "Black Queen", "Black King"};
+    const std::string PIECE_NAME[7] = {"EMTPY", "Pawn", "Knight",
+        "Bishop", "Rook", "Queen", "King"};
 
-    for (int piece = 1; piece < 13; piece++) {
+    for (int piece = WPAWN; piece <= WKING; piece++) {
         std::cout << std::endl;
         std::cout << PIECE_NAME[piece] << " Middlegame:";
         for (int sq = a1; sq < 64; sq++) {
-            print_score(pct[piece][FLIP_SQUARE(sq)].mg, sq);
+            print_score(pct[piece][sq].mg, sq);
         }
         std::cout << std::endl << std::endl;
         std::cout << PIECE_NAME[piece] << " Endgame:";
         for (int sq = a1; sq < 64; sq++) {
-            print_score(pct[piece][FLIP_SQUARE(sq)].eg, sq);
+            print_score(pct[piece][sq].eg, sq);
         }
         std::cout << std::endl << std::endl;
     }

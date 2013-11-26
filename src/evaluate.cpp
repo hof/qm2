@@ -3,10 +3,9 @@
 #include "defs.h"
 #include "score.h"
 
+TSCORE_PST PST; //piece square table
+
 inline short evaluateMaterial(TSearch * sd);
-
-TSCORE_PST PST;
-
 inline TScore * evaluatePawnsAndKings(TSearch * sd);
 inline TScore * evaluateKnights(TSearch * sd, bool white);
 inline TScore * evaluateBishops(TSearch * sd, bool white);
@@ -14,6 +13,170 @@ inline TScore * evaluateRooks(TSearch * sd, bool white);
 inline TScore * evaluateQueens(TSearch * sd, bool white);
 inline TScore * evaluatePassers(TSearch * sd, bool white);
 inline int evaluatePasserVsK(TSearch * sd, bool white, int sq);
+
+/*******************************************************************************
+ * Material Evaluation Values 
+ *******************************************************************************/
+
+enum MaterialValues {
+    MATERIAL_AHEAD_TRESHOLD = 80,
+    VNOPAWNS = -40,
+    VBISHOPPAIR = 50,
+    DRAWISH_QR_ENDGAME = -20,
+    DRAWISH_OPP_BISHOPS = -50
+};
+
+const TScore SVPAWN = S(VPAWN, VPAWN); //middle and endgame values
+const TScore SVKNIGHT = S(VKNIGHT, VKNIGHT);
+const TScore SVBISHOP = S(VBISHOP, VBISHOP);
+const TScore SVROOK = S(VROOK, VROOK);
+const TScore SVQUEEN = S(VQUEEN, VQUEEN);
+const TScore SVKING = S(VKING, VKING);
+
+const TScore PIECE_SCORE[13] = {
+    S(0, 0), SVPAWN, SVKNIGHT, SVBISHOP, SVROOK, SVQUEEN, SVKING,
+    SVPAWN, SVKNIGHT, SVBISHOP, SVROOK, SVQUEEN, SVKING
+};
+
+const short TRADEDOWN_PIECES[MAX_PIECES + 1] = {
+    80, 60, 40, 20, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
+
+const short TRADEDOWN_PAWNS[9] = {
+    -60, -40, -20, -10, -5, 0, 5, 10, 15
+};
+
+/*******************************************************************************
+ * Pawn Values 
+ *******************************************************************************/
+
+const TScore DEFENDED_PAWN[2] = {S(0, 4), S(4, 8)};
+const TScore ISOLATED_PAWN[2] = {S(-10, -20), S(-20, -20)};
+const TScore WEAK_PAWN[2] = {S(-8, -16), S(-16, -16)};
+const TScore DOUBLED_PAWN = S(-4, -8);
+
+const TScore PASSED_PAWN[64] = {
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+    S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150),
+    S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80),
+    S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50),
+    S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30),
+    S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20),
+    S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20),
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+};
+
+const TScore CONNECED_PASSED_PAWN[64] = {
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+    S(95, 95), S(95, 95), S(95, 95), S(95, 95), S(95, 95), S(95, 95), S(95, 95), S(95, 95),
+    S(50, 50), S(50, 50), S(50, 50), S(50, 50), S(50, 50), S(50, 50), S(50, 50), S(50, 50),
+    S(30, 30), S(30, 30), S(30, 30), S(30, 30), S(30, 30), S(30, 30), S(30, 30), S(30, 30),
+    S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10),
+    S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5),
+    S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5),
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+};
+
+const TScore CANDIDATE[64] = {
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+    S(32, 50), S(32, 50), S(32, 50), S(32, 50), S(32, 50), S(32, 50), S(32, 50), S(32, 50),
+    S(24, 40), S(24, 40), S(24, 40), S(24, 40), S(24, 40), S(24, 40), S(24, 40), S(24, 40),
+    S(18, 30), S(18, 30), S(18, 30), S(18, 30), S(18, 30), S(18, 30), S(18, 30), S(18, 30),
+    S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10),
+    S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10),
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+};
+
+const TScore SHELTER_KPOS[64] = {
+    S(-65, 0), S(-75, 0), S(-85, 0), S(-95, 0), S(-90, 0), S(-80, 0), S(-70, 0), S(-60, 0),
+    S(-55, 0), S(-65, 0), S(-75, 0), S(-85, 0), S(-80, -0), S(-70, 0), S(-60, 0), S(-50, 0),
+    S(-45, 0), S(-55, 0), S(-65, 0), S(-75, 0), S(-70, 0), S(-60, 0), S(-50, 0), S(-40, 0),
+    S(-35, 0), S(-45, 0), S(-55, 0), S(-65, 0), S(-60, 0), S(-50, 0), S(-40, 0), S(-30, 0),
+    S(-25, 0), S(-35, 0), S(-45, 0), S(-55, 0), S(-50, 0), S(-40, 0), S(-30, 0), S(-20, 0),
+    S(-10, 0), S(-20, 0), S(-30, 0), S(-40, 0), S(-40, 0), S(-30, 0), S(-20, 0), S(-10, 0),
+    S(15, 0), S(5, 0), S(-10, 0), S(-20, 0), S(-20, 0), S(-10, 0), S(10, 0), S(25, 0),
+    S(40, 0), S(40, 0), S(25, 0), S(-10, 0), S(-10, 0), S(25, 0), S(50, 0), S(50, 0)
+
+};
+
+const TScore SHELTER_PAWN[64] = {
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+    S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
+    S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
+    S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
+    S(5, 6), S(5, 6), S(5, 4), S(5, 4), S(5, 4), S(5, 4), S(15, 6), S(15, 6),
+    S(15, 8), S(15, 8), S(10, 4), S(2, 4), S(2, 4), S(10, 4), S(15, 8), S(15, 8),
+    S(30, 10), S(30, 10), S(25, 4), S(10, 4), S(5, 4), S(15, 4), S(30, 10), S(30, 10),
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+};
+
+const TScore STORM_PAWN[64] = {
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+    S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2),
+    S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2), S(0, 2),
+    S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
+    S(10, 4), S(10, 4), S(10, 4), S(10, 4), S(10, 4), S(10, 4), S(10, 4), S(10, 4),
+    S(30, 10), S(30, 10), S(30, 10), S(20, 10), S(20, 10), S(20, 10), S(30, 10), S(30, 10),
+    S(20, 10), S(20, 10), S(20, 10), S(20, 10), S(20, 10), S(20, 10), S(20, 10), S(20, 10),
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+};
+
+const TScore SHELTER_OPEN_FILES[4] = {
+    S(0, 0), S(-30, -5), S(-60, -10), S(-120, -15)
+};
+
+const TScore SHELTER_OPEN_ATTACK_FILES[4] = {
+    S(0, 0), S(-10, 0), S(-20, -5), S(-40, -10)
+};
+
+const TScore SHELTER_OPEN_EDGE_FILE = S(-110, -10);
+
+const TScore SHELTER_CASTLING_KINGSIDE = S(60, 20);
+
+const TScore SHELTER_CASTLING_QUEENSIDE = S(50, 20);
+
+/*******************************************************************************
+ * Knight Values 
+ *******************************************************************************/
+
+const TScore KNIGHT_MOBILITY[9] = {
+    S(-32, -32), S(-24, -24), S(-16, -16), S(-8, -8),
+    S(0, 0), S(4, 4), S(8, 8), S(12, 12), S(16, 16)
+};
+
+/*******************************************************************************
+ * Bishop Values 
+ *******************************************************************************/
+
+const TScore BISHOP_MOBILITY[14] = {
+    S(-24, -24), S(-18, -18), S(-12, -12), S(-6, -6),
+    S(0, 0), S(2, 2), S(4, 4), S(6, 6), S(8, 8),
+    S(10, 10), S(12, 12), S(14, 14), S(16, 16), S(18, 18)
+};
+
+const TScore TRAPPED_BISHOP(-80, -120);
+
+/*******************************************************************************
+ * Rook Values 
+ *******************************************************************************/
+
+const TScore ROOK_7TH = S(20, 30);
+const TScore ROOK_1ST = S(10, 0); //back rank protection
+const TScore ROOK_SEMIOPEN_FILE = S(12, 12);
+const TScore ROOK_OPEN_FILE = S(24, 24);
+const TScore ROOK_GOOD_SIDE = S(10, 30);
+const TScore ROOK_WRONG_SIDE = S(-10, -20);
+
+const TScore ROOK_MOBILITY[15] = {
+    S(-40, -40), S(-20, -20), S(-10, -10), S(-8, -8),
+    S(-6, -6), S(-4, -4), S(-2, -2), S(0, 0), S(0, 0),
+    S(2, 2), S(4, 4), S(6, 6), S(8, 8), S(10, 10), S(12, 12)
+};
+
+/*******************************************************************************
+ * Main evaluation function
+ *******************************************************************************/
 
 int evaluate(TSearch * sd, int alpha, int beta) {
     if (sd->stack->eval_result != SCORE_INVALID) {
@@ -28,7 +191,7 @@ int evaluate(TSearch * sd, int alpha, int beta) {
 
     TScore * score = &sd->stack->eval_score;
     score->set(evaluatePawnsAndKings(sd));
-    
+
     score->add(evaluateKnights(sd, WHITE));
     score->sub(evaluateKnights(sd, BLACK));
     score->add(evaluateBishops(sd, WHITE));
@@ -51,17 +214,9 @@ int evaluate(TSearch * sd, int alpha, int beta) {
 }
 
 bool skipExp(TSearch * sd) {
-    int pc = WKING;
+    int pc = WKNIGHT;
     return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
 }
-
-const short TRADEDOWN_PIECES[MAX_PIECES + 1] = {
-    80, 60, 40, 20, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
-
-const short TRADEDOWN_PAWNS[9] = {
-    -60, -40, -20, -10, -5, 0, 5, 10, 15
-};
 
 /**
  * Evaluate material score and set the current game phase
@@ -135,6 +290,7 @@ inline short evaluateMaterial(TSearch * sd) {
     }
 
     int piecePower = result.get(phase);
+    
     result.mg += (wpawns - bpawns) * SVPAWN.mg;
     result.eg += (wpawns - bpawns) * SVPAWN.eg;
 
@@ -169,6 +325,9 @@ inline short evaluateMaterial(TSearch * sd) {
             && ABS(value) < 2 * VPAWN
             && ABS(piecePower) < VPAWN / 2) {
         value += cond(value > 0, value < 0, DRAWISH_QR_ENDGAME);
+        if (wminors == 0 && bminors == 0) { //more drawish
+            value += cond(value > 30, value < -30, DRAWISH_QR_ENDGAME);
+        }
     }
 
     // Opposite  bishop ending is drawish
@@ -181,30 +340,30 @@ inline short evaluateMaterial(TSearch * sd) {
 
     //winning edge?
     if (piecePower >= VROOK && value > 2 * VPAWN) {
-        value += (value >> 2);
+        value += value >> 2;
     } else if (piecePower <= -VROOK && value < -2 * VPAWN) {
-        value -= (value >> 2);
+        value -= (-value) >> 2; 
     }
 
     //ahead but no mating material?
-    if (value > 0 && piecePower < VROOK && !wpawns) {
+    if (value > 0 && value < VROOK && !wpawns) {
         value >>= 2;
-    } else if (value < 0 && piecePower > -VROOK && !bpawns) {
+    } else if (value < 0 && value > -VROOK && !bpawns) {
         value >>= 2;
     }
 
-    //ahead with only pawns? 
+    //ahead with pawns and behind with pieces? 
     if (value > 0 && piecePower < 0) {
-        value -= 50;
+        value -= 20 + (value >> 2); 
+        //testeval r3r1k1/5p1p/2pbbBp1/q2p4/p2P4/1P1Q2N1/P1P1RPPP/R5K1 b - - 5 1
         if (value < VPAWN && bminors > wminors) {
-            //set drawflag
+            //set drawflag  
         }
     } else if (value < 0 && piecePower > 0) {
+        value += 20 + ((-value) >> 2);
         if (value > -VPAWN && wminors > bminors) {
             //set drawflag
         }
-        value += 50;
-
     }
 
     /*
@@ -274,12 +433,12 @@ void init_pct() {
         if ((bbsq & RANK_1) || (bbsq & RANK_8)) {
             continue;
         }
-        U64 caps = WPawnCaptures[sq] | WPawnMoves[sq];
+        U64 caps = WPawnCaptures[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].mul(3); //pawns are the most powerful to control squares
+        scores[sq].mul(4); //pawns are the most powerful to control squares
     }
     init_pct_store(scores, WPAWN);
 
@@ -431,8 +590,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         bool candidate = open && !doubled && !passed && !(up & ~wSafe);
 
         //std::cout << "WP " << PRINT_SQUARE(sq) << ": ";
-        
-        
+
+
         pawn_score->add(PST[WPAWN][isq]);
         if (isolated) {
             pawn_score->add(ISOLATED_PAWN[open]);
@@ -486,7 +645,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         bool candidate = open && !doubled && !passed && !(down & ~bSafe);
 
         //std::cout << "BP " << PRINT_SQUARE(sq) << ": ";
-        
+
         pawn_score->sub(PST[WPAWN][sq]);
         if (isolated) {
             pawn_score->sub(ISOLATED_PAWN[open]);
@@ -526,13 +685,13 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     //pawn_score->print();
     //std::cout << std::endl;
 
-    
+
     pawn_score->add(PST[WKING][ISQ(wkpos, WHITE)]);
     pawn_score->sub(PST[WKING][ISQ(bkpos, BLACK)]);
-    
+
     //support and attack pawns with king in the EG
-    pawn_score->add(0, popCount(KingZone[wkpos] & pos->allPawns(), true) * 12);
-    pawn_score->sub(0, popCount(KingZone[bkpos] & pos->allPawns(), true) * 12);
+    pawn_score->add(0, popCount(KingZone[wkpos] & pos->allPawns(), true) * 8);
+    pawn_score->sub(0, popCount(KingZone[bkpos] & pos->allPawns(), true) * 8);
 
     //support and attack passed pawns even more
     pawn_score->add(0, popCount(KingZone[wkpos] & passers, true) * 12);
@@ -648,10 +807,14 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
      * 3. Calculate the score and store on the stack
      */
     result->clear();
+    bool them = !us;
+    U64 mobMask = ~(*pos->pawns[us] | pos->pawnAttacks(them));
     TPiecePlacement * pp = &pos->pieces[KNIGHT[us]];
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
         result->add(PST[WKNIGHT][ISQ(sq, us)]);
+        U64 moves = KnightMoves[sq] & mobMask;
+        result->add(KNIGHT_MOBILITY[popCount(moves, true)]);
     }
     return result;
 }
@@ -736,7 +899,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     bool them = !us;
     U64 fill[2] = {FILEFILL(pos->blackPawns), FILEFILL(pos->whitePawns)};
     U64 occ = pos->pawnsAndKings();
-    U64 mobMask = ~(*pos->pawns[us] | pos->pawnAttacks(them));
+    U64 mobMask = ~(*pos->pawns[us] | pos->pawnAttacks(them) | *pos->kings[us]);
     for (int i = 0; i < pc->count; i++) {
         int sq = pc->squares[i];
         result->add(PST[WROOK][ISQ(sq, us)]);
@@ -749,35 +912,32 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
             }
         }
         U64 moves = MagicRookMoves(sq, occ);
-        int count = popCount(moves & mobMask);
+        int count = popCount(moves & mobMask, true);
         result->add(ROOK_MOBILITY[count]);
-
+        
         if ((bitSq & RANK[us][1]) && (BIT(*pos->kingPos[us]) & (RANK[us][1] | RANK[us][2]))) {
-            result->add(ROOK_SHELTER_PROTECT);
+            result->add(ROOK_1ST);
         }
         if (bitSq & RANK[us][7] && (BIT(*pos->kingPos[them]) & RANK[us][8])) {
-            result->add(20, 40);
+            result->add(ROOK_7TH);
         }
-
+        
         //Tarrasch rule: place rook behind passers
         if (moves & sd->stack->passers) {
             U64 front[2];
             front[BLACK] = southFill(bitSq) & moves & sd->stack->passers & (WHITE_SIDE | RANK_5);
             front[WHITE] = northFill(bitSq) & moves & sd->stack->passers & (BLACK_SIDE | RANK_4);
             if (front[us] & *pos->pawns[us]) { //supporting a passer from behind
-                result->add(ROOK_TARRASCH_SUPPORT);
-            }
-            if (front[them] & *pos->pawns[them]) { //attacking a passer from behind
-                result->add(ROOK_TARRASCH_ATTACK);
-            }
-            if (front[them] & *pos->pawns[us]) { //supporting from the wrong side
-                result->add(ROOK_WRONG_TARRASCH_SUPPORT);
-            }
-            if (front[us] & *pos->pawns[them]) { //attacking from the wrong side
-                result->add(ROOK_WRONG_TARRASCH_ATTACK);
+                result->add(ROOK_GOOD_SIDE);
+            } else if (front[them] & *pos->pawns[them]) { //attacking a passer from behind
+                result->add(ROOK_GOOD_SIDE);
+            } else if (front[them] & *pos->pawns[us]) { //supporting from the wrong side
+                result->add(ROOK_WRONG_SIDE);
+            } else if (front[us] & *pos->pawns[them]) { //attacking from the wrong side
+                result->add(ROOK_WRONG_SIDE);
             }
         }
-
+        
     }
     return result;
 }
@@ -785,7 +945,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
 inline TScore * evaluateQueens(TSearch * sd, bool us) {
 
     TScore * result = &sd->stack->queen_score[us];
-    
+
     TBoard * pos = sd->pos;
     if (*pos->queens[us] == 0) {
         result->clear();
@@ -822,7 +982,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
 inline TScore * evaluatePassers(TSearch * sd, bool us) {
     TScore * result = &sd->stack->passer_score[us];
     result->clear();
-    if (sd->stack->phase <= 10 || sd->stack->passers == 0
+    if (sd->stack->phase < 8 || sd->stack->passers == 0
             || (sd->stack->passers & *sd->pos->pawns[us]) == 0) {
         return result;
     }
