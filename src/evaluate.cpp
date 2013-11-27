@@ -224,7 +224,7 @@ int evaluate(TSearch * sd, int alpha, int beta) {
 }
 
 bool skipExp(TSearch * sd) {
-    int pc = WQUEEN;
+    int pc = WKING;
     return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
 }
 
@@ -258,6 +258,7 @@ inline short evaluateMaterial(TSearch * sd) {
     /*
      * 3. Calculate material value and store in material hash table
      */
+
     TScore result;
     result.clear();
     TBoard * pos = sd->pos;
@@ -302,7 +303,11 @@ inline short evaluateMaterial(TSearch * sd) {
     int piecePower = result.get(phase);
 
     result.mg += (wpawns - bpawns) * SVPAWN.mg;
-    result.eg += (wpawns - bpawns) * SVPAWN.eg;
+    //if (sd->learnParam) {
+    //    result.eg += (wpawns - bpawns) * sd->learnFactor * 100;
+    //} else {
+        result.eg += (wpawns - bpawns) * SVPAWN.eg;
+    //}
 
     // when ahead in material, reduce opponent's pieces (simplify) and keep pawns
     if (piecePower > MATERIAL_AHEAD_TRESHOLD) {
@@ -313,7 +318,7 @@ inline short evaluateMaterial(TSearch * sd) {
         result.sub(TRADEDOWN_PAWNS[bpawns]);
     }
 
-    // penalty for not having pawns - makes it hard to win
+    // penalty for not having pawns at all - makes it hard to win
     if (wpawns == 0) {
         result.add(VNOPAWNS);
     }
@@ -322,14 +327,14 @@ inline short evaluateMaterial(TSearch * sd) {
     }
 
     int value = result.get(phase);
-    
+
     /*
      * Special cases
      */
-    
+
     if (!wpieces && !bpieces) { //only pawns left, the side with more pawns wins
-        value += value; 
-    } else if (piecePower >= VROOK && value > 2 * VPAWN) { //winning edge with mating material
+        value += value;
+    } else if (piecePower >= VROOK && value > 2 * VPAWN) { //winning edge and having mating material
         value += value >> 2;
     } else if (piecePower <= -VROOK && value < -2 * VPAWN) {
         value -= (-value) >> 2;
@@ -345,8 +350,8 @@ inline short evaluateMaterial(TSearch * sd) {
         value -= 20 + (value >> 2); //testeval r3r1k1/5p1p/2pbbBp1/q2p4/p2P4/1P1Q2N1/P1P1RPPP/R5K1 b - - 5 1
     } else if (value < 0 && piecePower > 0) {
         value += 20 + ((-value) >> 2);
-    } 
-    
+    }
+
     /*
      * Endgame adjustments
      */
@@ -356,7 +361,7 @@ inline short evaluateMaterial(TSearch * sd) {
             && wminors < 2
             && bminors < 2
             && wpieces <= 3
-            && wpieces > 0 
+            && wpieces > 0
             && bpieces > 0
             && (wrooks || wqueens)
             && (brooks || bqueens)
@@ -365,18 +370,18 @@ inline short evaluateMaterial(TSearch * sd) {
             && ABS(value) < 2 * VPAWN
             && ABS(piecePower) < VPAWN / 2) {
         value += cond(value > 0, value < 0, DRAWISH_QR_ENDGAME);
-        if (wminors == 0 && bminors == 0) { //more drawish
-            value += cond(value > 30, value < -30, DRAWISH_QR_ENDGAME);
+        if (wminors == 0 && bminors == 0 && wpieces <= 1 && bpieces <= 1) { //more drawish
+            value += cond(value > 30, value < -30, DRAWISH_QR_ENDGAME >> 1);
         }
     }
 
     // Opposite  bishop ending is drawish
     if (value && wpieces == 1 && bpieces == 1 && wpawns != bpawns && wbishops && bbishops) {
         if (bool(pos->whiteBishops & BLACK_SQUARES) != bool(pos->blackBishops & BLACK_SQUARES)) {
-            //set drawflag 
+            //todo: set drawflag 
             value += cond(wpawns>bpawns, bpawns>wpawns, MAX(-(ABS(value) >> 1), DRAWISH_OPP_BISHOPS));
         }
-    } 
+    }
 
     /*
      * Store and return
@@ -611,6 +616,9 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
 
         pawn_score->add(PST[WPAWN][isq]);
+
+        //std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][isq]);
+
         if (isolated) {
             pawn_score->add(ISOLATED_PAWN[open]);
             //std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
@@ -665,6 +673,9 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         //std::cout << "BP " << PRINT_SQUARE(sq) << ": ";
 
         pawn_score->sub(PST[WPAWN][sq]);
+
+        //std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][sq]);
+
         if (isolated) {
             pawn_score->sub(ISOLATED_PAWN[open]);
             //std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
