@@ -322,12 +322,42 @@ inline short evaluateMaterial(TSearch * sd) {
     }
 
     int value = result.get(phase);
+    
+    /*
+     * Special cases
+     */
+    
+    if (!wpieces && !bpieces) { //only pawns left, the side with more pawns wins
+        value += value; 
+    } else if (piecePower >= VROOK && value > 2 * VPAWN) { //winning edge with mating material
+        value += value >> 2;
+    } else if (piecePower <= -VROOK && value < -2 * VPAWN) {
+        value -= (-value) >> 2;
+    } else if (value > 0 && piecePower < VROOK && !wpawns) { //ahead but no mating material (draw)
+        value >>= 2;
+    } else if (value < 0 && piecePower > -VROOK && !bpawns) {
+        value >>= 2;
+    } else if (!wpieces && bpieces > 0 && wpawns > 0) { //opponent only has pawns
+        value += piecePower >> 1;
+    } else if (!bpieces && wpieces > 0 && bpawns > 0) {
+        value += piecePower >> 1;
+    } else if (value > 0 && piecePower < 0) { //ahead with pawns and behind with pieces
+        value -= 20 + (value >> 2); //testeval r3r1k1/5p1p/2pbbBp1/q2p4/p2P4/1P1Q2N1/P1P1RPPP/R5K1 b - - 5 1
+    } else if (value < 0 && piecePower > 0) {
+        value += 20 + ((-value) >> 2);
+    } 
+    
+    /*
+     * Endgame adjustments
+     */
 
     //Rooks and queen endgames are drawish. Reduce any small material advantage.
     if (value
             && wminors < 2
             && bminors < 2
             && wpieces <= 3
+            && wpieces > 0 
+            && bpieces > 0
             && (wrooks || wqueens)
             && (brooks || bqueens)
             && wpieces == bpieces
@@ -346,35 +376,7 @@ inline short evaluateMaterial(TSearch * sd) {
             //set drawflag 
             value += cond(wpawns>bpawns, bpawns>wpawns, MAX(-(ABS(value) >> 1), DRAWISH_OPP_BISHOPS));
         }
-    }
-
-    //winning edge?
-    if (piecePower >= VROOK && value > 2 * VPAWN) {
-        value += value >> 2;
-    } else if (piecePower <= -VROOK && value < -2 * VPAWN) {
-        value -= (-value) >> 2;
-    }
-
-    //ahead but no mating material?
-    if (value > 0 && value < VROOK && !wpawns) {
-        value >>= 2;
-    } else if (value < 0 && value > -VROOK && !bpawns) {
-        value >>= 2;
-    }
-
-    //ahead with pawns and behind with pieces? 
-    if (value > 0 && piecePower < 0) {
-        value -= 20 + (value >> 2);
-        //testeval r3r1k1/5p1p/2pbbBp1/q2p4/p2P4/1P1Q2N1/P1P1RPPP/R5K1 b - - 5 1
-        if (value < VPAWN && bminors > wminors) {
-            //set drawflag  
-        }
-    } else if (value < 0 && piecePower > 0) {
-        value += 20 + ((-value) >> 2);
-        if (value > -VPAWN && wminors > bminors) {
-            //set drawflag
-        }
-    }
+    } 
 
     /*
      * Store and return
