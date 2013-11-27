@@ -57,7 +57,7 @@ const TScore DOUBLED_PAWN = S(-4, -8);
 
 const TScore PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150), S(60, 150),
+    S(60, 180), S(60, 180), S(60, 180), S(60, 180), S(60, 180), S(60, 180), S(60, 180), S(60, 180),
     S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80),
     S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50),
     S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30),
@@ -174,6 +174,18 @@ const TScore ROOK_MOBILITY[15] = {
     S(2, 2), S(4, 4), S(6, 6), S(8, 8), S(10, 10), S(12, 12)
 };
 
+
+/*******************************************************************************
+ * Queen Values
+ *******************************************************************************/
+
+const TScore QUEEN_MOBILITY[29] = {
+    S(-20, -40), S(-15, -20), S(-10, -10), S(-8, -8), S(-6, -6), S(-4, -4), S(-2, -2), S(0, 0),
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 1), S(0, 2), S(0, 3),
+    S(0, 4), S(0, 5), S(0, 6), S(0, 7), S(0, 8), S(0, 9), S(0, 10), S(0, 11),
+    S(0, 12), S(0, 13), S(0, 14), S(0, 15), S(0, 16)
+};
+
 /*******************************************************************************
  * Main evaluation function
  *******************************************************************************/
@@ -212,7 +224,7 @@ int evaluate(TSearch * sd, int alpha, int beta) {
 }
 
 bool skipExp(TSearch * sd) {
-    int pc = WKNIGHT;
+    int pc = WQUEEN;
     return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
 }
 
@@ -970,10 +982,17 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
     bool them = !us;
     result->clear();
     result->sub(sd->stack->shelter_score[them]);
+    if (pos->getPieces(us) == *pos->queens[us]) {
+        result->half();
+    }
     TPiecePlacement * pp = &pos->pieces[QUEEN[us]];
+    U64 occ = pos->pawnsAndKings();
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
         result->add(PST[WQUEEN][ISQ(sq, us)]);
+        U64 moves = MagicQueenMoves(sq, occ);
+        int count = popCount0(moves & sd->stack->mob[us]);
+        result->add(QUEEN_MOBILITY[count]);
     }
     return result;
 }
