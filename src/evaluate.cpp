@@ -303,11 +303,8 @@ inline short evaluateMaterial(TSearch * sd) {
     int piecePower = result.get(phase);
 
     result.mg += (wpawns - bpawns) * SVPAWN.mg;
-    //if (sd->learnParam) {
-    //    result.eg += (wpawns - bpawns) * sd->learnFactor * 100;
-    //} else {
-        result.eg += (wpawns - bpawns) * SVPAWN.eg;
-    //}
+    result.eg += (wpawns - bpawns) * SVPAWN.eg;
+
 
     // when ahead in material, reduce opponent's pieces (simplify) and keep pawns
     if (piecePower > MATERIAL_AHEAD_TRESHOLD) {
@@ -1013,7 +1010,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
 inline TScore * evaluatePassers(TSearch * sd, bool us) {
     TScore * result = &sd->stack->passer_score[us];
     result->clear();
-    if (sd->stack->phase < 8 || sd->stack->passers == 0
+    if (sd->stack->phase < 0 || sd->stack->passers == 0
             || (sd->stack->passers & *sd->pos->pawns[us]) == 0) {
         return result;
     }
@@ -1031,13 +1028,15 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
             continue;
         }
         int ix = us == WHITE ? FLIP_SQUARE(sq) : sq;
-        int bonus = PASSED_PAWN[ix].eg >> 1;
+        TScore bonus;
+        bonus.set(PASSED_PAWN[ix]);
+        bonus.half();
         int to = forwardSq(sq, us);
         do {
             if (BIT(to) & sd->pos->allPieces) {
                 break; //blocked
             }
-            result->add(0, bonus);
+            result->add(bonus);
             sd->pos->allPieces ^= BIT(sq); //to include rook/queen xray attacks from behind
             U64 attacks = sd->pos->attacksTo(to);
             sd->pos->allPieces ^= BIT(sq);
@@ -1051,7 +1050,7 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
                     break;
                 }
             }
-            result->add(0, bonus);
+            result->add(bonus);
             to = forwardSq(to, us);
         } while (to >= a1 && to <= h8);
     }
