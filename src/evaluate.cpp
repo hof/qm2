@@ -1046,7 +1046,7 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
                 if (support == 0) {
                     break;
                 }
-                if (is_1(defend)) {
+                if (is_1(support) && gt_1(defend)) {
                     break;
                 }
             }
