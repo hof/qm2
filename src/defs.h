@@ -228,12 +228,16 @@ inline U64 southFill(U64 x) {
 
 #define POP(x) (popFirst(x))
 
-inline bool is_1(U64 x) {
-    return x != 0 && (x-1) == 0;
+inline bool max_1(U64 x) {
+    return (x & (x - 1)) == 0;
 }
 
-inline bool max_1(U64 x) {
-    return (x & (x-1)) == 0;
+inline bool is_1(U64 x) {
+    return x != 0 && max_1(x);
+}
+
+inline bool gt_1(U64 x) {
+    return x != 0 && !max_1(x);
 }
 
 #define FRONTFILL(x) (northFill(x))
