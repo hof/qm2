@@ -591,12 +591,6 @@ void * TEngine::_learn(void * engineObjPtr) {
                         break;
                     }
 
-                    if (skipExp(sd_game)) {
-                        stats[0]++; //abort as draw
-                        gameover = true;
-                        break;
-                    }
-
                     prevScore = resultScore;
                     plyCount++;
                     //std::cout << plyCount << ": " << resultScore << " " << actualMove.asString() << " " << sd_game->pos->asFen() << std::endl; //for debugging

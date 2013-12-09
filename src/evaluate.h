@@ -23,8 +23,6 @@ int evaluate(TSearch * searchData, int alpha, int beta);
 void init_pct();
 extern TSCORE_PST PST;
 
-bool skipExp(TSearch * sd);
-
 enum EVALUATION_CONSTANTS {
     MAX_PIECES = 16,
     MAX_CLOSED_POSITION = 32, //maximum value indicating how much closed the position is

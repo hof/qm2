@@ -38,6 +38,10 @@ const TScore PIECE_SCORE[13] = {
     SVPAWN, SVKNIGHT, SVBISHOP, SVROOK, SVQUEEN, SVKING
 };
 
+const TScore VPOWER = S(60, 80);
+
+const TScore VLONESOME_MINOR[2] = {S(-60, -60), S(-40, -40)};
+
 const short TRADEDOWN_PIECES[MAX_PIECES + 1] = {
     80, 60, 40, 20, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
@@ -89,14 +93,14 @@ const TScore CANDIDATE[64] = {
 };
 
 const TScore SHELTER_KPOS[64] = {
-    S(-65, 0), S(-75, 0), S(-85, 0), S(-95, 0), S(-90, 0), S(-80, 0), S(-70, 0), S(-60, 0),
-    S(-55, 0), S(-65, 0), S(-75, 0), S(-85, 0), S(-80, -0), S(-70, 0), S(-60, 0), S(-50, 0),
-    S(-45, 0), S(-55, 0), S(-65, 0), S(-75, 0), S(-70, 0), S(-60, 0), S(-50, 0), S(-40, 0),
-    S(-35, 0), S(-45, 0), S(-55, 0), S(-65, 0), S(-60, 0), S(-50, 0), S(-40, 0), S(-30, 0),
-    S(-25, 0), S(-35, 0), S(-45, 0), S(-55, 0), S(-50, 0), S(-40, 0), S(-30, 0), S(-20, 0),
-    S(-10, 0), S(-20, 0), S(-30, 0), S(-40, 0), S(-40, 0), S(-30, 0), S(-20, 0), S(-10, 0),
-    S(15, 0), S(5, 0), S(-10, 0), S(-20, 0), S(-20, 0), S(-10, 0), S(10, 0), S(25, 0),
-    S(40, 0), S(40, 0), S(25, 0), S(-10, 0), S(-10, 0), S(25, 0), S(50, 0), S(50, 0)
+    S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0),
+    S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0),
+    S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0),
+    S(-30, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-40, 0), S(-30, 0),
+    S(-20, 0), S(-30, 0), S(-30, 0), S(-30, 0), S(-30, 0), S(-30, 0), S(-30, 0), S(-20, 0),
+    S(-10, 0), S(-20, 0), S(-24, 0), S(-28, 0), S(-28, 0), S(-24, 0), S(-20, 0), S(-10, 0),
+    S(20, 0), S(10, 0), S(-10, 0), S(-20, 0), S(-20, 0), S(-10, 0), S(10, 0), S(20, 0),
+    S(40, 0), S(40, 0), S(20, 0), S(-10, 0), S(-10, 0), S(20, 0), S(40, 0), S(40, 0)
 
 };
 
@@ -123,14 +127,14 @@ const TScore STORM_PAWN[64] = {
 };
 
 const TScore SHELTER_OPEN_FILES[4] = {
-    S(0, 0), S(-30, -5), S(-60, -10), S(-120, -15)
+    S(0, 0), S(-20, -10), S(-35, -18), S(-50, -25)
 };
 
 const TScore SHELTER_OPEN_ATTACK_FILES[4] = {
-    S(0, 0), S(-10, 0), S(-20, -5), S(-40, -10)
+    S(0, 0), S(-20, -10), S(-35, -18), S(-50, -25)
 };
 
-const TScore SHELTER_OPEN_EDGE_FILE = S(-110, -10);
+const TScore SHELTER_OPEN_EDGE_FILE = S(-80, -20);
 
 const TScore SHELTER_CASTLING_KINGSIDE = S(60, 20);
 
@@ -145,6 +149,10 @@ const TScore KNIGHT_MOBILITY[9] = {
     S(0, 0), S(4, 4), S(8, 8), S(12, 12), S(16, 16)
 };
 
+const TScore KNIGHT_RANK[8] = {
+  S(-20, -20), S(-10, -10), S(0,0), S(5, 5), S(10, 10), S(15, 15), S(0,0), S(-15,15)  
+};
+
 /*******************************************************************************
  * Bishop Values 
  *******************************************************************************/
@@ -155,7 +163,7 @@ const TScore BISHOP_MOBILITY[14] = {
     S(10, 10), S(12, 12), S(14, 14), S(16, 16), S(18, 18)
 };
 
-const TScore TRAPPED_BISHOP(-80, -120);
+const TScore TRAPPED_BISHOP = S(-80, -120);
 
 /*******************************************************************************
  * Rook Values 
@@ -223,11 +231,6 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     return result;
 }
 
-bool skipExp(TSearch * sd) {
-    int pc = WKING;
-    return sd->pos->pieces[pc].count == 0 && sd->pos->pieces[pc + WKING].count == 0;
-}
-
 /**
  * Evaluate material score and set the current game phase
  * @param sd search meta-data object
@@ -285,14 +288,24 @@ inline short evaluateMaterial(TSearch * sd) {
     phase = MAX(0, phase);
 
     // Piece values 
+    if (wknights != bknights) {
     result.mg += (wknights - bknights) * SVKNIGHT.mg;
     result.eg += (wknights - bknights) * SVKNIGHT.eg;
+    }
+    if (wbishops != bbishops) {
     result.mg += (wbishops - bbishops) * SVBISHOP.mg;
     result.eg += (wbishops - bbishops) * SVBISHOP.eg;
+    }
+    if (wrooks != brooks) {
     result.mg += (wrooks - brooks) * SVROOK.mg;
     result.eg += (wrooks - brooks) * SVROOK.eg;
+    }
+    if (wqueens != bqueens) {
     result.mg += (wqueens - bqueens) * SVQUEEN.mg;
     result.eg += (wqueens - bqueens) * SVQUEEN.eg;
+    }
+
+    // Bishop pair
     if (wbishops > 1 && pos->whiteBishopPair()) {
         result.add(VBISHOPPAIR);
     }
@@ -302,11 +315,26 @@ inline short evaluateMaterial(TSearch * sd) {
 
     int piecePower = result.get(phase);
 
+    if (piecePower >= VPAWN) { //compensate for pawn bonuses
+        result.add(VPOWER);
+    } else if (piecePower <= -VPAWN) {
+        result.sub(VPOWER);
+    }
+
+    if (wpieces == 1 && wminors == 1) { //harder to win 
+        result.add(VLONESOME_MINOR[wbishops == 1]);
+    } else if (bpieces == 1 && bminors == 1) {
+        result.sub(VLONESOME_MINOR[bbishops == 1]);
+    }
+
+    if (wpawns != bpawns) {
     result.mg += (wpawns - bpawns) * SVPAWN.mg;
     result.eg += (wpawns - bpawns) * SVPAWN.eg;
+    }
 
 
-    // when ahead in material, reduce opponent's pieces (simplify) and keep pawns
+    // Trade bonus: when ahead in material, reduce opponent's pieces (simplify) 
+    // and keep pawns
     if (piecePower > MATERIAL_AHEAD_TRESHOLD) {
         result.add(TRADEDOWN_PIECES[bpieces]);
         result.add(TRADEDOWN_PAWNS[wpawns]);
@@ -331,10 +359,6 @@ inline short evaluateMaterial(TSearch * sd) {
 
     if (!wpieces && !bpieces) { //only pawns left, the side with more pawns wins
         value += value;
-    } else if (piecePower >= VROOK && value > 2 * VPAWN) { //winning edge and having mating material
-        value += value >> 2;
-    } else if (piecePower <= -VROOK && value < -2 * VPAWN) {
-        value -= (-value) >> 2;
     } else if (value > 0 && piecePower < VROOK && !wpawns) { //ahead but no mating material (draw)
         value >>= 2;
     } else if (value < 0 && piecePower > -VROOK && !bpawns) {
@@ -343,10 +367,6 @@ inline short evaluateMaterial(TSearch * sd) {
         value += piecePower >> 1;
     } else if (!bpieces && wpieces > 0 && bpawns > 0) {
         value += piecePower >> 1;
-    } else if (value > 0 && piecePower < 0) { //ahead with pawns and behind with pieces
-        value -= 20 + (value >> 2); //testeval r3r1k1/5p1p/2pbbBp1/q2p4/p2P4/1P1Q2N1/P1P1RPPP/R5K1 b - - 5 1
-    } else if (value < 0 && piecePower > 0) {
-        value += 20 + ((-value) >> 2);
     }
 
     /*
@@ -465,6 +485,7 @@ void init_pct() {
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
         scores[sq].mul(1.5); //mobility is extra important because knights move slow
+        scores[sq].add(KNIGHT_RANK[RANK(sq)]);
     }
     init_pct_store(scores, WKNIGHT);
 
