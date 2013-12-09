@@ -107,7 +107,9 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
         pos->boardFlags->checkerSq = rMove->checkerSq;
         pos->boardFlags->checkers = rMove->checkers;
     }
-    int bestScore = -pvs(-beta, -alpha, depth - ONE_PLY + (bool)rMove->GivesCheck);
+    int new_depth = depth - ONE_PLY;
+    int extend_move = (bool)rMove->GivesCheck;
+    int bestScore = -pvs(-beta, -alpha, new_depth + extend_move);
     backward(&rMove->Move);
     int sortBaseScoreForPV = 1000 * depth / ONE_PLY;
     rMove->Nodes += nodes - nodesBeforeMove;
@@ -148,9 +150,11 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
             pos->boardFlags->checkerSq = rMove->checkerSq;
             pos->boardFlags->checkers = rMove->checkers;
         }
-        int score = -pvs(-alpha - 1, -alpha, depth - ONE_PLY + (bool)rMove->GivesCheck);
+        extend_move = (bool)rMove->GivesCheck;
+        int score = -pvs(-alpha - 1, -alpha, new_depth + extend_move);
         if (score > alpha && score < beta && stopSearch == false) {
-            score = -pvs(-beta, -alpha, depth - ONE_PLY);
+            score = -pvs(-beta, -alpha, new_depth); 
+            //note: extend_move is deliberately skipped in this research (performed better in tests)
         }
         backward(&rMove->Move);
         rMove->Nodes += nodes - nodesBeforeMove;
@@ -361,7 +365,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     if (depth >= LOW_DEPTH && extend > 0 && type != PVNODE) {
         extend--;
     }
-    
+
     assert(stack->phase >= 0 && stack->phase <= 16);
     if (stack->phase == 16
             && pos->boardFlags->fiftyCount == 0
