@@ -54,9 +54,9 @@ const short TRADEDOWN_PAWNS[9] = {
  * Pawn Values 
  *******************************************************************************/
 
-const TScore DEFENDED_PAWN[2] = {S(0, 4), S(4, 8)};
-const TScore ISOLATED_PAWN[2] = {S(-10, -20), S(-20, -20)};
-const TScore WEAK_PAWN[2] = {S(-8, -16), S(-16, -16)};
+const TScore DEFENDED_PAWN[2] = {S(0, 4), S(4, 8)}; //closed, open file
+const TScore ISOLATED_PAWN[2] = {S(-10, -20), S(-20, -20)}; //closed, open file
+const TScore WEAK_PAWN[2] = {S(-8, -16), S(-16, -16)}; //closed, open file
 const TScore DOUBLED_PAWN = S(-4, -8);
 
 const TScore PASSED_PAWN[64] = {
@@ -100,7 +100,7 @@ const TScore SHELTER_KPOS[64] = {
     S(-20, 0), S(-30, 0), S(-30, 0), S(-30, 0), S(-30, 0), S(-30, 0), S(-30, 0), S(-20, 0),
     S(-10, 0), S(-20, 0), S(-24, 0), S(-28, 0), S(-28, 0), S(-24, 0), S(-20, 0), S(-10, 0),
     S(20, 0), S(10, 0), S(-10, 0), S(-20, 0), S(-20, 0), S(-10, 0), S(10, 0), S(20, 0),
-    S(40, 0), S(40, 0), S(20, 0), S(-10, 0), S(-10, 0), S(20, 0), S(40, 0), S(40, 0)
+    S(40, 0), S(40, 0), S(30, 0), S(-10, 0), S(-10, 0), S(20, 0), S(40, 0), S(40, 0)
 
 };
 

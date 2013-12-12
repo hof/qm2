@@ -377,20 +377,9 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         }
     }
 
-    int givesCheck = pos->givesCheck(firstMove);
+    bool givesCheck = pos->givesCheck(firstMove);
     bool extendMove = extend == 0 && givesCheck;
-
-    //make the pv longer
-    if (type == PVNODE && depth > LOW_DEPTH) {
-        extendMove += extendMove == 1 && extend == 0;
-        extend += extendMove == 0 && extend == 1;
-        extend += extendMove == 0 && extend == 0 && pos->push7th(firstMove);
-        if (depth >= HIGH_DEPTH && extendMove == 0 && extend == 0) {
-            extend += firstMove->capture
-                    || (stack->phase > 10 && passedPawn(firstMove));
-        }
-    }
-
+    bool singular_node = depth > LOW_DEPTH && firstMove->capture && pos->SEE(firstMove) > 0;
 
     int new_depth = depth - ONE_PLY + extend + undo_lmr;
 
@@ -463,12 +452,15 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             assert(new_depth < 256);
             bool active = givesCheck || passedPawn(move) || pos->active(move);
             reduce += LMR[active][type == PVNODE][MIN(63, searchedMoves)][new_depth];
-            reduce += (reduce < (new_depth - 2) && type != PVNODE && history[move->piece][move->tsq] < 0);
-            reduce += (reduce < (new_depth - 4) && type == CUTNODE) * ONE_PLY;
+            int max_reduce = new_depth - 2;
+            reduce += reduce < max_reduce && type == CUTNODE;
+            reduce += reduce < max_reduce && type == CUTNODE;
+            reduce += reduce < max_reduce && singular_node;
+            reduce += reduce < max_reduce && type != PVNODE && history[move->piece][move->tsq] < 0;
         }
 
         stack->reduce = reduce;
-        int extendMove = extend == 0 && (bool)givesCheck;
+        extendMove = extend == 0 && givesCheck;
         forward(move, givesCheck);
         int score = -pvs(-alpha - 1, -alpha, new_depth - reduce + extendMove);
 
@@ -590,8 +582,6 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
         int base = score;
         do { //loop through quiescence moves
             int givesCheck = pos->givesCheck(move);
-            int qcheck_depth = checkDepth;
-
             if (!move->capture && !move->promotion &&
                     (givesCheck == 0 || (givesCheck == 1 && pos->SEE(move) < 0))) {
                 pruned_nodes++;
@@ -600,7 +590,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
 
             //pruning (delta futility and negative see), 
             //skipped for checks
-            if (!givesCheck && NOTPV(alpha, beta)) {
+            if (givesCheck == 0 && NOTPV(alpha, beta)) {
                 //1. delta futility pruning: the captured piece + max. positional gain should raise alpha
                 int gain = PIECE_VALUE[move->capture];
                 if (move->promotion) {
@@ -620,12 +610,9 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
                     pruned_nodes++;
                     continue;
                 }
-
             }
-            qcheck_depth -= givesCheck == 0;
-
             forward(move, givesCheck);
-            score = -qsearch(-beta, -alpha, qPly + 1, qcheck_depth);
+            score = -qsearch(-beta, -alpha, qPly + 1, checkDepth);
             backward(move);
             if (score >= beta) {
                 stack->bestMove.setMove(move);
