@@ -8,6 +8,7 @@ const short FMARGIN[9] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200};
 const bool DO_NULL = true;
 const bool DO_FP = true;
 const bool DO_LMR = true;
+const bool DO_SINGULAR = true;
 
 void TSearch::poll() {
     nodesUntilPoll = NODESBETWEENPOLLS;
@@ -293,7 +294,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         return eval - FMARGIN[depth];
     }
 
-    bool mateThreat = false;
+    bool mate_threat = false;
     if (!skipNull
             && DO_NULL
             && depth > ONE_PLY
@@ -315,7 +316,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             if (!threat->capture && !threat->promotion) {
                 updateHistoryScore(threat, rdepth);
             }
-            mateThreat = true;
+            mate_threat = true;
         }
     }
     skipNull = false;
@@ -346,12 +347,13 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             extend = 2 * ONE_PLY;
         }
     }
-    if (inCheck && extend == 0) {
+    if (inCheck && extend < ONE_PLY) {
         extend++;
         if (extend < ONE_PLY && movePicker->countEvasions(this, firstMove) <= 2) {
             extend++; //only one or two replies to check
         }
     }
+
     if (depth >= HIGH_DEPTH && extend > 0 && type != PVNODE) {
         extend--;
     }
@@ -361,6 +363,33 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 
     bool givesCheck = pos->givesCheck(firstMove);
     int extendMove = extend == 0 && givesCheck && (givesCheck > 1 || pos->SEE(firstMove) >= 0);
+    if (DO_SINGULAR && depth >= HIGH_DEPTH && (extend + extendMove) < ONE_PLY) {
+        if ((firstMove->capture || firstMove->promotion) && pos->SEE(firstMove) > 0) {
+            extendMove++;
+        } else if ((extend + extendMove) < ONE_PLY && excludedMove.piece == EMPTY) {
+            stack->reduce = 0;
+            forward(firstMove, givesCheck);
+            int score1 = -pvs(-beta, -alpha, depth - 6 * ONE_PLY);
+            backward(firstMove);
+            if (score1 > alpha) {
+                tempList.copy(&stack->moveList);
+                excludedMove.setMove(firstMove);
+                HASH_EXCLUDED_MOVE(pos->boardFlags->hashCode);
+                int scoreX = pvs(alpha, beta, depth - 6 * ONE_PLY);
+                HASH_EXCLUDED_MOVE(pos->boardFlags->hashCode);
+                firstMove->setMove(&excludedMove);
+                stack->bestMove.setMove(firstMove);
+                excludedMove.clear();
+                stack->moveList.copy(&tempList);
+                if (scoreX < (score1 - (depth >> 1))) {
+                    extendMove++;
+                    if ((extend + extendMove) < ONE_PLY && scoreX < score1 - depth) {
+                        extendMove++;
+                    }
+                }
+            }
+        }
+    }
     int new_depth = depth - ONE_PLY + extend;
 
     stack->bestMove.setMove(firstMove);
@@ -417,12 +446,12 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 pruned_nodes++;
                 continue;
             }
-            if (pos->SEE(move) < 0) {
+            int mc_max = 2 + ((depth * depth) >> 2);
+            if (searchedMoves > mc_max && !pos->active(move)) {
                 pruned_nodes++;
                 continue;
             }
-            int mc_max = 2 + ((depth*depth) >> 2);
-            if (searchedMoves > mc_max && !pos->active(move)) {
+            if (pos->SEE(move) < 0) {
                 pruned_nodes++;
                 continue;
             }
