@@ -56,8 +56,8 @@ const short TRADEDOWN_PAWNS[9] = {
 
 const TScore DEFENDED_PAWN[2] = {S(0, 4), S(4, 8)}; //closed, open file
 const TScore ISOLATED_PAWN[2] = {S(-10, -20), S(-20, -20)}; //closed, open file
-const TScore WEAK_PAWN[2] = {S(-8, -16), S(-16, -16)}; //closed, open file
-const TScore DOUBLED_PAWN = S(-4, -8);
+const TScore WEAK_PAWN[2] = {S(-8, -16), S(-12, -12)}; //closed, open file
+const TScore DOUBLED_PAWN = S(-10, -20);
 
 const TScore PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
@@ -150,7 +150,7 @@ const TScore KNIGHT_MOBILITY[9] = {
 };
 
 const TScore KNIGHT_RANK[8] = {
-  S(-20, -20), S(-10, -10), S(0,0), S(5, 5), S(10, 10), S(15, 15), S(0,0), S(-15,15)  
+    S(-20, -20), S(-10, -10), S(0, 0), S(5, 5), S(10, 10), S(15, 15), S(0, 0), S(-15, 15)
 };
 
 /*******************************************************************************
@@ -163,23 +163,23 @@ const TScore BISHOP_MOBILITY[14] = {
     S(10, 10), S(12, 12), S(14, 14), S(16, 16), S(18, 18)
 };
 
-const TScore TRAPPED_BISHOP = S(-80, -120);
+const TScore TRAPPED_BISHOP = S(-100, -120);
 
 /*******************************************************************************
  * Rook Values 
  *******************************************************************************/
 
-const TScore ROOK_7TH = S(20, 30);
+const TScore ROOK_7TH = S(20, 40);
 const TScore ROOK_1ST = S(10, 0); //back rank protection
 const TScore ROOK_SEMIOPEN_FILE = S(12, 12);
 const TScore ROOK_OPEN_FILE = S(24, 24);
-const TScore ROOK_GOOD_SIDE = S(10, 30);
-const TScore ROOK_WRONG_SIDE = S(-10, -20);
+const TScore ROOK_GOOD_SIDE = S(8, 16);
+const TScore ROOK_WRONG_SIDE = S(-8, -16);
 
 const TScore ROOK_MOBILITY[15] = {
-    S(-40, -40), S(-20, -20), S(-10, -10), S(-8, -8),
-    S(-6, -6), S(-4, -4), S(-2, -2), S(0, 0), S(0, 0),
-    S(2, 2), S(4, 4), S(6, 6), S(8, 8), S(10, 10), S(12, 12)
+    S(-30, -30), S(-20, -20), S(-10, -10), S(-8, -8),
+    S(-6, -6), S(-4, -4), S(-2, -2), S(0, 0), S(0, 2),
+    S(2, 4), S(4, 6), S(6, 8), S(8, 10), S(10, 12), S(12, 14)
 };
 
 
@@ -289,20 +289,20 @@ inline short evaluateMaterial(TSearch * sd) {
 
     // Piece values 
     if (wknights != bknights) {
-    result.mg += (wknights - bknights) * SVKNIGHT.mg;
-    result.eg += (wknights - bknights) * SVKNIGHT.eg;
+        result.mg += (wknights - bknights) * SVKNIGHT.mg;
+        result.eg += (wknights - bknights) * SVKNIGHT.eg;
     }
     if (wbishops != bbishops) {
-    result.mg += (wbishops - bbishops) * SVBISHOP.mg;
-    result.eg += (wbishops - bbishops) * SVBISHOP.eg;
+        result.mg += (wbishops - bbishops) * SVBISHOP.mg;
+        result.eg += (wbishops - bbishops) * SVBISHOP.eg;
     }
     if (wrooks != brooks) {
-    result.mg += (wrooks - brooks) * SVROOK.mg;
-    result.eg += (wrooks - brooks) * SVROOK.eg;
+        result.mg += (wrooks - brooks) * SVROOK.mg;
+        result.eg += (wrooks - brooks) * SVROOK.eg;
     }
     if (wqueens != bqueens) {
-    result.mg += (wqueens - bqueens) * SVQUEEN.mg;
-    result.eg += (wqueens - bqueens) * SVQUEEN.eg;
+        result.mg += (wqueens - bqueens) * SVQUEEN.mg;
+        result.eg += (wqueens - bqueens) * SVQUEEN.eg;
     }
 
     // Bishop pair
@@ -315,30 +315,27 @@ inline short evaluateMaterial(TSearch * sd) {
 
     int piecePower = result.get(phase);
 
-    if (piecePower >= VPAWN) { //compensate for pawn bonuses
-        result.add(VPOWER);
-    } else if (piecePower <= -VPAWN) {
-        result.sub(VPOWER);
-    }
-
     if (wpieces == 1 && wminors == 1) { //harder to win 
         result.add(VLONESOME_MINOR[wbishops == 1]);
-    } else if (bpieces == 1 && bminors == 1) {
+    } 
+    if (bpieces == 1 && bminors == 1) {
         result.sub(VLONESOME_MINOR[bbishops == 1]);
     }
 
     if (wpawns != bpawns) {
-    result.mg += (wpawns - bpawns) * SVPAWN.mg;
-    result.eg += (wpawns - bpawns) * SVPAWN.eg;
+        result.mg += (wpawns - bpawns) * SVPAWN.mg;
+        result.eg += (wpawns - bpawns) * SVPAWN.eg;
     }
 
 
     // Trade bonus: when ahead in material, reduce opponent's pieces (simplify) 
     // and keep pawns
     if (piecePower > MATERIAL_AHEAD_TRESHOLD) {
+        result.add(50);
         result.add(TRADEDOWN_PIECES[bpieces]);
         result.add(TRADEDOWN_PAWNS[wpawns]);
     } else if (piecePower < -MATERIAL_AHEAD_TRESHOLD) {
+        result.sub(50);
         result.sub(TRADEDOWN_PIECES[wpieces]);
         result.sub(TRADEDOWN_PAWNS[bpawns]);
     }
