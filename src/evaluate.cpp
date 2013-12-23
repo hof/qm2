@@ -19,11 +19,59 @@ inline int evaluatePasserVsK(TSearch * sd, bool white, int sq);
  *******************************************************************************/
 
 enum MaterialValues {
-    MATERIAL_AHEAD_TRESHOLD = 80,
+    MATERIAL_AHEAD_TRESHOLD = 80, //all values are in centipawns
     VNOPAWNS = -40,
     VBISHOPPAIR = 50,
     DRAWISH_QR_ENDGAME = -20,
     DRAWISH_OPP_BISHOPS = -50
+};
+
+const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
+
+    //4 major pieces down (-20 pawns))
+    { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-200, -100),
+        /*0 minor pieces (balance) */ S(-200, -100),
+        /*+1*/ S(-200, -100), /*+2*/ S(-150, -75), /*+3*/ S(-100, -50), /*+4*/ S(-50, 0)},
+
+    //3 major pieces down
+    { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-200, -100),
+        /*0 minor pieces (balance) */ S(-200, -100),
+        /*+1*/ S(-150, -75), /*+2*/ S(-100, -50), /*+3*/ S(-50, 0), /*+4*/ S(50, 0)},
+
+    //2 major pieces down (-10 pawns))
+    { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-150, -75),
+        /*0 minor pieces (balance) */ S(-200, -100),
+        /*+1*/ S(-100, -50), /*+2*/ S(-50, 0), /*+3*/ S(50, 0), /*+4*/ S(100, 50)},
+
+    //1 major piece down (-5 pawns))
+    { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-150, -75),
+        /*0 minor pieces (balance) */ S(-100, -50),
+        /*+1*/ S(-50, -50), /*+2*/ S(-50, 25), /*+3*/ S(-75, 0), /*+4*/ S(-100, -25)},
+
+    //balance of major pieces
+    { /*-4*/ S(-120, -60), /*-3*/ S(-80, -40), /*-2*/ S(-60, -30), /*-1*/ S(-40, -20),
+        /*0 minor pieces (balance) */ S(0, 0),
+        /*+1*/ S(40, 20), /*+2*/ S(60, 30), /*+3*/ S(80, 40), /*+4*/ S(120, 60)},
+
+    //1 major piece up (+5 pawns))
+    { /*-4*/ S(-100, -25), /*-3*/ S(-75, 0), /*-2*/ S(-50, 25), /*-1*/ S(50, 50),
+        /*0 minor pieces (balance) */ S(100, 50),
+        /*+1*/ S(150, 75), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
+
+    //2 major pieces up (+10 pawns))
+    { /*-4*/ S(-100, -50), /*-3*/ S(-50, 0), /*-2*/ S(50, 0), /*-1*/ S(100, 50),
+        /*0 minor pieces (balance) */ S(200, 100),
+        /*+1*/ S(150, 75), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
+
+    //3 major pieces up (+15 pawns))
+    { /*-4*/ S(-50, 0), /*-3*/ S(50, 0), /*-2*/ S(100, 50), /*-1*/ S(150, 75),
+        /*0 minor pieces (balance) */ S(200, 100),
+        /*+1*/ S(200, 100), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
+
+    //4 major pieces up (+20 pawns))
+    { /*-4*/ S(50, 0), /*-3*/ S(100, 50), /*-2*/ S(150, 75), /*-1*/ S(200, 100),
+        /*0 minor pieces (balance) */ S(200, 100),
+        /*+1*/ S(200, 100), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
 };
 
 const TScore SVPAWN = S(VPAWN, VPAWN); //middle and endgame values
@@ -38,16 +86,15 @@ const TScore PIECE_SCORE[13] = {
     SVPAWN, SVKNIGHT, SVBISHOP, SVROOK, SVQUEEN, SVKING
 };
 
-const TScore VPOWER = S(60, 80);
-
-const TScore VLONESOME_MINOR[2] = {S(-60, -60), S(-40, -40)};
+const short VNO_MATING_POWER = 50;
+const short VNO_MATING_MATERIAL = 50;
 
 const short TRADEDOWN_PIECES[MAX_PIECES + 1] = {
-    80, 60, 40, 20, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    100, 50, 25, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
 const short TRADEDOWN_PAWNS[9] = {
-    -60, -40, -20, -10, -5, 0, 5, 10, 15
+    -80, -40, -20, -10, 0, 0, 0, 0, 0
 };
 
 /*******************************************************************************
@@ -61,12 +108,12 @@ const TScore DOUBLED_PAWN = S(-10, -20);
 
 const TScore PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(60, 180), S(60, 180), S(60, 180), S(60, 180), S(60, 180), S(60, 180), S(60, 180), S(60, 180),
-    S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80), S(40, 80),
-    S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50), S(30, 50),
-    S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30), S(20, 30),
-    S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20),
-    S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20),
+    S(100, 180), S(80, 160), S(80, 160), S(70, 140), S(70, 140), S(80, 160), S(80, 160), S(100, 180),
+    S(65, 120), S(50, 100), S(50, 100), S(40, 80), S(40, 80), S(50, 100), S(50, 100), S(65, 120),
+    S(40, 80), S(30, 60), S(30, 60), S(20, 40), S(20, 40), S(30, 60), S(30, 60), S(40, 80),
+    S(20, 40), S(15, 30), S(15, 30), S(10, 20), S(10, 30), S(15, 20), S(15, 30), S(20, 40),
+    S(15, 30), S(10, 20), S(10, 20), S(5, 10), S(5, 10), S(10, 20), S(10, 20), S(15, 30),
+    S(15, 30), S(10, 20), S(10, 20), S(5, 10), S(5, 10), S(10, 20), S(10, 20), S(15, 30),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
 };
 
@@ -74,7 +121,7 @@ const TScore CONNECED_PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
     S(95, 95), S(95, 95), S(95, 95), S(95, 95), S(95, 95), S(95, 95), S(95, 95), S(95, 95),
     S(50, 50), S(50, 50), S(50, 50), S(50, 50), S(50, 50), S(50, 50), S(50, 50), S(50, 50),
-    S(30, 30), S(30, 30), S(30, 30), S(30, 30), S(30, 30), S(30, 30), S(30, 30), S(30, 30),
+    S(20, 20), S(20, 20), S(20, 20), S(20, 30), S(20, 20), S(20, 20), S(20, 30), S(20, 20),
     S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10),
     S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5),
     S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5),
@@ -84,11 +131,11 @@ const TScore CONNECED_PASSED_PAWN[64] = {
 const TScore CANDIDATE[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(32, 50), S(32, 50), S(32, 50), S(32, 50), S(32, 50), S(32, 50), S(32, 50), S(32, 50),
-    S(24, 40), S(24, 40), S(24, 40), S(24, 40), S(24, 40), S(24, 40), S(24, 40), S(24, 40),
-    S(18, 30), S(18, 30), S(18, 30), S(18, 30), S(18, 30), S(18, 30), S(18, 30), S(18, 30),
-    S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10),
-    S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10),
+    S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40),
+    S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20),
+    S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10),
+    S(0, 5), S(0, 5), S(0, 5), S(0, 5), S(0, 5), S(0, 5), S(0, 5), S(0, 5),
+    S(0, 5), S(0, 5), S(0, 5), S(0, 5), S(0, 5), S(0, 5), S(0, 5), S(0, 5),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
 };
 
@@ -106,12 +153,12 @@ const TScore SHELTER_KPOS[64] = {
 
 const TScore SHELTER_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
-    S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
-    S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4), S(2, 4),
-    S(5, 6), S(5, 6), S(5, 4), S(5, 4), S(5, 4), S(5, 4), S(15, 6), S(15, 6),
-    S(15, 8), S(15, 8), S(10, 4), S(2, 4), S(2, 4), S(10, 4), S(15, 8), S(15, 8),
-    S(30, 10), S(30, 10), S(25, 4), S(10, 4), S(5, 4), S(15, 4), S(30, 10), S(30, 10),
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+    S(2, 0), S(2, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(2, 0), S(2, 0),
+    S(5, 2), S(5, 2), S(3, 0), S(2, 0), S(2, 0), S(3, 0), S(5, 2), S(5, 2),
+    S(10, 5), S(10, 5), S(6, 3), S(4, 2), S(4, 2), S(6, 3), S(10, 5), S(10, 5),
+    S(20, 10), S(20, 10), S(12, 6), S(8, 4), S(8, 4), S(12, 6), S(20, 10), S(20, 10),
+    S(40, 20), S(40, 20), S(24, 12), S(16, 8), S(16, 8), S(24, 12), S(40, 20), S(40, 20),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
 };
 
@@ -127,11 +174,11 @@ const TScore STORM_PAWN[64] = {
 };
 
 const TScore SHELTER_OPEN_FILES[4] = {
-    S(0, 0), S(-20, -10), S(-35, -18), S(-50, -25)
+    S(0, 0), S(-20, -10), S(-50, -25), S(-80, -40)
 };
 
 const TScore SHELTER_OPEN_ATTACK_FILES[4] = {
-    S(0, 0), S(-20, -10), S(-35, -18), S(-50, -25)
+    S(0, 0), S(-20, -10), S(-50, -25), S(-80, -40)
 };
 
 const TScore SHELTER_OPEN_EDGE_FILE = S(-80, -20);
@@ -313,58 +360,60 @@ inline short evaluateMaterial(TSearch * sd) {
         result.sub(VBISHOPPAIR);
     }
 
-    int piecePower = result.get(phase);
+    bool minor_balance = (wminors == bminors);
+    bool major_balance = (wrooks + 2 * wqueens) == (brooks + 2 * bqueens);
+    bool balance = minor_balance && major_balance;
+    bool mating_power_w = wrooks || wqueens || wminors > 2 || (wminors == 2 && wbishops > 0);
+    bool mating_power_b = brooks || bqueens || bminors > 2 || (bminors == 2 && bbishops > 0);
+    bool mating_material_w = wpawns || mating_power_w;
+    bool mating_material_b = bpawns || mating_power_b;
 
-    if (wpieces == 1 && wminors == 1) { //harder to win 
-        result.add(VLONESOME_MINOR[wbishops == 1]);
-    } 
-    if (bpieces == 1 && bminors == 1) {
-        result.sub(VLONESOME_MINOR[bbishops == 1]);
+    if (!mating_power_w) {
+        result.add(VNO_MATING_POWER);
+        if (!mating_material_w) {
+            result.add(VNO_MATING_MATERIAL);
+        }
     }
+    if (!mating_power_b) {
+        result.sub(VNO_MATING_POWER);
+        if (!mating_material_b) {
+            result.sub(VNO_MATING_MATERIAL);
+        }
+    }
+
+    if (!balance) {
+        //material imbalance
+        int minors_ix = MAX(0, 4 + wminors - bminors);
+        int majors_ix = MAX(0, 4 + wrooks + 2 * wqueens - brooks - 2 * bqueens);
+        result.add(IMBALANCE[MIN(majors_ix, 8)][MIN(minors_ix, 8)]);
+    }
+
+    int piece_power = result.get(phase);
 
     if (wpawns != bpawns) {
         result.mg += (wpawns - bpawns) * SVPAWN.mg;
         result.eg += (wpawns - bpawns) * SVPAWN.eg;
-    }
 
-
-    // Trade bonus: when ahead in material, reduce opponent's pieces (simplify) 
-    // and keep pawns
-    if (piecePower > MATERIAL_AHEAD_TRESHOLD) {
-        result.add(50);
-        result.add(TRADEDOWN_PIECES[bpieces]);
-        result.add(TRADEDOWN_PAWNS[wpawns]);
-    } else if (piecePower < -MATERIAL_AHEAD_TRESHOLD) {
-        result.sub(50);
-        result.sub(TRADEDOWN_PIECES[wpieces]);
-        result.sub(TRADEDOWN_PAWNS[bpawns]);
-    }
-
-    // penalty for not having pawns at all - makes it hard to win
-    if (wpawns == 0) {
-        result.add(VNOPAWNS);
-    }
-    if (bpawns == 0) {
-        result.sub(VNOPAWNS);
+        // penalty for not having pawns at all - makes it hard to win
+        if (wpawns == 0) {
+            result.add(VNOPAWNS);
+        }
+        if (bpawns == 0) {
+            result.sub(VNOPAWNS);
+        }
     }
 
     int value = result.get(phase);
 
-    /*
-     * Special cases
-     */
-
-    if (!wpieces && !bpieces) { //only pawns left, the side with more pawns wins
-        value += value;
-    } else if (value > 0 && piecePower < VROOK && !wpawns) { //ahead but no mating material (draw)
-        value >>= 2;
-    } else if (value < 0 && piecePower > -VROOK && !bpawns) {
-        value >>= 2;
-    } else if (!wpieces && bpieces > 0 && wpawns > 0) { //opponent only has pawns
-        value += piecePower >> 1;
-    } else if (!bpieces && wpieces > 0 && bpawns > 0) {
-        value += piecePower >> 1;
+    //If ahead in material, trade pieces (simplify) and keep pawns
+    if (piece_power > MATERIAL_AHEAD_TRESHOLD) {
+        value += TRADEDOWN_PIECES[bpieces];
+        value += TRADEDOWN_PAWNS[wpawns];
+    } else if (piece_power < -MATERIAL_AHEAD_TRESHOLD) {
+        value -= TRADEDOWN_PIECES[wpieces];
+        value -= TRADEDOWN_PAWNS[bpawns];
     }
+
 
     /*
      * Endgame adjustments
@@ -372,19 +421,15 @@ inline short evaluateMaterial(TSearch * sd) {
 
     //Rooks and queen endgames are drawish. Reduce any small material advantage.
     if (value
+            && balance
             && wminors < 2
-            && bminors < 2
             && wpieces <= 3
             && wpieces > 0
-            && bpieces > 0
             && (wrooks || wqueens)
-            && (brooks || bqueens)
-            && wpieces == bpieces
             && ABS(value) > ABS(DRAWISH_QR_ENDGAME)
-            && ABS(value) < 2 * VPAWN
-            && ABS(piecePower) < VPAWN / 2) {
+            && ABS(value) < 2 * VPAWN) {
         value += cond(value > 0, value < 0, DRAWISH_QR_ENDGAME);
-        if (wminors == 0 && bminors == 0 && wpieces <= 1 && bpieces <= 1) { //more drawish
+        if (wminors == 0 && wpieces <= 1) { //more drawish
             value += cond(value > 30, value < -30, DRAWISH_QR_ENDGAME >> 1);
         }
     }
