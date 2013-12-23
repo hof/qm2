@@ -19,7 +19,7 @@ inline int evaluatePasserVsK(TSearch * sd, bool white, int sq);
  *******************************************************************************/
 
 enum MaterialValues {
-    MATERIAL_AHEAD_TRESHOLD = 80, //all values are in centipawns
+    MATERIAL_AHEAD_TRESHOLD = 240, //all values are in centipawns
     VNOPAWNS = -40,
     VBISHOPPAIR = 50,
     DRAWISH_QR_ENDGAME = -20,
@@ -46,7 +46,7 @@ const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
     //1 major piece down (-5 pawns))
     { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-150, -75),
         /*0 minor pieces (balance) */ S(-100, -50),
-        /*+1*/ S(-50, -50), /*+2*/ S(-50, 25), /*+3*/ S(-75, 0), /*+4*/ S(-100, -25)},
+        /*+1*/ S(-50, -50), /*+2*/ S(-50, 50), /*+3*/ S(-75, 0), /*+4*/ S(-100, -25)},
 
     //balance of major pieces
     { /*-4*/ S(-120, -60), /*-3*/ S(-80, -40), /*-2*/ S(-60, -30), /*-1*/ S(-40, -20),
@@ -54,7 +54,7 @@ const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
         /*+1*/ S(40, 20), /*+2*/ S(60, 30), /*+3*/ S(80, 40), /*+4*/ S(120, 60)},
 
     //1 major piece up (+5 pawns))
-    { /*-4*/ S(-100, -25), /*-3*/ S(-75, 0), /*-2*/ S(-50, 25), /*-1*/ S(50, 50),
+    { /*-4*/ S(-100, -25), /*-3*/ S(-75, 0), /*-2*/ S(-50, 50), /*-1*/ S(50, 50),
         /*0 minor pieces (balance) */ S(100, 50),
         /*+1*/ S(150, 75), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
 
@@ -220,7 +220,7 @@ const TScore ROOK_7TH = S(20, 40);
 const TScore ROOK_1ST = S(10, 0); //back rank protection
 const TScore ROOK_SEMIOPEN_FILE = S(12, 12);
 const TScore ROOK_OPEN_FILE = S(24, 24);
-const TScore ROOK_GOOD_SIDE = S(8, 16);
+const TScore ROOK_GOOD_SIDE = S(8, 16); //Rule of Tarrasch 
 const TScore ROOK_WRONG_SIDE = S(-8, -16);
 
 const TScore ROOK_MOBILITY[15] = {

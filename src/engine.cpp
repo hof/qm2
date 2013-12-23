@@ -162,7 +162,7 @@ void * TEngine::_think(void* engineObjPtr) {
         int beta_window = 0;
         int lowest = SCORE_INFINITE;
         int highest = -SCORE_INFINITE;
-        int depth = ONE_PLY;
+        int depth = MIN(LOW_DEPTH + ONE_PLY, maxDepth);
         int resultScore = 0;
         while (depth <= maxDepth * ONE_PLY && !searchData->stopSearch) {
 
