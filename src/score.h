@@ -35,18 +35,31 @@ typedef const short TSCORE_TABLE[GAME_PHASES];
 #define MATED_IN_PLY(s) ((s)<-SCORE_MATE+MAX_PLY? SCORE_MATE+s : 0)
 
 struct TScore {
-    short mg; //middle game value
-    short eg; //end game value
+    int16_t mg; //middle game value
+    int16_t eg; //end game value
 
-    TScore(): mg(0), eg(0) { }
-    TScore(const TScore & s) { mg = s.mg; eg = s.eg; }
-    TScore(short x, short y) { mg = x; eg = y; }
-    TScore(short x) { mg = x; eg = x; }
-    
-    void print () {
+    TScore() : mg(0), eg(0) {
+    }
+
+    TScore(const TScore & s) {
+        mg = s.mg;
+        eg = s.eg;
+    }
+
+    TScore(short x, short y) {
+        mg = x;
+        eg = y;
+    }
+
+    TScore(short x) {
+        mg = x;
+        eg = x;
+    }
+
+    void print() {
         std::cout << "(" << mg << ", " << eg << ") ";
     }
-    
+
     void print(int phase) {
         print();
         std::cout << "-> " << get(phase);
@@ -68,7 +81,7 @@ struct TScore {
         mg += (*table)[0];
         eg += (*table)[1];
     }
-    
+
     inline void add(const TScore * s) {
         mg += s->mg;
         eg += s->eg;
@@ -78,83 +91,83 @@ struct TScore {
         assert(phase >= 0 && phase <= MAX_GAMEPHASES);
         return (mg * (MAX_GAMEPHASES - phase) + eg * phase) >> GAMEPHASE_SCORE_BSR;
     }
-    
+
     inline void set(const TScore & s) {
         mg = s.mg;
         eg = s.eg;
     }
-    
+
     inline void set(const TScore * s) {
         mg = s->mg;
         eg = s->eg;
     }
-    
+
     inline void nset(const TScore & s) {
         mg = -s.mg;
         eg = -s.eg;
     }
-    
+
     inline void set(const short x, const short y) {
         mg = x;
         eg = y;
     }
-    
+
     inline void add(const short x, const short y) {
         mg += x;
         eg += y;
     }
-    
+
     inline void add(const TScore & s) {
         mg += s.mg;
         eg += s.eg;
     }
-    
+
     inline void sub(const TScore & s) {
         mg -= s.mg;
         eg -= s.eg;
     }
-    
+
     inline void sub(const TScore * s) {
         mg -= s->mg;
         eg -= s->eg;
     }
-    
+
     inline void sub(const short x, const short y) {
         mg -= x;
         eg -= y;
     }
-    
+
     inline void mul(const double x) {
         mg *= x;
         eg *= x;
     }
-    
+
     inline void mul(const double & x, const double & y) {
         mg *= x;
         eg *= y;
     }
-    
+
     inline void round() {
         static const short GRAIN = 0xFFFF & ~((1 << 1) - 1);
         mg &= GRAIN;
         eg &= GRAIN;
     }
-    
+
     inline void max(const TScore & s) {
-        mg = mg >= s.mg? mg : s.mg;
-        eg = eg >= s.eg? eg : s.eg;
+        mg = mg >= s.mg ? mg : s.mg;
+        eg = eg >= s.eg ? eg : s.eg;
     }
-    
+
     inline void min(const TScore & s) {
-        mg = mg <= s.mg? mg : s.mg;
-        eg = eg <= s.eg? eg : s.eg;
+        mg = mg <= s.mg ? mg : s.mg;
+        eg = eg <= s.eg ? eg : s.eg;
     }
 
     inline void clear() {
         mg = 0;
         eg = 0;
     }
-    
+
     inline void half() {
         mg >>= 1;
         eg >>= 1;

@@ -138,10 +138,11 @@ struct TSearchStack {
     TScore rook_score[2];
     TScore queen_score[2];
     TScore king_score[2];
-    TScore shelter_score[2];
     TScore passer_score[2];
     U64 passers;
     U64 mob[2];
+    U64 king_zone[2];
+    int8_t king_attack[BKING+1];
     int reduce;
     U64 captureMask;
 };
@@ -179,7 +180,7 @@ public:
     double learnFactor;
     TRoot root;
     
-    int drawContempt;
+    TScore drawContempt;
 
     TMovePicker * movePicker;
     THashTable * hashTable;
@@ -339,6 +340,7 @@ public:
 
     std::string getPVString();
     void poll();
+    bool pondering();
     void printMovePath();
     int initRootMoves();
 
@@ -351,8 +353,11 @@ public:
     int qsearch(int alpha, int beta, int qPly, int maxCheckPly);
     
     inline int drawScore(int adjust=0) {
-        return pos->boardFlags->WTM? drawContempt+adjust 
-                : -drawContempt-adjust;
+        int result = drawContempt.get(stack->phase)+adjust;
+        if (pos->boardFlags->WTM == false) {
+            result = -result;
+        }
+        return result & GRAIN;
     }
     
     inline bool passedPawn(TMove * move) {

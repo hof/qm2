@@ -8,6 +8,11 @@ const short FMARGIN[9] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200};
 const bool DO_NULL = true;
 const bool DO_FP = true;
 const bool DO_LMR = true;
+const bool DO_SINGULAR = true;
+
+bool TSearch::pondering() {
+    return ponder || (outputHandler && outputHandler->enginePonder == true);
+}
 
 void TSearch::poll() {
     nodesUntilPoll = NODESBETWEENPOLLS;
@@ -243,6 +248,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     /*
      * 3. Return obvious draws 
      */
+    stack->phase = (stack - 1)->phase;
     if (pos->boardFlags->fiftyCount > 1) {
         if (pos->boardFlags->fiftyCount >= 100) {
             return drawScore(); //draw by 50 reversible moves
@@ -350,29 +356,49 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         }
     }
 
-    if (depth > HIGH_DEPTH && extend > 1 && type != PVNODE) {
+    if (depth > HIGH_DEPTH && extend > 0 && type != PVNODE) {
         extend--; //if depth is far from horizon, extensions are less needed
     }
-    if (depth > LOW_DEPTH && extend > 1 && type != PVNODE) {
+    if (depth > LOW_DEPTH && extend > 0 && type != PVNODE) {
         extend--;
     }
-
-    /*
-     * First move extension
-     */
     bool gives_check = pos->givesCheck(first_move);
-    int extend_move = extend == 0
-            && (gives_check > 0)
-            && (gives_check > 1 || pos->SEE(first_move) >= 0);
-
+    int extend_move = extend == 0 && (gives_check) && (gives_check > 1 || pos->SEE(first_move) >= 0);
+    if (DO_SINGULAR
+            && depth >= HIGH_DEPTH
+            && extend == 0
+            && extend_move == 0
+            && eval >= alpha
+            && stack->ttMove1.piece > 0
+            && excludedMove.piece == EMPTY) {
+        int r = 2 * ONE_PLY + (depth >> 1);
+        int th = 32 - stack->phase;
+        stack->reduce = 0;
+        forward(first_move, gives_check);
+        int score1 = -pvs(-beta, -alpha, depth - r);
+        backward(first_move);
+        tempList.copy(&stack->moveList);
+        excludedMove.setMove(first_move);
+        HASH_EXCLUDED_MOVE(pos->boardFlags->hashCode);
+        int scoreX = pvs(alpha, beta, depth - r);
+        HASH_EXCLUDED_MOVE(pos->boardFlags->hashCode);
+        first_move->setMove(&excludedMove);
+        stack->bestMove.setMove(first_move);
+        excludedMove.clear();
+        stack->moveList.copy(&tempList);
+        if (scoreX < (score1 - th)) {
+            extend_move++;
+            if (scoreX < (score1 - 2 * th)) {
+                extend_move++;
+            }
+        }
+    }
     int new_depth = depth - ONE_PLY + extend;
-
     stack->bestMove.setMove(first_move);
     stack->reduce = 0;
     forward(first_move, gives_check);
     int bestScore = -pvs(-beta, -alpha, new_depth + extend_move);
     backward(first_move);
-
     if (bestScore > alpha) {
         if (bestScore >= beta) {
             hashTable->ttStore(this, first_move->asInt(), bestScore, depth, alpha, beta);
@@ -453,7 +479,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         }
 
         stack->reduce = reduce;
-        extend_move = extend == 0 && gives_check && (gives_check > 1 || pos->SEE(move) >= 0);
+        extend_move = extend == 0 && (gives_check) && (gives_check > 1 || pos->SEE(move) >= 0);
         forward(move, gives_check);
         int score = -pvs(-alpha - 1, -alpha, new_depth - reduce + extend_move);
         if (score > alpha && reduce > 0) {
@@ -498,7 +524,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         searchedMoves++;
     }
     hashTable->ttStore(this, stack->bestMove.asInt(), bestScore, depth, alpha, beta);
-
     return bestScore;
 }
 
@@ -520,6 +545,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
     }
 
     //return obvious draws
+    stack->phase = (stack - 1)->phase;
     if (pos->boardFlags->fiftyCount > 1) {
         if (pos->boardFlags->fiftyCount >= 100) {
             return drawScore();

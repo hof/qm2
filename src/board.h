@@ -101,14 +101,15 @@ using std::string;
 #define BQUEEN  11
 #define BKING   12
 
+#define WPIECES 13
+#define BPIECES 14
+#define ALLPIECES 0
+
+const uint8_t PAWN[2] = {BPAWN, WPAWN};
 const uint8_t QUEEN[2] = {BQUEEN, WQUEEN};
 const uint8_t ROOK[2] = {BROOK, WROOK};
 const uint8_t BISHOP[2] = {BBISHOP, WBISHOP};
 const uint8_t KNIGHT[2] = {BKNIGHT, WKNIGHT};
-
-#define WPIECES 13
-#define BPIECES 14
-#define ALLPIECES   0
 
 #define WHITEPIECE(pc) ((pc)<=WKING)
 

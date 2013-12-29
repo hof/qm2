@@ -20,8 +20,6 @@
 #include "outputhandler.h"
 #include "score.h"
 
-
-
 using namespace std;
 
 /**
@@ -62,13 +60,12 @@ void * TEngine::_think(void* engineObjPtr) {
     int learnParam = game.learnParam;
     double learnFactor = game.learnFactor;
     evaluate(searchData, -SCORE_INFINITE, SCORE_INFINITE);
-    int phase = searchData->stack->phase;
-    searchData->drawContempt = PHASED_SHORT(game.opponent.DrawContempt(),
-            game.opponent.DrawContempt() / 2, phase);
-    if (root->boardFlags->WTM == false) {
-        searchData->drawContempt = -searchData->drawContempt;
+    
+    if (root->boardFlags->WTM) {
+        searchData->drawContempt.set(-50,0);
+    } else {
+        searchData->drawContempt.set(50,0);
     }
-    searchData->drawContempt &= GRAIN;
 
     tm->setStartTime();
     int myTime = root->boardFlags->WTM ? whiteTime : blackTime;
@@ -165,6 +162,8 @@ void * TEngine::_think(void* engineObjPtr) {
         int depth = MIN(LOW_DEPTH + ONE_PLY, maxDepth);
         int resultScore = 0;
         while (depth <= maxDepth * ONE_PLY && !searchData->stopSearch) {
+            
+            int iteration_start_time = tm->elapsed();
 
             //std::cout << "pvs (" << alpha << ", " << beta << ", " << depth << ")" << std::endl;
 
@@ -193,11 +192,31 @@ void * TEngine::_think(void* engineObjPtr) {
                             searchData->nodes + searchData->pruned_nodes, tm->elapsed(), searchData->getPVString().c_str(), type);
                 }
             }
+            
+             /*
+             * Increase time for time based search when 
+             * - We opened the aspiration window on high depths
+             * - Evaluation shows large positional values
+             * - PV or pondermove is not set
+             */
+            int diffScore = ABS(score - prevScore);
+            if ((tm->elapsed() > 1500)
+                    && ((type != EXACT && diffScore > (VPAWN / 4))
+                    || ponderMove.piece == EMPTY)) {
+                tm->requestMoreTime();
+            }
+            
             /* 
              * Stop conditions
              */
+            int iteration_time = tm->elapsed() - iteration_start_time;
+ 
+           
+            
             searchData->poll();
-            if (searchData->stopSearch || (maxNodes > 0 && searchData->nodes > maxNodes)
+            if (searchData->stopSearch 
+                    || (maxNodes > 0 && searchData->nodes > maxNodes)
+                    //|| (!searchData->pondering() && !tm->available(iteration_time)) //no time for a next iteration
                     || (MATE_IN_PLY(resultScore) && type == EXACT && depth / ONE_PLY > MATE_IN_PLY(resultScore))
                     || (MATED_IN_PLY(resultScore)) && type == EXACT && depth / ONE_PLY > MATED_IN_PLY(resultScore)) {
                 break;
@@ -213,7 +232,7 @@ void * TEngine::_think(void* engineObjPtr) {
              */
             lowest = MIN(score, lowest);
             highest = MAX(score, highest);
-            int diffScore = ABS(score - prevScore);
+            
             if (score <= alpha) {
                 alpha_window++;
                 alpha = MIN(lowest, score - windows[alpha_window]);
@@ -243,17 +262,7 @@ void * TEngine::_think(void* engineObjPtr) {
                  beta = ((beta - 1) & ~1) + 1; //make uneven
             }
  
-            /*
-             * Increase time for time based search when 
-             * - We opened the aspiration window on high depths
-             * - Evaluation shows large positional values
-             * - PV or pondermove is not set
-             */
-            if ((tm->elapsed() > 1500)
-                    && ((type != EXACT && diffScore > (VPAWN / 4))
-                    || ponderMove.piece == EMPTY)) {
-                tm->requestMoreTime();
-            }
+            
             prevScore = score;
 
             searchData->root.sortMoves();
@@ -353,6 +362,7 @@ void TEngine::analyse() {
     print_row("Rooks", s->stack->rook_score[WHITE], s->stack->rook_score[BLACK], phase);
     print_row("Queens", s->stack->queen_score[WHITE], s->stack->queen_score[BLACK], phase);
     print_row("Passers", s->stack->passer_score[WHITE], s->stack->passer_score[BLACK], phase);
+    print_row("King Attack", s->stack->king_score[WHITE], s->stack->king_score[BLACK], phase);
     std::cout << "---------------+----------+----------+----------+----------+-------\n";
     print_row("Total", s->pos->boardFlags->WTM? s->stack->eval_result : -s->stack->eval_result);
     delete s;

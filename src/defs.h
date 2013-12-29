@@ -186,6 +186,11 @@ const U64 OUTER = U64(RANK_7 | RANK_2 | FILE_B | FILE_G | EDGE);
 const U64 LARGE_CENTER = U64(FULL_BOARD^OUTER);
 const U64 CENTER = U64(LARGE_CENTER & ~(RANK_6 | RANK_3 | FILE_C | FILE_F));
 
+const U64 ATTACKZONE[2] = {
+    RANK_1 | (RANK_2 & ~EDGE) | (RANK_3 & LARGE_CENTER) | (RANK_4 & CENTER), 
+    RANK_8 | (RANK_7 & ~EDGE) | (RANK_6 & LARGE_CENTER) | (RANK_5 & CENTER) 
+};
+
 
 inline unsigned popCount(U64 x) {
     x = (x & C64(0x5555555555555555)) + ((x >> 1) & C64(0x5555555555555555));
@@ -275,12 +280,23 @@ inline U64 forwardFill(int sq, bool white) {
 #define MAX_PLY              128
 #define MAX(x,y)            ((x)>=(y)?(x):(y))
 #define MIN(x,y)            ((x)<(y)?(x):(y))
+
 #define ABS(x)              ((x)>=0?(x):(-(x)))    
 #define FLIP_SQUARE(sq)     (((sq)^56))
 
 #define ISQ(sq,w)           (((sq)^(bool(w)*56)))
 
 #define PRINT_SQUARE(sq)    FILE_SYMBOL(sq) << RANK_SYMBOL(sq)
+
+inline int RANGE(const int min, const int max, const int x) {
+    if (x <= min) {
+        return min;
+    } 
+    if (x >= max) {
+        return max;
+    } 
+    return x;
+}
 
 /**
  * Flip a bitboard vertically about the centre ranks.

@@ -3,7 +3,8 @@
 
 void TTimeManager::set(unsigned int myTime, int oppTime, int myInc, int oppInc, int movesLeft) {
     static const int OVERHEAD_TIME = 500; //reserve 500ms for overhead
-    int MOVES_UNTIL_DECIDED = 15; //assume we'll have a winning position within this amount of moves from now
+    static const int LOW_TIME = 20000; //20 seconds
+    int MOVES_UNTIL_DECIDED = 15; //assume we'll have a winning position within this amount of moves
     if (myInc > 0) {
         MOVES_UNTIL_DECIDED = 10;
     }
@@ -37,8 +38,11 @@ void TTimeManager::set(unsigned int myTime, int oppTime, int myInc, int oppInc, 
     }
     
     /*
-     * 
+     * Avoid loosing on time 
      */
+    if (myTime < LOW_TIME) {
+        myTime >>= 1;
+    }
     
     /*
      * Make sure the time never exceeds the limit

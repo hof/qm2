@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
             std::cout << std::setw(2) << s->LMR[0][PVNODE][move][depth] << " | ";
             std::cout << std::setw(5) << s->LMR[0][0][move][depth] << " | ";
             std::cout << std::setw(3) << s->LMR[1][PVNODE][move][depth] << " | ";
-            std::cout << std::setw(4) << s->LMR[1][0][move][depth]  << std::endl;
+            std::cout << std::setw(4) << s->LMR[1][0][move][depth] << std::endl;
             if (move > 9) {
                 move += 9;
             }
@@ -39,6 +39,34 @@ int main(int argc, char** argv) {
             depth += 9;
         }
     }
+
+    /* kingzone generator 
+    for (int sq = 0; sq < 64; sq++) {
+        if ((sq % 4) == 0) {
+            std::cout << std::endl;
+        }
+        U64 zone = KingMoves[sq] | BIT(sq);
+        U64 result = zone;
+        int file = FILE(sq);
+        int rank = RANK(sq);
+        if (file > 0) {
+            result |= LEFT1(zone);
+        }
+        if (file < 7) {
+            result |= RIGHT1(zone);
+        }
+        if (rank > 0) {
+            result |= DOWN1(zone);
+        }
+        if (rank < 7) {
+            result |= UP1(zone);
+        }
+        std::cout << "C64(0x" << std::setfill('0') << std::setw(16) << std::hex << result << "), ";  
+    }
+     */ 
+
+
+
     return (EXIT_SUCCESS);
 }
 

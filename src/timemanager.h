@@ -50,6 +50,10 @@ public:
         return clock() >= endTime;
     }
     
+    inline bool available(int ms) {
+        return (clock() + ms) <= endTime;
+    }
+    
     /**
      * Return elapsed time in ms
      * @return elapsed time in ms

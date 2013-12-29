@@ -21,10 +21,9 @@ struct TMaterialTableEntry {
 
 struct TPawnTableEntry {
     U64 key;
-    U64 passers;
-    TScore pawnScore;
-    TScore shelterScoreW;
-    TScore shelterScoreB;
+    U64 passers; //using rank 1 and 8 for flags
+    TScore pawn_score;
+    int8_t king_attack[2];
 };
 
 enum TranspositionTableEntryType {
@@ -98,7 +97,7 @@ public:
     static void mtStore(TSearch * searchData, int value, int phase);
     static void repStore(TSearch * searchData, U64 hashCode, int fiftyCount);
     static void ptLookup(TSearch * searchData);
-    static void ptStore(TSearch * searchData, const TScore * ps, const TScore * sw, const TScore * wb, const U64 &passers);
+    static void ptStore(TSearch * searchData);
     void clear();
 
 
