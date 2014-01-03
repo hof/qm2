@@ -9,6 +9,7 @@ const bool DO_NULL = true;
 const bool DO_FP = true;
 const bool DO_LMR = true;
 const bool DO_SINGULAR = true;
+;
 
 bool TSearch::pondering() {
     return ponder || (outputHandler && outputHandler->enginePonder == true);

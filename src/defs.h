@@ -55,8 +55,8 @@ inline unsigned bitScanReverse(U64 x) {
     if (x >= BIT32) {
         x >>= 32;
         asm ("bsr %0, %0" : "=r" (x) : "0" (x));
-        return x+32;
-    } 
+        return x + 32;
+    }
     asm ("bsr %0, %0" : "=r" (x) : "0" (x));
     return x;
 }
@@ -78,7 +78,7 @@ const U64 FILE_G = FILE_A << 6;
 const U64 FILE_H = FILE_A << 7;
 
 const U64 NOT_FILE_A = ~(FILE_A);
-const U64 NOT_FILE_H = ~(FILE_H); 
+const U64 NOT_FILE_H = ~(FILE_H);
 
 const U64 RANK_1 = 0xFF;
 const U64 RANK_2 = RANK_1 << (1 * 8);
@@ -90,8 +90,8 @@ const U64 RANK_7 = RANK_1 << (6 * 8);
 const U64 RANK_8 = RANK_1 << (7 * 8);
 
 const U64 RANK[2][9] = {
-    { 0, RANK_8, RANK_7, RANK_6, RANK_5, RANK_4, RANK_3, RANK_2, RANK_1 }, //blacks point of view
-    { 0, RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8 } //whites point of view
+    { 0, RANK_8, RANK_7, RANK_6, RANK_5, RANK_4, RANK_3, RANK_2, RANK_1}, //blacks point of view
+    { 0, RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8} //whites point of view
 };
 
 const U64 FILES[8] = {
@@ -187,17 +187,23 @@ const U64 LARGE_CENTER = U64(FULL_BOARD^OUTER);
 const U64 CENTER = U64(LARGE_CENTER & ~(RANK_6 | RANK_3 | FILE_C | FILE_F));
 
 const U64 ATTACKZONE[2] = {
-    RANK_1 | (RANK_2 & ~EDGE) | (RANK_3 & LARGE_CENTER) | (RANK_4 & CENTER), 
-    RANK_8 | (RANK_7 & ~EDGE) | (RANK_6 & LARGE_CENTER) | (RANK_5 & CENTER) 
+    RANK_1 | (RANK_2 & ~EDGE) | (RANK_3 & LARGE_CENTER) | (RANK_4 & CENTER),
+    RANK_8 | (RANK_7 & ~EDGE) | (RANK_6 & LARGE_CENTER) | (RANK_5 & CENTER)
 };
 
+inline int popCount(U64 b) {
+    __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
+    return b;
+}
 
+/*
 inline unsigned popCount(U64 x) {
     x = (x & C64(0x5555555555555555)) + ((x >> 1) & C64(0x5555555555555555));
     x = (x & C64(0x3333333333333333)) + ((x >> 2) & C64(0x3333333333333333));
     x = (x & C64(0x0F0F0F0F0F0F0F0F)) + ((x >> 4) & C64(0x0F0F0F0F0F0F0F0F));
     return (x * C64(0x0101010101010101)) >> 56;
 }
+ */
 
 inline unsigned popCount0(U64 x) {
     return (x == 0) ? 0 : popCount(x);
@@ -218,7 +224,7 @@ inline unsigned popLast(U64 & x) {
 }
 
 inline U64 northFill(U64 x) {
-    x |= (x <<  8);
+    x |= (x << 8);
     x |= (x << 16);
     x |= (x << 32);
     return x;
@@ -263,12 +269,13 @@ inline bool gt_1(U64 x) {
 #define DOWNLEFT1(x) (((x) >> 9) & NOT_FILE_H)
 
 const int8_t PAWNDIRECTION[2] = {-8, 8};
+
 inline int forwardSq(int sq, bool white) {
     return sq + PAWNDIRECTION[white];
 }
 
 inline U64 forwardFill(int sq, bool white) {
-    return white? FRONTFILL(BIT(sq)) : BACKFILL(BIT(sq));
+    return white ? FRONTFILL(BIT(sq)) : BACKFILL(BIT(sq));
 }
 
 #define FILE(sq)            ((sq)&7)
@@ -291,11 +298,19 @@ inline U64 forwardFill(int sq, bool white) {
 inline int RANGE(const int min, const int max, const int x) {
     if (x <= min) {
         return min;
-    } 
+    }
     if (x >= max) {
         return max;
-    } 
+    }
     return x;
+}
+
+inline int BB_WIDTH(const U64 occ) {
+    if (occ == 0 || max_1(occ)) {
+        return 0;
+    }
+    U64 x = southFill(occ) & RANK_1;
+    return BSR(x) - BSF(x);
 }
 
 /**
@@ -322,8 +337,6 @@ inline bool WHITE_SQUARE(unsigned char sq) {
 inline bool BLACK_SQUARE(unsigned char sq) {
     return !WHITE_SQUARE(sq);
 }
-
-
 
 /*
  * For debugging

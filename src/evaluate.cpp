@@ -196,10 +196,15 @@ const TScore KNIGHT_MOBILITY[9] = {
     S(-8, -8), S(-6, -6), S(-4, -4), S(-2, -2), S(0, 0)
 };
 
-const TScore KNIGHT_RANK[8] = {
-    S(-20, -20), S(-10, -10), S(0, 0), S(5, 5), S(10, 10), S(15, 15), S(0, 0), S(-15, -15)
+const int8_t KNIGHT_RANK[8] = {-2, -1, 0, 0, 1, 2, 0, -1};
+
+const TScore KNIGHT_PAWN_WIDTH[8] = {//indexed by opponent pawn width
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, -5), S(0, -10), S(0, -15), S(0, -20)
 };
 
+const TScore KNIGHT_PAWN_COUNT[9] = {//indexed by opponent pawn count
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(4, 4), S(8, 8), S(12, 12)
+};
 /*******************************************************************************
  * Bishop Values 
  *******************************************************************************/
@@ -270,6 +275,10 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     score->sub(evaluatePassers(sd, BLACK));
     score->add(evaluateKingAttack(sd, WHITE));
     score->sub(evaluateKingAttack(sd, BLACK));
+    //score->add(evaluateSpace(sd, WHITE));
+    //score->add(evaluateSpace(sd, BLACK));
+
+    
 
     result += score->get(sd->stack->phase);
     result &= GRAIN;
@@ -484,24 +493,24 @@ void init_pct() {
     TScore scores[64];
     const short mobility_scale[2][64] = {
         {
-            2, 3, 4, 5, 5, 4, 3, 2,
-            3, 4, 5, 6, 6, 5, 4, 3,
-            4, 5, 6, 7, 7, 6, 5, 4,
-            4, 5, 6, 7, 7, 6, 5, 4,
-            4, 5, 6, 7, 7, 6, 5, 4,
-            3, 4, 5, 6, 6, 5, 4, 3,
-            2, 3, 4, 5, 5, 4, 3, 2,
-            1, 2, 3, 4, 4, 3, 2, 1
+            2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 3, 3, 2, 2, 2,
+            1, 1, 1, 2, 2, 1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1
         },
         {
-            1, 2, 3, 4, 4, 3, 2, 1,
-            2, 3, 4, 5, 5, 4, 3, 2,
-            3, 4, 5, 6, 6, 5, 4, 3,
-            4, 5, 6, 7, 7, 6, 5, 4,
-            4, 5, 6, 7, 7, 6, 5, 4,
-            3, 4, 5, 6, 6, 5, 4, 3,
-            2, 3, 4, 5, 5, 4, 3, 2,
-            1, 2, 3, 4, 4, 3, 2, 1
+            2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2
         }
     };
 
@@ -509,6 +518,7 @@ void init_pct() {
     for (int sq = a1; sq < 64; sq++) {
         U64 bbsq = BIT(sq);
         scores[sq].clear();
+        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
         if ((bbsq & RANK_1) || (bbsq & RANK_8)) {
             continue;
         }
@@ -517,19 +527,21 @@ void init_pct() {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].mul(4); //pawns are the most powerful to control squares
+        scores[sq].mul(8); //pawns are the most powerful to control squares
+        scores[sq].eg = RANK(sq) * RANK(sq);
     }
     init_pct_store(scores, WPAWN);
 
     //Knight
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
+        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
         U64 caps = KnightMoves[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].mul(1.5); //mobility is extra important because knights move slow
+        scores[sq].mul(3); //mobility is extra important because knights move slow
         scores[sq].add(KNIGHT_RANK[RANK(sq)]);
     }
     init_pct_store(scores, WKNIGHT);
@@ -537,50 +549,60 @@ void init_pct() {
     //Bishop
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
+        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
         U64 caps = BishopMoves[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
+        scores[sq].mul(3);
     }
     init_pct_store(scores, WBISHOP);
 
     //Rook
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
-        U64 bbsq = BIT(sq);
+        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
         U64 caps = RookMoves[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].half(); //square control by rook is less powerful than by bishop/knight/pawn
+        scores[sq].mul(2); //square control by rook is less powerful than by bishop/knight/pawn
     }
     init_pct_store(scores, WROOK);
 
     //Queen
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
+        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
         U64 caps = QueenMoves[sq];
         U64 bbsq = BIT(sq);
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].mul(0.25);
+        scores[sq].mul(1);
     }
     init_pct_store(scores, WQUEEN);
 
     //King
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
+        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
         U64 caps = KingMoves[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
+        if (BIT(sq) & LARGE_CENTER) {
+            scores[sq].eg += 2;
+        }
+        if (BIT(sq) & CENTER) {
+            scores[sq].eg += 2;
+        }
         scores[sq].mg = 0;
-        scores[sq].eg *= 1.5; // kings move slow
+        scores[sq].eg *= 2.25;
     }
     init_pct_store(scores, WKING);
 }
@@ -686,6 +708,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
 
         pawn_score->add(PST[WPAWN][isq]);
+        
 
 #ifdef PRINT_PAWN_EVAL        
         std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][isq]);
@@ -781,6 +804,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
 
         pawn_score->sub(PST[WPAWN][sq]);
+        
 
 #ifdef PRINT_PAWN_EVAL
         std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][sq]);
@@ -990,7 +1014,7 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = KNIGHT[us];
     sd->stack->king_attack[pc] = 0;
-
+    
     if (*pos->knights[us] == 0) {
         result->clear();
         return result;
@@ -1016,15 +1040,18 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
     result->clear();
     TPiecePlacement * pp = &pos->pieces[pc];
     bool them = !us;
+    int pawn_width = BB_WIDTH(*pos->pawns[them]);
+    int pawn_count = pos->pieces[PAWN[them]].count;
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
         result->add(PST[WKNIGHT][ISQ(sq, us)]);
         U64 moves = KnightMoves[sq];
         int mob_count = popCount0(moves & sd->stack->mob[us]);
         result->add(KNIGHT_MOBILITY[mob_count]);
+        result->add(KNIGHT_PAWN_WIDTH[pawn_width]);
+        result->add(KNIGHT_PAWN_COUNT[pawn_count]);
         sd->stack->king_attack[pc] += popCount0(moves & sd->stack->king_zone[them]);
-
-    }
+        }
     return result;
 }
 
@@ -1033,7 +1060,7 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = BISHOP[us];
     sd->stack->king_attack[pc] = 0;
-
+    
     if (*pos->bishops[us] == 0) {
         result->clear();
         return result;
@@ -1049,6 +1076,7 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->bishop_score[us]);
             sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
+            
             return result;
         }
     }
@@ -1084,7 +1112,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = ROOK[us];
     sd->stack->king_attack[pc] = 0;
-
+    
     if (*pos->rooks[us] == 0) {
         result->clear();
         return result;
@@ -1100,6 +1128,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->rook_score[us]);
             sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
+            
             return result;
         }
     }
@@ -1159,7 +1188,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = QUEEN[us];
     sd->stack->king_attack[pc] = 0;
-
+    
     if (*pos->queens[us] == 0) {
         result->clear();
         return result;
@@ -1225,12 +1254,10 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
         if (BIT(sq) & exclude) {
             continue;
         }
+        result->add(bonus);
         int to = forwardSq(sq, us);
         do {
             if (BIT(to) & sd->pos->allPieces) {
-                if ((BIT(to) & *sd->pos->knights[them]) != 0) {
-                    result->sub(bonus.mg >> 1, bonus.eg >> 1); //knight is perfect blocker
-                }
                 break; //blocked
             }
             result->add(bonus);
@@ -1329,7 +1356,7 @@ const int16_t KING_ATTACK[64] = {//piece attacks
 
 
 const double KING_ATTACK_MUL[8] = {
-    0, 0.25, 0.50, 1.00, 1.25, 1.50, 1.75, 2.00
+    0, 0.16, 0.42, 1.00, 1.25, 1.25, 1.25, 1.25
 };
 
 inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
@@ -1374,7 +1401,6 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     int score = KING_ATTACK[ix] * KING_ATTACK_MUL[pc_ix];
 
     result->add(score, 0);
-    result->mul(sd->learnFactor, 0);
 
 
 #ifdef PRINT_KING_SAFETY
@@ -1382,3 +1408,4 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
 #endif
     return result;
 }
+

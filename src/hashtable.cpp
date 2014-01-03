@@ -211,7 +211,7 @@ void THashTable::ptLookup(TSearch * sd) {
         sd->stack->pawn_score.set(entry->pawn_score);
         sd->stack->king_attack[WPAWN] = entry->king_attack[WHITE];
         sd->stack->king_attack[BPAWN] = entry->king_attack[BLACK];
-        sd->stack->passers = entry->passers; 
+        sd->stack->passers = entry->passers;
         sd->pawnTableHits++;
     } else {
         sd->stack->pawn_score.set(SCORE_INVALID);

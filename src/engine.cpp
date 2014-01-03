@@ -314,9 +314,9 @@ void print_row(std::string cap, short score) {
     std::cout << std::setw(14);
     std::cout << cap;
     std::cout << " | ";
-    std::cout << std::setw(44);
+    std::cout << std::setw(32);
     std::cout << " | ";
-    std::cout << std::setw(6) << score;
+    std::cout << std::setw(20) << score;
     std::cout << std::endl;
 }
 
@@ -329,14 +329,18 @@ void print_row(std::string cap, TScore & w, TScore & b, int phase) {
     std::cout << cap;
     std::cout << " | ";
     std::cout << std::setw(8) << w.mg;
-    std::cout << "   ";
-    std::cout << std::setw(8) << w.eg;
-    std::cout << "   ";
-    std::cout << std::setw(8) << b.mg;
-    std::cout << "   ";
-    std::cout << std::setw(8) << b.eg;
+    std::cout << " ";
+    std::cout << std::setw(4) << w.eg;
+    std::cout << "  ";
+    std::cout << std::setw(9) << b.mg;
+    std::cout << " ";
+    std::cout << std::setw(4) << b.eg;
     std::cout << " | ";
-    std::cout << std::setw(6) << total.get(phase);
+    std::cout << std::setw(9) << total.mg;
+    std::cout << " ";
+    std::cout << std::setw(4) << total.eg;
+    std::cout << " ";
+    std::cout << std::setw(5) << total.get(phase);
     std::cout << std::endl;
 }
 
@@ -351,10 +355,9 @@ void TEngine::analyse() {
     b.clear();
     
     std::cout << s->pos->asFen().c_str() << std::endl;
-    std::cout << "Game phase: " << phase << "\n\n";
-    
-    std::cout << "Eval Component | White MG | White EG | Black MG | Black EG |  Total\n";
-    std::cout << "---------------+----------+----------+----------+----------+-------\n";
+    std::cout << "Eval Component | White MG   EG | Black MG   EG |  Total MG   EG   Tot  \n";
+    std::cout << "---------------+---------------+---------------+---------------------\n";
+    print_row("Game phase", phase);
     print_row("Material", s->stack->material_score);
     print_row("Pawns & Kings", s->stack->pawn_score.get(phase));
     print_row("Knights", s->stack->knight_score[WHITE], s->stack->knight_score[BLACK], phase);
@@ -363,8 +366,9 @@ void TEngine::analyse() {
     print_row("Queens", s->stack->queen_score[WHITE], s->stack->queen_score[BLACK], phase);
     print_row("Passers", s->stack->passer_score[WHITE], s->stack->passer_score[BLACK], phase);
     print_row("King Attack", s->stack->king_score[WHITE], s->stack->king_score[BLACK], phase);
-    std::cout << "---------------+----------+----------+----------+----------+-------\n";
+    std::cout << "---------------+---------------+---------------+---------------------\n";
     print_row("Total", s->pos->boardFlags->WTM? s->stack->eval_result : -s->stack->eval_result);
+    
     delete s;
 }
 

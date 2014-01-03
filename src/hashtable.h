@@ -24,6 +24,7 @@ struct TPawnTableEntry {
     U64 passers; //using rank 1 and 8 for flags
     TScore pawn_score;
     int8_t king_attack[2];
+    int8_t space[2];
 };
 
 enum TranspositionTableEntryType {
