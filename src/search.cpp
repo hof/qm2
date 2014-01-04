@@ -8,8 +8,11 @@ const short FMARGIN[9] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200};
 const bool DO_NULL = true;
 const bool DO_FP = true;
 const bool DO_LMR = true;
-const bool DO_SINGULAR = true;
-;
+const bool DO_SINGULAR = false;
+
+const int16_t SINGULAR_THRESHOLD[17] = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+};
 
 bool TSearch::pondering() {
     return ponder || (outputHandler && outputHandler->enginePonder == true);
@@ -365,15 +368,17 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     }
     bool gives_check = pos->givesCheck(first_move);
     int extend_move = extend == 0 && (gives_check) && (gives_check > 1 || pos->SEE(first_move) >= 0);
+    bool singular = false;
     if (DO_SINGULAR
             && depth >= HIGH_DEPTH
             && extend == 0
             && extend_move == 0
             && eval >= alpha
+            && stack->phase < 8
             && stack->ttMove1.piece > 0
             && excludedMove.piece == EMPTY) {
         int r = 2 * ONE_PLY + (depth >> 1);
-        int th = 32 - stack->phase;
+        int th = SINGULAR_THRESHOLD[stack->phase];
         stack->reduce = 0;
         forward(first_move, gives_check);
         int score1 = -pvs(-beta, -alpha, depth - r);
@@ -388,8 +393,9 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         excludedMove.clear();
         stack->moveList.copy(&tempList);
         if (scoreX < (score1 - th)) {
+            singular = true;
             extend_move++;
-            if (scoreX < (score1 - 2 * th)) {
+            if (scoreX < (score1 - 8)) {
                 extend_move++;
             }
         }
@@ -469,6 +475,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 && !inCheck
                 && !gives_check
                 && !passedPawn(move)
+                && !singular
                 && new_depth > ONE_PLY) {
             assert(new_depth < 256);
             bool active = gives_check || passedPawn(move) || pos->active(move);
