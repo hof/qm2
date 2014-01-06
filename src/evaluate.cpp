@@ -23,7 +23,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool white);
  *******************************************************************************/
 
 enum MaterialValues {
-    MATERIAL_AHEAD_TRESHOLD = 240, //all values are in centipawns
+    MATERIAL_AHEAD_THRESHOLD = 240, //all values are in centipawns
     VNOPAWNS = -40,
     VBISHOPPAIR = 50,
     DRAWISH_QR_ENDGAME = -20,
@@ -401,7 +401,7 @@ inline short evaluateMaterial(TSearch * sd) {
     }
 
     int piece_power = result.get(phase);
-
+    
     if (wpawns != bpawns) {
         result.mg += (wpawns - bpawns) * SVPAWN.mg;
         result.eg += (wpawns - bpawns) * SVPAWN.eg;
@@ -418,10 +418,10 @@ inline short evaluateMaterial(TSearch * sd) {
     int value = result.get(phase);
 
     //If ahead in material, trade pieces (simplify) and keep pawns
-    if (piece_power > MATERIAL_AHEAD_TRESHOLD) {
+    if (piece_power > MATERIAL_AHEAD_THRESHOLD) {
         value += TRADEDOWN_PIECES[bpieces];
         value += TRADEDOWN_PAWNS[wpawns];
-    } else if (piece_power < -MATERIAL_AHEAD_TRESHOLD) {
+    } else if (piece_power < -MATERIAL_AHEAD_THRESHOLD) {
         value -= TRADEDOWN_PIECES[wpieces];
         value -= TRADEDOWN_PAWNS[bpawns];
     }
