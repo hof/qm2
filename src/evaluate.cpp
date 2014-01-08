@@ -162,7 +162,7 @@ const int8_t SHELTER_PAWN[64] = {//attack units for pawns in front of the king
     0, 0, 0, 0, 0, 0, 0, 0,
     -1, -1, 0, 0, 0, 0, -1, -1,
     -2, -2, -1, -1, -1, -1, -2, -2,
-    -3, -3, -2, -1, -1, -2, -3, -3,
+    -3, -4, -2, -1, -1, -2, -4, -3,
     0, 0, 0, 0, 0, 0, 0, 0
 };
 
@@ -186,6 +186,8 @@ const int8_t SHELTER_OPEN_EDGE_FILE = 3; //attack units for open file on the edg
 const int8_t SHELTER_CASTLING_KINGSIDE = -3; //attack units for having the option to safely  castle kingside 
 
 const int8_t SHELTER_CASTLING_QUEENSIDE = -2; //attack units for having the right to safely castle queenside
+
+const TScore BLOCKED_CENTER_PAWN = S(-10, -10);
 
 /*******************************************************************************
  * Knight Values 
@@ -216,6 +218,11 @@ const TScore BISHOP_MOBILITY[14] = {
 };
 
 const TScore TRAPPED_BISHOP = S(-100, -120);
+
+U64 BISHOP_PATTERNS[2] = {//black, white
+    BIT(d6) | BIT(d7) | BIT(e6) | BIT(d7) | BIT(a2) | BIT(h2),
+    BIT(d3) | BIT(d2) | BIT(e3) | BIT(d2) | BIT(a7) | BIT(h7),
+};
 
 /*******************************************************************************
  * Rook Values 
@@ -278,7 +285,7 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     //score->add(evaluateSpace(sd, WHITE));
     //score->add(evaluateSpace(sd, BLACK));
 
-    
+
 
     result += score->get(sd->stack->phase);
     result &= GRAIN;
@@ -401,7 +408,7 @@ inline short evaluateMaterial(TSearch * sd) {
     }
 
     int piece_power = result.get(phase);
-    
+
     if (wpawns != bpawns) {
         result.mg += (wpawns - bpawns) * SVPAWN.mg;
         result.eg += (wpawns - bpawns) * SVPAWN.eg;
@@ -428,11 +435,15 @@ inline short evaluateMaterial(TSearch * sd) {
 
 
     /*
-     * Endgame adjustments
+     * Special Cases / Endgame adjustments
      */
-
-    //Rooks and queen endgames are drawish. Reduce any small material advantage.
-    if (value
+    if (wpawns == 0 && value > 0 && piece_power < 450) {
+        //no pawns and less than a rook extra piece_power is mostly drawn
+        value >>= 2;
+    } else if (bpawns == 0 && value < 0 && piece_power > -450) {
+        //same case for black
+        value >>= 2;
+    } else if (value
             && balance
             && wminors < 2
             && wpieces <= 3
@@ -440,18 +451,16 @@ inline short evaluateMaterial(TSearch * sd) {
             && (wrooks || wqueens)
             && ABS(value) > ABS(DRAWISH_QR_ENDGAME)
             && ABS(value) < 2 * VPAWN) {
+        //Rooks and queen endgames are drawish. Reduce any small material advantage.
         value += cond(value > 0, value < 0, DRAWISH_QR_ENDGAME);
         if (wminors == 0 && wpieces <= 1) { //more drawish
             value += cond(value > 30, value < -30, DRAWISH_QR_ENDGAME >> 1);
         }
-    }
-
-    // Opposite  bishop ending is drawish
-    if (value && wpieces == 1 && bpieces == 1 && wpawns != bpawns && wbishops && bbishops) {
-        if (bool(pos->whiteBishops & BLACK_SQUARES) != bool(pos->blackBishops & BLACK_SQUARES)) {
-            //todo: set drawflag 
-            value += cond(wpawns>bpawns, bpawns>wpawns, MAX(-(ABS(value) >> 1), DRAWISH_OPP_BISHOPS));
-        }
+    } else if (value && wpieces == 1 && bpieces == 1 && wpawns != bpawns && wbishops && bbishops
+            && (bool(pos->whiteBishops & BLACK_SQUARES) != bool(pos->blackBishops & BLACK_SQUARES))) {
+        // Opposite  bishop ending is drawish
+        //todo: set drawflag 
+        value += cond(wpawns>bpawns, bpawns>wpawns, MAX(-(ABS(value) >> 1), DRAWISH_OPP_BISHOPS));
     }
 
     /*
@@ -555,6 +564,9 @@ void init_pct() {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
+        if (sq == g2 || sq == b2) {
+            scores[sq].mg += 2;
+        }
         scores[sq].mul(3);
     }
     init_pct_store(scores, WBISHOP);
@@ -596,10 +608,10 @@ void init_pct() {
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
         if (BIT(sq) & LARGE_CENTER) {
-            scores[sq].eg += 2;
+            scores[sq].eg += 4;
         }
         if (BIT(sq) & CENTER) {
-            scores[sq].eg += 2;
+            scores[sq].eg += 5;
         }
         scores[sq].mg = 0;
         scores[sq].eg *= 2.25;
@@ -708,7 +720,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
 
         pawn_score->add(PST[WPAWN][isq]);
-        
+
 
 #ifdef PRINT_PAWN_EVAL        
         std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][isq]);
@@ -804,7 +816,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
 
         pawn_score->sub(PST[WPAWN][sq]);
-        
+
 
 #ifdef PRINT_PAWN_EVAL
         std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][sq]);
@@ -1014,7 +1026,7 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = KNIGHT[us];
     sd->stack->king_attack[pc] = 0;
-    
+
     if (*pos->knights[us] == 0) {
         result->clear();
         return result;
@@ -1051,7 +1063,7 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
         result->add(KNIGHT_PAWN_WIDTH[pawn_width]);
         result->add(KNIGHT_PAWN_COUNT[pawn_count]);
         sd->stack->king_attack[pc] += popCount0(moves & sd->stack->king_zone[them]);
-        }
+    }
     return result;
 }
 
@@ -1060,7 +1072,7 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = BISHOP[us];
     sd->stack->king_attack[pc] = 0;
-    
+
     if (*pos->bishops[us] == 0) {
         result->clear();
         return result;
@@ -1076,7 +1088,7 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->bishop_score[us]);
             sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
-            
+
             return result;
         }
     }
@@ -1095,13 +1107,28 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
         int count = popCount0(moves & sd->stack->mob[us]);
         result->add(BISHOP_MOBILITY[count]);
         sd->stack->king_attack[pc] += popCount0(moves & sd->stack->king_zone[them]);
-        if (us == WHITE && count < 2 && (sq == h7 && pos->Matrix[g6] == BPAWN && pos->Matrix[f7] == BPAWN)
-                || (sq == a7 && pos->Matrix[b6] == BPAWN && pos->Matrix[c7] == BPAWN)) {
-            result->add(TRAPPED_BISHOP);
-        }
-        if (us == BLACK && count < 2 && (sq == h2 && pos->Matrix[g3] == WPAWN && pos->Matrix[f3] == WPAWN)
-                || (sq == a2 && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN)) {
-            result->add(TRAPPED_BISHOP);
+
+        //patterns
+        if (BIT(sq) & BISHOP_PATTERNS[us]) {
+            if (us == WHITE) {
+                if (((sq == d3 || sq == d4) && (pos->Matrix[d2] == WPAWN || pos->Matrix[d3] == WPAWN))) {
+                    result->add(BLOCKED_CENTER_PAWN);
+                } else if (((sq == e3 || sq == e4) && (pos->Matrix[e2] == WPAWN || pos->Matrix[e3] == WPAWN))) {
+                    result->add(BLOCKED_CENTER_PAWN);
+                } else if ((sq == h7 && pos->Matrix[g6] == BPAWN && pos->Matrix[f7] == BPAWN)
+                        || (sq == a7 && pos->Matrix[b6] == BPAWN && pos->Matrix[c7] == BPAWN)) {
+                    result->add(TRAPPED_BISHOP);
+                }
+            } else if (us == BLACK) {
+                if (((sq == d6 || sq == d5) && (pos->Matrix[d7] == BPAWN || pos->Matrix[d6] == BPAWN))) {
+                    result->add(BLOCKED_CENTER_PAWN);
+                } else if (((sq == e6 || sq == e5) && (pos->Matrix[e7] == BPAWN || pos->Matrix[e6] == BPAWN))) {
+                    result->add(BLOCKED_CENTER_PAWN);
+                } else if ((sq == h2 && pos->Matrix[g3] == WPAWN && pos->Matrix[f3] == WPAWN)
+                        || (sq == a2 && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN)) {
+                    result->add(TRAPPED_BISHOP);
+                }
+            }
         }
     }
     return result;
@@ -1112,7 +1139,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = ROOK[us];
     sd->stack->king_attack[pc] = 0;
-    
+
     if (*pos->rooks[us] == 0) {
         result->clear();
         return result;
@@ -1128,7 +1155,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->rook_score[us]);
             sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
-            
+
             return result;
         }
     }
@@ -1159,7 +1186,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         if ((bitSq & RANK[us][1]) && (BIT(*pos->kingPos[us]) & (RANK[us][1] | RANK[us][2]))) {
             result->add(ROOK_1ST);
         }
-        if (bitSq & RANK[us][7] && (BIT(*pos->kingPos[them]) & RANK[us][8])) {
+        if (bitSq & RANK[us][7] && (BIT(*pos->kingPos[them]) & (RANK[us][8] | (RANK[us][7])))) {
             result->add(ROOK_7TH);
         }
 
@@ -1188,7 +1215,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = QUEEN[us];
     sd->stack->king_attack[pc] = 0;
-    
+
     if (*pos->queens[us] == 0) {
         result->clear();
         return result;

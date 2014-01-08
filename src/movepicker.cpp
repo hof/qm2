@@ -54,7 +54,7 @@ TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, i
 TMove * TMovePicker::pickFirstQuiescenceMove(TSearch * searchData, int qCheckDepth, int alpha, int beta) {
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
-    moveList->stage = Q_CAPTURES;
+    moveList->stage = Q_CAPTURES; //q_hash1
     searchData->stack->captureMask = searchData->pos->allPieces;
     return pickNextMove(searchData, qCheckDepth, alpha, beta);
 }
@@ -240,6 +240,28 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 moveList->stage = STOP;
                 result = popBest(pos, moveList);
                 return result;
+
+            case Q_HASH1:
+                /*
+                 * Return the hashmove from depth-preferred table
+                 */
+                result = &searchData->stack->ttMove1;
+                if (result->piece && !moveList->excluded(result)) {
+                    moveList->stage = Q_HASH2;
+                    moveList->lastX++->setMove(result);
+                    return result;
+                }
+
+            case Q_HASH2:
+                /*
+                 * Return the hashmove from always-replace table
+                 */
+                result = &searchData->stack->ttMove2;
+                if (result->piece && !moveList->excluded(result)) {
+                    moveList->stage = Q_CAPTURES;
+                    moveList->lastX++->setMove(result);
+                    return result;
+                }
 
             case Q_CAPTURES:
                 mask = pos->allPieces;

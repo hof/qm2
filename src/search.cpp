@@ -558,6 +558,17 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
             return -SCORE_MATE + pos->currentPly;
         }
     }
+    
+    /*
+     * 4. Transposition table lookup
+    
+    assert(depth >= 0);
+    hashTable->ttLookup(this, 0, alpha, beta);
+    if (stack->ttScore != TT_EMPTY && excludedMove.piece == EMPTY) {
+        stack->pvCount = 0;
+        return stack->ttScore;
+    }
+     */
 
     //if not in check, generate captures, promotions and (upto some plies ) quiet checks
     if (!stack->inCheck) {

@@ -15,9 +15,7 @@
 
 #include "score.h"
 
-
 typedef uint64_t U64;
-
 
 #define C64(x) x##UL
 
@@ -191,23 +189,32 @@ const U64 ATTACKZONE[2] = {
     RANK_8 | (RANK_7 & ~EDGE) | (RANK_6 & LARGE_CENTER) | (RANK_5 & CENTER)
 };
 
+/* hardware popcount */
 inline int popCount(U64 b) {
     __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
     return b;
 }
 
-/*
+inline unsigned popCount0(U64 b) {
+    __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
+    return b;
+}
+/* end: hardware popcount */
+
+/* software popcount
 inline unsigned popCount(U64 x) {
     x = (x & C64(0x5555555555555555)) + ((x >> 1) & C64(0x5555555555555555));
     x = (x & C64(0x3333333333333333)) + ((x >> 2) & C64(0x3333333333333333));
     x = (x & C64(0x0F0F0F0F0F0F0F0F)) + ((x >> 4) & C64(0x0F0F0F0F0F0F0F0F));
     return (x * C64(0x0101010101010101)) >> 56;
 }
- */
+
 
 inline unsigned popCount0(U64 x) {
     return (x == 0) ? 0 : popCount(x);
 }
+ 
+*/ /* end: software popcount */
 
 inline unsigned popFirst(U64 & x) {
     assert(x);
