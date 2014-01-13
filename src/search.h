@@ -199,7 +199,7 @@ public:
         pos->fromFen(fen);
         memset(history, 0, sizeof (history));
         initLMR();
-        init_pct();
+        init_pst();
         hashTable = globalHashTable;
         outputHandler = outputH;
         movePicker = new TMovePicker();

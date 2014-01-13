@@ -8,6 +8,7 @@ const short FMARGIN[9] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200};
 const bool DO_NULL = true;
 const bool DO_FP = true;
 const bool DO_LMR = true;
+const bool DO_EXTEND_NODE = false;
 const bool DO_EXTEND_MOVE = true;
 const bool DO_SINGULAR = DO_EXTEND_MOVE && false;
 
@@ -342,8 +343,17 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         return inCheck ? -SCORE_MATE + pos->currentPly : drawScore();
     }
 
+    int extend_node = 0;
+    if (DO_EXTEND_NODE && inCheck && (!first_move->capture || pos->SEE(first_move) < 0)) {
+        int count = movePicker->countEvasions(this, first_move);
+        if (count < 3) {
+            extend_node = ONE_PLY;
+        } 
+    }
+    
+    
     bool gives_check = pos->givesCheck(first_move);
-    int extend_move = DO_EXTEND_MOVE && gives_check > 0
+    int extend_move = DO_EXTEND_MOVE && extend_node == 0 && gives_check > 0
             && (gives_check > 1 || pos->SEE(first_move) >= 0);
     extend_move += extend_move;
     bool singular = false;
@@ -377,7 +387,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             }
         }
     }
-    int new_depth = depth - ONE_PLY;
+    int new_depth = depth - ONE_PLY + extend_node;
     stack->bestMove.setMove(first_move);
     stack->reduce = 0;
     forward(first_move, gives_check);

@@ -5,6 +5,7 @@
 
 //#define PRINT_PAWN_EVAL 
 //#define PRINT_KING_SAFETY
+//#define PRINT_PASSED_PAWN 
 
 TSCORE_PST PST; //piece square table
 
@@ -151,7 +152,7 @@ const int8_t SHELTER_KPOS[64] = {//attack units regarding king position
     3, 4, 5, 6, 6, 5, 4, 3,
     1, 2, 3, 4, 4, 3, 2, 1,
     0, 1, 2, 3, 3, 2, 1, 0,
-    -3, -2, -1, 1, 1, -1, -2, -3,
+    -1, -2, -1, 1, 1, -1, -2, -1,
 
 };
 
@@ -282,10 +283,6 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     score->sub(evaluatePassers(sd, BLACK));
     score->add(evaluateKingAttack(sd, WHITE));
     score->sub(evaluateKingAttack(sd, BLACK));
-    //score->add(evaluateSpace(sd, WHITE));
-    //score->add(evaluateSpace(sd, BLACK));
-
-
 
     result += score->get(sd->stack->phase);
     result &= GRAIN;
@@ -472,7 +469,7 @@ inline short evaluateMaterial(TSearch * sd) {
     return value;
 }
 
-void init_pct_store(TScore scores[], int wpiece) {
+void init_pst_store(TScore scores[], int wpiece) {
     int tot_mg = 0;
     int tot_eg = 0;
     int count = 0;
@@ -498,7 +495,7 @@ void init_pct_store(TScore scores[], int wpiece) {
     }
 }
 
-void init_pct() {
+void init_pst() {
     TScore scores[64];
     const short mobility_scale[2][64] = {
         {
@@ -537,9 +534,9 @@ void init_pct() {
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
         scores[sq].mul(8); //pawns are the most powerful to control squares
-        scores[sq].eg = RANK(sq) * RANK(sq);
+        scores[sq].eg = 3 * RANK(sq);
     }
-    init_pct_store(scores, WPAWN);
+    init_pst_store(scores, WPAWN);
 
     //Knight
     for (int sq = a1; sq < 64; sq++) {
@@ -553,7 +550,7 @@ void init_pct() {
         scores[sq].mul(3); //mobility is extra important because knights move slow
         scores[sq].add(KNIGHT_RANK[RANK(sq)]);
     }
-    init_pct_store(scores, WKNIGHT);
+    init_pst_store(scores, WKNIGHT);
 
     //Bishop
     for (int sq = a1; sq < 64; sq++) {
@@ -569,7 +566,7 @@ void init_pct() {
         }
         scores[sq].mul(3);
     }
-    init_pct_store(scores, WBISHOP);
+    init_pst_store(scores, WBISHOP);
 
     //Rook
     for (int sq = a1; sq < 64; sq++) {
@@ -582,7 +579,7 @@ void init_pct() {
         }
         scores[sq].mul(2); //square control by rook is less powerful than by bishop/knight/pawn
     }
-    init_pct_store(scores, WROOK);
+    init_pst_store(scores, WROOK);
 
     //Queen
     for (int sq = a1; sq < 64; sq++) {
@@ -596,7 +593,7 @@ void init_pct() {
         }
         scores[sq].mul(1);
     }
-    init_pct_store(scores, WQUEEN);
+    init_pst_store(scores, WQUEEN);
 
     //King
     for (int sq = a1; sq < 64; sq++) {
@@ -616,7 +613,7 @@ void init_pct() {
         scores[sq].mg = 0;
         scores[sq].eg *= 2.25;
     }
-    init_pct_store(scores, WKING);
+    init_pst_store(scores, WKING);
 }
 
 /**
@@ -722,6 +719,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         pawn_score->add(PST[WPAWN][isq]);
 
 
+
 #ifdef PRINT_PAWN_EVAL        
         std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][isq]);
 #endif
@@ -764,21 +762,12 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
 
         } else if (passed) {
-            //pawn_score->add(PASSED_PAWN[isq]); //elo vs-1: +21, elo vs0: +6
 
 #ifdef PRINT_PAWN_EVAL
-            std::cout << "passed: " << PRINT_SCORE(PASSED_PAWN[isq]);
+            std::cout << "passed ";
 #endif
-
             passers |= sqBit;
-            if (up & pos->blackKings) { //blocked by king
-                //pawn_score->sub(PASSED_PAWN[isq].mg >> 1, PASSED_PAWN[isq].eg >> 1);
 
-#ifdef PRINT_PAWN_EVAL
-                std::cout << "passer blocked: (" << short(-PASSED_PAWN[isq].mg >> 1) << ", " << short(-PASSED_PAWN[isq].eg >> 1) << ") ";
-#endif 
-
-            }
             if (KingMoves[sq] & passers & pos->whitePawns) {
 
 #ifdef PRINT_PAWN_EVAL
@@ -817,7 +806,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
         pawn_score->sub(PST[WPAWN][sq]);
 
-
 #ifdef PRINT_PAWN_EVAL
         std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][sq]);
 #endif
@@ -851,17 +839,12 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
             std::cout << "candidate: " << PRINT_SCORE(CANDIDATE[sq]);
 #endif
         } else if (passed) {
-            //pawn_score->sub(PASSED_PAWN[sq]); //elo vs-1: +21, elo vs0: +6
+
 #ifdef PRINT_PAWN_EVAL
-            std::cout << "passed: " << PRINT_SCORE(PASSED_PAWN[sq]);
+            std::cout << "passed: ";
 #endif
             passers |= sqBit;
-            if (down & pos->whiteKings) { //blocked by king
-                //pawn_score->add(PASSED_PAWN[sq].mg >> 1, PASSED_PAWN[sq].eg >> 1);
-#ifdef PRINT_PAWN_EVAL
-                std::cout << "passer blocked: (" << short(-PASSED_PAWN[sq].mg >> 1) << ", " << short(-PASSED_PAWN[sq].eg >> 1) << ") ";
-#endif
-            }
+
             if (KingMoves[sq] & passers & pos->blackPawns) {
                 pawn_score->sub(CONNECED_PASSED_PAWN[sq]);
 #ifdef PRINT_PAWN_EVAL
@@ -880,7 +863,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     pawn_score->print();
     std::cout << std::endl;
 #endif
-
 
     pawn_score->add(PST[WKING][ISQ(wkpos, WHITE)]);
     pawn_score->sub(PST[WKING][ISQ(bkpos, BLACK)]);
@@ -1102,7 +1084,9 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     bool them = !us;
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
+
         result->add(PST[WBISHOP][ISQ(sq, us)]);
+
         U64 moves = MagicBishopMoves(sq, occ);
         int count = popCount0(moves & sd->stack->mob[us]);
         result->add(BISHOP_MOBILITY[count]);
@@ -1170,7 +1154,9 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     U64 occ = pos->pawnsAndKings();
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
+
         result->add(PST[WROOK][ISQ(sq, us)]);
+
         U64 bitSq = BIT(sq);
         if (bitSq & (~fill[us])) {
             if (bitSq & fill[them]) {
@@ -1244,7 +1230,9 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
     U64 occ = pos->pawnsAndKings();
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
+
         result->add(PST[WQUEEN][ISQ(sq, us)]);
+
         U64 moves = MagicQueenMoves(sq, occ);
         int count = popCount0(moves & sd->stack->mob[us]);
         result->add(QUEEN_MOBILITY[count]);
@@ -1270,24 +1258,29 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
     U64 exclude = SIDE[us] & ~(RANK_4 | RANK_5);
     while (passers) {
         int sq = POP(passers);
+#ifdef PRINT_PASSED_PAWN
+        std::cout << "passed pawn " << sq << ": ";
+#endif
         int ix = us == WHITE ? FLIP_SQUARE(sq) : sq;
         TScore bonus;
         bonus.set(PASSED_PAWN[ix]);
-        bonus.half();
         result->add(bonus);
+#ifdef PRINT_PASSED_PAWN
+        std::cout << "base ";
+        bonus.print();
+#endif
+        bonus.half();
         if (pVsK) {
             unstoppable = MAX(unstoppable, evaluatePasserVsK(sd, us, sq));
         }
         if (BIT(sq) & exclude) {
             continue;
         }
-        result->add(bonus);
         int to = forwardSq(sq, us);
         do {
             if (BIT(to) & sd->pos->allPieces) {
                 break; //blocked
             }
-            result->add(bonus);
             sd->pos->allPieces ^= BIT(sq); //to include rook/queen xray attacks from behind
             U64 attacks = sd->pos->attacksTo(to);
             sd->pos->allPieces ^= BIT(sq);
@@ -1302,10 +1295,20 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
                 }
             }
             result->add(bonus);
+#ifdef PRINT_PASSED_PAWN
+            std::cout << " can advance to "  << to;
+            bonus.print();
+#endif
             to = forwardSq(to, us);
         } while (to >= a1 && to <= h8);
     }
     result->add(0, unstoppable); //add the best unstoppable passer score
+#ifdef PRINT_PASSED_PAWN
+    std::cout << " unstoppable " << unstoppable;
+    std::cout << " total: ";
+    result->print();
+    std::cout << std::endl;
+#endif
     return result;
 }
 

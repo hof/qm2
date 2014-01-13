@@ -20,7 +20,7 @@ class TSearch;
 
 int evaluate(TSearch * searchData, int alpha, int beta);
 
-void init_pct();
+void init_pst();
 extern TSCORE_PST PST;
 
 enum EVALUATION_CONSTANTS {
