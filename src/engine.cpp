@@ -438,9 +438,10 @@ void * TEngine::_learn(void * engineObjPtr) {
      */
 
     const int MAXDEPTH = 2; //default: depth 2
-    const int MAXGAMECOUNT = 50000; //Sample size, 920+ recommended. Use even numbers. 
+    const int MAXGAMECOUNT = 100000; //Sample size, 920+ recommended. Use even numbers. 
 
     double MAX_WINDOW = 2.0; //maximum adjustment step for lower/upper bound
+    double MIN_WINDOW_ADJ = 0.1; //minimum window adjustment
     double STOP_WINDOW = 0.2; //stop if the difference between lower and upperbound is <= this value
     const int STOPSCORE = 120; //if the score is higher than this for both sides, the game is consider a win
     const int MAXPLIES = 200; //maximum game length in plies
@@ -501,8 +502,9 @@ void * TEngine::_learn(void * engineObjPtr) {
     double strongest = +bestFactor;
     double opponent = -bestFactor;
 
-    int step = 0;
-    while (ABS(upperBound - lowerBound) > STOP_WINDOW) {
+    U64 step = 0;
+    int maxgames = MAXGAMECOUNT;
+    while (ABS(upperBound - lowerBound) > STOP_WINDOW && ABS(bestFactor-opponent) > MIN_WINDOW_ADJ) {
         int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
         U64 nodes[2] = {0, 0}; //total node counts for both sides
         std::cout << "\nEngine(" << strongest << ") vs Engine(" << opponent << ")" << std::endl;
@@ -510,10 +512,10 @@ void * TEngine::_learn(void * engineObjPtr) {
         hash2->clear();
         batch = 0;
         x = 0;
-        for (int game = 0; game < MAXGAMECOUNT; game++) {
+        for (int game = 0; game < maxgames; game++) {
             //go par
             if (x <= game) {
-                engine->_create_start_positions(sd_root, book, start_positions, x, MAXGAMECOUNT);
+                engine->_create_start_positions(sd_root, book, start_positions, x, maxgames);
             }
 
             fen = start_positions[game];
@@ -664,18 +666,18 @@ void * TEngine::_learn(void * engineObjPtr) {
             //we have a winner!
             std::cout << "Engine(" << strongest << ") is significantly stronger than engine(" << opponent << ")" << std::endl;
             if (strongest > opponent) {
-                lowerBound = MAX(lowerBound, opponent);
+                lowerBound = MAX(lowerBound, opponent+0.1);
             } else {
-                upperBound = MIN(upperBound, opponent);
+                upperBound = MIN(upperBound, opponent-0.1);
             }
         } else if ((fscore + sdev) < 0.5) {
             //we have a winner!
             std::cout << "Engine(" << strongest << ") is significantly weaker than engine(" << opponent << ")" << std::endl;
             bestFactor = opponent;
             if (strongest < opponent) {
-                lowerBound = MAX(lowerBound, strongest);
+                lowerBound = MAX(lowerBound, strongest+0.1);
             } else {
-                upperBound = MIN(upperBound, strongest);
+                upperBound = MIN(upperBound, strongest-0.1);
             }
             opponent = strongest;
             strongest = bestFactor;
@@ -689,7 +691,10 @@ void * TEngine::_learn(void * engineObjPtr) {
                 if (opponent < bestFactor) {
                     bestFactor = opponent; //prefer the lowest factor
                 } else {
-                    bestFactor += (opponent - strongest) * adjust; //carefully adjust to a higher best
+                    double adj_step = (opponent - strongest) * adjust;
+                    adj_step = ceil(adj_step * 10) / 10.0;
+                    adj_step = MAX(MIN_WINDOW_ADJ, adj_step);
+                    bestFactor += adj_step; //carefully adjust to a higher best
                 }
                 opponent = strongest;
                 strongest = bestFactor;
@@ -703,9 +708,15 @@ void * TEngine::_learn(void * engineObjPtr) {
                 lowerBound = bestFactor - 2 * MAX_WINDOW;
             }
             if (strongest < opponent) {
-                upperBound -= MAX(STOP_WINDOW / 2, ABS(upperBound - opponent) * adjust);
+                double adj_step = MAX(STOP_WINDOW / 2, ABS(upperBound - opponent) * adjust);
+                adj_step = ceil(adj_step * 10) / 10.0;
+                adj_step = MAX(MIN_WINDOW_ADJ, adj_step);
+                upperBound -= adj_step;
             } else if (strongest > opponent) {
-                lowerBound += MAX(STOP_WINDOW / 2, ABS(lowerBound - opponent) * adjust);
+                double adj_step = MAX(STOP_WINDOW / 2, ABS(lowerBound - opponent) * adjust);
+                adj_step = ceil(adj_step * 10) / 10.0;
+                adj_step = MAX(MIN_WINDOW_ADJ, adj_step);
+                lowerBound += adj_step;
             }
             if (step < 2) {
                 //cancel altogether if the results are not significant in early, obvious steps (-1 vs 1) and (1 vs 0) or (-1 vs 0)
@@ -714,6 +725,7 @@ void * TEngine::_learn(void * engineObjPtr) {
             }
 
         }
+
         std::cout << "\nBest factor: " << bestFactor << std::endl;
         std::cout << "Lower bound: " << MIN(bestFactor, lowerBound) << std::endl;
         std::cout << "Upper bound: " << MAX(bestFactor, upperBound) << std::endl;
@@ -724,6 +736,11 @@ void * TEngine::_learn(void * engineObjPtr) {
         if (step == 1) {
             opponent = 0;
             continue;
+        } else if (step == 2) {
+            maxgames = 2 * batch;
+            maxgames = maxgames / 1000;
+            maxgames = (1 + maxgames) * 1000;
+            std::cout << "Setting batch size to " << maxgames << std::endl;
         }
 
         double delta_a = ABS(bestFactor - lowerBound);
@@ -732,12 +749,16 @@ void * TEngine::_learn(void * engineObjPtr) {
             //find better upperbound
             double window = MIN(MAX_WINDOW, delta_b / 2);
             window = MAX(window, STOP_WINDOW / 2);
+            window = MAX(MIN_WINDOW_ADJ, window);
             opponent = MIN(bestFactor + window, upperBound - STOP_WINDOW / 2);
         } else {
             double window = MIN(MAX_WINDOW, delta_a / 2);
             window = MAX(window, STOP_WINDOW / 2);
+            window = MAX(MIN_WINDOW_ADJ, window);
             opponent = MAX(bestFactor - window, lowerBound + STOP_WINDOW / 2);
+
         }
+        opponent = floor(opponent * 10.0) / 10.0;
     }
     clock_t end;
     end = clock();
@@ -761,6 +782,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     delete hash2;
 
     pthread_exit(NULL);
+
     return NULL;
 }
 

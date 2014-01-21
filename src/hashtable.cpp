@@ -209,8 +209,8 @@ void THashTable::ptLookup(TSearch * sd) {
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
     if ((entry->key ^ entry->pawn_score.mg) == pawnHash) {
         sd->stack->pawn_score.set(entry->pawn_score);
-        sd->stack->king_attack[WPAWN] = entry->king_attack[WHITE];
-        sd->stack->king_attack[BPAWN] = entry->king_attack[BLACK];
+        sd->stack->king_attack_pc[WPAWN] = entry->king_attack[WHITE];
+        sd->stack->king_attack_pc[BPAWN] = entry->king_attack[BLACK];
         sd->stack->passers = entry->passers;
         sd->pawnTableHits++;
     } else {
@@ -223,8 +223,8 @@ void THashTable::ptStore(TSearch * sd) {
     U64 pawnHash = sd->pos->boardFlags->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
     entry->pawn_score.set(sd->stack->pawn_score);
-    entry->king_attack[WHITE] = sd->stack->king_attack[WPAWN];
-    entry->king_attack[BLACK] = sd->stack->king_attack[BPAWN];
+    entry->king_attack[WHITE] = sd->stack->king_attack_pc[WPAWN];
+    entry->king_attack[BLACK] = sd->stack->king_attack_pc[BPAWN];
     entry->passers = sd->stack->passers;
     entry->key = (pawnHash ^ sd->stack->pawn_score.mg);
 }

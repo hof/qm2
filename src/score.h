@@ -186,6 +186,8 @@ typedef TScore TSCORE_PST[7][64];
 #define PHASED_SHORT(mg,eg,phase) (((mg) * (MAX_GAMEPHASES - phase) + (eg) * (phase)) >> GAMEPHASE_SCORE_BSR)
 #define PHASED_SCORE(s,phase) (((s.mg) * (MAX_GAMEPHASES - phase) + (s.eg) * (phase)) >> GAMEPHASE_SCORE_BSR)
 
+#define MUL256(x,y) (((x)*(y))/256)
+
 #define PRINT_SCORE(s) "(" << (int)(s).mg << ", " << (int)(s).eg << ") "
 
 #endif	/* SCORE_H */
