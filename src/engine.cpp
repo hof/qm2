@@ -397,36 +397,119 @@ void TEngine::testPosition(TMove bestMove, int score, int maxTime, int maxDepth)
 }
 
 /**
- * Learning by self-play. A factor for experimental evaluation is determined
- * by playing GAMECOUNT shallow fixed depth games, one side of the board, 
- * engine(learning), has the experimental evaluation enabled, the other side,
- * engine(base), not. 
+ * Learning by playing self-matches. 
+ * A factor for experimental evaluation is determined by playing GAMECOUNT 
+ * shallow fixed depth games between engine(x) and engine(y), where x and y
+ * represent a learning factor. 
  * 
  * Typically, depth is set to <= 3 and the amount of games >= 1000 to obtain
  * significant results. 
  * 
- * A book.bin file is required to pre-calculate a set of random start positions
+ * A book.bin file is required to pre-calculate sets of random start positions.
  * 
- * 1. Checks if the evaluation seems plausible by giving the exp. evaluation the 
- *    exact opposite score (multiplied with factor -1). 
- *    Example: for testing king safety evaluation, the learning side will expose 
- *    the king in stead of protecting it. This should result in many lost games 
- *    and is much easier to measure than a positive multiplication factor. 
+ * The first match is always played between engine(1) and engine(-1), or
+ * full positive experimental evaluation score vs the exact opposite: the same 
+ * evaluation score but negative. 
+ * E.g. when the experimental evaluation is about avoiding placing the King in the center 
+ * of the board during the opening phase (generally a very bad idea), engine (1)
+ * will avoid it and engine(-1) will do the opposite and actually place the King 
+ * in the center. This is the first step to verify the evaluation as 
+ * it's expected that engine(1) will proof to be much stronger than engine(-1) with 
+ * just a few games. 
  * 
- *    If there is no significant difference in wins/losses, it's assumed the 
- *    evaluation does not have any practical difference and the self-play is
- *    canceled.
+ * An upperbound and lowerbound is calculated after each match. This represents
+ * the maximum and minimum value for the best factor. If engine(1) was the winner 
+ * of the first match, the upperbound is still unknown and remains set to it's 
+ * initial value of +infinity (32000). The lowerbound is set to -1 + one minimum
+ * learning step of 0.1: -0.9. 
  * 
- * 2. Self-playing games of GAMECOUNT matches: engine(factor) vs engine(0) 
- *    for the following multiplication factors: 0.25, 0.5, 0.75, 1.0, 1.25, 1.5 
- *    and 1.75.
+ * The next match is played between engine(1) and engine(0), to verify if 
+ * using the evaluation (engine(1) is better than not using it at all (engine(0)).
+ * This step also determines the amount of games per match (with a minimum of 
+ * 2000 and a maximum of 100000).
  * 
- * The end-result is the best multiplication factor for the exp. evaluation, and
- * the median factor. The median factor indicates if the exp. evaluation score
- * is correct or should be adjusted to a higher/lower value.
+ * If the first two steps did not result in significant results, the learning process
+ * is aborted because the impact of the evaluation can't be measured. 
+ * 
+ * Otherwise, the process continues. The best scoring engine, at this point this can
+ * be engine(1), engine(0) or engine(-1), will play against an opponent engine.
+ * To determine the opponent engine, it's considered the distance between  
+ * the best factor to the upper or lowerbound. The higher distance is used, to try 
+ * and get a better upper or lowerbound. 
+ * 
+ * The process goes on until best factor is close to enough (<= 0.2) to both the lower and
+ * upper bound.
  * 
  * This learning method gives a (rough) indication if the exp. evaluation is 
- * plausible. It does not replace engine testing under tournament conditions.   
+ * plausible. It does not replace engine testing under tournament conditions.
+ * 
+ * Example run for learning the value of a queen:
+ * 
+ * First batch run (step 1:)
+ 
+Engine(1) vs Engine(-1)
+b+++++>
+Games: 250 Win: 160 Loss: 80 Draw: 10 Score: 165/250 (66%, 80, Elo: 115)
+Engine(1) is significantly stronger than engine(-1)
+
+Best factor: 1
+Lower bound: -0.9
+Upper bound: 32000
+
+ * So, it's better to keep a queen than to sacrifice a queen (duh!). Just 250
+ * games were needed to measure a significant result. The 'b' character indicates
+ * a set of 250 starting positions were generated from the book.bin file. A +, - or 
+ * = sign represents 50 games, with almost significant results (+ for winning or
+ * - for loosing) or equal (=).
+ * The '>' is an early cutoff, no more games are needed to proof a likelihood of 
+ * superiority. 
+ * The lowerbound is adjusted to -0.9. The upperbound remains unknown.
+ * 
+ * Step 2:
+ * 
+Engine(1) vs Engine(0)
+b==+++b+>
+Games: 300 Win: 166 Loss: 121 Draw: 13 Score: 172.5/300 (57.5%, 45, Elo: 53)
+Engine(1) is significantly stronger than engine(0)
+
+Best factor: 1
+Lower bound: 0.1
+Upper bound: 32000
+Setting batch size to 2000
+ 
+ * It's better to have a queen than to not have queen. The batch size is set
+ * to 2000 and the lowerbound is adjusted. 
+ * 
+ * At step 5, the match did not result in a significant result and the upperbound 
+ * is set:
+
+Engine(5) vs Engine(7)
+b=====b=====b=====b=====b=====b=====b=====b====-
+Games: 2000 Win: 881 Loss: 948 Draw: 171 Score: 966.5/2000 (48.325%, -67, Elo: -
+12)
+Engine(5) is a bit weaker than engine(7)
+
+Best factor: 7
+Lower bound: 4.3
+Upper bound: 15
+ * 
+ * And the last step, after playing 53540 games:
+ * 
+ Engine(9.3) vs Engine(9.5)
+b=====b=====b=====b=====b=====b=====b=====b=====
+Games: 2000 Win: 897 Loss: 893 Draw: 210 Score: 1002/2000 (50.1%, 4, Elo: 1)
+Engine(9.3) is a bit stronger than engine(9.5)
+
+Best factor: 9.3
+Lower bound: 9.1
+Upper bound: 9.5
+
+Elapsed: 393.439s.
+Games played: 53450 games. (135.853 games/sec)
+Nodes Total: 506986082 nodes. (1288601 nodes/sec)
+ * 
+ * So a value of 9.3 for the queen gave best results. 
+ * 
  * 
  * @param engineObjPtr pointer to engine object
  * @return void
@@ -437,16 +520,16 @@ void * TEngine::_learn(void * engineObjPtr) {
      * Constants
      */
 
-    const int MAXDEPTH = 2; //default: depth 2
-    const int MAXGAMECOUNT = 100000; //Sample size, 920+ recommended. Use even numbers. 
+    const int MAXDEPTH = 1; //default: depth 2
+    const int MINGAMESCOUNT = 2000; 
+    const int MAXGAMESCOUNT = 100000; 
 
     double MAX_WINDOW = 2.0; //maximum adjustment step for lower/upper bound
     double MIN_WINDOW_ADJ = 0.1; //minimum window adjustment
-    double STOP_WINDOW = 0.2; //stop if the difference between lower and upperbound is <= this value
+    double STOP_WINDOW = 0.24; //stop if the difference between lower and upperbound is <= this value
     const int STOPSCORE = 120; //if the score is higher than this for both sides, the game is consider a win
     const int MAXPLIES = 200; //maximum game length in plies
     const int HASH_SIZE_IN_MB = 1;
-
 
     /*
      * Initialize, normally it's not needed to change anything from here
@@ -478,12 +561,11 @@ void * TEngine::_learn(void * engineObjPtr) {
 
     std::cout << "\nLEARNING MODE" << std::endl;
     std::cout << "Depth: " << MAXDEPTH << std::endl;
-    std::cout << "Games: " << MAXGAMECOUNT << std::endl;
 
     TBook * book = new TBook();
     book->open("book.bin");
-    string start_positions[MAXGAMECOUNT + 1];
-    for (int p = 0; p < MAXGAMECOUNT + 1; p++) {
+    string start_positions[MAXGAMESCOUNT + 1];
+    for (int p = 0; p < MAXGAMESCOUNT + 1; p++) {
         start_positions[p] = "";
     }
 
@@ -503,8 +585,8 @@ void * TEngine::_learn(void * engineObjPtr) {
     double opponent = -bestFactor;
 
     U64 step = 0;
-    int maxgames = MAXGAMECOUNT;
-    while (ABS(upperBound - lowerBound) > STOP_WINDOW && ABS(bestFactor-opponent) > MIN_WINDOW_ADJ) {
+    int maxgames = MAXGAMESCOUNT;
+    while ((upperBound-strongest) > STOP_WINDOW || (strongest-lowerBound) > STOP_WINDOW) {
         int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
         U64 nodes[2] = {0, 0}; //total node counts for both sides
         std::cout << "\nEngine(" << strongest << ") vs Engine(" << opponent << ")" << std::endl;
@@ -691,10 +773,11 @@ void * TEngine::_learn(void * engineObjPtr) {
                 if (opponent < bestFactor) {
                     bestFactor = opponent; //prefer the lowest factor
                 } else {
-                    double adj_step = (opponent - strongest) * adjust;
-                    adj_step = ceil(adj_step * 10) / 10.0;
-                    adj_step = MAX(MIN_WINDOW_ADJ, adj_step);
-                    bestFactor += adj_step; //carefully adjust to a higher best
+                    bestFactor = opponent;
+                //    double adj_step = (opponent - strongest) * adjust;
+                //    adj_step = ceil(adj_step * 10) / 10.0;
+                //    adj_step = MAX(MIN_WINDOW_ADJ, adj_step);
+                //    bestFactor += adj_step; //carefully adjust to a higher best
                 }
                 opponent = strongest;
                 strongest = bestFactor;
@@ -702,10 +785,10 @@ void * TEngine::_learn(void * engineObjPtr) {
                 std::cout << "Engine(" << strongest << ") is equal in strength to engine(" << opponent << ")" << std::endl;
             }
             if (upperBound == SCORE_INFINITE) { //assume the bound is close
-                upperBound = bestFactor + 2 * MAX_WINDOW;
+                upperBound = bestFactor + 4 * MAX_WINDOW;
             }
             if (lowerBound == -SCORE_INFINITE) { //assume the bound is close
-                lowerBound = bestFactor - 2 * MAX_WINDOW;
+                lowerBound = bestFactor - 4 * MAX_WINDOW;
             }
             if (strongest < opponent) {
                 double adj_step = MAX(STOP_WINDOW / 2, ABS(upperBound - opponent) * adjust);
@@ -740,6 +823,7 @@ void * TEngine::_learn(void * engineObjPtr) {
             maxgames = 2 * batch;
             maxgames = maxgames / 1000;
             maxgames = (1 + maxgames) * 1000;
+            maxgames = MAX(maxgames, MINGAMESCOUNT);
             std::cout << "Setting batch size to " << maxgames << std::endl;
         }
 

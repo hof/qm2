@@ -1399,14 +1399,14 @@ const int16_t KING_SHELTER[24] = {//structural shelter (pawns & kings)
 };
 
 const int16_t KING_ATTACK[64] = {//indexed by attack units
-    0, 0, 1, 1, 2, 3, 4, 5,
-    6, 8, 10, 12, 14, 16, 20, 23,
-    26, 30, 34, 38, 42, 46, 50, 54,
-    58, 63, 68, 73, 78, 82, 86, 90,
-    94, 97, 100, 102, 104, 105, 106, 108,
-    110, 112, 114, 116, 118, 120, 122, 124,
-    126, 128, 130, 132, 134, 136, 138, 140,
-    142, 144, 146, 148, 150, 152, 154, 156
+    0, 0, 0, 1, 3, 5, 6, 8,
+    10, 12, 16, 20, 24, 28, 32, 36,
+    42, 48, 54, 60, 66, 72, 78, 84,
+    92, 100, 108, 116, 124, 131, 138, 144,
+    150, 155, 160, 164, 168, 172, 176, 180,
+    182, 188, 190, 192, 194, 196, 198, 200,
+    202, 204, 206, 208, 210, 212, 214, 216,
+    218, 220, 222, 224, 226, 228, 230, 232
 };
 
 const int16_t KING_ATTACKERS_MUL[6] = {
@@ -1433,7 +1433,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     int shelter_ix = RANGE(0, 23, KING_ATTACK_OFFSET + sd->stack->king_attack_pc[PAWN[us]]);
 
     result->set(KING_SHELTER[shelter_ix], 0);
-    result->add((popCount(sd->stack->king_attack_zone[us])-3) * 12, 0);
+    result->add((popCount(sd->stack->king_attack_zone[us]) - 3) * 12, 0);
 
 #ifdef PRINT_KING_SAFETY
     std::cout << "\nKing Attack\nShelter: " << shelter_ix << " -> " << (int) KING_SHELTER[shelter_ix] << std::endl;
@@ -1467,7 +1467,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
         queen_involved |= (pc == QUEEN[us]);
         attackers_count++;
         int unit = KING_ATTACK_UNIT[pc];
-        attack_units += unit * (1 + pcs) + sqs;
+        attack_units += unit + (2*pcs) + sqs;
 #ifdef PRINT_KING_SAFETY
         std::cout << "pc " << pc << ": " << pcs << " , sqs: " << sqs << " tot: " << attack_units << std::endl;
 #endif
@@ -1490,6 +1490,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
 #ifdef PRINT_KING_SAFETY
     result->print();
 #endif
+    
     return result;
 }
 
