@@ -17,10 +17,14 @@
 
 typedef uint64_t U64;
 
+//#define HARDWARE_POPCOUNT
+#define HARDWARE_64BITS
+
 #define C64(x) x##UL
 
 static const U64 BIT32 = (C64(1) << 32);
 
+#ifdef HARDWARE_64BITS
 inline unsigned bitScanForward(U64 x) {
     assert(x);
     asm ("bsfq %0, %0" : "=r" (x) : "0" (x));
@@ -32,11 +36,9 @@ inline unsigned bitScanReverse(U64 x) {
     asm ("bsrq %0, %0" : "=r" (x) : "0" (x));
     return x;
 }
+#endif /* 64 bits bitscan */
 
-#ifdef COMPILE_32BITS
-
-static const U64 BIT32 = (C64(1) << 32);
-
+#ifndef HARDWARE_64BITS
 inline unsigned bitScanForward(U64 x) {
     assert(x);
     if (x < BIT32) {
@@ -58,9 +60,7 @@ inline unsigned bitScanReverse(U64 x) {
     asm ("bsr %0, %0" : "=r" (x) : "0" (x));
     return x;
 }
-
-
-#endif
+#endif /* 32 bits bitscan */
 
 #define BSF(x) (bitScanForward(x))
 #define BSR(x) (bitScanReverse(x))
@@ -189,7 +189,8 @@ const U64 ATTACKZONE[2] = {
     RANK_8 | (RANK_7 & ~EDGE) | (RANK_6 & LARGE_CENTER) | (RANK_5 & CENTER)
 };
 
-/* hardware popcount */
+
+#ifdef HARDWARE_POPCOUNT /* hardware popcount */
 inline int popCount(U64 b) {
     __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
     return b;
@@ -199,9 +200,9 @@ inline unsigned popCount0(U64 b) {
     __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
     return b;
 }
-/* end: hardware popcount */
+#endif /* end: hardware popcount */
 
-/* software popcount
+#ifndef HARDWARE_POPCOUNT /* software popcount */
 inline unsigned popCount(U64 x) {
     x = (x & C64(0x5555555555555555)) + ((x >> 1) & C64(0x5555555555555555));
     x = (x & C64(0x3333333333333333)) + ((x >> 2) & C64(0x3333333333333333));
@@ -209,12 +210,10 @@ inline unsigned popCount(U64 x) {
     return (x * C64(0x0101010101010101)) >> 56;
 }
 
-
 inline unsigned popCount0(U64 x) {
     return (x == 0) ? 0 : popCount(x);
 }
- 
-*/ /* end: software popcount */
+#endif /* end: software popcount */
 
 inline unsigned popFirst(U64 & x) {
     assert(x);
