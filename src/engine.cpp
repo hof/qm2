@@ -522,7 +522,7 @@ void * TEngine::_learn(void * engineObjPtr) {
 
     const int MAXDEPTH = 1; //default: depth 2
     const int MINGAMESCOUNT = 2000; 
-    const int MAXGAMESCOUNT = 100000; 
+    const int MAXGAMESCOUNT = 100000;  //step 0: 1/10, step 1: 1/2, step2: upto 1/1
 
     double MAX_WINDOW = 2.0; //maximum adjustment step for lower/upper bound
     double MIN_WINDOW_ADJ = 0.1; //minimum window adjustment
@@ -585,7 +585,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     double opponent = -bestFactor;
 
     U64 step = 0;
-    int maxgames = MAXGAMESCOUNT;
+    int maxgames = MAXGAMESCOUNT/10;
     while ((upperBound-strongest) > STOP_WINDOW || (strongest-lowerBound) > STOP_WINDOW) {
         int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
         U64 nodes[2] = {0, 0}; //total node counts for both sides
@@ -817,6 +817,7 @@ void * TEngine::_learn(void * engineObjPtr) {
         //determine opponent
         step++;
         if (step == 1) {
+            maxgames = MAXGAMESCOUNT / 2;
             opponent = 0;
             continue;
         } else if (step == 2) {

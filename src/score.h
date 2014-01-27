@@ -64,6 +64,11 @@ struct TScore {
         print();
         std::cout << "-> " << get(phase);
     }
+    
+    void print(std::string txt) {
+        std::cout << txt << ": (" << mg << ", " << eg << ") ";
+    }
+
 
     inline void add_ix64(TSCORE_TABLE_64 * table, char ix) {
         assert(ix >= 0 && ix < 64);

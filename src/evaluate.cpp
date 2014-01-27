@@ -213,9 +213,9 @@ const TScore KNIGHT_PAWN_COUNT[9] = {//indexed by opponent pawn count
  *******************************************************************************/
 
 const TScore BISHOP_MOBILITY[14] = {
-    S(-48, -48), S(-24, -24), S(-12, -12), S(-6, -6),
-    S(-2, -2), S(0, 0), S(4, 4), S(8, 8), S(12, 12),
-    S(16, 16), S(18, 18), S(20, 20), S(22, 22), S(24, 24)
+    S(-48, -56), S(-24, -32), S(-14, -22), S(-8, -16),
+    S(-4, -12), S(0, -8), S(4, -4), S(8, 0), S(12, 4),
+    S(16, 8), S(19, 11), S(22, 14), S(25, 16), S(28, 18)
 };
 
 const TScore TRAPPED_BISHOP = S(-100, -120);
@@ -235,11 +235,12 @@ const TScore ROOK_SEMIOPEN_FILE = S(10, 10);
 const TScore ROOK_OPEN_FILE = S(20, 20);
 const TScore ROOK_GOOD_SIDE = S(8, 16); //Rule of Tarrasch 
 const TScore ROOK_WRONG_SIDE = S(-8, -16);
+const TScore ROOK_CLOSED_FILE = S(-5, -5);
 
 const TScore ROOK_MOBILITY[15] = {
-    S(-20, -40), S(-16, -32), S(-12, -24), S(-8, -16),
-    S(-6, -12), S(-4, -8), S(-2, -4), S(0, 0), S(2, 4),
-    S(4, 8), S(6, 12), S(8, 16), S(10, 20), S(12, 24), S(14, 28)
+    S(-30, -60), S(-20, -40), S(-12, -24), S(-6, -12), 
+    S(-2, -4), S(0, 0), S(2, 4), S(4, 8), S(6, 12), 
+    S(7, 14), S(8, 16), S(9, 18), S(10, 20), S(11, 22), S(12, 24)
 };
 
 /*******************************************************************************
@@ -401,7 +402,7 @@ inline short evaluateMaterial(TSearch * sd) {
         //material imbalance
         int minors_ix = MAX(0, 4 + wminors - bminors);
         int majors_ix = MAX(0, 4 + wrooks + 2 * wqueens - brooks - 2 * bqueens);
-        result.add(IMBALANCE[MIN(majors_ix, 8)][MIN(minors_ix, 8)]);
+        result.add(IMBALANCE[MIN(majors_ix, 8)][MIN(minors_ix, 8)]);        
     }
 
     int piece_power = result.get(phase);
@@ -456,8 +457,7 @@ inline short evaluateMaterial(TSearch * sd) {
     } else if (value && wpieces == 1 && bpieces == 1 && wpawns != bpawns && wbishops && bbishops
             && (bool(pos->whiteBishops & BLACK_SQUARES) != bool(pos->blackBishops & BLACK_SQUARES))) {
         // Opposite  bishop ending is drawish
-        //todo: set drawflag 
-        value += cond(wpawns>bpawns, bpawns>wpawns, MAX(-(ABS(value) >> 1), DRAWISH_OPP_BISHOPS));
+        value >>= 2;
     }
 
     /*
@@ -470,6 +470,9 @@ inline short evaluateMaterial(TSearch * sd) {
 }
 
 void init_pst_store(TScore scores[], int wpiece) {
+    /*  tuned multipliers:        X    P    N    B    R    Q    K  */
+    const double PCMUL_MG[7] = {0.0, 0.6, 1.0, 0.8, 1.0, 1.0, 1.0};
+    const double PCMUL_EG[7] = {0.0, 1.0, 1.0, 0.7, 1.0, 1.0, 1.0};
     int tot_mg = 0;
     int tot_eg = 0;
     int count = 0;
@@ -489,9 +492,12 @@ void init_pst_store(TScore scores[], int wpiece) {
         } else {
             scores[sq].mg -= avg_mg;
             scores[sq].eg -= avg_eg;
+            scores[sq].mg *= PCMUL_MG[wpiece];
+            scores[sq].eg *= PCMUL_EG[wpiece];
             scores[sq].round();
         }
-        PST[wpiece][FLIP_SQUARE(sq)].set(scores[sq]);
+        int isq = FLIP_SQUARE(sq);
+        PST[wpiece][isq].set(scores[sq]);
     }
 }
 
@@ -521,19 +527,26 @@ void init_pst() {
     };
 
     //Pawn
+    const short PAWN_FILE[8] = {-15, -5, 0, 10, 10, 0, -5, -15};
     for (int sq = a1; sq < 64; sq++) {
-        U64 bbsq = BIT(sq);
         scores[sq].clear();
-        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
+        U64 bbsq = BIT(sq);
         if ((bbsq & RANK_1) || (bbsq & RANK_8)) {
             continue;
         }
+        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
         U64 caps = WPawnCaptures[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
+
         scores[sq].mul(8); //pawns are the most powerful to control squares
+        scores[sq].mg += PAWN_FILE[FILE(sq)];
+        if (bbsq & CENTER) {
+            scores[sq].mg += 5;
+        }
+
         scores[sq].eg = 3 * RANK(sq);
     }
     init_pst_store(scores, WPAWN);
@@ -1095,16 +1108,15 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     U64 kcz = KingMoves[kpos]; //king control zone
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
-
         result->add(PST[WBISHOP][ISQ(sq, us)]);
-
         U64 moves = MagicBishopMoves(sq, occ) & sd->stack->mob[us];
         int count = popCount0(moves);
+
         result->add(BISHOP_MOBILITY[count]);
 
         sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
         sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
-
+        
         //patterns
         if (BIT(sq) & BISHOP_PATTERNS[us]) {
             if (us == WHITE) {
@@ -1184,15 +1196,14 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
                 result->add(ROOK_OPEN_FILE);
             }
         } else {
-            result->sub(ROOK_SEMIOPEN_FILE);
+            result->sub(ROOK_CLOSED_FILE);
         }
         U64 moves = MagicRookMoves(sq, occ) & sd->stack->mob[us];
         int count = popCount0(moves);
         result->add(ROOK_MOBILITY[count]);
-
         sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
         sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
-
+        
         if (bitSq & RANK[us][7] && (BIT(*pos->kingPos[them]) & (RANK[us][8] | (RANK[us][7])))) {
             result->add(ROOK_7TH);
         }
@@ -1262,7 +1273,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
 
         sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
         sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
-
+        
         if ((BIT(sq) & RANK[us][7]) && (BIT(*pos->kingPos[them]) & RANK[us][8])) {
             result->add(QUEEN_7TH);
         }
@@ -1467,7 +1478,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
         queen_involved |= (pc == QUEEN[us]);
         attackers_count++;
         int unit = KING_ATTACK_UNIT[pc];
-        attack_units += unit + (2*pcs) + sqs;
+        attack_units += unit + (2 * pcs) + sqs;
 #ifdef PRINT_KING_SAFETY
         std::cout << "pc " << pc << ": " << pcs << " , sqs: " << sqs << " tot: " << attack_units << std::endl;
 #endif
@@ -1490,7 +1501,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
 #ifdef PRINT_KING_SAFETY
     result->print();
 #endif
-    
+
     return result;
 }
 
