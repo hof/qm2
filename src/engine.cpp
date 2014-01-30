@@ -121,38 +121,57 @@ void * TEngine::_think(void* engineObjPtr) {
     ponderMove.setMove(0);
     TBook * book = new TBook();
     book->open("book.bin");
-    TMoveList * bookMoves = &searchData->stack->moveList;
-    int count = book->findMoves(root, bookMoves);
-    if (count > 0) {
-        srand(time(NULL));
-        int randomScore = 0;
-        int totalBookScore = 1;
-        for (int pickMove = 0; pickMove < 2; pickMove++) {
-            int totalScore = 0;
-            for (TMove * bookMove = bookMoves->first; bookMove != bookMoves->last; bookMove++) {
-                totalScore += bookMove->score;
-                if (pickMove && totalScore >= randomScore) {
-                    resultMove.setMove(bookMove);
-                    engine->setMove(bookMove);
-                    engine->setScore(0);
-                    if (searchData->outputHandler) {
-                        searchData->outputHandler->sendPV((bookMove->score) / totalBookScore, 1, 1, count, searchData->timeManager->elapsed(), resultMove.asString().c_str(), (int) EXACT);
+    bool book_move = false;
+    bool book_ponder_move = false;
+    for (int book_step = 0; book_step < 2; book_step++) {
+        TMoveList * bookMoves = &searchData->stack->moveList;
+        int count = book->findMoves(root, bookMoves);
+        if (count > 0) {
+            srand(time(NULL));
+            int randomScore = 0;
+            int totalBookScore = 1;
+            for (int pickMove = 0; pickMove < 2; pickMove++) {
+                int totalScore = 0;
+                for (TMove * bookMove = bookMoves->first; bookMove != bookMoves->last; bookMove++) {
+                    totalScore += bookMove->score;
+                    if (pickMove && totalScore >= randomScore) {
+                        if (book_step == 0) {
+                            book_move = true;
+                            resultMove.setMove(bookMove);
+                            engine->setMove(bookMove);
+                            engine->setScore(0);
+                            root->forward(&resultMove);
+                        } else if (book_step == 1) {
+                            book_ponder_move = true;
+                            ponderMove.setMove(bookMove);
+                            if (searchData->outputHandler) {
+                                std::string book_pv = resultMove.asString() + " " + ponderMove.asString();
+                                searchData->outputHandler->sendPV((bookMove->score) / totalBookScore, 1, 1, count, searchData->timeManager->elapsed(), book_pv.c_str(), (int) EXACT);
+                            }
+                        }
+                        break;
                     }
-                    break;
                 }
+                totalBookScore = totalScore;
+                randomScore = (rand() % totalScore) + 1;
             }
-            totalBookScore = totalScore;
-            randomScore = (rand() % totalScore) + 1;
         }
     }
-
-
+    if (book_move) {
+        root->backward(&resultMove);
+    }
+    
     /*
      * Find a move by Principle Variation Search (fail-soft) in an 
      * internal iterative deepening framework with aspiration search.
      */
 
-    if (resultMove.piece == EMPTY && searchData->initRootMoves() > 0) {
+    if (book_ponder_move == false && searchData->initRootMoves() > 0) {
+        if (book_move) {
+            //no ponder move.. only consider book_moves, but let the engine decide which one to play
+            book->findMoves(root, &searchData->stack->moveList);
+            searchData->root.matchMoves(&searchData->stack->moveList);
+        }
         if (searchData->root.MoveCount == 1) {
             tm->setEndTime(2);
             tm->setMaxTime(1);
@@ -208,7 +227,7 @@ void * TEngine::_think(void* engineObjPtr) {
              * - PV or pondermove is not set
              */
             int diffScore = ABS(score - prevScore);
-            if ((tm->elapsed() > 1500)
+            if (tm->elapsed() > 1500 && !book_move
                     && ((type != EXACT && diffScore > (VPAWN / 4))
                     || ponderMove.piece == EMPTY)) {
                 tm->requestMoreTime();
@@ -521,8 +540,8 @@ void * TEngine::_learn(void * engineObjPtr) {
      */
 
     const int MAXDEPTH = 1; //default: depth 2
-    const int MINGAMESCOUNT = 2000; 
-    const int MAXGAMESCOUNT = 100000;  //step 0: 1/10, step 1: 1/2, step2: upto 1/1
+    const int MINGAMESCOUNT = 2000;
+    const int MAXGAMESCOUNT = 100000; //step 0: 1/10, step 1: 1/2, step2: upto 1/1
 
     double MAX_WINDOW = 2.0; //maximum adjustment step for lower/upper bound
     double MIN_WINDOW_ADJ = 0.1; //minimum window adjustment
@@ -585,8 +604,8 @@ void * TEngine::_learn(void * engineObjPtr) {
     double opponent = -bestFactor;
 
     U64 step = 0;
-    int maxgames = MAXGAMESCOUNT/10;
-    while ((upperBound-strongest) > STOP_WINDOW || (strongest-lowerBound) > STOP_WINDOW) {
+    int maxgames = MAXGAMESCOUNT / 10;
+    while ((upperBound - strongest) > STOP_WINDOW || (strongest - lowerBound) > STOP_WINDOW) {
         int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
         U64 nodes[2] = {0, 0}; //total node counts for both sides
         std::cout << "\nEngine(" << strongest << ") vs Engine(" << opponent << ")" << std::endl;
@@ -748,18 +767,18 @@ void * TEngine::_learn(void * engineObjPtr) {
             //we have a winner!
             std::cout << "Engine(" << strongest << ") is significantly stronger than engine(" << opponent << ")" << std::endl;
             if (strongest > opponent) {
-                lowerBound = MAX(lowerBound, opponent+0.1);
+                lowerBound = MAX(lowerBound, opponent + 0.1);
             } else {
-                upperBound = MIN(upperBound, opponent-0.1);
+                upperBound = MIN(upperBound, opponent - 0.1);
             }
         } else if ((fscore + sdev) < 0.5) {
             //we have a winner!
             std::cout << "Engine(" << strongest << ") is significantly weaker than engine(" << opponent << ")" << std::endl;
             bestFactor = opponent;
             if (strongest < opponent) {
-                lowerBound = MAX(lowerBound, strongest+0.1);
+                lowerBound = MAX(lowerBound, strongest + 0.1);
             } else {
-                upperBound = MIN(upperBound, strongest-0.1);
+                upperBound = MIN(upperBound, strongest - 0.1);
             }
             opponent = strongest;
             strongest = bestFactor;
@@ -774,10 +793,10 @@ void * TEngine::_learn(void * engineObjPtr) {
                     bestFactor = opponent; //prefer the lowest factor
                 } else {
                     bestFactor = opponent;
-                //    double adj_step = (opponent - strongest) * adjust;
-                //    adj_step = ceil(adj_step * 10) / 10.0;
-                //    adj_step = MAX(MIN_WINDOW_ADJ, adj_step);
-                //    bestFactor += adj_step; //carefully adjust to a higher best
+                    //    double adj_step = (opponent - strongest) * adjust;
+                    //    adj_step = ceil(adj_step * 10) / 10.0;
+                    //    adj_step = MAX(MIN_WINDOW_ADJ, adj_step);
+                    //    bestFactor += adj_step; //carefully adjust to a higher best
                 }
                 opponent = strongest;
                 strongest = bestFactor;
@@ -803,7 +822,7 @@ void * TEngine::_learn(void * engineObjPtr) {
             }
             if (step < 2) {
                 //cancel altogether if the results are not significant in early, obvious steps (-1 vs 1) and (1 vs 0) or (-1 vs 0)
-                std::cout << "Canceling. The evaluation component does not work or more games are needed to detect significance." << std::endl;
+                std::cout << "Canceling. The evaluation component does not result in a significant improvement." << std::endl;
                 break;
             }
 

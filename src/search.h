@@ -102,6 +102,7 @@ public:
     int FiftyCount;
     bool InCheck;
     void sortMoves();
+    void matchMoves(TMoveList * list);
 };
 
 struct TSearchStack {

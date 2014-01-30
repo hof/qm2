@@ -101,6 +101,30 @@ void TRoot::sortMoves() {
     }
 }
 
+/* Copy moves */
+void TRoot::matchMoves(TMoveList * list) {
+    if (list->first == list->last) {
+        return;
+    }
+    for (int j = 0; j < MoveCount;) {
+        bool match = false;
+        TRootMove rMove = Moves[j];
+        std::cout << rMove.Move.asString() << " ";;
+        for (TMove * m = list->first; m != list->last; m++) {
+            if (rMove.Move.equals(m)) {
+                match = true;
+                break;
+            }
+        }
+        if (match == false) {
+            Moves[j] = Moves[MoveCount - 1];
+            MoveCount--;
+            continue;
+        }
+        j++;
+    }
+}
+
 int TSearch::pvs_root(int alpha, int beta, int depth) {
     /*
      * Principle variation search (PVS). 
@@ -348,10 +372,10 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         int count = movePicker->countEvasions(this, first_move);
         if (count < 3) {
             extend_node = ONE_PLY;
-        } 
+        }
     }
-    
-    
+
+
     bool gives_check = pos->givesCheck(first_move);
     int extend_move = DO_EXTEND_MOVE && extend_node == 0 && gives_check > 0
             && (gives_check > 1 || pos->SEE(first_move) >= 0);
@@ -568,7 +592,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
             return -SCORE_MATE + pos->currentPly;
         }
     }
-    
+
     /*
      * 4. Transposition table lookup
     

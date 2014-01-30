@@ -1065,7 +1065,7 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
         result->add(KNIGHT_PAWN_COUNT[pawn_count]);
         sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
         sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
-
+        
     }
     return result;
 }
@@ -1270,11 +1270,11 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
         U64 moves = MagicQueenMoves(sq, occ);
         int count = popCount0(moves & sd->stack->mob[us]);
         result->add(QUEEN_MOBILITY[count]);
-
+        
         sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
         sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
         
-        if ((BIT(sq) & RANK[us][7]) && (BIT(*pos->kingPos[them]) & RANK[us][8])) {
+        if ((BIT(sq) & RANK[us][7]) && (BIT(kpos) & RANK[us][8])) {
             result->add(QUEEN_7TH);
         }
     }

@@ -17,7 +17,7 @@
 
 typedef uint64_t U64;
 
-//#define HARDWARE_POPCOUNT
+#define HARDWARE_POPCOUNT
 #define HARDWARE_64BITS
 
 #define C64(x) x##UL
@@ -342,6 +342,12 @@ inline bool WHITE_SQUARE(unsigned char sq) {
 
 inline bool BLACK_SQUARE(unsigned char sq) {
     return !WHITE_SQUARE(sq);
+}
+
+inline int distance(int sq1, int sq2) {
+   int drank = ABS(RANK(sq1) - RANK(sq2));
+   int dfile = ABS(FILE(sq2) - FILE(sq2));
+   return MAX(drank, dfile);
 }
 
 /*
