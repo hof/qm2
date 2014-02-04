@@ -236,6 +236,7 @@ const TScore ROOK_OPEN_FILE = S(20, 20);
 const TScore ROOK_GOOD_SIDE = S(8, 16); //Rule of Tarrasch 
 const TScore ROOK_WRONG_SIDE = S(-8, -16);
 const TScore ROOK_CLOSED_FILE = S(-5, -5);
+const short ROOK_ATTACK = 12;
 
 const TScore ROOK_MOBILITY[15] = {
     S(-30, -60), S(-20, -40), S(-12, -24), S(-6, -12), 
@@ -1206,6 +1207,9 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         
         if (bitSq & RANK[us][7] && (BIT(*pos->kingPos[them]) & (RANK[us][8] | (RANK[us][7])))) {
             result->add(ROOK_7TH);
+        } else {
+            U64 attacks = moves & (*pos->pawns[them] | *pos->kings[them]);
+            result->add(popCount0(attacks)*ROOK_ATTACK);
         }
         //Tarrasch rule: place rook behind passers
         if (moves & sd->stack->passers) {
