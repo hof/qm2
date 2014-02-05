@@ -1211,21 +1211,24 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
             U64 attacks = moves & (*pos->pawns[them] | *pos->kings[them]);
             result->add(popCount0(attacks)*ROOK_ATTACK);
         }
-        //Tarrasch rule: place rook behind passers
-        if (moves & sd->stack->passers) {
+        
+        //Tarrasch Rule: place rook behind passers
+        U64 tpass = moves & sd->stack->passers; //touched passers
+        if (tpass) {
             U64 front[2];
-            front[BLACK] = southFill(bitSq) & moves & sd->stack->passers & (WHITE_SIDE | RANK_5);
-            front[WHITE] = northFill(bitSq) & moves & sd->stack->passers & (BLACK_SIDE | RANK_4);
-            if (front[us] & *pos->pawns[us]) { //supporting a passer from behind
+            front[BLACK] = southFill(bitSq) & tpass;
+            front[WHITE] = northFill(bitSq) & tpass;
+            if (front[us] & *pos->pawns[us] & SIDE[them]) { //supporting a passer from behind
                 result->add(ROOK_GOOD_SIDE);
-            } else if (front[them] & *pos->pawns[them]) { //attacking a passer from behind
+            } else if (front[them] & *pos->pawns[them] & SIDE[us]) { //attacking a passer from behind
                 result->add(ROOK_GOOD_SIDE);
-            } else if (front[them] & *pos->pawns[us]) { //supporting from the wrong side
+            } else if (front[them] & *pos->pawns[us] & SIDE[them]) { //supporting from the wrong side
                 result->add(ROOK_WRONG_SIDE);
-            } else if (front[us] & *pos->pawns[them]) { //attacking from the wrong side
+            } else if (front[us] & *pos->pawns[them] & SIDE[us]) { //attacking from the wrong side
                 result->add(ROOK_WRONG_SIDE);
             }
         }
+        
     }
     return result;
 }
