@@ -106,7 +106,7 @@ const short TRADEDOWN_PAWNS[9] = {
  * Pawn Values 
  *******************************************************************************/
 
-const TScore DEFENDED_PAWN[2] = {S(0, 4), S(4, 8)}; //closed, open file
+const TScore DEFENDED_PAWN[2] = {S(0, 2), S(2, 4)}; //closed, open file
 const TScore ISOLATED_PAWN[2] = {S(-10, -20), S(-20, -20)}; //closed, open file
 const TScore WEAK_PAWN[2] = {S(-12, -8), S(-16, -10)}; //closed, open file
 const TScore DOUBLED_PAWN = S(-10, -20);
@@ -548,7 +548,7 @@ void init_pst() {
             scores[sq].mg += 5;
         }
 
-        scores[sq].eg = 3 * RANK(sq);
+        scores[sq].eg = 0;
     }
     init_pst_store(scores, WPAWN);
 
@@ -736,9 +736,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
 
         pawn_score->add(PST[WPAWN][isq]);
-
-
-
+       
 #ifdef PRINT_PAWN_EVAL        
         std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][isq]);
 #endif
@@ -753,7 +751,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
         } else if (weak) {
             targets |= sqBit;
-            pawn_score->add(WEAK_PAWN[open]); //elo vs-1:+22, elo vs0:1
+            pawn_score->add(WEAK_PAWN[open]); 
 
 #ifdef PRINT_PAWN_EVAL
             std::cout << "weak: " << PRINT_SCORE(WEAK_PAWN[open]);
@@ -794,7 +792,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #ifdef PRINT_PAWN_EVAL
                 std::cout << "connected: " << PRINT_SCORE(PASSED_PAWN[isq]);
 #endif
-
                 pawn_score->add(CONNECED_PASSED_PAWN[isq]);
             }
         }
@@ -826,7 +823,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
 
         pawn_score->sub(PST[WPAWN][sq]);
-
+        
 #ifdef PRINT_PAWN_EVAL
         std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][sq]);
 #endif
