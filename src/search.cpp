@@ -109,7 +109,8 @@ void TRoot::matchMoves(TMoveList * list) {
     for (int j = 0; j < MoveCount;) {
         bool match = false;
         TRootMove rMove = Moves[j];
-        std::cout << rMove.Move.asString() << " ";;
+        std::cout << rMove.Move.asString() << " ";
+        ;
         for (TMove * m = list->first; m != list->last; m++) {
             if (rMove.Move.equals(m)) {
                 match = true;
@@ -411,6 +412,17 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             }
         }
     }
+
+    if (extend_node == 0 && !inCheck && pos->currentPly > 1) {
+        int last_eval = (stack - 2)->eval_result;
+        if (false && eval > (50 + last_eval)) {
+            extend_node++;
+        } else if (type != PVNODE && eval < last_eval) {
+            extend_node--;
+        }
+    }
+
+
     int new_depth = depth - ONE_PLY + extend_node;
     stack->bestMove.setMove(first_move);
     stack->reduce = 0;

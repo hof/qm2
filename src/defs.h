@@ -170,6 +170,7 @@ const U64 BACKWARD_RANKS[8] = {
 };
 
 
+
 const U64 WHITE_SQUARES = C64(0x55AA55AA55AA55AA);
 const U64 BLACK_SQUARES = C64(0xAA55AA55AA55AA55);
 
@@ -348,6 +349,10 @@ inline int distance(int sq1, int sq2) {
    int drank = ABS(RANK(sq1) - RANK(sq2));
    int dfile = ABS(FILE(sq2) - FILE(sq2));
    return MAX(drank, dfile);
+}
+
+inline U64 forwardRanks(int sq, bool white) {
+    return white? FORWARD_RANKS[RANK(sq)] : BACKWARD_RANKS[RANK(sq)];
 }
 
 /*

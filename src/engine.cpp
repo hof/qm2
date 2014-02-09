@@ -171,8 +171,7 @@ void * TEngine::_think(void* engineObjPtr) {
             //no ponder move.. only consider book_moves, but let the engine decide which one to play
             book->findMoves(root, &searchData->stack->moveList);
             searchData->root.matchMoves(&searchData->stack->moveList);
-        }
-        if (searchData->root.MoveCount == 1) {
+        } else if (searchData->root.MoveCount == 1) {
             tm->setEndTime(2);
             tm->setMaxTime(1);
         }
@@ -540,7 +539,7 @@ void * TEngine::_learn(void * engineObjPtr) {
      */
 
     const int MAXDEPTH = 1; //default: depth 2
-    const int MINGAMESCOUNT = 2000;
+    const int MINGAMESCOUNT = 3350;
     const int MAXGAMESCOUNT = 100000; //step 0: 1/10, step 1: 1/2, step2: upto 1/1
 
     double MAX_WINDOW = 2.0; //maximum adjustment step for lower/upper bound
@@ -759,7 +758,7 @@ void * TEngine::_learn(void * engineObjPtr) {
         totalNodes[1] += nodes[1];
         double score = (100.0 * points) / maxPoints;
         int elo = round(-400.0 * log(1 / (points / maxPoints) - 1) / log(10));
-        std::cout << "\nGames: " << batch << " Win: " << stats[1] << " Loss: " << stats[2] << " Draw: " << stats[0] << " Score: " << points << "/" << maxPoints << " (" << score << "%, " << wins << ", Elo: " << elo << ") " << std::endl;
+        std::cout << "\nGames: " << batch << " W: " << stats[1] << " L: " << stats[2] << " D: " << stats[0] << " Score: " << points << "/" << maxPoints << " (" << score << "%, " << wins << ", Elo: " << elo << ") " << std::endl;
 
         double sdev = 1.1 / pow(batch, 0.48); //safe(?) standard deviation
         double fscore = score / 100.0;
