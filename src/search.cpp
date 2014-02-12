@@ -320,11 +320,11 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 
     if (!skipNull
             && DO_NULL
-            && eval - FMARGIN[depth] >= beta
-            && !inCheck
             && depth <= LOW_DEPTH
+            && !inCheck
             && ABS(beta) < SCORE_MATE - MAX_PLY
-            && pos->getPieces(pos->boardFlags->WTM)) {
+            && pos->getPieces(pos->boardFlags->WTM)
+            && eval - FMARGIN[depth] >= beta) {
         return eval - FMARGIN[depth];
     }
 
@@ -386,7 +386,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && depth >= HIGH_DEPTH
             && extend_move == 0
             && eval >= alpha
-            && stack->phase < 8
             && stack->ttMove1.piece > 0
             && excludedMove.piece == EMPTY) {
         int r = 2 * ONE_PLY + (depth >> 1);
@@ -412,17 +411,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             }
         }
     }
-
-    if (extend_node == 0 && !inCheck && pos->currentPly > 1) {
-        int last_eval = (stack - 2)->eval_result;
-        if (false && eval > (50 + last_eval)) {
-            extend_node++;
-        } else if (type != PVNODE && eval < last_eval) {
-            extend_node--;
-        }
-    }
-
-
+    
     int new_depth = depth - ONE_PLY + extend_node;
     stack->bestMove.setMove(first_move);
     stack->reduce = 0;
@@ -445,6 +434,8 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         updatePV(first_move);
         alpha = bestScore;
     }
+    
+    
 
     /*
      * 10. Search remaining moves with a zero width window, in the following order:

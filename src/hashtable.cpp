@@ -187,19 +187,21 @@ void THashTable::mtLookup(TSearch * searchData) {
         searchData->materialTableHits++;
         searchData->stack->material_score = entry.value;
         searchData->stack->phase = entry.phase;
+        searchData->stack->material_flags = entry.flags;
     } else {
         searchData->stack->material_score = SCORE_INVALID;
     }
 }
 
-void THashTable::mtStore(TSearch * searchData, int value, int phase) {
+void THashTable::mtStore(TSearch * searchData) {
     THashTable * hashTable = searchData->hashTable;
     TMaterialTableEntry * materialTable = hashTable->materialTable;
     U64 materialHash = searchData->pos->boardFlags->materialHash;
     TMaterialTableEntry * entry = &materialTable[hashTable->getMaterialHashKey(materialHash)];
-    entry->value = value;
-    entry->phase = phase;
-    entry->key = materialHash^value;
+    entry->value = searchData->stack->material_score;
+    entry->phase = searchData->stack->phase;
+    entry->flags = searchData->stack->material_flags;
+    entry->key = materialHash^entry->value;
 }
 
 void THashTable::ptLookup(TSearch * sd) {

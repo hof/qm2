@@ -79,10 +79,10 @@ const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
         /*+1*/ S(200, 100), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
 };
 
-const TScore SVPAWN = S(VPAWN, VPAWN); //middle and endgame values
+const TScore SVPAWN = S(VPAWN-16, VPAWN); //middle and endgame values
 const TScore SVKNIGHT = S(VKNIGHT, VKNIGHT);
 const TScore SVBISHOP = S(VBISHOP, VBISHOP);
-const TScore SVROOK = S(VROOK, VROOK + 50);
+const TScore SVROOK = S(VROOK, VROOK+24);
 const TScore SVQUEEN = S(VQUEEN, VQUEEN);
 const TScore SVKING = S(VKING, VKING);
 
@@ -93,6 +93,12 @@ const TScore PIECE_SCORE[13] = {
 
 const short VMATING_POWER = 20;
 const short VMATING_MATERIAL = 50;
+
+const short REDUNDANT_ROOK = -10;
+const short REDUNDANT_KNIGHT = -8;
+const short REDUNDANT_QUEEN = -20;
+
+uint8_t MFLAG_DRAW = 1;
 
 const short TRADEDOWN_PIECES[MAX_PIECES + 1] = {
     100, 50, 25, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -115,7 +121,7 @@ const TScore DOUBLED_PAWN = S(-10, -20);
 
 const TScore PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(200, 250), S(180, 220), S(180, 220), S(170, 210), S(170, 210), S(180, 220), S(180, 220), S(200, 250),
+    S(200, 210), S(190, 200), S(180, 190), S(170, 180), S(170, 180), S(180, 190), S(190, 200), S(200, 210),
     S(65, 100), S(50, 80), S(50, 80), S(40, 60), S(40, 60), S(50, 80), S(50, 80), S(65, 100),
     S(40, 60), S(30, 40), S(30, 40), S(20, 30), S(20, 30), S(30, 40), S(30, 40), S(40, 60),
     S(20, 30), S(15, 20), S(15, 25), S(10, 15), S(10, 15), S(15, 20), S(15, 20), S(20, 30),
@@ -124,16 +130,6 @@ const TScore PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
 };
 
-const TScore CONNECED_PASSED_PAWN[64] = {
-    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(90, 110), S(90, 110), S(90, 110), S(90, 110), S(90, 110), S(90, 110), S(90, 110), S(90, 110),
-    S(50, 70), S(50, 70), S(50, 70), S(40, 60), S(40, 60), S(50, 70), S(50, 70), S(50, 70),
-    S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20), S(20, 20),
-    S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10),
-    S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5),
-    S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5), S(5, 5),
-    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-};
 
 const TScore CANDIDATE[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
@@ -314,6 +310,13 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     score->sub(evaluateKingAttack(sd, BLACK));
 
     result += score->get(sd->stack->phase);
+    
+    if (sd->stack->material_flags) {
+        if ((sd->stack->material_flags & MFLAG_DRAW) != 0) {
+            result >>= 2;
+        }
+    }
+    
     result &= GRAIN;
     result = sd->pos->boardFlags->WTM ? result : -result;
     sd->stack->eval_result = result;
@@ -339,6 +342,7 @@ inline short evaluateMaterial(TSearch * sd) {
             && (sd->stack - 1)->eval_result != SCORE_INVALID) {
         sd->stack->material_score = (sd->stack - 1)->material_score;
         sd->stack->phase = (sd->stack - 1)->phase;
+        sd->stack->material_flags = (sd->stack - 1)->material_flags;
         return sd->stack->material_score;
     }
 
@@ -353,7 +357,6 @@ inline short evaluateMaterial(TSearch * sd) {
     /*
      * 3. Calculate material value and store in material hash table
      */
-
     TScore result;
     result.clear();
     TBoard * pos = sd->pos;
@@ -383,6 +386,12 @@ inline short evaluateMaterial(TSearch * sd) {
     if (wknights != bknights) {
         result.mg += (wknights - bknights) * SVKNIGHT.mg;
         result.eg += (wknights - bknights) * SVKNIGHT.eg;
+        if (wknights > 1) {
+            result.add(REDUNDANT_KNIGHT);
+        }
+        if (bknights > 1) {
+            result.sub(REDUNDANT_KNIGHT);
+        }
     }
     if (wbishops != bbishops) {
         result.mg += (wbishops - bbishops) * SVBISHOP.mg;
@@ -391,10 +400,22 @@ inline short evaluateMaterial(TSearch * sd) {
     if (wrooks != brooks) {
         result.mg += (wrooks - brooks) * SVROOK.mg;
         result.eg += (wrooks - brooks) * SVROOK.eg;
+        if (wrooks > 1) {
+            result.add(REDUNDANT_ROOK);
+        }
+        if (brooks > 1) {
+            result.sub(REDUNDANT_ROOK);
+        }
     }
     if (wqueens != bqueens) {
         result.mg += (wqueens - bqueens) * SVQUEEN.mg;
         result.eg += (wqueens - bqueens) * SVQUEEN.eg;
+        if (wqueens > 1) {
+            result.add(REDUNDANT_QUEEN);
+        }
+        if (bqueens > 1) {
+            result.sub(REDUNDANT_QUEEN);
+        }
     }
 
     // Bishop pair
@@ -463,12 +484,17 @@ inline short evaluateMaterial(TSearch * sd) {
     /*
      * Special Cases / Endgame adjustments
      */
-    if (wpawns == 0 && value > 0 && piece_power < 450 && wqueens == bqueens) {
+    uint8_t flags = 0;
+    if (wpawns == 0 && value > 0 && piece_power < VROOK && wqueens == bqueens) {
         //no pawns and less than a rook extra piece_power is mostly drawn
-        value >>= 3;
-    } else if (bpawns == 0 && value < 0 && piece_power > -450 && wqueens == bqueens) {
+        flags |= MFLAG_DRAW;
+    } else if (bpawns == 0 && value < 0 && piece_power > -VROOK && wqueens == bqueens) {
         //same case for black
-        value >>= 3;
+        flags |= MFLAG_DRAW;
+    } else if (value && wpieces == 1 && bpieces == 1 && wpawns != bpawns && wbishops && bbishops
+            && (bool(pos->whiteBishops & BLACK_SQUARES) != bool(pos->blackBishops & BLACK_SQUARES))) {
+        // Opposite  bishop ending is mostly drawn as well
+        flags |= MFLAG_DRAW;
     } else if (value
             && balance
             && wminors < 2
@@ -482,18 +508,15 @@ inline short evaluateMaterial(TSearch * sd) {
         if (wminors == 0 && wpieces <= 1) { //more drawish
             value += cond(value > 30, value < -30, DRAWISH_QR_ENDGAME >> 1);
         }
-    } else if (value && wpieces == 1 && bpieces == 1 && wpawns != bpawns && wbishops && bbishops
-            && (bool(pos->whiteBishops & BLACK_SQUARES) != bool(pos->blackBishops & BLACK_SQUARES))) {
-        // Opposite  bishop ending is drawish
-        value >>= 2;
-    }
+    } 
 
     /*
      * Store and return
      */
     sd->stack->material_score = value;
+    sd->stack->material_flags = flags;
     sd->stack->phase = phase;
-    sd->hashTable->mtStore(sd, value, phase);
+    sd->hashTable->mtStore(sd);
     return value;
 }
 
@@ -714,7 +737,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
 
     U64 passers = 0;
-    U64 targets = 0;
     U64 openW = ~FILEFILL(pos->whitePawns);
     U64 openB = ~FILEFILL(pos->blackPawns);
     U64 wUp = UP1(pos->whitePawns);
@@ -769,7 +791,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
 
         if (isolated) {
-            targets |= sqBit;
             pawn_score->add(ISOLATED_PAWN[open]);
 
 #ifdef PRINT_PAWN_EVAL
@@ -777,7 +798,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
 
         } else if (weak) {
-            targets |= sqBit;
             pawn_score->add(WEAK_PAWN[open]);
 
 #ifdef PRINT_PAWN_EVAL
@@ -814,13 +834,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
             passers |= sqBit;
 
-            if (KingMoves[sq] & passers & pos->whitePawns) {
-
-#ifdef PRINT_PAWN_EVAL
-                std::cout << "connected: " << PRINT_SCORE(PASSED_PAWN[isq]);
-#endif
-                pawn_score->add(CONNECED_PASSED_PAWN[isq]);
-            }
         }
 
 #ifdef PRINT_PAWN_EVAL
@@ -856,13 +869,11 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
 
         if (isolated) {
-            targets |= sqBit;
             pawn_score->sub(ISOLATED_PAWN[open]);
 #ifdef PRINT_PAWN_EVAL
             std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
 #endif
         } else if (weak) {
-            targets |= sqBit;
             pawn_score->sub(WEAK_PAWN[open]);
 #ifdef PRINT_PAWN_EVAL
             std::cout << "weak: " << PRINT_SCORE(WEAK_PAWN[open]);
@@ -892,12 +903,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
             passers |= sqBit;
 
-            if (KingMoves[sq] & passers & pos->blackPawns) {
-                pawn_score->sub(CONNECED_PASSED_PAWN[sq]);
-#ifdef PRINT_PAWN_EVAL
-                std::cout << "passer connected: " << PRINT_SCORE(CONNECED_PASSED_PAWN[sq]);
-#endif
-            }
         }
 #ifdef PRINT_PAWN_EVAL
         std::cout << std::endl;
@@ -913,18 +918,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
     pawn_score->add(PST[WKING][ISQ(wkpos, WHITE)]);
     pawn_score->sub(PST[WKING][ISQ(bkpos, BLACK)]);
-
-    //attack pawns with king in the EG
-    //pawn_score->add(0, popCount0(KingZone[wkpos] & pos->blackPawns) * 8);
-    //pawn_score->sub(0, popCount0(KingZone[bkpos] & pos->whitePawns) * 8);
-
-    //attack especially weak pawns with king in the EG
-    pawn_score->add(0, popCount0(KingZone[wkpos] & pos->blackPawns & targets) * 8);
-    pawn_score->sub(0, popCount0(KingZone[bkpos] & pos->whitePawns & targets) * 8);
-
-    //support and attack passed pawns even more
-    pawn_score->add(0, popCount0(KingZone[wkpos] & passers) * 24);
-    pawn_score->sub(0, popCount0(KingZone[bkpos] & passers) * 24);
 
     /*
      * 4. Calculate King Shelter Attack units
@@ -1344,19 +1337,18 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
 inline TScore * evaluatePassers(TSearch * sd, bool us) {
     TScore * result = &sd->stack->passer_score[us];
     result->clear();
-    if (sd->stack->phase < 0 || sd->stack->passers == 0
-            || (sd->stack->passers & *sd->pos->pawns[us]) == 0) {
+    U64 passers = sd->stack->passers & *sd->pos->pawns[us];
+    if (passers == 0) {
         return result;
     }
     bool them = !us;
-    U64 passers = sd->stack->passers & *sd->pos->pawns[us];
     int unstoppable = 0;
     bool pVsK = sd->pos->getPieces(them) == 0;
     U64 exclude = SIDE[us] & ~(RANK_4 | RANK_5);
     while (passers) {
         int sq = POP(passers);
 #ifdef PRINT_PASSED_PAWN
-        std::cout << "passed pawn " << sq << ": ";
+        std::cout << "\npassed pawn " << sq << ": ";
 #endif
         int ix = us == WHITE ? FLIP_SQUARE(sq) : sq;
         TScore bonus;
@@ -1366,14 +1358,52 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
         std::cout << "base ";
         bonus.print();
 #endif
-        bonus.half();
         if (pVsK) {
             unstoppable = MAX(unstoppable, evaluatePasserVsK(sd, us, sq));
         }
         if (BIT(sq) & exclude) {
             continue;
         }
+        bonus.half();
+        int r = RANK(sq) - 1;
+        if (us == BLACK) {
+            r = 6 - r;
+        }
         int to = forwardSq(sq, us);
+
+        //consider distance of king
+        if (unstoppable == 0) {
+            int kdist_us_bonus = distance(*sd->pos->kingPos[us], to) * r * (r - 1);
+            int kdist_them_bonus = distance(*sd->pos->kingPos[them], to) * r * (r - 1) * 2;
+
+
+#ifdef PRINT_PASSED_PAWN
+            std::cout << "distance: " << kdist_them_bonus - kdist_us_bonus;
+#endif
+            result->add(0, kdist_them_bonus - kdist_us_bonus);
+        }
+
+        //connected passers
+        U64 bit_sq = BIT(sq);
+        U64 connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
+        if (connection_mask & *sd->pos->pawns[us]) {
+            result->add(r * 20);
+#ifdef PRINT_PASSED_PAWN
+            std::cout << " connected: " << r * 20;
+#endif
+        } else {
+            bit_sq = BIT(sq + PAWNDIRECTION[them]);
+            connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
+            if (connection_mask & *sd->pos->pawns[us]) {
+                result->add(r * 12);
+#ifdef PRINT_PASSED_PAWN
+                std::cout << " defended: " << r * 12;
+#endif
+            }
+        }
+
+
+
         do {
             if (BIT(to) & sd->pos->allPieces) {
                 break; //blocked
