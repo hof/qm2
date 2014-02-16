@@ -628,8 +628,7 @@ bool TBoard::active(TMove * move) {
         case EMPTY:
             return false;
         case WPAWN:
-            return move->tsq >= a4
-                    || (WPawnCaptures[move->tsq] & blackPieces);
+            return WPawnCaptures[move->tsq] & blackPieces;
         case WKNIGHT:
             return KnightMoves[move->tsq] & (blackRooks | blackQueens | blackKings);
         case WBISHOP:
@@ -639,10 +638,9 @@ bool TBoard::active(TMove * move) {
         case WQUEEN:
             return false;
         case WKING:
-            return false;
+            return true; 
         case BPAWN:
-            return move->tsq <= h5
-                    || (BPawnCaptures[move->tsq] & whitePieces);
+            return BPawnCaptures[move->tsq] & whitePieces;
         case BKNIGHT:
             return KnightMoves[move->tsq] & (whiteRooks | whiteQueens | whiteKings);
         case BBISHOP:
@@ -652,7 +650,7 @@ bool TBoard::active(TMove * move) {
         case BQUEEN:
             return false;
         case BKING:
-            return false;
+            return true;
         default:
             return false;
     }

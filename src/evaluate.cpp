@@ -27,7 +27,6 @@ enum MaterialValues {
     MATERIAL_AHEAD_THRESHOLD = 240, //all values are in centipawns
     VNOPAWNS = -40,
     VBISHOPPAIR = 50,
-    DRAWISH_QR_ENDGAME = -20,
     DRAWISH_OPP_BISHOPS = -50
 };
 
@@ -79,10 +78,10 @@ const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
         /*+1*/ S(200, 100), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
 };
 
-const TScore SVPAWN = S(VPAWN-16, VPAWN); //middle and endgame values
+const TScore SVPAWN = S(VPAWN - 16, VPAWN); //middle and endgame values
 const TScore SVKNIGHT = S(VKNIGHT, VKNIGHT);
 const TScore SVBISHOP = S(VBISHOP, VBISHOP);
-const TScore SVROOK = S(VROOK, VROOK+24);
+const TScore SVROOK = S(VROOK, VROOK + 50);
 const TScore SVQUEEN = S(VQUEEN, VQUEEN);
 const TScore SVKING = S(VKING, VKING);
 
@@ -271,14 +270,13 @@ const TScore ROOK_MOBILITY[15] = {
  * Queen Values
  *******************************************************************************/
 
-const TScore QUEEN_7TH = S(10, 20);
-
 const TScore QUEEN_MOBILITY[29] = {
     S(-10, -20), S(-4, -10), S(-2, -4), S(0, -2), S(1, 0), S(2, 2), S(3, 4), S(4, 6),
     S(5, 8), S(6, 10), S(6, 12), S(7, 14), S(7, 16), S(8, 17), S(8, 18), S(9, 19),
     S(9, 20), S(10, 21), S(10, 21), S(11, 22), S(11, 22), S(11, 22), S(12, 23), S(12, 23),
     S(13, 23), S(13, 24), S(13, 24), S(14, 25), S(14, 25)
 };
+
 
 /*******************************************************************************
  * Main evaluation function
@@ -310,13 +308,13 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     score->sub(evaluateKingAttack(sd, BLACK));
 
     result += score->get(sd->stack->phase);
-    
+
     if (sd->stack->material_flags) {
         if ((sd->stack->material_flags & MFLAG_DRAW) != 0) {
-            result >>= 2;
+            result >>= 1;
         }
     }
-    
+
     result &= GRAIN;
     result = sd->pos->boardFlags->WTM ? result : -result;
     sd->stack->eval_result = result;
@@ -487,28 +485,17 @@ inline short evaluateMaterial(TSearch * sd) {
     uint8_t flags = 0;
     if (wpawns == 0 && value > 0 && piece_power < VROOK && wqueens == bqueens) {
         //no pawns and less than a rook extra piece_power is mostly drawn
+        value >>= 2;
         flags |= MFLAG_DRAW;
     } else if (bpawns == 0 && value < 0 && piece_power > -VROOK && wqueens == bqueens) {
         //same case for black
+        value >>= 2;
         flags |= MFLAG_DRAW;
     } else if (value && wpieces == 1 && bpieces == 1 && wpawns != bpawns && wbishops && bbishops
             && (bool(pos->whiteBishops & BLACK_SQUARES) != bool(pos->blackBishops & BLACK_SQUARES))) {
         // Opposite  bishop ending is mostly drawn as well
         flags |= MFLAG_DRAW;
-    } else if (value
-            && balance
-            && wminors < 2
-            && wpieces <= 3
-            && wpieces > 0
-            && (wrooks || wqueens)
-            && ABS(value) > ABS(DRAWISH_QR_ENDGAME)
-            && ABS(value) < 2 * VPAWN) {
-        //Rooks and queen endgames are drawish. Reduce any small material advantage.
-        value += cond(value > 0, value < 0, DRAWISH_QR_ENDGAME);
-        if (wminors == 0 && wpieces <= 1) { //more drawish
-            value += cond(value > 30, value < -30, DRAWISH_QR_ENDGAME >> 1);
-        }
-    } 
+    }
 
     /*
      * Store and return
@@ -762,6 +749,9 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     U64 wDoubled = DOWN1(southFill(pos->whitePawns)) & pos->whitePawns;
     U64 bDoubled = UP1(northFill(pos->blackPawns)) & pos->blackPawns;
 
+    U64 kcz_w = KingZone[wkpos];
+    U64 kcz_b = KingZone[bkpos];
+
     TPiecePlacement * wPawns = &pos->pieces[WPAWN];
     for (int i = 0; i < wPawns->count; i++) {
         int sq = wPawns->squares[i];
@@ -836,6 +826,9 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
         }
 
+        sd->stack->king_attack_pc[WPAWN] += popCount0(WPawnCaptures[sq] & kcz_b);
+
+
 #ifdef PRINT_PAWN_EVAL
         std::cout << std::endl;
 #endif
@@ -908,6 +901,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         std::cout << std::endl;
 #endif
 
+        sd->stack->king_attack_pc[BPAWN] += popCount0(BPawnCaptures[sq] & kcz_w);
+
     }
 
 #ifdef PRINT_PAWN_EVAL
@@ -946,7 +941,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     //2. reward having pawns in front of the king
     U64 kingFront = FORWARD_RANKS[RANK(wkpos)] & PAWN_SCOPE[FILE(wkpos)];
     U64 shelterPawns = kingFront & pos->whitePawns;
-
     while (shelterPawns) {
         int sq = POP(shelterPawns);
         sd->stack->king_attack_pc[BPAWN] += SHELTER_PAWN[FLIP_SQUARE(sq)];
@@ -959,7 +953,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     while (stormPawns) {
         int sq = POP(stormPawns);
         sd->stack->king_attack_pc[BPAWN] += STORM_PAWN[FLIP_SQUARE(sq)];
-        sd->stack->king_attack_pc[WPAWN] += bool(BIT(sq) & KingZone[wkpos]);
     }
 
 #ifdef PRINT_PAWN_EVAL
@@ -1014,7 +1007,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     while (stormPawns) {
         int sq = POP(stormPawns);
         sd->stack->king_attack_pc[WPAWN] += STORM_PAWN[sq];
-        sd->stack->king_attack_pc[WPAWN] += bool(BIT(sq) & KingZone[bkpos]);
     }
 
 #ifdef PRINT_PAWN_EVAL
@@ -1142,7 +1134,7 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
         U64 attacks = moves & (*pos->kings[them] | kcz | *pos->pawns[them] | RANK[us][8]);
         if (attacks) {
             result->add(ACTIVE_BISHOP);
-        }
+        } 
         if (pos->attackedByPawn(sq, us)) {
             result->add(BISHOP_OUTPOST[sq]);
         }
@@ -1172,11 +1164,8 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
                 }
             }
         }
-
         sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
         sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
-
-
     }
     return result;
 }
@@ -1313,21 +1302,13 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
     U64 kcz = KingZone[kpos]; //king control zone
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
-
         result->add(PST[WQUEEN][ISQ(sq, us)]);
-
         U64 moves = MagicQueenMoves(sq, occ) & sd->stack->mob[us];
         int count = popCount0(moves);
         result->add(QUEEN_MOBILITY[count]);
-
         if (pos->attackedByPawn(sq, them)) {
             result->add(ATTACKED_PIECE);
         }
-
-        if ((BIT(sq) & RANK[us][7]) && (BIT(kpos) & RANK[us][8])) {
-            result->add(QUEEN_7TH);
-        }
-
         sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
         sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
     }
@@ -1387,7 +1368,7 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
         U64 bit_sq = BIT(sq);
         U64 connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
         if (connection_mask & *sd->pos->pawns[us]) {
-            result->add(r * 20);
+            result->add(8, r * 20);
 #ifdef PRINT_PASSED_PAWN
             std::cout << " connected: " << r * 20;
 #endif
@@ -1395,7 +1376,7 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
             bit_sq = BIT(sq + PAWNDIRECTION[them]);
             connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
             if (connection_mask & *sd->pos->pawns[us]) {
-                result->add(r * 12);
+                result->add(4, r * 12);
 #ifdef PRINT_PASSED_PAWN
                 std::cout << " defended: " << r * 12;
 #endif

@@ -46,27 +46,5 @@ const short PIECE_VALUE[13] = {
     VPAWN, VKNIGHT, VBISHOP, VROOK, VQUEEN, VKING
 };
 
-/*******************************************************************************
- * Helper functions
- *******************************************************************************/
-
-inline int cond(bool whiteValue, short value) {
-    return whiteValue ? value : -value;
-}
-
-inline int cond(bool whiteCondition, bool blackCondition, short value) {
-    if (whiteCondition != blackCondition) {
-        return whiteCondition ? value : -value;
-    }
-    return 0;
-}
-
-inline int cond(bool whiteCondition, bool blackCondition, const short values[], unsigned char indexW, unsigned char indexB) {
-    if (whiteCondition != blackCondition) {
-        return whiteCondition ? values[indexW] : -values[indexB];
-    }
-    return 0;
-}
-
 #endif	/* EVALUATE_H */
 
