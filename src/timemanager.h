@@ -63,10 +63,11 @@ public:
     }
     
     inline bool requestMoreTime() {
-        if (endTime < maxEndTime) {
-            endTime = maxEndTime;
+        int available = maxEndTime - endTime;
+        if (available > 500) {
+            endTime += (available / 2);
             return true;
-        }
+        }      
         return false;
     }
 };

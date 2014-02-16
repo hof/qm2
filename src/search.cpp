@@ -246,7 +246,6 @@ int TSearch::extendMove(TMove * move, int gives_check, bool first_move) {
         }
         return 0;
     }
-    
     return 0;
 }
 

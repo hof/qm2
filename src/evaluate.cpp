@@ -1572,7 +1572,6 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
 #ifdef PRINT_KING_SAFETY
     result->print();
 #endif
-
     return result;
 }
 

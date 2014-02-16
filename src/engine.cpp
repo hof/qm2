@@ -22,6 +22,8 @@
 
 using namespace std;
 
+const short ONE_SECOND = 1000;
+
 /**
  * Thread function for searching and finding a best move in a chess position
  * @param engineObjPtr pointer to the (parent) engine object
@@ -178,7 +180,7 @@ void * TEngine::_think(void* engineObjPtr) {
         searchData->stack->eval_result = evaluate(searchData, 0, 0);
         int alpha = -SCORE_INFINITE;
         int beta = SCORE_INFINITE;
-        int prevScore = -SCORE_INFINITE;
+        int prev_score = -SCORE_INFINITE;
         const int windows[] = {20, 40, 80, 160, 320, 640, 1280, SCORE_INFINITE, SCORE_INFINITE};
         const int MAX_WINDOW = 2 * VQUEEN;
         int alpha_window = 0;
@@ -187,6 +189,7 @@ void * TEngine::_think(void* engineObjPtr) {
         int highest = -SCORE_INFINITE;
         int depth = MIN(LOW_DEPTH + ONE_PLY, maxDepth);
         int resultScore = 0;
+        bool move_changed = false;
         while (depth <= maxDepth * ONE_PLY && !searchData->stopSearch) {
 
             int iteration_start_time = tm->elapsed();
@@ -205,6 +208,7 @@ void * TEngine::_think(void* engineObjPtr) {
             if (searchData->stack->pvCount > 0) {
                 TMove firstMove = searchData->stack->pvMoves[0];
                 if (firstMove.piece) {
+                    move_changed = resultMove.equals(&firstMove) == false;
                     resultMove.setMove(&firstMove);
                     ponderMove.setMove(0);
                     if (searchData->stack->pvCount > 1) {
@@ -225,24 +229,22 @@ void * TEngine::_think(void* engineObjPtr) {
              * - Evaluation shows large positional values
              * - PV or pondermove is not set
              */
-            int diffScore = ABS(score - prevScore);
-            if (tm->elapsed() > 1500 && !book_move
-                    && ((type != EXACT && diffScore > (VPAWN / 4))
-                    || ponderMove.piece == EMPTY)) {
-                tm->requestMoreTime();
+            if (!searchData->stopSearch && tm->elapsed() > ONE_SECOND && !book_move) {
+                if (ponderMove.piece == EMPTY) {
+                    tm->requestMoreTime();
+                } else if (move_changed) {
+                    tm->requestMoreTime();
+                } else if (ABS(prev_score - score) > (VPAWN/5)) {
+                    tm->requestMoreTime();
+                }
             }
 
             /* 
              * Stop conditions
              */
-            int iteration_time = tm->elapsed() - iteration_start_time;
-
-
-
             searchData->poll();
             if (searchData->stopSearch
                     || (maxNodes > 0 && searchData->nodes > maxNodes)
-                    //|| (!searchData->pondering() && !tm->available(iteration_time)) //no time for a next iteration
                     || (MATE_IN_PLY(resultScore) && type == EXACT && depth / ONE_PLY > MATE_IN_PLY(resultScore))
                     || (MATED_IN_PLY(resultScore)) && type == EXACT && depth / ONE_PLY > MATED_IN_PLY(resultScore)) {
                 break;
@@ -288,9 +290,8 @@ void * TEngine::_think(void* engineObjPtr) {
                 beta = ((beta - 1) & ~1) + 1; //make uneven
             }
 
-
-            prevScore = score;
-
+            prev_score = score;
+            move_changed = false;
             searchData->root.sortMoves();
         }
 

@@ -4,7 +4,7 @@
 void TTimeManager::set(unsigned int myTime, int oppTime, int myInc, int oppInc, int movesLeft) {
     static const int OVERHEAD_TIME = 500; //reserve 500ms for overhead
     static const int LOW_TIME = 20000; //20 seconds
-    int MOVES_UNTIL_DECIDED = 15; //assume we'll have a winning position within this amount of moves
+    int MOVES_UNTIL_DECIDED = 15; //assume we'll have a winning position within this amount of moves)
     if (myInc > 0) {
         MOVES_UNTIL_DECIDED = 10;
     }
@@ -30,7 +30,7 @@ void TTimeManager::set(unsigned int myTime, int oppTime, int myInc, int oppInc, 
      * Bonus/Penalty time when we have more/less time left than the opponent
      */
     if (myTime > oppTime && myInc >= oppInc && movesToGo > 2 && timeForThisMove > 2000) {
-        timeForThisMove += (myTime-oppTime)/4;
+        timeForThisMove += (myTime-oppTime)/(MOVES_UNTIL_DECIDED/2);
     } else if (myTime < oppTime && movesToGo > 2) {
         double factor = MAX(0.25, (1.0*myTime)/(1.0*oppTime));
         double correction = MIN(timeForThisMove/3.0, (oppTime-myTime)/5);
