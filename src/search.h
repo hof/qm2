@@ -144,6 +144,7 @@ struct TSearchStack {
     TScore passer_score[2];
     U64 passers;
     U64 mob[2];
+    U64 attack[2];
     U64 king_attack_zone[2];
     int8_t king_attack_sq[BKING+1];
     int8_t king_attack_pc[BKING+1];

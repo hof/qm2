@@ -78,7 +78,7 @@ const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
         /*+1*/ S(200, 100), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
 };
 
-const TScore SVPAWN = S(VPAWN - 16, VPAWN); //middle and endgame values
+const TScore SVPAWN = S(VPAWN-16, VPAWN); //middle and endgame values
 const TScore SVKNIGHT = S(VKNIGHT, VKNIGHT);
 const TScore SVBISHOP = S(VBISHOP, VBISHOP);
 const TScore SVROOK = S(VROOK, VROOK + 50);
@@ -222,14 +222,14 @@ const TScore KNIGHT_OUTPOST[64] = {
  *******************************************************************************/
 
 const TScore BISHOP_MOBILITY[14] = {
-    S(-48, -56), S(-24, -32), S(-14, -22), S(-8, -16),
-    S(-4, -12), S(0, -8), S(4, -4), S(8, 0), S(12, 4),
-    S(16, 8), S(19, 11), S(22, 14), S(25, 16), S(28, 18)
+    S(-48, -48), S(-24, -24), S(-12, -12), S(-6, -6),
+    S(-2, -2), S(0, 0), S(4, 4), S(8, 8), S(12, 12),
+    S(14, 14), S(16, 16), S(18, 18), S(20, 20), S(22, 22)
 };
 
 const TScore TRAPPED_BISHOP = S(-60, -80);
 
-const TScore ACTIVE_BISHOP = S(4, 2);
+const TScore ACTIVE_BISHOP = S(6, 6);
 
 U64 BISHOP_PATTERNS[2] = {//black, white
     BIT(d6) | BIT(d7) | BIT(e6) | BIT(d7) | BIT(a2) | BIT(h2),
@@ -261,7 +261,7 @@ const TScore ROOK_CLOSED_FILE = S(-5, -5);
 const short ROOK_ATTACK = 12;
 
 const TScore ROOK_MOBILITY[15] = {
-    S(-30, -60), S(-20, -40), S(-12, -24), S(-6, -12),
+    S(-30, -60), S(-15, -30), S(-8, -15), S(-4, -8),
     S(-2, -4), S(0, 0), S(2, 4), S(4, 8), S(6, 12),
     S(7, 14), S(8, 16), S(9, 18), S(10, 20), S(11, 22), S(12, 24)
 };
@@ -276,7 +276,6 @@ const TScore QUEEN_MOBILITY[29] = {
     S(9, 20), S(10, 21), S(10, 21), S(11, 22), S(11, 22), S(11, 22), S(12, 23), S(12, 23),
     S(13, 23), S(13, 24), S(13, 24), S(14, 25), S(14, 25)
 };
-
 
 /*******************************************************************************
  * Main evaluation function
@@ -306,7 +305,6 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     score->sub(evaluatePassers(sd, BLACK));
     score->add(evaluateKingAttack(sd, WHITE));
     score->sub(evaluateKingAttack(sd, BLACK));
-
     result += score->get(sd->stack->phase);
 
     if (sd->stack->material_flags) {
@@ -563,6 +561,9 @@ void init_pst() {
             2, 2, 2, 2, 2, 2, 2, 2
         }
     };
+    const short ROOK_FILE_BONUS[8] = {
+        -6, -4, 0, 4, 4, 0, -4, -6
+    };
 
     //Pawn
     const short PAWN_FILE[8] = {-15, -5, 0, 10, 10, 0, -5, -15};
@@ -622,13 +623,7 @@ void init_pst() {
     //Rook
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
-        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
-        U64 caps = RookMoves[sq];
-        while (caps) {
-            int ix = POP(caps);
-            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
-        }
-        scores[sq].mul(2); //square control by rook is less powerful than by bishop/knight/pawn
+        scores[sq].mg += ROOK_FILE_BONUS[FILE(sq)];
     }
     init_pst_store(scores, WROOK);
 
@@ -637,12 +632,12 @@ void init_pst() {
         scores[sq].clear();
         scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
         U64 caps = QueenMoves[sq];
-        U64 bbsq = BIT(sq);
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
         }
-        scores[sq].mul(1);
+        scores[sq].mg = ROOK_FILE_BONUS[FILE(sq)] / 2;
+        scores[sq].mg += sq <= h1 ? -4 : 0;
     }
     init_pst_store(scores, WQUEEN);
 
@@ -685,6 +680,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         sd->stack->passers = (sd->stack - 1)->passers;
         sd->stack->mob[WHITE] = (sd->stack - 1)->mob[WHITE];
         sd->stack->mob[BLACK] = (sd->stack - 1)->mob[BLACK];
+        sd->stack->attack[WHITE] = (sd->stack - 1)->attack[WHITE];
+        sd->stack->attack[BLACK] = (sd->stack - 1)->attack[BLACK];
         sd->stack->king_attack_zone[WHITE] = (sd->stack - 1)->king_attack_zone[WHITE];
         sd->stack->king_attack_zone[BLACK] = (sd->stack - 1)->king_attack_zone[BLACK];
         sd->stack->king_attack_pc[WPAWN] = (sd->stack - 1)->king_attack_pc[WPAWN];
@@ -700,6 +697,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     int bkpos = *pos->blackKingPos;
     sd->stack->mob[WHITE] = ~(*pos->pawns[WHITE] | pos->pawnAttacks(BLACK) | *pos->kings[WHITE]);
     sd->stack->mob[BLACK] = ~(*pos->pawns[BLACK] | pos->pawnAttacks(WHITE) | *pos->kings[BLACK]);
+    sd->stack->attack[WHITE] = (*pos->pawns[BLACK] | *pos->kings[BLACK]);
+    sd->stack->attack[BLACK] = (*pos->pawns[WHITE] | *pos->kings[WHITE]);
     sd->stack->king_attack_zone[WHITE] = MagicQueenMoves(bkpos, pos->pawnsAndKings()) & ~(RANK_8) & sd->stack->mob[WHITE];
     sd->stack->king_attack_zone[BLACK] = MagicQueenMoves(wkpos, pos->pawnsAndKings()) & ~(RANK_1) & sd->stack->mob[BLACK];
 
@@ -1131,10 +1130,11 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
         U64 moves = MagicBishopMoves(sq, occ) & sd->stack->mob[us];
         int count = popCount0(moves);
         result->add(BISHOP_MOBILITY[count]);
-        U64 attacks = moves & (*pos->kings[them] | kcz | *pos->pawns[them] | RANK[us][8]);
-        if (attacks) {
+        if (moves & sd->stack->attack[us]) {
             result->add(ACTIVE_BISHOP);
-        } 
+        } else {
+            result->sub(ACTIVE_BISHOP);
+        }
         if (pos->attackedByPawn(sq, us)) {
             result->add(BISHOP_OUTPOST[sq]);
         }
@@ -1207,7 +1207,6 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     if ((*pos->rooks[us] & RANK[us][1]) && (BIT(*pos->kingPos[us]) & (RANK[us][1] | RANK[us][2]))) {
         result->add(ROOK_1ST); //at least one rook is protecting the back rank
     }
-
     int kpos = *pos->kingPos[them];
     U64 kaz = sd->stack->king_attack_zone[us] & RookMoves[kpos]; //king attack zone
     U64 kcz = KingZone[kpos]; //king control zone
@@ -1216,14 +1215,12 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         int sq = pp->squares[i];
         result->add(PST[WROOK][ISQ(sq, us)]);
         U64 bitSq = BIT(sq);
-        if (bitSq & (~fill[us])) {
-            if (bitSq & fill[them]) {
-                result->add(ROOK_SEMIOPEN_FILE);
-            } else {
-                result->add(ROOK_OPEN_FILE);
-            }
+        if (bitSq & fill[us]) {
+            result->add(ROOK_CLOSED_FILE);
+        } else if (bitSq & fill[them]) {
+            result->add(ROOK_SEMIOPEN_FILE);
         } else {
-            result->sub(ROOK_CLOSED_FILE);
+            result->add(ROOK_OPEN_FILE);
         }
         U64 moves = MagicRookMoves(sq, occ) & sd->stack->mob[us];
         int count = popCount0(moves);
@@ -1235,9 +1232,8 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
 
         if (bitSq & RANK[us][7] && (BIT(*pos->kingPos[them]) & (RANK[us][8] | (RANK[us][7])))) {
             result->add(ROOK_7TH);
-        } else {
-            U64 attacks = moves & (*pos->pawns[them] | *pos->kings[them]);
-            result->add(popCount0(attacks) * ROOK_ATTACK);
+        } else if (moves & sd->stack->attack[us]) {
+            result->add(popCount0(moves & sd->stack->attack[us]) * ROOK_ATTACK);
         }
 
         //Tarrasch Rule: place rook behind passers

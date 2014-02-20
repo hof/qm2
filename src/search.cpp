@@ -658,7 +658,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
     do {
         int givesCheck = pos->givesCheck(move);
         if (!move->capture && !move->promotion &&
-                (givesCheck == 0 || (givesCheck == 1 && pos->SEE(move) < 0))) {
+                (givesCheck == 0 || (givesCheck == 1 && NOTPV(alpha, beta) && pos->SEE(move) < 0))) {
             pruned_nodes++;
             continue;
         }
