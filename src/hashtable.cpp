@@ -214,6 +214,7 @@ void THashTable::ptLookup(TSearch * sd) {
         sd->stack->king_attack_pc[WPAWN] = entry->king_attack[WHITE];
         sd->stack->king_attack_pc[BPAWN] = entry->king_attack[BLACK];
         sd->stack->passers = entry->passers;
+        sd->stack->pawn_flags = entry->pawn_flags;
         sd->pawnTableHits++;
     } else {
         sd->stack->pawn_score.set(SCORE_INVALID);
@@ -228,6 +229,7 @@ void THashTable::ptStore(TSearch * sd) {
     entry->king_attack[WHITE] = sd->stack->king_attack_pc[WPAWN];
     entry->king_attack[BLACK] = sd->stack->king_attack_pc[BPAWN];
     entry->passers = sd->stack->passers;
+    entry->pawn_flags = sd->stack->pawn_flags;
     entry->key = (pawnHash ^ sd->stack->pawn_score.mg);
 }
 

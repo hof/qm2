@@ -254,6 +254,7 @@ int TSearch::extendMove(TMove * move, int gives_check, bool first_move) {
         }
         return 0;
     }
+    
     return 0;
 }
 
@@ -351,25 +352,24 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     assert(type == PVNODE || alpha + 1 == beta);
     int eval = evaluate(this, alpha, beta);
 
-    if (!skipNull
-            && DO_NULL
+    if (DO_NULL
+            && !skipNull
             && !in_check
+            && (eval - FMARGIN[depth]) >= beta
             && ABS(beta) < SCORE_MATE - MAX_PLY
-            && pos->getPieces(pos->boardFlags->WTM)
-            && (eval - 50) >= beta) {
-        if (depth <= LOW_DEPTH && eval - FMARGIN[depth] >= beta) {
-            return eval - FMARGIN[depth];
-        }
+            && depth <= LOW_DEPTH
+            && pos->hasPieces(pos->boardFlags->WTM)) {
+        return eval - FMARGIN[depth];
     }
 
     bool mate_threat = false;
-    if (!skipNull
-            && DO_NULL
+    if (DO_NULL
+            && !skipNull
             && depth > ONE_PLY
-            && !in_check
             && eval >= beta
+            && !in_check
             && ABS(beta) < SCORE_MATE - MAX_PLY
-            && pos->getPieces(pos->boardFlags->WTM)) {
+            && pos->hasPieces(pos->boardFlags->WTM)) {
         int rdepth = depth - 3 * ONE_PLY - (depth >> 2);
         forward();
         int score = -pvs(-beta, -alpha, rdepth);
@@ -378,7 +378,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             if (score >= SCORE_MATE - MAX_PLY) {
                 score = beta; //do not return unproven mate scores
             }
-            return score;
+            return score; 
         } else if (alpha > (-SCORE_MATE + MAX_PLY) && score < (-SCORE_MATE + MAX_PLY)) {
             TMove * threat = &(stack + 1)->bestMove;
             if (!threat->capture && !threat->promotion) {
@@ -444,8 +444,8 @@ int TSearch::pvs(int alpha, int beta, int depth) {
          * 11. forward futility pruning at low depths
          * (moves without potential are skipped)
          */
-        if (stack->moveList.stage >= QUIET_MOVES
-                && DO_FP
+        if (DO_FP 
+                && stack->moveList.stage >= QUIET_MOVES
                 && type != PVNODE
                 && !move->capture
                 && !in_check

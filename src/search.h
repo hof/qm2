@@ -134,6 +134,7 @@ struct TSearchStack {
     TScore eval_score;
     short material_score;
     uint8_t material_flags;
+    uint8_t pawn_flags;
     TScore pawn_score;
     TScore knight_score[2];
     TScore bishop_score[2];
