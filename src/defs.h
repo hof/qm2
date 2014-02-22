@@ -351,6 +351,14 @@ inline int distance(int sq1, int sq2) {
    return MAX(drank, dfile);
 }
 
+inline int distance_rank(int sq1, int sq2) {
+    return ABS(RANK(sq1) - RANK(sq2));
+}
+
+inline int distance_file(int sq1, int sq2) {
+    return ABS(FILE(sq1) - FILE(sq2));
+}
+
 inline U64 forwardRanks(int sq, bool white) {
     return white? FORWARD_RANKS[RANK(sq)] : BACKWARD_RANKS[RANK(sq)];
 }

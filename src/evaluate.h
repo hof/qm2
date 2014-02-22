@@ -26,7 +26,7 @@ extern TSCORE_PST PST;
 enum EVALUATION_CONSTANTS {
     MAX_PIECES = 16,
     MAX_CLOSED_POSITION = 32, //maximum value indicating how much closed the position is
-    GRAIN_SIZE = 3, //powers of 2, used for rounding evaluation score down (and hopefully get more cutoffs)
+    GRAIN_SIZE = 2, //powers of 2, used for rounding evaluation score down (and hopefully get more cutoffs)
     GRAIN = 0xFFFFFFFF & ~((1 << GRAIN_SIZE) - 1)
 };
 

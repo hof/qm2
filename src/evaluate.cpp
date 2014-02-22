@@ -27,7 +27,6 @@ enum MaterialValues {
     MATERIAL_AHEAD_THRESHOLD = 240, //all values are in centipawns
     VNOPAWNS = -40,
     VBISHOPPAIR = 50,
-    DRAWISH_OPP_BISHOPS = -50
 };
 
 const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
@@ -78,7 +77,7 @@ const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
         /*+1*/ S(200, 100), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
 };
 
-const TScore SVPAWN = S(VPAWN-16, VPAWN); //middle and endgame values
+const TScore SVPAWN = S(VPAWN - 16, VPAWN); //middle and endgame values
 const TScore SVKNIGHT = S(VKNIGHT, VKNIGHT);
 const TScore SVBISHOP = S(VBISHOP, VBISHOP);
 const TScore SVROOK = S(VROOK, VROOK + 50);
@@ -562,7 +561,7 @@ void init_pst() {
         }
     };
     const short ROOK_FILE_BONUS[8] = {
-        -6, -4, 0, 4, 4, 0, -4, -6
+        -4, -4, 0, 4, 4, 0, -4, -4
     };
 
     //Pawn
@@ -1225,7 +1224,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         U64 moves = MagicRookMoves(sq, occ) & sd->stack->mob[us];
         int count = popCount0(moves);
         result->add(ROOK_MOBILITY[count]);
-
+        
         if (pos->attackedByPawn(sq, them)) {
             result->add(ATTACKED_PIECE);
         }
@@ -1235,7 +1234,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         } else if (moves & sd->stack->attack[us]) {
             result->add(popCount0(moves & sd->stack->attack[us]) * ROOK_ATTACK);
         }
-
+        
         //Tarrasch Rule: place rook behind passers
         U64 tpass = moves & sd->stack->passers; //touched passers
         if (tpass) {
@@ -1252,7 +1251,6 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
                 result->add(ROOK_WRONG_SIDE);
             }
         }
-
         sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
         sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
 
@@ -1305,6 +1303,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
         if (pos->attackedByPawn(sq, them)) {
             result->add(ATTACKED_PIECE);
         }
+        result->add(10 - distance_rank(sq, kpos) - distance_file(sq, kpos));
         sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
         sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
     }
