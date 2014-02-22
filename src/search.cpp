@@ -355,9 +355,9 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     if (DO_NULL
             && !skipNull
             && !in_check
+            && depth <= LOW_DEPTH
             && (eval - FMARGIN[depth]) >= beta
             && ABS(beta) < SCORE_MATE - MAX_PLY
-            && depth <= LOW_DEPTH
             && pos->hasPieces(pos->boardFlags->WTM)) {
         return eval - FMARGIN[depth];
     }
