@@ -386,7 +386,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && !in_check
             && ABS(beta) < SCORE_MATE - MAX_PLY
             && pos->hasPieces(pos->boardFlags->WTM)) {
-        int rdepth = depth - 3 * ONE_PLY - (depth >> 2);
+        int rdepth = depth - 3 * ONE_PLY - (depth >> 3);
         forward();
         int score = -pvs(-beta, -alpha, rdepth);
         backward();
@@ -423,23 +423,23 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     stack->bestMove.setMove(first_move);
     stack->reduce = 0;
     forward(first_move, gives_check);
-    int bestScore = -pvs(-beta, -alpha, new_depth + extend_move);
+    int best = -pvs(-beta, -alpha, new_depth + extend_move);
     backward(first_move);
-    if (bestScore > alpha) {
-        if (bestScore >= beta) {
-            hashTable->ttStore(this, first_move->asInt(), bestScore, depth, alpha, beta);
+    if (best > alpha) {
+        if (best >= beta) {
+            hashTable->ttStore(this, first_move->asInt(), best, depth, alpha, beta);
             if (!first_move->capture && !first_move->promotion) {
-                if (bestScore < SCORE_MATE - MAX_PLY) {
+                if (best < SCORE_MATE - MAX_PLY) {
                     updateKillers(first_move);
                 } else {
                     stack->mateKiller.setMove(first_move);
                 }
                 updateHistoryScore(first_move, depth);
             }
-            return bestScore;
+            return best;
         }
         updatePV(first_move);
-        alpha = bestScore;
+        alpha = best;
     }
 
     /*
@@ -466,7 +466,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 && type != PVNODE
                 && !in_check
                 && !active
-                && (eval < alpha || bestScore >= alpha)
+                && (eval < alpha || best >= alpha)
                 && new_depth <= LOW_DEPTH) {
             if (eval + FMARGIN[new_depth] <= alpha) {
                 pruned_nodes++;
@@ -521,12 +521,12 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         }
         backward(move);
 
-        if (score > bestScore) {
+        if (score > best) {
             stack->bestMove.setMove(move);
             if (score >= beta) {
                 hashTable->ttStore(this, move->asInt(), score, depth, alpha, beta);
                 if (!move->capture && !move->promotion) {
-                    if (bestScore < SCORE_MATE - MAX_PLY) {
+                    if (best < SCORE_MATE - MAX_PLY) {
                         updateKillers(move);
                     } else {
                         stack->mateKiller.setMove(move);
@@ -543,16 +543,16 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 }
                 return score;
             }
-            bestScore = score;
-            if (bestScore > alpha) {
+            best = score;
+            if (best > alpha) {
                 updatePV(move);
-                alpha = bestScore;
+                alpha = best;
             }
         }
         searchedMoves++;
     }
-    hashTable->ttStore(this, stack->bestMove.asInt(), bestScore, depth, alpha, beta);
-    return bestScore;
+    hashTable->ttStore(this, stack->bestMove.asInt(), best, depth, alpha, beta);
+    return best;
 }
 
 /*
