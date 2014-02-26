@@ -245,7 +245,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
 /**
  * Move Extensions
  */
-int TSearch::extendMove(TMove * move, int gives_check, bool first_move) {
+int TSearch::extendMove(TMove * move, int gives_check, bool first_move, bool pv) {
     if (DO_EXTEND_MOVE == false) {
         return 0;
     }
@@ -273,7 +273,6 @@ int TSearch::extendMove(TMove * move, int gives_check, bool first_move) {
         }
         return 0;
     }
-
     return 0;
 }
 
@@ -418,7 +417,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         return in_check ? -SCORE_MATE + pos->currentPly : drawScore();
     }
     int gives_check = pos->givesCheck(first_move);
-    int extend_move = extendMove(first_move, gives_check, true);
+    int extend_move = extendMove(first_move, gives_check, true, type == PVNODE);
     int new_depth = depth - ONE_PLY;
     stack->bestMove.setMove(first_move);
     stack->reduce = 0;
@@ -486,7 +485,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         /*
          * 12. Late Move Reductions (LMR) 
          */
-        extend_move = extendMove(move, gives_check, false);
+        extend_move = extendMove(move, gives_check, false, type == PVNODE);
         int reduce = 0;
         if (DO_LMR
                 && new_depth > ONE_PLY

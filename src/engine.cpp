@@ -162,7 +162,7 @@ void * TEngine::_think(void* engineObjPtr) {
     if (book_move) {
         root->backward(&resultMove);
     }
-    
+
     /*
      * Find a move by Principle Variation Search (fail-soft) in an 
      * internal iterative deepening framework with aspiration search.
@@ -234,7 +234,7 @@ void * TEngine::_think(void* engineObjPtr) {
                     tm->requestMoreTime();
                 } else if (move_changed) {
                     tm->requestMoreTime();
-                } else if (ABS(prev_score - score) > (VPAWN/5)) {
+                } else if (ABS(prev_score - score) > (VPAWN / 5)) {
                     tm->requestMoreTime();
                 }
             }
@@ -550,6 +550,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     const int MAXPLIES = 200; //maximum game length in plies
     const int HASH_SIZE_IN_MB = 1;
 
+
     /*
      * Initialize, normally it's not needed to change anything from here
      */
@@ -727,25 +728,26 @@ void * TEngine::_learn(void * engineObjPtr) {
             gamesPlayed++;
             batch++;
             if (gamesPlayed % 50 == 0) {
-                double tp = stats[1] + 0.5 * stats[0];
-                double tmax = batch;
-                double tscore = tp / tmax;
-                double max_sd = 1.1 / pow(batch, 0.48); //safe(?) standard deviation
-                if (tscore > 0.5 + max_sd / 2) {
-                    std::cout << "+";
-                } else if (tscore < 0.5 - max_sd / 2) {
-                    std::cout << "-";
+                double los = 0.5 + 0.5 * erf((stats[1] - stats[2]) / sqrt(2.0 * (stats[1] + stats[2])));
+                if (los > 0.8) {
+                    std::cout << '+';
+                } else if (los < 0.2) {
+                    std::cout << '-';
                 } else {
-                    std::cout << "=";
+                    std::cout << '=';
                 }
                 std::cout.flush();
                 //check if the result if significant enough before finishing the full batch
                 if (batch > 200) {
-                    if ((tscore + max_sd) < 0.5) {
-                        std::cout << "<";
-                        break;
-                    } else if ((tscore - max_sd > 0.5)) {
+                    double batch_adj = MIN(0.4, batch / 100000.0);
+                    bool winner = los > (0.99 - batch_adj);
+                    bool looser = los < (0.01 + batch_adj);
+                    if (winner) {
                         std::cout << ">";
+                        break;
+                    }
+                    if (looser) {
+                        std::cout << '<';
                         break;
                     }
                 }
@@ -759,11 +761,15 @@ void * TEngine::_learn(void * engineObjPtr) {
         totalNodes[1] += nodes[1];
         double score = (100.0 * points) / maxPoints;
         int elo = round(-400.0 * log(1 / (points / maxPoints) - 1) / log(10));
-        std::cout << "\nGames: " << batch << " W: " << stats[1] << " L: " << stats[2] << " D: " << stats[0] << " Score: " << points << "/" << maxPoints << " (" << score << "%, " << wins << ", Elo: " << elo << ") " << std::endl;
+        double los = 0.5 + 0.5 * erf((stats[1] - stats[2]) / sqrt(2.0 * (stats[1] + stats[2])));
+        double los_p = los * 100;
+        std::cout << "\nGames: " << batch << " WLD: " << stats[1] << "-" << stats[2] << "-" << stats[0]
+                << " (" << (int) score << "%, Elo: " << elo << ", LOS: " << (int) los_p << "%) " << std::endl;
 
-        double sdev = 1.1 / pow(batch, 0.48); //safe(?) standard deviation
-        double fscore = score / 100.0;
-        if ((fscore - sdev) > 0.5) {
+        double batch_adj = MIN(0.4, batch / 100000.0);
+        bool winner = los > (0.99 - batch_adj);
+        bool looser = los < (0.01 + batch_adj);
+        if (winner) {
             //we have a winner!
             std::cout << "Engine(" << strongest << ") is significantly stronger than engine(" << opponent << ")" << std::endl;
             if (strongest > opponent) {
@@ -771,7 +777,7 @@ void * TEngine::_learn(void * engineObjPtr) {
             } else {
                 upperBound = MIN(upperBound, opponent - 0.1);
             }
-        } else if ((fscore + sdev) < 0.5) {
+        } else if (looser) {
             //we have a winner!
             std::cout << "Engine(" << strongest << ") is significantly weaker than engine(" << opponent << ")" << std::endl;
             bestFactor = opponent;
@@ -784,19 +790,14 @@ void * TEngine::_learn(void * engineObjPtr) {
             strongest = bestFactor;
         } else {
             //no significant result.. adjust the bounds with care
-            double adjust = ABS(fscore - 0.5) / sdev;
-            if (fscore > 0.5) {
+            if (los > 0.5 && elo > 0) {
                 std::cout << "Engine(" << strongest << ") is a bit stronger than engine(" << opponent << ")" << std::endl;
-            } else if (fscore < 0.5) {
+            } else if (los < 0.5 && elo < 0) {
                 std::cout << "Engine(" << strongest << ") is a bit weaker than engine(" << opponent << ")" << std::endl;
                 if (opponent < bestFactor) {
                     bestFactor = opponent; //prefer the lowest factor
                 } else {
                     bestFactor = opponent;
-                    //    double adj_step = (opponent - strongest) * adjust;
-                    //    adj_step = ceil(adj_step * 10) / 10.0;
-                    //    adj_step = MAX(MIN_WINDOW_ADJ, adj_step);
-                    //    bestFactor += adj_step; //carefully adjust to a higher best
                 }
                 opponent = strongest;
                 strongest = bestFactor;
@@ -810,12 +811,12 @@ void * TEngine::_learn(void * engineObjPtr) {
                 lowerBound = bestFactor - 4 * MAX_WINDOW;
             }
             if (strongest < opponent) {
-                double adj_step = MAX(STOP_WINDOW / 2, ABS(upperBound - opponent) * adjust);
+                double adj_step = MAX(STOP_WINDOW / 2, ABS(upperBound - opponent) * ABS(los - 0.5));
                 adj_step = ceil(adj_step * 10) / 10.0;
                 adj_step = MAX(MIN_WINDOW_ADJ, adj_step);
                 upperBound -= adj_step;
             } else if (strongest > opponent) {
-                double adj_step = MAX(STOP_WINDOW / 2, ABS(lowerBound - opponent) * adjust);
+                double adj_step = MAX(STOP_WINDOW / 2, ABS(lowerBound - opponent) * ABS(los - 0.5));
                 adj_step = ceil(adj_step * 10) / 10.0;
                 adj_step = MAX(MIN_WINDOW_ADJ, adj_step);
                 lowerBound += adj_step;

@@ -4,7 +4,7 @@
 void TTimeManager::set(unsigned int myTime, int oppTime, int myInc, int oppInc, int movesLeft) {
     static const int OVERHEAD_TIME = 500; //reserve 500ms for overhead
     static const int LOW_TIME = 20000; //20 seconds
-    int MOVES_UNTIL_DECIDED = 15; //assume we'll have a winning position within this amount of moves)
+    int MOVES_UNTIL_DECIDED = 20; //assume we'll have a winning position within this amount of moves)
     static const double DIFFICULT_POSITION_FACTOR = 2.0;
     int movesToGo = movesLeft? MIN(movesLeft+1, MOVES_UNTIL_DECIDED) : MOVES_UNTIL_DECIDED;
     int limit = myTime - OVERHEAD_TIME;

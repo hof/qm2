@@ -365,7 +365,7 @@ public:
         return result & GRAIN;
     }
     
-    int extendMove(TMove * move, int gives_check, bool first_move);
+    int extendMove(TMove * move, int gives_check, bool first_move, bool pv);
     
     inline bool passedPawn(TMove * move) {
         return BIT(move->ssq) & stack->passers;
