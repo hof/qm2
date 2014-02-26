@@ -292,9 +292,8 @@ inline U64 forwardFill(int sq, bool white) {
 #define FILE_SYMBOL(sq)     (char(((sq)&7)+97))
 #define RANK_SYMBOL(sq)     (char(((sq)>>3)+49))
 #define MAX_PLY              128
-#define MAX(x,y)            ((x)>=(y)?(x):(y))
+#define MAX(x,y)            ((x)>(y)?(x):(y))
 #define MIN(x,y)            ((x)<(y)?(x):(y))
-
 #define ABS(x)              ((x)>=0?(x):(-(x)))    
 #define FLIP_SQUARE(sq)     (((sq)^56))
 

@@ -187,7 +187,7 @@ void * TEngine::_think(void* engineObjPtr) {
         int beta_window = 0;
         int lowest = SCORE_INFINITE;
         int highest = -SCORE_INFINITE;
-        int depth = MIN(LOW_DEPTH + ONE_PLY, maxDepth);
+        int depth = ONE_PLY;
         int resultScore = 0;
         bool move_changed = false;
         while (depth <= maxDepth * ONE_PLY && !searchData->stopSearch) {
@@ -217,7 +217,7 @@ void * TEngine::_think(void* engineObjPtr) {
                     engine->setMove(&firstMove);
                     engine->setScore(resultScore);
                 }
-                if (searchData->outputHandler) {
+                if (searchData->outputHandler && searchData->stopSearch) {
                     searchData->outputHandler->sendPV(resultScore, depth / ONE_PLY, searchData->selDepth,
                             searchData->nodes + searchData->pruned_nodes, tm->elapsed(), searchData->getPVString().c_str(), type);
                 }

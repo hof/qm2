@@ -3,13 +3,17 @@
 #include <iostream>
 #include <string.h>
 
-const short QCHECKDEPTH = 1;
-const short FMARGIN[9] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200};
-const bool DO_NULL = true;
-const bool DO_FP = true;
-const bool DO_LMR = true;
-const bool DO_EXTEND_MOVE = true;
-const bool QS_HASH_LOOKUP = false;
+static const bool DO_NULL = true;
+static const bool DO_STATIC_NULL = true;
+static const bool DO_FP = true;
+static const bool DO_LMR = true;
+static const bool DO_EXTEND_MOVE = true;
+static const short FMARGIN[12] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200, 2000, 2000, 2000};
+
+static const bool QS_DO_DELTA = true;
+static const bool QS_HASH_LOOKUP = false;
+static const short QS_CHECKDEPTH = 1;
+static const short QS_DELTA = 200;
 
 bool TSearch::pondering() {
     return ponder || (outputHandler && outputHandler->enginePonder == true);
@@ -142,39 +146,52 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
         pos->boardFlags->checkers = rMove->checkers;
     }
     int new_depth = depth - ONE_PLY;
-    int bestScore = -pvs(-beta, -alpha, new_depth);
+    int best = -pvs(-beta, -alpha, new_depth);
     backward(&rMove->Move);
     int sortBaseScoreForPV = 1000 * depth / ONE_PLY;
     rMove->Nodes += nodes - nodesBeforeMove;
     rMove->PV = sortBaseScoreForPV;
-    rMove->Value = bestScore;
+    rMove->Value = best;
+    stack->bestMove.setMove(&rMove->Move);
+    if (!rMove->Move.equals(&stack->pvMoves[0])) {
+        stack->pvMoves[0].setMove(&rMove->Move);
+        stack->pvCount = 1;
+    }
     if (stopSearch) {
         return alpha;
-    } else if (bestScore > alpha) {
-        if (bestScore >= beta) {
-            if (!rMove->Move.equals(&stack->pvMoves[0])) {
-                stack->pvMoves[0].setMove(&rMove->Move);
-                stack->pvCount = 1;
-            }
-            return bestScore;
-        }
-        updatePV(&rMove->Move);
-        if (outputHandler && !rMove->Move.equals(&stack->pvMoves[0])) {
-            outputHandler->sendPV(bestScore,
+    }
+    if (best < alpha) {
+        return best; //return to adjust the aspiration window
+    }
+    if (best >= beta) {
+        if (outputHandler && depth > LOW_DEPTH) {
+            outputHandler->sendPV(best,
                     depth / ONE_PLY,
                     selDepth,
                     nodes + pruned_nodes,
                     timeManager->elapsed(),
                     getPVString().c_str(),
-                    bestScore <= alpha ? FAILLOW : bestScore >= beta ? FAILHIGH : EXACT);
+                    best <= alpha ? FAILLOW : best >= beta ? FAILHIGH : EXACT);
         }
-        alpha = bestScore;
+        return best;
+    }
+    if (best > alpha) {
+        updatePV(&rMove->Move);
+        if (outputHandler && depth > LOW_DEPTH) {
+            outputHandler->sendPV(best,
+                    depth / ONE_PLY,
+                    selDepth,
+                    nodes + pruned_nodes,
+                    timeManager->elapsed(),
+                    getPVString().c_str(),
+                    best <= alpha ? FAILLOW : best >= beta ? FAILHIGH : EXACT);
+        }
+        alpha = best;
     }
 
     /*
      * Search remaining moves with a zero width window
      */
-    stack->bestMove.setMove(&rMove->Move);
     for (int i = 1; i < root.MoveCount; i++) {
         rMove = &root.Moves[i];
         nodesBeforeMove = nodes;
@@ -184,7 +201,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
             pos->boardFlags->checkers = rMove->checkers;
         }
         int score = -pvs(-alpha - 1, -alpha, new_depth);
-        if (score > alpha && score < beta && stopSearch == false) {
+        if (score > alpha && stopSearch == false) {
             score = -pvs(-beta, -alpha, new_depth);
         }
         backward(&rMove->Move);
@@ -192,8 +209,10 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
         rMove->Value = score;
         if (stopSearch) {
             return alpha;
-        } else if (score > bestScore && score > alpha) {
+        }
+        if (score > best) {
             rMove->PV = sortBaseScoreForPV + i;
+            stack->bestMove.setMove(&rMove->Move);
             if (score >= beta) {
                 if (!rMove->Move.equals(&stack->pvMoves[0])) {
                     stack->pvMoves[0].setMove(&rMove->Move);
@@ -201,26 +220,26 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
                 }
                 return score;
             }
-            bestScore = score;
-            stack->bestMove.setMove(&rMove->Move);
-            updatePV(&rMove->Move);
-            if (!stack->bestMove.equals(&stack->pvMoves[0]) && outputHandler) {
-                outputHandler->sendPV(bestScore,
-                        depth / ONE_PLY,
-                        selDepth,
-                        nodes + pruned_nodes,
-                        timeManager->elapsed(),
-                        getPVString().c_str(),
-                        bestScore <= alpha ? FAILLOW : bestScore >= beta ? FAILHIGH : EXACT);
-            }
-            if (bestScore > alpha) {
-                alpha = bestScore;
+            best = score;
+            if (score > alpha) {
+                updatePV(&rMove->Move);
+                //trace(best, alpha, beta);
+                if (outputHandler && depth > LOW_DEPTH) { //send the new pv right away
+                    outputHandler->sendPV(best,
+                            depth / ONE_PLY,
+                            selDepth,
+                            nodes + pruned_nodes,
+                            timeManager->elapsed(),
+                            getPVString().c_str(),
+                            best <= alpha ? FAILLOW : best >= beta ? FAILHIGH : EXACT);
+                }
+                alpha = score;
             }
         } else {
             rMove->PV >>= 5;
         }
     }
-    return bestScore;
+    return best;
 }
 
 /**
@@ -254,7 +273,7 @@ int TSearch::extendMove(TMove * move, int gives_check, bool first_move) {
         }
         return 0;
     }
-    
+
     return 0;
 }
 
@@ -273,11 +292,8 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      */
     if (depth < ONE_PLY) {
         stack->pvCount = 0;
-        if (pos->currentPly > selDepth) {
-            selDepth = pos->currentPly;
-        }
-        int score = qsearch(alpha, beta, 0, QCHECKDEPTH);
-        return score;
+        selDepth = MAX(selDepth, pos->currentPly);
+        return qsearch(alpha, beta, 0, QS_CHECKDEPTH);
     }
 
     nodes++;
@@ -352,7 +368,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     assert(type == PVNODE || alpha + 1 == beta);
     int eval = evaluate(this, alpha, beta);
 
-    if (DO_NULL
+    if (DO_STATIC_NULL
             && !skipNull
             && !in_check
             && depth <= LOW_DEPTH
@@ -378,7 +394,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             if (score >= SCORE_MATE - MAX_PLY) {
                 score = beta; //do not return unproven mate scores
             }
-            return score; 
+            return score;
         } else if (alpha > (-SCORE_MATE + MAX_PLY) && score < (-SCORE_MATE + MAX_PLY)) {
             TMove * threat = &(stack + 1)->bestMove;
             if (!threat->capture && !threat->promotion) {
@@ -439,25 +455,25 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         assert(stack->bestMove.equals(move) == false);
         assert(first_move->equals(move) == false);
         gives_check = pos->givesCheck(move);
+        bool active = gives_check > 0 || passedPawn(move) || pos->active(move);
 
         /*
          * 11. forward futility pruning at low depths
          * (moves without potential are skipped)
          */
-        if (DO_FP 
+        if (DO_FP
                 && stack->moveList.stage >= QUIET_MOVES
                 && type != PVNODE
-                && !move->capture
                 && !in_check
-                && gives_check <= 0
-                && new_depth <= LOW_DEPTH
-                && !passedPawn(move)) {
+                && !active
+                && (eval < alpha || bestScore >= alpha)
+                && new_depth <= LOW_DEPTH) {
             if (eval + FMARGIN[new_depth] <= alpha) {
                 pruned_nodes++;
                 continue;
             }
             int mc_max = 2 + ((depth * depth) >> 2);
-            if (searchedMoves > mc_max && !pos->active(move)) {
+            if (searchedMoves > mc_max) {
                 pruned_nodes++;
                 continue;
             }
@@ -498,7 +514,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             (stack - 1)->reduce = 0;
             score = -pvs(-alpha - 1, -alpha, new_depth + extend_move);
         }
-        if (score > alpha && score < beta) {
+        if (score > alpha) {
             //full window research
             (stack - 1)->reduce = 0;
             score = -pvs(-beta, -alpha, new_depth + extend_move);
@@ -542,7 +558,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 /*
  * Quiescence search
  */
-static const int MAXPOSGAIN = 200;
 
 int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
 
@@ -675,7 +690,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
                 }
                 gain += PIECE_VALUE[move->promotion] - VPAWN;
             }
-            if (base + gain + MAXPOSGAIN < alpha) {
+            if (base + gain + QS_DELTA < alpha) {
                 pruned_nodes++;
                 continue;
             }

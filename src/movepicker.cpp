@@ -126,9 +126,8 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                         return result;
                     }
                     //at this point, the position must be (stale)mate as no move was found
-                    //or the search was aborted
-                    moveList->stage = STOP;
-                    return NULL;
+                    //or the search was aborted.. continue anyway (robust))
+                    moveList->stage = MATEKILLER; //this line is kept to place a breakpoint. todo: assert (stale)mate
                 }
 
             case MATEKILLER:
