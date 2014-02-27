@@ -77,11 +77,11 @@ const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
         /*+1*/ S(200, 100), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
 };
 
-const TScore SVPAWN = S(VPAWN - 16, VPAWN); //middle and endgame values
+const TScore SVPAWN = S(VPAWN, VPAWN); //middle and endgame values
 const TScore SVKNIGHT = S(VKNIGHT, VKNIGHT);
 const TScore SVBISHOP = S(VBISHOP, VBISHOP);
 const TScore SVROOK = S(VROOK, VROOK + 50);
-const TScore SVQUEEN = S(VQUEEN, VQUEEN);
+const TScore SVQUEEN = S(VQUEEN, VQUEEN + 100);
 const TScore SVKING = S(VKING, VKING);
 
 const TScore PIECE_SCORE[13] = {

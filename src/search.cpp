@@ -380,12 +380,12 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     bool mate_threat = false;
     if (DO_NULL
             && !skipNull
+            && !in_check
             && depth > ONE_PLY
             && eval >= beta
-            && !in_check
             && ABS(beta) < SCORE_MATE - MAX_PLY
             && pos->hasPieces(pos->boardFlags->WTM)) {
-        int rdepth = depth - 3 * ONE_PLY - (depth >> 3);
+        int rdepth = depth - 3 * ONE_PLY - 1 - (depth >> 3);
         forward();
         int score = -pvs(-beta, -alpha, rdepth);
         backward();
@@ -496,7 +496,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 && !passedPawn(move)
                 && extend_move <= 0) {
             assert(new_depth < 256);
-            bool active = pos->active(move);
             reduce = LMR[active][type == PVNODE][MIN(63, searchedMoves)][new_depth];
             int max_reduce = new_depth - ONE_PLY;
             reduce += reduce < max_reduce && type == CUTNODE;

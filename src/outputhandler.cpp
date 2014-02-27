@@ -27,7 +27,7 @@ void TOutputHandler::sendPV(int cpScore, int depth, int selDepth, U64 nodes, int
     outputString += ntos(time);
     outputString += " nps ";
     int nps = nodes;
-    if (time > 100) {
+    if (time > 10) {
         nps = (1000 * U64(nodes)) / (time);
     }
     outputString += ntos(nps);
