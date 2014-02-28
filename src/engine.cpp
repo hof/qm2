@@ -739,7 +739,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                 std::cout.flush();
                 //check if the result if significant enough before finishing the full batch
                 if (batch > 200) {
-                    double batch_adj = MIN(0.4, batch / 100000.0);
+                    double batch_adj = MIN(0.04, batch / 100000.0);
                     bool winner = los > (0.99 - batch_adj);
                     bool looser = los < (0.01 + batch_adj);
                     if (winner) {
@@ -766,7 +766,7 @@ void * TEngine::_learn(void * engineObjPtr) {
         std::cout << "\nGames: " << batch << " WLD: " << stats[1] << "-" << stats[2] << "-" << stats[0]
                 << " (" << (int) score << "%, Elo: " << elo << ", LOS: " << (int) los_p << "%) " << std::endl;
 
-        double batch_adj = MIN(0.4, batch / 100000.0);
+        double batch_adj = MIN(0.04, batch / 100000.0);
         bool winner = los > (0.99 - batch_adj);
         bool looser = los < (0.01 + batch_adj);
         if (winner) {
