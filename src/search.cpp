@@ -269,9 +269,16 @@ int TSearch::extendMove(TMove * move, int gives_check, bool first_move) {
     }
     if (stack->phase >= 12 && passedPawn(move)) { //passed pawn ext in endgame
         if (first_move || pos->SEE(move) >= 0) {
-            return HALF_PLY;
+            return ONE_PLY;
         }
         return 0;
+    }
+    if (stack->phase >= 12 && first_move && move->capture != EMPTY 
+            && move->capture != WPAWN && move->capture != BPAWN) {
+        TMove * last_move = &(stack-1)->move;
+        if (last_move->capture && move->tsq == last_move->tsq) {
+            return ONE_PLY; //recapture into very late endgame
+        }
     }
     return 0;
 }
