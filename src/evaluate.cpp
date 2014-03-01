@@ -112,6 +112,8 @@ const short ATTACKED_PIECE = -32; //piece attacked by a pawn
  * Pawn Values 
  *******************************************************************************/
 
+uint8_t PFLAG_CLOSED_CENTER = 1;
+
 const TScore DEFENDED_PAWN[2] = {S(0, 2), S(2, 4)}; //closed, open file
 const TScore ISOLATED_PAWN[2] = {S(-10, -20), S(-20, -20)}; //closed, open file
 const TScore WEAK_PAWN[2] = {S(-12, -8), S(-16, -10)}; //closed, open file
@@ -148,7 +150,7 @@ const int8_t SHELTER_KPOS[64] = {//attack units regarding king position
     3, 4, 5, 6, 6, 5, 4, 3,
     1, 2, 3, 4, 4, 3, 2, 1,
     0, 1, 2, 3, 3, 2, 1, 0,
-    1, -2, -1, 1, 1, 0, -2, 1,
+    -2, -2, -1, 1, 1, 0, -2, -2,
 
 };
 
@@ -687,6 +689,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         sd->stack->king_attack_pc[BPAWN] = (sd->stack - 1)->king_attack_pc[BPAWN];
         sd->stack->king_attack_sq[WPAWN] = 0;
         sd->stack->king_attack_sq[BPAWN] = 0;
+        sd->stack->pawn_flags = (sd->stack - 1)->pawn_flags;
         return &sd->stack->pawn_score;
     }
 
@@ -698,8 +701,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     sd->stack->mob[BLACK] = ~(*pos->pawns[BLACK] | pos->pawnAttacks(WHITE) | *pos->kings[BLACK]);
     sd->stack->attack[WHITE] = (*pos->pawns[BLACK] | *pos->kings[BLACK]);
     sd->stack->attack[BLACK] = (*pos->pawns[WHITE] | *pos->kings[WHITE]);
-    sd->stack->king_attack_zone[WHITE] = MagicQueenMoves(bkpos, pos->pawnsAndKings()) & ~(RANK_8) & sd->stack->mob[WHITE];
-    sd->stack->king_attack_zone[BLACK] = MagicQueenMoves(wkpos, pos->pawnsAndKings()) & ~(RANK_1) & sd->stack->mob[BLACK];
+    sd->stack->king_attack_zone[WHITE] = MagicQueenMoves(bkpos, pos->pawnsAndKings()) & ~(RANK_8 | RANK_7) & sd->stack->mob[WHITE];
+    sd->stack->king_attack_zone[BLACK] = MagicQueenMoves(wkpos, pos->pawnsAndKings()) & ~(RANK_1 | RANK_2) & sd->stack->mob[BLACK];
 
     /*
      * 2. Probe the hash table for the pawn score
@@ -718,8 +721,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     sd->stack->king_attack_pc[BPAWN] = 0;
     sd->stack->king_attack_sq[WPAWN] = 0;
     sd->stack->king_attack_sq[BPAWN] = 0;
+    sd->stack->pawn_flags = 0;
     pawn_score->clear();
-
 
     U64 passers = 0;
     U64 openW = ~FILEFILL(pos->whitePawns);
@@ -749,6 +752,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
     U64 kcz_w = KingZone[wkpos];
     U64 kcz_b = KingZone[bkpos];
+
+    int blocked_center_pawns = 0;
 
     TPiecePlacement * wPawns = &pos->pieces[WPAWN];
     for (int i = 0; i < wPawns->count; i++) {
@@ -824,6 +829,10 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
         }
 
+        if (blocked && (sqBit & CENTER)) {
+            blocked_center_pawns++;
+        }
+
         sd->stack->king_attack_pc[WPAWN] += popCount0(WPawnCaptures[sq] & kcz_b);
 
 
@@ -895,12 +904,21 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
             passers |= sqBit;
 
         }
+
+        if (blocked && (sqBit & CENTER)) {
+            blocked_center_pawns++;
+        }
+
 #ifdef PRINT_PAWN_EVAL
         std::cout << std::endl;
 #endif
 
         sd->stack->king_attack_pc[BPAWN] += popCount0(BPawnCaptures[sq] & kcz_w);
 
+    }
+
+    if (blocked_center_pawns > 2) {
+        sd->stack->pawn_flags |= PFLAG_CLOSED_CENTER;
     }
 
 #ifdef PRINT_PAWN_EVAL
@@ -1224,7 +1242,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         U64 moves = MagicRookMoves(sq, occ) & sd->stack->mob[us];
         int count = popCount0(moves);
         result->add(ROOK_MOBILITY[count]);
-        
+
         if (pos->attackedByPawn(sq, them)) {
             result->add(ATTACKED_PIECE);
         }
@@ -1234,7 +1252,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         } else if (moves & sd->stack->attack[us]) {
             result->add(popCount0(moves & sd->stack->attack[us]) * ROOK_ATTACK);
         }
-        
+
         //Tarrasch Rule: place rook behind passers
         U64 tpass = moves & sd->stack->passers; //touched passers
         if (tpass) {
@@ -1476,18 +1494,18 @@ const int16_t KING_SHELTER[24] = {//structural shelter (pawns & kings)
 };
 
 const int16_t KING_ATTACK[64] = {//indexed by attack units
-    0, 0, 0, 1, 3, 5, 6, 8,
-    10, 12, 16, 20, 24, 28, 32, 36,
-    42, 48, 54, 60, 66, 72, 78, 84,
-    92, 100, 108, 116, 124, 131, 138, 144,
-    150, 155, 160, 164, 168, 172, 176, 180,
-    182, 188, 190, 192, 194, 196, 198, 200,
-    202, 204, 206, 208, 210, 212, 214, 216,
-    218, 220, 222, 224, 226, 228, 230, 232
+    0, 0, 0, 0, 0, 0, 1, 3,
+    5, 6, 8, 10, 12, 16, 20, 24,
+    28, 32, 36, 42, 48, 54, 60, 66,
+    72, 78, 84, 92, 100, 108, 116, 124,
+    131, 138, 144, 150, 155, 160, 164, 168,
+    172, 176, 180, 182, 188, 190, 192, 194,
+    196, 198, 200, 202, 204, 206, 208, 210,
+    212, 214, 216, 218, 220, 222, 224, 226
 };
 
-const int16_t KING_ATTACKERS_MUL[6] = {
-    0, 0, 128, 192, 256, 288
+const int16_t KING_ATTACKERS_MUL[5] = {
+    0, 128, 192, 256, 288
 };
 
 const int16_t KING_SHELTER_MUL[24] = {
@@ -1495,6 +1513,16 @@ const int16_t KING_SHELTER_MUL[24] = {
     272, 288, 304, 320, 328, 336, 342, 350,
     354, 358, 362, 368, 370, 372, 376, 380
 };
+
+inline int ka_units(TSearch * sd, int pc, int pcs, int sqs) {
+    int result = 0;
+    int unit = KING_ATTACK_UNIT[pc];
+    result += unit * (sqs + 1) + (2 * pcs);
+#ifdef PRINT_KING_SAFETY
+    std::cout << " pc  " << pc << " (pcs, sqs) = (" << pcs << ", " << sqs << ") -> " << result << std::endl;
+#endif
+    return result;
+}
 
 inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     TScore * result = &sd->stack->king_score[us];
@@ -1510,7 +1538,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     int shelter_ix = RANGE(0, 23, KING_ATTACK_OFFSET + sd->stack->king_attack_pc[PAWN[us]]);
 
     result->set(KING_SHELTER[shelter_ix], 0);
-    result->add((popCount(sd->stack->king_attack_zone[us]) - 3) * 12, 0);
+    result->add(popCount0(sd->stack->king_attack_zone[us]) * 12, 0);
 
 #ifdef PRINT_KING_SAFETY
     std::cout << "\nKing Attack\nShelter: " << shelter_ix << " -> " << (int) KING_SHELTER[shelter_ix] << std::endl;
@@ -1524,49 +1552,59 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
      * The shelter score still counts, but only half.
      */
 
+    //reduce shelter score for closed positions
+    if ((sd->stack->pawn_flags & PFLAG_CLOSED_CENTER) != 0) {
+        result->half();
+    }
+
     if (*pos->rooks[us] == 0 && *pos->bishops[us] == 0 && *pos->knights[us] == 0) {
         result->half();
         return result;
     }
 
     /*
-     * 3. Get the totals of the piece attack scores
+     * 3. If the queen is not involved in the king attack, return
      */
-    int attack_units = 0;
-    int attackers_count = 0;
-    bool queen_involved = false;
-    for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
+
+    int queen_pc = sd->stack->king_attack_pc[QUEEN[us]];
+    int queen_sq = sd->stack->king_attack_sq[QUEEN[us]];
+    if (queen_pc == 0 && queen_sq == 0) {
+        return result;
+    }
+    int attack_units = ka_units(sd, QUEEN[us], queen_pc, queen_sq);
+    int attackers_count = 1;
+
+    /*
+     * 4. Get the totals of the piece attack scores
+     */
+    for (int pc = KNIGHT[us]; pc < QUEEN[us]; pc++) {
         int pcs = sd->stack->king_attack_pc[pc];
         int sqs = sd->stack->king_attack_sq[pc];
         if (pcs == 0 && sqs == 0) {
             continue;
         }
-        queen_involved |= (pc == QUEEN[us]);
         attackers_count++;
-        int unit = KING_ATTACK_UNIT[pc];
-        attack_units += unit + (2 * pcs) + sqs;
-#ifdef PRINT_KING_SAFETY
-        std::cout << "pc " << pc << ": " << pcs << " , sqs: " << sqs << " tot: " << attack_units << std::endl;
-#endif
+        attack_units += ka_units(sd, pc, pcs, sqs);
     }
+
 #ifdef PRINT_KING_SAFETY
     std::cout << "attacking pieces " << attackers_count << std::endl;
     std::cout << "attack units total " << attack_units << std::endl;
 #endif
-    if (queen_involved && attackers_count > 1) {
-        int ix = RANGE(0, 63, attack_units);
-        int piece_attack_score = KING_ATTACK[ix];
-        MUL256(piece_attack_score, KING_ATTACKERS_MUL[RANGE(0, 5, attackers_count)]);
-        MUL256(piece_attack_score, KING_SHELTER_MUL[RANGE(0, 23, shelter_ix)]);
-        result->add(piece_attack_score, 0);
-#ifdef PRINT_KING_SAFETY
-        std::cout << "piece attack score " << piece_attack_score << std::endl;
-#endif
-    }
+
+    int ix = RANGE(0, 63, attack_units);
+
+    int piece_attack_score = KING_ATTACK[ix];
+    assert(attackers_count > 0 && attackers_count <= 4);
+    MUL256(piece_attack_score, KING_ATTACKERS_MUL[attackers_count]);
+    MUL256(piece_attack_score, KING_SHELTER_MUL[RANGE(0, 23, shelter_ix)]);
+    result->add(piece_attack_score, 0);
 
 #ifdef PRINT_KING_SAFETY
+    std::cout << "piece attack score " << piece_attack_score << std::endl;
     result->print();
 #endif
+
     return result;
 }
 
