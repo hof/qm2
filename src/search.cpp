@@ -8,7 +8,9 @@ static const bool DO_STATIC_NULL = true;
 static const bool DO_FP = true;
 static const bool DO_LMR = true;
 static const bool DO_EXTEND_MOVE = true;
+static const bool DO_RAZOR = false;
 static const short FMARGIN[12] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200, 2000, 2000, 2000};
+static const short RMARGIN = 500;
 
 static const bool QS_DO_DELTA = true;
 static const bool QS_HASH_LOOKUP = false;
@@ -245,7 +247,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
 /**
  * Move Extensions
  */
-int TSearch::extendMove(TMove * move, int gives_check, bool first_move) {
+int TSearch::extendMove(TMove * move, int gives_check) {
     if (DO_EXTEND_MOVE == false) {
         return 0;
     }
@@ -253,32 +255,16 @@ int TSearch::extendMove(TMove * move, int gives_check, bool first_move) {
         if (gives_check > 1) { //double check or exposed check
             return ONE_PLY;
         }
-        if (first_move || pos->SEE(move) >= 0) {
+        if (move->piece == WPAWN || move->piece == BPAWN) {
+            return ONE_PLY;
+        }
+        if (move->capture) {
+            return ONE_PLY;
+        }
+        if (pos->SEE(move) > -200) {
             return ONE_PLY;
         }
         return 0;
-    }
-    if (pos->push7th(move)) { //passed pawn to 7th rank or promotion
-        if (move->promotion && move->promotion != WQUEEN && move->promotion != BQUEEN) {
-            return 0; //don't extend under promotions
-        }
-        if (first_move || pos->SEE(move) >= 0) {
-            return ONE_PLY;
-        }
-        return 0;
-    }
-    if (stack->phase >= 12 && passedPawn(move)) { //passed pawn ext in endgame
-        if (first_move || pos->SEE(move) >= 0) {
-            return ONE_PLY;
-        }
-        return 0;
-    }
-    if (stack->phase >= 12 && first_move && move->capture != EMPTY 
-            && move->capture != WPAWN && move->capture != BPAWN) {
-        TMove * last_move = &(stack-1)->move;
-        if (last_move->capture && move->tsq == last_move->tsq) {
-            return ONE_PLY; //recapture into very late endgame
-        }
     }
     return 0;
 }
@@ -411,6 +397,27 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     skipNull = false;
 
     /*
+     * Razoring
+     */
+
+    if (DO_RAZOR && type != PVNODE && depth <= LOW_DEPTH && !in_check && eval < alpha) {
+        int razor_value = eval + RMARGIN;
+        if (razor_value < beta) {
+            if (depth < (2 * ONE_PLY)) {
+                int score = qsearch(alpha, beta, 0, QS_CHECKDEPTH);
+                return MAX(razor_value, score);
+            }
+            razor_value += RMARGIN;
+            if (razor_value < beta) {
+                int score = qsearch(alpha, beta, 0, QS_CHECKDEPTH);
+                if (score < beta) {
+                    return MAX(razor_value, score);
+                }
+            }
+        }
+    }
+
+    /*
      * 7. Principle variation search (PVS). 
      * Generate the first move from pv, hash or internal iterative deepening,
      * all handled by the movepicker instance. 
@@ -423,7 +430,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         return in_check ? -SCORE_MATE + pos->currentPly : drawScore();
     }
     int gives_check = pos->givesCheck(first_move);
-    int extend_move = extendMove(first_move, gives_check, true);
+    int extend_move = extendMove(first_move, gives_check);
     int new_depth = depth - ONE_PLY;
     stack->bestMove.setMove(first_move);
     stack->reduce = 0;
@@ -491,7 +498,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         /*
          * 12. Late Move Reductions (LMR) 
          */
-        extend_move = extendMove(move, gives_check, false);
+        extend_move = extendMove(move, gives_check);
         int reduce = 0;
         if (DO_LMR
                 && new_depth > ONE_PLY
@@ -510,7 +517,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             reduce += reduce < max_reduce && type != PVNODE && history[move->piece][move->tsq] < 0;
         }
         stack->reduce = reduce;
-
+        
         forward(move, gives_check);
         int score = -pvs(-alpha - 1, -alpha, new_depth - reduce + extend_move);
         if (score > alpha && reduce > 0) {
@@ -683,6 +690,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
 
         //pruning (delta futility and negative see), skipped for checks and PV nodes
         if (QS_DO_DELTA && givesCheck == 0 && !pv_node) {
+
             //1. delta futility pruning: the captured piece + max. positional gain should raise alpha
             int gain = PIECE_VALUE[move->capture];
             if (move->promotion) {
@@ -703,11 +711,11 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
                 continue;
             }
         }
-        
+
         forward(move, givesCheck);
         int score = -qsearch(-beta, -alpha, qPly + 1, checkDepth);
         backward(move);
-        
+
         if (score >= beta) {
             stack->bestMove.setMove(move);
             return score;

@@ -150,8 +150,7 @@ const int8_t SHELTER_KPOS[64] = {//attack units regarding king position
     3, 4, 5, 6, 6, 5, 4, 3,
     1, 2, 3, 4, 4, 3, 2, 1,
     0, 1, 2, 3, 3, 2, 1, 0,
-    -2, -2, -1, 1, 1, 0, -2, -2,
-
+    -2, -2, -1, 1, 1, 0, -2, -2
 };
 
 const int8_t SHELTER_PAWN[64] = {//attack units for pawns in front of the king
@@ -188,6 +187,10 @@ const int8_t SHELTER_CASTLING_QUEENSIDE = -2; //attack units for having the righ
 
 const TScore BLOCKED_CENTER_PAWN = S(-10, -4);
 
+#define KA_ENCODE(p,s) (MIN(p,3)|(MIN(s,15)<<2))
+#define KA_UNITS(k) ((k) & 3)
+#define KA_SQUARES(k) ((k) >> 2)
+
 /*******************************************************************************
  * Knight Values 
  *******************************************************************************/
@@ -223,7 +226,7 @@ const TScore KNIGHT_OUTPOST[64] = {
  *******************************************************************************/
 
 const TScore BISHOP_MOBILITY[14] = {
-    S(-48, -48), S(-24, -24), S(-12, -12), S(-6, -6),
+    S(-30, -30), S(-20, -20), S(-12, -12), S(-6, -6),
     S(-2, -2), S(0, 0), S(4, 4), S(8, 8), S(12, 12),
     S(14, 14), S(16, 16), S(18, 18), S(20, 20), S(22, 22)
 };
@@ -685,10 +688,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         sd->stack->attack[BLACK] = (sd->stack - 1)->attack[BLACK];
         sd->stack->king_attack_zone[WHITE] = (sd->stack - 1)->king_attack_zone[WHITE];
         sd->stack->king_attack_zone[BLACK] = (sd->stack - 1)->king_attack_zone[BLACK];
-        sd->stack->king_attack_pc[WPAWN] = (sd->stack - 1)->king_attack_pc[WPAWN];
-        sd->stack->king_attack_pc[BPAWN] = (sd->stack - 1)->king_attack_pc[BPAWN];
-        sd->stack->king_attack_sq[WPAWN] = 0;
-        sd->stack->king_attack_sq[BPAWN] = 0;
+        sd->stack->king_attack[WPAWN] = (sd->stack - 1)->king_attack[WPAWN];
+        sd->stack->king_attack[BPAWN] = (sd->stack - 1)->king_attack[BPAWN];
         sd->stack->pawn_flags = (sd->stack - 1)->pawn_flags;
         return &sd->stack->pawn_score;
     }
@@ -701,8 +702,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     sd->stack->mob[BLACK] = ~(*pos->pawns[BLACK] | pos->pawnAttacks(WHITE) | *pos->kings[BLACK]);
     sd->stack->attack[WHITE] = (*pos->pawns[BLACK] | *pos->kings[BLACK]);
     sd->stack->attack[BLACK] = (*pos->pawns[WHITE] | *pos->kings[WHITE]);
-    sd->stack->king_attack_zone[WHITE] = MagicQueenMoves(bkpos, pos->pawnsAndKings()) & ~(RANK_8 | RANK_7) & sd->stack->mob[WHITE];
-    sd->stack->king_attack_zone[BLACK] = MagicQueenMoves(wkpos, pos->pawnsAndKings()) & ~(RANK_1 | RANK_2) & sd->stack->mob[BLACK];
+    sd->stack->king_attack_zone[WHITE] = (MagicQueenMoves(bkpos, pos->pawnsAndKings()) & ~(RANK_8 | RANK_7)) & sd->stack->mob[WHITE];
+    sd->stack->king_attack_zone[BLACK] = (MagicQueenMoves(wkpos, pos->pawnsAndKings()) & ~(RANK_1 | RANK_2)) & sd->stack->mob[BLACK];
 
     /*
      * 2. Probe the hash table for the pawn score
@@ -717,10 +718,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
      */
     TScore * pawn_score = &sd->stack->pawn_score;
 
-    sd->stack->king_attack_pc[WPAWN] = 0;
-    sd->stack->king_attack_pc[BPAWN] = 0;
-    sd->stack->king_attack_sq[WPAWN] = 0;
-    sd->stack->king_attack_sq[BPAWN] = 0;
+    sd->stack->king_attack[WPAWN] = 0;
+    sd->stack->king_attack[BPAWN] = 0;
     sd->stack->pawn_flags = 0;
     pawn_score->clear();
 
@@ -833,7 +832,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
             blocked_center_pawns++;
         }
 
-        sd->stack->king_attack_pc[WPAWN] += popCount0(WPawnCaptures[sq] & kcz_b);
+        sd->stack->king_attack[WPAWN] += popCount0(WPawnCaptures[sq] & kcz_b);
 
 
 #ifdef PRINT_PAWN_EVAL
@@ -913,7 +912,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         std::cout << std::endl;
 #endif
 
-        sd->stack->king_attack_pc[BPAWN] += popCount0(BPawnCaptures[sq] & kcz_w);
+        sd->stack->king_attack[BPAWN] += popCount0(BPawnCaptures[sq] & kcz_w);
 
     }
 
@@ -933,10 +932,10 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     /*
      * 4. Calculate King Shelter Attack units
      */
-    sd->stack->king_attack_pc[BPAWN] += SHELTER_KPOS[FLIP_SQUARE(wkpos)];
+    sd->stack->king_attack[BPAWN] += SHELTER_KPOS[FLIP_SQUARE(wkpos)];
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (pos): " << (int) sd->stack->king_attack_pc[BPAWN] << std::endl;
+    std::cout << "attack on WK (pos): " << (int) sd->stack->king_attack_checks[BPAWN] << std::endl;
 #endif
 
     //1. reward having the right to castle
@@ -944,101 +943,101 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
             && ((pos->Matrix[h2] == WPAWN && pos->Matrix[g2] == WPAWN)
             || (pos->Matrix[f2] == WPAWN && pos->Matrix[h2] == WPAWN && pos->Matrix[g3] == WPAWN)
             || (pos->Matrix[h3] == WPAWN && pos->Matrix[g2] == WPAWN && pos->Matrix[f2] == WPAWN))) {
-        sd->stack->king_attack_pc[BPAWN] += SHELTER_CASTLING_KINGSIDE;
+        sd->stack->king_attack[BPAWN] += SHELTER_CASTLING_KINGSIDE;
     } else if (pos->boardFlags->castlingFlags & CASTLE_Q
             && ((pos->Matrix[a2] == WPAWN && pos->Matrix[b2] == WPAWN && pos->Matrix[c2] == WPAWN)
             || (pos->Matrix[a2] == WPAWN && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN))) {
-        sd->stack->king_attack_pc[BPAWN] += SHELTER_CASTLING_QUEENSIDE;
+        sd->stack->king_attack[BPAWN] += SHELTER_CASTLING_QUEENSIDE;
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (castling): " << (int) sd->stack->king_attack_pc[BPAWN] << std::endl;
+    std::cout << "attack on WK (castling): " << (int) sd->stack->king_attack_checks[BPAWN] << std::endl;
 #endif
     //2. reward having pawns in front of the king
     U64 kingFront = FORWARD_RANKS[RANK(wkpos)] & PAWN_SCOPE[FILE(wkpos)];
     U64 shelterPawns = kingFront & pos->whitePawns;
     while (shelterPawns) {
         int sq = POP(shelterPawns);
-        sd->stack->king_attack_pc[BPAWN] += SHELTER_PAWN[FLIP_SQUARE(sq)];
+        sd->stack->king_attack[BPAWN] += SHELTER_PAWN[FLIP_SQUARE(sq)];
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (shelter): " << (int) sd->stack->king_attack_pc[BPAWN] << std::endl;
+    std::cout << "attack on WK (shelter): " << (int) sd->stack->king_attack_checks[BPAWN] << std::endl;
 #endif
     U64 stormPawns = kingFront & pos->blackPawns;
     while (stormPawns) {
         int sq = POP(stormPawns);
-        sd->stack->king_attack_pc[BPAWN] += STORM_PAWN[FLIP_SQUARE(sq)];
+        sd->stack->king_attack[BPAWN] += STORM_PAWN[FLIP_SQUARE(sq)];
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (storm): " << (int) sd->stack->king_attack_pc[BPAWN] << std::endl;
+    std::cout << "attack on WK (storm): " << (int) sd->stack->king_attack_checks[BPAWN] << std::endl;
 #endif
     //3. penalize (half)open files on the king
     U64 open = (openW | openB) & kingFront & RANK_8;
     if (open) {
-        sd->stack->king_attack_pc[BPAWN] += SHELTER_OPEN_FILES[popCount0(open)];
+        sd->stack->king_attack[BPAWN] += SHELTER_OPEN_FILES[popCount0(open)];
         if (open & (FILE_A | FILE_H)) {
-            sd->stack->king_attack_pc[BPAWN] += SHELTER_OPEN_EDGE_FILE;
+            sd->stack->king_attack[BPAWN] += SHELTER_OPEN_EDGE_FILE;
         }
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (open files): " << (int) sd->stack->king_attack_pc[BPAWN] << std::endl;
+    std::cout << "attack on WK (open files): " << (int) sd->stack->king_attack_checks[BPAWN] << std::endl;
 #endif
 
     //black king shelter
-    sd->stack->king_attack_pc[WPAWN] += SHELTER_KPOS[bkpos];
+    sd->stack->king_attack[WPAWN] += SHELTER_KPOS[bkpos];
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (pos): " << (int) sd->stack->king_attack_pc[WPAWN] << std::endl;
+    std::cout << "attack on BK (pos): " << (int) sd->stack->king_attack_checks[WPAWN] << std::endl;
 #endif
     //1. reward having the right to castle safely
     if (pos->boardFlags->castlingFlags & CASTLE_k
             && ((pos->Matrix[h7] == BPAWN && pos->Matrix[g7] == BPAWN)
             || (pos->Matrix[f7] == BPAWN && pos->Matrix[h7] == BPAWN && pos->Matrix[g6] == BPAWN)
             || (pos->Matrix[h6] == BPAWN && pos->Matrix[g7] == BPAWN && pos->Matrix[f7] == BPAWN))) {
-        sd->stack->king_attack_pc[WPAWN] += SHELTER_CASTLING_KINGSIDE;
+        sd->stack->king_attack[WPAWN] += SHELTER_CASTLING_KINGSIDE;
     } else if (pos->boardFlags->castlingFlags & CASTLE_q
             && ((pos->Matrix[a7] == BPAWN && pos->Matrix[b7] == BPAWN && pos->Matrix[c7] == BPAWN)
             || (pos->Matrix[a7] == BPAWN && pos->Matrix[b6] == BPAWN && pos->Matrix[c7] == BPAWN))) {
-        sd->stack->king_attack_pc[WPAWN] += SHELTER_CASTLING_QUEENSIDE;
+        sd->stack->king_attack[WPAWN] += SHELTER_CASTLING_QUEENSIDE;
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (castling): " << (int) sd->stack->king_attack_pc[WPAWN] << std::endl;
+    std::cout << "attack on BK (castling): " << (int) sd->stack->king_attack_checks[WPAWN] << std::endl;
 #endif
     //2. reward having pawns in front of the king
     kingFront = BACKWARD_RANKS[RANK(bkpos)] & PAWN_SCOPE[FILE(bkpos)];
     shelterPawns = kingFront & pos->blackPawns;
     while (shelterPawns) {
         int sq = POP(shelterPawns);
-        sd->stack->king_attack_pc[WPAWN] += SHELTER_PAWN[sq];
+        sd->stack->king_attack[WPAWN] += SHELTER_PAWN[sq];
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (shelter): " << (int) sd->stack->king_attack_pc[WPAWN] << std::endl;
+    std::cout << "attack on BK (shelter): " << (int) sd->stack->king_attack_checks[WPAWN] << std::endl;
 #endif
     stormPawns = kingFront & pos->whitePawns;
     while (stormPawns) {
         int sq = POP(stormPawns);
-        sd->stack->king_attack_pc[WPAWN] += STORM_PAWN[sq];
+        sd->stack->king_attack[WPAWN] += STORM_PAWN[sq];
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (storm): " << (int) sd->stack->king_attack_pc[WPAWN] << std::endl;
+    std::cout << "attack on BK (storm): " << (int) sd->stack->king_attack_checks[WPAWN] << std::endl;
 #endif
     //3. penalize (half)open files on the king
     open = (openW | openB) & kingFront & RANK_1;
     if (open) {
-        sd->stack->king_attack_pc[WPAWN] += SHELTER_OPEN_FILES[popCount0(open)];
+        sd->stack->king_attack[WPAWN] += SHELTER_OPEN_FILES[popCount0(open)];
         if (open & (FILE_A | FILE_H)) {
-            sd->stack->king_attack_pc[WPAWN] += SHELTER_OPEN_EDGE_FILE;
+            sd->stack->king_attack[WPAWN] += SHELTER_OPEN_EDGE_FILE;
         }
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (open files): " << (int) sd->stack->king_attack_pc[WPAWN] << std::endl;
+    std::cout << "attack on BK (open files): " << (int) sd->stack->king_attack_checks[WPAWN] << std::endl;
 #endif
     sd->stack->passers = passers;
     sd->hashTable->ptStore(sd);
@@ -1051,8 +1050,7 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = KNIGHT[us];
     result->clear();
-    sd->stack->king_attack_pc[pc] = 0;
-    sd->stack->king_attack_sq[pc] = 0;
+    sd->stack->king_attack[pc] = 0;
 
     if (*pos->knights[us] == 0) {
         return result;
@@ -1067,8 +1065,7 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
         TMove * prevMove = &(sd->stack - 1)->move;
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->knight_score[us]);
-            sd->stack->king_attack_pc[pc] = (sd->stack - 1)->king_attack_pc[pc];
-            sd->stack->king_attack_sq[pc] = (sd->stack - 1)->king_attack_sq[pc];
+            sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
             return result;
         }
     }
@@ -1081,8 +1078,9 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
     int pawn_width = BB_WIDTH(*pos->pawns[them]);
     int pawn_count = pos->pieces[PAWN[them]].count;
     int kpos = *pos->kingPos[them];
-    U64 kaz = KnightMoves[kpos]; //king attack zone
-    U64 kcz = KingZone[kpos]; //king control zone
+    U64 kaz = KnightMoves[kpos] | KingZone[kpos]; //king attack zone
+    int ka_units = 0;
+    int ka_squares = 0;
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
         result->add(PST[WKNIGHT][ISQ(sq, us)]);
@@ -1098,10 +1096,12 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
         if (pos->attackedByPawn(sq, them)) {
             result->add(ATTACKED_PIECE);
         }
-        sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
-        sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
-
+        if (moves & kaz) {
+            ka_units++;
+            ka_squares += popCount(moves & kaz);
+        }
     }
+    sd->stack->king_attack[pc] = KA_ENCODE(ka_units, ka_squares);
     return result;
 }
 
@@ -1110,8 +1110,7 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = BISHOP[us];
     result->clear();
-    sd->stack->king_attack_pc[pc] = 0;
-    sd->stack->king_attack_sq[pc] = 0;
+    sd->stack->king_attack[pc] = 0;
 
     if (*pos->bishops[us] == 0) {
         return result;
@@ -1126,8 +1125,7 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
         TMove * prevMove = &(sd->stack - 1)->move;
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->bishop_score[us]);
-            sd->stack->king_attack_pc[pc] = (sd->stack - 1)->king_attack_pc[pc];
-            sd->stack->king_attack_sq[pc] = (sd->stack - 1)->king_attack_sq[pc];
+            sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
             return result;
         }
     }
@@ -1139,8 +1137,9 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     U64 occ = pos->pawnsAndKings();
     bool them = !us;
     int kpos = *pos->kingPos[them];
-    U64 kaz = sd->stack->king_attack_zone[us] & BishopMoves[kpos]; //king attack zone
-    U64 kcz = KingZone[kpos]; //king control zone
+    U64 kaz = (sd->stack->king_attack_zone[us] & BishopMoves[kpos]) | KingZone[kpos]; //king attack zone; 
+    int ka_units = 0;
+    int ka_squares = 0;
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
         result->add(PST[WBISHOP][ISQ(sq, us)]);
@@ -1181,9 +1180,12 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
                 }
             }
         }
-        sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
-        sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
+        if (moves & kaz) {
+            ka_units++;
+            ka_squares += popCount(moves & kaz);
+        }
     }
+    sd->stack->king_attack[pc] = KA_ENCODE(ka_units, ka_squares);
     return result;
 }
 
@@ -1192,8 +1194,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = ROOK[us];
     result->clear();
-    sd->stack->king_attack_pc[pc] = 0;
-    sd->stack->king_attack_sq[pc] = 0;
+    sd->stack->king_attack[pc] = 0;
 
     if (*pos->rooks[us] == 0) {
         return result;
@@ -1208,8 +1209,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         TMove * prevMove = &(sd->stack - 1)->move;
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->rook_score[us]);
-            sd->stack->king_attack_pc[pc] = (sd->stack - 1)->king_attack_pc[pc];
-            sd->stack->king_attack_sq[pc] = (sd->stack - 1)->king_attack_sq[pc];
+            sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
             return result;
         }
     }
@@ -1225,8 +1225,9 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         result->add(ROOK_1ST); //at least one rook is protecting the back rank
     }
     int kpos = *pos->kingPos[them];
-    U64 kaz = sd->stack->king_attack_zone[us] & RookMoves[kpos]; //king attack zone
-    U64 kcz = KingZone[kpos]; //king control zone
+    U64 kaz = (sd->stack->king_attack_zone[us] & RookMoves[kpos]) | KingZone[kpos]; //king attack zone
+    int ka_units = 0;
+    int ka_squares = 0;
 
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
@@ -1269,10 +1270,12 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
                 result->add(ROOK_WRONG_SIDE);
             }
         }
-        sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
-        sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
-
+        if (moves & kaz) {
+            ka_units++;
+            ka_squares += popCount(moves & kaz);
+        }
     }
+    sd->stack->king_attack[pc] = KA_ENCODE(ka_units, ka_squares);
     return result;
 }
 
@@ -1281,8 +1284,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
     TBoard * pos = sd->pos;
     int pc = QUEEN[us];
     result->clear();
-    sd->stack->king_attack_pc[pc] = 0;
-    sd->stack->king_attack_sq[pc] = 0;
+    sd->stack->king_attack[pc] = 0;
 
     if (*pos->queens[us] == 0) {
         return result;
@@ -1297,8 +1299,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
         TMove * prevMove = &(sd->stack - 1)->move;
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->queen_score[us]);
-            sd->stack->king_attack_pc[pc] = (sd->stack - 1)->king_attack_pc[pc];
-            sd->stack->king_attack_sq[pc] = (sd->stack - 1)->king_attack_sq[pc];
+            sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
             return result;
         }
     }
@@ -1310,8 +1311,9 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
     TPiecePlacement * pp = &pos->pieces[QUEEN[us]];
     U64 occ = pos->pawnsAndKings();
     int kpos = *pos->kingPos[them];
-    U64 kaz = sd->stack->king_attack_zone[us]; //king attack zone
-    U64 kcz = KingZone[kpos]; //king control zone
+    U64 kaz = sd->stack->king_attack_zone[us] | KingZone[kpos]; //king attack zone
+    int ka_units = 0;
+    int ka_squares = 0;
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
         result->add(PST[WQUEEN][ISQ(sq, us)]);
@@ -1322,9 +1324,12 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
             result->add(ATTACKED_PIECE);
         }
         result->add(10 - distance_rank(sq, kpos) - distance_file(sq, kpos));
-        sd->stack->king_attack_sq[pc] += popCount0(moves & kcz);
-        sd->stack->king_attack_pc[pc] += popCount0(moves & kaz);
+        if (moves & kaz) {
+            ka_units++;
+            ka_squares += popCount(moves & kaz);
+        }
     }
+    sd->stack->king_attack[pc] = KA_ENCODE(ka_units, ka_squares);
     return result;
 }
 
@@ -1395,8 +1400,6 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
 #endif
             }
         }
-
-
 
         do {
             if (BIT(to) & sd->pos->allPieces) {
@@ -1494,35 +1497,23 @@ const int16_t KING_SHELTER[24] = {//structural shelter (pawns & kings)
 };
 
 const int16_t KING_ATTACK[64] = {//indexed by attack units
-    0, 0, 0, 0, 0, 0, 1, 3,
-    5, 6, 8, 10, 12, 16, 20, 24,
-    28, 32, 36, 42, 48, 54, 60, 66,
-    72, 78, 84, 92, 100, 108, 116, 124,
-    131, 138, 144, 150, 155, 160, 164, 168,
-    172, 176, 180, 182, 188, 190, 192, 194,
-    196, 198, 200, 202, 204, 206, 208, 210,
-    212, 214, 216, 218, 220, 222, 224, 226
+    0, 0, 0, 0, 0, 0, 0, 0,
+    2, 4, 6, 8, 10, 12, 16, 20,
+    24, 28, 32, 36, 42, 48, 54, 60,
+    66, 72, 78, 84, 92, 100, 108, 116,
+    124, 131, 138, 144, 150, 155, 160, 164,
+    168, 172, 176, 180, 182, 188, 190, 192,
+    194, 196, 198, 200, 202, 204, 206, 208,
+    210, 212, 214, 216, 218, 220, 222, 224
 };
 
-const int16_t KING_ATTACKERS_MUL[5] = {
-    0, 128, 192, 256, 288
+const int16_t KING_ATTACKERS_MUL[8] = {
+    128, 192, 256, 288, 312, 328, 344, 360
 };
 
-const int16_t KING_SHELTER_MUL[24] = {
-    32, 64, 96, 128, 160, 192, 224, 256,
-    272, 288, 304, 320, 328, 336, 342, 350,
-    354, 358, 362, 368, 370, 372, 376, 380
+const int16_t KING_SHELTER_MUL[8] = {
+    128, 160, 192, 224, 256, 272, 288, 304
 };
-
-inline int ka_units(TSearch * sd, int pc, int pcs, int sqs) {
-    int result = 0;
-    int unit = KING_ATTACK_UNIT[pc];
-    result += unit * (sqs + 1) + (2 * pcs);
-#ifdef PRINT_KING_SAFETY
-    std::cout << " pc  " << pc << " (pcs, sqs) = (" << pcs << ", " << sqs << ") -> " << result << std::endl;
-#endif
-    return result;
-}
 
 inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     TScore * result = &sd->stack->king_score[us];
@@ -1535,14 +1526,20 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     /*
      * 1. Shelter score
      */
-    int shelter_ix = RANGE(0, 23, KING_ATTACK_OFFSET + sd->stack->king_attack_pc[PAWN[us]]);
-
+    int shelter_ix = RANGE(0, 23, KING_ATTACK_OFFSET + sd->stack->king_attack[PAWN[us]]);
     result->set(KING_SHELTER[shelter_ix], 0);
+
+#ifdef PRINT_KING_SAFETY
+    printBB("\nKing Attack Zone", sd->stack->king_attack_zone[us] | KingZone[*pos->kingPos[!us]]);
+    std::cout << "Shelter: " << shelter_ix << " -> " << (int)KING_SHELTER[shelter_ix];
+    std::cout << std::endl;
+#endif
+
     result->add(popCount0(sd->stack->king_attack_zone[us]) * 12, 0);
 
 #ifdef PRINT_KING_SAFETY
-    std::cout << "\nKing Attack\nShelter: " << shelter_ix << " -> " << (int) KING_SHELTER[shelter_ix] << std::endl;
-    printBB("attack zone", sd->stack->king_attack_zone[us]);
+    std::cout << "Zone: " << 12*popCount0(sd->stack->king_attack_zone[us]);
+    std::cout << "\nTotal: ";
     result->print();
     std::cout << std::endl;
 #endif
@@ -1552,9 +1549,8 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
      * The shelter score still counts, but only half.
      */
 
-    //reduce shelter score for closed positions
     if ((sd->stack->pawn_flags & PFLAG_CLOSED_CENTER) != 0) {
-        result->half();
+        result->half(); //reduce shelter score for closed positions
     }
 
     if (*pos->rooks[us] == 0 && *pos->bishops[us] == 0 && *pos->knights[us] == 0) {
@@ -1563,46 +1559,67 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     }
 
     /*
-     * 3. If the queen is not involved in the king attack, return
+     * 3. Stop if the queen is not involved in the king attack
      */
 
-    int queen_pc = sd->stack->king_attack_pc[QUEEN[us]];
-    int queen_sq = sd->stack->king_attack_sq[QUEEN[us]];
-    if (queen_pc == 0 && queen_sq == 0) {
+    int queen_attack = sd->stack->king_attack[QUEEN[us]];
+    if (queen_attack == 0) {
         return result;
     }
-    int attack_units = ka_units(sd, QUEEN[us], queen_pc, queen_sq);
-    int attackers_count = 1;
-
+    int attackers = 0;
+    int ka_units = KA_UNITS(queen_attack) * KING_ATTACK_UNIT[QUEEN[us]];
+    int ka_squares = KA_SQUARES(queen_attack);
+    
     /*
-     * 4. Get the totals of the piece attack scores
+     * 4. Get the totals of the Rooks, Bishops and Knights attacks
      */
     for (int pc = KNIGHT[us]; pc < QUEEN[us]; pc++) {
-        int pcs = sd->stack->king_attack_pc[pc];
-        int sqs = sd->stack->king_attack_sq[pc];
-        if (pcs == 0 && sqs == 0) {
+        int attack = sd->stack->king_attack[pc];
+        if (attack == 0) {
             continue;
         }
-        attackers_count++;
-        attack_units += ka_units(sd, pc, pcs, sqs);
+        int n = KA_UNITS(attack);
+        attackers += n;
+        ka_units += n * KING_ATTACK_UNIT[pc];
+        ka_squares += KA_SQUARES(attack);
+    }
+    if (attackers == 0) {
+        return result;
     }
 
 #ifdef PRINT_KING_SAFETY
-    std::cout << "attacking pieces " << attackers_count << std::endl;
-    std::cout << "attack units total " << attack_units << std::endl;
+    std::cout << "Attacking Pieces: " << (attackers + 1) << std::endl;
+    std::cout << "Attack Force: " << ka_units << std::endl;
+    std::cout << "Controlled Squares: " << ka_squares << std::endl;
 #endif
 
-    int ix = RANGE(0, 63, attack_units);
+    int piece_attack_score = 0;
+    int paix = 2 * ka_units + shelter_ix + ka_squares - 5;
+    piece_attack_score = KING_ATTACK[RANGE(0, 63, paix)];
 
-    int piece_attack_score = KING_ATTACK[ix];
-    assert(attackers_count > 0 && attackers_count <= 4);
-    MUL256(piece_attack_score, KING_ATTACKERS_MUL[attackers_count]);
-    MUL256(piece_attack_score, KING_SHELTER_MUL[RANGE(0, 23, shelter_ix)]);
+#ifdef PRINT_KING_SAFETY
+    std::cout << "Total Piece Attack Index: " << paix << std::endl;
+    std::cout << "Piece Attack Score: " << piece_attack_score << std::endl;
+#endif
+
+    piece_attack_score = MUL256(piece_attack_score, KING_ATTACKERS_MUL[RANGE(0, 7, attackers)]);
+
+#ifdef PRINT_KING_SAFETY
+    std::cout << "Corrected Score (attackers): " << piece_attack_score << std::endl;
+#endif
+
+    piece_attack_score = MUL256(piece_attack_score, KING_SHELTER_MUL[RANGE(0, 7, shelter_ix)]);
+
+#ifdef PRINT_KING_SAFETY
+    std::cout << "Corrected Score (shelter): " << piece_attack_score << std::endl;
+#endif
+
     result->add(piece_attack_score, 0);
 
 #ifdef PRINT_KING_SAFETY
-    std::cout << "piece attack score " << piece_attack_score << std::endl;
+    std::cout << "Total Piece Attack: " << piece_attack_score << std::endl;
     result->print();
+    std::cout << std::endl;
 #endif
 
     return result;
