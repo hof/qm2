@@ -431,6 +431,15 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     }
     int gives_check = pos->givesCheck(first_move);
     int extend_move = extendMove(first_move, gives_check);
+    
+    //recapture extension
+    if (extend_move <= 0 && first_move->capture && pos->SEE(first_move) > 100) {
+        TMove * previous_move = &(stack-1)->move;
+        if (previous_move->capture && first_move->tsq == previous_move->tsq) {
+            extend_move = ONE_PLY;
+        }
+    }
+    
     int new_depth = depth - ONE_PLY;
     stack->bestMove.setMove(first_move);
     stack->reduce = 0;
