@@ -39,7 +39,6 @@ std::string TSearch::getPVString() {
 
 void TSearch::initLMR() {
     const bool PV = 1;
-    const bool ACTIVE = 1;
     memset(LMR, 0, sizeof (LMR));
     for (int d = 3; d < 256; d++) {
         for (int m = 2; m < 64; m++) {
@@ -53,12 +52,8 @@ void TSearch::initLMR() {
             rmore += rmore == 1;
             rmore = MIN(rmore, d - 2);
             r = m > 2 ? r : 0;
-            int r_active = MAX(0, MIN(r - 2, d - 4));
-            int rmore_active = MAX(r_active, MIN(rmore - 2, d - 4));
-            LMR[0][PV][m][d] = r;
-            LMR[ACTIVE][PV][m][d] = r_active;
-            LMR[0][0][m][d] = rmore;
-            LMR[ACTIVE][0][m][d] = rmore_active;
+            LMR[PV][m][d] = r;
+            LMR[0][m][d] = rmore;
         }
     }
 }
@@ -517,7 +512,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 && !in_check //test if this works better
                 && extend_move <= 0) {
             assert(new_depth < 256);
-            reduce = LMR[active][type == PVNODE][MIN(63, searchedMoves)][new_depth];
+            reduce = LMR[type == PVNODE][MIN(63, searchedMoves)][new_depth];
             int max_reduce = new_depth - ONE_PLY;
             reduce += reduce < max_reduce && type == CUTNODE;
             reduce += reduce < max_reduce && type == CUTNODE;

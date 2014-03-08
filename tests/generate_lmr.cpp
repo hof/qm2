@@ -23,14 +23,12 @@ int main(int argc, char** argv) {
     std::string fen = "";
     TSearch * s = new TSearch(fen.c_str(), NULL, NULL);
     for (int depth = 1; depth <= 60; depth++) {
-        std::cout << "\ndepth | move | pv | nonpv | pv+ | nonpv+" << std::endl;
+        std::cout << "\ndepth | move | pv | nonpv " << std::endl;
         for (int move = 1; move <= 60; move++) {
             std::cout << std::setw(5) << depth << " | ";
             std::cout << std::setw(4) << move << " | ";
-            std::cout << std::setw(2) << s->LMR[0][PVNODE][move][depth] << " | ";
-            std::cout << std::setw(5) << s->LMR[0][0][move][depth] << " | ";
-            std::cout << std::setw(3) << s->LMR[1][PVNODE][move][depth] << " | ";
-            std::cout << std::setw(4) << s->LMR[1][0][move][depth] << std::endl;
+            std::cout << std::setw(2) << s->LMR[PVNODE][move][depth] << " | ";
+            std::cout << std::setw(5) << s->LMR[0][move][depth] << std::endl;
             if (move > 9) {
                 move += 9;
             }
