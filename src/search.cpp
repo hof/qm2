@@ -477,7 +477,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         assert(stack->bestMove.equals(move) == false);
         assert(first_move->equals(move) == false);
         gives_check = pos->givesCheck(move);
-        bool active = gives_check > 0 || passedPawn(move) || pos->active(move); 
+        bool active = gives_check > 0 || move->capture || move->promotion || move->castle || passedPawn(move);
 
         /*
          * 11. forward futility pruning at low depths
