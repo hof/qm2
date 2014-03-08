@@ -513,10 +513,8 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         if (DO_LMR
                 && new_depth > ONE_PLY
                 && stack->moveList.stage >= QUIET_MOVES
-                && !move->capture
-                && !in_check
-                && gives_check <= 0
-                && !passedPawn(move)
+                && !active
+                && !in_check //test if this works better
                 && extend_move <= 0) {
             assert(new_depth < 256);
             reduce = LMR[active][type == PVNODE][MIN(63, searchedMoves)][new_depth];
