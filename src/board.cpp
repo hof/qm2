@@ -624,6 +624,8 @@ bool TBoard::active(TMove * move) {
     if (move->capture || move->promotion || move->castle) {
         return true;
     }
+    return false;
+    /* 
     switch (move->piece) {
         case EMPTY:
             return false;
@@ -655,6 +657,7 @@ bool TBoard::active(TMove * move) {
             return false;
     }
     return false;
+     */ 
 }
 
 bool TBoard::checksPiece(TMove * move) {

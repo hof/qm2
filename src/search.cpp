@@ -8,9 +8,10 @@ static const bool DO_STATIC_NULL = true;
 static const bool DO_FP = true;
 static const bool DO_LMR = true;
 static const bool DO_EXTEND_MOVE = true;
-static const bool DO_RAZOR = false;
+static const bool DO_EXTEND_RECAPTURE = false;
+static const bool DO_RAZOR = true;
 static const short FMARGIN[12] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200, 2000, 2000, 2000};
-static const short RMARGIN = 500;
+static const short RMARGIN = 300;
 
 static const bool QS_DO_DELTA = true;
 static const bool QS_HASH_LOOKUP = false;
@@ -400,19 +401,19 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * Razoring
      */
 
-    if (DO_RAZOR && type != PVNODE && depth <= LOW_DEPTH && !in_check && eval < alpha) {
-        int razor_value = eval + RMARGIN;
-        if (razor_value < beta) {
-            if (depth < (2 * ONE_PLY)) {
-                int score = qsearch(alpha, beta, 0, QS_CHECKDEPTH);
-                return MAX(razor_value, score);
-            }
-            razor_value += RMARGIN;
-            if (razor_value < beta) {
-                int score = qsearch(alpha, beta, 0, QS_CHECKDEPTH);
-                if (score < beta) {
-                    return MAX(razor_value, score);
-                }
+    if (DO_RAZOR
+            && type != PVNODE
+            && depth <= LOW_DEPTH
+            && !in_check
+            && eval + RMARGIN < alpha) {
+        if (depth < (2 * ONE_PLY)) {
+            return qsearch(alpha, beta, 0, QS_CHECKDEPTH);
+        }
+        int rmargin = VPAWN * (depth+1);
+        if (eval + rmargin < alpha) {
+            int score = qsearch(alpha, beta, 0, QS_CHECKDEPTH);
+            if (score < alpha) {
+                return score;
             }
         }
     }
@@ -431,15 +432,15 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     }
     int gives_check = pos->givesCheck(first_move);
     int extend_move = extendMove(first_move, gives_check);
-    
+
     //recapture extension
-    if (extend_move <= 0 && first_move->capture && pos->SEE(first_move) > 100) {
-        TMove * previous_move = &(stack-1)->move;
+    if (DO_EXTEND_RECAPTURE && extend_move <= 0 && first_move->capture && pos->SEE(first_move) > 100) {
+        TMove * previous_move = &(stack - 1)->move;
         if (previous_move->capture && first_move->tsq == previous_move->tsq) {
             extend_move = ONE_PLY;
         }
     }
-    
+
     int new_depth = depth - ONE_PLY;
     stack->bestMove.setMove(first_move);
     stack->reduce = 0;
@@ -476,7 +477,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         assert(stack->bestMove.equals(move) == false);
         assert(first_move->equals(move) == false);
         gives_check = pos->givesCheck(move);
-        bool active = gives_check > 0 || passedPawn(move) || pos->active(move);
+        bool active = gives_check > 0 || passedPawn(move) || pos->active(move); 
 
         /*
          * 11. forward futility pruning at low depths
@@ -524,9 +525,10 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             reduce += reduce < max_reduce && type == CUTNODE;
             reduce += reduce < max_reduce && type != PVNODE && (eval + 50) <= alpha;
             reduce += reduce < max_reduce && type != PVNODE && history[move->piece][move->tsq] < 0;
+            //reduce = MIN(6, reduce);
         }
         stack->reduce = reduce;
-        
+
         forward(move, gives_check);
         int score = -pvs(-alpha - 1, -alpha, new_depth - reduce + extend_move);
         if (score > alpha && reduce > 0) {
@@ -698,7 +700,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
         }
 
         //pruning (delta futility and negative see), skipped for checks and PV nodes
-        if (QS_DO_DELTA && givesCheck == 0 && !pv_node) {
+        if (QS_DO_DELTA && givesCheck <= 0 && !pv_node) {
 
             //1. delta futility pruning: the captured piece + max. positional gain should raise alpha
             int gain = PIECE_VALUE[move->capture];
@@ -715,7 +717,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
             }
 
             //2. prune moves when SEE is negative
-            if (pos->SEE(move) < 0) {
+            if (PIECE_VALUE[move->piece] > PIECE_VALUE[move->capture] && pos->SEE(move) < 0) {
                 pruned_nodes++;
                 continue;
             }
