@@ -508,17 +508,14 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         if (DO_LMR
                 && new_depth > ONE_PLY
                 && stack->moveList.stage >= QUIET_MOVES
-                && !active
-                && !in_check //test if this works better
-                && extend_move <= 0) {
-            assert(new_depth < 256);
+                && !active) { 
+            assert(new_depth < 256 && new_depth >= 0);
             reduce = LMR[type == PVNODE][MIN(63, searchedMoves)][new_depth];
             int max_reduce = new_depth - ONE_PLY;
             reduce += reduce < max_reduce && type == CUTNODE;
             reduce += reduce < max_reduce && type == CUTNODE;
             reduce += reduce < max_reduce && type != PVNODE && (eval + 50) <= alpha;
             reduce += reduce < max_reduce && type != PVNODE && history[move->piece][move->tsq] < 0;
-            //reduce = MIN(6, reduce);
         }
         stack->reduce = reduce;
 
