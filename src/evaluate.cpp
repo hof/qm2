@@ -121,7 +121,7 @@ const TScore DOUBLED_PAWN = S(-10, -20);
 
 const TScore PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(200, 210), S(190, 200), S(180, 190), S(170, 180), S(170, 180), S(180, 190), S(190, 200), S(200, 210),
+    S(150, 170), S(140, 160), S(130, 150), S(120, 140), S(120, 140), S(130, 150), S(140, 160), S(150, 170),
     S(65, 100), S(50, 80), S(50, 80), S(40, 60), S(40, 60), S(50, 80), S(50, 80), S(65, 100),
     S(40, 60), S(30, 40), S(30, 40), S(20, 30), S(20, 30), S(30, 40), S(30, 40), S(40, 60),
     S(20, 30), S(15, 20), S(15, 20), S(10, 15), S(10, 15), S(15, 20), S(15, 20), S(20, 30),
@@ -307,8 +307,8 @@ int evaluate(TSearch * sd, int alpha, int beta) {
     score->sub(evaluateQueens(sd, BLACK));
     score->add(evaluatePassers(sd, WHITE));
     score->sub(evaluatePassers(sd, BLACK));
-    score->add(evaluateKingAttack(sd, WHITE));
-    score->sub(evaluateKingAttack(sd, BLACK));
+    score->add(evaluateKingAttack(sd, WHITE)); //must be after piece evals
+    score->sub(evaluateKingAttack(sd, BLACK)); //must be after piece evals
     result += score->get(sd->stack->phase);
 
     if (sd->stack->material_flags) {
@@ -434,24 +434,27 @@ inline short evaluateMaterial(TSearch * sd) {
     bool mating_material_w = wpawns || mating_power_w;
     bool mating_material_b = bpawns || mating_power_b;
 
-    if (mating_power_w) {
-        result.add(VMATING_POWER);
-        if (mating_material_w) {
-            result.add(VMATING_MATERIAL);
+    if (mating_power_w != mating_power_b) {
+        if (mating_power_w) {
+            result.add(VMATING_POWER);
+        } else {
+            result.sub(VMATING_POWER);
         }
     }
-    if (mating_power_b) {
-        result.sub(VMATING_POWER);
-        if (mating_material_b) {
+    if (mating_material_w != mating_material_b) {
+        if (mating_material_w) {
+            result.add(VMATING_MATERIAL);
+        } else {
             result.sub(VMATING_MATERIAL);
         }
     }
-
     if (!balance) {
         //material imbalance
         int minors_ix = MAX(0, 4 + wminors - bminors);
         int majors_ix = MAX(0, 4 + wrooks + 2 * wqueens - brooks - 2 * bqueens);
         result.add(IMBALANCE[MIN(majors_ix, 8)][MIN(minors_ix, 8)]);
+
+
     }
 
     int piece_power = result.get(phase);
@@ -1353,6 +1356,7 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
         TScore bonus;
         bonus.set(PASSED_PAWN[ix]);
         result->add(bonus);
+
 #ifdef PRINT_PASSED_PAWN
         std::cout << "base ";
         bonus.print();
@@ -1531,14 +1535,14 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
 
 #ifdef PRINT_KING_SAFETY
     printBB("\nKing Attack Zone", sd->stack->king_attack_zone[us] | KingZone[*pos->kingPos[!us]]);
-    std::cout << "Shelter: " << shelter_ix << " -> " << (int)KING_SHELTER[shelter_ix];
+    std::cout << "Shelter: " << shelter_ix << " -> " << (int) KING_SHELTER[shelter_ix];
     std::cout << std::endl;
 #endif
 
     result->add(popCount0(sd->stack->king_attack_zone[us]) * 12, 0);
 
 #ifdef PRINT_KING_SAFETY
-    std::cout << "Zone: " << 12*popCount0(sd->stack->king_attack_zone[us]);
+    std::cout << "Zone: " << 12 * popCount0(sd->stack->king_attack_zone[us]);
     std::cout << "\nTotal: ";
     result->print();
     std::cout << std::endl;
@@ -1569,7 +1573,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     int attackers = 0;
     int ka_units = KA_UNITS(queen_attack) * KING_ATTACK_UNIT[QUEEN[us]];
     int ka_squares = KA_SQUARES(queen_attack);
-    
+
     /*
      * 4. Get the totals of the Rooks, Bishops and Knights attacks
      */

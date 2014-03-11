@@ -229,29 +229,46 @@ void * TEngine::_think(void* engineObjPtr) {
              * - Evaluation shows large positional values
              * - PV or pondermove is not set
              */
-            if (!searchData->stopSearch && tm->elapsed() > ONE_SECOND && !book_move) {
+            if (!searchData->stopSearch && depth > HIGH_DEPTH && !book_move) {
                 if (ponderMove.piece == EMPTY) {
                     tm->requestMoreTime();
                 } else if (move_changed) {
                     tm->requestMoreTime();
-                } else if (ABS(prev_score - score) > (VPAWN / 5)) {
+                } else if (ABS(prev_score - score) > (VPAWN / 4)) {
                     tm->requestMoreTime();
                 }
             }
 
+
             /* 
              * Stop conditions
              */
-            searchData->poll();
-            if (searchData->stopSearch
-                    || (maxNodes > 0 && searchData->nodes > maxNodes)
-                    || (MATE_IN_PLY(resultScore) && type == EXACT && depth / ONE_PLY > MATE_IN_PLY(resultScore))
-                    || (MATED_IN_PLY(resultScore)) && type == EXACT && depth / ONE_PLY > MATED_IN_PLY(resultScore)) {
-                break;
-            } else if (targetScore && targetMove.piece && targetMove.equals(&resultMove) && score >= targetScore) {
+
+            //stop if running a test and the move and score are found
+            if (targetScore && targetMove.piece && targetMove.equals(&resultMove) && score >= targetScore) {
                 engine->setTestResult(true);
                 break;
             }
+
+            //stop if stopsearch is set (time is up) or max amount of nodes is reached
+            searchData->poll();
+            if (searchData->stopSearch
+                    || (maxNodes > 0 && searchData->nodes > maxNodes)) {
+                break;
+            }
+
+            //stop if a mate is found and the iteration depth is deeper than the mate depth
+            if ((MATE_IN_PLY(resultScore) && type == EXACT && depth / ONE_PLY > MATE_IN_PLY(resultScore))
+                    || (MATED_IN_PLY(resultScore)) && type == EXACT && depth / ONE_PLY > MATED_IN_PLY(resultScore)) {
+                break;
+            }
+
+            //stop if there is no time to find a new pv in a next iteration
+            int iteration_time = tm->elapsed() - iteration_start_time;
+            if (type == EXACT && !tm->available(iteration_time / 2)) {                
+                break;
+            }
+
             /*
              * Prepare next search
              * - Increase depth if the score is between the bounds

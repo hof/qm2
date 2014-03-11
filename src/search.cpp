@@ -9,6 +9,7 @@ static const bool DO_FP = true;
 static const bool DO_LMR = true;
 static const bool DO_EXTEND_MOVE = true;
 static const bool DO_EXTEND_RECAPTURE = false;
+static const bool DO_EXTEND_IMPROVING = false;
 static const bool DO_RAZOR = true;
 static const short FMARGIN[12] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200, 2000, 2000, 2000};
 static const short RMARGIN = 300;
@@ -404,7 +405,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         if (depth < (2 * ONE_PLY)) {
             return qsearch(alpha, beta, 0, QS_CHECKDEPTH);
         }
-        int rmargin = VPAWN * (depth+1);
+        int rmargin = VPAWN * (depth + 1);
         if (eval + rmargin < alpha) {
             int score = qsearch(alpha, beta, 0, QS_CHECKDEPTH);
             if (score < alpha) {
@@ -437,6 +438,14 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     }
 
     int new_depth = depth - ONE_PLY;
+
+    if (DO_EXTEND_IMPROVING && extend_move <= 0 && pos->currentPly > 1 && pos->boardFlags->fiftyCount > 0) {
+        int gain = (-eval) - (stack-1)->eval_result;
+        if (gain > 10) {
+            new_depth++;
+        }
+    }
+
     stack->bestMove.setMove(first_move);
     stack->reduce = 0;
     forward(first_move, gives_check);
@@ -508,7 +517,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         if (DO_LMR
                 && new_depth > ONE_PLY
                 && stack->moveList.stage >= QUIET_MOVES
-                && !active) { 
+                && !active) {
             assert(new_depth < 256 && new_depth >= 0);
             reduce = LMR[type == PVNODE][MIN(63, searchedMoves)][new_depth];
             int max_reduce = new_depth - ONE_PLY;

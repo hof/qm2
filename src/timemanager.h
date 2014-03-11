@@ -54,6 +54,10 @@ public:
         return (clock() + ms) <= endTime;
     }
     
+    inline int available() {
+        return endTime - clock();
+    }
+    
     /**
      * Return elapsed time in ms
      * @return elapsed time in ms
