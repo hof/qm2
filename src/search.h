@@ -192,7 +192,7 @@ public:
     TTimeManager * timeManager;
     int history[BKING + 1][64];
     
-    short LMR[2][64][256]; //pv, move number, depth
+    short LMR[32][64]; //depth,  move number
 
     TMoveList tempList;
 

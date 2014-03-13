@@ -13,6 +13,7 @@ static const bool DO_EXTEND_IMPROVING = false;
 static const bool DO_RAZOR = true;
 static const short FMARGIN[12] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200, 2000, 2000, 2000};
 static const short RMARGIN = 300;
+static const short LMR_MAX = 6; //in half plies
 
 static const bool QS_DO_DELTA = true;
 static const bool QS_HASH_LOOKUP = false;
@@ -39,22 +40,19 @@ std::string TSearch::getPVString() {
 }
 
 void TSearch::initLMR() {
-    const bool PV = 1;
     memset(LMR, 0, sizeof (LMR));
-    for (int d = 3; d < 256; d++) {
+    for (int d = 3; d < 32; d++) {
         for (int m = 2; m < 64; m++) {
             int r = BSR(m - 1) + BSR(d - 2) - 2 - (m < 4) - (m < 8);
             r += (m > 16 && d > 16);
             r += (m > 24 && d > 16);
             r += r == 1;
-            r = MIN(r, d - 2);
             r = MAX(0, r);
-            int rmore = 1 + r + (r >> 1);
-            rmore += rmore == 1;
-            rmore = MIN(rmore, d - 2);
-            r = m > 2 ? r : 0;
-            LMR[PV][m][d] = r;
-            LMR[0][m][d] = rmore;
+            r = 1 + r + (r >> 1);
+            r += r == 1;
+            r = MIN(r, d - 2);
+            r = MIN(r, LMR_MAX+2);
+            LMR[d][m] = r;
         }
     }
 }
@@ -440,7 +438,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     int new_depth = depth - ONE_PLY;
 
     if (DO_EXTEND_IMPROVING && extend_move <= 0 && pos->currentPly > 1 && pos->boardFlags->fiftyCount > 0) {
-        int gain = (-eval) - (stack-1)->eval_result;
+        int gain = (-eval) - (stack - 1)->eval_result;
         if (gain > 10) {
             new_depth++;
         }
@@ -477,6 +475,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * - All remaining moves
      */
     int searchedMoves = 1;
+    int max_reduce = MIN(new_depth - ONE_PLY, LMR_MAX);
     while (TMove * move = movePicker->pickNextMove(this, depth, alpha, beta)) {
         assert(stack->bestMove.equals(move) == false);
         assert(first_move->equals(move) == false);
@@ -518,13 +517,17 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 && new_depth > ONE_PLY
                 && stack->moveList.stage >= QUIET_MOVES
                 && !active) {
-            assert(new_depth < 256 && new_depth >= 0);
-            reduce = LMR[type == PVNODE][MIN(63, searchedMoves)][new_depth];
-            int max_reduce = new_depth - ONE_PLY;
-            reduce += reduce < max_reduce && type == CUTNODE;
-            reduce += reduce < max_reduce && type == CUTNODE;
-            reduce += reduce < max_reduce && type != PVNODE && (eval + 50) <= alpha;
-            reduce += reduce < max_reduce && type != PVNODE && history[move->piece][move->tsq] < 0;
+            assert(new_depth >= 0 && searchedMoves > 1);
+            reduce = LMR[MIN(new_depth, 31)][MIN(63, searchedMoves)];
+            if (type == PVNODE) {
+                reduce -= 2;
+            } else if (searchedMoves > 2 && reduce < max_reduce) {
+                reduce += type == CUTNODE;
+                reduce += type == CUTNODE;
+                reduce += (eval + 50) <= alpha;
+                reduce += history[move->piece][move->tsq] < 0;
+            }
+            reduce = RANGE(0, max_reduce, reduce);
         }
         stack->reduce = reduce;
 
