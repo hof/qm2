@@ -3,22 +3,21 @@
 #include <iostream>
 #include <string.h>
 
-static const bool DO_NULL = true;
-static const bool DO_STATIC_NULL = true;
-static const bool DO_FP = true;
-static const bool DO_LMR = true;
-static const bool DO_EXTEND_MOVE = true;
-static const bool DO_EXTEND_RECAPTURE = false;
-static const bool DO_EXTEND_IMPROVING = false;
-static const bool DO_RAZOR = true;
-static const short FMARGIN[12] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200, 2000, 2000, 2000};
-static const short RMARGIN = 300;
+static const bool DO_NULL = true; //nullmove pruning
+static const bool DO_FHP = true; //fail high pruning
+static const bool DO_RAZOR = true; //razoring (fail low pruning)
+static const bool DO_FFP = true; //forward futility pruning
+static const bool DO_LMR = true; //late move reductions
+static const bool DO_EXTEND_MOVE = true; //move extensions
+
+static const short FMARGIN[12] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200, 2000, 2000, 2000}; //futility margin
+static const short RMARGIN = 300; //razor margin
 static const short LMR_MAX = 6; //in half plies
 
-static const bool QS_DO_DELTA = true;
-static const bool QS_HASH_LOOKUP = false;
-static const short QS_CHECKDEPTH = 1;
-static const short QS_DELTA = 200;
+static const bool QS_DO_DELTA = true; //qsearch delta pruning
+static const bool QS_HASH_LOOKUP = false; //hash lookup in qsearch
+static const short QS_CHECKDEPTH = 1; //checkdeth in qsearch
+static const short QS_DELTA = 200; //qsearch delta pruning margin
 
 bool TSearch::pondering() {
     return ponder || (outputHandler && outputHandler->enginePonder == true);
@@ -51,7 +50,7 @@ void TSearch::initLMR() {
             r = 1 + r + (r >> 1);
             r += r == 1;
             r = MIN(r, d - 2);
-            r = MIN(r, LMR_MAX+2);
+            r = MIN(r, LMR_MAX + 2);
             LMR[d][m] = r;
         }
     }
@@ -125,6 +124,10 @@ void TRoot::matchMoves(TMoveList * list) {
 
 /**
  * Principle Variation Search (root node)
+ * Difference with normal (non-root) search:
+ * - Sending new PVs to the interface
+ * - Sort order based on amount of nodes of the subtrees
+ * - No pruning, reductions, extensions and hash table lookup/store
  */
 int TSearch::pvs_root(int alpha, int beta, int depth) {
     /*
@@ -266,7 +269,6 @@ int TSearch::extendMove(TMove * move, int gives_check) {
 
 /**
  * Principle Variation Search (fail-soft)
- * @param searchData search metadata including the position
  * @param alpha lowerbound value
  * @param beta upperbound value
  * @param depth remaining search depth
@@ -303,10 +305,10 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         }
     }
 
+    //time check
     if (nodesUntilPoll <= 0) {
         poll();
     }
-
     if (stopSearch || pos->currentPly >= MAX_PLY) {
         return alpha;
     }
@@ -346,16 +348,13 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     }
 
     /*
-     * 5. Nullmove pruning
+     * 5. Pruning: Fail-high, Razoring and Nullmove
      */
-    stack->hashCode = pos->boardFlags->hashCode;
-    int type = setNodeType(alpha, beta);
-    assert(type != UNKNOWN);
-    assert(type == PVNODE || alpha + 1 == beta);
-    int eval = evaluate(this, alpha, beta);
 
-    if (DO_STATIC_NULL
-            && !skipNull
+    int eval = evaluate(this, alpha, beta);
+    
+    //a) Fail-high pruning (return if static eval score is already much better than beta)
+    if (DO_FHP
             && !in_check
             && depth <= LOW_DEPTH
             && (eval - FMARGIN[depth]) >= beta
@@ -364,37 +363,10 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         return eval - FMARGIN[depth];
     }
 
-    bool mate_threat = false;
-    if (DO_NULL
-            && !skipNull
-            && !in_check
-            && depth > ONE_PLY
-            && eval >= beta
-            && ABS(beta) < SCORE_MATE - MAX_PLY
-            && pos->hasPieces(pos->boardFlags->WTM)) {
-        int rdepth = depth - 3 * ONE_PLY - 1 - (depth >> 3);
-        forward();
-        int score = -pvs(-beta, -alpha, rdepth);
-        backward();
-        if (score >= beta) {
-            if (score >= SCORE_MATE - MAX_PLY) {
-                score = beta; //do not return unproven mate scores
-            }
-            return score;
-        } else if (alpha > (-SCORE_MATE + MAX_PLY) && score < (-SCORE_MATE + MAX_PLY)) {
-            TMove * threat = &(stack + 1)->bestMove;
-            if (!threat->capture && !threat->promotion) {
-                updateHistoryScore(threat, rdepth);
-            }
-            mate_threat = true;
-        }
-    }
-    skipNull = false;
-
-    /*
-     * Razoring
-     */
-
+    //b) Razoring (fail-low pruning, return if static eval score is much below alpha)
+    int type = setNodeType(alpha, beta);
+    assert(type != UNKNOWN);
+    assert(type == PVNODE || alpha + 1 == beta);
     if (DO_RAZOR
             && type != PVNODE
             && depth <= LOW_DEPTH
@@ -412,6 +384,36 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         }
     }
 
+    //c) Nullmove pruning
+    stack->hashCode = pos->boardFlags->hashCode;
+    bool mate_threat = false;
+    int new_depth = depth - ONE_PLY;
+    if (DO_NULL
+            && !skipNull
+            && !in_check
+            && depth > ONE_PLY
+            && eval >= beta
+            && ABS(beta) < SCORE_MATE - MAX_PLY
+            && pos->hasPieces(pos->boardFlags->WTM)) {
+        int rdepth = new_depth - (3 * ONE_PLY);
+        forward();
+        int null_score = -pvs(-beta, -alpha, rdepth);
+        backward();
+        if (null_score >= beta) {
+            if (null_score >= SCORE_MATE - MAX_PLY) {
+                return beta; // not return unproven mate scores
+            }
+            return null_score;
+        } else if (alpha > (-SCORE_MATE + MAX_PLY) && null_score < (-SCORE_MATE + MAX_PLY)) {
+            TMove * threat = &(stack + 1)->bestMove;
+            if (!threat->capture && !threat->promotion) {
+                updateHistoryScore(threat, rdepth);
+            }
+            mate_threat = true;
+        }
+    }
+    skipNull = false;
+
     /*
      * 7. Principle variation search (PVS). 
      * Generate the first move from pv, hash or internal iterative deepening,
@@ -426,23 +428,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     }
     int gives_check = pos->givesCheck(first_move);
     int extend_move = extendMove(first_move, gives_check);
-
-    //recapture extension
-    if (DO_EXTEND_RECAPTURE && extend_move <= 0 && first_move->capture && pos->SEE(first_move) > 100) {
-        TMove * previous_move = &(stack - 1)->move;
-        if (previous_move->capture && first_move->tsq == previous_move->tsq) {
-            extend_move = ONE_PLY;
-        }
-    }
-
-    int new_depth = depth - ONE_PLY;
-
-    if (DO_EXTEND_IMPROVING && extend_move <= 0 && pos->currentPly > 1 && pos->boardFlags->fiftyCount > 0) {
-        int gain = (-eval) - (stack - 1)->eval_result;
-        if (gain > 10) {
-            new_depth++;
-        }
-    }
 
     stack->bestMove.setMove(first_move);
     stack->reduce = 0;
@@ -467,30 +452,31 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     }
 
     /*
-     * 10. Search remaining moves with a zero width window, in the following order:
-     * - Captures and promotions with a positive SEE value 
+     * 10. Search remaining moves with a zero width window (beta == alpha+1), 
+     * in the following order:
+     * - Captures and queen promotions with a positive SEE value 
      * - Killer Moves
-     * - Castling Moves
-     * - Non captures with a positive static score
+     * - Castling
+     * - Non-captures with a positive static score
      * - All remaining moves
      */
-    int searchedMoves = 1;
-    int max_reduce = MIN(new_depth - ONE_PLY, LMR_MAX);
+    int searched_moves = 1;
+    const int max_reduce = MIN(new_depth - ONE_PLY, LMR_MAX);
     while (TMove * move = movePicker->pickNextMove(this, depth, alpha, beta)) {
         assert(stack->bestMove.equals(move) == false);
         assert(first_move->equals(move) == false);
         gives_check = pos->givesCheck(move);
-        bool active = gives_check > 0 || move->capture || move->promotion || move->castle || passedPawn(move);
+        bool active_move = gives_check > 0 || move->capture || move->promotion || move->castle || passedPawn(move);
 
         /*
          * 11. forward futility pruning at low depths
          * (moves without potential are skipped)
          */
-        if (DO_FP
+        if (DO_FFP
                 && stack->moveList.stage >= QUIET_MOVES
                 && type != PVNODE
                 && !in_check
-                && !active
+                && !active_move
                 && (eval < alpha || best >= alpha)
                 && new_depth <= LOW_DEPTH) {
             if (eval + FMARGIN[new_depth] <= alpha) {
@@ -498,7 +484,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 continue;
             }
             int mc_max = 2 + ((depth * depth) >> 2);
-            if (searchedMoves > mc_max) {
+            if (searched_moves > mc_max) {
                 pruned_nodes++;
                 continue;
             }
@@ -516,12 +502,13 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         if (DO_LMR
                 && new_depth > ONE_PLY
                 && stack->moveList.stage >= QUIET_MOVES
-                && !active) {
-            assert(new_depth >= 0 && searchedMoves > 1);
-            reduce = LMR[MIN(new_depth, 31)][MIN(63, searchedMoves)];
+                && !active_move) {
+            assert(new_depth >= 0);
+            assert (searched_moves >= 1);
+            reduce = LMR[MIN(new_depth, 31)][MIN(63, searched_moves)];
             if (type == PVNODE) {
                 reduce -= 2;
-            } else if (searchedMoves > 2 && reduce < max_reduce) {
+            } else if (searched_moves > 2 && reduce < max_reduce) {
                 reduce += type == CUTNODE;
                 reduce += type == CUTNODE;
                 reduce += (eval + 50) <= alpha;
@@ -531,6 +518,9 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         }
         stack->reduce = reduce;
 
+        /*
+         * 13. Search one ply deeper
+         */
         forward(move, gives_check);
         int score = -pvs(-alpha - 1, -alpha, new_depth - reduce + extend_move);
         if (score > alpha && reduce > 0) {
@@ -545,9 +535,17 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         }
         backward(move);
 
+        /*
+         * 14. Update the best value for this node and return is the score is 
+         * above beta (beta cutoff)
+         */
         if (score > best) {
             stack->bestMove.setMove(move);
-            if (score >= beta) {
+            if (score >= beta) { 
+                /*
+                 * Beta Cutoff
+                 * Store result in hash table, update killers and history table
+                 */
                 hashTable->ttStore(this, move->asInt(), score, depth, alpha, beta);
                 if (!move->capture && !move->promotion) {
                     if (best < SCORE_MATE - MAX_PLY) {
@@ -563,18 +561,22 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                             updateHistoryScore(cur, -depth);
                         }
                     }
-                    assert(xMoves <= searchedMoves);
+                    assert(xMoves <= searched_moves);
                 }
                 return score;
             }
             best = score;
-            if (best > alpha) {
+            if (best > alpha) { //update the PV
                 updatePV(move);
                 alpha = best;
             }
         }
-        searchedMoves++;
+        searched_moves++;
     }
+    
+    /*
+     * 15. Store the result in the hash table and return
+     */
     hashTable->ttStore(this, stack->bestMove.asInt(), best, depth, alpha, beta);
     return best;
 }
@@ -586,11 +588,11 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
 
     nodes++;
-
+    
+    //time check
     if (--nodesUntilPoll <= 0) {
         poll();
     }
-
     if (stopSearch || pos->currentPly >= MAX_PLY) {
         return alpha;
     }
@@ -625,7 +627,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
     }
 
     /*
-     * 4. Transposition table lookup
+     * Hash table lookup
      */
     if (QS_HASH_LOOKUP) {
         hashTable->ttLookup(this, 0, alpha, beta);
@@ -636,7 +638,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
     }
 
     /*
-     * 5. Check Evasion
+     * Check Evasion
      */
     if (stack->inCheck) {
         assert(pos->boardFlags->checkers);
@@ -666,7 +668,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
     }
 
     /*
-     * 6. Not in check, generate captures, promotions and (upto some plies ) quiet checks
+     * Not in check
      */
 
     //return obvious draws
@@ -674,7 +676,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
         return drawScore();
     }
 
-    int best = evaluate(this, alpha, beta);
+    int best = evaluate(this, alpha, beta); //the "stand-pat" score
 
     //return evaluation score is it's already above beta
     if (best >= beta) {
@@ -688,7 +690,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
         return best;
     }
 
-    //loop through quiescence moves
+    //loop through quiescence moves (captures, promotions and checks)
     bool pv_node = ISPV(alpha, beta);
     alpha = MAX(best, alpha);
     stack->hashCode = pos->boardFlags->hashCode;
