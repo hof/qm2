@@ -180,7 +180,6 @@ public:
     bool skipNull;
     TMove excludedMove;
     int selDepth;
-    int learnParam;
     double learnFactor;
     TRoot root;
     
@@ -222,7 +221,7 @@ public:
         pawnTableProbes = 0;
         evalTableHits = 0;
         pawnTableHits = 0;
-        learnParam = 0;
+        learnFactor = 1.0;
         stopSearch = false;
         ponder = false;
         skipNull = false;

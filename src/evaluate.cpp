@@ -97,6 +97,8 @@ const short REDUNDANT_KNIGHT = -8;
 const short REDUNDANT_QUEEN = -20;
 
 uint8_t MFLAG_DRAW = 1;
+uint8_t MFLAG_KING_ATTACK_FORCE_W = 2;
+uint8_t MFLAG_KING_ATTACK_FORCE_B = 4;
 
 const short TRADEDOWN_PIECES[MAX_PIECES + 1] = {
     100, 50, 25, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -425,6 +427,14 @@ inline short evaluateMaterial(TSearch * sd) {
     if (bbishops > 1 && pos->blackBishopPair()) {
         result.sub(VBISHOPPAIR);
     }
+    
+    uint8_t flags = 0;
+    if (wqueens > 0 && (wpieces > 2 || wqueens > 1)) {
+        flags |= MFLAG_KING_ATTACK_FORCE_W;
+    }
+    if (bqueens > 0 && (bpieces > 2 || bqueens > 1)) {
+        flags |= MFLAG_KING_ATTACK_FORCE_B;
+    }
 
     bool minor_balance = (wminors == bminors);
     bool major_balance = (wrooks + 2 * wqueens) == (brooks + 2 * bqueens);
@@ -433,7 +443,7 @@ inline short evaluateMaterial(TSearch * sd) {
     bool mating_power_b = brooks || bqueens || bminors > 2 || (bminors == 2 && bbishops > 0);
     bool mating_material_w = wpawns || mating_power_w;
     bool mating_material_b = bpawns || mating_power_b;
-
+    
     if (mating_power_w != mating_power_b) {
         if (mating_power_w) {
             result.add(VMATING_POWER);
@@ -453,8 +463,6 @@ inline short evaluateMaterial(TSearch * sd) {
         int minors_ix = MAX(0, 4 + wminors - bminors);
         int majors_ix = MAX(0, 4 + wrooks + 2 * wqueens - brooks - 2 * bqueens);
         result.add(IMBALANCE[MIN(majors_ix, 8)][MIN(minors_ix, 8)]);
-
-
     }
 
     int piece_power = result.get(phase);
@@ -483,11 +491,9 @@ inline short evaluateMaterial(TSearch * sd) {
         value -= TRADEDOWN_PAWNS[bpawns];
     }
 
-
     /*
      * Special Cases / Endgame adjustments
      */
-    uint8_t flags = 0;
     if (wpawns == 0 && value > 0 && piece_power < VROOK && wqueens == bqueens) {
         //no pawns and less than a rook extra piece_power is mostly drawn
         value >>= 2;
@@ -1526,6 +1532,12 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     if (*pos->queens[us] == 0) {
         return result;
     }
+    if (us == WHITE && (sd->stack->material_flags & MFLAG_KING_ATTACK_FORCE_W) == 0) {
+        return result;
+    }
+    if (us == BLACK && (sd->stack->material_flags & MFLAG_KING_ATTACK_FORCE_B) == 0) {
+        return result;
+    }
 
     /*
      * 1. Shelter score
@@ -1549,21 +1561,17 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
 #endif
 
     /*
-     * 2. If we have only queens, stop and return.
-     * The shelter score still counts, but only half.
+     * 2. Reduce the shelter score for closed positions and 
+     * if little material is left
      */
 
     if ((sd->stack->pawn_flags & PFLAG_CLOSED_CENTER) != 0) {
         result->half(); //reduce shelter score for closed positions
     }
 
-    if (*pos->rooks[us] == 0 && *pos->bishops[us] == 0 && *pos->knights[us] == 0) {
-        result->half();
-        return result;
-    }
-
     /*
-     * 3. Stop if the queen is not involved in the king attack
+     * 3. Piece Attack Score.
+     * Stop if the queen is not involved in the attack
      */
 
     int queen_attack = sd->stack->king_attack[QUEEN[us]];

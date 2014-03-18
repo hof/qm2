@@ -3,8 +3,8 @@
 
 void TTimeManager::set(unsigned int myTime, int oppTime, int myInc, int oppInc, int movesLeft) {
     static const int OVERHEAD_TIME = 500; //reserve 500ms for overhead (e.g. a slow interface)
-    static const int MOVES_LEFT = myInc > 0? 20 : 30; //assume the game is decided after this amount of moves
     static const double EMERGENCY_FACTOR = 2.0; //for emergencies, multiply the time with this amount
+    int MOVES_LEFT = myInc > 0? 20 : 30; //assume the game is decided after this amount of moves
     int movesToGo = movesLeft ? MIN(movesLeft + 1, MOVES_LEFT) : MOVES_LEFT; //for classic time controls (X moves in Y minutes)
     int limit = myTime - OVERHEAD_TIME;
 

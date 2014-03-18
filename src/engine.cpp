@@ -78,6 +78,7 @@ void * TEngine::_think(void* engineObjPtr) {
         tm->set(myTime, oppTime, myInc, oppInc, movesToGo);
     } else {
         tm->setEndTime(INFINITE_TIME);
+        tm->setMaxTime(INFINITE_TIME);
     }
 
     searchData->drawContempt.set(-50, 8);
@@ -93,7 +94,6 @@ void * TEngine::_think(void* engineObjPtr) {
     }
 
     searchData->maxNodes = maxNodes;
-    searchData->learnParam = learnParam;
     searchData->learnFactor = learnFactor;
     searchData->ponder = ponder;
 
@@ -391,7 +391,6 @@ void print_row(std::string cap, TScore & w, TScore & b, int phase) {
 void TEngine::analyse() {
 
     TSearch * s = new TSearch(_rootFen.c_str(), _hashTable, _outputHandler);
-    s->learnParam = 0;
     s->stack->eval_result = evaluate(s, 0, 0);
     int phase = s->stack->phase;
     TScore w, b, t;
@@ -583,7 +582,6 @@ void * TEngine::_learn(void * engineObjPtr) {
     engine->gameSettings.maxDepth = MAXDEPTH;
     sd_root->timeManager->setEndTime(INFINITE_TIME);
     sd_game->timeManager->setEndTime(INFINITE_TIME);
-    sd_game->learnParam = 1;
 
     int x = 0;
     double bestFactor = 1.0;

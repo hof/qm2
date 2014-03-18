@@ -71,9 +71,8 @@ public:
         if (available > 500) {
             endTime += (available / 2);
             return true;
-        } else {
-            endTime = maxEndTime;
-        }
+        } 
+        endTime = maxEndTime;
         return false;
     }
 };
