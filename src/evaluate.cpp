@@ -257,10 +257,10 @@ const TScore BISHOP_OUTPOST[64] = {
  * Rook Values 
  *******************************************************************************/
 
-const TScore ROOK_7TH = S(20, 40);
-const TScore ROOK_1ST = S(8, 0); //back rank protection
+const TScore ROOK_7TH = S(10, 10);
+const TScore ROOK_1ST = S(10, 0); //back rank protection
 const TScore ROOK_SEMIOPEN_FILE = S(10, 10);
-const TScore ROOK_OPEN_FILE = S(20, 20);
+const TScore ROOK_OPEN_FILE = S(17, 17);
 const TScore ROOK_GOOD_SIDE = S(8, 16); //Rule of Tarrasch 
 const TScore ROOK_WRONG_SIDE = S(-8, -16);
 const TScore ROOK_CLOSED_FILE = S(-5, -5);
@@ -427,7 +427,7 @@ inline short evaluateMaterial(TSearch * sd) {
     if (bbishops > 1 && pos->blackBishopPair()) {
         result.sub(VBISHOPPAIR);
     }
-    
+
     uint8_t flags = 0;
     if (wqueens > 0 && (wpieces > 2 || wqueens > 1)) {
         flags |= MFLAG_KING_ATTACK_FORCE_W;
@@ -443,7 +443,7 @@ inline short evaluateMaterial(TSearch * sd) {
     bool mating_power_b = brooks || bqueens || bminors > 2 || (bminors == 2 && bbishops > 0);
     bool mating_material_w = wpawns || mating_power_w;
     bool mating_material_b = bpawns || mating_power_b;
-    
+
     if (mating_power_w != mating_power_b) {
         if (mating_power_w) {
             result.add(VMATING_POWER);
@@ -1249,17 +1249,17 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         } else {
             result->add(ROOK_OPEN_FILE);
         }
-        U64 moves = MagicRookMoves(sq, occ) & sd->stack->mob[us];
-        int count = popCount0(moves);
-        result->add(ROOK_MOBILITY[count]);
 
         if (pos->attackedByPawn(sq, them)) {
             result->add(ATTACKED_PIECE);
         }
 
-        if (bitSq & RANK[us][7] && (BIT(*pos->kingPos[them]) & (RANK[us][8] | (RANK[us][7])))) {
+        if ((bitSq & RANK[us][7]) && (BIT(*pos->kingPos[them]) & (RANK[us][8] | (RANK[us][7])))) {
             result->add(ROOK_7TH);
-        } else if (moves & sd->stack->attack[us]) {
+        }
+
+        U64 moves = MagicRookMoves(sq, occ) & sd->stack->mob[us];
+        if (moves & sd->stack->attack[us]) {
             result->add(popCount0(moves & sd->stack->attack[us]) * ROOK_ATTACK);
         }
 

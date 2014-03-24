@@ -71,9 +71,15 @@ public:
         if (available > 500) {
             endTime += (available / 2);
             return true;
-        } 
+        }
         endTime = maxEndTime;
         return false;
+    }
+
+    inline bool requestLessTime(int single_move = 0) {
+        if (maxEndTime != endTime) {
+            endTime >>= (1 + single_move);
+        }
     }
 };
 

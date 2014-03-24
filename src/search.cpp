@@ -9,6 +9,7 @@ static const bool DO_RAZOR = true; //razoring (fail low pruning)
 static const bool DO_FFP = true; //forward futility pruning
 static const bool DO_LMR = true; //late move reductions
 static const bool DO_EXTEND_MOVE = true; //move extensions
+static const bool DO_QPR = false; //quiet path reduction
 
 static const short FMARGIN[12] = {200, 200, 200, 450, 450, 600, 600, 1200, 1200, 2000, 2000, 2000}; //futility margin
 static const short RMARGIN = 300; //razor margin
@@ -461,6 +462,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * - Non-captures with a positive static score
      * - All remaining moves
      */
+    
     int searched_moves = 1;
     const int max_reduce = MIN(new_depth - ONE_PLY, LMR_MAX);
     while (TMove * move = movePicker->pickNextMove(this, depth, alpha, beta)) {
@@ -518,7 +520,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         stack->reduce = reduce;
 
         /*
-         * 13. Search one ply deeper
+         * 13. Go forward and search next node
          */
         forward(move, gives_check);
         int score = -pvs(-alpha - 1, -alpha, new_depth - reduce + extend_move);
@@ -527,7 +529,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             (stack - 1)->reduce = 0;
             score = -pvs(-alpha - 1, -alpha, new_depth + extend_move);
         }
-        if (score > alpha) {
+        if (type == PVNODE && score > alpha) {
             //full window research
             (stack - 1)->reduce = 0;
             score = -pvs(-beta, -alpha, new_depth + extend_move);

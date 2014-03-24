@@ -173,9 +173,9 @@ void * TEngine::_think(void* engineObjPtr) {
             //no ponder move.. only consider book_moves, but let the engine decide which one to play
             book->findMoves(root, &searchData->stack->moveList);
             searchData->root.matchMoves(&searchData->stack->moveList);
+            tm->requestLessTime(true);
         } else if (searchData->root.MoveCount == 1) {
-            tm->setEndTime(2);
-            tm->setMaxTime(1);
+            tm->requestLessTime(true);
         }
         searchData->stack->eval_result = evaluate(searchData, 0, 0);
         int alpha = -SCORE_INFINITE;
@@ -190,6 +190,8 @@ void * TEngine::_think(void* engineObjPtr) {
         int depth = ONE_PLY;
         int resultScore = 0;
         bool move_changed = false;
+        bool score_changed = false;
+        bool easy_move = true;
         while (depth <= maxDepth * ONE_PLY && !searchData->stopSearch) {
 
             int iteration_start_time = tm->elapsed();
@@ -229,16 +231,22 @@ void * TEngine::_think(void* engineObjPtr) {
              * - Evaluation shows large positional values
              * - PV or pondermove is not set
              */
+            score_changed = ABS(prev_score - score) > (VPAWN / 4);
+            easy_move &= move_changed == false;
+            easy_move &= score_changed == false;
+            
             if (!searchData->stopSearch && depth > HIGH_DEPTH && !book_move) {
                 if (ponderMove.piece == EMPTY) {
                     tm->requestMoreTime();
                 } else if (move_changed) {
                     tm->requestMoreTime();
-                } else if (ABS(prev_score - score) > (VPAWN / 4)) {
+                } else if (score_changed) {
                     tm->requestMoreTime();
+                } else if (easy_move) {
+                    easy_move = false;
+                    tm->requestLessTime();
                 }
             }
-
 
             /* 
              * Stop conditions
@@ -778,7 +786,7 @@ void * TEngine::_learn(void * engineObjPtr) {
         int elo = round(-400.0 * log(1 / (points / maxPoints) - 1) / log(10));
         double los = 0.5 + 0.5 * erf((stats[1] - stats[2]) / sqrt(2.0 * (stats[1] + stats[2])));
         double los_p = los * 100;
-        std::cout << "\nGames: " << batch << " WLD: " << stats[1] << "-" << stats[2] << "-" << stats[0]
+        std::cout << "\nGames: " << batch << " " << stats[1] << "-" << stats[2] << "-" << stats[0]
                 << " (" << (int) score << "%, Elo: " << elo << ", LOS: " << (int) los_p << "%) " << std::endl;
 
         double batch_adj = MIN(0.04, batch / 100000.0);
