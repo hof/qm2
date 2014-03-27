@@ -620,46 +620,6 @@ int TBoard::givesCheck(TMove * move) {
     return 0;
 }
 
-bool TBoard::active(TMove * move) {
-    if (move->capture || move->promotion || move->castle) {
-        return true;
-    }
-    return false;
-    /* 
-    switch (move->piece) {
-        case EMPTY:
-            return false;
-        case WPAWN:
-            return WPawnCaptures[move->tsq] & blackPieces;
-        case WKNIGHT:
-            return KnightMoves[move->tsq] & (blackRooks | blackQueens | blackKings);
-        case WBISHOP:
-            return MagicBishopMoves(move->tsq, allPieces) & (blackRooks | blackQueens | blackKings);
-        case WROOK:
-            return MagicRookMoves(move->tsq, allPieces) & (blackQueens | blackKings);
-        case WQUEEN:
-            return false;
-        case WKING:
-            return true;
-        case BPAWN:
-            return BPawnCaptures[move->tsq] & whitePieces;
-        case BKNIGHT:
-            return KnightMoves[move->tsq] & (whiteRooks | whiteQueens | whiteKings);
-        case BBISHOP:
-            return MagicBishopMoves(move->tsq, allPieces) & (whiteRooks | whiteQueens | whiteKings);
-        case BROOK:
-            return MagicRookMoves(move->tsq, allPieces) & (whiteQueens | whiteKings);
-        case BQUEEN:
-            return false;
-        case BKING:
-            return true;
-        default:
-            return false;
-    }
-    return false;
-     */ 
-}
-
 bool TBoard::checksPiece(TMove * move) {
     switch (move->piece) {
         case EMPTY:

@@ -272,6 +272,13 @@ const TScore ROOK_MOBILITY[15] = {
     S(7, 14), S(8, 16), S(9, 18), S(10, 20), S(11, 22), S(12, 24)
 };
 
+U64 ROOK_PATTERNS[2] = {//black, white
+    BIT(h8) | BIT(g8) | BIT(h7) | BIT(g7) | BIT(a8) | BIT(b8) | BIT(a7) | BIT(b7),
+    BIT(h1) | BIT(g1) | BIT(h2) | BIT(g2) | BIT(a1) | BIT(b1) | BIT(a2) | BIT(b2)
+};
+
+const TScore TRAPPED_ROOK = S(-40, -80);
+
 /*******************************************************************************
  * Queen Values
  *******************************************************************************/
@@ -1244,6 +1251,23 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         U64 bitSq = BIT(sq);
         if (bitSq & fill[us]) {
             result->add(ROOK_CLOSED_FILE);
+            //trapped rook pattern
+            if (sd->learnFactor > 0 && bitSq & ROOK_PATTERNS[us]) {
+                int kpos_us = *pos->kingPos[us];
+                if (us == WHITE && (kpos_us == g1 || kpos_us == h1 || kpos_us == f1)
+                        && (sq == h1 || sq == g1 || sq == h2 || sq == g2)) {
+                    result->add(TRAPPED_ROOK);
+                } else if (us == WHITE && (kpos_us == a1 || kpos_us == b1 || kpos_us == c1)
+                        && (sq == a1 || sq == b1 || sq == a2 || sq == b2)) {
+                    result->add(TRAPPED_ROOK);
+                } else if (us == BLACK && (kpos_us == g8 || kpos_us == h8 || kpos_us == f8)
+                        && (sq == h8 || sq == g8 || sq == h7 || sq == g7)) {
+                    result->add(TRAPPED_ROOK);
+                } else if (us == BLACK && (kpos_us == a8 || kpos_us == b8 || kpos_us == c8)
+                        && (sq == a8 || sq == b8 || sq == a7 || sq == b7)) {
+                    result->add(TRAPPED_ROOK);
+                } 
+            }
         } else if (bitSq & fill[them]) {
             result->add(ROOK_SEMIOPEN_FILE);
         } else {
@@ -1260,7 +1284,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
 
         U64 moves = MagicRookMoves(sq, occ) & sd->stack->mob[us];
         if (moves & sd->stack->attack[us]) {
-            result->add(popCount0(moves & sd->stack->attack[us]) * ROOK_ATTACK);
+            result->add(popCount(moves & sd->stack->attack[us]) * ROOK_ATTACK);
         }
 
         //Tarrasch Rule: place rook behind passers

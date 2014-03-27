@@ -53,7 +53,6 @@ class TRootMove {
 public:
     TMove Move;
     bool GivesCheck;
-    bool Active;
     int Nodes;
     int PV;
     int Value;
@@ -62,14 +61,13 @@ public:
     int checkerSq;
     U64 checkers;
 
-    void init(TMove * move, int initialValue, bool givesCheck, bool active, int see) {
+    void init(TMove * move, int initialValue, bool givesCheck, int see) {
         Nodes = 0;
         PV = 0;
         Value = -SCORE_INFINITE;
         InitialValue = initialValue;
         Move.setMove(move);
         GivesCheck = givesCheck;
-        Active = active;
         SEE = see;
     }
 

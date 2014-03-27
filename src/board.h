@@ -423,7 +423,6 @@ struct TBoard {
     }
 
     int givesCheck(TMove * move);
-    bool active(TMove * move);
     bool checksPiece(TMove * move);
 
     inline bool push7th(TMove * move) {

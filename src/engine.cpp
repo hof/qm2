@@ -173,9 +173,9 @@ void * TEngine::_think(void* engineObjPtr) {
             //no ponder move.. only consider book_moves, but let the engine decide which one to play
             book->findMoves(root, &searchData->stack->moveList);
             searchData->root.matchMoves(&searchData->stack->moveList);
-            tm->requestLessTime(true);
+            tm->requestLessTime();
         } else if (searchData->root.MoveCount == 1) {
-            tm->requestLessTime(true);
+            tm->requestLessTime();
         }
         searchData->stack->eval_result = evaluate(searchData, 0, 0);
         int alpha = -SCORE_INFINITE;

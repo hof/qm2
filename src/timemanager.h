@@ -76,10 +76,15 @@ public:
         return false;
     }
 
-    inline bool requestLessTime(int single_move = 0) {
+    inline bool requestLessTime() {
         if (maxEndTime != endTime) {
-            endTime >>= (1 + single_move);
+            int available = endTime - startTime;
+            if (available > 0) {
+                endTime -= available / 2;
+                return true;
+            }
         }
+        return false;
     }
 };
 
