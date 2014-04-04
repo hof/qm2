@@ -258,7 +258,7 @@ int TSearch::extendMove(TMove * move, int gives_check) {
         if (move->capture) {
             return ONE_PLY;
         }
-        if (pos->SEE(move) > -200) {
+        if (pos->SEE(move) >= 0) {
             return ONE_PLY;
         }
         return 0;
@@ -355,7 +355,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     int new_depth = depth - ONE_PLY;
     assert(new_depth >= 0);
 
-    //a) Fail-high pruning (return if static eval score is already much better than beta)
+    //a) Fail-high pruning (return if static evaluation score is already much better than beta)
     if (DO_FHP
             && !in_check
             && new_depth <= LOW_DEPTH
@@ -369,18 +369,20 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     assert(type != UNKNOWN);
     assert(type == PVNODE || alpha + 1 == beta);
 
-    //c) Nullmove pruning
+    //b) Null move pruning
     stack->hashCode = pos->boardFlags->hashCode;
     bool mate_threat = false;
-
     if (DO_NULL
             && !skipNull
             && !in_check
-            && depth > ONE_PLY
+            && new_depth > 0
             && eval >= beta
             && ABS(beta) < SCORE_MATE - MAX_PLY
             && pos->hasPieces(pos->boardFlags->WTM)) {
-        int rdepth = new_depth - (2.5 * ONE_PLY) - (depth >> 3);
+        int rdepth = new_depth - (3 * ONE_PLY);
+        if (rdepth >= 8) {
+            rdepth -= (rdepth >> 3);
+        }
         forward();
         int null_score = -pvs(-beta, -alpha, rdepth);
         backward();
@@ -445,7 +447,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * - Non-captures with a positive static score
      * - All remaining moves
      */
-
     int searched_moves = 1;
     int max_reduce = MIN(new_depth - ONE_PLY, LMR_MAX);
     while (TMove * move = movePicker->pickNextMove(this, depth, alpha, beta)) {
