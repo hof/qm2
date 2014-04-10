@@ -187,46 +187,50 @@ void THashTable::mtLookup(TSearch * searchData) {
         searchData->materialTableHits++;
         searchData->stack->material_score = entry.value;
         searchData->stack->phase = entry.phase;
+        searchData->stack->material_flags = entry.flags;
     } else {
         searchData->stack->material_score = SCORE_INVALID;
     }
 }
 
-void THashTable::mtStore(TSearch * searchData, int value, int phase) {
+void THashTable::mtStore(TSearch * searchData) {
     THashTable * hashTable = searchData->hashTable;
     TMaterialTableEntry * materialTable = hashTable->materialTable;
     U64 materialHash = searchData->pos->boardFlags->materialHash;
     TMaterialTableEntry * entry = &materialTable[hashTable->getMaterialHashKey(materialHash)];
-    entry->value = value;
-    entry->phase = phase;
-    entry->key = materialHash^value;
+    entry->value = searchData->stack->material_score;
+    entry->phase = searchData->stack->phase;
+    entry->flags = searchData->stack->material_flags;
+    entry->key = materialHash^entry->value;
 }
 
-void THashTable::ptLookup(TSearch * searchData) {
-    searchData->pawnTableProbes++;
-    THashTable * hashTable = searchData->hashTable;
-    U64 pawnHash = searchData->pos->boardFlags->pawnHash;
+void THashTable::ptLookup(TSearch * sd) {
+    sd->pawnTableProbes++;
+    THashTable * hashTable = sd->hashTable;
+    U64 pawnHash = sd->pos->boardFlags->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
-    if ((entry->key ^ entry->pawnScore.mg) == pawnHash) {
-        searchData->stack->pawn_score.set(entry->pawnScore);
-        searchData->stack->shelter_score[WHITE].set(entry->shelterScoreW);
-        searchData->stack->shelter_score[BLACK].set(entry->shelterScoreB);
-        searchData->stack->passers = entry->passers;
-        searchData->pawnTableHits++;
+    if ((entry->key ^ entry->pawn_score.mg) == pawnHash) {
+        sd->stack->pawn_score.set(entry->pawn_score);
+        sd->stack->king_attack[WPAWN] = entry->king_attack[WHITE];
+        sd->stack->king_attack[BPAWN] = entry->king_attack[BLACK];
+        sd->stack->passers = entry->passers;
+        sd->stack->pawn_flags = entry->pawn_flags;
+        sd->pawnTableHits++;
     } else {
-        searchData->stack->pawn_score.set(SCORE_INVALID);
+        sd->stack->pawn_score.set(SCORE_INVALID);
     }
 }
 
-void THashTable::ptStore(TSearch * searchData, const TScore * pawnScore, const TScore * shelter_w, const TScore * shelter_b, const U64 &passers) {
-    THashTable * hashTable = searchData->hashTable;
-    U64 pawnHash = searchData->pos->boardFlags->pawnHash;
+void THashTable::ptStore(TSearch * sd) {
+    THashTable * hashTable = sd->hashTable;
+    U64 pawnHash = sd->pos->boardFlags->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
-    entry->pawnScore.set(pawnScore);
-    entry->shelterScoreW.set(shelter_w);
-    entry->shelterScoreB.set(shelter_b);
-    entry->passers = passers;
-    entry->key = (pawnHash ^ pawnScore->mg);
+    entry->pawn_score.set(sd->stack->pawn_score);
+    entry->king_attack[WHITE] = sd->stack->king_attack[WPAWN];
+    entry->king_attack[BLACK] = sd->stack->king_attack[BPAWN];
+    entry->passers = sd->stack->passers;
+    entry->pawn_flags = sd->stack->pawn_flags;
+    entry->key = (pawnHash ^ sd->stack->pawn_score.mg);
 }
 
 void THashTable::clear() {

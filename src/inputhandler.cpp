@@ -8,6 +8,8 @@
 
 #include "inputhandler.h"
 
+//#define DO_LOG
+
 /**
  * Handle input command from stdin
  * @param cmd input from stdin
@@ -17,12 +19,12 @@ bool TInputHandler::handle(std::string cmd) {
     bool result = true;
     TInputParser parser(cmd);
 
-    /*
+#ifdef DO_LOG
     std::ofstream myfile;
     myfile.open("uci.log", std::ios::app);
     myfile << "> " << cmd << std::endl;
     myfile.close();
-     */
+#endif
 
     std::string token;
     if (parser >> token) { // operator>>() skips any whitespace
@@ -145,19 +147,19 @@ bool TInputHandler::handleSetOption(TInputParser& parser) {
                     //at this point, we have a name, value pair
                     if (name == "Hash") {
                         handled = true;
-                        _hashSize = fromString<int>(value);
+                        _hashSizeRequest = fromString<int>(value);
                     } else if (name == "UCI_Opponent") {
                         //value GM 2800 human Gary Kasparow"
                         //value none none computer Shredder"
                         _opponentString = value;
                         TInputParser optionParser(_opponentString);
                         std::string optionToken;
-                        
+
                         if (optionParser >> optionToken) { // title
                             _opponent.Title = optionToken;
                         }
                         if (optionParser >> optionToken) { //rating
-                            _opponent.Rating = optionToken == "none"? 0 : fromString<int>(optionToken);
+                            _opponent.Rating = optionToken == "none" ? 0 : fromString<int>(optionToken);
                         }
                         if (optionParser >> optionToken) { //computer or human
                             _opponent.Computer = optionToken == "computer";
@@ -166,7 +168,7 @@ bool TInputHandler::handleSetOption(TInputParser& parser) {
                             _opponent.Name = optionToken;
                         }
                         engine()->setOpponent(&_opponent);
-                        handled = true;    
+                        handled = true;
                     }
                 }
             } else {

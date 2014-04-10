@@ -89,6 +89,7 @@ public:
             _hashSize = _hashSizeRequest;
         }
         if (_hashTable == NULL) {
+            _hashSize = _hashSizeRequest;
             _hashTable = new THashTable(_hashSize);
         }
         return _hashTable;

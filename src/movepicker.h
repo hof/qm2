@@ -27,6 +27,8 @@ enum MovePickingStage {
     THREATMOVE,
     QUIET_MOVES,
     Q_EVASIONS,
+    Q_HASH1,
+    Q_HASH2,
     Q_CAPTURES,
     Q_PROMOTIONS,
     Q_QUIET_CHECKS,

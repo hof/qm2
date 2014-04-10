@@ -15,14 +15,16 @@
 
 #include "score.h"
 
-
 typedef uint64_t U64;
 
+#define HARDWARE_POPCOUNT
+#define HARDWARE_64BITS
 
 #define C64(x) x##UL
 
 static const U64 BIT32 = (C64(1) << 32);
 
+#ifdef HARDWARE_64BITS
 inline unsigned bitScanForward(U64 x) {
     assert(x);
     asm ("bsfq %0, %0" : "=r" (x) : "0" (x));
@@ -34,11 +36,9 @@ inline unsigned bitScanReverse(U64 x) {
     asm ("bsrq %0, %0" : "=r" (x) : "0" (x));
     return x;
 }
+#endif /* 64 bits bitscan */
 
-#ifdef COMPILE_32BITS
-
-static const U64 BIT32 = (C64(1) << 32);
-
+#ifndef HARDWARE_64BITS
 inline unsigned bitScanForward(U64 x) {
     assert(x);
     if (x < BIT32) {
@@ -55,14 +55,12 @@ inline unsigned bitScanReverse(U64 x) {
     if (x >= BIT32) {
         x >>= 32;
         asm ("bsr %0, %0" : "=r" (x) : "0" (x));
-        return x+32;
-    } 
+        return x + 32;
+    }
     asm ("bsr %0, %0" : "=r" (x) : "0" (x));
     return x;
 }
-
-
-#endif
+#endif /* 32 bits bitscan */
 
 #define BSF(x) (bitScanForward(x))
 #define BSR(x) (bitScanReverse(x))
@@ -78,7 +76,7 @@ const U64 FILE_G = FILE_A << 6;
 const U64 FILE_H = FILE_A << 7;
 
 const U64 NOT_FILE_A = ~(FILE_A);
-const U64 NOT_FILE_H = ~(FILE_H); 
+const U64 NOT_FILE_H = ~(FILE_H);
 
 const U64 RANK_1 = 0xFF;
 const U64 RANK_2 = RANK_1 << (1 * 8);
@@ -90,8 +88,8 @@ const U64 RANK_7 = RANK_1 << (6 * 8);
 const U64 RANK_8 = RANK_1 << (7 * 8);
 
 const U64 RANK[2][9] = {
-    { 0, RANK_8, RANK_7, RANK_6, RANK_5, RANK_4, RANK_3, RANK_2, RANK_1 }, //blacks point of view
-    { 0, RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8 } //whites point of view
+    { 0, RANK_8, RANK_7, RANK_6, RANK_5, RANK_4, RANK_3, RANK_2, RANK_1}, //blacks point of view
+    { 0, RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8} //whites point of view
 };
 
 const U64 FILES[8] = {
@@ -172,6 +170,7 @@ const U64 BACKWARD_RANKS[8] = {
 };
 
 
+
 const U64 WHITE_SQUARES = C64(0x55AA55AA55AA55AA);
 const U64 BLACK_SQUARES = C64(0xAA55AA55AA55AA55);
 
@@ -186,7 +185,25 @@ const U64 OUTER = U64(RANK_7 | RANK_2 | FILE_B | FILE_G | EDGE);
 const U64 LARGE_CENTER = U64(FULL_BOARD^OUTER);
 const U64 CENTER = U64(LARGE_CENTER & ~(RANK_6 | RANK_3 | FILE_C | FILE_F));
 
+const U64 ATTACKZONE[2] = {
+    RANK_1 | (RANK_2 & ~EDGE) | (RANK_3 & LARGE_CENTER) | (RANK_4 & CENTER),
+    RANK_8 | (RANK_7 & ~EDGE) | (RANK_6 & LARGE_CENTER) | (RANK_5 & CENTER)
+};
 
+
+#ifdef HARDWARE_POPCOUNT /* hardware popcount */
+inline int popCount(U64 b) {
+    __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
+    return b;
+}
+
+inline unsigned popCount0(U64 b) {
+    __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
+    return b;
+}
+#endif /* end: hardware popcount */
+
+#ifndef HARDWARE_POPCOUNT /* software popcount */
 inline unsigned popCount(U64 x) {
     x = (x & C64(0x5555555555555555)) + ((x >> 1) & C64(0x5555555555555555));
     x = (x & C64(0x3333333333333333)) + ((x >> 2) & C64(0x3333333333333333));
@@ -197,6 +214,7 @@ inline unsigned popCount(U64 x) {
 inline unsigned popCount0(U64 x) {
     return (x == 0) ? 0 : popCount(x);
 }
+#endif /* end: software popcount */
 
 inline unsigned popFirst(U64 & x) {
     assert(x);
@@ -213,7 +231,7 @@ inline unsigned popLast(U64 & x) {
 }
 
 inline U64 northFill(U64 x) {
-    x |= (x <<  8);
+    x |= (x << 8);
     x |= (x << 16);
     x |= (x << 32);
     return x;
@@ -258,12 +276,13 @@ inline bool gt_1(U64 x) {
 #define DOWNLEFT1(x) (((x) >> 9) & NOT_FILE_H)
 
 const int8_t PAWNDIRECTION[2] = {-8, 8};
+
 inline int forwardSq(int sq, bool white) {
     return sq + PAWNDIRECTION[white];
 }
 
 inline U64 forwardFill(int sq, bool white) {
-    return white? FRONTFILL(BIT(sq)) : BACKFILL(BIT(sq));
+    return white ? FRONTFILL(BIT(sq)) : BACKFILL(BIT(sq));
 }
 
 #define FILE(sq)            ((sq)&7)
@@ -273,7 +292,7 @@ inline U64 forwardFill(int sq, bool white) {
 #define FILE_SYMBOL(sq)     (char(((sq)&7)+97))
 #define RANK_SYMBOL(sq)     (char(((sq)>>3)+49))
 #define MAX_PLY              128
-#define MAX(x,y)            ((x)>=(y)?(x):(y))
+#define MAX(x,y)            ((x)>(y)?(x):(y))
 #define MIN(x,y)            ((x)<(y)?(x):(y))
 #define ABS(x)              ((x)>=0?(x):(-(x)))    
 #define FLIP_SQUARE(sq)     (((sq)^56))
@@ -281,6 +300,24 @@ inline U64 forwardFill(int sq, bool white) {
 #define ISQ(sq,w)           (((sq)^(bool(w)*56)))
 
 #define PRINT_SQUARE(sq)    FILE_SYMBOL(sq) << RANK_SYMBOL(sq)
+
+inline int RANGE(const int min, const int max, const int x) {
+    if (x <= min) {
+        return min;
+    }
+    if (x >= max) {
+        return max;
+    }
+    return x;
+}
+
+inline int BB_WIDTH(const U64 occ) {
+    if (occ == 0 || max_1(occ)) {
+        return 0;
+    }
+    U64 x = southFill(occ) & RANK_1;
+    return BSR(x) - BSF(x);
+}
 
 /**
  * Flip a bitboard vertically about the centre ranks.
@@ -307,7 +344,23 @@ inline bool BLACK_SQUARE(unsigned char sq) {
     return !WHITE_SQUARE(sq);
 }
 
+inline int distance(int sq1, int sq2) {
+   int drank = ABS(RANK(sq1) - RANK(sq2));
+   int dfile = ABS(FILE(sq1) - FILE(sq2));
+   return MAX(drank, dfile);
+}
 
+inline int distance_rank(int sq1, int sq2) {
+    return ABS(RANK(sq1) - RANK(sq2));
+}
+
+inline int distance_file(int sq1, int sq2) {
+    return ABS(FILE(sq1) - FILE(sq2));
+}
+
+inline U64 forwardRanks(int sq, bool white) {
+    return white? FORWARD_RANKS[RANK(sq)] : BACKWARD_RANKS[RANK(sq)];
+}
 
 /*
  * For debugging

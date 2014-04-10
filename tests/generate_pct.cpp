@@ -58,7 +58,7 @@ void print_pct(TSCORE_PST & pct) {
 
 int main(int argc, char** argv) {
     InitMagicMoves();
-    init_pct();
+    init_pst();
     print_pct(PST);
     return (EXIT_SUCCESS);
 }

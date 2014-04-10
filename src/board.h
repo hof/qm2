@@ -101,14 +101,15 @@ using std::string;
 #define BQUEEN  11
 #define BKING   12
 
+#define WPIECES 13
+#define BPIECES 14
+#define ALLPIECES 0
+
+const uint8_t PAWN[2] = {BPAWN, WPAWN};
 const uint8_t QUEEN[2] = {BQUEEN, WQUEEN};
 const uint8_t ROOK[2] = {BROOK, WROOK};
 const uint8_t BISHOP[2] = {BBISHOP, WBISHOP};
 const uint8_t KNIGHT[2] = {BKNIGHT, WKNIGHT};
-
-#define WPIECES 13
-#define BPIECES 14
-#define ALLPIECES   0
 
 #define WHITEPIECE(pc) ((pc)<=WKING)
 
@@ -245,7 +246,7 @@ struct TBoard {
     inline U64 allPawns() {
         return whitePawns | blackPawns;
     }
-    
+
     inline bool stmHasQueen() {
         return *queens[boardFlags->WTM] != 0;
     }
@@ -267,13 +268,23 @@ struct TBoard {
     }
 
     inline U64 all(bool wtm) {
-        return wtm? whitePieces : blackPieces;
+        return wtm ? whitePieces : blackPieces;
     }
+
     inline U64 getPieces(bool wtm) {
-        return wtm ? whiteRooks | whiteKnights | whiteBishops | whiteQueens 
-                : blackRooks | blackKnights | blackBishops | blackQueens;
+        return wtm ?
+                whiteRooks | whiteKnights | whiteBishops | whiteQueens
+                :
+                blackRooks | blackKnights | blackBishops | blackQueens;
     }
-    
+
+    inline bool hasPieces(bool wtm) {
+        return wtm ?
+                whiteRooks || whiteKnights || whiteBishops || whiteQueens
+                :
+                blackRooks || blackKnights || blackBishops || blackQueens;
+    }
+
     inline U64 queensOrMinorsAndRooks(bool white) {
         return white ? (whiteQueens || (whiteKnights && whiteBishops && whiteRooks))
                 : (blackQueens || (whiteKnights && whiteBishops && whiteRooks));
@@ -390,9 +401,9 @@ struct TBoard {
     inline bool attackedByBlackPawn(int sq) {
         return WPawnCaptures[sq] & blackPawns;
     }
-    
+
     inline bool attackedByPawn(int sq, bool white) {
-        return white? attackedByWhitePawn(sq) : attackedByBlackPawn(sq);
+        return white ? attackedByWhitePawn(sq) : attackedByBlackPawn(sq);
     }
 
     inline bool attackedByOpponentPawn(int sq) {
@@ -412,7 +423,6 @@ struct TBoard {
     }
 
     int givesCheck(TMove * move);
-    bool active(TMove * move);
     bool checksPiece(TMove * move);
 
     inline bool push7th(TMove * move) {
@@ -452,9 +462,9 @@ struct TBoard {
     inline U64 blackPawnAttacks() {
         return (DOWNLEFT1(blackPawns) | DOWNRIGHT1(blackPawns));
     }
-    
+
     inline U64 pawnAttacks(bool white) {
-        return white? whitePawnAttacks() : blackPawnAttacks();
+        return white ? whitePawnAttacks() : blackPawnAttacks();
     }
 
     U64 getSmallestAttacker(U64 attacks, bool wtm, int &piece);

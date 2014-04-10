@@ -53,7 +53,6 @@ class TRootMove {
 public:
     TMove Move;
     bool GivesCheck;
-    bool Active;
     int Nodes;
     int PV;
     int Value;
@@ -62,14 +61,13 @@ public:
     int checkerSq;
     U64 checkers;
 
-    void init(TMove * move, int initialValue, bool givesCheck, bool active, int see) {
+    void init(TMove * move, int initialValue, bool givesCheck, int see) {
         Nodes = 0;
         PV = 0;
         Value = -SCORE_INFINITE;
         InitialValue = initialValue;
         Move.setMove(move);
         GivesCheck = givesCheck;
-        Active = active;
         SEE = see;
     }
 
@@ -102,6 +100,7 @@ public:
     int FiftyCount;
     bool InCheck;
     void sortMoves();
+    void matchMoves(TMoveList * list);
 };
 
 struct TSearchStack {
@@ -132,16 +131,20 @@ struct TSearchStack {
     short eval_result;
     TScore eval_score;
     short material_score;
+    uint8_t material_flags;
+    uint8_t pawn_flags;
     TScore pawn_score;
     TScore knight_score[2];
     TScore bishop_score[2];
     TScore rook_score[2];
     TScore queen_score[2];
     TScore king_score[2];
-    TScore shelter_score[2];
     TScore passer_score[2];
     U64 passers;
     U64 mob[2];
+    U64 attack[2];
+    U64 king_attack_zone[2];
+    int8_t king_attack[BKING+1];
     int reduce;
     U64 captureMask;
 };
@@ -175,11 +178,10 @@ public:
     bool skipNull;
     TMove excludedMove;
     int selDepth;
-    int learnParam;
     double learnFactor;
     TRoot root;
     
-    int drawContempt;
+    TScore drawContempt;
 
     TMovePicker * movePicker;
     THashTable * hashTable;
@@ -187,7 +189,7 @@ public:
     TTimeManager * timeManager;
     int history[BKING + 1][64];
     
-    short LMR[2][2][64][256]; //active, pv, move number, depth
+    short LMR[32][64]; //depth,  move number
 
     TMoveList tempList;
 
@@ -198,7 +200,7 @@ public:
         pos->fromFen(fen);
         memset(history, 0, sizeof (history));
         initLMR();
-        init_pct();
+        init_pst();
         hashTable = globalHashTable;
         outputHandler = outputH;
         movePicker = new TMovePicker();
@@ -217,7 +219,7 @@ public:
         pawnTableProbes = 0;
         evalTableHits = 0;
         pawnTableHits = 0;
-        learnParam = 0;
+        learnFactor = 1.0;
         stopSearch = false;
         ponder = false;
         skipNull = false;
@@ -339,6 +341,7 @@ public:
 
     std::string getPVString();
     void poll();
+    bool pondering();
     void printMovePath();
     int initRootMoves();
 
@@ -351,9 +354,14 @@ public:
     int qsearch(int alpha, int beta, int qPly, int maxCheckPly);
     
     inline int drawScore(int adjust=0) {
-        return pos->boardFlags->WTM? drawContempt+adjust 
-                : -drawContempt-adjust;
+        int result = drawContempt.get(stack->phase)+adjust;
+        if (pos->boardFlags->WTM == false) {
+            result = -result;
+        }
+        return result & GRAIN;
     }
+    
+    int extendMove(TMove * move, int gives_check);
     
     inline bool passedPawn(TMove * move) {
         return BIT(move->ssq) & stack->passers;

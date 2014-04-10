@@ -620,45 +620,6 @@ int TBoard::givesCheck(TMove * move) {
     return 0;
 }
 
-bool TBoard::active(TMove * move) {
-    if (move->capture || move->promotion || move->castle) {
-        return true;
-    }
-    switch (move->piece) {
-        case EMPTY:
-            return false;
-        case WPAWN:
-            return move->tsq >= a4
-                    || (WPawnCaptures[move->tsq] & blackPieces);
-        case WKNIGHT:
-            return KnightMoves[move->tsq] & (blackRooks | blackQueens | blackKings);
-        case WBISHOP:
-            return MagicBishopMoves(move->tsq, allPieces) & (blackRooks | blackQueens | blackKings);
-        case WROOK:
-            return MagicRookMoves(move->tsq, allPieces) & (blackQueens | blackKings);
-        case WQUEEN:
-            return false;
-        case WKING:
-            return false;
-        case BPAWN:
-            return move->tsq <= h5
-                    || (BPawnCaptures[move->tsq] & whitePieces);
-        case BKNIGHT:
-            return KnightMoves[move->tsq] & (whiteRooks | whiteQueens | whiteKings);
-        case BBISHOP:
-            return MagicBishopMoves(move->tsq, allPieces) & (whiteRooks | whiteQueens | whiteKings);
-        case BROOK:
-            return MagicRookMoves(move->tsq, allPieces) & (whiteQueens | whiteKings);
-        case BQUEEN:
-            return false;
-        case BKING:
-            return false;
-        default:
-            return false;
-    }
-    return false;
-}
-
 bool TBoard::checksPiece(TMove * move) {
     switch (move->piece) {
         case EMPTY:
@@ -707,18 +668,23 @@ U64 TBoard::getSmallestAttacker(U64 attacks, bool wtm, int& piece) {
 }
 
 int TBoard::SEE(TMove * move) {
-    int ssq = move->ssq;
-    int tsq = move->tsq;
     int capturedPiece = move->capture;
     int movingPiece = move->piece;
-    int pieceVal = PIECE_VALUE[movingPiece];
     int capturedVal = PIECE_VALUE[capturedPiece];
+
+    /*
+     * 0. If the king captures, it's always a gain
+     */
+    if (movingPiece == WKING || movingPiece == BKING) {
+        return capturedVal;
+    }
 
     /*
      * 1. if a lower valued piece captures a higher valued piece 
      * return quickly as we are (almost) sure this capture gains material.
      * (e.g. pawn x knight)
      */
+    int pieceVal = PIECE_VALUE[movingPiece];
     if (pieceVal < capturedVal) {
         return capturedVal - pieceVal;
     }
@@ -727,28 +693,31 @@ int TBoard::SEE(TMove * move) {
      * 2. if a piece (not pawn) captures a pawn and that pawn is defended by
      * another pawn, return a negative score quickly
      */
+    int tsq = move->tsq;
     if ((movingPiece > BPAWN && capturedPiece == WPAWN && BPawnCaptures[tsq] & whitePawns)
-            || (movingPiece <= WKING && movingPiece > WPAWN && capturedPiece == BPAWN && WPawnCaptures[tsq] & blackPawns)) {
+            || (movingPiece < WKING && movingPiece > WPAWN && capturedPiece == BPAWN && WPawnCaptures[tsq] & blackPawns)) {
         return capturedVal - pieceVal;
     }
 
     /*
      * 3. full static exchange evaluation using the swap algoritm
      */
+    bool wtm = movingPiece > WKING;
+    U64 attacks = attacksTo(tsq);
     int gain[32];
     int depth = 0;
-    U64 fromBit = BIT(ssq);
+    U64 fromBit = BIT(move->ssq);
     U64 occupied = *boards[ALLPIECES];
     const U64 diagSliders = whiteBishops | whiteQueens | blackBishops | blackQueens;
     const U64 horVerSliders = whiteRooks | whiteQueens | blackRooks | blackQueens;
     const U64 xrays = diagSliders | horVerSliders;
-    U64 attacks = attacksTo(tsq);
+
     if (!capturedPiece && (movingPiece == WPAWN || movingPiece == BPAWN)) {
-        //set the non-captureing pawn move ssq bit in the attacks bitboard, 
+        //set the non-capturing pawn move ssq bit in the attacks bitboard, 
         //so it will be removed again in the swap loop
         attacks ^= fromBit;
     }
-    bool wtm = movingPiece > WKING;
+
     gain[0] = capturedVal;
     do {
         depth++;
@@ -769,19 +738,11 @@ int TBoard::SEE(TMove * move) {
 }
 
 bool TBoard::isDraw() {
-    bool result = false;
-    if (!whitePawns && !blackPawns && !whiteRooks && !blackRooks
-            && !whiteQueens && !blackQueens) {
-        /* there are only minor pieces left on the board */
-        int wbishops = pieces[WBISHOP].count;
-        int bbishops = pieces[BBISHOP].count;
-        int wknights = pieces[WKNIGHT].count;
-        int bknights = pieces[BKNIGHT].count;
-        int wminors = wbishops + wknights;
-        int bminors = bbishops + bknights;
-        result = wminors < 2 && bminors < 2;
-    }
-    return result;
+    return whitePawns == 0 && blackPawns == 0
+            && whiteRooks == 0 && blackRooks == 0
+            && whiteQueens == 0 && blackQueens == 0
+            && max_1(whiteKnights | whiteBishops)
+            && max_1(blackKnights | blackBishops);
 }
 
 void TBoard::fromFen(const char* fen) {

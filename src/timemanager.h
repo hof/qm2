@@ -13,7 +13,7 @@
 #include <string.h>
 
 const int TIME_UNIT = CLOCKS_PER_SEC;
-const unsigned int INFINITE_TIME = 24*60*60*1000;
+const unsigned int INFINITE_TIME = 24 * 60 * 60 * 1000;
 
 class TTimeManager {
 private:
@@ -35,33 +35,54 @@ public:
     void setStartTime() {
         startTime = clock();
     }
-    
+
     void setMaxTime(unsigned int timeInMs) {
         maxEndTime = startTime + NormalizeTime(timeInMs);
     }
-    
+
     void setEndTime(unsigned int timeInMs) {
         endTime = startTime + NormalizeTime(timeInMs);
     }
-    
+
     void set(unsigned int myTime, int oppTime, int myInc, int oppInc, int movesLeft);
-    
+
     inline bool timeIsUp() {
         return clock() >= endTime;
     }
-    
+
+    inline bool available(int ms) {
+        return (clock() + ms) <= endTime;
+    }
+
+    inline int available() {
+        return endTime - clock();
+    }
+
     /**
      * Return elapsed time in ms
      * @return elapsed time in ms
      */
     inline int elapsed() {
-        return (CLOCKS_PER_SEC*(clock() - startTime))/CLOCKS_PER_SEC;
+        return (CLOCKS_PER_SEC * (clock() - startTime)) / CLOCKS_PER_SEC;
     }
-    
+
     inline bool requestMoreTime() {
-        if (endTime < maxEndTime) {
-            endTime = maxEndTime;
+        int available = maxEndTime - endTime;
+        if (available > 500) {
+            endTime += (available / 2);
             return true;
+        }
+        endTime = maxEndTime;
+        return false;
+    }
+
+    inline bool requestLessTime() {
+        if (maxEndTime != endTime) {
+            int available = endTime - startTime;
+            if (available > 0) {
+                endTime -= available / 2;
+                return true;
+            }
         }
         return false;
     }
