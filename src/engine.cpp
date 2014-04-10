@@ -59,22 +59,20 @@ void * TEngine::_think(void* engineObjPtr) {
     TMove targetMove = game.targetMove;
     int targetScore = game.targetScore;
     bool ponder = game.ponder;
-    int learnParam = game.learnParam;
     double learnFactor = game.learnFactor;
     evaluate(searchData, -SCORE_INFINITE, SCORE_INFINITE);
-
-
-
     tm->setStartTime();
     int myTime = root->boardFlags->WTM ? whiteTime : blackTime;
     int oppTime = root->boardFlags->WTM ? blackTime : whiteTime;
     int myInc = root->boardFlags->WTM ? whiteInc : blackInc;
     int oppInc = root->boardFlags->WTM ? blackInc : whiteInc;
 
+    bool time_managed = false;
     if (maxTime) {
         tm->setEndTime(maxTime);
         tm->setMaxTime(maxTime);
     } else if (whiteTime || blackTime) {
+        time_managed = true;
         tm->set(myTime, oppTime, myInc, oppInc, movesToGo);
     } else {
         tm->setEndTime(INFINITE_TIME);
@@ -82,7 +80,7 @@ void * TEngine::_think(void* engineObjPtr) {
     }
 
     searchData->drawContempt.set(-50, 8);
-    if ((whiteTime || blackTime) && myInc == 0 && myTime < oppTime && myTime < 20000) {
+    if (time_managed && myInc == 0 && myTime < oppTime && myTime < 20000) {
         if (myTime < 2000) {
             searchData->drawContempt.set(100);
         } else {
@@ -173,8 +171,10 @@ void * TEngine::_think(void* engineObjPtr) {
             //no ponder move.. only consider book_moves, but let the engine decide which one to play
             book->findMoves(root, &searchData->stack->moveList);
             searchData->root.matchMoves(&searchData->stack->moveList);
-            tm->requestLessTime();
-        } else if (searchData->root.MoveCount == 1) {
+            if (time_managed) {
+                tm->requestLessTime();
+            }
+        } else if (searchData->root.MoveCount == 1 && time_managed) {
             tm->requestLessTime();
         }
         searchData->stack->eval_result = evaluate(searchData, 0, 0);
@@ -234,8 +234,8 @@ void * TEngine::_think(void* engineObjPtr) {
             score_changed = ABS(prev_score - score) > (VPAWN / 4);
             easy_move &= move_changed == false;
             easy_move &= score_changed == false;
-            
-            if (!searchData->stopSearch && depth > HIGH_DEPTH && !book_move) {
+
+            if (!searchData->stopSearch && time_managed && depth > HIGH_DEPTH && !book_move) {
                 if (ponderMove.piece == EMPTY) {
                     tm->requestMoreTime();
                 } else if (move_changed) {
@@ -273,7 +273,7 @@ void * TEngine::_think(void* engineObjPtr) {
 
             //stop if there is no time to find a new pv in a next iteration
             int iteration_time = tm->elapsed() - iteration_start_time;
-            if (type == EXACT && !tm->available(iteration_time / 2)) {                
+            if (type == EXACT && !tm->available(iteration_time / 2)) {
                 break;
             }
 

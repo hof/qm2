@@ -35,7 +35,6 @@ struct TGameSettings {
     int blackIncrement;
     int movesLeft;
     bool ponder;
-    int learnParam;
     double learnFactor;
 
     void clear() {
@@ -53,7 +52,6 @@ struct TGameSettings {
 #ifdef PRINTSEARCH
         examineSearch = false;
 #endif
-        learnParam = 0;
         learnFactor = 1.0;
     }
 };
