@@ -26,7 +26,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool white);
 enum MaterialValues {
     MATERIAL_AHEAD_THRESHOLD = 240, //all values are in centipawns
     VNOPAWNS = -40,
-    VBISHOPPAIR = VPAWN/3,
+    VBISHOPPAIR = 50,
 };
 
 const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
@@ -425,6 +425,14 @@ inline short evaluateMaterial(TSearch * sd) {
         if (bqueens > 1) {
             result.sub(REDUNDANT_QUEEN);
         }
+    }
+
+    // Bishop pair
+    if (wbishops > 1 && pos->whiteBishopPair()) {
+        result.add(VBISHOPPAIR);
+    }
+    if (bbishops > 1 && pos->blackBishopPair()) {
+        result.sub(VBISHOPPAIR);
     }
 
     uint8_t flags = 0;
@@ -1142,9 +1150,6 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
      * 3. Calculate the score and store on the stack
      */
     TPiecePlacement * pp = &pos->pieces[pc];
-    if (pp->count > 1) {
-        result->add(VBISHOPPAIR);
-    }
     U64 occ = pos->pawnsAndKings();
     bool them = !us;
     int kpos = *pos->kingPos[them];

@@ -52,16 +52,11 @@ TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, i
 }
 
 TMove * TMovePicker::pickFirstQuiescenceMove(TSearch * searchData, int qCheckDepth, int alpha, int beta) {
-    TMove * result;
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
-    moveList->stage = Q_CAPTURES;
+    moveList->stage = Q_CAPTURES; //q_hash1
     searchData->stack->captureMask = searchData->pos->allPieces;
-    if (searchData->stack->inCheck) {
-        moveList->minimumScore = -MOVE_INFINITY;
-    }
-    result = pickNextMove(searchData, qCheckDepth, alpha, beta);
-    return result;
+    return pickNextMove(searchData, qCheckDepth, alpha, beta);
 }
 
 TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, int beta) {
