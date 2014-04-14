@@ -284,7 +284,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         selDepth = MAX(selDepth, pos->currentPly);
         return qsearch(alpha, beta, 0, QS_CHECKDEPTH);
     }
-    
     nodes++;
 
     /* 
@@ -312,6 +311,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     if (stopSearch || pos->currentPly >= MAX_PLY) {
         return alpha;
     }
+    assert(depth >= ONE_PLY && depth < 256);
 
     /*
      * 3. Return obvious draws 
@@ -338,7 +338,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     /*
      * 4. Transposition table lookup
      */
-    assert(depth >= 0);
     hashTable->ttLookup(this, depth, alpha, beta);
     if (stack->ttScore != TT_EMPTY && excludedMove.piece == EMPTY) {
         return stack->ttScore;
@@ -377,7 +376,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && ABS(beta) < SCORE_MATE - MAX_PLY
             && pos->hasPieces(pos->boardFlags->WTM)) {
         int rdepth = new_depth - (3 * ONE_PLY);
-        if (rdepth >= 8) {
+        if (rdepth >= 8 && stack->phase < 14) {
             rdepth -= (rdepth >> 3);
         }
         forward();

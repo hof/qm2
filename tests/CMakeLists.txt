@@ -19,13 +19,11 @@ target_link_libraries(testTT QM2SRC)
 add_executable(testDepth test_depth.cpp)
 add_executable(testBK test_bratkokopec.cpp)
 add_executable(testWAC test_wac.cpp)
-add_executable(testPrintSearch test_printsearch.cpp)
 add_executable(testEvaluation test_evaluation.cpp)
 
 target_link_libraries(testDepth QM2SRC)
 target_link_libraries(testWAC QM2SRC)
 target_link_libraries(testBK QM2SRC)
-target_link_libraries(testPrintSearch QM2SRC)
 target_link_libraries(testEvaluation QM2SRC)
 
 #pct generation
@@ -35,4 +33,3 @@ target_link_libraries(genPct QM2SRC)
 #LMR table generation
 add_executable(genLMR generate_lmr.cpp)
 target_link_libraries(genLMR QM2SRC)
-
