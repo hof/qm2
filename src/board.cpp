@@ -738,11 +738,43 @@ int TBoard::SEE(TMove * move) {
 }
 
 bool TBoard::isDraw() {
-    return whitePawns == 0 && blackPawns == 0
-            && whiteRooks == 0 && blackRooks == 0
-            && whiteQueens == 0 && blackQueens == 0
-            && max_1(whiteKnights | whiteBishops)
-            && max_1(blackKnights | blackBishops);
+    if (whitePawns || blackPawns
+            || whiteRooks || blackRooks
+            || whiteQueens || blackQueens
+            || (whiteKnights && whiteBishops) || (blackKnights && blackBishops)
+            || gt_1(whiteBishops) || gt_1(blackBishops)
+            ) {
+        return false; //not a draw.. there is mating material
+}
+    int wN = pieces[WKNIGHT].count;
+    if (wN > 2) { //exotic!
+        return false;
+    }
+    int bN = pieces[BKNIGHT].count;
+    if (bN > 2) {
+        return false;
+    }
+
+    //at this point a side can have no pieces, 1 knight, 2 knights or 1 bishop.
+    int wB = pieces[WBISHOP].count;
+    int bB = pieces[BBISHOP].count;
+    assert(wN <= 2 && wB <= 1);
+    assert(bN <= 2 && bB <= 1);
+    assert (!(wB >= 1 && wN >= 1));
+    assert (!(bB >= 1 && bN >= 1));
+    
+    int wminors = wB + wN;
+    int bminors = bB + bN;
+    if ((wminors == 0 && bminors == 1)
+            || (bminors == 0 && wminors == 1)) {
+        return true;
+    }
+    
+    //mates are only possible with a king on the edge
+    if ((whiteKings & EDGE) || (blackKings & EDGE)) {
+        return false; 
+    }
+    return true;
 }
 
 void TBoard::fromFen(const char* fen) {

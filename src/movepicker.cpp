@@ -56,9 +56,6 @@ TMove * TMovePicker::pickFirstQuiescenceMove(TSearch * searchData, int qCheckDep
     moveList->clear();
     moveList->stage = Q_CAPTURES; //q_hash1
     searchData->stack->captureMask = searchData->pos->allPieces;
-    if (searchData->stack->inCheck) {
-        moveList->minimumScore = -MOVE_INFINITY;
-    }
     return pickNextMove(searchData, qCheckDepth, alpha, beta);
 }
 
@@ -79,7 +76,6 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
     /*
      * 2. Proceed to the next stage if no move was found
      */
-
     if (!result) {
         switch (moveList->stage) {
             case HASH1:
@@ -92,7 +88,6 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     moveList->lastX++->setMove(result);
                     return result;
                 }
-
             case HASH2:
                 /*
                  * Return the hashmove from always-replace table
@@ -132,7 +127,6 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     //or the search was aborted.. continue anyway (robust))
                     moveList->stage = MATEKILLER; //this line is kept to place a breakpoint. todo: assert (stale)mate
                 }
-
             case MATEKILLER:
                 result = &searchData->stack->mateKiller;
                 if (result->piece
@@ -242,7 +236,6 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 moveList->stage = STOP;
                 result = popBest(pos, moveList);
                 return result;
-
             case Q_HASH1:
                 /*
                  * Return the hashmove from depth-preferred table
@@ -253,7 +246,6 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     moveList->lastX++->setMove(result);
                     return result;
                 }
-
             case Q_HASH2:
                 /*
                  * Return the hashmove from always-replace table
@@ -264,7 +256,6 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     moveList->lastX++->setMove(result);
                     return result;
                 }
-
             case Q_CAPTURES:
                 mask = pos->allPieces;
                 if (searchData->stack->inCheck) {
@@ -314,12 +305,12 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     move->score = searchData->history[move->piece][move->tsq];
                 }
                 moveList->stage = STOP;
+                moveList->minimumScore = -MOVE_INFINITY;
                 result = popBest(pos, moveList);
                 return result;
             case STOP:
             default:
                 return NULL;
-
         }
     }
     return result;
