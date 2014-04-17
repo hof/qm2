@@ -276,7 +276,7 @@ int TSearch::extendMove(TMove * move, int gives_check) {
 int TSearch::pvs(int alpha, int beta, int depth) {
 
     stack->pvCount = 0;
-    
+
     /*
      * 1. If no more depth remaining, return quiescence value
      */
@@ -334,7 +334,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     if (pos->isDraw()) { //draw by no mating material
         return drawScore();
     }
-    
+
     /*
      * 4. Transposition table lookup
      */
@@ -447,9 +447,9 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         assert(stack->bestMove.equals(move) == false);
         assert(first_move->equals(move) == false);
         gives_check = pos->givesCheck(move);
-        bool skip_prune = stack->moveList.stage < QUIET_MOVES 
-            || in_check || gives_check > 0  | move->capture || move->promotion 
-            || move->castle || passedPawn(move);
+        bool skip_prune = stack->moveList.stage < QUIET_MOVES
+                || in_check || gives_check > 0 | move->capture || move->promotion
+                || move->castle || passedPawn(move);
 
         /*
          * 11. forward futility pruning at low depths
@@ -457,7 +457,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
          */
         if (DO_FFP
                 && !skip_prune
-                && type != PVNODE              
+                && type != PVNODE
                 && (eval < alpha || best >= alpha)
                 && new_depth <= LOW_DEPTH
                 ) {
@@ -487,9 +487,8 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             assert(new_depth >= 0);
             assert(searched_moves >= 1);
             reduce = LMR[MIN(new_depth, 31)][MIN(63, searched_moves)];
-            reduce -= (type == PVNODE)*2;
             reduce += (type == CUTNODE)*2;
-            reduce += (eval + 50) <= alpha;
+            reduce += eval + 50 < alpha;
             reduce += history[move->piece][move->tsq] < 0;
             reduce = RANGE(LMR_MIN, max_reduce, reduce);
         }
@@ -650,7 +649,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
 
         //pruning (delta futility and negative see), skipped for checks
         if (QS_DO_DELTA && givesCheck == 0 && NOTPV(alpha, beta)) {
-            
+
             //1. delta futility pruning: the captured piece + max. positional gain should raise alpha
             int gain = PIECE_VALUE[move->capture];
             if (move->promotion) {
