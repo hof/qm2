@@ -387,12 +387,14 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 return beta; // not return unproven mate scores
             }
             return null_score;
-        } else if (alpha > (-SCORE_MATE + MAX_PLY) && null_score < (-SCORE_MATE + MAX_PLY)) {
-            TMove * threat = &(stack + 1)->bestMove;
-            if (!threat->capture && !threat->promotion) {
-                updateHistoryScore(threat, rdepth);
+        } else {
+            mate_threat = null_score < (-SCORE_MATE + MAX_PLY);
+            if (mate_threat) {
+                TMove * threat = &(stack + 1)->bestMove;
+                if (!threat->capture && !threat->promotion) {
+                    updateHistoryScore(threat, rdepth);
+                }
             }
-            mate_threat = true;
         }
     }
     skipNull = false;
