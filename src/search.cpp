@@ -346,7 +346,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     /*
      * 5. Pruning: Fail-high and Nullmove
      */
-    int eval = evaluate(this, alpha, beta);
+    int eval = evaluate(this);
     int new_depth = depth - ONE_PLY;
     bool in_check = stack->inCheck;
     assert(new_depth >= 0);
@@ -448,7 +448,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         assert(first_move->equals(move) == false);
         gives_check = pos->givesCheck(move);
         bool skip_prune = stack->moveList.stage < QUIET_MOVES
-                || in_check || gives_check > 0 | move->capture || move->promotion
+                || in_check || gives_check > 0 || move->capture || move->promotion
                 || move->castle || passedPawn(move);
 
         /*
@@ -602,7 +602,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
         }
     }
 
-    int score = evaluate(this, alpha, beta); //always do an eval - it's incremental
+    int score = evaluate(this); //always do an eval - it's incremental
     if (stack->inCheck) { // in check
         assert(pos->boardFlags->checkers);
         int score = -SCORE_INFINITE;

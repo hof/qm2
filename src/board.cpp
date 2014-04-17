@@ -620,40 +620,6 @@ int TBoard::givesCheck(TMove * move) {
     return 0;
 }
 
-bool TBoard::checksPiece(TMove * move) {
-    switch (move->piece) {
-        case EMPTY:
-            return false;
-        case WPAWN:
-            return WPawnCaptures[move->tsq] & (blackKnights | blackBishops | blackRooks | blackQueens);
-        case WKNIGHT:
-            return KnightMoves[move->tsq] & (blackBishops | blackRooks | blackQueens);
-        case WBISHOP:
-            return BishopMoves[move->tsq] & (blackRooks | blackQueens | blackKings);
-        case WROOK:
-            return RookMoves[move->tsq] & (blackQueens | blackKings);
-        case WQUEEN:
-            return false;
-        case WKING:
-            return false;
-        case BPAWN:
-            return BPawnCaptures[move->tsq] & (whiteKnights | whiteBishops | whiteRooks | whiteQueens);
-        case BKNIGHT:
-            return KnightMoves[move->tsq] & (whiteBishops | whiteRooks | whiteQueens);
-        case BBISHOP:
-            return BishopMoves[move->tsq] & (whiteRooks | whiteQueens | whiteKings);
-        case BROOK:
-            return RookMoves[move->tsq] & (whiteQueens | whiteKings);
-        case BQUEEN:
-            return false;
-        case BKING:
-            return false;
-        default:
-            return false;
-    }
-    return false;
-}
-
 U64 TBoard::getSmallestAttacker(U64 attacks, bool wtm, int& piece) {
     static const int FIRSTPIECE[2] = {BPAWN, WPAWN};
     int firstPiece = FIRSTPIECE[wtm];

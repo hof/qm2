@@ -294,7 +294,7 @@ const TScore QUEEN_MOBILITY[29] = {
  * Main evaluation function
  *******************************************************************************/
 
-int evaluate(TSearch * sd, int alpha, int beta) {
+int evaluate(TSearch * sd) {
     if (sd->stack->eval_result != SCORE_INVALID) {
         return sd->stack->eval_result;
     }
@@ -688,8 +688,6 @@ void init_pst() {
  */
 
 inline TScore * evaluatePawnsAndKings(TSearch * sd) {
-
-
 
     /*
      * 1. Get the score from the last stack record if the latest move did not

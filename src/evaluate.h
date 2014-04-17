@@ -18,7 +18,7 @@
 
 class TSearch;
 
-int evaluate(TSearch * searchData, int alpha, int beta);
+int evaluate(TSearch * searchData);
 
 void init_pst();
 extern TSCORE_PST PST;

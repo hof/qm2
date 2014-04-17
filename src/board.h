@@ -363,12 +363,10 @@ struct TBoard {
         }
     }
 
-
-
     void forward(TMove * move);
     void backward(TMove * move);
 
-    void forward();
+    void forward(); //null move forward
     void backward();
 
     inline bool attackedByBlack(int sq) {
@@ -379,19 +377,19 @@ struct TBoard {
                 || MagicRookMoves(sq, allPieces) & (blackRooks | blackQueens);
     }
 
-    inline U64 pieceAttacksTo(int sq) {
-        return (KnightMoves[sq] & (whiteKnights | blackKnights))
-                | (KingMoves[sq] & (whiteKings | blackKings))
-                | (MagicBishopMoves(sq, allPieces) & (whiteBishops | whiteQueens | blackBishops | blackQueens))
-                | (MagicRookMoves(sq, allPieces) & (whiteRooks | whiteQueens | blackRooks | blackQueens));
-    }
-
     inline bool attackedByWhite(int sq) {
         return KnightMoves[sq] & whiteKnights
                 || BPawnCaptures[sq] & whitePawns
                 || KingMoves[sq] & whiteKings
                 || MagicBishopMoves(sq, allPieces) & (whiteBishops | whiteQueens)
                 || MagicRookMoves(sq, allPieces) & (whiteRooks | whiteQueens);
+    }
+    
+    inline U64 pieceAttacksTo(int sq) {
+        return (KnightMoves[sq] & (whiteKnights | blackKnights))
+                | (KingMoves[sq] & (whiteKings | blackKings))
+                | (MagicBishopMoves(sq, allPieces) & (whiteBishops | whiteQueens | blackBishops | blackQueens))
+                | (MagicRookMoves(sq, allPieces) & (whiteRooks | whiteQueens | blackRooks | blackQueens));
     }
 
     inline bool attackedByWhitePawn(int sq) {
@@ -423,7 +421,6 @@ struct TBoard {
     }
 
     int givesCheck(TMove * move);
-    bool checksPiece(TMove * move);
 
     inline bool push7th(TMove * move) {
         return (move->piece == WPAWN && move->tsq >= h7)

@@ -61,7 +61,7 @@ void * TEngine::_think(void* engineObjPtr) {
     bool ponder = game.ponder;
     int learnParam = game.learnParam;
     double learnFactor = game.learnFactor;
-    evaluate(searchData, -SCORE_INFINITE, SCORE_INFINITE);
+    evaluate(searchData);
 
 
 
@@ -177,7 +177,7 @@ void * TEngine::_think(void* engineObjPtr) {
         } else if (searchData->root.MoveCount == 1) {
             tm->requestLessTime();
         }
-        searchData->stack->eval_result = evaluate(searchData, 0, 0);
+        searchData->stack->eval_result = evaluate(searchData);
         int alpha = -SCORE_INFINITE;
         int beta = SCORE_INFINITE;
         int prev_score = -SCORE_INFINITE;
@@ -399,7 +399,7 @@ void print_row(std::string cap, TScore & w, TScore & b, int phase) {
 void TEngine::analyse() {
 
     TSearch * s = new TSearch(_rootFen.c_str(), _hashTable, _outputHandler);
-    s->stack->eval_result = evaluate(s, 0, 0);
+    s->stack->eval_result = evaluate(s);
     int phase = s->stack->phase;
     TScore w, b, t;
     w.clear();
@@ -686,7 +686,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                         break;
 
                     }
-                    sd_game->stack->eval_result = evaluate(sd_game, 0, 0);
+                    sd_game->stack->eval_result = evaluate(sd_game);
                     sd_game->hashTable = hash_list[learning_side]; //each side has it's own hash
                     int depth = ONE_PLY;
                     int resultScore = 0;
