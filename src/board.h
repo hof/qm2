@@ -474,13 +474,17 @@ struct TBoard {
     inline int getGamePly() {
         return rootPly + currentPly;
     }
+    
+    bool bishopPair(bool white) {
+        return white? whiteBishopPair() : blackBishopPair();
+    }
 
     bool whiteBishopPair() {
-        return whiteBishops & BLACK_SQUARES && whiteBishops & WHITE_SQUARES;
+        return (whiteBishops & BLACK_SQUARES) && (whiteBishops & WHITE_SQUARES);
     }
 
     bool blackBishopPair() {
-        return blackBishops & BLACK_SQUARES && blackBishops & WHITE_SQUARES;
+        return (blackBishops & BLACK_SQUARES) && (blackBishops & WHITE_SQUARES);
     }
 
     bool isDraw();

@@ -26,7 +26,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool white);
 enum MaterialValues {
     MATERIAL_AHEAD_THRESHOLD = 240, //all values are in centipawns
     VNOPAWNS = -40,
-    VBISHOPPAIR = 50,
+    VBISHOPPAIR = 40
 };
 
 const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
@@ -425,14 +425,6 @@ inline short evaluateMaterial(TSearch * sd) {
         if (bqueens > 1) {
             result.sub(REDUNDANT_QUEEN);
         }
-    }
-
-    // Bishop pair
-    if (wbishops > 1 && pos->whiteBishopPair()) {
-        result.add(VBISHOPPAIR);
-    }
-    if (bbishops > 1 && pos->blackBishopPair()) {
-        result.sub(VBISHOPPAIR);
     }
 
     uint8_t flags = 0;
@@ -1148,6 +1140,12 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
      * 3. Calculate the score and store on the stack
      */
     TPiecePlacement * pp = &pos->pieces[pc];
+    
+    //bishop pair
+    if (pp->count > 1 && pos->bishopPair(us) && (sd->stack->pawn_flags & PFLAG_CLOSED_CENTER) == 0) {
+       result->add(VBISHOPPAIR);
+    }
+    
     U64 occ = pos->pawnsAndKings();
     bool them = !us;
     int kpos = *pos->kingPos[them];
@@ -1250,7 +1248,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         if (bitSq & fill[us]) {
             result->add(ROOK_CLOSED_FILE);
             //trapped rook pattern
-            if (sd->learnFactor > 0 && bitSq & ROOK_PATTERNS[us]) {
+            if (bitSq & ROOK_PATTERNS[us]) {
                 int kpos_us = *pos->kingPos[us];
                 if (us == WHITE && (kpos_us == g1 || kpos_us == h1 || kpos_us == f1)
                         && (sq == h1 || sq == g1 || sq == h2 || sq == g2)) {
