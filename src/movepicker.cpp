@@ -225,7 +225,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 }
             case QUIET_MOVES:
                 moveList->minimumScore = -MOVE_INFINITY;
-                genMoves(pos, moveList);
+                genQuietMoves(pos, moveList);
                 for (TMove * move = moveList->current; move != moveList->last; move++) {
                     if (moveList->excluded(move)) {
                         move->score = MOVE_EXCLUDED;
@@ -291,7 +291,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 if (moveList->stage == Q_QUIET_CHECKS) {
                     moveList->stage = STOP;
                     //genQuietChecks(pos, moveList);
-                    genMoves(pos, moveList);
+                    genQuietMoves(pos, moveList);
                     for (TMove * move = moveList->current; move != moveList->last; move++) {
                         move->score = searchData->history[move->piece][move->tsq];
                     }
@@ -300,7 +300,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 }
             case Q_EVASIONS:
                 assert(searchData->stack->inCheck);
-                genEvasions(pos, moveList);
+                genQuietMoves(pos, moveList);
                 for (TMove * move = moveList->first; move != moveList->last; move++) {
                     move->score = searchData->history[move->piece][move->tsq];
                 }

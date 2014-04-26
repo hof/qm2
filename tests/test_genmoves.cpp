@@ -30,7 +30,7 @@ U64 moveGenerationPerft(TSearch *searchData, int depth) {
     genCaptures(pos, moveList, FULL_BOARD);
     genPromotions(pos, moveList);
     genCastles(pos, moveList);
-    genMoves(pos, moveList);
+    genQuietMoves(pos, moveList);
     for (TMove * move = moveList->first; move != moveList->last; move++) {
         if (pos->legal(move)) {
             if (depth <= 1) {
@@ -57,8 +57,7 @@ void movePerftDivide(TSearch * searchData, int depth) {
     genCaptures(pos, moveList, FULL_BOARD);
     genPromotions(pos, moveList);
     genCastles(pos, moveList);
-    genMoves(pos, moveList);
-    
+    genQuietMoves(pos, moveList);
     for (TMove * move = moveList->first; move != moveList->last; move++) {
         std::cout << move->asString() << " ";
         if (pos->legal(move)) {
