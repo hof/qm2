@@ -214,11 +214,11 @@ const TScore KNIGHT_PAWN_COUNT[9] = {//indexed by opponent pawn count
 
 const TScore KNIGHT_OUTPOST[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(4, 2), S(8, 4), S(12, 6), S(16, 8), S(16, 8), S(12, 6), S(8, 4), S(4, 2),
-    S(8, 4), S(16, 8), S(24, 12), S(32, 16), S(32, 16), S(24, 12), S(16, 8), S(8, 4),
-    S(4, 2), S(8, 4), S(12, 6), S(16, 8), S(16, 8), S(12, 6), S(8, 4), S(4, 2),
-    S(2, 1), S(4, 2), S(6, 3), S(8, 4), S(8, 4), S(6, 3), S(4, 2), S(2, 1),
-    S(1, 0), S(2, 1), S(3, 1), S(4, 2), S(4, 2), S(3, 1), S(2, 1), S(1, 0),
+    S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2),
+    S(8, 2), S(8, 2), S(12, 2), S(16, 2), S(16, 2), S(12, 2), S(8, 2), S(8, 2),
+    S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2),
+    S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2),
+    S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0)
 };
@@ -243,12 +243,12 @@ U64 BISHOP_PATTERNS[2] = {//black, white
 };
 
 const TScore BISHOP_OUTPOST[64] = {
-    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(2, 1), S(4, 2), S(6, 3), S(8, 4), S(8, 4), S(6, 3), S(4, 2), S(2, 1),
-    S(4, 2), S(8, 4), S(12, 6), S(16, 8), S(16, 8), S(12, 6), S(8, 4), S(4, 2),
-    S(2, 1), S(4, 2), S(6, 3), S(8, 4), S(8, 4), S(6, 3), S(4, 2), S(2, 1),
-    S(1, 0), S(2, 1), S(3, 1), S(4, 2), S(4, 2), S(3, 1), S(2, 1), S(1, 0),
-    S(0, 0), S(1, 0), S(1, 0), S(2, 1), S(2, 1), S(1, 0), S(1, 0), S(0, 0),
+    S(-10, -10), S(4, 2), S(4, 2), S(4, 2), S(4, 2), S(4, 2), S(4, 2), S(-10, -10),
+    S(4, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(4, 2),
+    S(4, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(4, 2),
+    S(4, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(4, 2),
+    S(4, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(4, 2),
+    S(4, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(4, 2),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0)
 };
@@ -1097,7 +1097,7 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
         result->add(KNIGHT_PAWN_COUNT[pawn_count]);
 
         if (pos->attackedByPawn(sq, us)) {
-            result->add(KNIGHT_OUTPOST[sq]);
+            result->add(KNIGHT_OUTPOST[ISQ(sq, us)]);
         }
         if (pos->attackedByPawn(sq, them)) {
             result->add(ATTACKED_PIECE);
@@ -1164,7 +1164,7 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
             result->sub(ACTIVE_BISHOP);
         }
         if (pos->attackedByPawn(sq, us)) {
-            result->add(BISHOP_OUTPOST[sq]);
+            result->add(BISHOP_OUTPOST[ISQ(sq, us)]);
         }
         if (pos->attackedByPawn(sq, them)) {
             result->add(ATTACKED_PIECE);

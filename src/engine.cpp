@@ -81,12 +81,14 @@ void * TEngine::_think(void* engineObjPtr) {
         tm->setMaxTime(INFINITE_TIME);
     }
 
-    searchData->drawContempt.set(-50, 8);
+    searchData->drawContempt.set(-50, 10);
+    if (root->boardFlags->fiftyCount > 10) {
+        searchData->drawContempt.add(root->boardFlags->fiftyCount / 2);
+    }
     if ((whiteTime || blackTime) && myInc == 0 && myTime < oppTime && myTime < 20000) {
+        searchData->drawContempt.add(50);
         if (myTime < 2000) {
-            searchData->drawContempt.set(100);
-        } else {
-            searchData->drawContempt.set(50);
+            searchData->drawContempt.add(50);
         }
     }
     if (!root->boardFlags->WTM) {
@@ -234,7 +236,7 @@ void * TEngine::_think(void* engineObjPtr) {
             score_changed = ABS(prev_score - score) > (VPAWN / 4);
             easy_move &= move_changed == false;
             easy_move &= score_changed == false;
-            
+
             if (!searchData->stopSearch && depth > HIGH_DEPTH && !book_move) {
                 if (ponderMove.piece == EMPTY) {
                     tm->requestMoreTime();
@@ -273,7 +275,7 @@ void * TEngine::_think(void* engineObjPtr) {
 
             //stop if there is no time to find a new pv in a next iteration
             int iteration_time = tm->elapsed() - iteration_start_time;
-            if (type == EXACT && !tm->available(iteration_time / 2)) {                
+            if (type == EXACT && !tm->available(iteration_time / 2)) {
                 break;
             }
 
