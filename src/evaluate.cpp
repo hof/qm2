@@ -586,7 +586,7 @@ void init_pst() {
             continue;
         }
         scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
-        U64 caps = WPawnCaptures[sq];
+        U64 caps = WPAWN_CAPTURES[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
@@ -606,7 +606,7 @@ void init_pst() {
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
         scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
-        U64 caps = KnightMoves[sq];
+        U64 caps = KNIGHT_MOVES[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
@@ -620,7 +620,7 @@ void init_pst() {
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
         scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
-        U64 caps = BishopMoves[sq];
+        U64 caps = BISHOP_MOVES[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
@@ -643,7 +643,7 @@ void init_pst() {
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
         scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
-        U64 caps = QueenMoves[sq];
+        U64 caps = QUEEN_MOVES[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
@@ -657,7 +657,7 @@ void init_pst() {
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
         scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
-        U64 caps = KingMoves[sq];
+        U64 caps = KING_MOVES[sq];
         while (caps) {
             int ix = POP(caps);
             scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
@@ -755,8 +755,8 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     U64 wDoubled = DOWN1(southFill(pos->white_pawns)) & pos->white_pawns;
     U64 bDoubled = UP1(northFill(pos->black_pawns)) & pos->black_pawns;
 
-    U64 kcz_w = KingZone[wkpos];
-    U64 kcz_b = KingZone[bkpos];
+    U64 kcz_w = KING_ZONE[wkpos];
+    U64 kcz_b = KING_ZONE[bkpos];
 
     int blocked_center_pawns = 0;
 
@@ -838,7 +838,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
             blocked_center_pawns++;
         }
 
-        sd->stack->king_attack[WPAWN] += popCount0(WPawnCaptures[sq] & kcz_b);
+        sd->stack->king_attack[WPAWN] += popCount0(WPAWN_CAPTURES[sq] & kcz_b);
 
 
 #ifdef PRINT_PAWN_EVAL
@@ -918,7 +918,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         std::cout << std::endl;
 #endif
 
-        sd->stack->king_attack[BPAWN] += popCount0(BPawnCaptures[sq] & kcz_w);
+        sd->stack->king_attack[BPAWN] += popCount0(BPAWN_CAPTURES[sq] & kcz_w);
 
     }
 
@@ -1084,13 +1084,13 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
     int pawn_width = BB_WIDTH(*pos->pawns[them]);
     int pawn_count = pos->pieces[PAWN[them]].count;
     int kpos = *pos->king_sq[them];
-    U64 kaz = KnightMoves[kpos] | KingZone[kpos]; //king attack zone
+    U64 kaz = KNIGHT_MOVES[kpos] | KING_ZONE[kpos]; //king attack zone
     int ka_units = 0;
     int ka_squares = 0;
     for (int i = 0; i < pp->count; i++) {
         int sq = pp->squares[i];
         result->add(PST[WKNIGHT][ISQ(sq, us)]);
-        U64 moves = KnightMoves[sq] & sd->stack->mob[us];
+        U64 moves = KNIGHT_MOVES[sq] & sd->stack->mob[us];
         int mob_count = popCount0(moves);
         result->add(KNIGHT_MOBILITY[mob_count]);
         result->add(KNIGHT_PAWN_WIDTH[pawn_width]);
@@ -1149,7 +1149,7 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     U64 occ = pos->pawnsAndKings();
     bool them = !us;
     int kpos = *pos->king_sq[them];
-    U64 kaz = (sd->stack->king_attack_zone[us] & BishopMoves[kpos]) | KingZone[kpos]; //king attack zone; 
+    U64 kaz = (sd->stack->king_attack_zone[us] & BISHOP_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone; 
     int ka_units = 0;
     int ka_squares = 0;
     for (int i = 0; i < pp->count; i++) {
@@ -1237,7 +1237,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         result->add(ROOK_1ST); //at least one rook is protecting the back rank
     }
     int kpos = *pos->king_sq[them];
-    U64 kaz = (sd->stack->king_attack_zone[us] & RookMoves[kpos]) | KingZone[kpos]; //king attack zone
+    U64 kaz = (sd->stack->king_attack_zone[us] & ROOK_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone
     int ka_units = 0;
     int ka_squares = 0;
 
@@ -1340,7 +1340,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
     TPiecePlacement * pp = &pos->pieces[QUEEN[us]];
     U64 occ = pos->pawnsAndKings();
     int kpos = *pos->king_sq[them];
-    U64 kaz = sd->stack->king_attack_zone[us] | KingZone[kpos]; //king attack zone
+    U64 kaz = sd->stack->king_attack_zone[us] | KING_ZONE[kpos]; //king attack zone
     int ka_units = 0;
     int ka_squares = 0;
     for (int i = 0; i < pp->count; i++) {
@@ -1496,7 +1496,7 @@ int evaluatePasserVsK(TSearch * sd, bool us, int sq) {
     int qfile = FILE(queening_square);
     int pdistance = 1 + ABS(qrank - prank);
     int kingUs = *sd->pos->king_sq[us];
-    if ((path & KingMoves[kingUs]) == path) {
+    if ((path & KING_MOVES[kingUs]) == path) {
         //yes, the promotion path is fully defended and not blocked by our own King
         return 700 - pdistance;
     }
@@ -1566,7 +1566,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     result->set(KING_SHELTER[shelter_ix], 0);
 
 #ifdef PRINT_KING_SAFETY
-    printBB("\nKing Attack Zone", sd->stack->king_attack_zone[us] | KingZone[*pos->king_sq[!us]]);
+    printBB("\nKing Attack Zone", sd->stack->king_attack_zone[us] | KING_ZONE[*pos->king_sq[!us]]);
     std::cout << "Shelter: " << shelter_ix << " -> " << (int) KING_SHELTER[shelter_ix];
     std::cout << std::endl;
 #endif

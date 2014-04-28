@@ -46,7 +46,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
     TPiecePlacement * pp = &board->pieces[++pc];
     for (int i = 0; i < pp->count; i++) {
         int ssq = pp->squares[i];
-        moves = KnightMoves[ssq] & targets;
+        moves = KNIGHT_MOVES[ssq] & targets;
         while (moves) {
             int tsq = POP(moves);
             (current++)->setCapture(pc, ssq, tsq, board->matrix[tsq]);
@@ -85,7 +85,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
     //king captures:
     pc++;
     int kpos = *board->king_sq[us];
-    moves = KingMoves[kpos] & board->all(them);
+    moves = KING_MOVES[kpos] & board->all(them);
     while (moves) {
         int tsq = POP(moves);
         (current++)->setCapture(pc, kpos, tsq, board->matrix[tsq]);
@@ -201,7 +201,7 @@ void genQuietMoves(TBoard * board, TMoveList * list) {
     assert((us == WHITE && pc == WKNIGHT) || (us == BLACK && pc == BKNIGHT));
     for (int i = 0; i < pp->count; i++) {
         int ssq = pp->squares[i];
-        moves = KnightMoves[ssq] & targets;
+        moves = KNIGHT_MOVES[ssq] & targets;
         while (moves) {
             (current++)->setMove(pc, ssq, POP(moves));
         }
@@ -240,7 +240,7 @@ void genQuietMoves(TBoard * board, TMoveList * list) {
     int kpos = *board->king_sq[us];
     pc++;
     assert((us == WHITE && pc == WKING) || (us == BLACK && pc == BKING));
-    moves = KingMoves[kpos] & targets;
+    moves = KING_MOVES[kpos] & targets;
     while (moves) {
         (
 

@@ -1,15 +1,31 @@
-/** 
- * bbmoves.cpp
+/**
+ * Maxima, a chess playing program. 
+ * Copyright (C) 1996-2014 Erik van het Hof and Hermen Reitsma 
  * 
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 3
+ * of the License, or (at your option) any later version.
+ *  
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *  
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
+ * 
+ * 
+ * File: bbmoves.cpp
  * - Bitboards with (pseudo) moves per piece.
- * - Magic bitboards with credits and thanks to Pradyumna Kannan. The original 
- *   code for magic bitboards is available at his website. Note the function 
- *   InitMagicMoves() needs to be called before using the engine.
+ * - Magic bitboards with credits and thanks to Pradyumna Kannan. 
+ * The original code for magic bitboards is available at his website. 
+ * Note the function InitMagicMoves() needs to be called before using the engine.
  */
 
 #include "bbmoves.h"
 
-const U64 KingMoves[64] = {
+const U64 KING_MOVES[64] = {
     C64(0x0000000000000302), C64(0x0000000000000705), C64(0x0000000000000E0A), C64(0x0000000000001C14),
     C64(0x0000000000003828), C64(0x0000000000007050), C64(0x000000000000E0A0), C64(0x000000000000C040),
     C64(0x0000000000030203), C64(0x0000000000070507), C64(0x00000000000E0A0E), C64(0x00000000001C141C),
@@ -28,7 +44,7 @@ const U64 KingMoves[64] = {
     C64(0x2838000000000000), C64(0x5070000000000000), C64(0xA0E0000000000000), C64(0x40C0000000000000)
 };
 
-const U64 QueenMoves[64] = {
+const U64 QUEEN_MOVES[64] = {
     C64(0x81412111090503FE), C64(0x02824222120A07FD), C64(0x0404844424150EFB), C64(0x08080888492A1CF7),
     C64(0x10101011925438EF), C64(0x2020212224A870DF), C64(0x404142444850E0BF), C64(0x8182848890A0C07F),
     C64(0x412111090503FE03), C64(0x824222120A07FD07), C64(0x04844424150EFB0E), C64(0x080888492A1CF71C),
@@ -47,7 +63,7 @@ const U64 QueenMoves[64] = {
     C64(0xEF38549211101010), C64(0xDF70A82422212020), C64(0xBFE0504844424140), C64(0x7FC0A09088848281)
 };
 
-const U64 RookMoves[64] = {
+const U64 ROOK_MOVES[64] = {
     C64(0x01010101010101FE), C64(0x02020202020202FD), C64(0x04040404040404FB), C64(0x08080808080808F7),
     C64(0x10101010101010EF), C64(0x20202020202020DF), C64(0x40404040404040BF), C64(0x808080808080807F),
     C64(0x010101010101FE01), C64(0x020202020202FD02), C64(0x040404040404FB04), C64(0x080808080808F708),
@@ -66,7 +82,7 @@ const U64 RookMoves[64] = {
     C64(0xEF10101010101010), C64(0xDF20202020202020), C64(0xBF40404040404040), C64(0x7F80808080808080)
 };
 
-const U64 BishopMoves[64] = {
+const U64 BISHOP_MOVES[64] = {
     C64(0x8040201008040200), C64(0x0080402010080500), C64(0x0000804020110A00), C64(0x0000008041221400),
     C64(0x0000000182442800), C64(0x0000010204885000), C64(0x000102040810A000), C64(0x0102040810204000),
     C64(0x4020100804020002), C64(0x8040201008050005), C64(0x00804020110A000A), C64(0x0000804122140014),
@@ -85,7 +101,7 @@ const U64 BishopMoves[64] = {
     C64(0x0028448201000000), C64(0x0050880402010000), C64(0x00A0100804020100), C64(0x0040201008040201)
 };
 
-const U64 KnightMoves[64] = {
+const U64 KNIGHT_MOVES[64] = {
     C64(0x0000000000020400), C64(0x0000000000050800), C64(0x00000000000A1100), C64(0x0000000000142200),
     C64(0x0000000000284400), C64(0x0000000000508800), C64(0x0000000000A01000), C64(0x0000000000402000),
     C64(0x0000000002040004), C64(0x0000000005080008), C64(0x000000000A110011), C64(0x0000000014220022),
@@ -104,7 +120,7 @@ const U64 KnightMoves[64] = {
     C64(0x0044280000000000), C64(0x0088500000000000), C64(0x0010A00000000000), C64(0x0020400000000000)
 };
 
-const U64 WPawnMoves[64] = {
+const U64 WPAWN_MOVES[64] = {
     C64(0x0000000000000100), C64(0x0000000000000200), C64(0x0000000000000400), C64(0x0000000000000800),
     C64(0x0000000000001000), C64(0x0000000000002000), C64(0x0000000000004000), C64(0x0000000000008000),
     C64(0x0000000000010000), C64(0x0000000000020000), C64(0x0000000000040000), C64(0x0000000000080000),
@@ -123,7 +139,7 @@ const U64 WPawnMoves[64] = {
     C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000)
 };
 
-const U64 BPawnMoves[64] = {
+const U64 BPAWN_MOVES[64] = {
     C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000),
     C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000),
     C64(0x0000000000000001), C64(0x0000000000000002), C64(0x0000000000000004), C64(0x0000000000000008),
@@ -142,7 +158,7 @@ const U64 BPawnMoves[64] = {
     C64(0x0010000000000000), C64(0x0020000000000000), C64(0x0040000000000000), C64(0x0080000000000000)
 };
 
-const U64 WPawnCaptures[64] = {
+const U64 WPAWN_CAPTURES[64] = {
     C64(0x0000000000000200), C64(0x0000000000000500), C64(0x0000000000000A00), C64(0x0000000000001400),
     C64(0x0000000000002800), C64(0x0000000000005000), C64(0x000000000000A000), C64(0x0000000000004000),
     C64(0x0000000000020000), C64(0x0000000000050000), C64(0x00000000000A0000), C64(0x0000000000140000),
@@ -161,7 +177,7 @@ const U64 WPawnCaptures[64] = {
     C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000)
 };
 
-const U64 BPawnCaptures[64] = {
+const U64 BPAWN_CAPTURES[64] = {
     C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000),
     C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000), C64(0x0000000000000000),
     C64(0x0000000000000002), C64(0x0000000000000005), C64(0x000000000000000A), C64(0x0000000000000014),
@@ -180,7 +196,7 @@ const U64 BPawnCaptures[64] = {
     C64(0x0028000000000000), C64(0x0050000000000000), C64(0x00A0000000000000), C64(0x0040000000000000)
 };
 
-const U64 KingZone[64] = {
+const U64 KING_ZONE[64] = {
     C64(0x0000000000030303), C64(0x0000000000070707), C64(0x00000000000e0e0e), C64(0x00000000001c1c1c),
     C64(0x0000000000383838), C64(0x0000000000707070), C64(0x0000000000e0e0e0), C64(0x0000000000c0c0c0),
     C64(0x0000000003030303), C64(0x0000000007070707), C64(0x000000000e0e0e0e), C64(0x000000001c1c1c1c),
@@ -202,8 +218,7 @@ const U64 KingZone[64] = {
 /*
  * Magic rook moves stuff
  */
-
-const unsigned int magicmoves_r_shift[64] = {
+const unsigned int MAGIC_MOVES_ROOK_SHIFT[64] = {
     52, 53, 53, 53, 53, 53, 53, 52,
     53, 54, 54, 54, 54, 54, 54, 53,
     53, 54, 54, 54, 54, 54, 54, 53,
@@ -214,7 +229,7 @@ const unsigned int magicmoves_r_shift[64] = {
     53, 54, 54, 53, 53, 53, 53, 53
 };
 
-const U64 magicmoves_r_magics[64] = {
+const U64 MAGIC_MOVES_ROOK_MAGICS[64] = {
     C64(0x0080001020400080), C64(0x0040001000200040), C64(0x0080081000200080), C64(0x0080040800100080),
     C64(0x0080020400080080), C64(0x0080010200040080), C64(0x0080008001000200), C64(0x0080002040800100),
     C64(0x0000800020400080), C64(0x0000400020005000), C64(0x0000801000200080), C64(0x0000800800100080),
@@ -233,7 +248,7 @@ const U64 magicmoves_r_magics[64] = {
     C64(0x0001000204080011), C64(0x0001000204000801), C64(0x0001000082000401), C64(0x0001FFFAABFAD1A2)
 };
 
-const U64 magicmoves_r_mask[64] = {
+const U64 MAGIC_MOVES_ROOK_MASK[64] = {
     C64(0x000101010101017E), C64(0x000202020202027C), C64(0x000404040404047A), C64(0x0008080808080876),
     C64(0x001010101010106E), C64(0x002020202020205E), C64(0x004040404040403E), C64(0x008080808080807E),
     C64(0x0001010101017E00), C64(0x0002020202027C00), C64(0x0004040404047A00), C64(0x0008080808087600),
@@ -256,7 +271,7 @@ const U64 magicmoves_r_mask[64] = {
  * Magic bishop move stuff
  */
 
-const unsigned int magicmoves_b_shift[64] = {
+const unsigned int MAGIC_MOVES_BISHOP_SHIFT[64] = {
     58, 59, 59, 59, 59, 59, 59, 58,
     59, 59, 59, 59, 59, 59, 59, 59,
     59, 59, 57, 57, 57, 57, 59, 59,
@@ -267,7 +282,7 @@ const unsigned int magicmoves_b_shift[64] = {
     58, 59, 59, 59, 59, 59, 59, 58
 };
 
-const U64 magicmoves_b_magics[64] = {
+const U64 MAGIC_MOVES_BISHOP_MAGICS[64] = {
     C64(0x0002020202020200), C64(0x0002020202020000), C64(0x0004010202000000), C64(0x0004040080000000),
     C64(0x0001104000000000), C64(0x0000821040000000), C64(0x0000410410400000), C64(0x0000104104104000),
     C64(0x0000040404040400), C64(0x0000020202020200), C64(0x0000040102020000), C64(0x0000040400800000),
@@ -286,7 +301,7 @@ const U64 magicmoves_b_magics[64] = {
     C64(0x0000000010020200), C64(0x0000000404080200), C64(0x0000040404040400), C64(0x0002020202020200)
 };
 
-const U64 magicmoves_b_mask[64] = {
+const U64 MAGIC_MOVES_BISHOP_MASK[64] = {
     C64(0x0040201008040200), C64(0x0000402010080400), C64(0x0000004020100A00), C64(0x0000000040221400),
     C64(0x0000000002442800), C64(0x0000000204085000), C64(0x0000020408102000), C64(0x0002040810204000),
     C64(0x0020100804020000), C64(0x0040201008040000), C64(0x00004020100A0000), C64(0x0000004022140000),
@@ -308,11 +323,11 @@ const U64 magicmoves_b_mask[64] = {
 /*
  * Magic stuff
  */
-U64 magicmovesbdb[64][1 << 9];
+U64 MAGIC_MOVES_BISHOP_DB[64][1 << 9];
 
-U64 magicmovesrdb[64][1 << 12];
+U64 MAGIC_MOVES_ROOK_DB[64][1 << 12];
 
-U64 initmagicmoves_occ(const int* squares, const int numSquares, const U64 linocc) {
+U64 _InitMagicMovesOcc(const int* squares, const int numSquares, const U64 linocc) {
     int i;
     U64 ret = 0;
     for (i = 0; i < numSquares; i++)
@@ -320,11 +335,10 @@ U64 initmagicmoves_occ(const int* squares, const int numSquares, const U64 linoc
     return ret;
 }
 
-U64 initmagicmoves_Rmoves(const int square, const U64 occ) {
+U64 _InitMagicMovesRookMoves(const int square, const U64 occ) {
     U64 ret = 0;
     U64 bit;
     U64 rowbits = (((U64) 0xFF) << (8 * (square / 8)));
-
     bit = (((U64) (1)) << square);
     do {
         bit <<= 8;
@@ -350,12 +364,11 @@ U64 initmagicmoves_Rmoves(const int square, const U64 occ) {
     return ret;
 }
 
-U64 initmagicmoves_Bmoves(const int square, const U64 occ) {
+U64 _InitMagicMovesBishopMoves(const int square, const U64 occ) {
     U64 ret = 0;
     U64 bit;
     U64 bit2;
     U64 rowbits = (((U64) 0xFF) << (8 * (square / 8)));
-
     bit = (((U64) (1)) << square);
     bit2 = bit;
     do {
@@ -393,12 +406,17 @@ U64 initmagicmoves_Bmoves(const int square, const U64 occ) {
 
 //used so that the original indices can be left as const so that the compiler can optimize better
 
-#define BmagicNOMASK2(square, occupancy) magicmovesbdb[square][((occupancy)*magicmoves_b_magics[square])>>MINIMAL_B_BITS_SHIFT(square)]
-#define RmagicNOMASK2(square, occupancy) magicmovesrdb[square][((occupancy)*magicmoves_r_magics[square])>>MINIMAL_R_BITS_SHIFT(square)]
+#define _BISHOP_MAGIC_NOMASK2(square, occupancy) MAGIC_MOVES_BISHOP_DB[square][((occupancy)*MAGIC_MOVES_BISHOP_MAGICS[square])>>MINIMAL_B_BITS_SHIFT(square)]
+#define _ROOK_MAGIC_NOMASK2(square, occupancy) MAGIC_MOVES_ROOK_DB[square][((occupancy)*MAGIC_MOVES_ROOK_MAGICS[square])>>MINIMAL_R_BITS_SHIFT(square)]
 
+/**
+ * Initialize Magic Moves by Pradyumna Kannan
+ * Thanks Pradyumna, this magic stuff is brilliant
+ * Note it's required to run this function before using the engine
+ */
 void InitMagicMoves(void) {
     int i;
-
+    
     //for bitscans :
     //initmagicmoves_bitpos64_database[(x*C64(0x07EDD5E59A4E28C2))>>58]
     int initmagicmoves_bitpos64_database[64] = {
@@ -411,35 +429,33 @@ void InitMagicMoves(void) {
         56, 45, 25, 31, 35, 16, 9, 12,
         44, 24, 15, 8, 23, 7, 6, 5
     };
-
-
     for (i = 0; i < 64; i++) {
         int squares[64];
         int numsquares = 0;
-        U64 temp = magicmoves_b_mask[i];
+        U64 temp = MAGIC_MOVES_BISHOP_MASK[i];
         while (temp) {
             U64 bit = temp&-temp;
             squares[numsquares++] = initmagicmoves_bitpos64_database[(bit * C64(0x07EDD5E59A4E28C2)) >> 58];
             temp ^= bit;
         }
         for (temp = 0; temp < (((U64) (1)) << numsquares); temp++) {
-            U64 tempocc = initmagicmoves_occ(squares, numsquares, temp);
-            BmagicNOMASK2(i, tempocc) = initmagicmoves_Bmoves(i, tempocc);
+            U64 tempocc = _InitMagicMovesOcc(squares, numsquares, temp);
+            _BISHOP_MAGIC_NOMASK2(i, tempocc) = _InitMagicMovesBishopMoves(i, tempocc);
 
         }
     }
     for (i = 0; i < 64; i++) {
         int squares[64];
         int numsquares = 0;
-        U64 temp = magicmoves_r_mask[i];
+        U64 temp = MAGIC_MOVES_ROOK_MASK[i];
         while (temp) {
             U64 bit = temp&-temp;
             squares[numsquares++] = initmagicmoves_bitpos64_database[(bit * C64(0x07EDD5E59A4E28C2)) >> 58];
             temp ^= bit;
         }
         for (temp = 0; temp < (((U64) (1)) << numsquares); temp++) {
-            U64 tempocc = initmagicmoves_occ(squares, numsquares, temp);
-            RmagicNOMASK2(i, tempocc) = initmagicmoves_Rmoves(i, tempocc);
+            U64 tempocc = _InitMagicMovesOcc(squares, numsquares, temp);
+            _ROOK_MAGIC_NOMASK2(i, tempocc) = _InitMagicMovesRookMoves(i, tempocc);
         }
     }
 }

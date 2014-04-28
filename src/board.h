@@ -16,10 +16,10 @@
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  * 
  * 
- * board.h
+ * File: board.h
  * Board representation:
  * - Bitboards for each piece and all (white/black) occupied squares
- * - matrix[64] 
+ * - Matrix[64] 
  * - Piece placement arrays for each piece
  */
 
@@ -409,9 +409,9 @@ struct TBoard {
      * @return true: attacked, false: not attacked
      */
     inline bool attackedByBlack(int sq) {
-        return KnightMoves[sq] & black_knights
-                || WPawnCaptures[sq] & black_pawns
-                || KingMoves[sq] & black_kings
+        return KNIGHT_MOVES[sq] & black_knights
+                || WPAWN_CAPTURES[sq] & black_pawns
+                || KING_MOVES[sq] & black_kings
                 || MagicBishopMoves(sq, all_pieces) & (black_bishops | black_queens)
                 || MagicRookMoves(sq, all_pieces) & (black_rooks | black_queens);
     }
@@ -422,21 +422,21 @@ struct TBoard {
      * @return true: attacked, false: not attacked
      */
     inline bool attackedByWhite(int sq) {
-        return KnightMoves[sq] & white_knights
-                || BPawnCaptures[sq] & white_pawns
-                || KingMoves[sq] & white_kings
+        return KNIGHT_MOVES[sq] & white_knights
+                || BPAWN_CAPTURES[sq] & white_pawns
+                || KING_MOVES[sq] & white_kings
                 || MagicBishopMoves(sq, all_pieces) & (white_bishops | white_queens)
                 || MagicRookMoves(sq, all_pieces) & (white_rooks | white_queens);
     }
 
     /**
-     * Get a bitboard of all attacking pieces to a square
+     * Get a bitboard of all attacking pieces (not pawns) to a square
      * @param sq the square (a1..h8) to investigate 
      * @return bitboard populated with pieces attacking the square
      */
     inline U64 pieceAttacksTo(int sq) {
-        return (KnightMoves[sq] & (white_knights | black_knights))
-                | (KingMoves[sq] & (white_kings | black_kings))
+        return (KNIGHT_MOVES[sq] & (white_knights | black_knights))
+                | (KING_MOVES[sq] & (white_kings | black_kings))
                 | (MagicBishopMoves(sq, all_pieces) & (white_bishops | white_queens | black_bishops | black_queens))
                 | (MagicRookMoves(sq, all_pieces) & (white_rooks | white_queens | black_rooks | black_queens));
     }
@@ -558,10 +558,10 @@ struct TBoard {
      * @return bitboard populated with all pieces attacking the square
      */
     inline U64 attacksTo(int sq) {
-        return (KnightMoves[sq] & (white_knights | black_knights))
-                | (BPawnCaptures[sq] & white_pawns)
-                | (WPawnCaptures[sq] & black_pawns)
-                | (KingMoves[sq] & (white_kings | black_kings))
+        return (KNIGHT_MOVES[sq] & (white_knights | black_knights))
+                | (BPAWN_CAPTURES[sq] & white_pawns)
+                | (WPAWN_CAPTURES[sq] & black_pawns)
+                | (KING_MOVES[sq] & (white_kings | black_kings))
                 | (MagicBishopMoves(sq, all_pieces) & (white_bishops | white_queens | black_bishops | black_queens))
                 | (MagicRookMoves(sq, all_pieces) & (white_rooks | white_queens | black_rooks | black_queens));
     }
@@ -579,15 +579,15 @@ struct TBoard {
     }
 
     inline U64 pawnAttacks(int sq, bool white) {
-        return white ? WPawnCaptures[sq] : BPawnCaptures[sq];
+        return white ? WPAWN_CAPTURES[sq] : BPAWN_CAPTURES[sq];
     }
 
     inline bool attackedByWhitePawn(int sq) {
-        return BPawnCaptures[sq] & white_pawns;
+        return BPAWN_CAPTURES[sq] & white_pawns;
     }
 
     inline bool attackedByBlackPawn(int sq) {
-        return WPawnCaptures[sq] & black_pawns;
+        return WPAWN_CAPTURES[sq] & black_pawns;
     }
 
     inline bool attackedByPawn(int sq, bool white) {

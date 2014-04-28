@@ -16,8 +16,11 @@
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  * 
  * 
- * board.cpp
- * Board structure implementation
+ * File: board.cpp
+ * Board representation:
+ * - Bitboards for each piece and all (white/black) occupied squares
+ * - Matrix[64]
+ * - Piece placement arrays for each piece
  */
 
 #include <cstdlib>
@@ -391,9 +394,9 @@ bool TBoard::legal(TMove * move) {
         int kpos_list[2] = {*white_king_sq, tsq};
         int kpos = kpos_list[piece == WKING];
 
-        if ((black_knights & occ & KnightMoves[kpos])
-                || (black_pawns & occ & WPawnCaptures[kpos])
-                || (piece == WKING && KingMoves[kpos] & black_kings)) {
+        if ((black_knights & occ & KNIGHT_MOVES[kpos])
+                || (black_pawns & occ & WPAWN_CAPTURES[kpos])
+                || (piece == WKING && KING_MOVES[kpos] & black_kings)) {
             return false;
         }
 
@@ -418,7 +421,7 @@ bool TBoard::legal(TMove * move) {
         //   note we deliberately dont update occupied for rooks for castling moves
         //   but en-passant update is required 
         U64 opp_sliders = (black_bishops | black_rooks | black_queens) & ~tsq_bit;
-        if (QueenMoves[kpos] & opp_sliders) {
+        if (QUEEN_MOVES[kpos] & opp_sliders) {
             U64 opp_diag_sliders = opp_sliders & ~black_rooks;
             U64 opp_hv_sliders = opp_sliders & ~black_bishops;
             occ ^= BIT(move->ssq);
@@ -436,9 +439,9 @@ bool TBoard::legal(TMove * move) {
         int kpos_list[2] = {*black_king_sq, tsq};
         int kpos = kpos_list[piece == BKING];
 
-        if ((white_knights & occ & KnightMoves[kpos])
-                || (white_pawns & occ & BPawnCaptures[kpos])
-                || (piece == BKING && KingMoves[kpos] & white_kings)) {
+        if ((white_knights & occ & KNIGHT_MOVES[kpos])
+                || (white_pawns & occ & BPAWN_CAPTURES[kpos])
+                || (piece == BKING && KING_MOVES[kpos] & white_kings)) {
             return false;
         }
 
@@ -465,7 +468,7 @@ bool TBoard::legal(TMove * move) {
 
 
         U64 opp_sliders = (white_bishops | white_rooks | white_queens) & ~tsq_bit;
-        if (QueenMoves[kpos] & opp_sliders) {
+        if (QUEEN_MOVES[kpos] & opp_sliders) {
             U64 opp_diag_sliders = opp_sliders & ~white_rooks;
             U64 opp_hv_sliders = opp_sliders & ~white_bishops;
             occ ^= BIT(move->ssq);
@@ -491,7 +494,7 @@ int TBoard::givesCheck(TMove * move) {
     U64 checkers = 0;
     int kpos_list[2] = {*white_king_sq, *black_king_sq};
     int kpos = kpos_list[piece <= WKING];
-    U64 check_mask = QueenMoves[kpos] | KnightMoves[kpos];
+    U64 check_mask = QUEEN_MOVES[kpos] | KNIGHT_MOVES[kpos];
     if ((check_mask & (ssq_bit | tsq_bit)) == 0 && !move->castle && !move->en_passant) {
         return 0;
     }
@@ -502,23 +505,23 @@ int TBoard::givesCheck(TMove * move) {
             case EMPTY:
                 assert(false);
             case WPAWN:
-                checkers = BPawnCaptures[kpos] & tsq_bit;
+                checkers = BPAWN_CAPTURES[kpos] & tsq_bit;
                 break;
             case WKNIGHT:
-                checkers = KnightMoves[kpos] & tsq_bit;
+                checkers = KNIGHT_MOVES[kpos] & tsq_bit;
                 break;
             case WBISHOP:
-                if (BishopMoves[kpos] & tsq_bit) {
+                if (BISHOP_MOVES[kpos] & tsq_bit) {
                     checkers = MagicBishopMoves(kpos, all_pieces) & tsq_bit;
                 }
                 break;
             case WROOK:
-                if (RookMoves[kpos] & tsq_bit) {
+                if (ROOK_MOVES[kpos] & tsq_bit) {
                     checkers = MagicRookMoves(kpos, all_pieces) & tsq_bit;
                 }
                 break;
             case WQUEEN:
-                if (QueenMoves[kpos] & tsq_bit) {
+                if (QUEEN_MOVES[kpos] & tsq_bit) {
                     checkers = MagicQueenMoves(kpos, all_pieces) & tsq_bit;
                 }
             case WKING:
@@ -531,23 +534,23 @@ int TBoard::givesCheck(TMove * move) {
                 }
                 break;
             case BPAWN:
-                checkers = WPawnCaptures[kpos] & tsq_bit;
+                checkers = WPAWN_CAPTURES[kpos] & tsq_bit;
                 break;
             case BKNIGHT:
-                checkers = KnightMoves[kpos] & tsq_bit;
+                checkers = KNIGHT_MOVES[kpos] & tsq_bit;
                 break;
             case BBISHOP:
-                if (BishopMoves[kpos] & tsq_bit) {
+                if (BISHOP_MOVES[kpos] & tsq_bit) {
                     checkers = MagicBishopMoves(kpos, all_pieces) & tsq_bit;
                 }
                 break;
             case BROOK:
-                if (RookMoves[kpos] & tsq_bit) {
+                if (ROOK_MOVES[kpos] & tsq_bit) {
                     checkers = MagicRookMoves(kpos, all_pieces) & tsq_bit;
                 }
                 break;
             case BQUEEN:
-                if (QueenMoves[kpos] & tsq_bit) {
+                if (QUEEN_MOVES[kpos] & tsq_bit) {
                     checkers = MagicQueenMoves(kpos, all_pieces) & tsq_bit;
                 }
             case BKING:
@@ -577,7 +580,7 @@ int TBoard::givesCheck(TMove * move) {
 
         U64 exclude = ssq_bit | tsq_bit;
         sliders &= ~exclude;
-        sliders &= QueenMoves[kpos];
+        sliders &= QUEEN_MOVES[kpos];
         if (sliders) {
             U64 occ = (all_pieces ^ ssq_bit) | tsq_bit;
             if (move->en_passant) {
@@ -606,11 +609,11 @@ int TBoard::givesCheck(TMove * move) {
     if (move->promotion && (check_mask & tsq_bit)) {
         piece = move->promotion;
         if (piece == WKNIGHT) {
-            checkers = KnightMoves[kpos] & tsq_bit;
+            checkers = KNIGHT_MOVES[kpos] & tsq_bit;
         } else if (piece == BKNIGHT) {
-            checkers = KnightMoves[kpos] & tsq_bit;
+            checkers = KNIGHT_MOVES[kpos] & tsq_bit;
         } else {
-            U64 checkMask = QueenMoves[kpos];
+            U64 checkMask = QUEEN_MOVES[kpos];
             if (checkMask & tsq_bit) {
                 U64 occ = all_pieces ^ ssq_bit;
                 switch (piece) {
@@ -705,8 +708,8 @@ int TBoard::SEE(TMove * move) {
      * another pawn, return a negative score quickly
      */
     int tsq = move->tsq;
-    if ((moving_piece > BPAWN && captured_piece == WPAWN && BPawnCaptures[tsq] & white_pawns)
-            || (moving_piece < WKING && moving_piece > WPAWN && captured_piece == BPAWN && WPawnCaptures[tsq] & black_pawns)) {
+    if ((moving_piece > BPAWN && captured_piece == WPAWN && BPAWN_CAPTURES[tsq] & white_pawns)
+            || (moving_piece < WKING && moving_piece > WPAWN && captured_piece == BPAWN && WPAWN_CAPTURES[tsq] & black_pawns)) {
         return captured_val - piece_val;
     }
 
