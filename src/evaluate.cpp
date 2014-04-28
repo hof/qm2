@@ -1274,15 +1274,15 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
             result->add(ATTACKED_PIECE);
         }
 
-        if ((bitSq & RANK[us][7]) && (BIT(*pos->kingPos[them]) & (RANK[us][8] | (RANK[us][7])))) {
-            result->add(ROOK_7TH);
-        }
-
         U64 moves = MagicRookMoves(sq, occ) & sd->stack->mob[us];
         if (moves & sd->stack->attack[us]) {
             result->add(popCount(moves & sd->stack->attack[us]) * ROOK_ATTACK);
         }
-
+        
+        if ((bitSq & RANK[us][7]) && (BIT(*pos->kingPos[them]) & BACKRANKS[us])) {
+            result->add(ROOK_7TH);
+        }
+        
         //Tarrasch Rule: place rook behind passers
         U64 tpass = moves & sd->stack->passers; //touched passers
         if (tpass) {

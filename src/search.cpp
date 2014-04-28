@@ -252,10 +252,10 @@ int TSearch::extendMove(TMove * move, int gives_check) {
         if (gives_check > 1) { //double check or exposed check
             return ONE_PLY;
         }
-        if (move->piece == WPAWN || move->piece == BPAWN) {
+        if (move->capture) {
             return ONE_PLY;
         }
-        if (move->capture) {
+        if (move->piece == WPAWN || move->piece == BPAWN) {
             return ONE_PLY;
         }
         if (pos->SEE(move) >= 0) {
@@ -452,7 +452,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         bool skip_prune = stack->moveList.stage < QUIET_MOVES
                 || in_check || gives_check > 0 || move->capture || move->promotion
                 || move->castle || passedPawn(move);
-
+    
         /*
          * 11. forward futility pruning at low depths
          * (moves without potential are skipped)

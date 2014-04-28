@@ -418,7 +418,9 @@ struct TBoard {
         return boardFlags->WTM ? (attackedByWhite(*blackKingPos) == false) :
                 (attackedByBlack(*whiteKingPos) == false);
     }
+    
     bool legal(TMove * move);
+    
     bool valid(TMove * move);
 
     inline bool inCheck() {
@@ -489,10 +491,10 @@ struct TBoard {
     inline bool attackedByOpponentPawn(int sq) {
         return boardFlags->WTM ? attackedByBlackPawn(sq) : attackedByWhitePawn(sq);
     }
-
+    
     U64 getSmallestAttacker(U64 attacks, bool wtm, int &piece);
+    
     int SEE(TMove * capture);
-
 
 };
 
