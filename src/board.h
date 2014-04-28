@@ -384,7 +384,7 @@ struct TBoard {
                 || MagicBishopMoves(sq, allPieces) & (whiteBishops | whiteQueens)
                 || MagicRookMoves(sq, allPieces) & (whiteRooks | whiteQueens);
     }
-    
+
     inline U64 pieceAttacksTo(int sq) {
         return (KnightMoves[sq] & (whiteKnights | blackKnights))
                 | (KingMoves[sq] & (whiteKings | blackKings))
@@ -392,21 +392,27 @@ struct TBoard {
                 | (MagicRookMoves(sq, allPieces) & (whiteRooks | whiteQueens | blackRooks | blackQueens));
     }
 
-    inline bool attackedByWhitePawn(int sq) {
-        return BPawnCaptures[sq] & whitePawns;
+    inline bool castleRight(int flag) {
+        return boardFlags->castlingFlags & flag;
     }
 
-    inline bool attackedByBlackPawn(int sq) {
-        return WPawnCaptures[sq] & blackPawns;
+    inline int getGamePly() {
+        return rootPly + currentPly;
     }
 
-    inline bool attackedByPawn(int sq, bool white) {
-        return white ? attackedByWhitePawn(sq) : attackedByBlackPawn(sq);
+    bool bishopPair(bool white) {
+        return white ? whiteBishopPair() : blackBishopPair();
     }
 
-    inline bool attackedByOpponentPawn(int sq) {
-        return boardFlags->WTM ? attackedByBlackPawn(sq) : attackedByWhitePawn(sq);
+    bool whiteBishopPair() {
+        return (whiteBishops & BLACK_SQUARES) && (whiteBishops & WHITE_SQUARES);
     }
+
+    bool blackBishopPair() {
+        return (blackBishops & BLACK_SQUARES) && (blackBishops & WHITE_SQUARES);
+    }
+
+    bool isDraw();
 
     inline bool legal() {
         return boardFlags->WTM ? (attackedByWhite(*blackKingPos) == false) :
@@ -463,31 +469,30 @@ struct TBoard {
     inline U64 pawnAttacks(bool white) {
         return white ? whitePawnAttacks() : blackPawnAttacks();
     }
+    
+    inline U64 pawnAttacks(int sq, bool white) {
+        return white? WPawnCaptures[sq] : BPawnCaptures[sq];
+    }
+
+    inline bool attackedByWhitePawn(int sq) {
+        return BPawnCaptures[sq] & whitePawns;
+    }
+
+    inline bool attackedByBlackPawn(int sq) {
+        return WPawnCaptures[sq] & blackPawns;
+    }
+
+    inline bool attackedByPawn(int sq, bool white) {
+        return white ? attackedByWhitePawn(sq) : attackedByBlackPawn(sq);
+    }
+
+    inline bool attackedByOpponentPawn(int sq) {
+        return boardFlags->WTM ? attackedByBlackPawn(sq) : attackedByWhitePawn(sq);
+    }
 
     U64 getSmallestAttacker(U64 attacks, bool wtm, int &piece);
     int SEE(TMove * capture);
 
-    inline bool castleRight(int flag) {
-        return boardFlags->castlingFlags & flag;
-    }
-
-    inline int getGamePly() {
-        return rootPly + currentPly;
-    }
-    
-    bool bishopPair(bool white) {
-        return white? whiteBishopPair() : blackBishopPair();
-    }
-
-    bool whiteBishopPair() {
-        return (whiteBishops & BLACK_SQUARES) && (whiteBishops & WHITE_SQUARES);
-    }
-
-    bool blackBishopPair() {
-        return (blackBishops & BLACK_SQUARES) && (blackBishops & WHITE_SQUARES);
-    }
-
-    bool isDraw();
 
 };
 
