@@ -3,29 +3,31 @@
 #include "bbmoves.h"
 #include "movegen.h"
 
-/*
- * Loop through all pieces and fill the boardstructure 
- * with moves bitboards
+/**
+ * Generate Captures. The captures are added to a movelist object.
+ * @param board board structure object
+ * @param list movelist object
+ * @param targets the pieces to capture
  */
-
-
 void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
-    U64 occ = board->allPieces;
-    U64 moves;
     TMove * current = list->last;
     list->current = current;
+    U64 moves;
+    U64 occ = board->allPieces;
     bool us = board->boardFlags->WTM;
     bool them = !us;
+    int pc = PAWN[us];
     targets &= board->all(them);
 
-    //pawn captures (including en-passant and promotion captures)
-    int pc = PAWN[us];
-    U64 pieces = *board->pawns[us];
-    U64 pawn_caps = board->pawnAttacks(us);
-    pawn_caps &= board->boardFlags->epSquare == EMPTY? targets : targets | BIT(board->boardFlags->epSquare);
+    //pawn captures (including en-passant and promotion captures):
+    U64 pawn_caps = targets;
+    if (board->boardFlags->epSquare) {
+        pawn_caps |= BIT(board->boardFlags->epSquare);
+    }
+    pawn_caps &= board->pawnAttacks(us);
     while (pawn_caps) {
         int tsq = POP(pawn_caps);
-        moves = board->pawnAttacks(tsq, them) & pieces;
+        moves = board->pawnAttacks(tsq, them) & *board->pawns[us];
         while (moves) {
             int ssq = POP(moves);
             if (tsq == board->boardFlags->epSquare && tsq > 0) {
@@ -40,8 +42,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
             }
         }
     }
-
-    //knight captures
+    //knight captures:
     TPiecePlacement * pp = &board->pieces[++pc];
     for (int i = 0; i < pp->count; i++) {
         int ssq = pp->squares[i];
@@ -51,8 +52,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
             (current++)->setCapture(pc, ssq, tsq, board->Matrix[tsq]);
         }
     }
-
-    //bishop captures
+    //bishop captures:
     pp = &board->pieces[++pc];
     for (int i = 0; i < pp->count; i++) {
         int ssq = pp->squares[i];
@@ -62,8 +62,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
             (current++)->setCapture(pc, ssq, tsq, board->Matrix[tsq]);
         }
     }
-
-    //rook captures
+    //rook captures:
     pp = &board->pieces[++pc];
     for (int i = 0; i < pp->count; i++) {
         int ssq = pp->squares[i];
@@ -73,8 +72,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
             (current++)->setCapture(pc, ssq, tsq, board->Matrix[tsq]);
         }
     }
-
-    //queen captures
+    //queen captures:
     pp = &board->pieces[++pc];
     for (int i = 0; i < pp->count; i++) {
         int ssq = pp->squares[i];
@@ -84,8 +82,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
             (current++)->setCapture(pc, ssq, tsq, board->Matrix[tsq]);
         }
     }
-
-    //king captures
+    //king captures:
     pc++;
     int kpos = *board->kingPos[us];
     moves = KingMoves[kpos] & board->all(them);
@@ -97,6 +94,11 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
     list->last = current;
 }
 
+/**
+ * Generate Promotions. The promotions are added to a movelist object.
+ * @param board board structure object
+ * @param list movelist object
+ */
 void genPromotions(TBoard * board, TMoveList * list) {
     TMove * current = list->last;
     list->current = current;
@@ -119,7 +121,13 @@ void genPromotions(TBoard * board, TMoveList * list) {
     list->last = current;
 }
 
-void genCastles(TBoard * board, TMoveList * list) { //todo: support chess960
+/**
+ * Generate castling moves. The castling moves are added to a movelist
+ * TODO: support chess960 
+ * @param board board structure object
+ * @param list movelist object
+ */
+void genCastles(TBoard * board, TMoveList * list) { 
     TMove * current = list->last;
     list->current = current;
     if (board->castleRight(CASTLE_ANY)) {
@@ -154,6 +162,12 @@ void genCastles(TBoard * board, TMoveList * list) { //todo: support chess960
     list->last = current;
 }
 
+/**
+ * Generate quiet moves, e.g.no captures, promotions or castling moves. Add the
+ * moves to a movelist.
+ * @param board board structure object
+ * @param list movelist object
+ */
 void genQuietMoves(TBoard * board, TMoveList * list) {
     U64 occ = board->allPieces;
     U64 targets = ~occ;
@@ -235,6 +249,10 @@ void genQuietMoves(TBoard * board, TMoveList * list) {
     list->last = current;
 }
 
+/**
+ * Copy a movelist object from another movelist object
+ * @param list the movelist object to copy
+ */
 void TMoveList::copy(TMoveList * list) {
     int i = 0;
     first = &_list[0];
@@ -267,6 +285,3 @@ void TMoveList::copy(TMoveList * list) {
     minimumScore = list->minimumScore;
     stage = list->stage;
 }
-
-
-
