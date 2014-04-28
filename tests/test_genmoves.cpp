@@ -53,7 +53,7 @@ void movePerftDivide(TSearch * searchData, int depth) {
     TBoard * pos = searchData->pos;
     std::cout << pos->asFen() << std::endl;
     moveList->clear();
-    U64 target = FULL_BOARD ^ *pos->boards[WPIECES + !pos->stack->WTM];
+    U64 target = FULL_BOARD ^ *pos->boards[WPIECES + !pos->stack->wtm];
     genCaptures(pos, moveList, FULL_BOARD);
     genPromotions(pos, moveList);
     genCastles(pos, moveList);

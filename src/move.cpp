@@ -28,14 +28,14 @@ void TMove::fromString(TBoard * pos, const char * moveStr) { //default: xboard n
     file = *moveStr++ -'a';
     rank = *moveStr++ -'1';
     tsq = (rank << 3) | file;
-    piece = pos->Matrix[ssq];
+    piece = pos->matrix[ssq];
     assert(piece);
-    capture = pos->Matrix[tsq];
+    capture = pos->matrix[tsq];
     castle = 0;
     en_passant = false;
-    if (tsq == pos->stack->epsq 
+    if (tsq == pos->stack->enpassant_sq 
             && (piece == WPAWN || piece == BPAWN)
-            && pos->stack->epsq) {
+            && pos->stack->enpassant_sq) {
         en_passant = true;
         capture = piece == WPAWN ? BPAWN : WPAWN;
     } else if (piece == WKING && ssq == e1) {
@@ -67,7 +67,7 @@ void TMove::fromString(TBoard * pos, const char * moveStr) { //default: xboard n
                 promotion = WQUEEN;
                 break;
         }
-        if (pos->stack->WTM == false) {
+        if (pos->stack->wtm == false) {
             promotion += WKING;
         }
     }

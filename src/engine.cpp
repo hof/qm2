@@ -66,10 +66,10 @@ void * TEngine::_think(void* engineObjPtr) {
 
 
     tm->setStartTime();
-    int myTime = root->stack->WTM ? whiteTime : blackTime;
-    int oppTime = root->stack->WTM ? blackTime : whiteTime;
-    int myInc = root->stack->WTM ? whiteInc : blackInc;
-    int oppInc = root->stack->WTM ? blackInc : whiteInc;
+    int myTime = root->stack->wtm ? whiteTime : blackTime;
+    int oppTime = root->stack->wtm ? blackTime : whiteTime;
+    int myInc = root->stack->wtm ? whiteInc : blackInc;
+    int oppInc = root->stack->wtm ? blackInc : whiteInc;
 
     if (maxTime) {
         tm->setEndTime(maxTime);
@@ -82,8 +82,8 @@ void * TEngine::_think(void* engineObjPtr) {
     }
 
     searchData->drawContempt.set(-50, 10);
-    if (root->stack->fiftyCount > 10) {
-        searchData->drawContempt.add(root->stack->fiftyCount / 2);
+    if (root->stack->fifty_count > 10) {
+        searchData->drawContempt.add(root->stack->fifty_count / 2);
     }
     if ((whiteTime || blackTime) && myInc == 0 && myTime < oppTime && myTime < 20000) {
         searchData->drawContempt.add(50);
@@ -91,7 +91,7 @@ void * TEngine::_think(void* engineObjPtr) {
             searchData->drawContempt.add(50);
         }
     }
-    if (!root->stack->WTM) {
+    if (!root->stack->wtm) {
         searchData->drawContempt.mul(-1);
     }
 
@@ -420,7 +420,7 @@ void TEngine::analyse() {
     print_row("Passers", s->stack->passer_score[WHITE], s->stack->passer_score[BLACK], phase);
     print_row("King Attack", s->stack->king_score[WHITE], s->stack->king_score[BLACK], phase);
     std::cout << "---------------+---------------+---------------+---------------------\n";
-    print_row("Total", s->pos->stack->WTM ? s->stack->eval_result : -s->stack->eval_result);
+    print_row("Total", s->pos->stack->wtm ? s->stack->eval_result : -s->stack->eval_result);
 
     delete s;
 }
@@ -715,7 +715,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                     nodes[1 - learning_side] += sd_game->nodes;
 
                     //stop conditions
-                    if (sd_game->pos->stack->fiftyCount >= 20 || sd_game->pos->isDraw()) {
+                    if (sd_game->pos->stack->fifty_count >= 20 || sd_game->pos->isDraw()) {
                         stats[0]++; //draw
                         gameover = true;
                         break;
@@ -923,7 +923,7 @@ void TEngine::_create_start_positions(TSearch * sd_root, TBook * book, string * 
     int gen = 0;
     while (x < max) {
         gen++;
-        while (sd_root->pos->currentPly < MAX_PLY) {
+        while (sd_root->pos->current_ply < MAX_PLY) {
             actualMove.setMove(0);
             int count = book->findMoves(sd_root->pos, bookMoves);
             if (count > 0) {
@@ -953,7 +953,7 @@ void TEngine::_create_start_positions(TSearch * sd_root, TBook * book, string * 
         poslist[x++] = sd_root->pos->asFen();
 
         //revert to root
-        while (sd_root->pos->currentPly > 0) {
+        while (sd_root->pos->current_ply > 0) {
             TMove * move = &(sd_root->stack - 1)->move;
             sd_root->backward(move);
         }

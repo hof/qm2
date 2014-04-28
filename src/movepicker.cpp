@@ -44,7 +44,7 @@ TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, i
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
     moveList->stage = HASH1;
-    searchData->stack->captureMask = searchData->pos->allPieces;
+    searchData->stack->captureMask = searchData->pos->all_pieces;
     if (searchData->excludedMove.piece != EMPTY) {
         moveList->lastX++->setMove(&searchData->excludedMove);
     }
@@ -55,7 +55,7 @@ TMove * TMovePicker::pickFirstQuiescenceMove(TSearch * searchData, int qCheckDep
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
     moveList->stage = Q_CAPTURES; //q_hash1
-    searchData->stack->captureMask = searchData->pos->allPieces;
+    searchData->stack->captureMask = searchData->pos->all_pieces;
     return pickNextMove(searchData, qCheckDepth, alpha, beta);
 }
 
@@ -138,7 +138,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     return result;
                 }
             case CAPTURES:
-                mask = pos->allPieces;
+                mask = pos->all_pieces;
                 if (searchData->stack->inCheck) {
                     mask &= pos->stack->checkers;
                 }
@@ -257,7 +257,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     return result;
                 }
             case Q_CAPTURES:
-                mask = pos->allPieces;
+                mask = pos->all_pieces;
                 if (searchData->stack->inCheck) {
                     mask &= pos->stack->checkers;
                 }

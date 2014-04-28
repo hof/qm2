@@ -58,21 +58,21 @@ void TSearch::initLMR() {
 int TSearch::initRootMoves() {
     int result = 0;
     root.MoveCount = 0;
-    root.FiftyCount = pos->stack->fiftyCount;
+    root.FiftyCount = pos->stack->fifty_count;
     setNodeType(-SCORE_INFINITE, SCORE_INFINITE);
-    hashTable->repStore(this, pos->stack->hashCode, pos->stack->fiftyCount);
+    hashTable->repStore(this, pos->stack->hash_code, pos->stack->fifty_count);
     hashTable->ttLookup(this, 0, -SCORE_INFINITE, SCORE_INFINITE);
     for (TMove * move = movePicker->pickFirstMove(this, 0, -SCORE_INFINITE, SCORE_INFINITE);
             move; move = movePicker->pickNextMove(this, 0, -SCORE_INFINITE, SCORE_INFINITE)) {
         TRootMove * rMove = &root.Moves[root.MoveCount++];
         rMove->init(move, 1000 - root.MoveCount, pos->givesCheck(move), pos->SEE(move));
         if (rMove->GivesCheck) {
-            rMove->checkerSq = (pos->stack + 1)->checkerSq;
+            rMove->checker_sq = (pos->stack + 1)->checker_sq;
             rMove->checkers = (pos->stack + 1)->checkers;
         }
     }
     root.InCheck = pos->inCheck();
-    stack->hashCode = pos->stack->hashCode;
+    stack->hash_code = pos->stack->hash_code;
     stack->reduce = 0;
     stack->eval_result = SCORE_INVALID;
     result = root.MoveCount;
@@ -141,7 +141,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
     TRootMove * rMove = &root.Moves[0];
     forward(&rMove->Move, rMove->GivesCheck);
     if (rMove->GivesCheck) {
-        pos->stack->checkerSq = rMove->checkerSq;
+        pos->stack->checker_sq = rMove->checker_sq;
         pos->stack->checkers = rMove->checkers;
     }
     int new_depth = depth - ONE_PLY;
@@ -196,7 +196,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
         nodesBeforeMove = nodes;
         forward(&rMove->Move, rMove->GivesCheck);
         if (rMove->GivesCheck) {
-            pos->stack->checkerSq = rMove->checkerSq;
+            pos->stack->checker_sq = rMove->checker_sq;
             pos->stack->checkers = rMove->checkers;
         }
         int score = -pvs(-alpha - 1, -alpha, new_depth);
@@ -281,7 +281,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * 1. If no more depth remaining, return quiescence value
      */
     if (depth < ONE_PLY) {
-        selDepth = MAX(selDepth, pos->currentPly);
+        selDepth = MAX(selDepth, pos->current_ply);
         return qsearch(alpha, beta, 0, QS_CHECKDEPTH);
     }
     nodes++;
@@ -291,16 +291,16 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * if we already know we will win/loose by mate in n, 
      * it is not needed to search deeper than n
      */
-    if ((SCORE_MATE - pos->currentPly) < beta) {
-        beta = SCORE_MATE - pos->currentPly;
-        if (alpha >= (SCORE_MATE - pos->currentPly)) {
-            return SCORE_MATE - pos->currentPly;
+    if ((SCORE_MATE - pos->current_ply) < beta) {
+        beta = SCORE_MATE - pos->current_ply;
+        if (alpha >= (SCORE_MATE - pos->current_ply)) {
+            return SCORE_MATE - pos->current_ply;
         }
     }
-    if ((-SCORE_MATE + pos->currentPly) > alpha) {
-        alpha = -SCORE_MATE + pos->currentPly;
-        if (beta <= (-SCORE_MATE + pos->currentPly)) {
-            return -SCORE_MATE + pos->currentPly;
+    if ((-SCORE_MATE + pos->current_ply) > alpha) {
+        alpha = -SCORE_MATE + pos->current_ply;
+        if (beta <= (-SCORE_MATE + pos->current_ply)) {
+            return -SCORE_MATE + pos->current_ply;
         }
     }
 
@@ -308,7 +308,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     if (nodesUntilPoll <= 0) {
         poll();
     }
-    if (stopSearch || pos->currentPly >= MAX_PLY) {
+    if (stopSearch || pos->current_ply >= MAX_PLY) {
         return alpha;
     }
     assert(depth >= ONE_PLY && depth < 256);
@@ -317,15 +317,15 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * 3. Return obvious draws 
      */
     stack->phase = (stack - 1)->phase;
-    if (pos->stack->fiftyCount > 3) {
-        if (pos->stack->fiftyCount >= 100) {
+    if (pos->stack->fifty_count > 3) {
+        if (pos->stack->fifty_count >= 100) {
             return drawScore(); //draw by 50 reversible moves
         }
-        int stopPly = pos->currentPly - pos->stack->fiftyCount;
-        for (int ply = pos->currentPly - 4; ply >= stopPly; ply -= 2) { //draw by repetition
-            if (ply >= 0 && getStack(ply)->hashCode == pos->stack->hashCode) {
+        int stopPly = pos->current_ply - pos->stack->fifty_count;
+        for (int ply = pos->current_ply - 4; ply >= stopPly; ply -= 2) { //draw by repetition
+            if (ply >= 0 && getStack(ply)->hash_code == pos->stack->hash_code) {
                 return drawScore();
-            } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->stack->hashCode) {
+            } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->stack->hash_code) {
                 return drawScore();
 
             }
@@ -357,7 +357,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && new_depth <= LOW_DEPTH
             && (eval - FHP_MARGIN[new_depth]) >= beta
             && ABS(beta) < SCORE_MATE - MAX_PLY
-            && pos->hasPieces(pos->stack->WTM)) {
+            && pos->hasPieces(pos->stack->wtm)) {
         return eval - FHP_MARGIN[new_depth];
     }
 
@@ -366,7 +366,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     assert(type == PVNODE || alpha + 1 == beta);
 
     //b) Null move pruning
-    stack->hashCode = pos->stack->hashCode;
+    stack->hash_code = pos->stack->hash_code;
     bool mate_threat = false;
     if (DO_NULL
             && !skipNull
@@ -374,7 +374,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && new_depth > 0
             && eval >= beta
             && ABS(beta) < SCORE_MATE - MAX_PLY
-            && pos->hasPieces(pos->stack->WTM)) {
+            && pos->hasPieces(pos->stack->wtm)) {
         int rdepth = new_depth - (3 * ONE_PLY);
         if (rdepth >= 8 && stack->phase < 14) {
             rdepth -= (rdepth >> 3);
@@ -408,7 +408,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      */
     TMove * first_move = movePicker->pickFirstMove(this, depth, alpha, beta);
     if (!first_move) { //no legal move: it's checkmate or stalemate
-        return in_check ? -SCORE_MATE + pos->currentPly : drawScore();
+        return in_check ? -SCORE_MATE + pos->current_ply : drawScore();
     }
     int gives_check = pos->givesCheck(first_move);
     int extend_move = extendMove(first_move, gives_check);
@@ -567,21 +567,21 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
     if (--nodesUntilPoll <= 0) {
         poll();
     }
-    if (stopSearch || pos->currentPly >= MAX_PLY) {
+    if (stopSearch || pos->current_ply >= MAX_PLY) {
         return alpha;
     }
 
     //return obvious draws
     stack->phase = (stack - 1)->phase;
-    if (pos->stack->fiftyCount > 3) { //draw by repetition or fifty quiet moves
-        if (pos->stack->fiftyCount >= 100) {
+    if (pos->stack->fifty_count > 3) { //draw by repetition or fifty quiet moves
+        if (pos->stack->fifty_count >= 100) {
             return drawScore();
         }
-        int stopPly = pos->currentPly - pos->stack->fiftyCount;
-        for (int ply = pos->currentPly - 4; ply >= stopPly; ply -= 2) {
-            if (ply >= 0 && getStack(ply)->hashCode == pos->stack->hashCode) {
+        int stopPly = pos->current_ply - pos->stack->fifty_count;
+        for (int ply = pos->current_ply - 4; ply >= stopPly; ply -= 2) {
+            if (ply >= 0 && getStack(ply)->hash_code == pos->stack->hash_code) {
                 return drawScore();
-            } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->stack->hashCode) {
+            } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->stack->hash_code) {
                 return drawScore();
             }
         }
@@ -591,16 +591,16 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
     }
 
     //mate distance pruning
-    if ((SCORE_MATE - pos->currentPly) < beta) {
-        beta = SCORE_MATE - pos->currentPly;
-        if (alpha >= (SCORE_MATE - pos->currentPly)) {
-            return SCORE_MATE - pos->currentPly;
+    if ((SCORE_MATE - pos->current_ply) < beta) {
+        beta = SCORE_MATE - pos->current_ply;
+        if (alpha >= (SCORE_MATE - pos->current_ply)) {
+            return SCORE_MATE - pos->current_ply;
         }
     }
-    if ((-SCORE_MATE + pos->currentPly) > alpha) {
-        alpha = -SCORE_MATE + pos->currentPly;
-        if (beta <= (-SCORE_MATE + pos->currentPly)) {
-            return -SCORE_MATE + pos->currentPly;
+    if ((-SCORE_MATE + pos->current_ply) > alpha) {
+        alpha = -SCORE_MATE + pos->current_ply;
+        if (beta <= (-SCORE_MATE + pos->current_ply)) {
+            return -SCORE_MATE + pos->current_ply;
         }
     }
 
@@ -610,9 +610,9 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
         int score = -SCORE_INFINITE;
         TMove * move = movePicker->pickFirstQuiescenceMove(this, 0, alpha, beta);
         if (!move) { //checkmate
-            return -SCORE_MATE + pos->currentPly;
+            return -SCORE_MATE + pos->current_ply;
         }
-        stack->hashCode = pos->stack->hashCode;
+        stack->hash_code = pos->stack->hash_code;
         do {
             bool givesCheck = pos->givesCheck(move);
             forward(move, givesCheck);
@@ -639,7 +639,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
         return score;
     }
     alpha = MAX(score, alpha);
-    stack->hashCode = pos->stack->hashCode;
+    stack->hash_code = pos->stack->hash_code;
     int base = score;
     do { //loop through quiescence moves
         int givesCheck = pos->givesCheck(move);
@@ -691,21 +691,21 @@ void TSearch::debug_print_search(int alpha, int beta) {
 
     TBoard pos2;
     memcpy(&pos2, pos, sizeof (TBoard));
-    while (pos2.currentPly > 0) {
-        TMove * move = &getStack(pos2.currentPly - 1)->move;
+    while (pos2.current_ply > 0) {
+        TMove * move = &getStack(pos2.current_ply - 1)->move;
         move->piece ? pos2.backward(move) : pos2.backward();
     }
 
     std::cout << "ROOT FEN: " << pos2.asFen() << std::endl;
     std::cout << "Path ";
-    for (int i = 0; i < pos->currentPly; i++) {
+    for (int i = 0; i < pos->current_ply; i++) {
         std::cout << " " << getStack(i)->move.asString();
         if (getStack(i)->reduce) {
             std::cout << "(r)";
         }
     }
     std::cout << "\nFEN: " << pos->asFen() << std::endl;
-    std::cout << "Hash: " << pos->stack->hashCode << std::endl;
+    std::cout << "Hash: " << pos->stack->hash_code << std::endl;
     std::cout << "Nodes: " << nodes << std::endl;
     std::cout << "Skip nullmove: " << this->skipNull << std::endl;
 

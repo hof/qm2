@@ -248,13 +248,13 @@ int TBook::findMoves(TBoard * pos, TMoveList * list) {
 void TBook::readPolyglotMove(TBoard* pos, TMove * move, int polyglotMove) {
     int tsq = polyglotMove & 63;
     int ssq = (polyglotMove >> 6) & 63;
-    int piece = pos->Matrix[ssq];
+    int piece = pos->matrix[ssq];
 
     move->setMove(piece, ssq, tsq);
-    move->capture = pos->Matrix[tsq];
+    move->capture = pos->matrix[tsq];
     move->castle = 0;
     move->en_passant = false;
-    if (pos->stack->epsq && tsq == pos->stack->epsq) {
+    if (pos->stack->enpassant_sq && tsq == pos->stack->enpassant_sq) {
         if (piece == WPAWN) {
             move->capture = BPAWN;
             move->en_passant = true;
@@ -267,7 +267,7 @@ void TBook::readPolyglotMove(TBoard* pos, TMove * move, int polyglotMove) {
     //"normal" moves
     int promotion = (polyglotMove >> 12) & 7; //none 0, knight 1, bishop 2, rook 3, queen 4
     if (promotion) {
-        promotion += pos->stack->WTM ? 1 : 7; //WKNIGHT == 2; BKNIGHT == 8;
+        promotion += pos->stack->wtm ? 1 : 7; //WKNIGHT == 2; BKNIGHT == 8;
         move->promotion = promotion;
     } else if (piece == BKING && ssq == e8) {
         if (tsq == h8) {
@@ -407,11 +407,11 @@ U64 TBook::polyglot_key(TBoard* pos) {
     static const int PolyGlotPiece[] = {0, 1, 3, 5, 7, 9, 11, 0, 2, 4, 6, 8, 10};
 
     U64 result = 0;
-    U64 occupied = pos->allPieces;
+    U64 occupied = pos->all_pieces;
 
     while (occupied) {
         int sq = popFirst(occupied);
-        result ^= Random64[PolyGlotPiece[pos->Matrix[sq]]*64 + sq];
+        result ^= Random64[PolyGlotPiece[pos->matrix[sq]]*64 + sq];
     }
 
     if (pos->castleRight(CASTLE_K)) {
@@ -427,13 +427,13 @@ U64 TBook::polyglot_key(TBoard* pos) {
         result ^= Random64[CASTLE_OFFSET + 3];
     }
 
-    if (pos->stack->epsq >= a3 //polyglot only considers en passant if ep captures are possible
-            && ((pos->stack->WTM && (BPawnCaptures[pos->stack->epsq] & pos->whitePawns))
-            || (pos->stack->WTM == false && (WPawnCaptures[pos->stack->epsq] & pos->blackPawns)))) {
-        result ^= Random64[EP_OFFSET + FILE(pos->stack->epsq)];
+    if (pos->stack->enpassant_sq >= a3 //polyglot only considers en passant if ep captures are possible
+            && ((pos->stack->wtm && (BPawnCaptures[pos->stack->enpassant_sq] & pos->white_pawns))
+            || (pos->stack->wtm == false && (WPawnCaptures[pos->stack->enpassant_sq] & pos->black_pawns)))) {
+        result ^= Random64[EP_OFFSET + FILE(pos->stack->enpassant_sq)];
 
     }
-    result ^= pos->stack->WTM ? Random64[STM_OFFSET] : 0;
+    result ^= pos->stack->wtm ? Random64[STM_OFFSET] : 0;
     return result;
 }
 

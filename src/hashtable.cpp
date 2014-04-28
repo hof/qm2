@@ -50,8 +50,8 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
     searchData->stack->ttMove2.piece = EMPTY;
     THashTable * hashTable = searchData->hashTable;
 
-    U64 hashCode = searchData->pos->stack->hashCode;
-    int hashKey = hashTable->getTTHashKey(hashCode);
+    U64 hash_code = searchData->pos->stack->hash_code;
+    int hashKey = hashTable->getTTHashKey(hash_code);
 
     /*
      * 1) Probe the depth preferred table
@@ -60,7 +60,7 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
     TTranspositionTableEntry * ttEntry = &hashTable->depthPrefTable[hashKey];
     U64 hashedKey = ttEntry->key;
     U64 hashedData = ttEntry->value;
-    if ((hashedKey ^ hashedData) == hashCode) {
+    if ((hashedKey ^ hashedData) == hash_code) {
         TMove move;
         move.setMove(TTMOVE(hashedData));
         TBoard * pos = searchData->pos;
@@ -76,9 +76,9 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
                     || (nodeType == TT_UPPERBOUND && hashedScore <= alpha)
                     || (nodeType == TT_LOWERBOUND && hashedScore >= beta))) {
                 if (hashedScore > SCORE_MATE - MAX_PLY) {
-                    hashedScore -= pos->currentPly;
+                    hashedScore -= pos->current_ply;
                 } else if (hashedScore < -SCORE_MATE + MAX_PLY) {
-                    hashedScore += pos->currentPly;
+                    hashedScore += pos->current_ply;
                 }
                 searchData->stack->ttScore = hashedScore;
                 assert(hashedScore > -SCORE_MATE && hashedScore < SCORE_MATE);
@@ -93,7 +93,7 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
     U64 hashedData2 = ttEntry->value;
     int hashedDepth2 = 0;
     hashedKey = ttEntry->key;
-    if ((hashedKey ^ hashedData2) == hashCode) {
+    if ((hashedKey ^ hashedData2) == hash_code) {
         TMove move;
         move.setMove(TTMOVE(hashedData2));
         TBoard * pos = searchData->pos;
@@ -113,9 +113,9 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
                     || (nodeType == TT_UPPERBOUND && hashedScore <= alpha)
                     || (nodeType == TT_LOWERBOUND && hashedScore >= beta))) {
                 if (hashedScore > SCORE_MATE - MAX_PLY) {
-                    hashedScore -= pos->currentPly;
+                    hashedScore -= pos->current_ply;
                 } else if (hashedScore < -SCORE_MATE + MAX_PLY) {
-                    hashedScore += pos->currentPly;
+                    hashedScore += pos->current_ply;
                 }
                 if (searchData->stack->ttScore == TT_EMPTY || hashedDepth2 > hashedDepth1) {
                     searchData->stack->ttScore = hashedScore;
@@ -127,9 +127,9 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
     searchData->hashHits += hashHit;
 }
 
-void THashTable::repStore(TSearch * searchData, U64 hashCode, int fiftyCount) {
+void THashTable::repStore(TSearch * searchData, U64 hash_code, int fiftyCount) {
     if (fiftyCount < 100 && fiftyCount >= 0) {
-        searchData->hashTable->repTable[fiftyCount] = hashCode;
+        searchData->hashTable->repTable[fiftyCount] = hash_code;
     }
 }
 
@@ -139,41 +139,41 @@ void THashTable::ttStore(TSearch * searchData, int move, int score, int depth, i
     }
 
     THashTable * hashTable = searchData->hashTable;
-    int rootPly = searchData->pos->rootPly % 64;
+    int root_ply = searchData->pos->root_ply % 64;
     int flags = score >= beta ? TT_LOWERBOUND : (score <= alpha ? TT_UPPERBOUND : TT_EXACT);
     assert(flags);
 
-    U64 hashCode = searchData->pos->stack->hashCode;
+    U64 hash_code = searchData->pos->stack->hash_code;
 
     assert(move > 0 || depth == 0);
 
-    int hashKey = hashTable->getTTHashKey(hashCode);
+    int hashKey = hashTable->getTTHashKey(hash_code);
 
     TTranspositionTableEntry * ttEntry = &hashTable->depthPrefTable[hashKey];
     U64 hashValue = ttEntry->value;
 
     if (score > SCORE_MATE - MAX_PLY) {
-        score += searchData->pos->currentPly;
+        score += searchData->pos->current_ply;
     } else if (score < -SCORE_MATE + MAX_PLY) {
-        score -= searchData->pos->currentPly;
+        score -= searchData->pos->current_ply;
     }
     assert(score < SCORE_MATE && score > -SCORE_MATE);
 
 
-    U64 newHashValue = ttEntry->encode(rootPly, depth, score, flags, move);
+    U64 newHashValue = ttEntry->encode(root_ply, depth, score, flags, move);
 
     int hashedGamePly = TTPLY(hashValue);
     int hashedDepth = TTDEPTH(hashValue);
 
 
-    if (rootPly != hashedGamePly || hashedDepth <= depth) {
+    if (root_ply != hashedGamePly || hashedDepth <= depth) {
 
-        ttEntry->key = (hashCode ^ newHashValue);
+        ttEntry->key = (hash_code ^ newHashValue);
         ttEntry->value = newHashValue;
 
     }
     ttEntry = &hashTable->alwaysReplaceTable[hashKey];
-    ttEntry->key = (hashCode ^ newHashValue);
+    ttEntry->key = (hash_code ^ newHashValue);
     ttEntry->value = newHashValue;
 }
 
@@ -181,9 +181,9 @@ void THashTable::mtLookup(TSearch * searchData) {
     searchData->materialTableProbes++;
     THashTable * hashTable = searchData->hashTable;
     TMaterialTableEntry * materialTable = hashTable->materialTable;
-    U64 materialHash = searchData->pos->stack->materialHash;
-    TMaterialTableEntry entry = materialTable[hashTable->getMaterialHashKey(materialHash)];
-    if ((entry.key ^ entry.value) == materialHash) {
+    U64 material_hash = searchData->pos->stack->material_hash;
+    TMaterialTableEntry entry = materialTable[hashTable->getMaterialHashKey(material_hash)];
+    if ((entry.key ^ entry.value) == material_hash) {
         searchData->materialTableHits++;
         searchData->stack->material_score = entry.value;
         searchData->stack->phase = entry.phase;
@@ -196,20 +196,20 @@ void THashTable::mtLookup(TSearch * searchData) {
 void THashTable::mtStore(TSearch * searchData) {
     THashTable * hashTable = searchData->hashTable;
     TMaterialTableEntry * materialTable = hashTable->materialTable;
-    U64 materialHash = searchData->pos->stack->materialHash;
-    TMaterialTableEntry * entry = &materialTable[hashTable->getMaterialHashKey(materialHash)];
+    U64 material_hash = searchData->pos->stack->material_hash;
+    TMaterialTableEntry * entry = &materialTable[hashTable->getMaterialHashKey(material_hash)];
     entry->value = searchData->stack->material_score;
     entry->phase = searchData->stack->phase;
     entry->flags = searchData->stack->material_flags;
-    entry->key = materialHash^entry->value;
+    entry->key = material_hash^entry->value;
 }
 
 void THashTable::ptLookup(TSearch * sd) {
     sd->pawnTableProbes++;
     THashTable * hashTable = sd->hashTable;
-    U64 pawnHash = sd->pos->stack->pawnHash;
-    TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
-    if ((entry->key ^ entry->pawn_score.mg) == pawnHash) {
+    U64 pawn_hash = sd->pos->stack->pawn_hash;
+    TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawn_hash)];
+    if ((entry->key ^ entry->pawn_score.mg) == pawn_hash) {
         sd->stack->pawn_score.set(entry->pawn_score);
         sd->stack->king_attack[WPAWN] = entry->king_attack[WHITE];
         sd->stack->king_attack[BPAWN] = entry->king_attack[BLACK];
@@ -223,14 +223,14 @@ void THashTable::ptLookup(TSearch * sd) {
 
 void THashTable::ptStore(TSearch * sd) {
     THashTable * hashTable = sd->hashTable;
-    U64 pawnHash = sd->pos->stack->pawnHash;
-    TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
+    U64 pawn_hash = sd->pos->stack->pawn_hash;
+    TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawn_hash)];
     entry->pawn_score.set(sd->stack->pawn_score);
     entry->king_attack[WHITE] = sd->stack->king_attack[WPAWN];
     entry->king_attack[BLACK] = sd->stack->king_attack[BPAWN];
     entry->passers = sd->stack->passers;
     entry->pawn_flags = sd->stack->pawn_flags;
-    entry->key = (pawnHash ^ sd->stack->pawn_score.mg);
+    entry->key = (pawn_hash ^ sd->stack->pawn_score.mg);
 }
 
 void THashTable::clear() {

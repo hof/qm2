@@ -58,7 +58,7 @@ public:
     int Value;
     int InitialValue;
     int SEE;
-    int checkerSq;
+    int checker_sq;
     U64 checkers;
 
     void init(TMove * move, int initialValue, bool givesCheck, int see) {
@@ -109,7 +109,7 @@ struct TSearchStack {
     TMove move;
     TMove bestMove;
 
-    U64 hashCode;
+    U64 hash_code;
     bool inCheck;
 
     TMove mateKiller;
@@ -272,14 +272,14 @@ public:
         stack->inCheck = false;
         stack->eval_result = SCORE_INVALID;
         pos->forward();
-        assert(stack == &_stack[pos->currentPly]);
+        assert(stack == &_stack[pos->current_ply]);
     }
 
     inline void backward() { //null move
         stack--;
         pos->backward();
         skipNull = false;
-        assert(stack == &_stack[pos->currentPly]);
+        assert(stack == &_stack[pos->current_ply]);
     }
 
     inline void forward(TMove * move, bool givesCheck) {
@@ -288,13 +288,13 @@ public:
         stack->inCheck = givesCheck;
         stack->eval_result = SCORE_INVALID;
         pos->forward(move);
-        assert(stack == &_stack[pos->currentPly]);
+        assert(stack == &_stack[pos->current_ply]);
     }
 
     inline void backward(TMove * move) {
         stack--;
         pos->backward(move);
-        assert(stack == &_stack[pos->currentPly]);
+        assert(stack == &_stack[pos->current_ply]);
     }
 
     inline NodeType setNodeType(int alpha, int beta) {
@@ -329,7 +329,7 @@ public:
      * starts with a new stack. 
      */
     inline void resetStack() {
-        pos->currentPly = 0;
+        pos->current_ply = 0;
         stack = rootStack;
         stack->eval_result = SCORE_INVALID;
         pos->_stack[0].copy(this->pos->stack);
@@ -355,7 +355,7 @@ public:
     
     inline int drawScore(int adjust=0) {
         int result = drawContempt.get(stack->phase)+adjust;
-        if (pos->stack->WTM == false) {
+        if (pos->stack->wtm == false) {
             result = -result;
         }
         return result & GRAIN;

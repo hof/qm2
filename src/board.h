@@ -19,7 +19,7 @@
  * board.h
  * Board representation:
  * - Bitboards for each piece and all (white/black) occupied squares
- * - Matrix[64] 
+ * - matrix[64] 
  * - Piece placement arrays for each piece
  */
 
@@ -175,62 +175,62 @@ struct TPiecePlacement {
 //Structure with metadata, e.g. side to move, kept on a stack
 
 struct TBoardStack {
-    uint8_t epsq; //enpassant square
-    unsigned char castlingFlags;
-    unsigned char fiftyCount;
-    unsigned char checkerSq;
-    bool WTM; //white to move
-    U64 hashCode;
-    U64 materialHash;
-    U64 pawnHash;
+    uint8_t enpassant_sq; //enpassant square
+    uint8_t castling_flags;
+    uint8_t fifty_count;
+    uint8_t checker_sq;
+    bool wtm; //white to move
+    U64 hash_code;
+    U64 material_hash;
+    U64 pawn_hash;
     U64 checkers;
 
     void clear() {
-        epsq = 0;
-        castlingFlags = 0;
-        fiftyCount = 0;
-        WTM = true;
-        hashCode = 0;
-        materialHash = 0;
-        pawnHash = 0;
+        enpassant_sq = 0;
+        castling_flags = 0;
+        fifty_count = 0;
+        wtm = true;
+        hash_code = 0;
+        material_hash = 0;
+        pawn_hash = 0;
         checkers = 0;
     }
 
     void copy(TBoardStack * bFlags) {
-        epsq = bFlags->epsq;
-        castlingFlags = bFlags->castlingFlags;
-        fiftyCount = bFlags->fiftyCount;
-        WTM = bFlags->WTM;
-        hashCode = bFlags->hashCode;
-        materialHash = bFlags->materialHash;
-        pawnHash = bFlags->pawnHash;
+        enpassant_sq = bFlags->enpassant_sq;
+        castling_flags = bFlags->castling_flags;
+        fifty_count = bFlags->fifty_count;
+        wtm = bFlags->wtm;
+        hash_code = bFlags->hash_code;
+        material_hash = bFlags->material_hash;
+        pawn_hash = bFlags->pawn_hash;
     }
 };
 
 //Board representation structure
 
 struct TBoard {
-    int currentPly;
-    int rootPly;
+    int current_ply;
+    int root_ply;
 
     TBoardStack _stack[MAX_PLY + 1];
     TBoardStack * stack;
 
-    U64 whitePawns;
-    U64 blackPawns;
-    U64 whiteKnights;
-    U64 blackKnights;
-    U64 whiteBishops;
-    U64 blackBishops;
-    U64 whiteRooks;
-    U64 blackRooks;
-    U64 whiteQueens;
-    U64 blackQueens;
-    U64 whiteKings;
-    U64 blackKings;
-    U64 whitePieces;
-    U64 blackPieces;
-    U64 allPieces;
+    U64 white_pawns;
+    U64 black_pawns;
+    U64 white_knights;
+    U64 black_knights;
+    U64 white_bishops;
+    U64 black_bishops;
+    U64 white_rooks;
+    U64 black_rooks;
+    U64 white_queens;
+    U64 black_queens;
+    U64 white_kings;
+    U64 black_kings;
+    U64 white_pieces;
+    U64 black_pieces;
+    U64 all_pieces;
     U64 * boards[BPIECES + 1];
     U64 * bishops[2];
     U64 * rooks[2];
@@ -239,44 +239,44 @@ struct TBoard {
     U64 * knights[2];
     U64 * kings[2];
 
-    unsigned char Matrix[64];
+    unsigned char matrix[64];
     TPiecePlacement pieces[BKING + 1];
-    const unsigned char * whiteKingPos;
-    const unsigned char * blackKingPos;
-    const uint8_t * kingPos[2];
+    const uint8_t * white_king_sq;
+    const uint8_t * black_king_sq;
+    const uint8_t * king_sq[2];
 
     void clear();
 
     inline int topPiece(bool white) {
         if (white) {
-            return whiteQueens ? WQUEEN : whiteRooks ? WROOK : whiteBishops ? WBISHOP : whiteKnights ? WKNIGHT : WPAWN;
+            return white_queens ? WQUEEN : white_rooks ? WROOK : white_bishops ? WBISHOP : white_knights ? WKNIGHT : WPAWN;
         } else {
-            return blackQueens ? BQUEEN : blackRooks ? BROOK : blackBishops ? BBISHOP : blackKnights ? BKNIGHT : BPAWN;
+            return black_queens ? BQUEEN : black_rooks ? BROOK : black_bishops ? BBISHOP : black_knights ? BKNIGHT : BPAWN;
         }
     }
 
     inline U64 pawnsAndKings() {
-        return whiteKings | blackKings | whitePawns | blackPawns;
+        return white_kings | black_kings | white_pawns | black_pawns;
     }
 
     inline U64 allPawns() {
-        return whitePawns | blackPawns;
+        return white_pawns | black_pawns;
     }
 
     inline bool stmHasQueen() {
-        return *queens[stack->WTM] != 0;
+        return *queens[stack->wtm] != 0;
     }
 
     inline U64 closedFiles() {
-        return FILEFILL(whitePawns) & FILEFILL(blackPawns);
+        return FILEFILL(white_pawns) & FILEFILL(black_pawns);
     }
 
     inline U64 openFiles() {
-        return ~(FILEFILL(whitePawns) | FILEFILL(blackPawns));
+        return ~(FILEFILL(white_pawns) | FILEFILL(black_pawns));
     }
 
     inline U64 halfOpenOrOpenFile(bool white) {
-        return white ? ~FILEFILL(whitePawns) : ~FILEFILL(blackPawns);
+        return white ? ~FILEFILL(white_pawns) : ~FILEFILL(black_pawns);
     }
 
     inline U64 halfOpenFiles(bool white) {
@@ -284,26 +284,26 @@ struct TBoard {
     }
 
     inline U64 all(bool wtm) {
-        return wtm ? whitePieces : blackPieces;
+        return wtm ? white_pieces : black_pieces;
     }
 
     inline U64 getPieces(bool wtm) {
         return wtm ?
-                whiteRooks | whiteKnights | whiteBishops | whiteQueens
+                white_rooks | white_knights | white_bishops | white_queens
                 :
-                blackRooks | blackKnights | blackBishops | blackQueens;
+                black_rooks | black_knights | black_bishops | black_queens;
     }
 
     inline bool hasPieces(bool wtm) {
         return wtm ?
-                whiteRooks || whiteKnights || whiteBishops || whiteQueens
+                white_rooks || white_knights || white_bishops || white_queens
                 :
-                blackRooks || blackKnights || blackBishops || blackQueens;
+                black_rooks || black_knights || black_bishops || black_queens;
     }
 
-    inline U64 queensOrMinorsAndRooks(bool white) {
-        return white ? (whiteQueens || (whiteKnights && whiteBishops && whiteRooks))
-                : (blackQueens || (whiteKnights && whiteBishops && whiteRooks));
+    inline U64 queensOrMinorsAndRooks(bool wtm) {
+        return wtm ? (white_queens || (white_knights && white_bishops && white_rooks))
+                : (black_queens || (white_knights && white_bishops && white_rooks));
     }
 
     void fromFen(const char* fen);
@@ -318,8 +318,8 @@ struct TBoard {
         U64 bit = BIT(sq);
         *boards[piece] ^= bit;
         *boards[WPIECES + (piece > WKING)] ^= bit;
-        allPieces ^= bit;
-        Matrix[sq] = piece;
+        all_pieces ^= bit;
+        matrix[sq] = piece;
         pieces[piece].add(sq);
     }
 
@@ -329,10 +329,10 @@ struct TBoard {
      * @param sq the piece location (a1..h8)
      */
     inline void addPieceFull(int piece, int sq) {
-        HASH_ADD_PIECE(stack->materialHash, piece, pieces[piece].count + BISHOP_IX(piece, sq));
-        HASH_ADD_PIECE(stack->hashCode, piece, sq);
+        HASH_ADD_PIECE(stack->material_hash, piece, pieces[piece].count + BISHOP_IX(piece, sq));
+        HASH_ADD_PIECE(stack->hash_code, piece, sq);
         if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
-            HASH_ADD_PIECE(stack->pawnHash, piece, sq);
+            HASH_ADD_PIECE(stack->pawn_hash, piece, sq);
         }
         addPiece(piece, sq);
     }
@@ -346,8 +346,8 @@ struct TBoard {
         U64 bit = BIT(sq);
         *boards[piece] ^= bit;
         *boards[WPIECES + (piece > WKING)] ^= bit;
-        allPieces ^= bit;
-        Matrix[sq] = EMPTY;
+        all_pieces ^= bit;
+        matrix[sq] = EMPTY;
         pieces[piece].remove(sq);
     }
 
@@ -358,10 +358,10 @@ struct TBoard {
      */
     inline void removePieceFull(int piece, int sq) {
         removePiece(piece, sq);
-        HASH_REMOVE_PIECE(stack->materialHash, piece, pieces[piece].count + BISHOP_IX(piece, sq));
-        HASH_REMOVE_PIECE(stack->hashCode, piece, sq);
+        HASH_REMOVE_PIECE(stack->material_hash, piece, pieces[piece].count + BISHOP_IX(piece, sq));
+        HASH_REMOVE_PIECE(stack->hash_code, piece, sq);
         if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
-            HASH_REMOVE_PIECE(stack->pawnHash, piece, sq);
+            HASH_REMOVE_PIECE(stack->pawn_hash, piece, sq);
         }
     }
 
@@ -375,9 +375,9 @@ struct TBoard {
         U64 updateMask = BIT(ssq) | BIT(tsq);
         *boards[piece] ^= updateMask;
         *boards[WPIECES + (piece > WKING)] ^= updateMask;
-        allPieces ^= updateMask;
-        Matrix[ssq] = EMPTY;
-        Matrix[tsq] = piece;
+        all_pieces ^= updateMask;
+        matrix[ssq] = EMPTY;
+        matrix[tsq] = piece;
         pieces[piece].update(ssq, tsq);
     }
 
@@ -389,16 +389,18 @@ struct TBoard {
      */
     inline void movePieceFull(int piece, int ssq, int tsq) {
         movePiece(piece, ssq, tsq);
-        HASH_MOVE_PIECE(stack->hashCode, piece, ssq, tsq);
+        HASH_MOVE_PIECE(stack->hash_code, piece, ssq, tsq);
         if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
-            HASH_MOVE_PIECE(stack->pawnHash, piece, ssq, tsq);
+            HASH_MOVE_PIECE(stack->pawn_hash, piece, ssq, tsq);
         }
     }
 
     void forward(TMove * move); //make a move
+    
     void backward(TMove * move); //unmake a move
 
     void forward(); //do a nullmove 
+    
     void backward(); //undo nullmove
 
     /**
@@ -407,11 +409,11 @@ struct TBoard {
      * @return true: attacked, false: not attacked
      */
     inline bool attackedByBlack(int sq) {
-        return KnightMoves[sq] & blackKnights
-                || WPawnCaptures[sq] & blackPawns
-                || KingMoves[sq] & blackKings
-                || MagicBishopMoves(sq, allPieces) & (blackBishops | blackQueens)
-                || MagicRookMoves(sq, allPieces) & (blackRooks | blackQueens);
+        return KnightMoves[sq] & black_knights
+                || WPawnCaptures[sq] & black_pawns
+                || KingMoves[sq] & black_kings
+                || MagicBishopMoves(sq, all_pieces) & (black_bishops | black_queens)
+                || MagicRookMoves(sq, all_pieces) & (black_rooks | black_queens);
     }
 
     /**
@@ -420,11 +422,11 @@ struct TBoard {
      * @return true: attacked, false: not attacked
      */
     inline bool attackedByWhite(int sq) {
-        return KnightMoves[sq] & whiteKnights
-                || BPawnCaptures[sq] & whitePawns
-                || KingMoves[sq] & whiteKings
-                || MagicBishopMoves(sq, allPieces) & (whiteBishops | whiteQueens)
-                || MagicRookMoves(sq, allPieces) & (whiteRooks | whiteQueens);
+        return KnightMoves[sq] & white_knights
+                || BPawnCaptures[sq] & white_pawns
+                || KingMoves[sq] & white_kings
+                || MagicBishopMoves(sq, all_pieces) & (white_bishops | white_queens)
+                || MagicRookMoves(sq, all_pieces) & (white_rooks | white_queens);
     }
 
     /**
@@ -433,10 +435,10 @@ struct TBoard {
      * @return bitboard populated with pieces attacking the square
      */
     inline U64 pieceAttacksTo(int sq) {
-        return (KnightMoves[sq] & (whiteKnights | blackKnights))
-                | (KingMoves[sq] & (whiteKings | blackKings))
-                | (MagicBishopMoves(sq, allPieces) & (whiteBishops | whiteQueens | blackBishops | blackQueens))
-                | (MagicRookMoves(sq, allPieces) & (whiteRooks | whiteQueens | blackRooks | blackQueens));
+        return (KnightMoves[sq] & (white_knights | black_knights))
+                | (KingMoves[sq] & (white_kings | black_kings))
+                | (MagicBishopMoves(sq, all_pieces) & (white_bishops | white_queens | black_bishops | black_queens))
+                | (MagicRookMoves(sq, all_pieces) & (white_rooks | white_queens | black_rooks | black_queens));
     }
 
     /**
@@ -445,7 +447,7 @@ struct TBoard {
      * @return true: flag is set, false: otherwise 
      */
     inline bool castleRight(int flag) {
-        return stack->castlingFlags & flag;
+        return stack->castling_flags & flag;
     }
 
     /**
@@ -453,7 +455,7 @@ struct TBoard {
      * @return game ply number
      */
     inline int getGamePly() {
-        return rootPly + currentPly;
+        return root_ply + current_ply;
     }
 
     /**
@@ -470,7 +472,7 @@ struct TBoard {
      * @return true: white has the bishop pair, false otherwise
      */
     bool whiteBishopPair() {
-        return (whiteBishops & BLACK_SQUARES) && (whiteBishops & WHITE_SQUARES);
+        return (white_bishops & BLACK_SQUARES) && (white_bishops & WHITE_SQUARES);
     }
 
     /**
@@ -478,7 +480,7 @@ struct TBoard {
      * @return true: black has the bishop pair, false otherwise
      */
     bool blackBishopPair() {
-        return (blackBishops & BLACK_SQUARES) && (blackBishops & WHITE_SQUARES);
+        return (black_bishops & BLACK_SQUARES) && (black_bishops & WHITE_SQUARES);
     }
 
     bool isDraw(); //verify if the position on the board is a trivial draw
@@ -488,8 +490,8 @@ struct TBoard {
      * @return true: legal, false: not legal
      */
     inline bool legal() {
-        return stack->WTM ? (attackedByWhite(*blackKingPos) == false) :
-                (attackedByBlack(*whiteKingPos) == false);
+        return stack->wtm ? (attackedByWhite(*black_king_sq) == false) :
+                (attackedByBlack(*white_king_sq) == false);
     }
 
     bool legal(TMove * move); //test if a move is legal in the actual position
@@ -501,8 +503,8 @@ struct TBoard {
      * @return true: in check, false: not in check
      */
     inline bool inCheck() {
-        return stack->WTM ? attackedByBlack(*whiteKingPos) :
-                attackedByWhite(*blackKingPos);
+        return stack->wtm ? attackedByBlack(*white_king_sq) :
+                attackedByWhite(*black_king_sq);
     }
 
     int givesCheck(TMove * move); //test if a move checks the opponent's king
@@ -522,7 +524,7 @@ struct TBoard {
      * @return populated bitboard of promoting pawns
      */
     inline U64 promotingWhitePawns() {
-        return whitePawns & RANK_7;
+        return white_pawns & RANK_7;
     }
 
     /**
@@ -530,7 +532,7 @@ struct TBoard {
      * @return populated bitboard of promoting pawns
      */
     inline U64 promotingBlackPawns() {
-        return blackPawns & RANK_2;
+        return black_pawns & RANK_2;
     }
 
     /**
@@ -538,7 +540,7 @@ struct TBoard {
      * @return populated bitboard of promoting pawns
      */
     inline bool promotingPawn() {
-        return stack->WTM ? promotingWhitePawns() : promotingBlackPawns();
+        return stack->wtm ? promotingWhitePawns() : promotingBlackPawns();
     }
 
     /**
@@ -556,20 +558,20 @@ struct TBoard {
      * @return bitboard populated with all pieces attacking the square
      */
     inline U64 attacksTo(int sq) {
-        return (KnightMoves[sq] & (whiteKnights | blackKnights))
-                | (BPawnCaptures[sq] & whitePawns)
-                | (WPawnCaptures[sq] & blackPawns)
-                | (KingMoves[sq] & (whiteKings | blackKings))
-                | (MagicBishopMoves(sq, allPieces) & (whiteBishops | whiteQueens | blackBishops | blackQueens))
-                | (MagicRookMoves(sq, allPieces) & (whiteRooks | whiteQueens | blackRooks | blackQueens));
+        return (KnightMoves[sq] & (white_knights | black_knights))
+                | (BPawnCaptures[sq] & white_pawns)
+                | (WPawnCaptures[sq] & black_pawns)
+                | (KingMoves[sq] & (white_kings | black_kings))
+                | (MagicBishopMoves(sq, all_pieces) & (white_bishops | white_queens | black_bishops | black_queens))
+                | (MagicRookMoves(sq, all_pieces) & (white_rooks | white_queens | black_rooks | black_queens));
     }
 
     inline U64 whitePawnAttacks() {
-        return (UPLEFT1(whitePawns) | UPRIGHT1(whitePawns));
+        return (UPLEFT1(white_pawns) | UPRIGHT1(white_pawns));
     }
 
     inline U64 blackPawnAttacks() {
-        return (DOWNLEFT1(blackPawns) | DOWNRIGHT1(blackPawns));
+        return (DOWNLEFT1(black_pawns) | DOWNRIGHT1(black_pawns));
     }
 
     inline U64 pawnAttacks(bool white) {
@@ -581,11 +583,11 @@ struct TBoard {
     }
 
     inline bool attackedByWhitePawn(int sq) {
-        return BPawnCaptures[sq] & whitePawns;
+        return BPawnCaptures[sq] & white_pawns;
     }
 
     inline bool attackedByBlackPawn(int sq) {
-        return WPawnCaptures[sq] & blackPawns;
+        return WPawnCaptures[sq] & black_pawns;
     }
 
     inline bool attackedByPawn(int sq, bool white) {
@@ -593,7 +595,7 @@ struct TBoard {
     }
 
     inline bool attackedByOpponentPawn(int sq) {
-        return stack->WTM ? attackedByBlackPawn(sq) : attackedByWhitePawn(sq);
+        return stack->wtm ? attackedByBlackPawn(sq) : attackedByWhitePawn(sq);
     }
 
     U64 getSmallestAttacker(U64 attacks, bool wtm, int &piece);
