@@ -300,7 +300,7 @@ int evaluate(TSearch * sd) {
     }
 
     sd->stack->equal_pawns = sd->pos->currentPly > 0
-            && sd->pos->boardFlags->pawnHash == (sd->pos->boardFlags - 1)->pawnHash
+            && sd->pos->stack->pawnHash == (sd->pos->stack - 1)->pawnHash
             && (sd->stack - 1)->eval_result != SCORE_INVALID;
 
     int result = evaluateMaterial(sd); //sets stack->phase (required)
@@ -327,7 +327,7 @@ int evaluate(TSearch * sd) {
     }
 
     result &= GRAIN;
-    result = sd->pos->boardFlags->WTM ? result : -result;
+    result = sd->pos->stack->WTM ? result : -result;
     sd->stack->eval_result = result;
 
     assert(result > -VKING && result < VKING);
@@ -347,7 +347,7 @@ inline short evaluateMaterial(TSearch * sd) {
      *    the material hash
      */
     if (sd->pos->currentPly > 0 &&
-            (sd->pos->boardFlags - 1)->materialHash == sd->pos->boardFlags->materialHash
+            (sd->pos->stack - 1)->materialHash == sd->pos->stack->materialHash
             && (sd->stack - 1)->eval_result != SCORE_INVALID) {
         sd->stack->material_score = (sd->stack - 1)->material_score;
         sd->stack->phase = (sd->stack - 1)->phase;
@@ -945,12 +945,12 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
 
     //1. reward having the right to castle
-    if (pos->boardFlags->castlingFlags & CASTLE_K
+    if (pos->stack->castlingFlags & CASTLE_K
             && ((pos->Matrix[h2] == WPAWN && pos->Matrix[g2] == WPAWN)
             || (pos->Matrix[f2] == WPAWN && pos->Matrix[h2] == WPAWN && pos->Matrix[g3] == WPAWN)
             || (pos->Matrix[h3] == WPAWN && pos->Matrix[g2] == WPAWN && pos->Matrix[f2] == WPAWN))) {
         sd->stack->king_attack[BPAWN] += SHELTER_CASTLING_KINGSIDE;
-    } else if (pos->boardFlags->castlingFlags & CASTLE_Q
+    } else if (pos->stack->castlingFlags & CASTLE_Q
             && ((pos->Matrix[a2] == WPAWN && pos->Matrix[b2] == WPAWN && pos->Matrix[c2] == WPAWN)
             || (pos->Matrix[a2] == WPAWN && pos->Matrix[b3] == WPAWN && pos->Matrix[c2] == WPAWN))) {
         sd->stack->king_attack[BPAWN] += SHELTER_CASTLING_QUEENSIDE;
@@ -999,12 +999,12 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     std::cout << "attack on BK (pos): " << (int) sd->stack->king_attack_checks[WPAWN] << std::endl;
 #endif
     //1. reward having the right to castle safely
-    if (pos->boardFlags->castlingFlags & CASTLE_k
+    if (pos->stack->castlingFlags & CASTLE_k
             && ((pos->Matrix[h7] == BPAWN && pos->Matrix[g7] == BPAWN)
             || (pos->Matrix[f7] == BPAWN && pos->Matrix[h7] == BPAWN && pos->Matrix[g6] == BPAWN)
             || (pos->Matrix[h6] == BPAWN && pos->Matrix[g7] == BPAWN && pos->Matrix[f7] == BPAWN))) {
         sd->stack->king_attack[WPAWN] += SHELTER_CASTLING_KINGSIDE;
-    } else if (pos->boardFlags->castlingFlags & CASTLE_q
+    } else if (pos->stack->castlingFlags & CASTLE_q
             && ((pos->Matrix[a7] == BPAWN && pos->Matrix[b7] == BPAWN && pos->Matrix[c7] == BPAWN)
             || (pos->Matrix[a7] == BPAWN && pos->Matrix[b6] == BPAWN && pos->Matrix[c7] == BPAWN))) {
         sd->stack->king_attack[WPAWN] += SHELTER_CASTLING_QUEENSIDE;
@@ -1480,14 +1480,14 @@ int evaluatePasserVsK(TSearch * sd, bool us, int sq) {
         if (sq <= h2) {
             sq += 8;
         }
-        if (sd->pos->boardFlags->WTM && sq <= h6) {
+        if (sd->pos->stack->WTM && sq <= h6) {
             sq += 8;
         }
     } else if (us == BLACK) {
         if (sq >= a7) {
             sq -= 8;
         }
-        if (sd->pos->boardFlags->WTM == false && sq >= a3) {
+        if (sd->pos->stack->WTM == false && sq >= a3) {
             sq -= 8;
         }
     }

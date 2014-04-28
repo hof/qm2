@@ -254,7 +254,7 @@ void TBook::readPolyglotMove(TBoard* pos, TMove * move, int polyglotMove) {
     move->capture = pos->Matrix[tsq];
     move->castle = 0;
     move->en_passant = false;
-    if (pos->boardFlags->epSquare && tsq == pos->boardFlags->epSquare) {
+    if (pos->stack->epsq && tsq == pos->stack->epsq) {
         if (piece == WPAWN) {
             move->capture = BPAWN;
             move->en_passant = true;
@@ -267,7 +267,7 @@ void TBook::readPolyglotMove(TBoard* pos, TMove * move, int polyglotMove) {
     //"normal" moves
     int promotion = (polyglotMove >> 12) & 7; //none 0, knight 1, bishop 2, rook 3, queen 4
     if (promotion) {
-        promotion += pos->boardFlags->WTM ? 1 : 7; //WKNIGHT == 2; BKNIGHT == 8;
+        promotion += pos->stack->WTM ? 1 : 7; //WKNIGHT == 2; BKNIGHT == 8;
         move->promotion = promotion;
     } else if (piece == BKING && ssq == e8) {
         if (tsq == h8) {
@@ -427,13 +427,13 @@ U64 TBook::polyglot_key(TBoard* pos) {
         result ^= Random64[CASTLE_OFFSET + 3];
     }
 
-    if (pos->boardFlags->epSquare >= a3 //polyglot only considers en passant if ep captures are possible
-            && ((pos->boardFlags->WTM && (BPawnCaptures[pos->boardFlags->epSquare] & pos->whitePawns))
-            || (pos->boardFlags->WTM == false && (WPawnCaptures[pos->boardFlags->epSquare] & pos->blackPawns)))) {
-        result ^= Random64[EP_OFFSET + FILE(pos->boardFlags->epSquare)];
+    if (pos->stack->epsq >= a3 //polyglot only considers en passant if ep captures are possible
+            && ((pos->stack->WTM && (BPawnCaptures[pos->stack->epsq] & pos->whitePawns))
+            || (pos->stack->WTM == false && (WPawnCaptures[pos->stack->epsq] & pos->blackPawns)))) {
+        result ^= Random64[EP_OFFSET + FILE(pos->stack->epsq)];
 
     }
-    result ^= pos->boardFlags->WTM ? Random64[STM_OFFSET] : 0;
+    result ^= pos->stack->WTM ? Random64[STM_OFFSET] : 0;
     return result;
 }
 

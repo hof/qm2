@@ -58,21 +58,21 @@ void TSearch::initLMR() {
 int TSearch::initRootMoves() {
     int result = 0;
     root.MoveCount = 0;
-    root.FiftyCount = pos->boardFlags->fiftyCount;
+    root.FiftyCount = pos->stack->fiftyCount;
     setNodeType(-SCORE_INFINITE, SCORE_INFINITE);
-    hashTable->repStore(this, pos->boardFlags->hashCode, pos->boardFlags->fiftyCount);
+    hashTable->repStore(this, pos->stack->hashCode, pos->stack->fiftyCount);
     hashTable->ttLookup(this, 0, -SCORE_INFINITE, SCORE_INFINITE);
     for (TMove * move = movePicker->pickFirstMove(this, 0, -SCORE_INFINITE, SCORE_INFINITE);
             move; move = movePicker->pickNextMove(this, 0, -SCORE_INFINITE, SCORE_INFINITE)) {
         TRootMove * rMove = &root.Moves[root.MoveCount++];
         rMove->init(move, 1000 - root.MoveCount, pos->givesCheck(move), pos->SEE(move));
         if (rMove->GivesCheck) {
-            rMove->checkerSq = (pos->boardFlags + 1)->checkerSq;
-            rMove->checkers = (pos->boardFlags + 1)->checkers;
+            rMove->checkerSq = (pos->stack + 1)->checkerSq;
+            rMove->checkers = (pos->stack + 1)->checkers;
         }
     }
     root.InCheck = pos->inCheck();
-    stack->hashCode = pos->boardFlags->hashCode;
+    stack->hashCode = pos->stack->hashCode;
     stack->reduce = 0;
     stack->eval_result = SCORE_INVALID;
     result = root.MoveCount;
@@ -141,8 +141,8 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
     TRootMove * rMove = &root.Moves[0];
     forward(&rMove->Move, rMove->GivesCheck);
     if (rMove->GivesCheck) {
-        pos->boardFlags->checkerSq = rMove->checkerSq;
-        pos->boardFlags->checkers = rMove->checkers;
+        pos->stack->checkerSq = rMove->checkerSq;
+        pos->stack->checkers = rMove->checkers;
     }
     int new_depth = depth - ONE_PLY;
     int best = -pvs(-beta, -alpha, new_depth);
@@ -196,8 +196,8 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
         nodesBeforeMove = nodes;
         forward(&rMove->Move, rMove->GivesCheck);
         if (rMove->GivesCheck) {
-            pos->boardFlags->checkerSq = rMove->checkerSq;
-            pos->boardFlags->checkers = rMove->checkers;
+            pos->stack->checkerSq = rMove->checkerSq;
+            pos->stack->checkers = rMove->checkers;
         }
         int score = -pvs(-alpha - 1, -alpha, new_depth);
         if (score > alpha && stopSearch == false) {
@@ -317,15 +317,15 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * 3. Return obvious draws 
      */
     stack->phase = (stack - 1)->phase;
-    if (pos->boardFlags->fiftyCount > 3) {
-        if (pos->boardFlags->fiftyCount >= 100) {
+    if (pos->stack->fiftyCount > 3) {
+        if (pos->stack->fiftyCount >= 100) {
             return drawScore(); //draw by 50 reversible moves
         }
-        int stopPly = pos->currentPly - pos->boardFlags->fiftyCount;
+        int stopPly = pos->currentPly - pos->stack->fiftyCount;
         for (int ply = pos->currentPly - 4; ply >= stopPly; ply -= 2) { //draw by repetition
-            if (ply >= 0 && getStack(ply)->hashCode == pos->boardFlags->hashCode) {
+            if (ply >= 0 && getStack(ply)->hashCode == pos->stack->hashCode) {
                 return drawScore();
-            } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->boardFlags->hashCode) {
+            } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->stack->hashCode) {
                 return drawScore();
 
             }
@@ -357,7 +357,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && new_depth <= LOW_DEPTH
             && (eval - FHP_MARGIN[new_depth]) >= beta
             && ABS(beta) < SCORE_MATE - MAX_PLY
-            && pos->hasPieces(pos->boardFlags->WTM)) {
+            && pos->hasPieces(pos->stack->WTM)) {
         return eval - FHP_MARGIN[new_depth];
     }
 
@@ -366,7 +366,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     assert(type == PVNODE || alpha + 1 == beta);
 
     //b) Null move pruning
-    stack->hashCode = pos->boardFlags->hashCode;
+    stack->hashCode = pos->stack->hashCode;
     bool mate_threat = false;
     if (DO_NULL
             && !skipNull
@@ -374,7 +374,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && new_depth > 0
             && eval >= beta
             && ABS(beta) < SCORE_MATE - MAX_PLY
-            && pos->hasPieces(pos->boardFlags->WTM)) {
+            && pos->hasPieces(pos->stack->WTM)) {
         int rdepth = new_depth - (3 * ONE_PLY);
         if (rdepth >= 8 && stack->phase < 14) {
             rdepth -= (rdepth >> 3);
@@ -573,15 +573,15 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
 
     //return obvious draws
     stack->phase = (stack - 1)->phase;
-    if (pos->boardFlags->fiftyCount > 3) { //draw by repetition or fifty quiet moves
-        if (pos->boardFlags->fiftyCount >= 100) {
+    if (pos->stack->fiftyCount > 3) { //draw by repetition or fifty quiet moves
+        if (pos->stack->fiftyCount >= 100) {
             return drawScore();
         }
-        int stopPly = pos->currentPly - pos->boardFlags->fiftyCount;
+        int stopPly = pos->currentPly - pos->stack->fiftyCount;
         for (int ply = pos->currentPly - 4; ply >= stopPly; ply -= 2) {
-            if (ply >= 0 && getStack(ply)->hashCode == pos->boardFlags->hashCode) {
+            if (ply >= 0 && getStack(ply)->hashCode == pos->stack->hashCode) {
                 return drawScore();
-            } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->boardFlags->hashCode) {
+            } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->stack->hashCode) {
                 return drawScore();
             }
         }
@@ -606,13 +606,13 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
 
     int score = evaluate(this); //always do an eval - it's incremental
     if (stack->inCheck) { // in check
-        assert(pos->boardFlags->checkers);
+        assert(pos->stack->checkers);
         int score = -SCORE_INFINITE;
         TMove * move = movePicker->pickFirstQuiescenceMove(this, 0, alpha, beta);
         if (!move) { //checkmate
             return -SCORE_MATE + pos->currentPly;
         }
-        stack->hashCode = pos->boardFlags->hashCode;
+        stack->hashCode = pos->stack->hashCode;
         do {
             bool givesCheck = pos->givesCheck(move);
             forward(move, givesCheck);
@@ -639,7 +639,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
         return score;
     }
     alpha = MAX(score, alpha);
-    stack->hashCode = pos->boardFlags->hashCode;
+    stack->hashCode = pos->stack->hashCode;
     int base = score;
     do { //loop through quiescence moves
         int givesCheck = pos->givesCheck(move);
@@ -705,7 +705,7 @@ void TSearch::debug_print_search(int alpha, int beta) {
         }
     }
     std::cout << "\nFEN: " << pos->asFen() << std::endl;
-    std::cout << "Hash: " << pos->boardFlags->hashCode << std::endl;
+    std::cout << "Hash: " << pos->stack->hashCode << std::endl;
     std::cout << "Nodes: " << nodes << std::endl;
     std::cout << "Skip nullmove: " << this->skipNull << std::endl;
 

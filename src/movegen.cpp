@@ -14,15 +14,15 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
     list->current = current;
     U64 moves;
     U64 occ = board->allPieces;
-    bool us = board->boardFlags->WTM;
+    bool us = board->stack->WTM;
     bool them = !us;
     int pc = PAWN[us];
     targets &= board->all(them);
 
     //pawn captures (including en-passant and promotion captures):
     U64 pawn_caps = targets;
-    if (board->boardFlags->epSquare) {
-        pawn_caps |= BIT(board->boardFlags->epSquare);
+    if (board->stack->epsq) {
+        pawn_caps |= BIT(board->stack->epsq);
     }
     pawn_caps &= board->pawnAttacks(us);
     while (pawn_caps) {
@@ -30,7 +30,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
         moves = board->pawnAttacks(tsq, them) & *board->pawns[us];
         while (moves) {
             int ssq = POP(moves);
-            if (tsq == board->boardFlags->epSquare && tsq > 0) {
+            if (tsq == board->stack->epsq && tsq > 0) {
                 (current++)->setCapture(pc, ssq, tsq, PAWN[them]);
             } else if ((BIT(tsq) & RANK[us][8]) == 0) {
                 (current++)->setCapture(pc, ssq, tsq, board->Matrix[tsq]);
@@ -102,7 +102,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
 void genPromotions(TBoard * board, TMoveList * list) {
     TMove * current = list->last;
     list->current = current;
-    bool us = board->boardFlags->WTM;
+    bool us = board->stack->WTM;
     U64 pieces = *board->pawns[us] & RANK[us][7];
     if (pieces) {
         int pawn_up = PAWNDIRECTION[us];
@@ -131,7 +131,7 @@ void genCastles(TBoard * board, TMoveList * list) {
     TMove * current = list->last;
     list->current = current;
     if (board->castleRight(CASTLE_ANY)) {
-        if (board->boardFlags->WTM) {
+        if (board->stack->WTM) {
             if (board->castleRight(CASTLE_K)
                     && board->Matrix[f1] == EMPTY
                     && board->Matrix[g1] == EMPTY) {
@@ -174,7 +174,7 @@ void genQuietMoves(TBoard * board, TMoveList * list) {
     U64 moves;
     TMove * current = list->last;
     list->current = current;
-    bool us = board->boardFlags->WTM;
+    bool us = board->stack->WTM;
     int pc = PAWN[us];
     int pawn_up = PAWNDIRECTION[us];
 

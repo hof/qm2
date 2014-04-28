@@ -210,12 +210,12 @@ bool TInputHandler::handlePosition(TInputParser& parser) {
         pos.fromFen(_fen.c_str());
         if (token == "moves") {
             THashTable * hash = hashTable();
-            hash->repTable[pos.boardFlags->fiftyCount] = pos.boardFlags->hashCode;
+            hash->repTable[pos.stack->fiftyCount] = pos.stack->hashCode;
             while (parser >> token) {
                 TMove move;
                 move.fromString(&pos, token.c_str());
                 pos.forward(&move);
-                hash->repTable[pos.boardFlags->fiftyCount] = pos.boardFlags->hashCode;
+                hash->repTable[pos.stack->fiftyCount] = pos.stack->hashCode;
                 if (pos.currentPly > MAX_PLY - 2) {
                     pos.fromFen(pos.asFen().c_str()); //reset to prevent overflow
                 }

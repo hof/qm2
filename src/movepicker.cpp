@@ -140,7 +140,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
             case CAPTURES:
                 mask = pos->allPieces;
                 if (searchData->stack->inCheck) {
-                    mask &= pos->boardFlags->checkers;
+                    mask &= pos->stack->checkers;
                 }
                 genCaptures(pos, moveList, mask);
                 if (moveList->current != moveList->last) {
@@ -259,7 +259,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
             case Q_CAPTURES:
                 mask = pos->allPieces;
                 if (searchData->stack->inCheck) {
-                    mask &= pos->boardFlags->checkers;
+                    mask &= pos->stack->checkers;
                 }
                 genCaptures(pos, moveList, mask);
                 for (TMove * move = moveList->current; move != moveList->last; move++) {

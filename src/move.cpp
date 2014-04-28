@@ -33,9 +33,9 @@ void TMove::fromString(TBoard * pos, const char * moveStr) { //default: xboard n
     capture = pos->Matrix[tsq];
     castle = 0;
     en_passant = false;
-    if (tsq == pos->boardFlags->epSquare 
+    if (tsq == pos->stack->epsq 
             && (piece == WPAWN || piece == BPAWN)
-            && pos->boardFlags->epSquare) {
+            && pos->stack->epsq) {
         en_passant = true;
         capture = piece == WPAWN ? BPAWN : WPAWN;
     } else if (piece == WKING && ssq == e1) {
@@ -67,7 +67,7 @@ void TMove::fromString(TBoard * pos, const char * moveStr) { //default: xboard n
                 promotion = WQUEEN;
                 break;
         }
-        if (pos->boardFlags->WTM == false) {
+        if (pos->stack->WTM == false) {
             promotion += WKING;
         }
     }

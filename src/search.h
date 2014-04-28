@@ -332,8 +332,8 @@ public:
         pos->currentPly = 0;
         stack = rootStack;
         stack->eval_result = SCORE_INVALID;
-        pos->_boardFlags[0].copy(this->pos->boardFlags);
-        pos->boardFlags = &this->pos->_boardFlags[0];
+        pos->_stack[0].copy(this->pos->stack);
+        pos->stack = &this->pos->_stack[0];
         nodes = 0;
         pruned_nodes = 0;
         stack->pvCount = 0;
@@ -355,7 +355,7 @@ public:
     
     inline int drawScore(int adjust=0) {
         int result = drawContempt.get(stack->phase)+adjust;
-        if (pos->boardFlags->WTM == false) {
+        if (pos->stack->WTM == false) {
             result = -result;
         }
         return result & GRAIN;

@@ -1,6 +1,22 @@
 /**
- * board.cpp
+ * Maxima, a chess playing program. 
+ * Copyright (C) 1996-2014 Erik van het Hof and Hermen Reitsma 
  * 
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 3
+ * of the License, or (at your option) any later version.
+ *  
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *  
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
+ * 
+ * 
+ * board.cpp
  * Board structure implementation
  */
 
@@ -12,9 +28,12 @@
 #include "hashcodes.h"
 #include "evaluate.h"
 
+/**
+ * Empty and initialize the board structure
+ */
 void TBoard::clear() {
-    _boardFlags[0].clear();
-    boardFlags = &_boardFlags[0];
+    _stack[0].clear();
+    stack = &_stack[0];
     currentPly = 0;
     rootPly = 0;
     whiteKingPos = &pieces[WKING].squares[0];
@@ -67,6 +86,10 @@ void TBoard::clear() {
     memset(pieces, 0, sizeof (pieces));
 }
 
+/**
+ * Do the move in the current position and update the board structure 
+ * @param move move object, the move to make
+ */
 void TBoard::forward(TMove * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
@@ -81,11 +104,11 @@ void TBoard::forward(TMove * move) {
     assert(piece == Matrix[ssq]);
     assert(currentPly < MAX_PLY);
 
-    (boardFlags + 1)->copy(boardFlags);
-    boardFlags++;
+    (stack + 1)->copy(stack);
+    stack++;
     currentPly++;
 
-    HASH_EP(boardFlags->hashCode, boardFlags->epSquare); //remove (a possible) ep square from hashcode
+    HASH_EP(stack->hashCode, stack->epsq); //remove (a possible) ep square from hashcode
 
     if (capture || promotion) {
         if (capture) {
@@ -93,7 +116,7 @@ void TBoard::forward(TMove * move) {
             if (move->en_passant) {
                 assert(move->piece == WPAWN || move->piece == BPAWN);
                 assert(Matrix[tsq] == EMPTY);
-                assert(boardFlags->epSquare == tsq);
+                assert(stack->ep_square == tsq);
                 assert(tsq >= a6 ? Matrix[tsq - 8] == BPAWN : Matrix[tsq + 8] == WPAWN);
                 removePieceFull(capture, tsq >= a6 ? tsq - 8 : tsq + 8);
             } else {
@@ -107,29 +130,29 @@ void TBoard::forward(TMove * move) {
         } else {
             movePieceFull(piece, ssq, tsq);
         }
-        boardFlags->epSquare = EMPTY;
-        boardFlags->fiftyCount = 0;
+        stack->epsq = EMPTY;
+        stack->fiftyCount = 0;
     } else { //not a capture or promotion
         assert(Matrix[tsq] == EMPTY);
         movePieceFull(piece, ssq, tsq);
-        boardFlags->fiftyCount++;
-        boardFlags->epSquare = EMPTY;
+        stack->fiftyCount++;
+        stack->epsq = EMPTY;
         if (piece == WPAWN) {
             if (ssq <= h2 && tsq == ssq + 16) {
-                boardFlags->epSquare = tsq - 8;
-                HASH_EP(boardFlags->hashCode, boardFlags->epSquare);
+                stack->epsq = tsq - 8;
+                HASH_EP(stack->hashCode, stack->epsq);
             }
-            boardFlags->fiftyCount = 0;
+            stack->fiftyCount = 0;
         } else if (piece == BPAWN) {
             if (ssq <= h7 && tsq == ssq - 16) {
-                boardFlags->epSquare = tsq + 8;
-                HASH_EP(boardFlags->hashCode, boardFlags->epSquare);
+                stack->epsq = tsq + 8;
+                HASH_EP(stack->hashCode, stack->epsq);
             }
-            boardFlags->fiftyCount = 0;
+            stack->fiftyCount = 0;
         }
     }
 
-    if (boardFlags->castlingFlags) {
+    if (stack->castlingFlags) {
         /*
          * For castling moves, move the rook as well 
          */
@@ -155,36 +178,40 @@ void TBoard::forward(TMove * move) {
          * Removal of castling rights
          */
         if (castleRight(CASTLE_K) && (ssq == h1 || ssq == e1 || tsq == h1)) {
-            boardFlags->castlingFlags ^= CASTLE_K;
-            HASH_CASTLE_K(boardFlags->hashCode);
-            HASH_CASTLE_K(boardFlags->pawnHash);
+            stack->castlingFlags ^= CASTLE_K;
+            HASH_CASTLE_K(stack->hashCode);
+            HASH_CASTLE_K(stack->pawnHash);
         }
         if (castleRight(CASTLE_Q) && (ssq == a1 || ssq == e1 || tsq == a1)) {
-            boardFlags->castlingFlags ^= CASTLE_Q;
-            HASH_CASTLE_Q(boardFlags->hashCode);
-            HASH_CASTLE_Q(boardFlags->pawnHash);
+            stack->castlingFlags ^= CASTLE_Q;
+            HASH_CASTLE_Q(stack->hashCode);
+            HASH_CASTLE_Q(stack->pawnHash);
         }
         if (castleRight(CASTLE_k) && (ssq == h8 || ssq == e8 || tsq == h8)) {
-            boardFlags->castlingFlags ^= CASTLE_k;
-            HASH_CASTLE_k(boardFlags->hashCode);
-            HASH_CASTLE_k(boardFlags->pawnHash);
+            stack->castlingFlags ^= CASTLE_k;
+            HASH_CASTLE_k(stack->hashCode);
+            HASH_CASTLE_k(stack->pawnHash);
         }
         if (castleRight(CASTLE_q) && (ssq == a8 || ssq == e8 || tsq == a8)) {
-            boardFlags->castlingFlags ^= CASTLE_q;
-            HASH_CASTLE_q(boardFlags->hashCode);
-            HASH_CASTLE_q(boardFlags->pawnHash);
+            stack->castlingFlags ^= CASTLE_q;
+            HASH_CASTLE_q(stack->hashCode);
+            HASH_CASTLE_q(stack->pawnHash);
         }
 
     }
 
-    /* update flags and hashcode for STM */
-    boardFlags->WTM = !boardFlags->WTM;
-    HASH_STM(boardFlags->hashCode);
+    // update flags and hashcode for the side to move
+    stack->WTM = !stack->WTM;
+    HASH_STM(stack->hashCode);
 
     assert(Matrix[*whiteKingPos] == WKING && Matrix[*blackKingPos] == BKING);
     assert(piece == Matrix[tsq] || (promotion && promotion == Matrix[tsq]));
 }
 
+/**
+ * Undo the move, updating the board structure
+ * @param move the move to unmake
+ */
 void TBoard::backward(TMove * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
@@ -230,33 +257,39 @@ void TBoard::backward(TMove * move) {
         }
     }
     currentPly--;
-    boardFlags--;
-}
-
-void TBoard::forward() { //do a null move
-    (boardFlags + 1)->copy(boardFlags);
-    boardFlags++;
-    currentPly++;
-    HASH_EP(boardFlags->hashCode, boardFlags->epSquare); //remove epsquare if it is set
-    boardFlags->epSquare = EMPTY;
-    boardFlags->WTM = !boardFlags->WTM;
-    HASH_STM(boardFlags->hashCode);
-}
-
-void TBoard::backward() { //undo a null move
-    currentPly--;
-    boardFlags--;
+    stack--;
 }
 
 /**
- * see if the move is valid in the current board (legality is not checked here)
- * valid means: the move would be generated by the move generator
+ * Do a nullmove: update board structure, e.g. switch side to move
+ */
+void TBoard::forward() { //do a null move
+    (stack + 1)->copy(stack);
+    stack++;
+    currentPly++;
+    HASH_EP(stack->hashCode, stack->epsq); //remove epsquare if it is set
+    stack->epsq = EMPTY;
+    stack->WTM = !stack->WTM;
+    HASH_STM(stack->hashCode);
+}
+
+/**
+ * Undo a nullmove: restore board structure
+ */
+void TBoard::backward() { //undo a null move
+    currentPly--;
+    stack--;
+}
+
+/**
+ * See if the move is valid in the current board (legality is not checked here)
+ * "valid" means: the move would be generated by the move generator
  * @param move the move to test for validity, not yet performed in the position
  * @return true if the move is valid in the current position, false otherwise 
  */
 bool TBoard::valid(TMove * move) {
     int piece = move->piece;
-    if (boardFlags->WTM != piece <= WKING) {
+    if (stack->WTM != piece <= WKING) {
         return false;
     }
     int ssq = move->ssq;
@@ -265,8 +298,8 @@ bool TBoard::valid(TMove * move) {
     }
     int tsq = move->tsq;
     if (move->en_passant) {
-        return tsq == boardFlags->epSquare && Matrix[tsq] == EMPTY && ((boardFlags->WTM && piece == WPAWN && Matrix[tsq - 8] == BPAWN)
-                || (!boardFlags->WTM && piece == BPAWN && Matrix[tsq + 8] == WPAWN));
+        return tsq == stack->epsq && Matrix[tsq] == EMPTY && ((stack->WTM && piece == WPAWN && Matrix[tsq - 8] == BPAWN)
+                || (!stack->WTM && piece == BPAWN && Matrix[tsq + 8] == WPAWN));
     } else if (move->castle) {
         int castle = move->castle;
         if (!castleRight(castle)) {
@@ -336,7 +369,7 @@ bool TBoard::valid(TMove * move) {
 }
 
 /**
- * see if the move is legal in the current board (not leaving our king in check)
+ * Verify if the move is legal in the current board, e.g. not leaving our king in check
  * @param move the move to test for legality, not yet performed in the position
  * @return true if the move is legal in the current position, false otherwise 
  * NOTE: this version does not consider if we are in check or not which leaves some
@@ -348,8 +381,8 @@ bool TBoard::legal(TMove * move) {
     assert(piece >= WPAWN && piece <= BKING && tsq >= a1 && tsq <= h8);
     U64 tsqBoard = BIT(tsq);
     U64 occupied = allPieces & ~tsqBoard;
-    if (boardFlags->WTM) {
-        move->en_passant = boardFlags->epSquare && tsq == boardFlags->epSquare && piece == WPAWN;
+    if (stack->WTM) {
+        move->en_passant = stack->epsq && tsq == stack->epsq && piece == WPAWN;
         if (move->en_passant) {
             occupied ^= tsqBoard >> 8;
         }
@@ -394,7 +427,7 @@ bool TBoard::legal(TMove * move) {
                     && !(MagicRookMoves(kpos, occupied) & oppHVSliders);
         }
     } else {
-        move->en_passant = boardFlags->epSquare && tsq == boardFlags->epSquare && piece == BPAWN;
+        move->en_passant = stack->epsq && tsq == stack->epsq && piece == BPAWN;
         if (move->en_passant) {
             occupied ^= tsqBoard << 8;
         }
@@ -444,6 +477,11 @@ bool TBoard::legal(TMove * move) {
     return true;
 }
 
+/**
+ * Verify if a move checks the opponent's king
+ * @param move the move to verify
+ * @return 0: no check, 1: simple, direct check, 2: exposed check 
+ */
 int TBoard::givesCheck(TMove * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
@@ -458,9 +496,7 @@ int TBoard::givesCheck(TMove * move) {
         return 0;
     }
 
-    /*
-     * Direct Check?
-     */
+    //is it a direct check?
     if ((checkMask & tsqBB) || move->castle) {
         switch (piece) {
             case EMPTY:
@@ -527,13 +563,12 @@ int TBoard::givesCheck(TMove * move) {
         }
     }
     if (checkers) {
-        (boardFlags + 1)->checkers = checkers;
-        (boardFlags + 1)->checkerSq = tsq;
+        (stack + 1)->checkers = checkers;
+        (stack + 1)->checkerSq = tsq;
         return 1;
     }
-    /*
-     * Exposed check?
-     */
+
+    //is it an exposed check?
     if ((checkMask & ssqBB) || move->en_passant) {
         U64 sliders = piece <= WKING ?
                 whiteBishops | whiteQueens | whiteRooks
@@ -552,23 +587,22 @@ int TBoard::givesCheck(TMove * move) {
             U64 slidersDiag = sliders & ~(whiteRooks | blackRooks);
             checkers = diag & slidersDiag;
             if (checkers) {
-                (boardFlags + 1)->checkers = checkers;
-                (boardFlags + 1)->checkerSq = BSF(checkers);
+                (stack + 1)->checkers = checkers;
+                (stack + 1)->checkerSq = BSF(checkers);
                 return 2;
             }
             U64 horVer = MagicRookMoves(kpos, occ);
             sliders &= ~(whiteBishops | blackBishops);
             checkers = horVer & sliders;
             if (checkers) {
-                (boardFlags + 1)->checkers = checkers;
-                (boardFlags + 1)->checkerSq = BSF(checkers);
+                (stack + 1)->checkers = checkers;
+                (stack + 1)->checkerSq = BSF(checkers);
                 return 2;
             }
         }
     }
-    /*
-     * Check by promoting?
-     */
+
+    //is it a check by promotion?
     if (move->promotion && (checkMask & tsqBB)) {
         piece = move->promotion;
         if (piece == WKNIGHT) {
@@ -613,16 +647,22 @@ int TBoard::givesCheck(TMove * move) {
         }
     }
     if (checkers) {
-        (boardFlags + 1)->checkers = checkers;
-        (boardFlags + 1)->checkerSq = tsq;
+        (stack + 1)->checkers = checkers;
+        (stack + 1)->checkerSq = tsq;
         return 1;
     }
     return 0;
 }
 
+/**
+ * Get the smallest attacking piece. This function is used in the SEE routine
+ * @param attacks bitboard with attack information
+ * @param wtm side to move, white(1) or black(0)
+ * @param piece this will be set to the piece type 
+ * @return bitboard with the location of the smallest attacker
+ */
 U64 TBoard::getSmallestAttacker(U64 attacks, bool wtm, int& piece) {
-    static const int FIRSTPIECE[2] = {BPAWN, WPAWN};
-    int firstPiece = FIRSTPIECE[wtm];
+    int firstPiece = PAWN[wtm];
     int lastPiece = firstPiece + (WKING - WPAWN);
     for (piece = firstPiece; piece <= lastPiece; piece++) {
         U64 subset = attacks & *boards[piece];
@@ -633,6 +673,11 @@ U64 TBoard::getSmallestAttacker(U64 attacks, bool wtm, int& piece) {
     return 0;
 }
 
+/**
+ * SEE, Static Exchange Evaluator. Verify if a move or capture wins or looses material
+ * @param move the move to verify
+ * @return expected gain or loss by playing this move as a number in centipawns (e.g +300 when fully winning a knight)
+ */
 int TBoard::SEE(TMove * move) {
     int capturedPiece = move->capture;
     int movingPiece = move->piece;
@@ -703,17 +748,20 @@ int TBoard::SEE(TMove * move) {
     return gain[0];
 }
 
+/**
+ * Verify it the position on the board is a trivial, theoretical draw
+ * @return true: it's a draw; false: not a trivial draw
+ */
 bool TBoard::isDraw() {
     if (whitePawns || blackPawns
             || whiteRooks || blackRooks
             || whiteQueens || blackQueens
             || (whiteKnights && whiteBishops) || (blackKnights && blackBishops)
-            || gt_1(whiteBishops) || gt_1(blackBishops)
-            ) {
-        return false; //not a draw.. there is mating material
-}
+            || gt_1(whiteBishops) || gt_1(blackBishops)) {
+        return false; //not a draw.. there is mating material on the board
+    }
     int wN = pieces[WKNIGHT].count;
-    if (wN > 2) { //exotic!
+    if (wN > 2) { //3 knights, exotic!
         return false;
     }
     int bN = pieces[BKNIGHT].count;
@@ -721,40 +769,40 @@ bool TBoard::isDraw() {
         return false;
     }
 
-    //at this point a side can have no pieces, 1 knight, 2 knights or 1 bishop.
+    //at this point a side can have: a) no pieces, b) 1 knight, c) 2 knights or d) 1 bishop.
     int wB = pieces[WBISHOP].count;
     int bB = pieces[BBISHOP].count;
     assert(wN <= 2 && wB <= 1);
     assert(bN <= 2 && bB <= 1);
-    assert (!(wB >= 1 && wN >= 1));
-    assert (!(bB >= 1 && bN >= 1));
-    
+    assert(!(wB >= 1 && wN >= 1));
+    assert(!(bB >= 1 && bN >= 1));
+
     int wminors = wB + wN;
     int bminors = bB + bN;
     if ((wminors == 0 && bminors == 1)
             || (bminors == 0 && wminors == 1)) {
-        return true;
+        return true; //simple case of 1 minor vs no minors (KBK or KNK)
     }
-    
-    //mates are only possible with a king on the edge
+
+    //for other cases, mates are only possible with a king on the edge
     if ((whiteKings & EDGE) || (blackKings & EDGE)) {
-        return false; 
+        return false;
     }
-    return true;
+    return true; //save to assume theoretical draw, when no king is on the edge
 }
 
+/**
+ * Construct the board structure from a FEN string
+ * @param fen the FEN string
+ */
 void TBoard::fromFen(const char* fen) {
-    /*
-     * Initialize
-     */
+    //initialize:
     clear();
     char offset = a8;
     unsigned char pos = a8;
     bool wtm = true;
     int i, end = strlen(fen);
-    /*
-     * Piece placement
-     */
+    //piece placement:
     for (i = 0; i < end; i++) {
         switch (fen[i]) {
             case ' ': offset = -1;
@@ -818,9 +866,7 @@ void TBoard::fromFen(const char* fen) {
             break;
         };
     }
-    /*
-     * Site to move
-     */
+    //site to move:
     for (bool done = false; i <= end; i++) {
         switch (fen[i]) {
             case '-':
@@ -838,9 +884,7 @@ void TBoard::fromFen(const char* fen) {
             break;
         };
     }
-    /*
-     * Castling status and en passant square
-     */
+    //castling status and en-passant square:
     bool castleDash = true;
     for (; i <= end; i++) {
         char c = fen[i];
@@ -855,35 +899,35 @@ void TBoard::fromFen(const char* fen) {
             case 'h':
                 i++;
                 if (fen[i] >= '1' && fen[i] <= '8') {
-                    boardFlags->epSquare = (char((fen[i] - '1')*8 + (fen[i - 1] - 'a')));
-                    HASH_EP(boardFlags->hashCode, boardFlags->epSquare);
+                    stack->epsq = (char((fen[i] - '1')*8 + (fen[i - 1] - 'a')));
+                    HASH_EP(stack->hashCode, stack->epsq);
                 }
                 i += 2;
                 goto half_move;
                 break;
             case 'k':
                 castleDash = false;
-                boardFlags->castlingFlags |= CASTLE_k;
-                HASH_CASTLE_k(boardFlags->hashCode);
-                HASH_CASTLE_k(boardFlags->pawnHash);
+                stack->castlingFlags |= CASTLE_k;
+                HASH_CASTLE_k(stack->hashCode);
+                HASH_CASTLE_k(stack->pawnHash);
                 break;
             case 'q':
                 castleDash = false;
-                boardFlags->castlingFlags |= CASTLE_q;
-                HASH_CASTLE_q(boardFlags->hashCode);
-                HASH_CASTLE_q(boardFlags->pawnHash);
+                stack->castlingFlags |= CASTLE_q;
+                HASH_CASTLE_q(stack->hashCode);
+                HASH_CASTLE_q(stack->pawnHash);
                 break;
             case 'K':
                 castleDash = false;
-                boardFlags->castlingFlags |= CASTLE_K;
-                HASH_CASTLE_K(boardFlags->hashCode);
-                HASH_CASTLE_K(boardFlags->pawnHash);
+                stack->castlingFlags |= CASTLE_K;
+                HASH_CASTLE_K(stack->hashCode);
+                HASH_CASTLE_K(stack->pawnHash);
                 break;
             case 'Q':
                 castleDash = false;
-                boardFlags->castlingFlags |= CASTLE_Q;
-                HASH_CASTLE_Q(boardFlags->hashCode);
-                HASH_CASTLE_Q(boardFlags->pawnHash);
+                stack->castlingFlags |= CASTLE_Q;
+                HASH_CASTLE_Q(stack->hashCode);
+                HASH_CASTLE_Q(stack->pawnHash);
                 break;
             case ' ':
                 break;
@@ -898,9 +942,7 @@ void TBoard::fromFen(const char* fen) {
                 break;
         }
     }
-    /*
-     * Half move clock and move number
-     */
+    //half move count and move number:
 half_move:
     int half_move = 0;
     int movenumber = 0;
@@ -928,17 +970,21 @@ half_move:
         }
     }
 
-    boardFlags->fiftyCount = half_move;
+    stack->fiftyCount = half_move;
     rootPly = movenumber * 2;
     if (wtm) {
-        boardFlags->WTM = true;
+        stack->WTM = true;
     } else {
-        boardFlags->WTM = false;
-        HASH_STM(boardFlags->hashCode);
+        stack->WTM = false;
+        HASH_STM(stack->hashCode);
         rootPly++;
     }
 }
 
+/**
+ * Display the board structure as a FEN string
+ * @return FEN string
+ */
 string TBoard::asFen() {
     string result = "";
     int offset = 56;
@@ -970,7 +1016,7 @@ string TBoard::asFen() {
         }
         offset -= 8;
     }
-    result += boardFlags->WTM ? " w " : " b ";
+    result += stack->WTM ? " w " : " b ";
     if (castleRight(CASTLE_ANY)) {
         if (castleRight(CASTLE_K)) {
             result += 'K';
@@ -989,19 +1035,17 @@ string TBoard::asFen() {
     }
     result += ' ';
 
-    if (boardFlags->epSquare) {
-        result += FILE_SYMBOL(boardFlags->epSquare);
-        result += RANK_SYMBOL(boardFlags->epSquare);
+    if (stack->epsq) {
+        result += FILE_SYMBOL(stack->epsq);
+        result += RANK_SYMBOL(stack->epsq);
     } else {
         result += "-";
     }
     result += " ";
-    sprintf(buf, "%d", boardFlags->fiftyCount);
+    sprintf(buf, "%d", stack->fiftyCount);
     result += buf;
     result += " ";
     sprintf(buf, "%d", getGamePly() / 2);
     result += buf;
     return result;
 }
-
-

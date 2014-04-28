@@ -52,8 +52,8 @@ U64 rootPerft(TSearch *searchData, int depth) {
         } else {
             searchData->forward(&rMove->Move, rMove->GivesCheck);
             if (rMove->GivesCheck) {
-                searchData->pos->boardFlags->checkerSq = rMove->checkerSq;
-                searchData->pos->boardFlags->checkers = rMove->checkers;
+                searchData->pos->stack->checkerSq = rMove->checkerSq;
+                searchData->pos->stack->checkers = rMove->checkers;
             }
             result += searchPerft(searchData, depth - 1, -32000, 32000);
             searchData->backward(&rMove->Move);

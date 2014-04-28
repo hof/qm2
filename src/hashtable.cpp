@@ -50,7 +50,7 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
     searchData->stack->ttMove2.piece = EMPTY;
     THashTable * hashTable = searchData->hashTable;
 
-    U64 hashCode = searchData->pos->boardFlags->hashCode;
+    U64 hashCode = searchData->pos->stack->hashCode;
     int hashKey = hashTable->getTTHashKey(hashCode);
 
     /*
@@ -143,7 +143,7 @@ void THashTable::ttStore(TSearch * searchData, int move, int score, int depth, i
     int flags = score >= beta ? TT_LOWERBOUND : (score <= alpha ? TT_UPPERBOUND : TT_EXACT);
     assert(flags);
 
-    U64 hashCode = searchData->pos->boardFlags->hashCode;
+    U64 hashCode = searchData->pos->stack->hashCode;
 
     assert(move > 0 || depth == 0);
 
@@ -181,7 +181,7 @@ void THashTable::mtLookup(TSearch * searchData) {
     searchData->materialTableProbes++;
     THashTable * hashTable = searchData->hashTable;
     TMaterialTableEntry * materialTable = hashTable->materialTable;
-    U64 materialHash = searchData->pos->boardFlags->materialHash;
+    U64 materialHash = searchData->pos->stack->materialHash;
     TMaterialTableEntry entry = materialTable[hashTable->getMaterialHashKey(materialHash)];
     if ((entry.key ^ entry.value) == materialHash) {
         searchData->materialTableHits++;
@@ -196,7 +196,7 @@ void THashTable::mtLookup(TSearch * searchData) {
 void THashTable::mtStore(TSearch * searchData) {
     THashTable * hashTable = searchData->hashTable;
     TMaterialTableEntry * materialTable = hashTable->materialTable;
-    U64 materialHash = searchData->pos->boardFlags->materialHash;
+    U64 materialHash = searchData->pos->stack->materialHash;
     TMaterialTableEntry * entry = &materialTable[hashTable->getMaterialHashKey(materialHash)];
     entry->value = searchData->stack->material_score;
     entry->phase = searchData->stack->phase;
@@ -207,7 +207,7 @@ void THashTable::mtStore(TSearch * searchData) {
 void THashTable::ptLookup(TSearch * sd) {
     sd->pawnTableProbes++;
     THashTable * hashTable = sd->hashTable;
-    U64 pawnHash = sd->pos->boardFlags->pawnHash;
+    U64 pawnHash = sd->pos->stack->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
     if ((entry->key ^ entry->pawn_score.mg) == pawnHash) {
         sd->stack->pawn_score.set(entry->pawn_score);
@@ -223,7 +223,7 @@ void THashTable::ptLookup(TSearch * sd) {
 
 void THashTable::ptStore(TSearch * sd) {
     THashTable * hashTable = sd->hashTable;
-    U64 pawnHash = sd->pos->boardFlags->pawnHash;
+    U64 pawnHash = sd->pos->stack->pawnHash;
     TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawnHash)];
     entry->pawn_score.set(sd->stack->pawn_score);
     entry->king_attack[WHITE] = sd->stack->king_attack[WPAWN];
