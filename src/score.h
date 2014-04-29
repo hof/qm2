@@ -1,6 +1,26 @@
-/* 
- * File:   score.h
- * Author: Hajewiet
+/**
+ * Maxima, a chess playing program. 
+ * Copyright (C) 1996-2014 Erik van het Hof and Hermen Reitsma 
+ * 
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 3
+ * of the License, or (at your option) any later version.
+ *  
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *  
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
+ *  
+ * File: score.h
+ * Score structure to hold two scores, one for the middle game and one for the end game
+ * A single score value is interpolated by the mg and eg values using the game phase.
+ * In maxima, the game phase ranges from 0 (opening with all pieces still on the board) 
+ * to 16 (an endgame with pawns and kings)
+ * This idea is based on similar principles found in the Fruit engine by Fabien Letouzey.
  *
  * Created on 21 september 2013, 23:09
  */
@@ -9,7 +29,6 @@
 #define	SCORE_H
 
 #include "defs.h"
-
 
 #define MAX_GAMEPHASES 16 //use grain size of 16 gamephases
 #define GAMEPHASE_BSR 2 //divide by 4 (right shift by 2) (64/4=16)

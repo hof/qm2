@@ -411,7 +411,6 @@ U64 _InitMagicMovesBishopMoves(const int square, const U64 occ) {
 
 /**
  * Initialize Magic Moves by Pradyumna Kannan
- * Thanks Pradyumna, this magic stuff is brilliant
  * Note it's required to run this function before using the engine
  */
 void InitMagicMoves(void) {
