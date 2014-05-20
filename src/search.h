@@ -196,7 +196,6 @@ public:
     bool stopSearch;
     int nodesUntilPoll;
     bool skipNull;
-    TMove excludedMove;
     int selDepth;
     double learnFactor;
     TRoot root;
@@ -243,7 +242,6 @@ public:
         stopSearch = false;
         ponder = false;
         skipNull = false;
-        excludedMove.clear();
         nodesUntilPoll = NODESBETWEENPOLLS;
         maxNodes = 0;
         selDepth = 0;

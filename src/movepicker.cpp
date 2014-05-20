@@ -73,9 +73,6 @@ TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, i
     moveList->clear();
     moveList->stage = HASH1;
     searchData->stack->captureMask = searchData->pos->all_pieces;
-    if (searchData->excludedMove.piece != EMPTY) {
-        moveList->lastX++->setMove(&searchData->excludedMove);
-    }
     return pickNextMove(searchData, depth, alpha, beta);
 }
 

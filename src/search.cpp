@@ -366,7 +366,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * 4. Transposition table lookup
      */
     hashTable->ttLookup(this, depth, alpha, beta);
-    if (stack->ttScore != TT_EMPTY && excludedMove.piece == EMPTY) {
+    if (stack->ttScore != TT_EMPTY) {
         return stack->ttScore;
     }
 

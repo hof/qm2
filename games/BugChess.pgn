@@ -53632,3 +53632,282 @@
 38. Kf1 Rxb2 39. Ke1 b4 40. Kd1 bxa3 41. Kc1 f5 42. f4 h5 43. h3 h4 44. Kd1 a2 
 45. Kc1 a1=Q# {White checkmated} 0-1
 
+[Event "ICS rated blitz game"]
+[Site "69.36.243.188 23"]
+[Date "2014.04.29"]
+[Time "22:51:00"]
+[Round "-"]
+[White "BugChess"]
+[Black "noseblunter"]
+[WhiteElo "2617"]
+[BlackElo "1801"]
+[TimeControl "3+1"]
+[Mode "ICS"]
+[Result "1-0"]
+
+1. e4 d6 2. d4 Nf6 3. Nc3 g6 4. Nf3 Bg7 5. Be2 O-O 6. O-O Nbd7 7. e5 Ne8 
+8. Bf4 c5 9. Re1 cxd4 10. Qxd4 dxe5 11. Bxe5 Qb6 12. Bxg7 Nxg7 13. Nd5 Qd6 
+14. Bc4 e5 15. Nxe5 Nxe5 16. Rxe5 Nf5 17. Rxf5 {Black resigns} 1-0
+
+[Event "ICS rated blitz game"]
+[Site "69.36.243.188 23"]
+[Date "2014.04.29"]
+[Time "22:53:00"]
+[Round "-"]
+[White "noseblunter"]
+[Black "BugChess"]
+[WhiteElo "1801"]
+[BlackElo "2617"]
+[TimeControl "3+1"]
+[Mode "ICS"]
+[Result "0-1"]
+
+1. e4 e6 2. Nf3 d5 3. exd5 exd5 4. d4 Nf6 5. Bd3 Bd6 6. O-O O-O 7. Bg5 Bg4 
+8. Nbd2 Nbd7 9. Re1 c6 10. c4 h6 11. Bh4 Bb4 12. h3 Bxf3 13. gxf3 dxc4 
+14. Bxc4 Qa5 15. Re2 Qh5 16. Bg3 Nb6 17. Bd3 Qxh3 18. Qc2 Bxd2 19. Rxd2 Rfe8 
+20. Re2 Rxe2 21. Bxe2 Re8 22. Rd1 Qe6 23. Bd3 Qxa2 24. Qd2 h5 25. Be5 Nbd7 
+26. Bb1 Qb3 27. Bc2 Qxf3 28. Re1 Qg4+ 29. Kh1 g6 30. Bb3 Qf3+ {White resigns} 0-1
+
+[Event "ICS rated blitz game"]
+[Site "69.36.243.188 23"]
+[Date "2014.04.29"]
+[Time "22:58:00"]
+[Round "-"]
+[White "BugChess"]
+[Black "noseblunter"]
+[WhiteElo "2617"]
+[BlackElo "1801"]
+[TimeControl "3+1"]
+[Mode "ICS"]
+[Result "1-0"]
+
+1. e4 d6 2. d4 Nf6 3. Nc3 g6 4. f4 Bg7 5. Nf3 c5 6. Bb5+ Bd7 7. e5 Ng4 
+8. Bxd7+ Nxd7 9. e6 fxe6 10. Ng5 cxd4 11. Nxe6 Qb6 12. Nd5 Qa5+ 13. b4 
+{Black resigns} 1-0
+
+[Event "ICS rated blitz game"]
+[Site "69.36.243.188 23"]
+[Date "2014.04.29"]
+[Time "23:01:00"]
+[Round "-"]
+[White "shawnthegreat"]
+[Black "BugChess"]
+[WhiteElo "1416"]
+[BlackElo "2617"]
+[TimeControl "5+1"]
+[Mode "ICS"]
+[Result "0-1"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4 Bc5 5. Nxc6 Qf6 6. Be3 Bxe3 7. fxe3 Qxb2 
+8. Nb4 Qxa1 9. c3 Qb2 10. Bc4 Qxg2 11. Rf1 Nh6 12. Qf3 Qb2 13. Bxf7+ Kd8 
+14. Qd1 Qxh2 15. Qe2 Qxe2+ 16. Kxe2 Rf8 17. Bb3 Rxf1 18. Kxf1 Ng4 19. Ke2 Ne5 
+20. Nd2 d6 21. Bg8 h5 22. Nd5 c6 23. Nf4 Ke7 24. Nxh5 Bg4+ 25. Kf2 Rxg8 
+26. Nf4 g5 27. Ne2 Rh8 28. Ng1 Rh2+ 29. Ke1 Nd3+ 30. Kf1 Rf2# {White checkmated} 0-1
+
+[Event "ICS rated standard game"]
+[Site "69.36.243.188 23"]
+[Date "2014.04.29"]
+[Time "23:09:00"]
+[Round "-"]
+[White "BugChess"]
+[Black "tentacle"]
+[WhiteElo "2530"]
+[BlackElo "2337"]
+[TimeControl "15+2"]
+[Mode "ICS"]
+[Result "1-0"]
+
+1. d4 d5 2. c4 e6 3. Nc3 Bb4 4. Nf3 Nf6 5. Bg5 Nbd7 6. cxd5 exd5 7. e3 c6 
+8. Bd3 h6 9. Bh4 Qa5 10. Qc2 g5 11. Bg3 Nh5 12. O-O Nxg3 13. fxg3 g4 
+14. Nd2 Qd8 15. e4 Nb6 16. exd5 Nxd5 17. Rae1+ Ne7 18. Nb3 O-O 19. Qd2 Kg7 
+20. a3 Bd6 21. Nc5 Bxc5 22. dxc5 Qd4+ 23. Kh1 Ng6 24. Ne4 f5 25. Nd6 Ne5 
+26. Re3 Rb8 27. Qe2 Nxd3 28. Rxd3 Qf6 29. Ne8+ Rxe8 30. Qxe8 Qe6 31. Qd8 Ra8 
+32. Rd6 Qf7 33. Re1 Be6 34. Qxa8 Bd5 35. Re8 a5 36. Qd8 Qxe8 37. Qxe8 Bf7 
+38. Rd7 Kf6 39. Rxf7+ Kg5 40. Qg8+ Kh5 41. Rxf5# {Black checkmated} 1-0
+
+[Event "ICS rated lightning game"]
+[Site "69.36.243.188 23"]
+[Date "2014.04.30"]
+[Time "00:41:00"]
+[Round "-"]
+[White "tentacle"]
+[Black "BugChess"]
+[WhiteElo "2484"]
+[BlackElo "2632"]
+[TimeControl "1+1"]
+[Mode "ICS"]
+[Result "0-1"]
+
+1. d4 Nf6 2. c4 c5 3. d5 b5 4. cxb5 a6 5. bxa6 g6 6. Nc3 Bxa6 7. Nf3 Bg7 
+8. e4 Bxf1 9. Kxf1 d6 10. Kg1 O-O 11. h4 Qb6 12. Rh3 Nbd7 13. a4 Rfb8 
+14. Ra2 Ng4 15. Nd2 h5 16. a5 Qa6 17. Nb3 Rb4 18. Ra3 Nde5 19. Na2 Rxe4 
+20. f3 c4 21. fxe4 cxb3 22. Raxb3 Qa7+ 23. Be3 Nxe3 24. Rbxe3 Ng4 25. Qd3 Qxa5 
+26. Nc3 Bxc3 27. bxc3 Qb6 28. Rf3 Ra1+ 29. Rf1 Rxf1+ 30. Kxf1 Nxe3+ 
+31. Ke2 Nxg2 32. Qg3 Qg1 33. c4 Qh1 34. e5 Nxh4 35. Qf4 Qg2+ 36. Ke3 g5 
+37. Qe4 Qf1 38. exd6 exd6 39. Kd2 Nf3+ 40. Kc3 Qc1+ 41. Qc2 Qxc2+ 42. Kxc2 h4 
+43. c5 dxc5 44. d6 Ne5 45. Kd2 h3 46. Ke3 h2 47. Ke4 f6 48. Kd5 h1=Q+ 
+49. Kxc5 Qc6+ 50. Kb4 Qc4+ 51. Ka5 Qb3 52. Ka6 Nd7 53. Ka7 Qb6+ 54. Ka8 Qb8# 
+{White checkmated} 0-1
+
+[Event "ICS rated blitz game"]
+[Site "69.36.243.188 23"]
+[Date "2014.04.30"]
+[Time "00:46:00"]
+[Round "-"]
+[White "BugChess"]
+[Black "Knightsmasher"]
+[WhiteElo "2617"]
+[BlackElo "2403"]
+[TimeControl "3+0"]
+[Mode "ICS"]
+[Result "1-0"]
+
+1. d4 d5 2. Nf3 Nf6 3. c4 e6 4. Nc3 Bb4 5. cxd5 Qxd5 6. e3 O-O 7. Bd3 b6 
+8. Qe2 e5 9. dxe5 Rd8 10. Bc4 Bxc3+ 11. bxc3 Qa5 12. O-O Nd5 13. Ng5 Ba6 
+14. Bxa6 Nxa6 15. Qh5 h6 16. Nxf7 Re8 17. e4 Ne7 18. Nxh6+ gxh6 19. Bxh6 Kh8 
+20. c4 Nb4 21. a3 Nbc6 22. Bd2+ Kg7 23. Qh6+ Kg8 24. Bxa5 bxa5 {Black resigns} 1-0
+
+[Event "ICS rated blitz game"]
+[Site "69.36.243.188 23"]
+[Date "2014.05.15"]
+[Time "04:23:00"]
+[Round "-"]
+[White "BugChess"]
+[Black "Knightsmasher"]
+[WhiteElo "2621"]
+[BlackElo "2452"]
+[TimeControl "5+0"]
+[Mode "ICS"]
+[Result "1-0"]
+
+1. d4 Nf6 2. Nf3 e6 3. c4 Nc6 4. Nc3 Bb4 5. Qc2 O-O 6. a3 Bxc3+ 7. Qxc3 b6 
+8. e3 Bb7 9. Be2 d5 10. cxd5 Qxd5 11. b4 Qd6 12. O-O a5 13. b5 Ne7 14. Ne5 Rfc8 
+15. Qb2 Rd8 16. f3 Nf5 17. Bd3 Rab8 18. Bd2 Nd7 19. Nc4 Qd5 20. Rac1 Nf6 
+21. Ne5 Rdc8 22. Rc4 Qd8 23. e4 Nd6 24. Rc2 Nfe8 25. Rfc1 Qh4 26. a4 Rd8 
+27. Be3 Ra8 28. Rc3 Qe7 29. Bf4 Qh4 30. Bg3 Qg5 31. Qf2 Qh6 32. Ng4 Qh5 
+33. Bf4 Nxe4 34. Bxe4 Bxe4 35. Nh6+ gxh6 36. fxe4 Nf6 37. Rg3+ Kf8 38. Rh3 Qg6 
+39. Rxh6 Nxe4 40. Qh4 Qg7 41. Be3 Ng5 42. Bxg5 Qxd4+ 43. Qxd4 Rxd4 44. Rxh7 Kg8 
+45. Rh6 Kg7 46. Bf6+ Kxh6 47. Bxd4 Rd8 48. Be5 Kg6 49. Bxc7 Rc8 50. Rc6 Rh8 
+51. g3 Rg8 52. Bxb6 Ra8 53. Bc7 Ra7 54. b6 Rb7 55. Rc5 Kf6 56. Rxa5 e5 
+57. Ra7 Rxb6 {Black resigns} 1-0
+
+[Event "ICS rated blitz game"]
+[Site "69.36.243.188 23"]
+[Date "2014.05.15"]
+[Time "04:33:00"]
+[Round "-"]
+[White "Knightsmasher"]
+[Black "BugChess"]
+[WhiteElo "2448"]
+[BlackElo "2626"]
+[TimeControl "3+0"]
+[Mode "ICS"]
+[Result "0-1"]
+
+1. d4 Nf6 2. Nf3 g6 3. Nc3 d5 4. e3 Bg7 5. Bd3 O-O 6. O-O Nc6 7. b3 Nb4 
+8. Be2 c5 9. a3 Nc6 10. Bb2 cxd4 11. exd4 Bf5 12. Ne5 Rc8 13. g4 Be6 
+14. Bf3 Nxe5 15. dxe5 Nd7 16. Bxd5 Nxe5 17. Bxe6 fxe6 18. Qxd8 Rfxd8 
+19. Nd1 Nf3+ 20. Kg2 Nd2 21. Bxg7 Nxf1 22. Bb2 Nd2 23. Ne3 Ne4 24. Kf3 Nc3 
+25. Re1 Rd2 26. Bxc3 Rxc3 27. Re2 Rxe2 28. Kxe2 Kg7 29. f4 e5 30. Kd2 Rc6 
+31. fxe5 Re6 32. c4 Rxe5 33. Kd3 Re6 34. c5 Kf6 35. h4 g5 36. h5 Ke5 
+37. Ng2 Rf6 38. Ke3 Rf1 39. Ke2 Rb1 40. b4 Rb2+ 41. Kf1 Rb3 42. Ke2 Rxa3 
+43. b5 Rb3 44. c6 Rxb5 45. c7 Rc5 46. c8=Q Rxc8 47. Kd3 a5 48. Ke3 Kd6 
+49. Ke4 a4 50. Ne3 {White resigns} 0-1
+
+[Event "ICS rated lightning game"]
+[Site "69.36.243.188 23"]
+[Date "2014.05.15"]
+[Time "04:40:00"]
+[Round "-"]
+[White "Sillycon"]
+[Black "BugChess"]
+[WhiteElo "2435"]
+[BlackElo "2637"]
+[TimeControl "1+0"]
+[Mode "ICS"]
+[Result "0-1"]
+
+1. e4 c5 2. Nf3 Nc6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 d6 6. Bg5 Bd7 7. Qd2 Rc8 
+8. O-O-O Nxd4 9. Qxd4 Qa5 10. Bd2 a6 11. f3 g6 12. Bc4 Bg7 13. Nd5 Qc5 
+14. Qxc5 Rxc5 15. Nb6 Rc6 16. Nxd7 Rxc4 17. Nb6 Rc6 18. Be3 h5 19. Kb1 h4 
+20. g4 Bh6 21. Bf2 Bf4 22. Bd4 Rh6 23. h3 g5 24. Rhg1 Nd7 25. Nd5 Be5 
+26. Be3 f6 27. c3 Kf7 28. f4 gxf4 29. Nxf4 Bxf4 30. Bxf4 Rg6 31. Be3 Nc5 
+32. Rd4 Ne6 33. Rb4 b5 34. Rh1 Ng5 35. Kc2 Rc4 36. Kd3 Rxb4 37. cxb4 Ke6 
+38. Bf4 Rg7 39. b3 Rh7 40. Kd4 Rf7 41. Be3 Nf3+ 42. Kd3 Rg7 43. Bf2 Ke5 
+44. Rf1 Ng5 45. Bd4+ Ke6 46. Rh1 Rg8 {White forfeits by disconnection} 0-1
+
+[Event "ICS rated standard game"]
+[Site "69.36.243.188 23"]
+[Date "2014.05.15"]
+[Time "04:44:00"]
+[Round "-"]
+[White "BugChess"]
+[Black "SlowBox"]
+[WhiteElo "2534"]
+[BlackElo "2326"]
+[TimeControl "15+0"]
+[Mode "ICS"]
+[Result "1-0"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Be3 e5 7. Nb3 Be7 
+8. f3 Be6 9. Qd2 O-O 10. O-O-O Nbd7 11. g4 b5 12. g5 Nh5 13. Nd5 Bxd5 
+14. exd5 f5 15. Rg1 Qc7 16. g6 hxg6 17. Rxg6 f4 18. Bf2 e4 19. fxe4 Ne5 
+20. Rg1 Nf6 21. Bh3 Nf3 22. Qxf4 Nh7 23. Bf5 Rac8 24. c3 Bg5 25. Rxg5 Nfxg5 
+26. Bd4 Rce8 27. Nd2 b4 28. Rg1 Qe7 29. Qg4 Rxf5 30. Qxf5 bxc3 31. bxc3 Qf7 
+32. Qxf7+ Kxf7 33. h4 Kg6 34. hxg5 a5 35. Nc4 Rxe4 36. Nxd6 Re2 37. c4 Rxa2 
+38. c5 Nxg5 39. c6 Kh6 40. c7 Nf3 41. Rh1+ Rh2 42. Rxh2+ Nxh2 43. c8=Q Nf3 
+44. Qh3+ Nh4 45. Qxh4+ Kg6 46. Qg4+ Kh6 47. Nf7+ Kh7 48. Qxg7# {Black checkmated} 1-0
+
+[Event "ICS rated standard game"]
+[Site "69.36.243.188 23"]
+[Date "2014.05.15"]
+[Time "05:04:00"]
+[Round "-"]
+[White "SlowBox"]
+[Black "BugChess"]
+[WhiteElo "2317"]
+[BlackElo "2538"]
+[TimeControl "15+0"]
+[Mode "ICS"]
+[Result "0-1"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4 Bc5 5. Be3 Qf6 6. c3 Nge7 7. Bc4 Ne5 
+8. Be2 Qg6 9. O-O d6 10. Kh1 Qxe4 11. Nd2 Qg6 12. Nb5 O-O 13. Nxc7 Rb8 
+14. Bh5 Qf5 15. Nb3 Nc4 16. Bxc5 dxc5 17. Re1 Nxb2 18. Qd6 Qxh5 19. Qxe7 Bf5 
+20. Nxc5 b6 21. N5a6 Rbd8 22. Nb4 f6 23. Ne6 Bxe6 24. Qxe6+ Qf7 25. Qb3 Rd2 
+26. Kg1 Rc8 27. Re6 Kh8 28. Rae1 h6 29. h3 a5 30. Nd5 Nd3 31. Nxb6 Rb8 
+32. R1e4 Nxf2 33. Rd4 Rb2 34. Qxb2 Nxh3+ 35. gxh3 Qxe6 36. Kg2 Rxb6 37. Qc2 f5 
+38. h4 g5 39. hxg5 hxg5 40. Rd1 Kg7 41. c4 Qe5 42. Rb1 Rxb1 43. Qxb1 Qe2+ 
+44. Kg1 Qg4+ 45. Kh2 Qxc4 46. Qxf5 Qxa2+ 47. Kg3 Qb3+ 48. Kh2 a4 49. Qxg5+ Kf7 
+50. Qf4+ Ke8 51. Qe4+ Kd7 52. Qg4+ Kc6 53. Qe4+ Kc5 54. Qe7+ Kc4 55. Qe4+ Kc3 
+56. Qe5+ Kc2 57. Qe2+ Kb1 58. Qf1+ Ka2 59. Qa6 a3 60. Kg2 Qc2+ 61. Kf1 Qc1+ 
+62. Ke2 Kb1 63. Kf3 Qc3+ 64. Kg4 a2 65. Qb5+ Kc1 66. Qf1+ Kc2 67. Qe2+ Kb3 
+68. Qd1+ Ka3 69. Kg5 a1=Q 70. Qd6+ Kb3 71. Qe6+ Kc2 72. Qe4+ Qd3 73. Qg2+ Qd2+ 
+74. Qxd2+ Kxd2 75. Kf4 Qf6+ 76. Ke4 Kc3 77. Ke3 Qf5 78. Ke2 Qf4 79. Ke1 Kd3 
+80. Kd1 Qf1# {White checkmated} 0-1
+
+[Event "ICS rated blitz game"]
+[Site "69.36.243.188 23"]
+[Date "2014.05.19"]
+[Time "17:30:00"]
+[Round "-"]
+[White "Knightsmasher"]
+[Black "BugChess"]
+[WhiteElo "2443"]
+[BlackElo "2630"]
+[TimeControl "5+0"]
+[Mode "ICS"]
+[Result "0-1"]
+
+1. e4 c5 2. Nf3 d6 3. Bb5+ Bd7 4. Bxd7+ Qxd7 5. d4 Nf6 6. dxc5 Nxe4 7. cxd6 Nc6 
+8. O-O Nxd6 9. Bf4 g6 10. Na3 Bg7 11. Bxd6 Qxd6 12. Qxd6 exd6 13. Rae1+ Kd7 
+14. Rd1 Rhe8 15. Nc4 Kc7 16. Nxd6 Re2 17. b3 Rxc2 18. a4 Rf8 19. Ng5 h6 
+20. Ngxf7 a6 21. Rc1 Rb2 22. Rce1 g5 23. Re6 Rxb3 24. Nxh6 Bxh6 25. Rxh6 Rf4 
+26. Ne8+ Kb8 27. Rg6 Rxa4 28. Rxg5 a5 29. Rc5 Rab4 30. Nf6 a4 31. Rcc1 Rd3 
+32. Rfe1 a3 33. g3 Nd4 34. Kg2 a2 35. Re8+ Ka7 36. Rcc8 Rb2 37. Ra8+ Kb6 
+38. Nd7+ Kb5 39. Re5+ Kb4 40. Re4 Rdd2 41. Rf4 Rbc2 42. Ne5 Kb3 43. Rf7 b5 
+44. h4 Rc8 45. Ra5 b4 46. Rfa7 Rcc2 47. Kh3 Rxf2 48. R7a6 Rh2+ 49. Kg4 Rc3 
+50. Nd7 Nc2 51. Nc5+ Rxc5 52. Rxc5 Kb2 53. Rb5 b3 54. Rba5 Kc1 55. Rf6 Rd2 
+56. Rb6 Rd4+ 57. Kh3 Nb4 58. Rf6 b2 59. Rf1+ Rd1 60. Rf2 b1=Q 61. Rf4 Qd3 
+62. Rxa2 Nxa2 63. Kg4 {White resigns} 0-1
+
