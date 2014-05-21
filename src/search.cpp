@@ -557,14 +557,12 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                         stack->mateKiller.setMove(move);
                     }
                     updateHistoryScore(move, depth);
-                    int xMoves = 0;
                     for (TMove * cur = stack->moveList.first;
                             cur != stack->moveList.last; cur++) {
                         if (cur->score == MOVE_EXCLUDED && cur != move) {
                             updateHistoryScore(cur, -depth);
                         }
                     }
-                    assert(xMoves <= searched_moves);
                 }
                 return score;
             }

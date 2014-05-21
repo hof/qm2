@@ -1,4 +1,4 @@
-add_library(QM2SRC 
+add_library(MAX2SRC 
 	inputhandler.cpp
 	outputhandler.cpp	
 	hashcodes.cpp
@@ -15,10 +15,10 @@ add_library(QM2SRC
 	timemanager.cpp
 )
 
-include_directories(${QM2_SOURCE_DIR}/src)
-link_directories(${QM2_BINARY_DIR}/src)
+include_directories(${MAX2_SOURCE_DIR}/src)
+link_directories(${MAX2_BINARY_DIR}/src)
 
-add_executable(qm2 main.cpp)
+add_executable(maxima2 main.cpp)
 
-target_link_libraries(QM2SRC pthread)
-target_link_libraries(qm2 QM2SRC)
+target_link_libraries(MAX2SRC pthread)
+target_link_libraries(maxima2 MAX2SRC)
