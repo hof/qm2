@@ -165,7 +165,6 @@ struct TSearchStack {
     U64 attack[2];
     U64 king_attack_zone[2];
     int8_t king_attack[BKING+1];
-    int reduce;
     U64 captureMask;
 };
 

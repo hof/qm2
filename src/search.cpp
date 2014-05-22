@@ -100,7 +100,6 @@ int TSearch::initRootMoves() {
     }
     root.InCheck = pos->inCheck();
     stack->hash_code = pos->stack->hash_code;
-    stack->reduce = 0;
     stack->eval_result = SCORE_INVALID;
     result = root.MoveCount;
     return result;
@@ -439,8 +438,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     }
     int gives_check = pos->givesCheck(first_move);
     int extend_move = extendMove(first_move, gives_check);
-    stack->bestMove.setMove(first_move);
-    stack->reduce = 0;
+    stack->bestMove.setMove(first_move); 
     forward(first_move, gives_check);
     int best = -pvs(-beta, -alpha, new_depth + extend_move);
     backward(first_move);
@@ -521,7 +519,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             reduce += history[move->piece][move->tsq] < 0;
             reduce = RANGE(LMR_MIN, max_reduce, reduce);
         }
-        stack->reduce = reduce;
         assert(reduce == 0 || extend_move == 0);
 
         /*
@@ -531,12 +528,10 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         int score = -pvs(-alpha - 1, -alpha, new_depth - reduce + extend_move);
         if (score > alpha && reduce > 0) {
             //research without reductions
-            (stack - 1)->reduce = 0;
             score = -pvs(-alpha - 1, -alpha, new_depth + extend_move);
         }
         if (type == PVNODE && score > alpha) {
             //full window research
-            (stack - 1)->reduce = 0;
             score = -pvs(-beta, -alpha, new_depth + extend_move);
         }
         backward(move);
@@ -725,9 +720,6 @@ void TSearch::debug_print_search(int alpha, int beta) {
     std::cout << "Path ";
     for (int i = 0; i < pos->current_ply; i++) {
         std::cout << " " << getStack(i)->move.asString();
-        if (getStack(i)->reduce) {
-            std::cout << "(r)";
-        }
     }
     std::cout << "\nFEN: " << pos->asFen() << std::endl;
     std::cout << "Hash: " << pos->stack->hash_code << std::endl;
