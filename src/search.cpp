@@ -310,7 +310,16 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         selDepth = MAX(selDepth, pos->current_ply);
         return qsearch(alpha, beta, 0, QS_CHECKDEPTH);
     }
+
+    //time check
     nodes++;
+    if (nodesUntilPoll <= 0) {
+        poll();
+    }
+    if (stopSearch || pos->current_ply >= MAX_PLY) {
+        return alpha;
+    }
+    assert(depth >= ONE_PLY && depth < 256);
 
     /* 
      * 2. Mate distance pruning: 
@@ -330,19 +339,13 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         }
     }
 
-    //time check
-    if (nodesUntilPoll <= 0) {
-        poll();
-    }
-    if (stopSearch || pos->current_ply >= MAX_PLY) {
-        return alpha;
-    }
-    assert(depth >= ONE_PLY && depth < 256);
-
     /*
      * 3. Return obvious draws 
      */
     stack->phase = (stack - 1)->phase;
+    if (pos->isDraw()) { //draw by no mating material
+        return drawScore();
+    }
     if (pos->stack->fifty_count > 3) {
         if (pos->stack->fifty_count >= 100) {
             return drawScore(); //draw by 50 reversible moves
@@ -356,9 +359,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 
             }
         }
-    }
-    if (pos->isDraw()) { //draw by no mating material
-        return drawScore();
     }
 
     /*
@@ -438,7 +438,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     }
     int gives_check = pos->givesCheck(first_move);
     int extend_move = extendMove(first_move, gives_check);
-    stack->bestMove.setMove(first_move); 
+    stack->bestMove.setMove(first_move);
     forward(first_move, gives_check);
     int best = -pvs(-beta, -alpha, new_depth + extend_move);
     backward(first_move);
@@ -477,7 +477,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         bool skip_prune = stack->moveList.stage < QUIET_MOVES
                 || in_check || gives_check > 0 || move->capture || move->promotion
                 || move->castle || passedPawn(move);
-    
+
         /*
          * 11. forward futility pruning at low depths
          * (moves without potential are skipped)
@@ -624,53 +624,31 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
         }
     }
 
-    int score = evaluate(this); //always do an eval - it's incremental
-    if (stack->inCheck) { // in check
-        assert(pos->stack->checkers);
-        int score = -SCORE_INFINITE;
-        TMove * move = movePicker->pickFirstQuiescenceMove(this, 0, alpha, beta);
-        if (!move) { //checkmate
-            return -SCORE_MATE + pos->current_ply;
-        }
-        stack->hash_code = pos->stack->hash_code;
-        do {
-            bool givesCheck = pos->givesCheck(move);
-            forward(move, givesCheck);
-            score = -qsearch(-beta, -alpha, qPly + 1, checkDepth);
-            backward(move);
-            if (score >= beta) {
-                stack->bestMove.setMove(move);
-                return score;
-            } else if (score > alpha) {
-                stack->bestMove.setMove(move);
-                alpha = score;
-            }
-        } while (move = movePicker->pickNextMove(this, 0, alpha, beta));
-        return alpha;
-    }
-
+    int eval = evaluate(this); //always do an eval - it's incremental
+    
     //if not in check, generate captures, promotions and (upto some plies ) quiet checks
-    if (score >= beta) { //return evaluation score is it's already above beta (stand-pat idea)
-        return score;
+    if (eval >= beta && !stack->inCheck) { //return evaluation score is it's already above beta (stand-pat idea)
+        return eval;
     }
 
     TMove * move = movePicker->pickFirstQuiescenceMove(this, qPly < checkDepth, alpha, beta);
     if (!move) { //return evaluation score if there are no quiescence moves
-        return score;
+        return stack->inCheck ? -SCORE_MATE + pos->current_ply : eval;
     }
-    alpha = MAX(score, alpha);
+    if (!stack->inCheck) {
+        alpha = MAX(eval, alpha);
+    }
     stack->hash_code = pos->stack->hash_code;
-    int base = score;
     do { //loop through quiescence moves
         int givesCheck = pos->givesCheck(move);
-        if (!move->capture && !move->promotion &&
+        if (!stack->inCheck && !move->capture && !move->promotion &&
                 (givesCheck == 0 || (givesCheck == 1 && pos->SEE(move) < 0))) {
             pruned_nodes++;
             continue;
         }
 
         //pruning (delta futility and negative see), skipped for checks
-        if (QS_DO_DELTA && givesCheck == 0 && NOTPV(alpha, beta)) {
+        if (QS_DO_DELTA && !stack->inCheck && givesCheck == 0 && NOTPV(alpha, beta)) {
 
             //1. delta futility pruning: the captured piece + max. positional gain should raise alpha
             int gain = PIECE_VALUE[move->capture];
@@ -681,7 +659,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
                 }
                 gain += PIECE_VALUE[move->promotion] - VPAWN;
             }
-            if (base + gain + QS_DELTA < alpha) {
+            if (eval + gain + QS_DELTA < alpha) {
                 pruned_nodes++;
                 continue;
             }
@@ -693,7 +671,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
             }
         }
         forward(move, givesCheck);
-        score = -qsearch(-beta, -alpha, qPly + 1, checkDepth);
+        int score = -qsearch(-beta, -alpha, qPly + 1, checkDepth);
         backward(move);
         if (score >= beta) {
             stack->bestMove.setMove(move);
