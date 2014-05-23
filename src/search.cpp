@@ -30,14 +30,7 @@
 #include <iostream>
 #include <string.h>
 
-static const bool DO_NULL = true; //nullmove pruning
-static const bool DO_FHP = true; //fail high pruning
-static const bool DO_FFP = true; //forward futility pruning
-static const bool DO_LMR = true; //late move reductions
-static const bool DO_EXTEND_MOVE = true; //move extensions
-
-static const short FHP_MARGIN[7] = {200, 350, 400, 550, 600, 750, 800}; //futility margins for FHP
-static const short FFP_MARGIN[7] = {200, 200, 200, 450, 450, 600, 600}; //futility margins for FFP
+static const short FUTILITY_MARGIN = 50; 
 static const short LMR_MIN = 0; //in half plies
 static const short LMR_MAX = 6; //in half plies
 
@@ -271,9 +264,6 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
  * Move Extensions
  */
 int TSearch::extendMove(TMove * move, int gives_check) {
-    if (DO_EXTEND_MOVE == false) {
-        return 0;
-    }
     if (gives_check > 0) {
         if (gives_check > 1) { //double check or exposed check
             return ONE_PLY;
@@ -378,13 +368,12 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     assert(new_depth >= 0);
 
     //a) Fail-high pruning (return if static evaluation score is already much better than beta)
-    if (DO_FHP
-            && !in_check
+    if (!in_check
             && new_depth <= LOW_DEPTH
-            && (eval - FHP_MARGIN[new_depth]) >= beta
+            && (eval - FUTILITY_MARGIN * depth) >= beta
             && ABS(beta) < SCORE_MATE - MAX_PLY
             && pos->hasPieces(pos->stack->wtm)) {
-        return eval - FHP_MARGIN[new_depth];
+        return eval - FUTILITY_MARGIN * depth;
     }
 
     int type = setNodeType(alpha, beta);
@@ -394,8 +383,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     //b) Null move pruning
     stack->hash_code = pos->stack->hash_code;
     bool mate_threat = false;
-    if (DO_NULL
-            && !skipNull
+    if (!skipNull
             && !in_check
             && new_depth > 0
             && eval >= beta
@@ -482,8 +470,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
          * 11. forward futility pruning at low depths
          * (moves without potential are skipped)
          */
-        if (DO_FFP
-                && !skip_prune
+        if (!skip_prune
                 && type != PVNODE
                 && (eval < alpha || best >= alpha)
                 && new_depth <= LOW_DEPTH
@@ -493,7 +480,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 pruned_nodes++;
                 continue;
             }
-            if (eval + FFP_MARGIN[new_depth] <= alpha) {
+            if (eval + FUTILITY_MARGIN * depth <= alpha) {
                 pruned_nodes++;
                 continue;
             }
@@ -508,8 +495,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
          */
         extend_move = extendMove(move, gives_check);
         int reduce = 0;
-        if (DO_LMR
-                && !skip_prune
+        if (!skip_prune
                 && new_depth > ONE_PLY) {
             assert(new_depth >= 0);
             assert(searched_moves >= 1);
