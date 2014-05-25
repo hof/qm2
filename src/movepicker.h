@@ -68,9 +68,7 @@ protected:
 public:
 
     TMove * pickNextMove(TSearch * searchData, int depth, int alpha, int beta);
-
     TMove * pickFirstMove(TSearch * searchData, int depth, int alpha, int beta);
-    TMove * pickFirstQuiescenceMove(TSearch * searchData, int qCheckDepth, int alpha, int beta);
     short countEvasions(TSearch * sd, TMove * firstMove);
     
     void push(TSearch * searchData, TMove * move, int score);

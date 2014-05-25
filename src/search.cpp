@@ -35,7 +35,6 @@ static const short LMR_MIN = 0; //in half plies
 static const short LMR_MAX = 6; //in half plies
 
 static const bool QS_DO_DELTA = true; //qsearch delta pruning
-static const short QS_CHECKDEPTH = 1; //checkdepth in qsearch
 static const short QS_DELTA = 200; //qsearch delta pruning margin
 
 bool TSearch::pondering() {
@@ -82,8 +81,8 @@ int TSearch::initRootMoves() {
     setNodeType(-SCORE_INFINITE, SCORE_INFINITE);
     hashTable->repStore(this, pos->stack->hash_code, pos->stack->fifty_count);
     hashTable->ttLookup(this, 0, -SCORE_INFINITE, SCORE_INFINITE);
-    for (TMove * move = movePicker->pickFirstMove(this, 0, -SCORE_INFINITE, SCORE_INFINITE);
-            move; move = movePicker->pickNextMove(this, 0, -SCORE_INFINITE, SCORE_INFINITE)) {
+    for (TMove * move = movePicker->pickFirstMove(this, ONE_PLY, -SCORE_INFINITE, SCORE_INFINITE);
+            move; move = movePicker->pickNextMove(this, ONE_PLY, -SCORE_INFINITE, SCORE_INFINITE)) {
         TRootMove * rMove = &root.Moves[root.MoveCount++];
         rMove->init(move, 1000 - root.MoveCount, pos->givesCheck(move), pos->SEE(move));
         if (rMove->GivesCheck) {
@@ -298,7 +297,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      */
     if (depth < ONE_PLY) {
         selDepth = MAX(selDepth, pos->current_ply);
-        return qsearch(alpha, beta, 0, QS_CHECKDEPTH);
+        return qsearch(alpha, beta, 0, depth);
     }
 
     //time check
@@ -566,7 +565,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 /*
  * Quiescence search
  */
-int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
+int TSearch::qsearch(int alpha, int beta, int qPly, int depth) {
 
     //time check
     nodes++;
@@ -617,7 +616,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
         return eval;
     }
 
-    TMove * move = movePicker->pickFirstQuiescenceMove(this, qPly < checkDepth, alpha, beta);
+    TMove * move = movePicker->pickFirstMove(this, depth, alpha, beta);
     if (!move) { //return evaluation score if there are no quiescence moves
         return stack->inCheck ? -SCORE_MATE + pos->current_ply : eval;
     }
@@ -657,7 +656,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
             }
         }
         forward(move, givesCheck);
-        int score = -qsearch(-beta, -alpha, qPly + 1, checkDepth);
+        int score = -qsearch(-beta, -alpha, qPly + 1, depth - ONE_PLY);
         backward(move);
         if (score >= beta) {
             stack->bestMove.setMove(move);
@@ -666,7 +665,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int checkDepth) {
             stack->bestMove.setMove(move);
             alpha = score;
         }
-    } while (move = movePicker->pickNextMove(this, qPly < checkDepth, alpha, beta));
+    } while (move = movePicker->pickNextMove(this, depth, alpha, beta));
     return alpha;
 }
 

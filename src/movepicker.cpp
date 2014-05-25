@@ -71,17 +71,9 @@ inline TMove * TMovePicker::popBest(TBoard * pos, TMoveList * list) {
 TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, int beta) {
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
-    moveList->stage = HASH1;
+    moveList->stage = depth < ONE_PLY ? CAPTURES : HASH1;
     searchData->stack->captureMask = searchData->pos->all_pieces;
     return pickNextMove(searchData, depth, alpha, beta);
-}
-
-TMove * TMovePicker::pickFirstQuiescenceMove(TSearch * searchData, int qCheckDepth, int alpha, int beta) {
-    TMoveList * moveList = &searchData->stack->moveList;
-    moveList->clear();
-    moveList->stage = Q_CAPTURES; //q_hash1
-    searchData->stack->captureMask = searchData->pos->all_pieces;
-    return pickNextMove(searchData, qCheckDepth, alpha, beta);
 }
 
 TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, int beta) {
@@ -202,26 +194,30 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     }
                 }
             case KILLER1:
-                result = &searchData->stack->killer1;
-                if (result->piece
-                        && pos->valid(result)
-                        && !moveList->excluded(result)
-                        && pos->legal(result)) {
-                    moveList->lastX++->setMove(result);
-                    moveList->stage = KILLER2;
-                    assert(result->capture == EMPTY && result->promotion == EMPTY);
-                    return result;
+                if (depth >= ONE_PLY) {
+                    result = &searchData->stack->killer1;
+                    if (result->piece
+                            && pos->valid(result)
+                            && !moveList->excluded(result)
+                            && pos->legal(result)) {
+                        moveList->lastX++->setMove(result);
+                        moveList->stage = KILLER2;
+                        assert(result->capture == EMPTY && result->promotion == EMPTY);
+                        return result;
+                    }
                 }
             case KILLER2:
-                result = &searchData->stack->killer2;
-                if (result->piece
-                        && pos->valid(result)
-                        && !moveList->excluded(result)
-                        && pos->legal(result)) {
-                    moveList->lastX++->setMove(result);
-                    moveList->stage = MINORPROMOTIONS;
-                    assert(result->capture == EMPTY && result->promotion == EMPTY);
-                    return result;
+                if (depth >= ONE_PLY) {
+                    result = &searchData->stack->killer2;
+                    if (result->piece
+                            && pos->valid(result)
+                            && !moveList->excluded(result)
+                            && pos->legal(result)) {
+                        moveList->lastX++->setMove(result);
+                        moveList->stage = MINORPROMOTIONS;
+                        assert(result->capture == EMPTY && result->promotion == EMPTY);
+                        return result;
+                    }
                 }
             case MINORPROMOTIONS: //and captures with see < 0
                 if (depth <= LOW_DEPTH) {
@@ -233,106 +229,38 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     }
                 }
             case CASTLING:
-                genCastles(pos, moveList);
-                if (moveList->current != moveList->last) {
+                if (searchData->stack->inCheck == false) {
+                    genCastles(pos, moveList);
+                    if (moveList->current != moveList->last) {
+                        for (TMove * move = moveList->current; move != moveList->last; move++) {
+                            if (moveList->excluded(move)) {
+                                move->score = MOVE_EXCLUDED;
+                            } else {
+                                move->score = 100;
+                            }
+                        }
+                        result = popBest(pos, moveList);
+                        if (result) {
+                            moveList->stage = QUIET_MOVES;
+                            return result;
+                        }
+                    }
+                }
+            case QUIET_MOVES:
+                if (depth >= 0 || searchData->stack->inCheck) {
+                    moveList->minimumScore = -MOVE_INFINITY;
+                    genQuietMoves(pos, moveList);
                     for (TMove * move = moveList->current; move != moveList->last; move++) {
                         if (moveList->excluded(move)) {
                             move->score = MOVE_EXCLUDED;
                         } else {
-                            move->score = 100;
+                            move->score = searchData->history[move->piece][move->tsq];
                         }
                     }
-                    result = popBest(pos, moveList);
-                    if (result) {
-                        moveList->stage = QUIET_MOVES;
-                        return result;
-                    }
-                }
-            case QUIET_MOVES:
-                moveList->minimumScore = -MOVE_INFINITY;
-                genQuietMoves(pos, moveList);
-                for (TMove * move = moveList->current; move != moveList->last; move++) {
-                    if (moveList->excluded(move)) {
-                        move->score = MOVE_EXCLUDED;
-                    } else {
-                        move->score = searchData->history[move->piece][move->tsq];
-                    }
-                }
-                moveList->stage = STOP;
-                result = popBest(pos, moveList);
-                return result;
-            case Q_HASH1:
-                /*
-                 * Return the hashmove from depth-preferred table
-                 */
-                result = &searchData->stack->ttMove1;
-                if (result->piece && !moveList->excluded(result)) {
-                    moveList->stage = Q_HASH2;
-                    moveList->lastX++->setMove(result);
-                    return result;
-                }
-            case Q_HASH2:
-                /*
-                 * Return the hashmove from always-replace table
-                 */
-                result = &searchData->stack->ttMove2;
-                if (result->piece && !moveList->excluded(result)) {
-                    moveList->stage = Q_CAPTURES;
-                    moveList->lastX++->setMove(result);
-                    return result;
-                }
-            case Q_CAPTURES:
-                mask = pos->all_pieces;
-                if (searchData->stack->inCheck) {
-                    mask &= pos->stack->checkers;
-                }
-                genCaptures(pos, moveList, mask);
-                for (TMove * move = moveList->current; move != moveList->last; move++) {
-                    move->score = MVVLVA(move);
-                }
-                result = popBest(pos, moveList);
-                if (result) {
-                    moveList->stage = Q_PROMOTIONS;
-                    return result;
-                }
-            case Q_PROMOTIONS:
-                genPromotions(pos, moveList);
-                for (TMove * move = moveList->current; move != moveList->last; move++) {
-                    move->score = MVVLVA(move);
-                }
-                result = popBest(pos, moveList);
-                if (searchData->stack->inCheck) {
-                    moveList->stage = Q_EVASIONS;
-                } else if (depth > 0) {
-                    moveList->stage = Q_QUIET_CHECKS;
-                } else {
                     moveList->stage = STOP;
-                    return result;
-                }
-                if (result) {
-                    return result;
-                }
-            case Q_QUIET_CHECKS:
-                if (moveList->stage == Q_QUIET_CHECKS) {
-                    moveList->stage = STOP;
-                    //genQuietChecks(pos, moveList);
-                    genQuietMoves(pos, moveList);
-                    for (TMove * move = moveList->current; move != moveList->last; move++) {
-                        move->score = searchData->history[move->piece][move->tsq];
-                    }
                     result = popBest(pos, moveList);
                     return result;
                 }
-            case Q_EVASIONS:
-                assert(searchData->stack->inCheck);
-                genQuietMoves(pos, moveList);
-                for (TMove * move = moveList->first; move != moveList->last; move++) {
-                    move->score = searchData->history[move->piece][move->tsq];
-                }
-                moveList->stage = STOP;
-                moveList->minimumScore = -MOVE_INFINITY;
-                result = popBest(pos, moveList);
-                return result;
             case STOP:
             default:
                 return NULL;

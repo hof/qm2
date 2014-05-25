@@ -119,7 +119,7 @@ void TBoard::forward(TMove * move) {
             if (move->en_passant) {
                 assert(move->piece == WPAWN || move->piece == BPAWN);
                 assert(matrix[tsq] == EMPTY);
-                assert(stack->ep_square == tsq);
+                assert(stack->enpassant_sq == tsq);
                 assert(tsq >= a6 ? matrix[tsq - 8] == BPAWN : matrix[tsq + 8] == WPAWN);
                 removePieceFull(capture, tsq >= a6 ? tsq - 8 : tsq + 8);
             } else {
