@@ -115,6 +115,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     moveList->lastX++->setMove(result);
                     return result;
                 }
+
             case IID:
                 if (depth > LOW_DEPTH && moveList->firstX == moveList->lastX) {
                     //find a good first move to try by doing a shallow search

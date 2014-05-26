@@ -30,11 +30,10 @@
 #include <iostream>
 #include <string.h>
 
-static const short FUTILITY_MARGIN = 50; 
+static const short FUTILITY_MARGIN = 50;
 static const short LMR_MIN = 0; //in half plies
 static const short LMR_MAX = 6; //in half plies
 
-static const bool QS_DO_DELTA = true; //qsearch delta pruning
 static const short QS_DELTA = 200; //qsearch delta pruning margin
 
 bool TSearch::pondering() {
@@ -297,7 +296,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      */
     if (depth < ONE_PLY) {
         selDepth = MAX(selDepth, pos->current_ply);
-        return qsearch(alpha, beta, 0, depth);
+        return qsearch(alpha, beta, depth);
     }
 
     //time check
@@ -392,6 +391,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         if (rdepth >= 8 && stack->phase < 14) {
             rdepth -= (rdepth >> 3);
         }
+        rdepth = MAX(rdepth, 0);
         forward();
         int null_score = -pvs(-beta, -alpha, rdepth);
         backward();
@@ -565,7 +565,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
 /*
  * Quiescence search
  */
-int TSearch::qsearch(int alpha, int beta, int qPly, int depth) {
+int TSearch::qsearch(int alpha, int beta, int depth) {
 
     //time check
     nodes++;
@@ -610,7 +610,7 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int depth) {
     }
 
     int eval = evaluate(this); //always do an eval - it's incremental
-    
+
     //if not in check, generate captures, promotions and (upto some plies ) quiet checks
     if (eval >= beta && !stack->inCheck) { //return evaluation score is it's already above beta (stand-pat idea)
         return eval;
@@ -625,15 +625,15 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int depth) {
     }
     stack->hash_code = pos->stack->hash_code;
     do { //loop through quiescence moves
-        int givesCheck = pos->givesCheck(move);
-        if (!stack->inCheck && !move->capture && !move->promotion &&
-                (givesCheck == 0 || (givesCheck == 1 && pos->SEE(move) < 0))) {
+        int gives_check = pos->givesCheck(move);
+        if (!stack->inCheck && !move->capture && !move->promotion && !move->castle &&
+                (gives_check == 0 || (gives_check == 1 && pos->SEE(move) < 0))) {
             pruned_nodes++;
             continue;
         }
 
         //pruning (delta futility and negative see), skipped for checks
-        if (QS_DO_DELTA && !stack->inCheck && givesCheck == 0 && NOTPV(alpha, beta)) {
+        if (!stack->inCheck && gives_check == 0 && NOTPV(alpha, beta)) {
 
             //1. delta futility pruning: the captured piece + max. positional gain should raise alpha
             int gain = PIECE_VALUE[move->capture];
@@ -644,7 +644,8 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int depth) {
                 }
                 gain += PIECE_VALUE[move->promotion] - VPAWN;
             }
-            if (eval + gain + QS_DELTA < alpha) {
+            int delta = depth >=0? QS_DELTA : FUTILITY_MARGIN;
+            if (eval + gain + delta < alpha) {
                 pruned_nodes++;
                 continue;
             }
@@ -655,8 +656,8 @@ int TSearch::qsearch(int alpha, int beta, int qPly, int depth) {
                 continue;
             }
         }
-        forward(move, givesCheck);
-        int score = -qsearch(-beta, -alpha, qPly + 1, depth - ONE_PLY);
+        forward(move, gives_check);
+        int score = -qsearch(-beta, -alpha, depth - ONE_PLY);
         backward(move);
         if (score >= beta) {
             stack->bestMove.setMove(move);

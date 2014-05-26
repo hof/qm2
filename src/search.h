@@ -368,7 +368,7 @@ public:
     }
     int pvs_root(int alpha, int beta, int depth);
     int pvs(int alpha, int beta, int depth);
-    int qsearch(int alpha, int beta, int qPly, int maxCheckPly);
+    int qsearch(int alpha, int beta, int depth);
     
     inline int drawScore(int adjust=0) {
         int result = drawContempt.get(stack->phase)+adjust;
