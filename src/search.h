@@ -217,7 +217,6 @@ public:
         pos = new TBoard();
         pos->fromFen(fen);
         memset(history, 0, sizeof (history));
-        initLMR();
         init_pst();
         hashTable = globalHashTable;
         outputHandler = outputH;
@@ -257,8 +256,6 @@ public:
         delete timeManager;
     }
 
-    void initLMR();
-    
     inline void clearHistory() {
         memset(history, 0, sizeof (history));
         

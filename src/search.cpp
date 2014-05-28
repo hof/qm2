@@ -55,24 +55,6 @@ std::string TSearch::getPVString() {
     return result;
 }
 
-void TSearch::initLMR() {
-    memset(LMR, 0, sizeof (LMR));
-    for (int d = 3; d < 32; d++) {
-        for (int m = 2; m < 64; m++) {
-            int r = BSR(m - 1) + BSR(d - 2) - 2 - (m < 4) - (m < 8);
-            r += (m > 16 && d > 16);
-            r += (m > 24 && d > 16);
-            r += r == 1;
-            r = MAX(0, r);
-            r = 1 + r + (r >> 1);
-            r += r == 1;
-            r = MIN(r, d - 2);
-            r = MIN(r, LMR_MAX + 2);
-            LMR[d][m] = r;
-        }
-    }
-}
-
 int TSearch::initRootMoves() {
     int result = 0;
     root.MoveCount = 0;
@@ -456,7 +438,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * - All remaining moves
      */
     int searched_moves = 1;
-    int max_reduce = MIN(new_depth - ONE_PLY, LMR_MAX);
+    int max_reduce = MAX(0, new_depth - ONE_PLY);
     while (TMove * move = movePicker->pickNextMove(this, depth, alpha, beta)) {
         assert(stack->bestMove.equals(move) == false);
         assert(first_move->equals(move) == false);
@@ -496,13 +478,11 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         int reduce = 0;
         if (!skip_prune
                 && new_depth > ONE_PLY) {
-            assert(new_depth >= 0);
-            assert(searched_moves >= 1);
-            reduce = LMR[MIN(new_depth, 31)][MIN(63, searched_moves)];
-            reduce += (type == CUTNODE)*2;
-            reduce += eval + 50 < alpha;
-            reduce += history[move->piece][move->tsq] < 0;
-            reduce = RANGE(LMR_MIN, max_reduce, reduce);
+            reduce = ONE_PLY;
+            if (searched_moves >= 4 && new_depth > 2 * ONE_PLY) {
+                reduce += ONE_PLY;
+            }
+            reduce = MIN(max_reduce, reduce);
         }
         assert(reduce == 0 || extend_move == 0);
 

@@ -29,7 +29,3 @@ target_link_libraries(testEvaluation MAX2SRC)
 #pct generation
 add_executable(genPct generate_pct.cpp)
 target_link_libraries(genPct MAX2SRC)
-
-#LMR table generation
-add_executable(genLMR generate_lmr.cpp)
-target_link_libraries(genLMR MAX2SRC)
