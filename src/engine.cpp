@@ -395,6 +395,20 @@ void print_row(std::string cap, short score) {
     std::cout << std::endl;
 }
 
+void print_row(std::string cap, TScore & total, int phase) {
+    std::cout << std::setw(14);
+    std::cout << cap;
+    std::cout << " | ";
+    std::cout << std::setw(32);
+    std::cout << " | ";
+    std::cout << std::setw(9) << total.mg;
+    std::cout << " ";
+    std::cout << std::setw(4) << total.eg;
+    std::cout << " ";
+    std::cout << std::setw(5) << total.get(phase);
+    std::cout << std::endl;    
+}
+
 void print_row(std::string cap, TScore & w, TScore & b, int phase) {
     TScore total;
     total.clear();
@@ -424,7 +438,7 @@ void TEngine::analyse() {
     TSearch * s = new TSearch(_rootFen.c_str(), _hashTable, _outputHandler);
     s->stack->eval_result = evaluate(s);
     int phase = s->stack->phase;
-    TScore w, b, t;
+    TScore w, b;
     w.clear();
     b.clear();
 
@@ -433,7 +447,7 @@ void TEngine::analyse() {
     std::cout << "---------------+---------------+---------------+---------------------\n";
     print_row("Game phase", phase);
     print_row("Material", s->stack->material_score);
-    print_row("Pawns & Kings", s->stack->pawn_score.get(phase));
+    print_row("Pawns & Kings", s->stack->pawn_score, phase);
     print_row("Knights", s->stack->knight_score[WHITE], s->stack->knight_score[BLACK], phase);
     print_row("Bishops", s->stack->bishop_score[WHITE], s->stack->bishop_score[BLACK], phase);
     print_row("Rooks", s->stack->rook_score[WHITE], s->stack->rook_score[BLACK], phase);

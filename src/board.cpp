@@ -1052,3 +1052,89 @@ string TBoard::asFen() {
     result += buf;
     return result;
 }
+
+/**
+ * Flip the board, useful for testing on white/black bugs. A flipped
+ * board should give exactly the same search and evaluation results.
+ */
+void TBoard::flip() {
+    all_pieces = flipBB(all_pieces);
+    U64 tmp = white_pieces;
+    white_pieces = flipBB(black_pieces);
+    black_pieces = flipBB(tmp);
+    for (int sq = 0; sq <= 31; sq++) {
+        if (sq <= WKING && sq >= WPAWN) {
+            U64 occ = *boards[sq];
+            *boards[sq] = flipBB(*boards[sq + WKING]);
+            *boards[sq + WKING] = flipBB(occ);
+
+            TPiecePlacement * pp_w = &pieces[sq];
+            TPiecePlacement * pp_b = &pieces[sq + WKING];
+            TPiecePlacement * tmp = &pieces[EMPTY];
+            tmp->count = pp_w->count;
+            for (int i = 0; i < tmp->count; i++) {
+                tmp->squares[i] = pp_w->squares[i];
+            }
+            pp_w->count = pp_b->count;
+            for (int i = 0; i < pp_b->count; i++) {
+                pp_w->squares[i] = FLIP_SQUARE(pp_b->squares[i]);
+            }
+            pp_b->count = tmp->count;
+            for (int i = 0; i < tmp->count; i++) {
+                pp_b->squares[i] = FLIP_SQUARE(tmp->squares[i]);
+            }
+            tmp->count = 0;
+        }
+        int fsq = FLIP_SQUARE(sq);
+        int pc1 = matrix[sq];
+        int pc2 = matrix[fsq];
+        matrix[sq] = EMPTY;
+        matrix[fsq] = EMPTY;
+        if (pc2) {
+            matrix[sq] = pc2 > WKING ? pc2 - WKING : pc2 + WKING;
+        }
+        if (pc1) {
+            matrix[fsq] = pc1 > WKING ? pc1 - WKING : pc1 + WKING;
+        }
+    }
+    stack->flip();
+}
+
+/**
+ * Test the board, verify the bitboards, pieceplacement and matrix match.
+ */
+int TBoard::test() {
+    U64 bb_occ[BKING+1];
+    unsigned char matrix_test[64];
+    memset(matrix_test, 0, sizeof(matrix_test));
+    for (int pc = WPAWN; pc <= BKING; pc++) {
+        bb_occ[pc] = 0;
+        TPiecePlacement * pp = &pieces[pc];
+        for (int i = 0; i < pp->count; i++) {
+            int sq = pp->squares[i];
+            if (matrix[sq] != pc) {
+                return 100;
+            }
+            matrix_test[sq] = pc;
+            bb_occ[pc] |= BIT(sq);
+        }
+        if (bb_occ[pc] != *boards[pc]) {
+            return 101;
+        }
+    }
+    if (memcmp(matrix, matrix_test, sizeof(matrix)) != 0) {
+        return 102;
+    }
+    U64 bb_w = bb_occ[WPAWN] | bb_occ[WKNIGHT] | bb_occ[WBISHOP] | bb_occ[WROOK] | bb_occ[WQUEEN] | bb_occ[WKING];
+    if (bb_w != white_pieces) {
+        return 103;
+    }
+    U64 bb_b = bb_occ[BPAWN] | bb_occ[BKNIGHT] | bb_occ[BBISHOP] | bb_occ[BROOK] | bb_occ[BQUEEN] | bb_occ[BKING];
+    if (bb_b != black_pieces) {
+        return 104;
+    }
+    if (all_pieces != (bb_w | bb_b)) {
+        return 105;
+    }    
+    return 0;
+}

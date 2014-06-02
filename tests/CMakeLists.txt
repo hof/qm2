@@ -7,12 +7,14 @@ add_executable(testGenmoves test_genmoves.cpp)
 add_executable(testSearch test_search.cpp)
 add_executable(testPolyglot test_polyglot.cpp)
 add_executable(testTT test_transpositiontable.cpp)
+add_executable(testFlip test_flip.cpp)
 
 target_link_libraries(testBits MAX2SRC)
 target_link_libraries(testGenmoves MAX2SRC)
 target_link_libraries(testSearch MAX2SRC)
 target_link_libraries(testPolyglot MAX2SRC)
 target_link_libraries(testTT MAX2SRC)
+target_link_libraries(testFlip MAX2SRC)
 
 
 #performance analyzing tests: 

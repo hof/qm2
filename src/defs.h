@@ -20,7 +20,7 @@
  *
  * Created on 8 april 2011, 20:20
  * 
- * For 64 bits architecturs, make sure to #define HARDWARE_64BITS
+ * For 64 bits architectures, make sure to #define HARDWARE_64BITS
  * For hardware popcount support, make sure to #define HARDWARE_POPCOUNT
  */
 
@@ -36,7 +36,7 @@
 
 typedef uint64_t U64;
 
-#define HARDWARE_POPCOUNT
+//#define HARDWARE_POPCOUNT
 #define HARDWARE_64BITS
 
 #define C64(x) x##UL
@@ -44,6 +44,7 @@ typedef uint64_t U64;
 static const U64 BIT32 = (C64(1) << 32);
 
 #ifdef HARDWARE_64BITS
+
 inline unsigned bitScanForward(U64 x) {
     assert(x);
     asm ("bsfq %0, %0" : "=r" (x) : "0" (x));
@@ -58,6 +59,7 @@ inline unsigned bitScanReverse(U64 x) {
 #endif /* 64 bits bitscan */
 
 #ifndef HARDWARE_64BITS
+
 inline unsigned bitScanForward(U64 x) {
     assert(x);
     if (x < BIT32) {
@@ -111,7 +113,7 @@ const U64 RANK[2][9] = {
     { 0, RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8} //whites point of view
 };
 
-const U64 BACKRANKS[2] = { RANK_1 | RANK_2, RANK_7 | RANK_8 }; 
+const U64 BACKRANKS[2] = {RANK_1 | RANK_2, RANK_7 | RANK_8};
 
 const U64 FILES[8] = {
     FILE_A,
@@ -190,8 +192,6 @@ const U64 BACKWARD_RANKS[8] = {
     RANK_1 | RANK_2 | RANK_3 | RANK_4 | RANK_5 | RANK_6 | RANK_7
 };
 
-
-
 const U64 WHITE_SQUARES = C64(0x55AA55AA55AA55AA);
 const U64 BLACK_SQUARES = C64(0xAA55AA55AA55AA55);
 
@@ -211,8 +211,8 @@ const U64 ATTACKZONE[2] = {
     RANK_8 | (RANK_7 & ~EDGE) | (RANK_6 & LARGE_CENTER) | (RANK_5 & CENTER)
 };
 
-
 #ifdef HARDWARE_POPCOUNT /* hardware popcount */
+
 inline int popCount(U64 b) {
     __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
     return b;
@@ -225,6 +225,7 @@ inline unsigned popCount0(U64 b) {
 #endif /* end: hardware popcount */
 
 #ifndef HARDWARE_POPCOUNT /* software popcount */
+
 inline unsigned popCount(U64 x) {
     x = (x & C64(0x5555555555555555)) + ((x >> 1) & C64(0x5555555555555555));
     x = (x & C64(0x3333333333333333)) + ((x >> 2) & C64(0x3333333333333333));
@@ -366,9 +367,9 @@ inline bool BLACK_SQUARE(unsigned char sq) {
 }
 
 inline int distance(int sq1, int sq2) {
-   int drank = ABS(RANK(sq1) - RANK(sq2));
-   int dfile = ABS(FILE(sq1) - FILE(sq2));
-   return MAX(drank, dfile);
+    int drank = ABS(RANK(sq1) - RANK(sq2));
+    int dfile = ABS(FILE(sq1) - FILE(sq2));
+    return MAX(drank, dfile);
 }
 
 inline int distance_rank(int sq1, int sq2) {
@@ -380,7 +381,7 @@ inline int distance_file(int sq1, int sq2) {
 }
 
 inline U64 forwardRanks(int sq, bool white) {
-    return white? FORWARD_RANKS[RANK(sq)] : BACKWARD_RANKS[RANK(sq)];
+    return white ? FORWARD_RANKS[RANK(sq)] : BACKWARD_RANKS[RANK(sq)];
 }
 
 /*

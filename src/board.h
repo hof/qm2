@@ -196,6 +196,29 @@ struct TBoardStack {
         checkers = 0;
     }
 
+    void flip() {
+        wtm = !wtm;
+        HASH_STM(hash_code);
+        if (enpassant_sq) {
+            enpassant_sq = FLIP_SQUARE(enpassant_sq);
+        }
+        checkers = flipBB(checkers);
+        uint8_t flags = castling_flags;
+        castling_flags = 0;
+        if (flags & CASTLE_K) {
+            castling_flags |= CASTLE_k;
+        }
+        if (flags & CASTLE_Q) {
+            castling_flags |= CASTLE_q;
+        }
+        if (flags & CASTLE_k) {
+            castling_flags |= CASTLE_K;
+        }
+        if (flags & CASTLE_q) {
+            castling_flags |= CASTLE_Q;
+        }
+    }
+
     void copy(TBoardStack * bFlags) {
         enpassant_sq = bFlags->enpassant_sq;
         castling_flags = bFlags->castling_flags;
@@ -246,6 +269,10 @@ struct TBoard {
     const uint8_t * king_sq[2];
 
     void clear();
+
+    void flip();
+    
+    int test();
 
     inline int topPiece(bool white) {
         if (white) {
@@ -396,11 +423,11 @@ struct TBoard {
     }
 
     void forward(TMove * move); //make a move
-    
+
     void backward(TMove * move); //unmake a move
 
     void forward(); //do a nullmove 
-    
+
     void backward(); //undo nullmove
 
     /**

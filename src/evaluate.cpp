@@ -343,16 +343,16 @@ int evaluate(TSearch * sd) {
 
     if (sd->stack->material_flags) {
         if ((sd->stack->material_flags & MFLAG_DRAW) != 0) {
-            result >>= 1;
+            result = result / 2;
         }
     }
 
-    result &= GRAIN;
     result = sd->pos->stack->wtm ? result : -result;
+    result &= GRAIN;
     sd->stack->eval_result = result;
 
     assert(result > -VKING && result < VKING);
-
+    
     return result;
 }
 
@@ -516,11 +516,11 @@ inline short evaluateMaterial(TSearch * sd) {
      */
     if (wpawns == 0 && value > 0 && piece_power < VROOK && wqueens == bqueens) {
         //no pawns and less than a rook extra piece_power is mostly drawn
-        value >>= 2;
+        value = value / 4;
         flags |= MFLAG_DRAW;
     } else if (bpawns == 0 && value < 0 && piece_power > -VROOK && wqueens == bqueens) {
         //same case for black
-        value >>= 2;
+        value = value / 4;
         flags |= MFLAG_DRAW;
     } else if (value && wpieces == 1 && bpieces == 1 && wpawns != bpawns && wbishops && bbishops
             && (bool(pos->white_bishops & BLACK_SQUARES) != bool(pos->black_bishops & BLACK_SQUARES))) {
@@ -962,7 +962,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     sd->stack->king_attack[BPAWN] += SHELTER_KPOS[FLIP_SQUARE(wkpos)];
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (pos): " << (int) sd->stack->king_attack_checks[BPAWN] << std::endl;
+    std::cout << "attack on WK (pos): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
 #endif
 
     //1. reward having the right to castle
@@ -978,7 +978,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (castling): " << (int) sd->stack->king_attack_checks[BPAWN] << std::endl;
+    std::cout << "attack on WK (castling): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
 #endif
     //2. reward having pawns in front of the king
     U64 kingFront = FORWARD_RANKS[RANK(wkpos)] & PAWN_SCOPE[FILE(wkpos)];
@@ -989,7 +989,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (shelter): " << (int) sd->stack->king_attack_checks[BPAWN] << std::endl;
+    std::cout << "attack on WK (shelter): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
 #endif
     U64 stormPawns = kingFront & pos->black_pawns;
     while (stormPawns) {
@@ -998,7 +998,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (storm): " << (int) sd->stack->king_attack_checks[BPAWN] << std::endl;
+    std::cout << "attack on WK (storm): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
 #endif
     //3. penalize (half)open files on the king
     U64 open = (openW | openB) & kingFront & RANK_8;
@@ -1010,14 +1010,14 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (open files): " << (int) sd->stack->king_attack_checks[BPAWN] << std::endl;
+    std::cout << "attack on WK (open files): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
 #endif
 
     //black king shelter
     sd->stack->king_attack[WPAWN] += SHELTER_KPOS[bkpos];
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (pos): " << (int) sd->stack->king_attack_checks[WPAWN] << std::endl;
+    std::cout << "attack on BK (pos): " << (int) sd->stack->king_attack[WPAWN] << std::endl;
 #endif
     //1. reward having the right to castle safely
     if (pos->stack->castling_flags & CASTLE_k
@@ -1032,7 +1032,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (castling): " << (int) sd->stack->king_attack_checks[WPAWN] << std::endl;
+    std::cout << "attack on BK (castling): " << (int) sd->stack->king_attack[WPAWN] << std::endl;
 #endif
     //2. reward having pawns in front of the king
     kingFront = BACKWARD_RANKS[RANK(bkpos)] & PAWN_SCOPE[FILE(bkpos)];
@@ -1043,7 +1043,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (shelter): " << (int) sd->stack->king_attack_checks[WPAWN] << std::endl;
+    std::cout << "attack on BK (shelter): " << (int) sd->stack->king_attack[WPAWN] << std::endl;
 #endif
     stormPawns = kingFront & pos->white_pawns;
     while (stormPawns) {
@@ -1052,7 +1052,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (storm): " << (int) sd->stack->king_attack_checks[WPAWN] << std::endl;
+    std::cout << "attack on BK (storm): " << (int) sd->stack->king_attack[WPAWN] << std::endl;
 #endif
     //3. penalize (half)open files on the king
     open = (openW | openB) & kingFront & RANK_1;
@@ -1064,7 +1064,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (open files): " << (int) sd->stack->king_attack_checks[WPAWN] << std::endl;
+    std::cout << "attack on BK (open files): " << (int) sd->stack->king_attack[WPAWN] << std::endl;
 #endif
     sd->stack->passers = passers;
     sd->hashTable->ptStore(sd);
@@ -1392,7 +1392,7 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
     }
     bool them = !us;
     int unstoppable = 0;
-    bool pVsK = sd->pos->getPieces(them) == 0;
+    bool p_vs_k = sd->pos->getPieces(them) == 0;
     U64 exclude = SIDE[us] & ~(RANK_4 | RANK_5);
     while (passers) {
         int sq = POP(passers);
@@ -1408,7 +1408,7 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
         std::cout << "base ";
         bonus.print();
 #endif
-        if (pVsK) {
+        if (p_vs_k) {
             unstoppable = MAX(unstoppable, evaluatePasserVsK(sd, us, sq));
         }
         if (BIT(sq) & exclude) {
@@ -1417,7 +1417,7 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
         bonus.half();
         int r = RANK(sq) - 1;
         if (us == BLACK) {
-            r = 6 - r;
+            r = 5 - r;
         }
         int to = forwardSq(sq, us);
 
@@ -1437,17 +1437,17 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
         U64 bit_sq = BIT(sq);
         U64 connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
         if (connection_mask & *sd->pos->pawns[us]) {
-            result->add(8, r * 20);
+            result->add(10, 10 + r * 10);
 #ifdef PRINT_PASSED_PAWN
-            std::cout << " connected: " << r * 20;
+            std::cout << " connected: " << 10 + r * 10;
 #endif
         } else {
             bit_sq = BIT(sq + PAWNDIRECTION[them]);
             connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
             if (connection_mask & *sd->pos->pawns[us]) {
-                result->add(4, r * 12);
+                result->add(5, 5 + r * 5);
 #ifdef PRINT_PASSED_PAWN
-                std::cout << " defended: " << r * 12;
+                std::cout << " defended: " << 5 + r * 5;
 #endif
             }
         }

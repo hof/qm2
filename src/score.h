@@ -31,12 +31,6 @@
 #include "defs.h"
 
 #define MAX_GAMEPHASES 16 //use grain size of 16 gamephases
-#define GAMEPHASE_BSR 2 //divide by 4 (right shift by 2) (64/4=16)
-#define GAMEPHASE_SCORE_BSR 4 //divide by 16 (right shift by 4)
-#define GAME_PHASES 2 //middlegame and endgame
-#define PHASE_OPENING 0 //two phases are used: middlegame and endgame
-#define PHASE_MIDDLEGAME 0
-#define PHASE_ENDGAME 1
 
 enum SCORE_CONSTANTS {
     SCORE_INFINITE = 32000,
@@ -46,9 +40,9 @@ enum SCORE_CONSTANTS {
     SCORE_DRAW = 0
 };
 
-typedef const short TSCORE_TABLE_64[GAME_PHASES][64];
-typedef const short TSCORE_TABLE_4[GAME_PHASES][4];
-typedef const short TSCORE_TABLE[GAME_PHASES];
+typedef const short TSCORE_TABLE_64[2][64];
+typedef const short TSCORE_TABLE_4[2][4];
+typedef const short TSCORE_TABLE[2];
 
 #define MATE_IN_PLY(s) ((s)>SCORE_MATE-MAX_PLY? SCORE_MATE-s : 0)
 #define MATED_IN_PLY(s) ((s)<-SCORE_MATE+MAX_PLY? SCORE_MATE+s : 0)
@@ -113,7 +107,7 @@ struct TScore {
 
     inline short get(short phase) {
         assert(phase >= 0 && phase <= MAX_GAMEPHASES);
-        return (mg * (MAX_GAMEPHASES - phase) + eg * phase) >> GAMEPHASE_SCORE_BSR;
+        return (mg * (MAX_GAMEPHASES - phase) + eg * phase) / MAX_GAMEPHASES;
     }
 
     inline void set(const TScore & s) {
@@ -206,9 +200,6 @@ struct TScore {
 typedef TScore TSCORE_PST[7][64];
 
 #define S(x,y) TScore(x,y)
-
-#define PHASED_SHORT(mg,eg,phase) (((mg) * (MAX_GAMEPHASES - phase) + (eg) * (phase)) >> GAMEPHASE_SCORE_BSR)
-#define PHASED_SCORE(s,phase) (((s.mg) * (MAX_GAMEPHASES - phase) + (s.eg) * (phase)) >> GAMEPHASE_SCORE_BSR)
 
 #define MUL256(x,y) (((x)*(y))/256)
 
