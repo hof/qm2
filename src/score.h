@@ -40,10 +40,6 @@ enum SCORE_CONSTANTS {
     SCORE_DRAW = 0
 };
 
-typedef const short TSCORE_TABLE_64[2][64];
-typedef const short TSCORE_TABLE_4[2][4];
-typedef const short TSCORE_TABLE[2];
-
 #define MATE_IN_PLY(s) ((s)>SCORE_MATE-MAX_PLY? SCORE_MATE-s : 0)
 #define MATED_IN_PLY(s) ((s)<-SCORE_MATE+MAX_PLY? SCORE_MATE+s : 0)
 
@@ -80,24 +76,6 @@ struct TScore {
     
     void print(std::string txt) {
         std::cout << txt << ": (" << mg << ", " << eg << ") ";
-    }
-
-
-    inline void add_ix64(TSCORE_TABLE_64 * table, char ix) {
-        assert(ix >= 0 && ix < 64);
-        mg += (*table)[0][ix];
-        eg += (*table)[1][ix];
-    }
-
-    inline void add_ix4(TSCORE_TABLE_4 * table, char ix) {
-        assert(ix >= 0 && ix < 4);
-        mg += (*table)[0][ix];
-        eg += (*table)[1][ix];
-    }
-
-    inline void add(TSCORE_TABLE * table) {
-        mg += (*table)[0];
-        eg += (*table)[1];
     }
 
     inline void add(const TScore * s) {
@@ -187,8 +165,8 @@ struct TScore {
     }
 
     inline void half() {
-        mg >>= 1;
-        eg >>= 1;
+        mg = mg / 2;;
+        eg  = eg /2;
     }
 
     inline bool valid() {

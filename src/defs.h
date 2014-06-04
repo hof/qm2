@@ -36,7 +36,7 @@
 
 typedef uint64_t U64;
 
-//#define HARDWARE_POPCOUNT
+#define HARDWARE_POPCOUNT
 #define HARDWARE_64BITS
 
 #define C64(x) x##UL

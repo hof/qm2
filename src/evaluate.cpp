@@ -352,7 +352,7 @@ int evaluate(TSearch * sd) {
     sd->stack->eval_result = result;
 
     assert(result > -VKING && result < VKING);
-    
+
     return result;
 }
 
@@ -572,27 +572,15 @@ void init_pst_store(TScore scores[], int wpiece) {
 
 void init_pst() {
     TScore scores[64];
-    const short mobility_scale[2][64] = {
-        {
-            2, 2, 2, 2, 2, 2, 2, 2,
-            2, 2, 2, 2, 2, 2, 2, 2,
-            2, 2, 2, 2, 2, 2, 2, 2,
-            2, 2, 2, 3, 3, 2, 2, 2,
-            1, 1, 1, 2, 2, 1, 1, 1,
-            1, 1, 1, 1, 1, 1, 1, 1,
-            1, 1, 1, 1, 1, 1, 1, 1,
-            1, 1, 1, 1, 1, 1, 1, 1
-        },
-        {
-            2, 2, 2, 2, 2, 2, 2, 2,
-            2, 2, 2, 2, 2, 2, 2, 2,
-            2, 2, 2, 2, 2, 2, 2, 2,
-            2, 2, 2, 2, 2, 2, 2, 2,
-            2, 2, 2, 2, 2, 2, 2, 2,
-            2, 2, 2, 2, 2, 2, 2, 2,
-            2, 2, 2, 2, 2, 2, 2, 2,
-            2, 2, 2, 2, 2, 2, 2, 2
-        }
+    const TScore mobility_weight[64] = {
+        S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2),
+        S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2),
+        S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2),
+        S(2, 2), S(2, 2), S(2, 2), S(3, 2), S(3, 2), S(2, 2), S(2, 2), S(2, 2),
+        S(1, 2), S(1, 2), S(1, 2), S(2, 2), S(2, 2), S(1, 2), S(1, 2), S(1, 2),
+        S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2),
+        S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2),
+        S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2)
     };
     const short ROOK_FILE_BONUS[8] = {
         -4, -4, 0, 4, 4, 0, -4, -4
@@ -606,19 +594,17 @@ void init_pst() {
         if ((bbsq & RANK_1) || (bbsq & RANK_8)) {
             continue;
         }
-        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
+        scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
         U64 caps = WPAWN_CAPTURES[sq];
         while (caps) {
             int ix = POP(caps);
-            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
+            scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
         }
-
         scores[sq].mul(8); //pawns are the most powerful to control squares
         scores[sq].mg += PAWN_FILE[FILE(sq)];
         if (bbsq & CENTER) {
             scores[sq].mg += 5;
         }
-
         scores[sq].eg = 0;
     }
     init_pst_store(scores, WPAWN);
@@ -626,11 +612,11 @@ void init_pst() {
     //Knight
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
-        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
+        scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
         U64 caps = KNIGHT_MOVES[sq];
         while (caps) {
             int ix = POP(caps);
-            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
+            scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
         }
         scores[sq].mul(3); //mobility is extra important because knights move slow
         scores[sq].add(KNIGHT_RANK[RANK(sq)]);
@@ -640,11 +626,11 @@ void init_pst() {
     //Bishop
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
-        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
+        scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
         U64 caps = BISHOP_MOVES[sq];
         while (caps) {
             int ix = POP(caps);
-            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
+            scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
         }
         if (sq == g2 || sq == b2) {
             scores[sq].mg += 2;
@@ -663,11 +649,11 @@ void init_pst() {
     //Queen
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
-        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
+        scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
         U64 caps = QUEEN_MOVES[sq];
         while (caps) {
             int ix = POP(caps);
-            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
+            scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
         }
         scores[sq].mg = ROOK_FILE_BONUS[FILE(sq)] / 2;
         scores[sq].mg += sq <= h1 ? -4 : 0;
@@ -677,11 +663,11 @@ void init_pst() {
     //King
     for (int sq = a1; sq < 64; sq++) {
         scores[sq].clear();
-        scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(sq));
+        scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
         U64 caps = KING_MOVES[sq];
         while (caps) {
             int ix = POP(caps);
-            scores[sq].add_ix64(&mobility_scale, FLIP_SQUARE(ix));
+            scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
         }
         if (BIT(sq) & LARGE_CENTER) {
             scores[sq].eg += 4;
@@ -1161,12 +1147,12 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
      * 3. Calculate the score and store on the stack
      */
     TPiecePlacement * pp = &pos->pieces[pc];
-    
+
     //bishop pair
     if (pp->count > 1 && pos->bishopPair(us) && (sd->stack->pawn_flags & PFLAG_CLOSED_CENTER) == 0) {
-       result->add(VBISHOPPAIR);
+        result->add(VBISHOPPAIR);
     }
-    
+
     U64 occ = pos->pawnsAndKings();
     bool them = !us;
     int kpos = *pos->king_sq[them];
@@ -1283,7 +1269,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
                 } else if (us == BLACK && (kpos_us == a8 || kpos_us == b8 || kpos_us == c8)
                         && (sq == a8 || sq == b8 || sq == a7 || sq == b7)) {
                     result->add(TRAPPED_ROOK);
-                } 
+                }
             }
         } else if (bitSq & fill[them]) {
             result->add(ROOK_SEMIOPEN_FILE);
@@ -1299,11 +1285,11 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
         if (moves & sd->stack->attack[us]) {
             result->add(popCount(moves & sd->stack->attack[us]) * ROOK_ATTACK);
         }
-        
+
         if ((bitSq & RANK[us][7]) && (BIT(*pos->king_sq[them]) & BACKRANKS[us])) {
             result->add(ROOK_7TH);
         }
-        
+
         //Tarrasch Rule: place rook behind passers
         U64 tpass = moves & sd->stack->passers; //touched passers
         if (tpass) {
