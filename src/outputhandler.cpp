@@ -44,7 +44,7 @@ void TOutputHandler::sendPV(int cpScore, int depth, int selDepth, U64 nodes, int
 
 
     outputString += " nodes ";
-    outputString += n64tos(nodes);
+    outputString += ntos(nodes);
     outputString += " time ";
     outputString += ntos(time);
     outputString += " nps ";

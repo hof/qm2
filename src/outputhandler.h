@@ -34,25 +34,19 @@
 #include "defs.h"
 #include "move.h"
 #include <fstream>
+#include <sstream>
 
 class TOutputHandler {
 private:
 
-    std::string ntos(int number) {
+    std::string ntos(U64 number) {
         std::string result = "";
-        char buf[128];
-        sprintf(buf, "%d", number);
-        result = buf;
+        std::stringstream tmp;
+        tmp << number;
+        result = tmp.str();
         return result;
     }
 
-    std::string n64tos(U64 number) {
-        std::string result = "";
-        char buf[128];
-        sprintf(buf, "%llu", number);
-        result = buf;
-        return result;
-    }
 public:
     volatile bool engineStop;
     volatile bool enginePonder;

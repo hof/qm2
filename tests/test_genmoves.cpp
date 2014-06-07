@@ -53,7 +53,6 @@ void movePerftDivide(TSearch * searchData, int depth) {
     TBoard * pos = searchData->pos;
     std::cout << pos->asFen() << std::endl;
     moveList->clear();
-    U64 target = FULL_BOARD ^ *pos->boards[WPIECES + !pos->stack->wtm];
     genCaptures(pos, moveList, FULL_BOARD);
     genPromotions(pos, moveList);
     genCastles(pos, moveList);
@@ -101,7 +100,6 @@ int arraySum(int anArray[], int arraySize) {
 int main(int argc, char** argv) {
 
     clock_t begin;
-    clock_t beginTest;
     clock_t now;
 
     THashTable * hashTable = new THashTable(0);
@@ -111,7 +109,6 @@ int main(int argc, char** argv) {
 
 
     InitMagicMoves();
-    begin = clock();
     std::cout << "%SUITE_STARTING% test_genmoves" << std::endl;
     std::cout << "%SUITE_STARTED%" << std::endl;
 
@@ -127,7 +124,7 @@ int main(int argc, char** argv) {
     totalNodes += arraySum(targetValues2, sizeof (targetValues2) / sizeof (int));
     totalNodes += arraySum(targetValues3, sizeof (targetValues3) / sizeof (int));
 
-    beginTest = clock();
+    begin = clock();
     testMoveGeneration("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", targetValues1, sizeof (targetValues1) / sizeof (int), searchData);
     testMoveGeneration("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", targetValues2, sizeof (targetValues2) / sizeof (int), searchData);
     testMoveGeneration("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1", targetValues3, sizeof (targetValues3) / sizeof (int), searchData);

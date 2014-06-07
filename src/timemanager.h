@@ -47,7 +47,7 @@ public:
         maxEndTime = 0;
     }
 
-    int NormalizeTime(unsigned int timeInMs) {
+    int NormalizeTime(int timeInMs) {
         return (U64(timeInMs) * 1000) / CLOCKS_PER_SEC;
     }
 
@@ -55,15 +55,15 @@ public:
         startTime = clock();
     }
 
-    void setMaxTime(unsigned int timeInMs) {
+    void setMaxTime(int timeInMs) {
         maxEndTime = startTime + NormalizeTime(timeInMs);
     }
 
-    void setEndTime(unsigned int timeInMs) {
+    void setEndTime(int timeInMs) {
         endTime = startTime + NormalizeTime(timeInMs);
     }
 
-    void set(unsigned int myTime, int oppTime, int myInc, int oppInc, int movesLeft);
+    void set(int myTime, int oppTime, int myInc, int oppInc, int movesLeft);
 
     inline bool timeIsUp() {
         return clock() >= endTime;

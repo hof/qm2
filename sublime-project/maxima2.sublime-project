@@ -1,0 +1,69 @@
+{
+    "folders": 
+    [ 
+        {
+            "path": "../src",
+            "name": "Source Files",
+            "file_include_patterns": ["*.cpp", "*.h"]
+        },
+        {
+            "path": "../tests",
+            "name": "Tests",
+            "file_include_patterns": ["*.cpp", "*.h"]
+        },
+        {
+            "path": "../build",
+            "name": "Build"
+        }
+    ],
+	"build_systems":
+	[
+		{
+            "name": "Maxima2 Build",
+			"cmd":
+			[
+				"cd $project_path && cd ../build && cmake -DCMAKE_BUILD_TYPE=release .. && make"
+			],
+			"shell": true,
+            "file_regex": "/([^/:]+):(\\d+):(\\d+): ",
+            "variants": 
+            [   
+                {
+                    "name": "Maxima 2 Debug Build",
+                    "cmd":
+                    [
+                        "cd $project_path && cd ../build && cmake -DCMAKE_BUILD_TYPE=debug .. && make"
+                    ]
+                },
+                {
+                    "name": "Maxima 2 Release Build",
+                    "cmd":
+                    [
+                        "cd $project_path && cd ../build && cmake -DCMAKE_BUILD_TYPE=release .. && make"
+                    ]
+                },
+                {
+                    "name": "Maxima 2 Clean",
+                    "cmd":
+                    [
+                        "cd $project_path && cd ../build && make clean"
+                    ]
+                },
+                {
+                    "name": "Run Maxima 2",
+                    "cmd":
+                    [
+                        "cd $project_path && cd ../build/src && start maxima2"
+                    ]
+                },
+                {
+                    "name": "Run Maxima 2 Tests",
+                    "cmd":
+                    [
+                        "cd $project_path && cd ../build/tests && testBits && testGenmoves && testSearch && testTT && testWAC"
+                    ]
+                }        
+            ]
+		}
+	]
+}

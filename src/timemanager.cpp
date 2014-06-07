@@ -25,7 +25,7 @@
 #include "defs.h"
 #include "timemanager.h"
 
-void TTimeManager::set(unsigned int myTime, int oppTime, int myInc, int oppInc, int movesLeft) {
+void TTimeManager::set(int myTime, int oppTime, int myInc, int oppInc, int movesLeft) {
     static const int OVERHEAD_TIME = 500; //reserve 500ms for overhead (e.g. a slow interface)
     static const double EMERGENCY_FACTOR = 2.0; //for emergencies, multiply the time with this amount
     int M = myInc > 0? 25 : 30; //assume the game is decided after this amount of moves

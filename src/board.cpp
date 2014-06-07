@@ -292,7 +292,7 @@ void TBoard::backward() { //undo a null move
  */
 bool TBoard::valid(TMove * move) {
     int piece = move->piece;
-    if (stack->wtm != piece <= WKING) {
+    if (stack->wtm != (piece <= WKING)) {
         return false;
     }
     int ssq = move->ssq;
@@ -664,11 +664,11 @@ int TBoard::givesCheck(TMove * move) {
  * @param piece this will be set to the piece type 
  * @return bitboard with the location of the smallest attacker
  */
-U64 TBoard::getSmallestAttacker(U64 attacks, bool wtm, int& piece) {
-    int first_piece = PAWN[wtm];
-    int last_piece = first_piece + (WKING - WPAWN);
+U64 TBoard::getSmallestAttacker(U64 attacks, bool wtm, uint8_t & piece) {
+    uint8_t first_piece = PAWN[wtm];
+    uint8_t last_piece = first_piece + (WKING - WPAWN);
     for (piece = first_piece; piece <= last_piece; piece++) {
-        U64 subset = attacks & *boards[piece];
+        U64 subset = attacks & *(boards[piece]);
         if (subset) {
             return subset & -subset;
         }
@@ -682,8 +682,8 @@ U64 TBoard::getSmallestAttacker(U64 attacks, bool wtm, int& piece) {
  * @return expected gain or loss by playing this move as a number in centipawns (e.g +300 when fully winning a knight)
  */
 int TBoard::SEE(TMove * move) {
-    int captured_piece = move->capture;
-    int moving_piece = move->piece;
+    uint8_t captured_piece = move->capture;
+    uint8_t moving_piece = move->piece;
     int captured_val = PIECE_VALUE[captured_piece];
 
     /*

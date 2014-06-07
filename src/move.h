@@ -129,7 +129,7 @@ public:
                 && promotion == move->promotion;
     }
 
-    inline bool clear() {
+    inline void clear() {
         piece = 0;
     }
    

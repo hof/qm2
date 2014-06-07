@@ -625,7 +625,7 @@ struct TBoard {
         return stack->wtm ? attackedByBlackPawn(sq) : attackedByWhitePawn(sq);
     }
 
-    U64 getSmallestAttacker(U64 attacks, bool wtm, int &piece);
+    U64 getSmallestAttacker(U64 attacks, bool wtm, uint8_t &piece);
 
     int SEE(TMove * capture);
 

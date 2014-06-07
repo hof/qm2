@@ -125,7 +125,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     iid_depth -= searchData->stack->nodeType != PVNODE;
                     iid_depth -= searchData->stack->nodeType == ALLNODE;
                     iid_depth = MAX(ONE_PLY, iid_depth);
-                    int iid_score = searchData->pvs(alpha, beta, iid_depth);
+                    searchData->pvs(alpha, beta, iid_depth);
                     searchData->skipNull = skipNull;
                     searchData->hashTable->ttLookup(searchData, iid_depth, alpha, beta);
                     moveList->clear();

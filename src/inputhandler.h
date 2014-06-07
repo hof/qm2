@@ -112,7 +112,7 @@ public:
         return _hashTable;
     }
 
-    THashTable * clearHashTable() {
+    void clearHashTable() {
         if (_hashTable) {
             _hashTable->clear();
         }

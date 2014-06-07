@@ -70,7 +70,7 @@ void * TEngine::_think(void* engineObjPtr) {
     TTimeManager * tm = searchData->timeManager;
 
     int maxDepth = game.maxDepth;
-    int maxNodes = game.maxNodes;
+    U64 maxNodes = game.maxNodes;
     int maxTime = game.maxTimePerMove;
     int whiteTime = game.whiteTime;
     int blackTime = game.blackTime;
@@ -80,7 +80,6 @@ void * TEngine::_think(void* engineObjPtr) {
     TMove targetMove = game.targetMove;
     int targetScore = game.targetScore;
     bool ponder = game.ponder;
-    int learnParam = game.learnParam;
     double learnFactor = game.learnFactor;
     evaluate(searchData);
 
@@ -289,8 +288,10 @@ void * TEngine::_think(void* engineObjPtr) {
             }
 
             //stop if a mate is found and the iteration depth is deeper than the mate depth
-            if ((MATE_IN_PLY(resultScore) && type == EXACT && depth / ONE_PLY > MATE_IN_PLY(resultScore))
-                    || (MATED_IN_PLY(resultScore)) && type == EXACT && depth / ONE_PLY > MATED_IN_PLY(resultScore)) {
+            if (MATE_IN_PLY(resultScore) && type == EXACT && depth / ONE_PLY > MATE_IN_PLY(resultScore)) {
+                break;
+            }
+            if (MATED_IN_PLY(resultScore) && type == EXACT && depth / ONE_PLY > MATED_IN_PLY(resultScore)) {
                 break;
             }
 
@@ -816,7 +817,6 @@ void * TEngine::_learn(void * engineObjPtr) {
         }
         double points = stats[1] + 0.5 * stats[0];
         int maxPoints = batch;
-        int wins = stats[1] - stats[2];
         totalNodes[0] += nodes[0];
         totalNodes[1] += nodes[1];
         double score = (100.0 * points) / maxPoints;
@@ -963,7 +963,6 @@ void TEngine::_create_start_positions(TSearch * sd_root, TBook * book, string * 
             int count = book->findMoves(sd_root->pos, bookMoves);
             if (count > 0) {
                 int randomScore = 0;
-                int totalBookScore = 1;
                 for (int pickMove = 0; pickMove < 2; pickMove++) {
                     int totalScore = 0;
                     for (TMove * bookMove = bookMoves->first; bookMove != bookMoves->last; bookMove++) {
@@ -973,7 +972,6 @@ void TEngine::_create_start_positions(TSearch * sd_root, TBook * book, string * 
                             break;
                         }
                     }
-                    totalBookScore = totalScore;
                     randomScore = (rand() % totalScore) + 1;
                 }
             }

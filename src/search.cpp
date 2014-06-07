@@ -646,7 +646,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
             stack->bestMove.setMove(move);
             alpha = score;
         }
-    } while (move = movePicker->pickNextMove(this, depth, alpha, beta));
+    } while ( (move = movePicker->pickNextMove(this, depth, alpha, beta)) );
     return alpha;
 }
 

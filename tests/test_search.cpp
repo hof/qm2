@@ -119,13 +119,11 @@ int arraySum(int anArray[], int arraySize) {
 int main(int argc, char** argv) {
 
     clock_t begin;
-    clock_t beginTest;
     clock_t now;
 
     THashTable * hashTable = new THashTable(8);
 
     InitMagicMoves();
-    begin = clock();
     std::cout << "%SUITE_STARTING% test_genmoves" << std::endl;
     std::cout << "%SUITE_STARTED%" << std::endl;
 
@@ -141,12 +139,11 @@ int main(int argc, char** argv) {
     totalNodes += arraySum(targetValues3, sizeof (targetValues3) / sizeof (int));
     totalNodes += arraySum(targetValues4, sizeof (targetValues4) / sizeof (int));
 
-    beginTest = clock();
+    begin = clock();
     testMoveGeneration("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", targetValues1, sizeof (targetValues1) / sizeof (int), hashTable);
     testMoveGeneration("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", targetValues2, sizeof (targetValues2) / sizeof (int), hashTable);
     testMoveGeneration("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1", targetValues3, sizeof (targetValues3) / sizeof (int), hashTable);
     testMoveGeneration("r5r1/p1q2p1k/1p1R2pB/3pP3/6bQ/2p5/P1P1NPPP/6K1 w - - 0 1", targetValues4, sizeof (targetValues4) / sizeof (int), hashTable);
-    
     now = clock();
 
     std::cout << totalNodes << " nodes generated in " << (now - begin) << "ms (" << U64(CLOCKS_PER_SEC * U64(totalNodes)) / (now - begin) << "nps)" << std::endl;

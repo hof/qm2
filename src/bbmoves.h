@@ -72,7 +72,7 @@ static U64 MagicBishopMoves(const unsigned int sq, const U64 occ) {
  * @param occ occupancy bitboard
  * @return bitboard populated with rook moves
  */
-static U64 MagicRookMoves(const unsigned int sq, const U64 occ) {
+inline U64 MagicRookMoves(const unsigned int sq, const U64 occ) {
     return MAGIC_MOVES_ROOK_DB[sq][(((occ) & MAGIC_MOVES_ROOK_MASK[sq]) * MAGIC_MOVES_ROOK_MAGICS[sq]) >> MINIMAL_R_BITS_SHIFT(sq)];
 }
 
@@ -82,7 +82,7 @@ static U64 MagicRookMoves(const unsigned int sq, const U64 occ) {
  * @param occ occupancy bitboard
  * @return bitboard populated with queen moves
  */
-static U64 MagicQueenMoves(const unsigned int sq, const U64 occ) {
+inline U64 MagicQueenMoves(const unsigned int sq, const U64 occ) {
     return MagicBishopMoves(sq, occ) | MagicRookMoves(sq, occ);
 }
 
