@@ -24,8 +24,7 @@
 #ifndef MOVE_H
 #define	MOVE_H
 
-#include <assert.h>
-#include <string>
+#include "defs.h"
 using std::string;
 
 class TBoard;
@@ -41,14 +40,14 @@ public:
     //[1: en-passant 28]
     //[3: special 29
 
-    unsigned char piece;
-    unsigned char ssq;
-    unsigned char tsq;
-    unsigned char capture;
-    unsigned char promotion;
-    unsigned char castle;
+    uint8_t piece;
+    uint8_t ssq;
+    uint8_t tsq;
+    uint8_t capture;
+    uint8_t promotion;
+    uint8_t castle;
     bool en_passant;
-    unsigned char special; 
+    uint8_t special; 
     int score;
 
     void setMove(TMove * move) {
@@ -64,6 +63,7 @@ public:
     }
 
     void setMove(int move) {
+        assert(move >= 0);
         piece = move & 0x0F;
         ssq = move >> 4 & 0x3F;
         tsq = move >> 10 & 0x3F;
@@ -96,7 +96,7 @@ public:
         ssq = from;
         tsq = to;
         promotion = 0;
-        capture = capturedPiece;
+        capture = capturedPiece;;
     }
     
     inline void setPromotionCapture(char pc, char from, char to, char promotionPiece, char capturedPiece) {
@@ -119,6 +119,7 @@ public:
         result |= castle << 24;
         result |= en_passant << 28;
         result |= special << 29;
+        assert(result >= 0);
         return result;
     }
 
