@@ -31,8 +31,7 @@
 #include <time.h>
 #include <string.h>
 
-const int ONE_SECOND = CLOCKS_PER_SEC;
-const double ONE_MS = ONE_SECOND / 1000;
+const double ONE_MS = CLOCKS_PER_SEC / 1000;
 const int INFINITE_TIME = 24 * 60 * 60 * 1000;
 
 class TTimeManager {
@@ -48,7 +47,7 @@ public:
         maxEndTime = 0;
     }
 
-    int ticks(int time_in_ms) {
+    clock_t ticks(int time_in_ms) {
         return time_in_ms * ONE_MS;
     }
 
@@ -75,7 +74,7 @@ public:
     }
 
     inline int available() {
-        int ticks = endTime - clock();
+        clock_t ticks = endTime - clock();
         return ticks / ONE_MS;
     }
 
@@ -84,12 +83,12 @@ public:
      * @return elapsed time in ms
      */
     inline int elapsed() {
-        int ticks = clock() - startTime;
+        clock_t ticks = clock() - startTime;
         return ticks / ONE_MS;
     }
 
     inline bool requestMoreTime() {
-        int ticks_available = maxEndTime - endTime;
+        clock_t ticks_available = maxEndTime - endTime;
         if (ticks_available > ticks(500)) {
             endTime += (ticks_available / 2);
             return true;
@@ -100,7 +99,7 @@ public:
 
     inline bool requestLessTime() {
         if (maxEndTime != endTime) {
-            int ticks_available = endTime - startTime;
+            clock_t ticks_available = endTime - startTime;
             if (ticks_available > ticks(0)) {
                 endTime -= ticks_available / 2;
                 return true;
