@@ -43,7 +43,6 @@
 
 using namespace std;
 
-const short ONE_SECOND = 1000;
 
 /**
  * Thread function for searching and finding a best move in a chess position
@@ -82,8 +81,6 @@ void * TEngine::_think(void* engineObjPtr) {
     bool ponder = game.ponder;
     double learnFactor = game.learnFactor;
     evaluate(searchData);
-
-
 
     tm->setStartTime();
     int myTime = root->stack->wtm ? whiteTime : blackTime;

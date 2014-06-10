@@ -31,8 +31,9 @@
 #include <time.h>
 #include <string.h>
 
-const int TIME_UNIT = CLOCKS_PER_SEC;
-const unsigned int INFINITE_TIME = 24 * 60 * 60 * 1000;
+const int ONE_SECOND = CLOCKS_PER_SEC;
+const double ONE_MS = ONE_SECOND / 1000;
+const int INFINITE_TIME = 24 * 60 * 60 * 1000;
 
 class TTimeManager {
 private:
@@ -47,20 +48,20 @@ public:
         maxEndTime = 0;
     }
 
-    int NormalizeTime(int timeInMs) {
-        return (U64(timeInMs) * 1000) / CLOCKS_PER_SEC;
+    int ticks(int time_in_ms) {
+        return time_in_ms * ONE_MS;
     }
 
     void setStartTime() {
         startTime = clock();
     }
 
-    void setMaxTime(int timeInMs) {
-        maxEndTime = startTime + NormalizeTime(timeInMs);
+    void setMaxTime(int ms) {
+        maxEndTime = startTime + ticks(ms);
     }
 
-    void setEndTime(int timeInMs) {
-        endTime = startTime + NormalizeTime(timeInMs);
+    void setEndTime(int ms) {
+        endTime = startTime + ticks(ms);
     }
 
     void set(int myTime, int oppTime, int myInc, int oppInc, int movesLeft);
@@ -70,11 +71,12 @@ public:
     }
 
     inline bool available(int ms) {
-        return (clock() + ms) <= endTime;
+        return (clock() + ticks(ms)) <= endTime;
     }
 
     inline int available() {
-        return endTime - clock();
+        int ticks = endTime - clock();
+        return ticks / ONE_MS;
     }
 
     /**
@@ -82,13 +84,14 @@ public:
      * @return elapsed time in ms
      */
     inline int elapsed() {
-        return (CLOCKS_PER_SEC * (clock() - startTime)) / CLOCKS_PER_SEC;
+        int ticks = clock() - startTime;
+        return ticks / ONE_MS;
     }
 
     inline bool requestMoreTime() {
-        int available = maxEndTime - endTime;
-        if (available > 500) {
-            endTime += (available / 2);
+        int ticks_available = maxEndTime - endTime;
+        if (ticks_available > ticks(500)) {
+            endTime += (ticks_available / 2);
             return true;
         }
         endTime = maxEndTime;
@@ -97,9 +100,9 @@ public:
 
     inline bool requestLessTime() {
         if (maxEndTime != endTime) {
-            int available = endTime - startTime;
-            if (available > 0) {
-                endTime -= available / 2;
+            int ticks_available = endTime - startTime;
+            if (ticks_available > ticks(0)) {
+                endTime -= ticks_available / 2;
                 return true;
             }
         }

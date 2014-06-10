@@ -87,7 +87,7 @@ private:
     pthread_mutex_t _statemutex; // = PTHREAD_MUTEX_INITIALIZER;
 
     inline pthread_t getThread(int index) {
-        return (index >= 0 && index < MAX_THREADS)? _threads[index] : NULL;
+        return (index >= 0 && index < MAX_THREADS)? _threads[index] : 0;
     }
 
     void Lock() {

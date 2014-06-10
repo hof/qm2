@@ -66,4 +66,5 @@ void TTimeManager::set(int myTime, int oppTime, int myInc, int oppInc, int moves
     int maxTimeForThisMove = MIN(timeForThisMove*EMERGENCY_FACTOR, limit);
     this->setEndTime(timeForThisMove);
     this->setMaxTime(maxTimeForThisMove);
+    std::cout << endTime << std::endl;
 }
