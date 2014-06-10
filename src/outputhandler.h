@@ -39,7 +39,7 @@
 class TOutputHandler {
 private:
 
-    std::string ntos(U64 number) {
+    std::string ntos(int64_t number) {
         std::string result = "";
         std::stringstream tmp;
         tmp << number;

@@ -11,14 +11,6 @@
 	},
 	"buffers":
 	[
-		{
-			"file": "/C/Users/Hermen/Documents/GitHub/qm2/src/timemanager.h",
-			"settings":
-			{
-				"buffer_size": 2936,
-				"line_ending": "Windows"
-			}
-		}
 	],
 	"build_system": "Maxima2 Build",
 	"command_palette":
@@ -48,6 +40,8 @@
 	},
 	"file_history":
 	[
+		"/C/work/ng/examples/FOSRestBundleByExample-master/src/ByExample/DemoBundle/Controller/UserRestController.php",
+		"/C/Users/Hermen/Documents/GitHub/qm2/src/timemanager.h",
 		"/C/Users/Hermen/Documents/GitHub/qm2/src/timemanager.cpp",
 		"/C/Users/Hermen/Documents/GitHub/qm2/tests/test_search.cpp",
 		"/C/Users/Hermen/Documents/GitHub/qm2/src/movepicker.cpp",
@@ -57,7 +51,6 @@
 		"/C/Users/Hermen/Documents/GitHub/qm2/src/engine.cpp",
 		"/C/Users/Hermen/Documents/GitHub/qm2/src/engine.h",
 		"/C/Users/Hermen/Documents/GitHub/qm2/src/search.cpp",
-		"/C/Users/Hermen/Documents/GitHub/qm2/src/timemanager.h",
 		"/C/Users/Hermen/Documents/GitHub/qm2/tests/test_genmoves.cpp",
 		"/C/Users/Hermen/Documents/GitHub/qm2/src/move.cpp",
 		"/C/Users/Hermen/Documents/GitHub/qm2/src/move.h",
@@ -108,37 +101,8 @@
 	"groups":
 	[
 		{
-			"selected": 0,
 			"sheets":
 			[
-				{
-					"buffer": 0,
-					"file": "/C/Users/Hermen/Documents/GitHub/qm2/src/timemanager.h",
-					"settings":
-					{
-						"buffer_size": 2936,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								2935,
-								2935
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/C++/C++.tmLanguage",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 1384.0,
-						"zoom_level": 1.0
-					},
-					"type": "text"
-				}
 			]
 		}
 	],
