@@ -121,12 +121,8 @@ uint8_t MFLAG_DRAW = 1;
 uint8_t MFLAG_KING_ATTACK_FORCE_W = 2;
 uint8_t MFLAG_KING_ATTACK_FORCE_B = 4;
 
-const short TRADEDOWN_PIECES[MAX_PIECES + 1] = {
-    80, 40, 20, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
-
 const short TRADEDOWN_PAWNS[9] = {
-    -80, -40, -20, -10, 0, 0, 0, 0, 0
+    -120, -60, -30, -15, 0, 0, 0, 0, 0
 };
 
 const short ATTACKED_PIECE = -32; //piece attacked by a pawn
@@ -502,7 +498,7 @@ inline short evaluateMaterial(TSearch * sd) {
 
     int value = result.get(phase);
 
-    //If ahead in material, trade pieces (simplify) and keep pawns
+    //Keep pawns if ahead in material
     if (piece_power > MATERIAL_AHEAD_THRESHOLD) {
         value += TRADEDOWN_PAWNS[wpawns];
     } else if (piece_power < -MATERIAL_AHEAD_THRESHOLD) {
