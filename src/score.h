@@ -37,11 +37,12 @@ enum SCORE_CONSTANTS {
     SCORE_ILLEGAL = 32001,
     SCORE_INVALID = 32002,
     SCORE_MATE = 30000,
+    SCORE_DEEPEST_MATE = 29500,
     SCORE_DRAW = 0
 };
 
-#define MATE_IN_PLY(s) ((s)>SCORE_MATE-MAX_PLY? SCORE_MATE-s : 0)
-#define MATED_IN_PLY(s) ((s)<-SCORE_MATE+MAX_PLY? SCORE_MATE+s : 0)
+#define MATE_IN_PLY(s) ((s)>SCORE_DEEPEST_MATE? SCORE_MATE-s : 0)
+#define MATED_IN_PLY(s) ((s)<-SCORE_DEEPEST_MATE? SCORE_MATE+s : 0)
 
 struct TScore {
     int16_t mg; //middle game value

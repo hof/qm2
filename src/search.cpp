@@ -351,7 +351,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     if (!in_check
             && new_depth <= LOW_DEPTH
             && (eval - FUTILITY_MARGIN * depth) >= beta
-            && ABS(beta) < SCORE_MATE - MAX_PLY
+            && beta > -SCORE_DEEPEST_MATE
             && pos->hasPieces(pos->stack->wtm)) {
         return eval - FUTILITY_MARGIN * depth;
     }
@@ -367,7 +367,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && !in_check
             && new_depth > 0
             && eval >= beta
-            && ABS(beta) < SCORE_MATE - MAX_PLY
+            && beta > -SCORE_DEEPEST_MATE
             && pos->hasPieces(pos->stack->wtm)) {
         int rdepth = new_depth - (3 * ONE_PLY);
         if (rdepth >= 8 && stack->phase < 14) {
@@ -378,12 +378,12 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         int null_score = -pvs(-beta, -alpha, rdepth);
         backward();
         if (null_score >= beta) {
-            if (null_score >= SCORE_MATE - MAX_PLY) {
+            if (null_score > SCORE_DEEPEST_MATE) {
                 return beta; // not return unproven mate scores
             }
             return null_score;
         } else {
-            mate_threat = null_score < (-SCORE_MATE + MAX_PLY);
+            mate_threat = null_score < -SCORE_DEEPEST_MATE;
             if (mate_threat) {
                 TMove * threat = &(stack + 1)->bestMove;
                 if (!threat->capture && !threat->promotion) {
@@ -415,7 +415,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         if (best >= beta) {
             hashTable->ttStore(this, first_move->asInt(), best, depth, alpha, beta);
             if (!first_move->capture && !first_move->promotion) {
-                if (best < SCORE_MATE - MAX_PLY) {
+                if (best < SCORE_DEEPEST_MATE) {
                     updateKillers(first_move);
                 } else {
                     stack->mateKiller.setMove(first_move);
@@ -445,7 +445,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         gives_check = pos->givesCheck(move);
         bool skip_prune = stack->moveList.stage < QUIET_MOVES
                 || in_check || gives_check > 0 || move->capture || move->promotion
-                || move->castle || passedPawn(move);
+                || move->castle || passedPawn(move) || beta < -SCORE_DEEPEST_MATE;
 
         /*
          * 11. forward futility pruning at low depths
@@ -511,7 +511,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 // Beta Cutoff, hash the results, update killers and history table
                 hashTable->ttStore(this, move->asInt(), score, depth, alpha, beta);
                 if (!move->capture && !move->promotion) {
-                    if (best < SCORE_MATE - MAX_PLY) {
+                    if (best < SCORE_DEEPEST_MATE) {
                         updateKillers(move);
                     } else {
                         stack->mateKiller.setMove(move);
