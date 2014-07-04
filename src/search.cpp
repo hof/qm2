@@ -456,7 +456,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 && (eval < alpha || best >= alpha)
                 && new_depth <= LOW_DEPTH
                 ) {
-            int mc_max = 2 + ((depth * depth) >> 2);
+            int mc_max = 2 + ((depth * depth) / 4);
             if (searched_moves > mc_max) {
                 pruned_nodes++;
                 continue;
@@ -476,10 +476,9 @@ int TSearch::pvs(int alpha, int beta, int depth) {
          */
         extend_move = extendMove(move, gives_check);
         int reduce = 0;
-        if (!skip_prune
-                && new_depth > ONE_PLY) {
+        if (!skip_prune && max_reduce > 0) {
             reduce = ONE_PLY;
-            if (searched_moves >= 4 && new_depth > 2 * ONE_PLY) {
+            if (searched_moves >= 4) {
                 reduce += ONE_PLY;
             }
             reduce = MIN(max_reduce, reduce);
