@@ -479,7 +479,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         if (!skip_prune && max_reduce > 0) {
             reduce = ONE_PLY;
             if (searched_moves >= 4) {
-                reduce += ONE_PLY;
+                reduce += new_depth / 4;
             }
             reduce = MIN(max_reduce, reduce);
         }
