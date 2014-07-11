@@ -516,9 +516,10 @@ inline short evaluateMaterial(TSearch * sd) {
         //same case for black
         value = value / 4;
         flags |= MFLAG_DRAW;
-    } else if (value && wpieces == 1 && bpieces == 1 && wpawns != bpawns && wbishops && bbishops
+    } else if (wpieces == 1 && bpieces == 1 && wbishops && bbishops
             && (bool(pos->white_bishops & BLACK_SQUARES) != bool(pos->black_bishops & BLACK_SQUARES))) {
         // Opposite  bishop ending is mostly drawn as well
+        value = value / 3;
         flags |= MFLAG_DRAW;
     }
 
