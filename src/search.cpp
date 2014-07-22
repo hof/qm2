@@ -371,7 +371,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && pos->hasPieces(pos->stack->wtm)) {
         int rdepth = new_depth - (3 * ONE_PLY);
         if (rdepth >= 8 && stack->phase < 14) {
-            rdepth -= (rdepth >> 3);
+            rdepth -= rdepth / 6;
         }
         rdepth = MAX(rdepth, 0);
         forward();
