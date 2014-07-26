@@ -18,52 +18,96 @@
  * Simple C++ Test Suite
  */
 
-void testFail(std::string msg, std::string fen, TEngine * engine) {
-    std::cout << "%TEST_FAILED% time=0 testname=evaluation (test_evaluation) message=" << msg << std::endl;
+THashTable *globalHashTable;
+TEngine * engine;
+TOutputHandler oh;
+bool test_stop;
+int tests_passed;
+
+void testFail(std::string msg, int score, std::string fen, TEngine * engine) {
+    test_stop = true;
+    std::cout << "Test " << tests_passed << ": " << fen << " " << msg << " " << score << std::endl;
+    std::cout << "%TEST_FAILED% time=0 testname=evaluation (test_evaluation) message=evaluation test failed" << std::endl;
     engine->newGame(fen.c_str());
     engine->analyse();
 }
 
-void testEvaluation() {
-    std::cout << "evaluation_test test 1" << std::endl;
-
-    TEngine * engine = new TEngine();
-    THashTable *globalHashTable = new THashTable(128);
-    engine->setHashTable(globalHashTable);
-    engine->gameSettings.maxDepth = 20;
-    TOutputHandler oh;
-    engine->setOutputHandler(&oh);
-
-    /* Test 1: Perfectly save kings */
-    std::string fen = "r1bq1rk1/ppppbppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQ1RK1 w - - 3 6";
-    TSearch * s = new TSearch(fen.c_str(), globalHashTable, &oh);
-    evaluate(s);
-    if (s->stack->king_score[WHITE].mg != 0 || s->stack->king_score[BLACK].mg != 0) {
-        testFail("king_score != 0", fen, engine);
+void testEval(std::string fen, int min_score, int max_score) {
+    if (test_stop) {
         return;
     }
+    tests_passed++;
+    TSearch * s = new TSearch(fen.c_str(), globalHashTable, &oh);
+    int score = evaluate(s);
+    if (score < min_score) {
+        testFail("score < ", min_score, fen, engine);
+    }
+    if (score > max_score) {
+        testFail("score > ", max_score, fen, engine);
+    }
+    delete s;
+}
 
+void testKingAttackZero(std::string fen) {
+    if (test_stop) {
+        return;
+    }
+    tests_passed++;
+    TSearch * s = new TSearch(fen.c_str(), globalHashTable, &oh);
+    evaluate(s);
+    int score = s->stack->king_score[WHITE].mg;
+    if (score != 0) {
+        testFail("score (king attack white) 0 != ", score, fen, engine);
+    }
+    score = s->stack->king_score[BLACK].mg;
+    if (score != 0) {
+        testFail("score (king attack black) 0 != ", score, fen, engine);
+    }
+    delete s;
+}
 
-    //engine->newGame("1r4k1/2Q2pp1/4p3/4Pn1p/qr1PR3/5BPP/P2R2K1/8 b - - 2 30");
-    //engine->newGame("3R4/k7/2K5/8/8/8/5b2/8 w - - 79 111");   
-    //engine->newGame("1R6/1brk2p1/4p2p/p1P1Pp2/P7/6P1/1P4P1/2R3K1 w - - 0 1");
-    //engine->analyse();
-
-    delete engine;
-    delete globalHashTable;
+void testEvaluationSuite() {
+    /*
+     * Opening
+     */
+    testEval("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 0, 20);
+    
+    /*
+     * End games
+     */
+    testEval("8/8/k5r1/2P5/PQ6/KP6/4q3/8 w - - 0 1", -350, -200); 
+    testEval("8/8/4k3/3N1b2/3K1P2/8/8/8 b - - 7 1", -10, 10);
+    testEval("6k1/8/8/8/8/8/8/1K6 w - - 2 2", -10, 10);
+    testEval("8/4k3/8/8/8/8/5K2/R7 w - - 0 2", SCORE_WIN, SCORE_MATE);
+    testEval("2k5/8/8/8/8/2P5/8/2K5 w - - 0 1", -10, 10);
+    testEval("2k5/8/8/8/8/8/2P5/2K5 w - - 0 1", SCORE_WIN, SCORE_MATE);
+    testEval("7K/8/k1P5/7p/8/8/8/8 w - - 0 1", -10, 10);
+    
+    /*
+     * King Attack
+     */
+    testKingAttackZero("r1bq1rk1/ppppbppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQ1RK1 w - - 3 6");
+    
 }
 
 int main(int argc, char** argv) {
     std::cout << "%SUITE_STARTING% evaluation_test" << std::endl;
     std::cout << "%SUITE_STARTED%" << std::endl;
-
     std::cout << "%TEST_STARTED% test1 (evaluation_test)" << std::endl;
+    test_stop = false;
+    tests_passed = 0;
     InitMagicMoves();
-    testEvaluation();
+    globalHashTable = new THashTable(128);
+    engine = new TEngine();
+    engine->setHashTable(globalHashTable);
+    engine->gameSettings.maxDepth = 20;
+    engine->setOutputHandler(&oh);
+    testEvaluationSuite();
     std::cout << "%TEST_FINISHED% time=0 test1 (evaluation_test)" << std::endl;
-
     std::cout << "%SUITE_FINISHED% time=0" << std::endl;
 
+    delete engine;
+    delete globalHashTable;
     return (EXIT_SUCCESS);
 }
 

@@ -13,8 +13,8 @@ THashTable *globalHashTable;
 bool flipTest(TEngine * engine, const char * fen) {
     TBoard pos;
     pos.fromFen(fen);
-    std::cout << "\ntesting original: " << pos.asFen() << std::endl;
     if (pos.test() != 0) {
+        std::cout << "\ntesting position: " << pos.asFen() << std::endl;
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=board integrity failure before flip" << std::endl;
         std::cout << "pos.test() result " << pos.test() << std::endl;
         return false;
@@ -24,6 +24,7 @@ bool flipTest(TEngine * engine, const char * fen) {
     //flip
     pos.flip();
     if (pos.test() != 0) {
+        std::cout << "\ntesting position: " << pos.asFen() << std::endl;
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=board integrity failure after flip" << std::endl;
         std::cout << "pos.test() result " << pos.test() << std::endl;
         return false;
@@ -33,6 +34,7 @@ bool flipTest(TEngine * engine, const char * fen) {
     //flip back
     pos.flip();
     if (pos.test() != 0) {
+        std::cout << "\ntesting position: " << pos.asFen() << std::endl;
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=board integrity failure after flip back" << std::endl;
         std::cout << "pos.test() result " << pos.test() << std::endl;
         return false;
@@ -77,15 +79,13 @@ bool flipTest(TEngine * engine, const char * fen) {
     score1 = engine->getScore();
 
     pos.flip();
-    std::cout << "testing flipped:  " << pos.asFen() << std::endl;
-
+    
     engine->clearHash();
     engine->newGame(pos.asFen());
     engine->think();
     engine->stopAllThreads();
     int nodes2 = engine->getNodesSearched();
     score2 = engine->getScore();
-    std::cout << std::endl;
     
     if (score1 != score2) {
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=Search does not match" << std::endl;

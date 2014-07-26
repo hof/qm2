@@ -120,9 +120,9 @@ const short REDUNDANT_QUEEN = -20;
 uint8_t MFLAG_DRAW = 1;
 uint8_t MFLAG_KING_ATTACK_FORCE_W = 2;
 uint8_t MFLAG_KING_ATTACK_FORCE_B = 4;
-
-const short TRADEDOWN_PAWNS[9] = {
-    -120, -60, -30, -15, 0, 0, 0, 0, 0
+    
+const short TRADEDOWN_PAWNS_MUL[9] = {
+    210, 226, 238, 248, 256, 256, 256, 256, 256
 };
 
 const short ATTACKED_PIECE = -32; //piece attacked by a pawn
@@ -457,23 +457,7 @@ inline short evaluateMaterial(TSearch * sd) {
     bool balance = minor_balance && major_balance;
     bool mating_power_w = wrooks || wqueens || wminors > 2 || (wminors == 2 && wbishops > 0);
     bool mating_power_b = brooks || bqueens || bminors > 2 || (bminors == 2 && bbishops > 0);
-    bool mating_material_w = wpawns || mating_power_w;
-    bool mating_material_b = bpawns || mating_power_b;
 
-    if (mating_power_w != mating_power_b) {
-        if (mating_power_w) {
-            result.add(VMATING_POWER);
-        } else {
-            result.sub(VMATING_POWER);
-        }
-    }
-    if (mating_material_w != mating_material_b) {
-        if (mating_material_w) {
-            result.add(VMATING_MATERIAL);
-        } else {
-            result.sub(VMATING_MATERIAL);
-        }
-    }
     if (!balance) {
         //material imbalance
         int minors_ix = MAX(0, 4 + wminors - bminors);
@@ -481,46 +465,21 @@ inline short evaluateMaterial(TSearch * sd) {
         result.add(IMBALANCE[MIN(majors_ix, 8)][MIN(minors_ix, 8)]);
     }
 
-    int piece_power = result.get(phase);
-
     if (wpawns != bpawns) {
         result.mg += (wpawns - bpawns) * SVPAWN.mg;
         result.eg += (wpawns - bpawns) * SVPAWN.eg;
-
-        // penalty for not having pawns at all - makes it hard to win
-        if (wpawns == 0) {
-            result.add(VNOPAWNS);
-        }
-        if (bpawns == 0) {
-            result.sub(VNOPAWNS);
-        }
     }
 
     int value = result.get(phase);
 
-    //Keep pawns if ahead in material
-    if (piece_power > MATERIAL_AHEAD_THRESHOLD) {
-        value += TRADEDOWN_PAWNS[wpawns];
-    } else if (piece_power < -MATERIAL_AHEAD_THRESHOLD) {
-        value -= TRADEDOWN_PAWNS[bpawns];
-    }
-
     /*
-     * Special Cases / Endgame adjustments
+     * Sure wins
      */
-    if (wpawns == 0 && value > 0 && piece_power < VROOK && wqueens == bqueens) {
-        //no pawns and less than a rook extra piece_power is mostly drawn
-        value = value / 4;
-        flags |= MFLAG_DRAW;
-    } else if (bpawns == 0 && value < 0 && piece_power > -VROOK && wqueens == bqueens) {
-        //same case for black
-        value = value / 4;
-        flags |= MFLAG_DRAW;
-    } else if (wpieces == 1 && bpieces == 1 && wbishops && bbishops
-            && (bool(pos->white_bishops & BLACK_SQUARES) != bool(pos->black_bishops & BLACK_SQUARES))) {
-        // Opposite  bishop ending is mostly drawn as well
-        value = value / 3;
-        flags |= MFLAG_DRAW;
+    if (bpieces == 0 && bpawns == 0 && mating_power_w) {
+        value += SCORE_WIN;
+    }
+    if (wpieces == 0 && wpawns == 0 && mating_power_b) {
+        value -= SCORE_WIN;
     }
 
     /*
@@ -959,7 +918,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #ifdef PRINT_PAWN_EVAL
     std::cout << "attack on WK (castling): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
 #endif
-    
+
     //2. rewards for having shelter and storm pawns
     U64 kingFront = (FORWARD_RANKS[RANK(wkpos)] | KING_MOVES[wkpos]) & PAWN_SCOPE[FILE(wkpos)];
     U64 shelterPawns = kingFront & pos->white_pawns;
@@ -970,7 +929,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #ifdef PRINT_PAWN_EVAL
     std::cout << "attack on WK (shelter): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
 #endif
-    
+
     U64 stormPawns = kingFront & pos->black_pawns;
     while (stormPawns) {
         int sq = POP(stormPawns);
@@ -979,7 +938,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #ifdef PRINT_PAWN_EVAL
     std::cout << "attack on WK (storm): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
 #endif
-    
+
     //3. penalize (half)open files on the king
     U64 open = (openW | openB) & kingFront & RANK_8;
     if (open) {
@@ -1565,7 +1524,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
      */
     int shelter_ix = RANGE(0, 23, KING_ATTACK_OFFSET + sd->stack->king_attack[PAWN[us]]);
     result->set(KING_SHELTER[shelter_ix], 0);
-    
+
     U64 kaz = sd->stack->king_attack_zone[us];
 
 #ifdef PRINT_KING_SAFETY
