@@ -38,12 +38,12 @@ int evaluate(TSearch * searchData);
 
 void init_pst();
 extern TSCORE_PST PST;
+extern const TScore TEMPO[2];
 
 enum EVALUATION_CONSTANTS {
     MAX_PIECES = 16,
     MAX_CLOSED_POSITION = 32, //maximum value indicating how much closed the position is
-    GRAIN_SIZE = 2, //powers of 2, used for rounding evaluation score down (and hopefully get more cutoffs)
-    GRAIN = 0xFFFFFFFF & ~((1 << GRAIN_SIZE) - 1)
+    GRAIN_SIZE = 4 //used for rounding evaluation score (and hopefully get more cutoffs and less "noise")
 };
 
 /*******************************************************************************

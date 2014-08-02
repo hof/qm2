@@ -39,6 +39,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool white);
 inline TScore * evaluatePassers(TSearch * sd, bool white);
 inline int evaluatePasserVsK(TSearch * sd, bool white, int sq);
 inline TScore * evaluateKingAttack(TSearch * sd, bool white);
+int short evaluateEndgame(TSearch * sd, short score);
 
 /*******************************************************************************
  * Material Evaluation Values 
@@ -49,6 +50,8 @@ enum MaterialValues {
     VNOPAWNS = -40,
     VBISHOPPAIR = 40
 };
+
+const TScore TEMPO[2] = {S(-10, 0), S(10, 0)};
 
 const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
 
@@ -105,11 +108,6 @@ const TScore SVROOK = S(VROOK, VROOK + 50);
 const TScore SVQUEEN = S(VQUEEN, VQUEEN + 100);
 const TScore SVKING = S(VKING, VKING);
 
-const TScore PIECE_SCORE[13] = {
-    S(0, 0), SVPAWN, SVKNIGHT, SVBISHOP, SVROOK, SVQUEEN, SVKING,
-    SVPAWN, SVKNIGHT, SVBISHOP, SVROOK, SVQUEEN, SVKING
-};
-
 const short VMATING_POWER = 20;
 const short VMATING_MATERIAL = 50;
 
@@ -117,10 +115,13 @@ const short REDUNDANT_ROOK = -10;
 const short REDUNDANT_KNIGHT = -8;
 const short REDUNDANT_QUEEN = -20;
 
-uint8_t MFLAG_DRAW = 1;
-uint8_t MFLAG_KING_ATTACK_FORCE_W = 2;
-uint8_t MFLAG_KING_ATTACK_FORCE_B = 4;
-    
+uint8_t MFLAG_EG = 1; //do endgame evaluation
+uint8_t MFLAG_KING_ATTACK_FORCE_W = 2; //do  king attack evaluation (white)
+uint8_t MFLAG_KING_ATTACK_FORCE_B = 4; //do king attack evaluation (black)
+uint8_t MFLAG_IMBALANCE = 8; //material imbalance
+uint8_t MFLAG_MATING_POWER_W = 16;
+uint8_t MFLAG_MATING_POWER_B = 32;
+
 const short TRADEDOWN_PAWNS_MUL[9] = {
     210, 226, 238, 248, 256, 256, 256, 256, 256
 };
@@ -283,12 +284,6 @@ const TScore ROOK_WRONG_SIDE = S(-8, -16);
 const TScore ROOK_CLOSED_FILE = S(-5, -5);
 const short ROOK_ATTACK = 12;
 
-const TScore ROOK_MOBILITY[15] = {
-    S(-30, -60), S(-15, -30), S(-8, -15), S(-4, -8),
-    S(-2, -4), S(0, 0), S(2, 4), S(4, 8), S(6, 12),
-    S(7, 14), S(8, 16), S(9, 18), S(10, 20), S(11, 22), S(12, 24)
-};
-
 U64 ROOK_PATTERNS[2] = {//black, white
     BIT(h8) | BIT(g8) | BIT(h7) | BIT(g7) | BIT(a8) | BIT(b8) | BIT(a7) | BIT(b7),
     BIT(h1) | BIT(g1) | BIT(h2) | BIT(g2) | BIT(a1) | BIT(b1) | BIT(a2) | BIT(b2)
@@ -320,6 +315,7 @@ int evaluate(TSearch * sd) {
             && sd->pos->stack->pawn_hash == (sd->pos->stack - 1)->pawn_hash
             && (sd->stack - 1)->eval_result != SCORE_INVALID;
 
+    bool wtm = sd->pos->stack->wtm;
     int result = evaluateMaterial(sd); //sets stack->phase (required)
     TScore * score = &sd->stack->eval_score;
     score->set(evaluatePawnsAndKings(sd)); //initializes mobility and attack masks (required)
@@ -335,20 +331,22 @@ int evaluate(TSearch * sd) {
     score->sub(evaluatePassers(sd, BLACK));
     score->add(evaluateKingAttack(sd, WHITE)); //must be after piece evals
     score->sub(evaluateKingAttack(sd, BLACK)); //must be after piece evals
+    score->add(TEMPO[wtm]);
     result += score->get(sd->stack->phase);
-
-    if (sd->stack->material_flags) {
-        if ((sd->stack->material_flags & MFLAG_DRAW) != 0) {
-            result = result / 2;
-        }
+    sd->stack->eg_score = result;
+    if (sd->stack->material_flags & MFLAG_EG) {
+        sd->stack->eg_score = result;
+        result = evaluateEndgame(sd, result);
+    }
+    if (!wtm) {
+        result = -result;
+        sd->stack->eg_score = -sd->stack->eg_score;
     }
 
-    result = sd->pos->stack->wtm ? result : -result;
-    result &= GRAIN;
+    result = (result / GRAIN_SIZE) * GRAIN_SIZE;
     sd->stack->eval_result = result;
 
     assert(result > -VKING && result < VKING);
-
     return result;
 }
 
@@ -401,14 +399,18 @@ inline short evaluateMaterial(TSearch * sd) {
     int wpieces = wminors + wrooks + wqueens;
     int bpieces = bminors + brooks + bqueens;
 
-    // Calculate game phase
+    /*
+     * Game phase
+     */
     int phase = MAX_GAMEPHASES /* 16 */
             - (wminors + bminors) /* max: 8 */
             - (wrooks + brooks) /* max:4 */
             - 2 * (wqueens + bqueens) /* max: 4 */;
     phase = MAX(0, phase);
 
-    // Piece values 
+    /*
+     * Material count evaluation
+     */
     if (wknights != bknights) {
         result.mg += (wknights - bknights) * SVKNIGHT.mg;
         result.eg += (wknights - bknights) * SVKNIGHT.eg;
@@ -443,48 +445,50 @@ inline short evaluateMaterial(TSearch * sd) {
             result.sub(REDUNDANT_QUEEN);
         }
     }
-
-    uint8_t flags = 0;
-    if (wqueens > 0 && (wpieces > 2 || wqueens > 1)) {
-        flags |= MFLAG_KING_ATTACK_FORCE_W;
-    }
-    if (bqueens > 0 && (bpieces > 2 || bqueens > 1)) {
-        flags |= MFLAG_KING_ATTACK_FORCE_B;
-    }
-
-    bool minor_balance = (wminors == bminors);
-    bool major_balance = (wrooks + 2 * wqueens) == (brooks + 2 * bqueens);
-    bool balance = minor_balance && major_balance;
-    bool mating_power_w = wrooks || wqueens || wminors > 2 || (wminors == 2 && wbishops > 0);
-    bool mating_power_b = brooks || bqueens || bminors > 2 || (bminors == 2 && bbishops > 0);
-
-    if (!balance) {
-        //material imbalance
-        int minors_ix = MAX(0, 4 + wminors - bminors);
-        int majors_ix = MAX(0, 4 + wrooks + 2 * wqueens - brooks - 2 * bqueens);
-        result.add(IMBALANCE[MIN(majors_ix, 8)][MIN(minors_ix, 8)]);
-    }
-
     if (wpawns != bpawns) {
         result.mg += (wpawns - bpawns) * SVPAWN.mg;
         result.eg += (wpawns - bpawns) * SVPAWN.eg;
     }
 
+    /*
+     * Material Balance
+     */
+    uint8_t flags = 0;
+    bool balance = (wminors == bminors) && (wrooks + 2 * wqueens) == (brooks + 2 * bqueens);
+    if (!balance) { //material imbalance
+
+        flags |= MFLAG_IMBALANCE;
+        int minors_ix = MAX(0, 4 + wminors - bminors);
+        int majors_ix = MAX(0, 4 + wrooks + 2 * wqueens - brooks - 2 * bqueens);
+        result.add(IMBALANCE[MIN(majors_ix, 8)][MIN(minors_ix, 8)]);
+    }
+
+    /*
+     * Set Flags
+     */
+    bool mating_power_w = wrooks || wqueens || wminors > 2 || (wminors == 2 && wbishops > 0);
+    bool mating_power_b = brooks || bqueens || bminors > 2 || (bminors == 2 && bbishops > 0);
+
+    if (mating_power_w) {
+        flags |= MFLAG_MATING_POWER_W;
+        if (wqueens > 0 && (wpieces > 2 || wrooks > 0 || wqueens > 1)) {
+            flags |= MFLAG_KING_ATTACK_FORCE_W;
+        }
+    }
+    if (mating_power_b) {
+        flags |= MFLAG_MATING_POWER_B;
+        if (bqueens > 0 && (bpieces > 2 || brooks > 0 || bqueens > 1)) {
+            flags |= MFLAG_KING_ATTACK_FORCE_B;
+        }
+    }
+    if (wpawns <= 1 || bpawns <= 1 || !mating_power_w || !mating_power_b) {
+        flags |= MFLAG_EG;
+    }
+
+    /*
+     * Store result in material table and return
+     */
     int value = result.get(phase);
-
-    /*
-     * Sure wins
-     */
-    if (bpieces == 0 && bpawns == 0 && mating_power_w) {
-        value += SCORE_WIN;
-    }
-    if (wpieces == 0 && wpawns == 0 && mating_power_b) {
-        value -= SCORE_WIN;
-    }
-
-    /*
-     * Store and return
-     */
     sd->stack->material_score = value;
     sd->stack->material_flags = flags;
     sd->stack->phase = phase;
@@ -536,13 +540,12 @@ void init_pst() {
         S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2),
         S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2)
     };
-    const short ROOK_FILE_BONUS[8] = {
-        -4, -4, 0, 4, 4, 0, -4, -4
-    };
+    const short ROOK_FILE_BONUS[8] = {-4, -4, 0, 4, 4, 0, -4, -4};
+    const short PAWN_FILE[8] = {-15, -5, 0, 10, 10, 0, -5, -15};
+    const short PROGRESS[8] = {-3, -2, -1, 0, 1, 2, 1, 0};
 
     //Pawn
-    const short PAWN_FILE[8] = {-15, -5, 0, 10, 10, 0, -5, -15};
-    for (int sq = a1; sq < 64; sq++) {
+    for (int sq = a1; sq <= h8; sq++) {
         scores[sq].clear();
         U64 bbsq = BIT(sq);
         if ((bbsq & RANK_1) || (bbsq & RANK_8)) {
@@ -554,7 +557,7 @@ void init_pst() {
             int ix = POP(caps);
             scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
         }
-        scores[sq].mul(8); //pawns are the most powerful to control squares
+        scores[sq].mul(8);
         scores[sq].mg += PAWN_FILE[FILE(sq)];
         if (bbsq & CENTER) {
             scores[sq].mg += 5;
@@ -629,8 +632,12 @@ void init_pst() {
         if (BIT(sq) & CENTER) {
             scores[sq].eg += 5;
         }
+        if (BIT(sq) & EDGE) {
+            scores[sq].eg -= 2;
+        }
+        scores[sq].eg += PROGRESS[RANK(sq)];
         scores[sq].mg = 0;
-        scores[sq].eg *= 2.25;
+        scores[sq].eg *= 3;
     }
     init_pst_store(scores, WKING);
 }
@@ -1621,3 +1628,86 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     return result;
 }
 
+inline short evaluateEndgame(TSearch * s, short score) {
+    static const int SCORE_SURE_WIN[2] = {-SCORE_WIN, SCORE_WIN};
+    static const int BONUS[2] = {-10, 10};
+    static const int PAWN_TRADE[9] = {6, 12, 14, 15, 16, 16, 16, 17, 18};
+
+    TBoard * pos = s->pos;
+    bool us = (score > 0) || (score == 0 && pos->stack->wtm); //winning side white: 1, black: 0
+    bool them = !us;
+    int pawn_count[2] = {pos->pieces[BPAWN].count, pos->pieces[WPAWN].count};
+    bool has_pieces[2] = {pos->hasPieces(BLACK), pos->hasPieces(WHITE)};
+
+    //endgame with only pawns (KK, KPK, KPPK, KPKP, etc.)
+    if (!has_pieces[us] && !has_pieces[them]) {
+        assert(s->stack->phase == 16);
+        bool utm = us == WHITE && pos->stack->wtm;
+        if (opposition(*pos->white_king_sq, *pos->black_king_sq)) {
+            score -= 5 * BONUS[utm];
+        } else {
+            score += 5 * BONUS[utm];
+        }
+        if (pawn_count[us] == 0 && pawn_count[them] == 0) {
+            return score / 8;
+        }
+        int dpawns = pawn_count[WHITE] - pawn_count[BLACK];
+        if (dpawns > 1 || dpawns < -1) {
+            score += dpawns * 50;
+        }
+
+        //@todo: heuristic / perfect result for KPK, KPKP and KPPKP endgames
+        //std::cout << result << " ... ";
+        return score;
+    }
+
+    bool mating_power[2] = {(s->stack->material_flags & MFLAG_MATING_POWER_B) != 0,
+        (s->stack->material_flags & MFLAG_MATING_POWER_W) != 0};
+
+    //we have nothing left to win the game
+
+
+    if (!mating_power[us] && pawn_count[us] == 0) {
+        return score / 32;
+    }
+
+    //we have no mating power, so we depend upon our pawns to win
+    if (!mating_power[us] && has_pieces[them]) {
+        score = score * PAWN_TRADE[pawn_count[us]] / 16;
+
+    }
+
+    bool king_on_edge[2] = {(pos->black_kings & EDGE) != 0, (pos->white_kings & EDGE) != 0};
+
+    //opponent has nothing, we have mating power
+    if (pawn_count[them] == 0 && !has_pieces[them] && mating_power[us]) {
+        return score + SCORE_SURE_WIN[us] + king_on_edge[them] * BONUS[us];
+    }
+
+    bool winning_edge[2] = {score <= -VROOK, score >= VROOK};
+
+    //we have much more material than opponent, opponent has no pawns
+    if (pawn_count[them] == 0 && pawn_count[us] > 0 && winning_edge[us] && mating_power[us]) {
+        return score + SCORE_SURE_WIN[us] / 8 + king_on_edge[them] * BONUS[us];
+    }
+
+    //endgame with only pieces: requires an extra major piece to win
+    if (pawn_count[us] == 0 && pawn_count[them] == 0) {
+        if (!mating_power[us]) {
+            return score / 16;
+        }
+        if (!winning_edge[us]) {
+            return score / 8 + king_on_edge[them] * BONUS[us];
+        }
+        if (!mating_power[them]) {
+            return score + SCORE_SURE_WIN[us] / 4 + king_on_edge[them] * BONUS[us];
+        }
+        return score + SCORE_SURE_WIN[us] / 8 + king_on_edge[them] * BONUS[us];
+    }
+
+    //minor adjustments: reward having pieces, mating power and pawn(s))
+    int adjust = has_pieces[us] - has_pieces[them]
+            + mating_power[us] - mating_power[them]
+            + (pawn_count[them] == 0) - (pawn_count[us] == 0);
+    return score + (adjust * BONUS[us]);
+}

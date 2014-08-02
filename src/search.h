@@ -149,6 +149,7 @@ struct TSearchStack {
     short phase;
     bool equal_pawns; //false if a pawn or king has moved
     short eval_result;
+    short eg_score;
     TScore eval_score;
     short material_score;
     uint8_t material_flags;
@@ -160,6 +161,7 @@ struct TSearchStack {
     TScore queen_score[2];
     TScore king_score[2];
     TScore passer_score[2];
+    
     U64 passers;
     U64 mob[2];
     U64 attack[2];
@@ -369,10 +371,10 @@ public:
     
     inline int drawScore(int adjust=0) {
         int result = drawContempt.get(stack->phase)+adjust;
-        if (pos->stack->wtm == false) {
+        if (!pos->stack->wtm) {
             result = -result;
         }
-        return result & GRAIN;
+        return (result / GRAIN_SIZE) * GRAIN_SIZE;
     }
     
     int extendMove(TMove * move, int gives_check);

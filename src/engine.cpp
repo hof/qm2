@@ -43,7 +43,6 @@
 
 using namespace std;
 
-
 /**
  * Thread function for searching and finding a best move in a chess position
  * @param engineObjPtr pointer to the (parent) engine object
@@ -111,6 +110,7 @@ void * TEngine::_think(void* engineObjPtr) {
     if (!root->stack->wtm) {
         searchData->drawContempt.mul(-1);
     }
+    searchData->drawContempt.set(0, 0);
 
     searchData->maxNodes = maxNodes;
     searchData->learnFactor = learnFactor;
@@ -404,7 +404,7 @@ void print_row(std::string cap, TScore & total, int phase) {
     std::cout << std::setw(4) << total.eg;
     std::cout << " ";
     std::cout << std::setw(5) << total.get(phase);
-    std::cout << std::endl;    
+    std::cout << std::endl;
 }
 
 void print_row(std::string cap, TScore & w, TScore & b, int phase) {
@@ -436,14 +436,18 @@ void TEngine::analyse() {
     TSearch * s = new TSearch(_rootFen.c_str(), _hashTable, _outputHandler);
     s->stack->eval_result = evaluate(s);
     int phase = s->stack->phase;
+    bool wtm = s->pos->stack->wtm;
+    TScore tempo_score;
+    tempo_score.set(TEMPO[wtm]);
     TScore w, b;
     w.clear();
     b.clear();
 
     std::cout << s->pos->asFen().c_str() << std::endl;
+    std::cout << "Game Phase: " << phase << std::endl;
     std::cout << "Eval Component | White MG   EG | Black MG   EG |  Total MG   EG   Tot  \n";
     std::cout << "---------------+---------------+---------------+---------------------\n";
-    print_row("Game phase", phase);
+    print_row("Tempo", tempo_score.get(phase));
     print_row("Material", s->stack->material_score);
     print_row("Pawns & Kings", s->stack->pawn_score, phase);
     print_row("Knights", s->stack->knight_score[WHITE], s->stack->knight_score[BLACK], phase);
@@ -452,8 +456,16 @@ void TEngine::analyse() {
     print_row("Queens", s->stack->queen_score[WHITE], s->stack->queen_score[BLACK], phase);
     print_row("Passers", s->stack->passer_score[WHITE], s->stack->passer_score[BLACK], phase);
     print_row("King Attack", s->stack->king_score[WHITE], s->stack->king_score[BLACK], phase);
+    if (s->pos->stack->wtm == false) {
+        std::cout << "---------------+---------------+---------------+---------------------\n";
+        print_row("Black to move", s->stack->eg_score);
+    }
+    if ((s->stack->material_flags & 1) != 0) {
+        print_row("EG Adjustment", s->stack->eval_result - s->stack->eg_score);
+    }
+
     std::cout << "---------------+---------------+---------------+---------------------\n";
-    print_row("Total", s->pos->stack->wtm ? s->stack->eval_result : -s->stack->eval_result);
+    print_row("Total", s->stack->eval_result);
 
     delete s;
 }

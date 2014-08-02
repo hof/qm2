@@ -366,18 +366,24 @@ inline bool BLACK_SQUARE(unsigned char sq) {
     return !WHITE_SQUARE(sq);
 }
 
-inline int distance(int sq1, int sq2) {
-    int drank = ABS(RANK(sq1) - RANK(sq2));
-    int dfile = ABS(FILE(sq1) - FILE(sq2));
-    return MAX(drank, dfile);
-}
-
 inline int distance_rank(int sq1, int sq2) {
     return ABS(RANK(sq1) - RANK(sq2));
 }
 
 inline int distance_file(int sq1, int sq2) {
     return ABS(FILE(sq1) - FILE(sq2));
+}
+
+inline int distance(int sq1, int sq2) {
+    int drank = distance_rank(sq1, sq2);
+    int dfile = distance_file(sq2, sq2);
+    return MAX(drank, dfile);
+}
+
+inline bool opposition(int sq1, int sq2) {
+    int drank = distance_rank(sq1, sq2);
+    int dfile = distance_file(sq2, sq2);
+    return drank % 2 == 0 && dfile % 2 == 0;
 }
 
 inline U64 forwardRanks(int sq, bool white) {
