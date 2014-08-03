@@ -36,7 +36,7 @@ class TSearch;
 
 int evaluate(TSearch * searchData);
 
-void init_pst();
+void InitPST();
 extern TSCORE_PST PST;
 extern const TScore TEMPO[2];
 

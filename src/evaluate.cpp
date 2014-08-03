@@ -24,11 +24,11 @@
 #include "defs.h"
 #include "score.h"
 
+#include "pst.h"
+
 //#define PRINT_PAWN_EVAL 
 //#define PRINT_KING_SAFETY
 //#define PRINT_PASSED_PAWN 
-
-TSCORE_PST PST; //piece square table
 
 inline short evaluateMaterial(TSearch * sd);
 inline TScore * evaluatePawnsAndKings(TSearch * sd);
@@ -41,15 +41,34 @@ inline int evaluatePasserVsK(TSearch * sd, bool white, int sq);
 inline TScore * evaluateKingAttack(TSearch * sd, bool white);
 int short evaluateEndgame(TSearch * sd, short score);
 
+TSCORE_PST PST;
+
+/**
+ * Initialize the Piece Square Tables
+ */
+void InitPST() {
+    for (int sq = a1; sq <= h8; sq++) {
+        PST[EMPTY][sq].mg = 0;
+        PST[EMPTY][sq].eg = 0;
+        PST[WPAWN][sq].mg = PST_PAWN_MG[sq];
+        PST[WPAWN][sq].eg = PST_PAWN_EG[sq];
+        PST[WKNIGHT][sq].mg = PST_KNIGHT_MG[sq];
+        PST[WKNIGHT][sq].eg = PST_KNIGHT_EG[sq];
+        PST[WBISHOP][sq].mg = PST_BISHOP_MG[sq];
+        PST[WBISHOP][sq].eg = PST_BISHOP_EG[sq];
+        PST[WROOK][sq].mg = PST_ROOK_MG[sq];
+        PST[WROOK][sq].eg = PST_ROOK_EG[sq];
+        PST[WQUEEN][sq].mg = PST_QUEEN_MG[sq];
+        PST[WQUEEN][sq].eg = PST_QUEEN_EG[sq];
+        PST[WKING][sq].mg = PST_KING_MG[sq];
+        PST[WKING][sq].eg = PST_KING_EG[sq];
+    }
+}
+
 /*******************************************************************************
  * Material Evaluation Values 
  *******************************************************************************/
 
-enum MaterialValues {
-    MATERIAL_AHEAD_THRESHOLD = 240, //all values are in centipawns
-    VNOPAWNS = -40,
-    VBISHOPPAIR = 40
-};
 
 const TScore TEMPO[2] = {S(-10, 0), S(10, 0)};
 
@@ -220,7 +239,7 @@ const TScore KNIGHT_MOBILITY[9] = {
     S(-8, -8), S(-6, -6), S(-4, -4), S(-2, -2), S(0, 0)
 };
 
-const int8_t KNIGHT_RANK[8] = {-2, -1, 0, 0, 1, 2, 0, -1};
+
 
 const TScore KNIGHT_PAWN_WIDTH[8] = {//indexed by opponent pawn width
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, -5), S(0, -10), S(0, -15), S(0, -20)
@@ -244,6 +263,8 @@ const TScore KNIGHT_OUTPOST[64] = {
 /*******************************************************************************
  * Bishop Values 
  *******************************************************************************/
+
+const int8_t VBISHOPPAIR = 40;
 
 const TScore BISHOP_MOBILITY[14] = {
     S(-30, -30), S(-20, -20), S(-12, -12), S(-6, -6),
@@ -335,7 +356,6 @@ int evaluate(TSearch * sd) {
     result += score->get(sd->stack->phase);
     sd->stack->eg_score = result;
     if (sd->stack->material_flags & MFLAG_EG) {
-        sd->stack->eg_score = result;
         result = evaluateEndgame(sd, result);
     }
     if (!wtm) {
@@ -494,152 +514,6 @@ inline short evaluateMaterial(TSearch * sd) {
     sd->stack->phase = phase;
     sd->hashTable->mtStore(sd);
     return value;
-}
-
-void init_pst_store(TScore scores[], int wpiece) {
-    /*  tuned multipliers:        X    P    N    B    R    Q    K  */
-    const double PCMUL_MG[7] = {0.0, 0.6, 1.0, 0.6, 1.0, 1.0, 1.0};
-    const double PCMUL_EG[7] = {0.0, 1.0, 1.0, 0.6, 1.0, 1.0, 1.0};
-    int tot_mg = 0;
-    int tot_eg = 0;
-    int count = 0;
-    for (int sq = a1; sq <= h8; sq++) {
-        if (wpiece == WPAWN && (sq < a2 || sq > h7)) {
-            continue;
-        }
-        tot_mg += scores[sq].mg;
-        tot_eg += scores[sq].eg;
-        count++;
-    }
-    int avg_mg = tot_mg / count;
-    int avg_eg = tot_eg / count;
-    for (int sq = a1; sq <= h8; sq++) {
-        if (wpiece == WPAWN && (sq < a2 || sq > h7)) {
-            scores[sq].clear();
-        } else {
-            scores[sq].mg -= avg_mg;
-            scores[sq].eg -= avg_eg;
-            scores[sq].mg *= PCMUL_MG[wpiece];
-            scores[sq].eg *= PCMUL_EG[wpiece];
-            scores[sq].round();
-        }
-        int isq = FLIP_SQUARE(sq);
-        PST[wpiece][isq].set(scores[sq]);
-    }
-}
-
-void init_pst() {
-    TScore scores[64];
-    const TScore mobility_weight[64] = {
-        S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2),
-        S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2),
-        S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2),
-        S(2, 2), S(2, 2), S(2, 2), S(3, 2), S(3, 2), S(2, 2), S(2, 2), S(2, 2),
-        S(1, 2), S(1, 2), S(1, 2), S(2, 2), S(2, 2), S(1, 2), S(1, 2), S(1, 2),
-        S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2),
-        S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2),
-        S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2), S(1, 2)
-    };
-    const short ROOK_FILE_BONUS[8] = {-4, -4, 0, 4, 4, 0, -4, -4};
-    const short PAWN_FILE[8] = {-15, -5, 0, 10, 10, 0, -5, -15};
-    const short PROGRESS[8] = {-3, -2, -1, 0, 1, 2, 1, 0};
-
-    //Pawn
-    for (int sq = a1; sq <= h8; sq++) {
-        scores[sq].clear();
-        U64 bbsq = BIT(sq);
-        if ((bbsq & RANK_1) || (bbsq & RANK_8)) {
-            continue;
-        }
-        scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
-        U64 caps = WPAWN_CAPTURES[sq];
-        while (caps) {
-            int ix = POP(caps);
-            scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
-        }
-        scores[sq].mul(8);
-        scores[sq].mg += PAWN_FILE[FILE(sq)];
-        if (bbsq & CENTER) {
-            scores[sq].mg += 5;
-        }
-        scores[sq].eg = 0;
-    }
-    init_pst_store(scores, WPAWN);
-
-    //Knight
-    for (int sq = a1; sq < 64; sq++) {
-        scores[sq].clear();
-        scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
-        U64 caps = KNIGHT_MOVES[sq];
-        while (caps) {
-            int ix = POP(caps);
-            scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
-        }
-        scores[sq].mul(3); //mobility is extra important because knights move slow
-        scores[sq].add(KNIGHT_RANK[RANK(sq)]);
-    }
-    init_pst_store(scores, WKNIGHT);
-
-    //Bishop
-    for (int sq = a1; sq < 64; sq++) {
-        scores[sq].clear();
-        scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
-        U64 caps = BISHOP_MOVES[sq];
-        while (caps) {
-            int ix = POP(caps);
-            scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
-        }
-        if (sq == g2 || sq == b2) {
-            scores[sq].mg += 2;
-        }
-        scores[sq].mul(3);
-    }
-    init_pst_store(scores, WBISHOP);
-
-    //Rook
-    for (int sq = a1; sq < 64; sq++) {
-        scores[sq].clear();
-        scores[sq].mg += ROOK_FILE_BONUS[FILE(sq)];
-    }
-    init_pst_store(scores, WROOK);
-
-    //Queen
-    for (int sq = a1; sq < 64; sq++) {
-        scores[sq].clear();
-        scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
-        U64 caps = QUEEN_MOVES[sq];
-        while (caps) {
-            int ix = POP(caps);
-            scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
-        }
-        scores[sq].mg = ROOK_FILE_BONUS[FILE(sq)] / 2;
-        scores[sq].mg += sq <= h1 ? -4 : 0;
-    }
-    init_pst_store(scores, WQUEEN);
-
-    //King
-    for (int sq = a1; sq < 64; sq++) {
-        scores[sq].clear();
-        scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
-        U64 caps = KING_MOVES[sq];
-        while (caps) {
-            int ix = POP(caps);
-            scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
-        }
-        if (BIT(sq) & LARGE_CENTER) {
-            scores[sq].eg += 4;
-        }
-        if (BIT(sq) & CENTER) {
-            scores[sq].eg += 5;
-        }
-        if (BIT(sq) & EDGE) {
-            scores[sq].eg -= 2;
-        }
-        scores[sq].eg += PROGRESS[RANK(sq)];
-        scores[sq].mg = 0;
-        scores[sq].eg *= 3;
-    }
-    init_pst_store(scores, WKING);
 }
 
 /**
@@ -1628,10 +1502,53 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     return result;
 }
 
+inline short DRAW(int score, int div) {
+    if (score == 0 || div == 0) {
+        return 0;
+    }
+    if (score > 0) {
+        return MAX(GRAIN_SIZE, score/div);
+    }   
+    return MIN(-GRAIN_SIZE, score/div);
+}
+
+/**
+ * Routine to drive their king to the right corner and mate it
+ * @param s search object
+ * @param white white or black king
+ * @return score value related to distance to corner and distance between kings
+ */
+inline short cornerKing(TSearch * s, bool them) {
+    static const int8_t DIST[8] = { 120, 90, 75, 60, 45, 30, 15, 0 };
+    static const int8_t EDGE[8] = { 5, 3, 1, 0, 0, 1, 3, 5 };
+      
+    TBoard * pos = s->pos;
+    int kpos[2] = { *pos->black_king_sq, *pos->white_king_sq };
+    int king_dist = distance(kpos[BLACK], kpos[WHITE]);
+    int result = DIST[king_dist];
+    int r = RANK(kpos[them]);
+    int f = FILE(kpos[them]);
+    result += 10 * (EDGE[r] + EDGE[f]);
+    bool us = !them;
+    if (is_1(*pos->bishops[us])) {
+        //drive to the right edge
+        int corner_dist = 0;
+        if ((*pos->bishops[us] & WHITE_SQUARES) != 0) {
+            corner_dist = MIN(distance(kpos[them], a8), distance(kpos[them], h1));
+        } else {
+            corner_dist = MIN(distance(kpos[them], a1), distance(kpos[them], h8));
+        }
+        result += DIST[corner_dist];    
+    }
+    if (them == WHITE) {
+        result = -result;
+    }
+    return result;
+}
+
 inline short evaluateEndgame(TSearch * s, short score) {
     static const int SCORE_SURE_WIN[2] = {-SCORE_WIN, SCORE_WIN};
     static const int BONUS[2] = {-10, 10};
-    static const int PAWN_TRADE[9] = {6, 12, 14, 15, 16, 16, 16, 17, 18};
 
     TBoard * pos = s->pos;
     bool us = (score > 0) || (score == 0 && pos->stack->wtm); //winning side white: 1, black: 0
@@ -1642,14 +1559,14 @@ inline short evaluateEndgame(TSearch * s, short score) {
     //endgame with only pawns (KK, KPK, KPPK, KPKP, etc.)
     if (!has_pieces[us] && !has_pieces[them]) {
         assert(s->stack->phase == 16);
-        bool utm = us == WHITE && pos->stack->wtm;
-        if (opposition(*pos->white_king_sq, *pos->black_king_sq)) {
-            score -= 5 * BONUS[utm];
+        bool utm = pos->stack->wtm == (us == WHITE);
+        if (opposition(*pos->white_king_sq, *pos->black_king_sq) && utm) {
+            score -= 5 * BONUS[us];
         } else {
-            score += 5 * BONUS[utm];
+            score += 5 * BONUS[us];
         }
         if (pawn_count[us] == 0 && pawn_count[them] == 0) {
-            return score / 8;
+            return DRAW(score, 128);
         }
         int dpawns = pawn_count[WHITE] - pawn_count[BLACK];
         if (dpawns > 1 || dpawns < -1) {
@@ -1664,50 +1581,40 @@ inline short evaluateEndgame(TSearch * s, short score) {
     bool mating_power[2] = {(s->stack->material_flags & MFLAG_MATING_POWER_B) != 0,
         (s->stack->material_flags & MFLAG_MATING_POWER_W) != 0};
 
-    //we have nothing left to win the game
-
-
+    //we have nothing left to win the game (KNK, KBK, KNNK)
     if (!mating_power[us] && pawn_count[us] == 0) {
-        return score / 32;
+        return DRAW(score, 128);
     }
-
-    //we have no mating power, so we depend upon our pawns to win
-    if (!mating_power[us] && has_pieces[them]) {
-        score = score * PAWN_TRADE[pawn_count[us]] / 16;
-
-    }
-
-    bool king_on_edge[2] = {(pos->black_kings & EDGE) != 0, (pos->white_kings & EDGE) != 0};
-
-    //opponent has nothing, we have mating power
+    
+    //opponent has nothing, we have mating power (KRK, KBNK and better)
     if (pawn_count[them] == 0 && !has_pieces[them] && mating_power[us]) {
-        return score + SCORE_SURE_WIN[us] + king_on_edge[them] * BONUS[us];
+        return score + SCORE_SURE_WIN[us] + cornerKing(s, them);
     }
-
+    
+    //endgame with only pieces, (e.g. KBNKN, KRBKR, KRRKR, KQBKQ, ...)
     bool winning_edge[2] = {score <= -VROOK, score >= VROOK};
-
-    //we have much more material than opponent, opponent has no pawns
-    if (pawn_count[them] == 0 && pawn_count[us] > 0 && winning_edge[us] && mating_power[us]) {
-        return score + SCORE_SURE_WIN[us] / 8 + king_on_edge[them] * BONUS[us];
-    }
-
-    //endgame with only pieces: requires an extra major piece to win
     if (pawn_count[us] == 0 && pawn_count[them] == 0) {
-        if (!mating_power[us]) {
-            return score / 16;
+        if (!mating_power[us]) { //we have no mating power
+            return DRAW(score, 16);
         }
-        if (!winning_edge[us]) {
-            return score / 8 + king_on_edge[them] * BONUS[us];
+        if (!winning_edge[us]) { //we have mating power, but no winning edge (e.g. KRNKR)
+            return DRAW(score, 16) + cornerKing(s, them) / 8;
         }
-        if (!mating_power[them]) {
-            return score + SCORE_SURE_WIN[us] / 4 + king_on_edge[them] * BONUS[us];
+        if (!mating_power[them]) { //we have mating power and a winning edge
+            return score + SCORE_SURE_WIN[us] / 4 + cornerKing(s, them) / 4;
         }
-        return score + SCORE_SURE_WIN[us] / 8 + king_on_edge[them] * BONUS[us];
+        return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 8;
     }
-
-    //minor adjustments: reward having pieces, mating power and pawn(s))
-    int adjust = has_pieces[us] - has_pieces[them]
-            + mating_power[us] - mating_power[them]
-            + (pawn_count[them] == 0) - (pawn_count[us] == 0);
-    return score + (adjust * BONUS[us]);
+    
+    //cases with a clear, decisive material advantage; opponent has no pawns
+    if (pawn_count[them] == 0 && mating_power[us] && winning_edge[us]) {
+        if (!mating_power[them]) {
+            return score + SCORE_SURE_WIN[us] / 4 + cornerKing(s, them) / 4;
+        }
+        return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 8;
+    }
+    
+    
+    
+    return score;
 }

@@ -219,7 +219,7 @@ public:
         pos = new TBoard();
         pos->fromFen(fen);
         memset(history, 0, sizeof (history));
-        init_pst();
+        InitPST();
         hashTable = globalHashTable;
         outputHandler = outputH;
         movePicker = new TMovePicker();

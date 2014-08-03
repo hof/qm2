@@ -28,6 +28,3 @@ target_link_libraries(testWAC MAX2SRC)
 target_link_libraries(testBK MAX2SRC)
 target_link_libraries(testEvaluation MAX2SRC)
 
-#pct generation
-add_executable(genPct generate_pct.cpp)
-target_link_libraries(genPct MAX2SRC)
