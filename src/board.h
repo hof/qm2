@@ -327,6 +327,32 @@ struct TBoard {
                 :
                 black_rooks || black_knights || black_bishops || black_queens;
     }
+    
+    inline bool hasPieces() {
+        return white_rooks || black_rooks || white_knights || black_knights
+            || white_bishops || black_bishops || white_queens || black_queens;
+    }
+    
+    inline bool onlyPawns() {
+        return hasPieces() == false;
+    }
+    
+    inline bool bothBishops(bool w) {
+        return gt_1(*bishops[w]) 
+                && (*bishops[w] & WHITE_SQUARES) != 0 
+                && (*bishops[w] & BLACK_SQUARES) != 0; 
+    }
+    
+    inline bool isKBBKN(bool w) {
+        if (white_pawns || black_pawns 
+                || white_rooks || black_rooks 
+                || white_queens || black_queens
+                || *knights[w] || *bishops[!w]
+                || gt_1(*knights[!w])) {
+            return false;
+        }
+        return bothBishops(w); 
+    }
 
     inline U64 queensOrMinorsAndRooks(bool wtm) {
         return wtm ? (white_queens || (white_knights && white_bishops && white_rooks))

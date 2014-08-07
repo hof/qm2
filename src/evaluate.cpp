@@ -25,6 +25,7 @@
 #include "score.h"
 
 #include "pst.h"
+#include "kpk_bb.h"
 
 //#define PRINT_PAWN_EVAL 
 //#define PRINT_KING_SAFETY
@@ -337,7 +338,7 @@ int evaluate(TSearch * sd) {
             && (sd->stack - 1)->eval_result != SCORE_INVALID;
 
     bool wtm = sd->pos->stack->wtm;
-    int result = evaluateMaterial(sd); //sets stack->phase (required)
+    int result = evaluateMaterial(sd); //sets stack->phase (required) 
     TScore * score = &sd->stack->eval_score;
     score->set(evaluatePawnsAndKings(sd)); //initializes mobility and attack masks (required)
     score->add(evaluateKnights(sd, WHITE));
@@ -422,11 +423,11 @@ inline short evaluateMaterial(TSearch * sd) {
     /*
      * Game phase
      */
-    int phase = MAX_GAMEPHASES /* 16 */
-            - (wminors + bminors) /* max: 8 */
-            - (wrooks + brooks) /* max:4 */
+    int phase = MAX_GAMEPHASES /* 16 */ 
+            - wminors - bminors /* max: 8 */
+            - wrooks - brooks /* max:4 */
             - 2 * (wqueens + bqueens) /* max: 4 */;
-    phase = MAX(0, phase);
+    phase = MAX(0, phase);    
 
     /*
      * Material count evaluation
@@ -1507,9 +1508,9 @@ inline short DRAW(int score, int div) {
         return 0;
     }
     if (score > 0) {
-        return MAX(GRAIN_SIZE, score/div);
-    }   
-    return MIN(-GRAIN_SIZE, score/div);
+        return MAX(GRAIN_SIZE, score / div);
+    }
+    return MIN(-GRAIN_SIZE, score / div);
 }
 
 /**
@@ -1519,26 +1520,28 @@ inline short DRAW(int score, int div) {
  * @return score value related to distance to corner and distance between kings
  */
 inline short cornerKing(TSearch * s, bool them) {
-    static const int8_t DIST[8] = { 120, 90, 75, 60, 45, 30, 15, 0 };
-    static const int8_t EDGE[8] = { 5, 3, 1, 0, 0, 1, 3, 5 };
-      
+    static const uint8_t EDGE[8] = {50, 30, 10, 0, 0, 10, 30, 50};
+    static const uint8_t CORNER[8] = {250, 200, 150, 120, 90, 60, 30, 0};
+    static const uint8_t KING[8] = {0, 100, 80, 60, 45, 30, 15, 0};
     TBoard * pos = s->pos;
-    int kpos[2] = { *pos->black_king_sq, *pos->white_king_sq };
+    int kpos[2] = {*pos->black_king_sq, *pos->white_king_sq};
     int king_dist = distance(kpos[BLACK], kpos[WHITE]);
-    int result = DIST[king_dist];
-    int r = RANK(kpos[them]);
-    int f = FILE(kpos[them]);
-    result += 10 * (EDGE[r] + EDGE[f]);
+    int result = KING[king_dist];
     bool us = !them;
-    if (is_1(*pos->bishops[us])) {
-        //drive to the right edge
+    if (is_1(*pos->bishops[us]) && *pos->rooks[us] == 0 && *pos->queens[us] == 0) {
+        //drive to right corner
         int corner_dist = 0;
         if ((*pos->bishops[us] & WHITE_SQUARES) != 0) {
             corner_dist = MIN(distance(kpos[them], a8), distance(kpos[them], h1));
         } else {
             corner_dist = MIN(distance(kpos[them], a1), distance(kpos[them], h8));
         }
-        result += DIST[corner_dist];    
+        result += CORNER[corner_dist];
+    } else {
+        //drive to edge, any corner
+        int r = RANK(kpos[them]);
+        int f = FILE(kpos[them]);
+        result += EDGE[r] + EDGE[f];
     }
     if (them == WHITE) {
         result = -result;
@@ -1558,8 +1561,19 @@ inline short evaluateEndgame(TSearch * s, short score) {
 
     //endgame with only pawns (KK, KPK, KPPK, KPKP, etc.)
     if (!has_pieces[us] && !has_pieces[them]) {
+        assert(pos->onlyPawns());
         assert(s->stack->phase == 16);
         bool utm = pos->stack->wtm == (us == WHITE);
+        
+        if (pawn_count[them] == 0 && pawn_count[us] == 1) { //get result from KPK bitbase
+            int pawn_sq = pos->pieces[PAWN[us]].squares[0];
+            bool won = KPK::probe(utm, *pos->king_sq[us], *pos->king_sq[them], pawn_sq, us == BLACK);
+            if (won) {
+                return score + SCORE_SURE_WIN[us]/2;
+            } 
+            return DRAW(score, 64);
+        }
+        
         if (opposition(*pos->white_king_sq, *pos->black_king_sq) && utm) {
             score -= 5 * BONUS[us];
         } else {
@@ -1568,13 +1582,17 @@ inline short evaluateEndgame(TSearch * s, short score) {
         if (pawn_count[us] == 0 && pawn_count[them] == 0) {
             return DRAW(score, 128);
         }
+        int passers_score[2] = {s->stack->passer_score[BLACK].eg, s->stack->passer_score[WHITE].eg};
+        if (passers_score[them] < VPAWN && passers_score[us] > VROOK) {
+            score += SCORE_SURE_WIN[us] / 2;
+        }
         int dpawns = pawn_count[WHITE] - pawn_count[BLACK];
         if (dpawns > 1 || dpawns < -1) {
             score += dpawns * 50;
         }
 
-        //@todo: heuristic / perfect result for KPK, KPKP and KPPKP endgames
-        //std::cout << result << " ... ";
+        //@todo: heuristics for KPKP and KPPKP endgames
+        
         return score;
     }
 
@@ -1585,27 +1603,33 @@ inline short evaluateEndgame(TSearch * s, short score) {
     if (!mating_power[us] && pawn_count[us] == 0) {
         return DRAW(score, 128);
     }
-    
+
     //opponent has nothing, we have mating power (KRK, KBNK and better)
     if (pawn_count[them] == 0 && !has_pieces[them] && mating_power[us]) {
         return score + SCORE_SURE_WIN[us] + cornerKing(s, them);
     }
-    
+
     //endgame with only pieces, (e.g. KBNKN, KRBKR, KRRKR, KQBKQ, ...)
-    bool winning_edge[2] = {score <= -VROOK, score >= VROOK};
+    bool winning_edge[2] = {
+        s->stack->material_score <= -VROOK,
+        s->stack->material_score >= VROOK
+    };
     if (pawn_count[us] == 0 && pawn_count[them] == 0) {
-        if (!mating_power[us]) { //we have no mating power
+        if (!mating_power[us]) {
             return DRAW(score, 16);
         }
-        if (!winning_edge[us]) { //we have mating power, but no winning edge (e.g. KRNKR)
-            return DRAW(score, 16) + cornerKing(s, them) / 8;
+        if (pos->isKBBKN(us)) { //an exception
+            return score + SCORE_SURE_WIN[us] / 2 + cornerKing(s, them);
         }
-        if (!mating_power[them]) { //we have mating power and a winning edge
-            return score + SCORE_SURE_WIN[us] / 4 + cornerKing(s, them) / 4;
+        if (!winning_edge[us]) {
+            return DRAW(score, 16) + cornerKing(s, them) / 4;
         }
-        return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 8;
+        if (!mating_power[them]) {
+            return score + SCORE_SURE_WIN[us] / 4 + cornerKing(s, them) / 2;
+        }
+        return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 4;
     }
-    
+
     //cases with a clear, decisive material advantage; opponent has no pawns
     if (pawn_count[them] == 0 && mating_power[us] && winning_edge[us]) {
         if (!mating_power[them]) {
@@ -1613,8 +1637,5 @@ inline short evaluateEndgame(TSearch * s, short score) {
         }
         return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 8;
     }
-    
-    
-    
     return score;
 }

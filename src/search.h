@@ -369,12 +369,8 @@ public:
     int pvs(int alpha, int beta, int depth);
     int qsearch(int alpha, int beta, int depth);
     
-    inline int drawScore(int adjust=0) {
-        int result = drawContempt.get(stack->phase)+adjust;
-        if (!pos->stack->wtm) {
-            result = -result;
-        }
-        return (result / GRAIN_SIZE) * GRAIN_SIZE;
+    inline int drawScore() {
+        return 0;;
     }
     
     int extendMove(TMove * move, int gives_check);

@@ -172,6 +172,9 @@ void flipTestSuite(TEngine * engine, int depth) {
     flipTest(61, "6r1/K7/8/4k3/3n4/2N5/R7/1R6 w - - 0 1");
     flipTest(62, "8/8/8/4b3/3k4/2N5/RP6/K7 w - - 0 1");
     flipTest(63, "8/8/8/4b3/3k4/2N1q3/RP6/KQ6 w - - 0 1");
+    flipTest(1601, "7k/8/8/8/8/8/P7/K7 w - - 0 1"); 
+    flipTest(1602, "8/1k6/8/8/8/7K/7P/8 w - - 0 1");
+    flipTest(1603, "8/2k5/8/8/8/7K/7P/8 w - - 0 1");
 }
 
 int main(int argc, char** argv) {

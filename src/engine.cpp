@@ -97,21 +97,7 @@ void * TEngine::_think(void* engineObjPtr) {
         tm->setMaxTime(INFINITE_TIME);
     }
 
-    searchData->drawContempt.set(-50, 10);
-    if (root->stack->fifty_count > 10) {
-        searchData->drawContempt.add(root->stack->fifty_count / 2);
-    }
-    if ((whiteTime || blackTime) && myInc == 0 && myTime < oppTime && myTime < 20000) {
-        searchData->drawContempt.add(50);
-        if (myTime < 2000) {
-            searchData->drawContempt.add(50);
-        }
-    }
-    if (!root->stack->wtm) {
-        searchData->drawContempt.mul(-1);
-    }
-    searchData->drawContempt.set(0, 0);
-
+    searchData->drawContempt.set(0, 0); //todo: unused for now
     searchData->maxNodes = maxNodes;
     searchData->learnFactor = learnFactor;
     searchData->ponder = ponder;

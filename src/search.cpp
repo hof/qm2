@@ -272,7 +272,8 @@ int TSearch::extendMove(TMove * move, int gives_check) {
 int TSearch::pvs(int alpha, int beta, int depth) {
 
     stack->pvCount = 0;
-
+    
+    
     /*
      * 1. If no more depth remaining, return quiescence value
      */
@@ -312,7 +313,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     /*
      * 3. Return obvious draws 
      */
-    stack->phase = (stack - 1)->phase;
     if (pos->isDraw()) { //draw by no mating material
         return drawScore();
     }
@@ -346,6 +346,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     int new_depth = depth - ONE_PLY;
     bool in_check = stack->inCheck;
     assert(new_depth >= 0);
+    assert((stack->phase == 16) == pos->onlyPawns());
 
     //a) Fail-high pruning (return if static evaluation score is already much better than beta)
     if (!in_check
@@ -556,7 +557,6 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
     }
 
     //return obvious draws
-    stack->phase = (stack - 1)->phase;
     if (pos->stack->fifty_count > 3) { //draw by repetition or fifty quiet moves
         if (pos->stack->fifty_count >= 100) {
             return drawScore();
@@ -589,6 +589,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
     }
 
     int eval = evaluate(this); //always do an eval - it's incremental
+    assert((stack->phase == 16) == pos->onlyPawns());
 
     //if not in check, generate captures, promotions and (upto some plies ) quiet checks
     if (eval >= beta && !stack->inCheck) { //return evaluation score is it's already above beta (stand-pat idea)
@@ -623,7 +624,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
                 }
                 gain += PIECE_VALUE[move->promotion] - VPAWN;
             }
-            int delta = depth >=0? QS_DELTA : FUTILITY_MARGIN;
+            int delta = depth >= 0 ? QS_DELTA : FUTILITY_MARGIN;
             if (eval + gain + delta < alpha) {
                 pruned_nodes++;
                 continue;
@@ -645,7 +646,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
             stack->bestMove.setMove(move);
             alpha = score;
         }
-    } while ( (move = movePicker->pickNextMove(this, depth, alpha, beta)) );
+    } while ((move = movePicker->pickNextMove(this, depth, alpha, beta)));
     return alpha;
 }
 
