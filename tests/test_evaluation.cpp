@@ -86,55 +86,65 @@ void testEvaluationSuite() {
      * Endgames without pawns
      */
 
-    //KNK, KBK, KNNK are drawn
+    //KNK, KBK, KNNK (draw)
     testEval(1101, "7k/8/6K1/3N4/8/8/8/8 w - - 0 1", 1, DRAW_MAX);
     testEval(1102, "7k/8/6K1/8/5B2/8/8/8 w - - 0 1", 1, DRAW_MAX);
     testEval(1103, "5k2/8/2N2K2/8/5N2/8/8/8 w - - 0 1", 1, DRAW_MAX);
 
-    //KRK, KQK, KBBK, KBNK and up are won
+    //KRK, KQK, KBBK, KBNK (win)
     testEval(1201, "8/8/8/8/4k3/8/7K/7R w - - 0 1", SCORE_WIN, SCORE_MAX); //KRK
     testEval(1202, "8/8/8/8/4k3/8/Q7/K7 w - - 0 1", SCORE_WIN, SCORE_MAX); //KQK
     testEval(1203, "8/8/8/8/4k3/8/8/K2B2B1 w - - 0 1", SCORE_WIN, SCORE_MAX); //KBBK
     testEval(1204, "K7/2kB4/8/8/8/8/8/5N2 w - - 0 1", SCORE_WIN, SCORE_MAX); //longest KBNK
     
-
-    //Extra minor piece or less
+    //Extra minor piece (draw) 
     testEval(1301, "8/8/5k2/4n3/8/2K5/1R6/8 w - - 0 1", 1, VPAWN); //KRKN
     testEval(1301, "7R/8/8/2n5/6k1/r7/4K3/8 w - - 0 78", -VPAWN, -1);
-    testEval(1303, "K7/8/8/8/4n3/4k3/8/B6B w - - 0 1", SCORE_WIN / 2, SCORE_WIN); //KBBKN is mostly won
+    
+    //KBBKN exception
+    testEval(1351, "K7/8/8/8/4n3/4k3/8/B6B w - - 0 1", SCORE_WIN / 2, SCORE_WIN); //KBBKN is mostly won
 
-    //Extra major piece
+    //Extra major piece (won)
     testEval(1401, "8/K7/8/4k3/3n4/2N5/R7/8 w - - 0 1", SCORE_WIN / 4, SCORE_WIN / 2);
     testEval(1402, "6r1/K7/8/4k3/3n4/2N5/R7/1R6 w - - 0 1", SCORE_WIN / 8, SCORE_WIN / 4);
     testEval(1403, "8/8/8/4kr2/8/8/8/3QK3 w - - 0 1", SCORE_WIN / 8, SCORE_WIN / 3); //KQKR
     testEval(1404, "8/8/8/4kr2/8/8/4P3/3QK3 w - - 0 1", SCORE_WIN / 8, SCORE_WIN / 3); //KQPKR
 
     /*
-     * Endgames where we have one or more pieces and pawns, and opponent does not have pawns
+     * Opponent has no pawns
      */
-
-    //Decisive, clear winning advantage: mating material, winning edge
+    
+    //KRPK and better
     testEval(1501, "8/6k1/8/8/8/8/PK6/R7 w - - 0 1", SCORE_WIN, SCORE_MAX);
     testEval(1502, "8/8/8/4b3/3k4/2N5/RP6/K7 w - - 0 1", SCORE_WIN / 4, SCORE_WIN / 2);
     testEval(1503, "8/8/8/4b3/3k4/2N1q3/RP6/KQ6 w - - 0 1", SCORE_WIN / 8, SCORE_WIN / 3);
     
-    
-    //Endgames with pawn(s) but no mating material
-
-    /*
-     * KPK positions (King and pawn vas king)
-     */
+    //KPK
     testEval(1601, "7k/8/8/8/8/8/P7/K7 w - - 0 1", SCORE_WIN/2, SCORE_WIN); 
     testEval(1602, "8/1k6/8/8/8/7K/7P/8 w - - 0 1", SCORE_WIN/2, SCORE_WIN);
     testEval(1603, "8/2k5/8/8/8/7K/7P/8 w - - 0 1", 1, DRAW_MAX);
-
-    //testEval(5, "2k5/8/8/8/8/8/2P5/2K5 w - - 0 1", SCORE_WIN, SCORE_MATE);
-    //testEval(6, "2k5/8/8/8/8/2P5/8/2K5 w - - 0 1", 1, SCORE_DRAW_MAX);
-
+    testEval(1604, "2k5/8/8/8/8/8/2P5/2K5 w - - 0 1", SCORE_WIN/2, SCORE_WIN);
+    testEval(1605, "2k5/8/8/8/8/2P5/8/2K5 w - - 0 1", 1, DRAW_MAX);
+    
+    //KBPK
+    testEval(1701, "8/8/8/8/6k1/6bp/8/6K1 w - - 0 1", -DRAW_MAX, -1);
+    
+    //KNPK
+    testEval(1801, "8/Pk6/8/1N6/8/8/5K2/8 w - - 0 1", 1, DRAW_MAX);
+    
+    //
+    
     /*
-     * KPKP
+     * Opponent has one pawn
      */
+    
+    //KPKP
     //testEval(14, "7K/8/k1P5/7p/8/8/8/8 w - - 0 1", SCORE_DRAW_MIN, SCORE_DRAW_MAX); //famous study by Réti
+    
+    /*
+     * Opponent has two pawns
+     */
+    
 
     /*
      * Opening
@@ -164,18 +174,13 @@ void testEvaluationSuite() {
         testEval(11, "8/1K6/3k4/P2p4/8/4b3/4B3/8 w - - 27 1", SCORE_DRAW_MIN, SCORE_DRAW_MAX);
      * 
      * testEval("8/8/8/pB1k4/P5r1/3K4/8/8 w - - 13 32", -VPAWN, -1); //KBPKRP -> draw
-
-        //kpk
-        
-
         
      */
     
     /*
-add<KPK>
+
 add<KRKP>
 add<KQKP>
-add<KNPK>
 add<KNPKB>
 add<KRPKR>
 add<KRPKB>

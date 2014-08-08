@@ -19,6 +19,8 @@
  * Generates KPK bitbase
  *
  * Created on 04 aug 2014, 11:08
+ * 
+ * @Credits This code is inspired on the KPK generator in Glaurung by Tord Romstad.
  */
 
 #include <stdlib.h>

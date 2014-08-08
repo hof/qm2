@@ -423,11 +423,11 @@ inline short evaluateMaterial(TSearch * sd) {
     /*
      * Game phase
      */
-    int phase = MAX_GAMEPHASES /* 16 */ 
+    int phase = MAX_GAMEPHASES /* 16 */
             - wminors - bminors /* max: 8 */
             - wrooks - brooks /* max:4 */
             - 2 * (wqueens + bqueens) /* max: 4 */;
-    phase = MAX(0, phase);    
+    phase = MAX(0, phase);
 
     /*
      * Material count evaluation
@@ -1559,40 +1559,47 @@ inline short evaluateEndgame(TSearch * s, short score) {
     int pawn_count[2] = {pos->pieces[BPAWN].count, pos->pieces[WPAWN].count};
     bool has_pieces[2] = {pos->hasPieces(BLACK), pos->hasPieces(WHITE)};
 
+    /*
+     * 1. Cases where opponent has no pawns
+     */
+
     //endgame with only pawns (KK, KPK, KPPK, KPKP, etc.)
     if (!has_pieces[us] && !has_pieces[them]) {
         assert(pos->onlyPawns());
         assert(s->stack->phase == 16);
         bool utm = pos->stack->wtm == (us == WHITE);
-        
-        if (pawn_count[them] == 0 && pawn_count[us] == 1) { //get result from KPK bitbase
-            int pawn_sq = pos->pieces[PAWN[us]].squares[0];
-            bool won = KPK::probe(utm, *pos->king_sq[us], *pos->king_sq[them], pawn_sq, us == BLACK);
-            if (won) {
-                return score + SCORE_SURE_WIN[us]/2;
-            } 
-            return DRAW(score, 64);
-        }
-        
+
+        //opposition
         if (opposition(*pos->white_king_sq, *pos->black_king_sq) && utm) {
             score -= 5 * BONUS[us];
         } else {
             score += 5 * BONUS[us];
         }
+
+        //KK (no pawns))
         if (pawn_count[us] == 0 && pawn_count[them] == 0) {
             return DRAW(score, 128);
         }
-        int passers_score[2] = {s->stack->passer_score[BLACK].eg, s->stack->passer_score[WHITE].eg};
-        if (passers_score[them] < VPAWN && passers_score[us] > VROOK) {
-            score += SCORE_SURE_WIN[us] / 2;
-        }
-        int dpawns = pawn_count[WHITE] - pawn_count[BLACK];
-        if (dpawns > 1 || dpawns < -1) {
-            score += dpawns * 50;
+
+        //KPK
+        if (pawn_count[them] == 0 && pawn_count[us] == 1) {
+            int pawn_sq = pos->pieces[PAWN[us]].squares[0];
+            bool won = KPK::probe(utm, *pos->king_sq[us], *pos->king_sq[them], pawn_sq, us == BLACK);
+            if (won) {
+                return score + SCORE_SURE_WIN[us] / 2;
+            }
+            return DRAW(score, 64);
         }
 
-        //@todo: heuristics for KPKP and KPPKP endgames
-        
+        //unstoppable pawns
+        if (s->stack->passer_score[them].eg < VPAWN && s->stack->passer_score[us].eg > VROOK) {
+            score += SCORE_SURE_WIN[us] / 8;
+        }
+
+        //extra pawns
+        int dpawns = pawn_count[WHITE] - pawn_count[BLACK];
+        score += dpawns * 50;
+
         return score;
     }
 
@@ -1629,6 +1636,8 @@ inline short evaluateEndgame(TSearch * s, short score) {
         }
         return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 4;
     }
+    
+    assert(pawn_count[them] || pawn_count[us]);
 
     //cases with a clear, decisive material advantage; opponent has no pawns
     if (pawn_count[them] == 0 && mating_power[us] && winning_edge[us]) {
@@ -1637,5 +1646,44 @@ inline short evaluateEndgame(TSearch * s, short score) {
         }
         return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 8;
     }
+
+    //minor piece and pawn(s) vs lone king
+    if (pawn_count[them] == 0 && !has_pieces[them] && !mating_power[us]) {
+        if (s->stack->passer_score[us].eg > VROOK) {
+            return score + SCORE_SURE_WIN[us] / 4;
+        }
+        if (pos->isKBPsK(us)) { //KBPK, KBPPK, ...
+            U64 queening_squares = upFill(*pos->pawns[us], us) & RANK[us][8];
+            bool all_on_edge = (*pos->pawns[us] & ~EDGE) == 0; 
+            if (all_on_edge && is_1(queening_squares)) { //all pawns on A or all pawns on H
+                bool w1 = *pos->bishops[us] & WHITE_SQUARES;
+                bool w2 = queening_squares & WHITE_SQUARES;  
+                if (w1 != w2) { //wrong colored bishop
+                    U64 control_us = KING_MOVES[*pos->king_sq[us]] | BIT(*pos->king_sq[us]);
+                    if ((control_us & queening_squares) == queening_squares) {
+                        return score;
+                    }
+                    U64 control_them = KING_MOVES[*pos->king_sq[them]] | BIT(*pos->king_sq[them]);
+                    control_them &= ~control_us;
+                    if ((control_them & queening_squares) == queening_squares) {
+                        return DRAW(score, 128);
+                    }
+                    return DRAW(score, 4);
+                }
+            }
+            return score;
+        }
+        if (pos->isKNPK(us)) {
+            if (*pos->pawns[us] & EDGE & RANK[us][7]) {
+                U64 queening_square = upFill(*pos->pawns[us], us) & RANK[us][8];
+                if (distance(BSF(queening_square), *pos->king_sq[them]) <= 1) {
+                    return DRAW(score, 128);
+                }
+            }
+            return score;
+        }
+        
+    }
+
     return score;
 }

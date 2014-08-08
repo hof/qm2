@@ -266,6 +266,10 @@ inline U64 southFill(U64 x) {
     return x;
 }
 
+inline U64 upFill(U64 x, bool w) {
+    return w? northFill(x) : southFill(x);
+}
+
 #define POP(x) (popFirst(x))
 
 inline bool max_1(U64 x) {

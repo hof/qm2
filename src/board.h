@@ -333,6 +333,14 @@ struct TBoard {
             || white_bishops || black_bishops || white_queens || black_queens;
     }
     
+    inline bool hasMajors() {
+        return white_rooks || black_rooks || white_queens || black_queens;
+    }
+    
+    inline bool hasPawns() {
+        return white_pawns || black_pawns;
+    }
+    
     inline bool onlyPawns() {
         return hasPieces() == false;
     }
@@ -343,7 +351,7 @@ struct TBoard {
                 && (*bishops[w] & BLACK_SQUARES) != 0; 
     }
     
-    inline bool isKBBKN(bool w) {
+    bool isKBBKN(bool w) {
         if (white_pawns || black_pawns 
                 || white_rooks || black_rooks 
                 || white_queens || black_queens
@@ -353,10 +361,21 @@ struct TBoard {
         }
         return bothBishops(w); 
     }
-
-    inline U64 queensOrMinorsAndRooks(bool wtm) {
-        return wtm ? (white_queens || (white_knights && white_bishops && white_rooks))
-                : (black_queens || (white_knights && white_bishops && white_rooks));
+    
+    bool isKBPsK(bool us) {
+        return *pawns[!us] == 0 && *pawns[us] != 0
+                && white_rooks == 0 && black_rooks == 0
+                && white_queens == 0 && black_queens == 0
+                && white_knights == 0 && black_knights == 0
+                && is_1(*bishops[us]) && *bishops[!us] == 0;
+    }
+    
+    bool isKNPK(bool us) {
+        return *pawns[!us] == 0 && is_1(*pawns[us]) 
+                && white_rooks == 0 && black_rooks == 0
+                && white_queens == 0 && black_queens == 0
+                && white_bishops == 0 && black_bishops == 0
+                && is_1(*knights[us]) && *knights[!us] == 0;
     }
 
     void fromFen(const char* fen);
