@@ -70,6 +70,7 @@ void testKingAttackZero(int idx, std::string fen) {
 void testEvaluationSuite() {
 
     const int DRAW_MAX = VPAWN / 10;
+    const int DRAWISH_MAX = VPAWN / 5;
     const int SCORE_MAX = 2 * SCORE_WIN;
 
     /*
@@ -132,6 +133,9 @@ void testEvaluationSuite() {
     //KNPK
     testEval(1801, "8/Pk6/8/1N6/8/8/5K2/8 w - - 0 1", 1, DRAW_MAX);
     
+    //KNPKB
+    testEval(1901, "8/8/4k3/3N1b2/3K1P2/8/8/8 w - - 7 1", 1, DRAWISH_MAX);
+    
     //
     
     /*
@@ -141,9 +145,13 @@ void testEvaluationSuite() {
     //KPKP
     //testEval(14, "7K/8/k1P5/7p/8/8/8/8 w - - 0 1", SCORE_DRAW_MIN, SCORE_DRAW_MAX); //famous study by Réti
     
+    //opposite bishops
+    //testEval(11, "8/1K6/3k4/P2p4/8/4b3/4B3/8 w - - 27 1", SCORE_DRAW_MIN, SCORE_DRAW_MAX);
+    
     /*
      * Opponent has two pawns
      */
+    
     
 
     /*
@@ -157,10 +165,15 @@ void testEvaluationSuite() {
     //testKingAttackZero(2, "r1bq1rk1/ppppbppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQ1RK1 w - - 3 6");
 
 
-
+    /*
+     * Pawns vs extra piece
+     */
+    
+    //KQPPPKQKQ
+    //testEval(5, "8/8/k5r1/2P5/PQ6/KP6/4q3/8 w - - 0 1", -350, -200);
 
     /*    
-        testEval(5, "8/8/k5r1/2P5/PQ6/KP6/4q3/8 w - - 0 1", -350, -200);
+        
         testEval(6, "8/8/4k3/3N1b2/3K1P2/8/8/8 w - - 7 1", 1, SCORE_DRAW_MAX);
        
         testEval(8, "8/8/8/2k2p2/1q6/7R/2K5/8 w - - 0 29", -SCORE_MATE, -SCORE_WIN / 8);
@@ -169,25 +182,9 @@ void testEvaluationSuite() {
         testEval(9, "8/K7/8/4k3/3p4/8/4B3/8 w - - 0 4", SCORE_DRAW_MIN, SCORE_DRAW_MAX);
     
         
-    
-        //one pawn, but no mating power and opp can sacrifice his piece
-        testEval(11, "8/1K6/3k4/P2p4/8/4b3/4B3/8 w - - 27 1", SCORE_DRAW_MIN, SCORE_DRAW_MAX);
      * 
      * testEval("8/8/8/pB1k4/P5r1/3K4/8/8 w - - 13 32", -VPAWN, -1); //KBPKRP -> draw
         
-     */
-    
-    /*
-
-add<KRKP>
-add<KQKP>
-add<KNPKB>
-add<KRPKR>
-add<KRPKB>
-add<KBPKB>
-add<KBPKN>
-add<KBPPKB>
-add<KRPPKRP>
      */
 }
 

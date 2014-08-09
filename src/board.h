@@ -271,7 +271,7 @@ struct TBoard {
     void clear();
 
     void flip();
-    
+
     int test();
 
     inline int topPiece(bool white) {
@@ -327,41 +327,52 @@ struct TBoard {
                 :
                 black_rooks || black_knights || black_bishops || black_queens;
     }
-    
+
     inline bool hasPieces() {
         return white_rooks || black_rooks || white_knights || black_knights
-            || white_bishops || black_bishops || white_queens || black_queens;
+                || white_bishops || black_bishops || white_queens || black_queens;
     }
-    
+
     inline bool hasMajors() {
         return white_rooks || black_rooks || white_queens || black_queens;
     }
-    
+
     inline bool hasPawns() {
         return white_pawns || black_pawns;
     }
-    
+
     inline bool onlyPawns() {
         return hasPieces() == false;
     }
-    
+
     inline bool bothBishops(bool w) {
-        return gt_1(*bishops[w]) 
-                && (*bishops[w] & WHITE_SQUARES) != 0 
-                && (*bishops[w] & BLACK_SQUARES) != 0; 
+        return gt_1(*bishops[w])
+                && (*bishops[w] & WHITE_SQUARES) != 0
+                && (*bishops[w] & BLACK_SQUARES) != 0;
     }
     
+    bool oppBishopsEG() {
+        if (white_rooks || black_rooks
+                || white_knights || black_knights
+                || white_queens || black_queens
+                || white_bishops == 0 || black_bishops == 0
+                || gt_1(white_bishops) || gt_1(black_bishops)) {
+            return false;
+        }
+        return bool(white_bishops & WHITE_SQUARES) == bool(black_bishops & BLACK_SQUARES);
+    }
+
     bool isKBBKN(bool w) {
-        if (white_pawns || black_pawns 
-                || white_rooks || black_rooks 
+        if (white_pawns || black_pawns
+                || white_rooks || black_rooks
                 || white_queens || black_queens
                 || *knights[w] || *bishops[!w]
                 || gt_1(*knights[!w])) {
             return false;
         }
-        return bothBishops(w); 
+        return bothBishops(w);
     }
-    
+
     bool isKBPsK(bool us) {
         return *pawns[!us] == 0 && *pawns[us] != 0
                 && white_rooks == 0 && black_rooks == 0
@@ -369,9 +380,9 @@ struct TBoard {
                 && white_knights == 0 && black_knights == 0
                 && is_1(*bishops[us]) && *bishops[!us] == 0;
     }
-    
+
     bool isKNPK(bool us) {
-        return *pawns[!us] == 0 && is_1(*pawns[us]) 
+        return *pawns[!us] == 0 && is_1(*pawns[us])
                 && white_rooks == 0 && black_rooks == 0
                 && white_queens == 0 && black_queens == 0
                 && white_bishops == 0 && black_bishops == 0
@@ -481,11 +492,11 @@ struct TBoard {
      * @return true: attacked, false: not attacked
      */
     inline bool attackedByBlack(int sq) {
-        return KNIGHT_MOVES[sq] & black_knights
-                || WPAWN_CAPTURES[sq] & black_pawns
-                || KING_MOVES[sq] & black_kings
-                || MagicBishopMoves(sq, all_pieces) & (black_bishops | black_queens)
-                || MagicRookMoves(sq, all_pieces) & (black_rooks | black_queens);
+        return black_knights & KNIGHT_MOVES[sq]
+                || black_pawns & WPAWN_CAPTURES[sq]
+                || black_kings & KING_MOVES[sq]
+                || (black_bishops | black_queens) & MagicBishopMoves(sq, all_pieces)
+                || (black_rooks | black_queens) & MagicRookMoves(sq, all_pieces);
     }
 
     /**
@@ -494,11 +505,15 @@ struct TBoard {
      * @return true: attacked, false: not attacked
      */
     inline bool attackedByWhite(int sq) {
-        return KNIGHT_MOVES[sq] & white_knights
-                || BPAWN_CAPTURES[sq] & white_pawns
-                || KING_MOVES[sq] & white_kings
-                || MagicBishopMoves(sq, all_pieces) & (white_bishops | white_queens)
-                || MagicRookMoves(sq, all_pieces) & (white_rooks | white_queens);
+        return white_knights & KNIGHT_MOVES[sq]
+                || white_pawns & BPAWN_CAPTURES[sq]
+                || white_kings & KING_MOVES[sq]
+                || (white_bishops | white_queens) & MagicBishopMoves(sq, all_pieces)
+                || (white_rooks | white_queens) & MagicRookMoves(sq, all_pieces);
+    }
+
+    inline bool attackedBy(int sq, bool us) {
+        return us == WHITE ? attackedByWhite(sq) : attackedByBlack(sq);
     }
 
     /**

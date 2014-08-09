@@ -1549,6 +1549,32 @@ inline short cornerKing(TSearch * s, bool them) {
     return result;
 }
 
+inline bool blockedPawns(TSearch * s, bool us) {
+    U64 pawns = *s->pos->pawns[us];
+    int direction = us == WHITE ? 8 : -8;
+    bool them = !us;
+    U64 occ = s->pos->all(them);
+    while (pawns) {
+        bool blocked = false;
+        int sq = POP(pawns);
+        do {
+            sq += direction;
+            if (BIT(sq) & occ) {
+                blocked = true;
+                break;
+            }
+            if (s->pos->attackedBy(sq, them)) {
+                blocked = true;
+                break;
+            }
+        } while (sq >= a2 && sq <= h7);
+        if (!blocked) {
+            return false;
+        }
+    }
+    return true;
+}
+
 inline short evaluateEndgame(TSearch * s, short score) {
     static const int SCORE_SURE_WIN[2] = {-SCORE_WIN, SCORE_WIN};
     static const int BONUS[2] = {-10, 10};
@@ -1616,11 +1642,13 @@ inline short evaluateEndgame(TSearch * s, short score) {
         return score + SCORE_SURE_WIN[us] + cornerKing(s, them);
     }
 
-    //endgame with only pieces, (e.g. KBNKN, KRBKR, KRRKR, KQBKQ, ...)
+
     bool winning_edge[2] = {
         s->stack->material_score <= -VROOK,
         s->stack->material_score >= VROOK
     };
+
+    //endgame with only pieces, (e.g. KBNKN, KRBKR, KRRKR, KQBKQ, ...)
     if (pawn_count[us] == 0 && pawn_count[them] == 0) {
         if (!mating_power[us]) {
             return DRAW(score, 16);
@@ -1629,14 +1657,14 @@ inline short evaluateEndgame(TSearch * s, short score) {
             return score + SCORE_SURE_WIN[us] / 2 + cornerKing(s, them);
         }
         if (!winning_edge[us]) {
-            return DRAW(score, 16) + cornerKing(s, them) / 4;
+            return DRAW(score, 16) + cornerKing(s, them) / 2;
         }
         if (!mating_power[them]) {
-            return score + SCORE_SURE_WIN[us] / 4 + cornerKing(s, them) / 2;
+            return score + SCORE_SURE_WIN[us] / 4 + cornerKing(s, them);
         }
         return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 4;
     }
-    
+
     assert(pawn_count[them] || pawn_count[us]);
 
     //cases with a clear, decisive material advantage; opponent has no pawns
@@ -1646,7 +1674,15 @@ inline short evaluateEndgame(TSearch * s, short score) {
         }
         return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 8;
     }
-
+    
+    //we have no pawns and no winning edge
+    if (pawn_count[us] == 0 && !winning_edge[us]) {
+        if (mating_power[us]) {
+            return DRAW(score, 16) + cornerKing(s, them) / 8;
+        }
+        return DRAW(score, 16);
+    }
+    
     //minor piece and pawn(s) vs lone king
     if (pawn_count[them] == 0 && !has_pieces[them] && !mating_power[us]) {
         if (s->stack->passer_score[us].eg > VROOK) {
@@ -1654,10 +1690,10 @@ inline short evaluateEndgame(TSearch * s, short score) {
         }
         if (pos->isKBPsK(us)) { //KBPK, KBPPK, ...
             U64 queening_squares = upFill(*pos->pawns[us], us) & RANK[us][8];
-            bool all_on_edge = (*pos->pawns[us] & ~EDGE) == 0; 
+            bool all_on_edge = (*pos->pawns[us] & ~EDGE) == 0;
             if (all_on_edge && is_1(queening_squares)) { //all pawns on A or all pawns on H
                 bool w1 = *pos->bishops[us] & WHITE_SQUARES;
-                bool w2 = queening_squares & WHITE_SQUARES;  
+                bool w2 = queening_squares & WHITE_SQUARES;
                 if (w1 != w2) { //wrong colored bishop
                     U64 control_us = KING_MOVES[*pos->king_sq[us]] | BIT(*pos->king_sq[us]);
                     if ((control_us & queening_squares) == queening_squares) {
@@ -1671,19 +1707,56 @@ inline short evaluateEndgame(TSearch * s, short score) {
                     return DRAW(score, 4);
                 }
             }
-            return score;
-        }
-        if (pos->isKNPK(us)) {
+        } else if (pos->isKNPK(us)) {
             if (*pos->pawns[us] & EDGE & RANK[us][7]) {
                 U64 queening_square = upFill(*pos->pawns[us], us) & RANK[us][8];
                 if (distance(BSF(queening_square), *pos->king_sq[them]) <= 1) {
                     return DRAW(score, 128);
                 }
             }
-            return score;
         }
-        
+        return score;
+    }
+
+    //minor piece(s) and pawn vs piece(s) that can sacrifice to force a draw
+    if (pawn_count[them] == 0 && pawn_count[us] == 1 && !mating_power[us] && has_pieces[them]) {
+        if (blockedPawns(s, us)) {
+            return DRAW(score, 8);
+        }
+        return DRAW(score, 4);
+    }
+
+    //opposite bishops
+    if (pos->oppBishopsEG()) {
+        static const int PF[9] = {128, 16, 8, 4, 2, 2, 2, 2, 2};
+        int pf = PF[pawn_count[us]];
+        if (blockedPawns(s, us)) {
+            pf *= 2;
+        }
+        return DRAW(score, pf);
     }
 
     return score;
 }
+
+/*
+  add<KPK>("KPK"); //done
+  add<KNNK>("KNNK"); //done
+  add<KBNK>("KBNK"); //done
+  add<KRKP>("KRKP"); 
+  add<KRKB>("KRKB");//done
+  add<KRKN>("KRKN"); //done
+  add<KQKP>("KQKP"); 
+  add<KQKR>("KQKR"); //done
+  add<KBBKN>("KBBKN"); //done
+
+  add<KNPK>("KNPK"); //done
+  add<KNPKB>("KNPKB");
+  add<KRPKR>("KRPKR");
+  add<KRPKB>("KRPKB");
+  add<KBPKB>("KBPKB");
+  add<KBPKN>("KBPKN");
+  add<KBPPKB>("KBPPKB");
+  add<KRPPKRP>("KRPPKRP");
+}
+ */

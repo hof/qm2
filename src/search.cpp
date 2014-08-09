@@ -272,8 +272,8 @@ int TSearch::extendMove(TMove * move, int gives_check) {
 int TSearch::pvs(int alpha, int beta, int depth) {
 
     stack->pvCount = 0;
-    
-    
+
+
     /*
      * 1. If no more depth remaining, return quiescence value
      */
