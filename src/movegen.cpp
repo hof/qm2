@@ -34,7 +34,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
     TMove * current = list->last;
     list->current = current;
     U64 moves;
-    U64 occ = board->all_pieces;
+    U64 occ = board->boards[ALLPIECES];
     bool us = board->stack->wtm;
     bool them = !us;
     int pc = PAWN[us];
@@ -48,7 +48,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
     pawn_caps &= board->pawnAttacks(us);
     while (pawn_caps) {
         int tsq = POP(pawn_caps);
-        moves = board->pawnAttacks(tsq, them) & *board->pawns[us];
+        moves = board->pawnAttacks(tsq, them) & board->boards[PAWN[us]];
         while (moves) {
             int ssq = POP(moves);
             if (tsq == board->stack->enpassant_sq && tsq > 0) {
@@ -64,7 +64,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
         }
     }
     //knight captures:
-    U64 pieces = *board->boards[++pc];
+    U64 pieces = board->boards[++pc];
     while (pieces) {
         int ssq = POP(pieces);
         moves = KNIGHT_MOVES[ssq] & targets;
@@ -74,7 +74,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
         }
     }
     //bishop captures:
-    pieces = *board->boards[++pc];
+    pieces = board->boards[++pc];
     while (pieces) {
         int ssq = POP(pieces);//pp->squares[i];
         moves = magic::bishop_moves(ssq, occ) & targets;
@@ -84,7 +84,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
         }
     }
     //rook captures:
-    pieces = *board->boards[++pc];
+    pieces = board->boards[++pc];
     while (pieces) {
         int ssq = POP(pieces);//pp->squares[i];
         moves = magic::rook_moves(ssq, occ) & targets;
@@ -94,7 +94,7 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
         }
     }
     //queen captures:
-    pieces = *board->boards[++pc];
+    pieces = board->boards[++pc];
     while (pieces) {
         int ssq = POP(pieces);//pp->squares[i];
         moves = magic::queen_moves(ssq, occ) & targets;
@@ -123,7 +123,7 @@ void genPromotions(TBoard * board, TMoveList * list) {
     TMove * current = list->last;
     list->current = current;
     bool us = board->stack->wtm;
-    U64 pieces = *board->pawns[us] & RANK[us][7];
+    U64 pieces = board->boards[PAWN[us]] & RANK[us][7];
     if (pieces) {
         int pawn_up = PAWNDIRECTION[us];
         int pc = PAWN[us];
@@ -189,7 +189,7 @@ void genCastles(TBoard * board, TMoveList * list) {
  * @param list movelist object
  */
 void genQuietMoves(TBoard * board, TMoveList * list) {
-    U64 occ = board->all_pieces;
+    U64 occ = board->boards[ALLPIECES];
     U64 targets = ~occ;
     U64 moves;
     TMove * current = list->last;
@@ -199,7 +199,7 @@ void genQuietMoves(TBoard * board, TMoveList * list) {
     int pawn_up = PAWNDIRECTION[us];
 
     //pawn moves:
-    U64 pieces = *board->boards[pc];
+    U64 pieces = board->boards[pc];
     while (pieces) {
         int ssq = POP(pieces);
         int tsq = ssq + pawn_up;
@@ -215,7 +215,7 @@ void genQuietMoves(TBoard * board, TMoveList * list) {
             (current++)->setMove(pc, ssq, tsq);
         }
     }
-    pieces = *board->boards[++pc];
+    pieces = board->boards[++pc];
     while (pieces) {
         int ssq = POP(pieces);//pp->squares[i];
         moves = KNIGHT_MOVES[ssq] & targets;
@@ -223,7 +223,7 @@ void genQuietMoves(TBoard * board, TMoveList * list) {
             (current++)->setMove(pc, ssq, POP(moves));
         }
     }
-    pieces = *board->boards[++pc];
+    pieces = board->boards[++pc];
     while (pieces) {
         int ssq = POP(pieces);//pp->squares[i];
         moves = magic::bishop_moves(ssq, occ) & targets;
@@ -231,7 +231,7 @@ void genQuietMoves(TBoard * board, TMoveList * list) {
             (current++)->setMove(pc, ssq, POP(moves));
         }
     }
-    pieces = *board->boards[++pc];
+    pieces = board->boards[++pc];
     while (pieces) {
         int ssq = POP(pieces);//pp->squares[i];
         moves = magic::rook_moves(ssq, occ) & targets;
@@ -239,7 +239,7 @@ void genQuietMoves(TBoard * board, TMoveList * list) {
             (current++)->setMove(pc, ssq, POP(moves));
         }
     }
-    pieces = *board->boards[++pc];
+    pieces = board->boards[++pc];
     while (pieces) {
         int ssq = POP(pieces);//pp->squares[i];
         moves = magic::queen_moves(ssq, occ) & targets;

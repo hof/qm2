@@ -427,7 +427,7 @@ U64 TBook::polyglot_key(TBoard* pos) {
     static const int PolyGlotPiece[] = {0, 1, 3, 5, 7, 9, 11, 0, 2, 4, 6, 8, 10};
 
     U64 result = 0;
-    U64 occupied = pos->all_pieces;
+    U64 occupied = pos->boards[ALLPIECES];
 
     while (occupied) {
         int sq = popFirst(occupied);
@@ -448,8 +448,8 @@ U64 TBook::polyglot_key(TBoard* pos) {
     }
 
     if (pos->stack->enpassant_sq >= a3 //polyglot only considers en passant if ep captures are possible
-            && ((pos->stack->wtm && (BPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->white_pawns))
-            || (pos->stack->wtm == false && (WPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->black_pawns)))) {
+            && ((pos->stack->wtm && (BPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->boards[WPAWN]))
+            || (pos->stack->wtm == false && (WPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->boards[BPAWN])))) {
         result ^= Random64[EP_OFFSET + FILE(pos->stack->enpassant_sq)];
 
     }

@@ -72,7 +72,7 @@ TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, i
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
     moveList->stage = depth < ONE_PLY ? CAPTURES : HASH1;
-    searchData->stack->captureMask = searchData->pos->all_pieces;
+    searchData->stack->captureMask = searchData->pos->boards[ALLPIECES];
     return pickNextMove(searchData, depth, alpha, beta);
 }
 
@@ -156,7 +156,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     return result;
                 }
             case CAPTURES:
-                mask = pos->all_pieces;
+                mask = pos->boards[ALLPIECES];
                 if (searchData->stack->inCheck) {
                     mask &= pos->stack->checkers;
                 }

@@ -51,10 +51,6 @@ enum piece_t {
     WPIECES, BPIECES, ALLPIECES = 0
 };
 
-enum color_t {
-    BLACK, WHITE
-};
-
 const piece_t PAWN[2] = {BPAWN, WPAWN};
 const piece_t QUEEN[2] = {BQUEEN, WQUEEN};
 const piece_t ROOK[2] = {BROOK, WROOK};
@@ -62,78 +58,73 @@ const piece_t BISHOP[2] = {BBISHOP, WBISHOP};
 const piece_t KNIGHT[2] = {BKNIGHT, WKNIGHT};
 const piece_t KING[2] = {BKING, WKING};
 
-#define WHITEPIECE(pc) ((pc)<=WKING)
-
-#define CASTLE_K    1 //white kingside castle
-#define CASTLE_Q    2 //white queenside castle
-#define CASTLE_k    4 //black kingsside castle
-#define CASTLE_q    8 //black queenside castle
-#define CASTLE_WHITE    (CASTLE_K|CASTLE_Q)
-#define CASTLE_BLACK    (CASTLE_k|CASTLE_q)
-#define CASTLE_ANY      (CASTLE_WHITE|CASTLE_BLACK)
-
-#define MAX_PIECECOUNT 10
-
-//for keeping info about bishop pair on different colored squares in material hash key
-#define BISHOP_IX(piece,sq) (((piece==WBISHOP||piece==BBISHOP)&&BLACK_SQUARE(sq))<<5)
-
-//Structure with metadata, e.g. side to move, kept on a stack
-
-struct TBoardStack {
-    int enpassant_sq; //enpassant square
-    int castling_flags;
-    int fifty_count;
-    int checker_sq;
-    bool wtm; //white to move
-    U64 hash_code;
-    U64 material_hash;
-    U64 pawn_hash;
-    U64 checkers;
-
-    void clear() {
-        enpassant_sq = 0;
-        castling_flags = 0;
-        fifty_count = 0;
-        wtm = true;
-        hash_code = 0;
-        material_hash = 0;
-        pawn_hash = 0;
-        checkers = 0;
-    }
-
-    void flip() {
-        wtm = !wtm;
-        HASH_STM(hash_code);
-        if (enpassant_sq) {
-            enpassant_sq = FLIP_SQUARE(enpassant_sq);
-        }
-        checkers = flipBB(checkers);
-        uint8_t flags = castling_flags;
-        castling_flags = 0;
-        if (flags & CASTLE_K) {
-            castling_flags |= CASTLE_k;
-        }
-        if (flags & CASTLE_Q) {
-            castling_flags |= CASTLE_q;
-        }
-        if (flags & CASTLE_k) {
-            castling_flags |= CASTLE_K;
-        }
-        if (flags & CASTLE_q) {
-            castling_flags |= CASTLE_Q;
-        }
-    }
-
-    void copy(TBoardStack * bFlags) {
-        enpassant_sq = bFlags->enpassant_sq;
-        castling_flags = bFlags->castling_flags;
-        fifty_count = bFlags->fifty_count;
-        wtm = bFlags->wtm;
-        hash_code = bFlags->hash_code;
-        material_hash = bFlags->material_hash;
-        pawn_hash = bFlags->pawn_hash;
-    }
+enum color_t {
+    BLACK, WHITE
 };
+
+enum castle_flag_t {
+    CASTLE_K = 1, CASTLE_Q = 2, CASTLE_k = 4, CASTLE_q = 8,
+    CASTLE_WHITE = 3, CASTLE_BLACK = 12, CASTLE_ANY = 15, CASTLE_NONE = 0
+};
+
+namespace board {
+
+    struct stack_t {
+        int enpassant_sq;
+        int castling_flags;
+        int fifty_count;
+        int checker_sq;
+        bool wtm; //white to move
+        U64 hash_code;
+        U64 material_hash;
+        U64 pawn_hash;
+        U64 checkers;
+
+        void clear() {
+            enpassant_sq = 0;
+            castling_flags = 0;
+            fifty_count = 0;
+            wtm = true;
+            hash_code = 0;
+            material_hash = 0;
+            pawn_hash = 0;
+            checkers = 0;
+        }
+
+        void flip() {
+            wtm = !wtm;
+            HASH_STM(hash_code);
+            if (enpassant_sq) {
+                enpassant_sq = FLIP_SQUARE(enpassant_sq);
+            }
+            checkers = flipBB(checkers);
+            uint8_t flags = castling_flags;
+            castling_flags = 0;
+            if (flags & CASTLE_K) {
+                castling_flags |= CASTLE_k;
+            }
+            if (flags & CASTLE_Q) {
+                castling_flags |= CASTLE_q;
+            }
+            if (flags & CASTLE_k) {
+                castling_flags |= CASTLE_K;
+            }
+            if (flags & CASTLE_q) {
+                castling_flags |= CASTLE_Q;
+            }
+        }
+
+        void copy(stack_t * bFlags) {
+            enpassant_sq = bFlags->enpassant_sq;
+            castling_flags = bFlags->castling_flags;
+            fifty_count = bFlags->fifty_count;
+            wtm = bFlags->wtm;
+            hash_code = bFlags->hash_code;
+            material_hash = bFlags->material_hash;
+            pawn_hash = bFlags->pawn_hash;
+        }
+    };
+}
 
 //Board representation structure
 
@@ -141,72 +132,87 @@ struct TBoard {
     int current_ply;
     int root_ply;
 
-    TBoardStack _stack[MAX_PLY + 1];
-    TBoardStack * stack;
+    board::stack_t _stack[MAX_PLY + 1];
+    board::stack_t * stack;
 
-    U64 white_pawns;
-    U64 black_pawns;
-    U64 white_knights;
-    U64 black_knights;
-    U64 white_bishops;
-    U64 black_bishops;
-    U64 white_rooks;
-    U64 black_rooks;
-    U64 white_queens;
-    U64 black_queens;
-    U64 white_kings;
-    U64 black_kings;
+    /*U64 boards[WPAWN];
+    U64 boards[BPAWN];
+    U64 boards[WKNIGHT];
+    U64 boards[BKNIGHT];
+    U64 boards[WBISHOP];
+    U64 boards[BBISHOP];
+    U64 boards[WROOK];
+    U64 boards[BROOK];
+    U64 boards[WQUEEN];
+    U64 boards[BQUEEN];
+    U64 boards[WKING];
+    U64 boards[BKING];
     U64 white_pieces;
     U64 black_pieces;
-    U64 all_pieces;
-    U64 * boards[BPIECES + 1];
-    U64 * bishops[2];
+    U64 boards[ALLPIECES];*/
+    U64 boards[BPIECES + 1];
+    /*U64 * bishops[2];
     U64 * rooks[2];
     U64 * pawns[2];
     U64 * queens[2];
     U64 * knights[2];
-    U64 * kings[2];
+    U64 * kings[2];*/
 
     unsigned char matrix[64];
-    
+
     void clear();
 
     void flip();
+
+    inline int count(int piece) {
+        return popCount0(boards[piece]);
+    }
     
     inline int get_sq(int pc) {
-        return BSF(*boards[pc]);
+        return BSF(boards[pc]);
+    }
+    
+    inline U64 get_bb(int pc) {
+        return boards[pc];
     }
 
-    inline int topPiece(bool white) {
-        if (white) {
-            return white_queens ? WQUEEN : white_rooks ? WROOK : white_bishops ? WBISHOP : white_knights ? WKNIGHT : WPAWN;
-        } else {
-            return black_queens ? BQUEEN : black_rooks ? BROOK : black_bishops ? BBISHOP : black_knights ? BKNIGHT : BPAWN;
+    //for keeping info about bishop pair on different colored squares in material hash key
+
+    inline int _bishop_ix(int piece, int sq) {
+        return ((piece == WBISHOP || piece == BBISHOP) && BLACK_SQUARE(sq)) << 5;
+    }
+
+    inline int topPiece(bool us) {
+        for (int pc = QUEEN[us]; pc >= PAWN[us]; pc--) {
+            if (boards[pc] != 0) {
+                return pc;
+            }
         }
+        return EMPTY;
     }
 
     inline U64 pawnsAndKings() {
-        return white_kings | black_kings | white_pawns | black_pawns;
+        return boards[WKING] | boards[BKING] | boards[WPAWN] | boards[BPAWN];
     }
 
     inline U64 allPawns() {
-        return white_pawns | black_pawns;
+        return boards[WPAWN] | boards[BPAWN];
     }
 
     inline bool stmHasQueen() {
-        return *queens[stack->wtm] != 0;
+        return boards[QUEEN[stack->wtm]];
     }
 
     inline U64 closedFiles() {
-        return FILEFILL(white_pawns) & FILEFILL(black_pawns);
+        return FILEFILL(boards[WPAWN]) & FILEFILL(boards[BPAWN]);
     }
 
     inline U64 openFiles() {
-        return ~(FILEFILL(white_pawns) | FILEFILL(black_pawns));
+        return ~(FILEFILL(boards[WPAWN]) | FILEFILL(boards[BPAWN]));
     }
 
     inline U64 halfOpenOrOpenFile(bool white) {
-        return white ? ~FILEFILL(white_pawns) : ~FILEFILL(black_pawns);
+        return white ? ~FILEFILL(boards[WPAWN]) : ~FILEFILL(boards[BPAWN]);
     }
 
     inline U64 halfOpenFiles(bool white) {
@@ -214,34 +220,34 @@ struct TBoard {
     }
 
     inline U64 all(bool wtm) {
-        return wtm ? white_pieces : black_pieces;
+        return wtm? boards[WPIECES] : boards[BPIECES];
     }
 
     inline U64 getPieces(bool wtm) {
         return wtm ?
-                white_rooks | white_knights | white_bishops | white_queens
+                boards[WROOK] | boards[WKNIGHT] | boards[WBISHOP] | boards[WQUEEN]
                 :
-                black_rooks | black_knights | black_bishops | black_queens;
+                boards[BROOK] | boards[BKNIGHT] | boards[BBISHOP] | boards[BQUEEN];
     }
 
     inline bool hasPieces(bool wtm) {
         return wtm ?
-                white_rooks || white_knights || white_bishops || white_queens
+                boards[WROOK] || boards[WKNIGHT] || boards[WBISHOP] || boards[WQUEEN]
                 :
-                black_rooks || black_knights || black_bishops || black_queens;
+                boards[BROOK] || boards[BKNIGHT] || boards[BBISHOP] || boards[BQUEEN];
     }
 
     inline bool hasPieces() {
-        return white_rooks || black_rooks || white_knights || black_knights
-                || white_bishops || black_bishops || white_queens || black_queens;
+        return boards[WROOK] || boards[BROOK] || boards[WKNIGHT] || boards[BKNIGHT]
+                || boards[WBISHOP] || boards[BBISHOP] || boards[WQUEEN] || boards[BQUEEN];
     }
 
     inline bool hasMajors() {
-        return white_rooks || black_rooks || white_queens || black_queens;
+        return boards[WROOK] || boards[BROOK] || boards[WQUEEN] || boards[BQUEEN];
     }
 
     inline bool hasPawns() {
-        return white_pawns || black_pawns;
+        return boards[WPAWN] ||boards[BPAWN];
     }
 
     inline bool onlyPawns() {
@@ -249,46 +255,44 @@ struct TBoard {
     }
 
     bool oppBishopsEG() {
-        if (white_rooks || black_rooks
-                || white_knights || black_knights
-                || white_queens || black_queens
-                || white_bishops == 0 || black_bishops == 0
-                || gt_1(white_bishops) || gt_1(black_bishops)) {
+        if (boards[WROOK] || boards[BROOK]
+                || boards[WKNIGHT] || boards[WKNIGHT]
+                || boards[WQUEEN] || boards[BQUEEN]
+                || boards[WBISHOP] == 0 || boards[BBISHOP] == 0
+                || gt_1(boards[WBISHOP]) || gt_1(boards[BBISHOP])) {
             return false;
         }
-        return bool(white_bishops & WHITE_SQUARES) == bool(black_bishops & BLACK_SQUARES);
+        return bool(boards[WBISHOP] & WHITE_SQUARES) == bool(boards[BBISHOP] & BLACK_SQUARES);
     }
 
-    bool isKBBKN(bool w) {
-        if (white_pawns || black_pawns
-                || white_rooks || black_rooks
-                || white_queens || black_queens
-                || *knights[w] || *bishops[!w]
-                || gt_1(*knights[!w])) {
+    bool isKBBKN(bool us) {
+        if (boards[WPAWN] || boards[BPAWN]
+                || boards[WROOK] || boards[BROOK]
+                || boards[WQUEEN] || boards[BQUEEN]
+                || boards[KNIGHT[us]] || boards[BISHOP[!us]]
+                || gt_1(boards[KNIGHT[us]])) {
             return false;
         }
-        return bishopPair(w);
+        return bishopPair(us);
     }
 
     bool isKBPsK(bool us) {
-        return *pawns[!us] == 0 && *pawns[us] != 0
-                && white_rooks == 0 && black_rooks == 0
-                && white_queens == 0 && black_queens == 0
-                && white_knights == 0 && black_knights == 0
-                && is_1(*bishops[us]) && *bishops[!us] == 0;
+        return boards[PAWN[!us]] == 0 && boards[PAWN[us]] != 0
+                && boards[WROOK] == 0 && boards[BROOK] == 0
+                && boards[WQUEEN] == 0 && boards[BQUEEN] == 0
+                && boards[WKNIGHT] == 0 && boards[BKNIGHT] == 0
+                && is_1(boards[BISHOP[us]]) && boards[BISHOP[!us]] == 0;
     }
 
     bool isKNPK(bool us) {
-        return *pawns[!us] == 0 && is_1(*pawns[us])
-                && white_rooks == 0 && black_rooks == 0
-                && white_queens == 0 && black_queens == 0
-                && white_bishops == 0 && black_bishops == 0
-                && is_1(*knights[us]) && *knights[!us] == 0;
+        return boards[PAWN[!us]] == 0 && is_1(boards[PAWN[us]])
+                && boards[WROOK] == 0 && boards[BROOK] == 0
+                && boards[WQUEEN] == 0 && boards[BQUEEN] == 0
+                && boards[WBISHOP] == 0 && boards[BBISHOP] == 0
+                && is_1(boards[KNIGHT[us]]) && boards[KNIGHT[!us]] == 0;
     }
 
-    inline int count(int piece) {
-        return popCount0(*boards[piece]);
-    }
+    
 
     void fromFen(const char* fen);
     string asFen();
@@ -300,11 +304,10 @@ struct TBoard {
      */
     inline void addPiece(int piece, int sq) {
         U64 bit = BIT(sq);
-        *boards[piece] ^= bit;
-        *boards[WPIECES + (piece > WKING)] ^= bit;
-        all_pieces ^= bit;
+        boards[piece] ^= bit;
+        boards[WPIECES + (piece > WKING)] ^= bit;
+        boards[ALLPIECES] ^= bit;
         matrix[sq] = piece;
-        //pieces[piece].add(sq);
     }
 
     /**
@@ -313,7 +316,7 @@ struct TBoard {
      * @param sq the piece location (a1..h8)
      */
     inline void addPieceFull(int piece, int sq) {
-        HASH_ADD_PIECE(stack->material_hash, piece, count(piece) + BISHOP_IX(piece, sq));
+        HASH_ADD_PIECE(stack->material_hash, piece, count(piece) + _bishop_ix(piece, sq));
         HASH_ADD_PIECE(stack->hash_code, piece, sq);
         if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
             HASH_ADD_PIECE(stack->pawn_hash, piece, sq);
@@ -328,11 +331,10 @@ struct TBoard {
      */
     inline void removePiece(int piece, int sq) {
         U64 bit = BIT(sq);
-        *boards[piece] ^= bit;
-        *boards[WPIECES + (piece > WKING)] ^= bit;
-        all_pieces ^= bit;
+        boards[piece] ^= bit;
+        boards[WPIECES + (piece > WKING)] ^= bit;
+        boards[ALLPIECES] ^= bit;
         matrix[sq] = EMPTY;
-        //pieces[piece].remove(sq);
     }
 
     /**
@@ -342,7 +344,7 @@ struct TBoard {
      */
     inline void removePieceFull(int piece, int sq) {
         removePiece(piece, sq);
-        HASH_REMOVE_PIECE(stack->material_hash, piece, count(piece) + BISHOP_IX(piece, sq));
+        HASH_REMOVE_PIECE(stack->material_hash, piece, count(piece) + _bishop_ix(piece, sq));
         HASH_REMOVE_PIECE(stack->hash_code, piece, sq);
         if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
             HASH_REMOVE_PIECE(stack->pawn_hash, piece, sq);
@@ -357,12 +359,11 @@ struct TBoard {
      */
     inline void movePiece(int piece, int ssq, int tsq) {
         U64 updateMask = BIT(ssq) | BIT(tsq);
-        *boards[piece] ^= updateMask;
-        *boards[WPIECES + (piece > WKING)] ^= updateMask;
-        all_pieces ^= updateMask;
+        boards[piece] ^= updateMask;
+        boards[WPIECES + (piece > WKING)] ^= updateMask;
+        boards[ALLPIECES] ^= updateMask;
         matrix[ssq] = EMPTY;
         matrix[tsq] = piece;
-        //pieces[piece].update(ssq, tsq);
     }
 
     /**
@@ -393,11 +394,11 @@ struct TBoard {
      * @return true: attacked, false: not attacked
      */
     inline bool attackedByBlack(int sq) {
-        return black_knights & KNIGHT_MOVES[sq]
-                || black_pawns & WPAWN_CAPTURES[sq]
-                || black_kings & KING_MOVES[sq]
-                || (black_bishops | black_queens) & magic::bishop_moves(sq, all_pieces)
-                || (black_rooks | black_queens) & magic::rook_moves(sq, all_pieces);
+        return boards[BKNIGHT] & KNIGHT_MOVES[sq]
+                || boards[BPAWN] & WPAWN_CAPTURES[sq]
+                || boards[BKING] & KING_MOVES[sq]
+                || (boards[BBISHOP] | boards[BQUEEN]) & magic::bishop_moves(sq, boards[ALLPIECES])
+                || (boards[BROOK] | boards[BQUEEN]) & magic::rook_moves(sq, boards[ALLPIECES]);
     }
 
     /**
@@ -406,11 +407,11 @@ struct TBoard {
      * @return true: attacked, false: not attacked
      */
     inline bool attackedByWhite(int sq) {
-        return white_knights & KNIGHT_MOVES[sq]
-                || white_pawns & BPAWN_CAPTURES[sq]
-                || white_kings & KING_MOVES[sq]
-                || (white_bishops | white_queens) & magic::bishop_moves(sq, all_pieces)
-                || (white_rooks | white_queens) & magic::rook_moves(sq, all_pieces);
+        return boards[WKNIGHT] & KNIGHT_MOVES[sq]
+                || boards[WPAWN] & BPAWN_CAPTURES[sq]
+                || boards[WKING] & KING_MOVES[sq]
+                || (boards[WBISHOP] | boards[WQUEEN]) & magic::bishop_moves(sq, boards[ALLPIECES])
+                || (boards[WROOK] | boards[WQUEEN]) & magic::rook_moves(sq, boards[ALLPIECES]);
     }
 
     inline bool attackedBy(int sq, bool us) {
@@ -423,10 +424,10 @@ struct TBoard {
      * @return bitboard populated with pieces attacking the square
      */
     inline U64 pieceAttacksTo(int sq) {
-        return (KNIGHT_MOVES[sq] & (white_knights | black_knights))
-                | (KING_MOVES[sq] & (white_kings | black_kings))
-                | (magic::bishop_moves(sq, all_pieces) & (white_bishops | white_queens | black_bishops | black_queens))
-                | (magic::rook_moves(sq, all_pieces) & (white_rooks | white_queens | black_rooks | black_queens));
+        return (KNIGHT_MOVES[sq] & (boards[WKNIGHT] | boards[BKNIGHT]))
+                | (KING_MOVES[sq] & (boards[WKING] | boards[BKING]))
+                | (magic::bishop_moves(sq, boards[ALLPIECES]) & (boards[WBISHOP] | boards[WQUEEN] | boards[BBISHOP] | boards[BQUEEN]))
+                | (magic::rook_moves(sq, boards[ALLPIECES]) & (boards[WROOK] | boards[WQUEEN] | boards[BROOK] | boards[BQUEEN]));
     }
 
     /**
@@ -451,9 +452,9 @@ struct TBoard {
      * @param white side to test
      * @return true: side has bishop pair, false: side does not have the bishop pair
      */
-    inline bool bishopPair(bool w) {
-        int pc = BISHOP[w];
-        return (*boards[pc] & WHITE_SQUARES) && (*boards[pc] & BLACK_SQUARES);
+    inline bool bishopPair(bool us) {
+        int pc = BISHOP[us];
+        return (boards[pc] & WHITE_SQUARES) && (boards[pc] & BLACK_SQUARES);
     }
 
     bool isDraw(); //verify if the position on the board is a trivial draw
@@ -497,7 +498,7 @@ struct TBoard {
      * @return populated bitboard of promoting pawns
      */
     inline U64 promotingWhitePawns() {
-        return white_pawns & RANK_7;
+        return boards[WPAWN] & RANK_7;
     }
 
     /**
@@ -505,7 +506,7 @@ struct TBoard {
      * @return populated bitboard of promoting pawns
      */
     inline U64 promotingBlackPawns() {
-        return black_pawns & RANK_2;
+        return boards[BPAWN] & RANK_2;
     }
 
     /**
@@ -531,20 +532,20 @@ struct TBoard {
      * @return bitboard populated with all pieces attacking the square
      */
     inline U64 attacksTo(int sq) {
-        return (KNIGHT_MOVES[sq] & (white_knights | black_knights))
-                | (BPAWN_CAPTURES[sq] & white_pawns)
-                | (WPAWN_CAPTURES[sq] & black_pawns)
-                | (KING_MOVES[sq] & (white_kings | black_kings))
-                | (magic::bishop_moves(sq, all_pieces) & (white_bishops | white_queens | black_bishops | black_queens))
-                | (magic::rook_moves(sq, all_pieces) & (white_rooks | white_queens | black_rooks | black_queens));
+        return (KNIGHT_MOVES[sq] & (boards[WKNIGHT] | boards[BKNIGHT]))
+                | (BPAWN_CAPTURES[sq] & boards[WPAWN])
+                | (WPAWN_CAPTURES[sq] & boards[BPAWN])
+                | (KING_MOVES[sq] & (boards[WKING] | boards[BKING]))
+                | (magic::bishop_moves(sq, boards[ALLPIECES]) & (boards[WBISHOP] | boards[WQUEEN] | boards[BBISHOP] | boards[BQUEEN]))
+                | (magic::rook_moves(sq, boards[ALLPIECES]) & (boards[WROOK] | boards[WQUEEN] | boards[BROOK] | boards[BQUEEN]));
     }
 
     inline U64 whitePawnAttacks() {
-        return (UPLEFT1(white_pawns) | UPRIGHT1(white_pawns));
+        return (UPLEFT1(boards[WPAWN]) | UPRIGHT1(boards[WPAWN]));
     }
 
     inline U64 blackPawnAttacks() {
-        return (DOWNLEFT1(black_pawns) | DOWNRIGHT1(black_pawns));
+        return (DOWNLEFT1(boards[BPAWN]) | DOWNRIGHT1(boards[BPAWN]));
     }
 
     inline U64 pawnAttacks(bool white) {
@@ -556,11 +557,11 @@ struct TBoard {
     }
 
     inline bool attackedByWhitePawn(int sq) {
-        return BPAWN_CAPTURES[sq] & white_pawns;
+        return BPAWN_CAPTURES[sq] & boards[WPAWN];
     }
 
     inline bool attackedByBlackPawn(int sq) {
-        return WPAWN_CAPTURES[sq] & black_pawns;
+        return WPAWN_CAPTURES[sq] & boards[BPAWN];
     }
 
     inline bool attackedByPawn(int sq, bool white) {
