@@ -226,7 +226,7 @@ namespace kpk_bitbase {
 }
 
 int main(int argc, char** argv) {
-    InitMagicMoves();
+    magic::init();
     kpk_bitbase::init();
     
     std::cout << "\nconst U64 KPK_BB[2][" << kpk_bitbase::MAX_IDX << "] = {";

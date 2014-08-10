@@ -371,9 +371,6 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && beta > -SCORE_DEEPEST_MATE
             && pos->hasPieces(pos->stack->wtm)) {
         int rdepth = new_depth - (3 * ONE_PLY);
-        if (rdepth >= 8 && stack->phase < 14) {
-            rdepth -= rdepth / 6;
-        }
         rdepth = MAX(rdepth, 0);
         forward();
         int null_score = -pvs(-beta, -alpha, rdepth);
@@ -477,12 +474,9 @@ int TSearch::pvs(int alpha, int beta, int depth) {
          */
         extend_move = extendMove(move, gives_check);
         int reduce = 0;
-        if (!skip_prune && max_reduce > 0) {
-            reduce = ONE_PLY;
-            if (searched_moves >= 4) {
-                reduce += new_depth / 4;
-            }
-            reduce = MIN(max_reduce, reduce);
+
+        if (!skip_prune && max_reduce > 0 && depth >= 6 && searched_moves >= 3) {
+            reduce = (searched_moves >= 6) ? depth / 3 : ONE_PLY;
         }
         assert(reduce == 0 || extend_move == 0);
 

@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
 
     clock_t begin;
 
-    InitMagicMoves();
+    magic::init();
     TEngine * engine = new TEngine();
     THashTable *globalHashTable = new THashTable(128);
     TOutputHandler oh;

@@ -405,16 +405,16 @@ inline short evaluateMaterial(TSearch * sd) {
     TScore result;
     result.clear();
     TBoard * pos = sd->pos;
-    int wpawns = pos->pieces[WPAWN].count;
-    int bpawns = pos->pieces[BPAWN].count;
-    int wknights = pos->pieces[WKNIGHT].count;
-    int bknights = pos->pieces[BKNIGHT].count;
-    int wbishops = pos->pieces[WBISHOP].count;
-    int bbishops = pos->pieces[BBISHOP].count;
-    int wrooks = pos->pieces[WROOK].count;
-    int brooks = pos->pieces[BROOK].count;
-    int wqueens = pos->pieces[WQUEEN].count;
-    int bqueens = pos->pieces[BQUEEN].count;
+    int wpawns = pos->count(WPAWN);
+    int bpawns = pos->count(BPAWN);
+    int wknights = pos->count(WKNIGHT);
+    int bknights = pos->count(BKNIGHT);
+    int wbishops = pos->count(WBISHOP);
+    int bbishops = pos->count(BBISHOP);
+    int wrooks = pos->count(WROOK);
+    int brooks = pos->count(BROOK);
+    int wqueens = pos->count(WQUEEN);
+    int bqueens = pos->count(BQUEEN);
     int wminors = wknights + wbishops;
     int bminors = bknights + bbishops;
     int wpieces = wminors + wrooks + wqueens;
@@ -545,14 +545,14 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
     //set mobility and attack masks
     TBoard * pos = sd->pos;
-    int wkpos = *pos->white_king_sq;
-    int bkpos = *pos->black_king_sq;
+    int wkpos = pos->get_sq(WKING);
+    int bkpos = pos->get_sq(BKING);
     sd->stack->mob[WHITE] = ~(*pos->pawns[WHITE] | pos->pawnAttacks(BLACK) | *pos->kings[WHITE]);
     sd->stack->mob[BLACK] = ~(*pos->pawns[BLACK] | pos->pawnAttacks(WHITE) | *pos->kings[BLACK]);
     sd->stack->attack[WHITE] = (*pos->pawns[BLACK] | *pos->kings[BLACK]);
     sd->stack->attack[BLACK] = (*pos->pawns[WHITE] | *pos->kings[WHITE]);
-    sd->stack->king_attack_zone[WHITE] = MagicQueenMoves(bkpos, pos->pawnsAndKings()) & sd->stack->mob[WHITE];
-    sd->stack->king_attack_zone[BLACK] = MagicQueenMoves(wkpos, pos->pawnsAndKings()) & sd->stack->mob[BLACK];
+    sd->stack->king_attack_zone[WHITE] = magic::queen_moves(bkpos, pos->pawnsAndKings()) & sd->stack->mob[WHITE];
+    sd->stack->king_attack_zone[BLACK] = magic::queen_moves(wkpos, pos->pawnsAndKings()) & sd->stack->mob[BLACK];
 
     /*
      * 2. Probe the hash table for the pawn score
@@ -603,9 +603,9 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
     int blocked_center_pawns = 0;
 
-    TPiecePlacement * wPawns = &pos->pieces[WPAWN];
-    for (int i = 0; i < wPawns->count; i++) {
-        int sq = wPawns->squares[i];
+    U64 wpawns = pos->white_pawns;
+    while (wpawns) {
+        int sq = POP(wpawns);;
         int isq = FLIP_SQUARE(sq);
         U64 sqBit = BIT(sq);
         U64 up = northFill(sqBit);
@@ -689,9 +689,10 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
     }
 
-    TPiecePlacement * bPawns = &pos->pieces[BPAWN];
-    for (int i = 0; i < bPawns->count; i++) {
-        int sq = bPawns->squares[i];
+   
+    U64 bpawns = pos->black_pawns;
+    while (bpawns) {
+        int sq = POP(bpawns);
         U64 sqBit = BIT(sq);
         U64 down = southFill(sqBit);
         bool open = sqBit & openW;
@@ -899,8 +900,9 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
     int pc = KNIGHT[us];
     result->clear();
     sd->stack->king_attack[pc] = 0;
+    U64 knights = *pos->boards[pc];
 
-    if (*pos->knights[us] == 0) {
+    if (knights == 0) {
         return result;
     }
 
@@ -921,16 +923,17 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
     /*
      * 3. Calculate the score and store on the stack
      */
-    TPiecePlacement * pp = &pos->pieces[pc];
+    
+    
     bool them = !us;
     int pawn_width = BB_WIDTH(*pos->pawns[them]);
-    int pawn_count = pos->pieces[PAWN[them]].count;
-    int kpos = *pos->king_sq[them];
+    int pawn_count = pos->count(PAWN[them]);
+    int kpos = pos->get_sq(KING[them]);
     U64 kaz = KNIGHT_MOVES[kpos] | KING_ZONE[kpos]; //king attack zone
     int ka_units = 0;
     int ka_squares = 0;
-    for (int i = 0; i < pp->count; i++) {
-        int sq = pp->squares[i];
+    while (knights) {
+        int sq = POP(knights);
         result->add(PST[WKNIGHT][ISQ(sq, us)]);
         U64 moves = KNIGHT_MOVES[sq] & sd->stack->mob[us];
         int mob_count = popCount0(moves);
@@ -959,8 +962,9 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     int pc = BISHOP[us];
     result->clear();
     sd->stack->king_attack[pc] = 0;
+    U64 bishops = *pos->boards[pc];
 
-    if (*pos->bishops[us] == 0) {
+    if (bishops == 0) {
         return result;
     }
 
@@ -981,23 +985,21 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     /*
      * 3. Calculate the score and store on the stack
      */
-    TPiecePlacement * pp = &pos->pieces[pc];
-
     //bishop pair
-    if (pp->count > 1 && pos->bishopPair(us) && (sd->stack->pawn_flags & PFLAG_CLOSED_CENTER) == 0) {
+    if (pos->bishopPair(us) && (sd->stack->pawn_flags & PFLAG_CLOSED_CENTER) == 0) {
         result->add(VBISHOPPAIR);
     }
 
     U64 occ = pos->pawnsAndKings();
     bool them = !us;
-    int kpos = *pos->king_sq[them];
+    int kpos = pos->get_sq(KING[them]);
     U64 kaz = (sd->stack->king_attack_zone[us] & BISHOP_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone; 
     int ka_units = 0;
     int ka_squares = 0;
-    for (int i = 0; i < pp->count; i++) {
-        int sq = pp->squares[i];
+    while (bishops) {
+        int sq = POP(bishops);
         result->add(PST[WBISHOP][ISQ(sq, us)]);
-        U64 moves = MagicBishopMoves(sq, occ) & sd->stack->mob[us];
+        U64 moves = magic::bishop_moves(sq, occ) & sd->stack->mob[us];
         int count = popCount0(moves);
         result->add(BISHOP_MOBILITY[count]);
         if (moves & sd->stack->attack[us]) {
@@ -1049,8 +1051,9 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     int pc = ROOK[us];
     result->clear();
     sd->stack->king_attack[pc] = 0;
+    U64 rooks = *pos->boards[pc];
 
-    if (*pos->rooks[us] == 0) {
+    if (rooks == 0) {
         return result;
     }
 
@@ -1071,27 +1074,26 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     /*
      * 3. Calculate the score and store on the stack
      */
-    TPiecePlacement * pp = &pos->pieces[ROOK[us]];
     bool them = !us;
     U64 fill[2] = {FILEFILL(pos->black_pawns), FILEFILL(pos->white_pawns)};
     U64 occ = pos->pawnsAndKings();
-    if ((*pos->rooks[us] & RANK[us][1]) && (BIT(*pos->king_sq[us]) & (RANK[us][1] | RANK[us][2]))) {
+    if ((*pos->rooks[us] & RANK[us][1]) && (BIT(pos->get_sq(KING[us])) & (RANK[us][1] | RANK[us][2]))) {
         result->add(ROOK_1ST); //at least one rook is protecting the back rank
     }
-    int kpos = *pos->king_sq[them];
+    int kpos = pos->get_sq(KING[them]);
     U64 kaz = (sd->stack->king_attack_zone[us] & ROOK_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone
     int ka_units = 0;
     int ka_squares = 0;
 
-    for (int i = 0; i < pp->count; i++) {
-        int sq = pp->squares[i];
+    while (rooks) {
+        int sq = POP(rooks);
         result->add(PST[WROOK][ISQ(sq, us)]);
         U64 bitSq = BIT(sq);
         if (bitSq & fill[us]) {
             result->add(ROOK_CLOSED_FILE);
             //trapped rook pattern
             if (bitSq & ROOK_PATTERNS[us]) {
-                int kpos_us = *pos->king_sq[us];
+                int kpos_us = pos->get_sq(KING[us]);
                 if (us == WHITE && (kpos_us == g1 || kpos_us == h1 || kpos_us == f1)
                         && (sq == h1 || sq == g1 || sq == h2 || sq == g2)) {
                     result->add(TRAPPED_ROOK);
@@ -1116,12 +1118,12 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
             result->add(ATTACKED_PIECE);
         }
 
-        U64 moves = MagicRookMoves(sq, occ) & sd->stack->mob[us];
+        U64 moves = magic::rook_moves(sq, occ) & sd->stack->mob[us];
         if (moves & sd->stack->attack[us]) {
             result->add(popCount(moves & sd->stack->attack[us]) * ROOK_ATTACK);
         }
 
-        if ((bitSq & RANK[us][7]) && (BIT(*pos->king_sq[them]) & BACKRANKS[us])) {
+        if ((bitSq & RANK[us][7]) && (BIT(pos->get_sq(KING[them])) & BACKRANKS[us])) {
             result->add(ROOK_7TH);
         }
 
@@ -1156,8 +1158,9 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
     int pc = QUEEN[us];
     result->clear();
     sd->stack->king_attack[pc] = 0;
+    U64 queens = *pos->boards[pc];
 
-    if (*pos->queens[us] == 0) {
+    if (queens == 0) {
         return result;
     }
 
@@ -1179,16 +1182,15 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
      * 3. Calculate the score and store on the stack
      */
     bool them = !us;
-    TPiecePlacement * pp = &pos->pieces[QUEEN[us]];
     U64 occ = pos->pawnsAndKings();
-    int kpos = *pos->king_sq[them];
+    int kpos = pos->get_sq(KING[them]);
     U64 kaz = sd->stack->king_attack_zone[us] | KING_ZONE[kpos]; //king attack zone
     int ka_units = 0;
     int ka_squares = 0;
-    for (int i = 0; i < pp->count; i++) {
-        int sq = pp->squares[i];
+    while (queens) {
+        int sq = POP(queens);
         result->add(PST[WQUEEN][ISQ(sq, us)]);
-        U64 moves = MagicQueenMoves(sq, occ) & sd->stack->mob[us];
+        U64 moves = magic::queen_moves(sq, occ) & sd->stack->mob[us];
         int count = popCount0(moves);
         result->add(QUEEN_MOBILITY[count]);
         if (pos->attackedByPawn(sq, them)) {
@@ -1244,8 +1246,8 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
 
         //consider distance of king
         if (unstoppable == 0) {
-            int kdist_us_bonus = distance(*sd->pos->king_sq[us], to) * r * (r - 1);
-            int kdist_them_bonus = distance(*sd->pos->king_sq[them], to) * r * (r - 1) * 2;
+            int kdist_us_bonus = distance(sd->pos->get_sq(KING[us]), to) * r * (r - 1);
+            int kdist_them_bonus = distance(sd->pos->get_sq(KING[them]), to) * r * (r - 1) * 2;
 
 
 #ifdef PRINT_PASSED_PAWN
@@ -1316,7 +1318,7 @@ int evaluatePasserVsK(TSearch * sd, bool us, int sq) {
         return 0; //no, the path is blocked
     }
     bool them = !us;
-    int kingThem = *sd->pos->king_sq[them];
+    int kingThem = sd->pos->get_sq(KING[them]);
     int queening_square = FILE(sq) + us * 56;
     if (us == WHITE) {
         if (sq <= h2) {
@@ -1337,7 +1339,7 @@ int evaluatePasserVsK(TSearch * sd, bool us, int sq) {
     int qrank = RANK(queening_square);
     int qfile = FILE(queening_square);
     int pdistance = 1 + ABS(qrank - prank);
-    int kingUs = *sd->pos->king_sq[us];
+    int kingUs = sd->pos->get_sq(KING[us]);
     if ((path & KING_MOVES[kingUs]) == path) {
         //yes, the promotion path is fully defended and not blocked by our own King
         return 700 - pdistance;
@@ -1415,7 +1417,7 @@ inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
     std::cout << std::endl;
 #endif
 
-    kaz &= ~(RANK[us][7] | RANK[us][8] | KING_MOVES[*pos->king_sq[!us]]);
+    kaz &= ~(RANK[us][7] | RANK[us][8] | KING_MOVES[pos->get_sq(KING[!us])]);
     result->add(12 * popCount0(kaz), 0);
 
 #ifdef PRINT_KING_SAFETY
@@ -1524,7 +1526,7 @@ inline short cornerKing(TSearch * s, bool them) {
     static const uint8_t CORNER[8] = {250, 200, 150, 120, 90, 60, 30, 0};
     static const uint8_t KING[8] = {0, 100, 80, 60, 45, 30, 15, 0};
     TBoard * pos = s->pos;
-    int kpos[2] = {*pos->black_king_sq, *pos->white_king_sq};
+    int kpos[2] = {pos->get_sq(BKING), pos->get_sq(WKING)};
     int king_dist = distance(kpos[BLACK], kpos[WHITE]);
     int result = KING[king_dist];
     bool us = !them;
@@ -1582,7 +1584,7 @@ inline short evaluateEndgame(TSearch * s, short score) {
     TBoard * pos = s->pos;
     bool us = (score > 0) || (score == 0 && pos->stack->wtm); //winning side white: 1, black: 0
     bool them = !us;
-    int pawn_count[2] = {pos->pieces[BPAWN].count, pos->pieces[WPAWN].count};
+    int pawn_count[2] = {pos->count(BPAWN), pos->count(WPAWN)};
     bool has_pieces[2] = {pos->hasPieces(BLACK), pos->hasPieces(WHITE)};
 
     /*
@@ -1596,7 +1598,7 @@ inline short evaluateEndgame(TSearch * s, short score) {
         bool utm = pos->stack->wtm == (us == WHITE);
 
         //opposition
-        if (opposition(*pos->white_king_sq, *pos->black_king_sq) && utm) {
+        if (opposition(pos->get_sq(WKING), pos->get_sq(BKING)) && utm) {
             score -= 5 * BONUS[us];
         } else {
             score += 5 * BONUS[us];
@@ -1609,8 +1611,8 @@ inline short evaluateEndgame(TSearch * s, short score) {
 
         //KPK
         if (pawn_count[them] == 0 && pawn_count[us] == 1) {
-            int pawn_sq = pos->pieces[PAWN[us]].squares[0];
-            bool won = KPK::probe(utm, *pos->king_sq[us], *pos->king_sq[them], pawn_sq, us == BLACK);
+            bool won = KPK::probe(utm, pos->get_sq(KING[us]), pos->get_sq(KING[them]), 
+                    pos->get_sq(PAWN[us]), us == BLACK);
             if (won) {
                 return score + SCORE_SURE_WIN[us] / 2;
             }
@@ -1695,11 +1697,11 @@ inline short evaluateEndgame(TSearch * s, short score) {
                 bool w1 = *pos->bishops[us] & WHITE_SQUARES;
                 bool w2 = queening_squares & WHITE_SQUARES;
                 if (w1 != w2) { //wrong colored bishop
-                    U64 control_us = KING_MOVES[*pos->king_sq[us]] | BIT(*pos->king_sq[us]);
+                    U64 control_us = KING_MOVES[pos->get_sq(KING[us])] | *pos->boards[KING[us]];
                     if ((control_us & queening_squares) == queening_squares) {
                         return score;
                     }
-                    U64 control_them = KING_MOVES[*pos->king_sq[them]] | BIT(*pos->king_sq[them]);
+                    U64 control_them = KING_MOVES[pos->get_sq(KING[them])] | *pos->boards[KING[them]];
                     control_them &= ~control_us;
                     if ((control_them & queening_squares) == queening_squares) {
                         return DRAW(score, 128);
@@ -1710,7 +1712,7 @@ inline short evaluateEndgame(TSearch * s, short score) {
         } else if (pos->isKNPK(us)) {
             if (*pos->pawns[us] & EDGE & RANK[us][7]) {
                 U64 queening_square = upFill(*pos->pawns[us], us) & RANK[us][8];
-                if (distance(BSF(queening_square), *pos->king_sq[them]) <= 1) {
+                if (distance(BSF(queening_square), pos->get_sq(KING[them])) <= 1) {
                     return DRAW(score, 128);
                 }
             }

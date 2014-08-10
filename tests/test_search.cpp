@@ -123,7 +123,7 @@ int main(int argc, char** argv) {
 
     THashTable * hashTable = new THashTable(8);
 
-    InitMagicMoves();
+    magic::init();
     std::cout << "%SUITE_STARTING% test_genmoves" << std::endl;
     std::cout << "%SUITE_STARTED%" << std::endl;
 

@@ -120,7 +120,7 @@ public:
 
     TEngine * engine() {
         if (_engine == NULL) {
-            InitMagicMoves();
+            magic::init();
             _engine = new TEngine();
             _engine->newGame(_fen);
         }

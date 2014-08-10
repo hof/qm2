@@ -179,7 +179,7 @@ void initPST() {
 }
 
 int main(int argc, char** argv) {
-    InitMagicMoves();
+    magic::init();
     initPST();
     
     std::string PIECE_NAME[WKING + 1] = {"", "PAWN", "KNIGHT", "BISHOP", "ROOK", "QUEEN", "KING"};

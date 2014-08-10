@@ -39,7 +39,7 @@ void test_tt() {
     
     //test if searching the position with a hashtable finished a depth 15 
     //search with less than 50.000 nodes
-    InitMagicMoves();
+    magic::init();
     TEngine * engine = new TEngine();
     engine->setHashTable(hashTable);
     engine->setOutputHandler(&oh);

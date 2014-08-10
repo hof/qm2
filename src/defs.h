@@ -27,6 +27,9 @@
 #ifndef DEFS_H
 #define	DEFS_H
 
+#define HARDWARE_POPCOUNT
+#define HARDWARE_64BITS
+
 #include <assert.h>
 #include <stdint.h>
 #include <iostream>
@@ -35,9 +38,6 @@
 #include "score.h"
 
 typedef uint64_t U64;
-
-#define HARDWARE_POPCOUNT
-#define HARDWARE_64BITS
 
 #define C64(x) x##UL
 

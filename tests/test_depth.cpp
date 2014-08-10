@@ -110,7 +110,7 @@ void depth_test(TEngine * engine, TStats * stats, int depth) {
 }
 
 int main(int argc, char** argv) {
-    InitMagicMoves();
+    magic::init();
     TEngine * engine = new TEngine();
     THashTable *globalHashTable = new THashTable(256);
     engine->setHashTable(globalHashTable);

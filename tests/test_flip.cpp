@@ -20,32 +20,15 @@ bool flipTest(int test_num, const char * fen) {
     stop_test = true;
     TBoard pos;
     pos.fromFen(fen);
-    if (pos.test() != 0) {
-        std::cout << "\ntesting position " << test_num << ": " << pos.asFen() << std::endl;
-        std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=board integrity failure before flip" << std::endl;
-        std::cout << "pos.test() result " << pos.test() << std::endl;
-        return false;
-    }
+    
     std::string fen1 = pos.asFen();
 
     //flip
     pos.flip();
-    if (pos.test() != 0) {
-        std::cout << "\ntesting position " << test_num << ": " << pos.asFen() << std::endl;
-        std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=board integrity failure after flip" << std::endl;
-        std::cout << "pos.test() result " << pos.test() << std::endl;
-        return false;
-    }
     std::string fen2 = pos.asFen();
 
     //flip back
     pos.flip();
-    if (pos.test() != 0) {
-        std::cout << "\ntesting position " << test_num << ": " << pos.asFen() << std::endl;
-        std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=board integrity failure after flip back" << std::endl;
-        std::cout << "pos.test() result " << pos.test() << std::endl;
-        return false;
-    }
     std::string fen3 = pos.asFen();
 
     //test 1: fen notations should be equal
@@ -180,7 +163,7 @@ void flipTestSuite(TEngine * engine, int depth) {
 }
 
 int main(int argc, char** argv) {
-    InitMagicMoves();
+    magic::init();
     globalHashTable = new THashTable(16);
     engine = new TEngine();
     engine->setHashTable(globalHashTable);

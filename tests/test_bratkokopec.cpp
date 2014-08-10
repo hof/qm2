@@ -102,7 +102,7 @@ int main(int argc, char** argv) {
     std::cout << "%SUITE_STARTING% test_positions" << std::endl;
     std::cout << "%SUITE_STARTED%" << std::endl;
 
-    InitMagicMoves();
+    magic::init();
     TEngine * engine = new TEngine();
     THashTable *globalHashTable = new THashTable(256);
     TOutputHandler oh;

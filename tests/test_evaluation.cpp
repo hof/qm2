@@ -193,7 +193,7 @@ int main(int argc, char** argv) {
     std::cout << "%SUITE_STARTED%" << std::endl;
     std::cout << "%TEST_STARTED% test1 (evaluation_test)" << std::endl;
     test_stop = false;
-    InitMagicMoves();
+    magic::init();
     globalHashTable = new THashTable(128);
     engine = new TEngine();
     engine->setHashTable(globalHashTable);

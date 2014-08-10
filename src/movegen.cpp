@@ -64,9 +64,9 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
         }
     }
     //knight captures:
-    TPiecePlacement * pp = &board->pieces[++pc];
-    for (int i = 0; i < pp->count; i++) {
-        int ssq = pp->squares[i];
+    U64 pieces = *board->boards[++pc];
+    while (pieces) {
+        int ssq = POP(pieces);
         moves = KNIGHT_MOVES[ssq] & targets;
         while (moves) {
             int tsq = POP(moves);
@@ -74,38 +74,37 @@ void genCaptures(TBoard * board, TMoveList * list, U64 targets) {
         }
     }
     //bishop captures:
-    pp = &board->pieces[++pc];
-    for (int i = 0; i < pp->count; i++) {
-        int ssq = pp->squares[i];
-        moves = MagicBishopMoves(ssq, occ) & targets;
+    pieces = *board->boards[++pc];
+    while (pieces) {
+        int ssq = POP(pieces);//pp->squares[i];
+        moves = magic::bishop_moves(ssq, occ) & targets;
         while (moves) {
             int tsq = POP(moves);
             (current++)->setCapture(pc, ssq, tsq, board->matrix[tsq]);
         }
     }
     //rook captures:
-    pp = &board->pieces[++pc];
-    for (int i = 0; i < pp->count; i++) {
-        int ssq = pp->squares[i];
-        moves = MagicRookMoves(ssq, occ) & targets;
+    pieces = *board->boards[++pc];
+    while (pieces) {
+        int ssq = POP(pieces);//pp->squares[i];
+        moves = magic::rook_moves(ssq, occ) & targets;
         while (moves) {
             int tsq = POP(moves);
             (current++)->setCapture(pc, ssq, tsq, board->matrix[tsq]);
         }
     }
     //queen captures:
-    pp = &board->pieces[++pc];
-    for (int i = 0; i < pp->count; i++) {
-        int ssq = pp->squares[i];
-        moves = MagicQueenMoves(ssq, occ) & targets;
+    pieces = *board->boards[++pc];
+    while (pieces) {
+        int ssq = POP(pieces);//pp->squares[i];
+        moves = magic::queen_moves(ssq, occ) & targets;
         while (moves) {
             int tsq = POP(moves);
             (current++)->setCapture(pc, ssq, tsq, board->matrix[tsq]);
         }
     }
     //king captures:
-    pc++;
-    int kpos = *board->king_sq[us];
+    int kpos = board->get_sq(++pc);
     moves = KING_MOVES[kpos] & board->all(them);
     while (moves) {
         int tsq = POP(moves);
@@ -200,10 +199,9 @@ void genQuietMoves(TBoard * board, TMoveList * list) {
     int pawn_up = PAWNDIRECTION[us];
 
     //pawn moves:
-    assert((us == WHITE && pc == WPAWN) || (us == BLACK && pc == BPAWN));
-    TPiecePlacement * pp = &board->pieces[pc];
-    for (int i = 0; i < pp->count; i++) {
-        int ssq = pp->squares[i];
+    U64 pieces = *board->boards[pc];
+    while (pieces) {
+        int ssq = POP(pieces);
         int tsq = ssq + pawn_up;
         if (board->matrix[tsq] != EMPTY || (BIT(ssq) & RANK[us][7])) {
             continue;
@@ -217,55 +215,43 @@ void genQuietMoves(TBoard * board, TMoveList * list) {
             (current++)->setMove(pc, ssq, tsq);
         }
     }
-    //knight moves:
-    pp = &board->pieces[++pc];
-    assert((us == WHITE && pc == WKNIGHT) || (us == BLACK && pc == BKNIGHT));
-    for (int i = 0; i < pp->count; i++) {
-        int ssq = pp->squares[i];
+    pieces = *board->boards[++pc];
+    while (pieces) {
+        int ssq = POP(pieces);//pp->squares[i];
         moves = KNIGHT_MOVES[ssq] & targets;
         while (moves) {
             (current++)->setMove(pc, ssq, POP(moves));
         }
     }
-    //bishop moves:
-    pp = &board->pieces[++pc];
-    assert((us == WHITE && pc == WBISHOP) || (us == BLACK && pc == BBISHOP));
-    for (int i = 0; i < pp->count; i++) {
-        int ssq = pp->squares[i];
-        moves = MagicBishopMoves(ssq, occ) & targets;
+    pieces = *board->boards[++pc];
+    while (pieces) {
+        int ssq = POP(pieces);//pp->squares[i];
+        moves = magic::bishop_moves(ssq, occ) & targets;
         while (moves) {
             (current++)->setMove(pc, ssq, POP(moves));
         }
     }
-    //rook moves:
-    pp = &board->pieces[++pc];
-    assert((us == WHITE && pc == WROOK) || (us == BLACK && pc == BROOK));
-    for (int i = 0; i < pp->count; i++) {
-        int ssq = pp->squares[i];
-        moves = MagicRookMoves(ssq, occ) & targets;
+    pieces = *board->boards[++pc];
+    while (pieces) {
+        int ssq = POP(pieces);//pp->squares[i];
+        moves = magic::rook_moves(ssq, occ) & targets;
         while (moves) {
             (current++)->setMove(pc, ssq, POP(moves));
         }
     }
-    //queen moves:
-    pp = &board->pieces[++pc];
-    assert((us == WHITE && pc == WQUEEN) || (us == BLACK && pc == BQUEEN));
-    for (int i = 0; i < pp->count; i++) {
-        int ssq = pp->squares[i];
-        moves = MagicQueenMoves(ssq, occ) & targets;
+    pieces = *board->boards[++pc];
+    while (pieces) {
+        int ssq = POP(pieces);//pp->squares[i];
+        moves = magic::queen_moves(ssq, occ) & targets;
         while (moves) {
             (current++)->setMove(pc, ssq, POP(moves));
         }
     }
     //king moves:
-    int kpos = *board->king_sq[us];
-    pc++;
-    assert((us == WHITE && pc == WKING) || (us == BLACK && pc == BKING));
+    int kpos = board->get_sq(++pc);
     moves = KING_MOVES[kpos] & targets;
     while (moves) {
-        (
-
-                current++)->setMove(pc, kpos, POP(moves));
+        (current++)->setMove(pc, kpos, POP(moves));
     }
     list->last = current;
 }
