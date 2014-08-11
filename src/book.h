@@ -29,6 +29,7 @@
 #ifndef BOOK_H
 #define	BOOK_H
 
+#include <cstdlib>
 #include <fstream>
 #include <string>
 
@@ -36,7 +37,7 @@
 #include "board.h"
 #include "movegen.h"
 
-struct TBookEntry {
+struct book_entry_t {
     U64 key;
     unsigned short move;
     unsigned short weight;
@@ -44,43 +45,41 @@ struct TBookEntry {
     unsigned short learn2;
 };
 
-class TBook : private std::ifstream {
+class book_t : private std::ifstream {
+    
 public:
-
-    ~TBook() {
+    ~book_t() {
         close();
     }
     void open(const std::string& fName);
     void close();
-    const std::string file_name();
+    const std::string get_file_name();
     static U64 polyglot_key(board_t* pos);
-    int findMoves(board_t * pos, TMoveList * list);
-    void readPolyglotMove(board_t * pos, TMove * move, int polyglotMove);
+    int find(board_t * pos, TMoveList * list);
+    void read_polyglot_move(board_t * pos, TMove * move, int polyglotMove);
 
 private:
+    std::string file_name;
+    int book_size;  
+    U64 read_integer(int size);
+    void read_entry(book_entry_t &e, int n);
+    int find_key(U64 key);
 
-    TBook& operator>>(U64& n) {
+    book_t& operator>>(U64& n) {
         n = read_integer(8);
         return *this;
     }
 
-    TBook& operator>>(uint16_t& n) {
+    book_t& operator>>(uint16_t &n) {
         n = (uint16_t) read_integer(2);
         return *this;
     }
 
-    void operator>>(TBookEntry& e) {
+    void operator>>(book_entry_t &e) {
         *this >> e.key >> e.move >> e.weight >> e.learn1 >> e.learn2;
     }
-
-    U64 read_integer(int size);
-    void read_entry(TBookEntry& e, int n);
-    int find_key(U64 key);
-
-    std::string fileName;
-    int bookSize;
+    
 };
-
 
 #endif	/* BOOK_H */
 

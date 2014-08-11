@@ -24,7 +24,7 @@ void testPolyglotKeys() {
 
     //starting position
     board->create("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    U64 key = TBook::polyglot_key(board);
+    U64 key = book_t::polyglot_key(board);
     if (key != C64(0x463b96181691fc9c)) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch" << std::endl;
     }
@@ -40,11 +40,11 @@ void testPolyglotKeys() {
     board_t * board_test = new board_t();
     board_test->create("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1");
 
-    key = TBook::polyglot_key(board);
+    key = book_t::polyglot_key(board);
     if (key != C64(0x823c9b50fd114196)) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2-e4" << std::endl;
     }
-    if (TBook::polyglot_key(board_test) != key) {
+    if (book_t::polyglot_key(board_test) != key) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2-e4 (board_test)" << std::endl;
     }
 
@@ -55,11 +55,11 @@ void testPolyglotKeys() {
     move->setMove(BPAWN, d7, d5);
     board->forward(move);
     board_test->create("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2");
-    key = TBook::polyglot_key(board);
+    key = book_t::polyglot_key(board);
     if (key != C64(0x0756b94461c50fb0)) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2e4 d7d5" << std::endl;
     }
-    if (TBook::polyglot_key(board_test) != key) {
+    if (book_t::polyglot_key(board_test) != key) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2e4 d7d5 (board_test)" << std::endl;
     }
     /* position after e2e4 d7d5 e4e5
@@ -69,11 +69,11 @@ void testPolyglotKeys() {
     move->setMove(WPAWN, e4, e5);
     board->forward(move);
     board_test->create("rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2");
-    key = TBook::polyglot_key(board);
+    key = book_t::polyglot_key(board);
     if (key != C64(0x662fafb965db29d4)) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2e4 d7d5 e4e5" << std::endl;
     }
-    if (TBook::polyglot_key(board_test) != key) {
+    if (book_t::polyglot_key(board_test) != key) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2e4 d7d5 e4e5 (board_test)" << std::endl;
     }
 
@@ -84,11 +84,11 @@ void testPolyglotKeys() {
     move->setMove(BPAWN, f7, f5);
     board->forward(move);
     board_test->create("rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3");
-    key = TBook::polyglot_key(board);
+    key = book_t::polyglot_key(board);
     if (key != C64(0x22a48b5a8e47ff78)) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2e4 d7d5 e4e5 f7f5" << std::endl;
     }
-    if (TBook::polyglot_key(board_test) != key) {
+    if (book_t::polyglot_key(board_test) != key) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2e4 d7d5 e4e5 f7f5 (board_test)" << std::endl;
     }
     /* position after e2e4 d7d5 e4e5 f7f5 e1e2
@@ -98,11 +98,11 @@ void testPolyglotKeys() {
     move->setMove(WKING, e1, e2);
     board->forward(move);
     board_test->create("rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPPKPPP/RNBQ1BNR b kq - 0 3");
-    key = TBook::polyglot_key(board);
+    key = book_t::polyglot_key(board);
     if (key != C64(0x652a607ca3f242c1)) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2e4 d7d5 e4e5 f7f5 e1e2" << std::endl;
     }
-    if (TBook::polyglot_key(board_test) != key) {
+    if (book_t::polyglot_key(board_test) != key) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2e4 d7d5 e4e5 f7f5 e1e2 (board_test)" << std::endl;
     }
     /* position after e2e4 d7d5 e4e5 f7f5 e1e2 e8f7
@@ -112,11 +112,11 @@ void testPolyglotKeys() {
     move->setMove(BKING, e8, f7);
     board->forward(move);
     board_test->create("rnbq1bnr/ppp1pkpp/8/3pPp2/8/8/PPPPKPPP/RNBQ1BNR w - - 0 4");
-    key = TBook::polyglot_key(board);
+    key = book_t::polyglot_key(board);
     if (key != C64(0x00fdd303c946bdd9)) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2e4 d7d5 e4e5 f7f5 e1e2 e8f7" << std::endl;
     }
-    if (TBook::polyglot_key(board_test) != key) {
+    if (book_t::polyglot_key(board_test) != key) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after e2e4 d7d5 e4e5 f7f5 e1e2 e8f7 (board_test)" << std::endl;
     }
     /* position after a2a4 b7b5 h2h4 b5b4 c2c4
@@ -124,7 +124,7 @@ void testPolyglotKeys() {
      * key=3c8123ea7b067637
      */
     board->create("rnbqkbnr/p1pppppp/8/8/PpP4P/8/1P1PPPP1/RNBQKBNR b KQkq c3 0 3");
-    key = TBook::polyglot_key(board);
+    key = book_t::polyglot_key(board);
     if (key != C64(0x3c8123ea7b067637)) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after a2a4 b7b5 h2h4 b5b4 c2c4" << std::endl;
     }
@@ -133,7 +133,7 @@ void testPolyglotKeys() {
      * key=5c3f9b829b279560
      */
     board->create("rnbqkbnr/p1pppppp/8/8/P6P/R1p5/1P1PPPP1/1NBQKBNR b Kkq - 0 4");
-    key = TBook::polyglot_key(board);
+    key = book_t::polyglot_key(board);
     if (key != C64(0x5c3f9b829b279560)) {
         std::cout << "%TEST_FAILED% time=0 testname=testPolyglotKeys (test_polyglot) message=key mismatch after a2a4 b7b5 h2h4 b5b4 c2c4 b4c3 a1a3" << std::endl;
     }

@@ -35,7 +35,7 @@
 #include "opponent.h"
 
 class TInputHandler;
-class TBook;
+class book_t;
 class TSearch;
 
 struct TGameSettings {
@@ -86,7 +86,7 @@ private:
 
 public:
     TGameSettings gameSettings;
-    void _create_start_positions(TSearch * root, TBook * book, string * pos, int &x, const int max);
+    void _create_start_positions(TSearch * root, book_t * book, string * pos, int &x, const int max);
     
 
     TEngine() : TThreadsManager() {

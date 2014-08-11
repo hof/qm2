@@ -24,20 +24,17 @@
  * Public License, and can be downloaded from http://wbec-ridderkerk.nl
  */
 
-#include <cstdlib>
 #include "book.h"
-#include "movegen.h"
-#include "bbmoves.h"
 
 using namespace std;
 
 namespace {
 
     // Book entry size in bytes
-    const int EntrySize = 16;
+    const int ENTRY_SIZE = 16;
 
     // Random numbers from PolyGlot, used to compute book hash keys
-    const U64 Random64[781] = {
+    const U64 RANDOM64[781] = {
         C64(0x9D39247E33776D41), C64(0x2AF7398005AAA5C7), C64(0x44DB015024623547), C64(0x9C15F73E62A76AE2),
         C64(0x75834465489C0C89), C64(0x3290AC3A203001BF), C64(0x0FBBAD1F61042279), C64(0xE83A908FF2FB60CA),
         C64(0x0D7E765D58755C10), C64(0x1A083822CEAFE02D), C64(0x9605D5F0E25EC3B0), C64(0xD021FF5CD13A2ED5),
@@ -240,34 +237,43 @@ namespace {
     const int CASTLE_OFFSET = 768;
     const int EP_OFFSET = 772;
     const int STM_OFFSET = 780; //site to move
-
-    // Local functions
-
 }
 
-int TBook::findMoves(board_t * pos, TMoveList * list) {
+/**
+ * Finds all book moves for a position and places them in a list
+ * @param pos board structure
+ * @param list list of moves
+ * @return amount of book moves found
+ */
+int book_t::find(board_t * pos, TMoveList * list) {
     list->clear();
 
-    if (!is_open() || this->bookSize == 0) {
+    if (!is_open() || this->book_size == 0) {
         return 0;
     }
-    TBookEntry entry;
+    book_entry_t entry;
     U64 key = this->polyglot_key(pos);
-    for (int idx = find_key(key); idx < this->bookSize; idx++) {
+    for (int idx = find_key(key); idx < this->book_size; idx++) {
         read_entry(entry, idx);
         if (entry.key != key) {
             break;
         }
         TMove * move = list->last++;
-        readPolyglotMove(pos, move, entry.move);
+        read_polyglot_move(pos, move, entry.move);
         move->score = entry.weight;
     }
     return list->last - list->first;
 }
 
-void TBook::readPolyglotMove(board_t* pos, TMove * move, int polyglotMove) {
-    int tsq = polyglotMove & 63;
-    int ssq = (polyglotMove >> 6) & 63;
+/**
+ * Converts a polyglot move to a move representation as used by the engine
+ * @param pos board structure
+ * @param move engine's move
+ * @param polyglotMove polyglot move
+ */
+void book_t::read_polyglot_move(board_t *pos, TMove * move, int polyglot_move) {
+    int tsq = polyglot_move & 63;
+    int ssq = (polyglot_move >> 6) & 63;
     int piece = pos->matrix[ssq];
 
     move->setMove(piece, ssq, tsq);
@@ -285,7 +291,7 @@ void TBook::readPolyglotMove(board_t* pos, TMove * move, int polyglotMove) {
     }
 
     //"normal" moves
-    int promotion = (polyglotMove >> 12) & 7; //none 0, knight 1, bishop 2, rook 3, queen 4
+    int promotion = (polyglot_move >> 12) & 7; //none 0, knight 1, bishop 2, rook 3, queen 4
     if (promotion) {
         promotion += pos->stack->wtm ? 1 : 7; //WKNIGHT == 2; BKNIGHT == 8;
         move->promotion = promotion;
@@ -312,18 +318,25 @@ void TBook::readPolyglotMove(board_t* pos, TMove * move, int polyglotMove) {
     }
 }
 
-void TBook::close() {
+/**
+ * Closes a book file
+ */
+void book_t::close() {
     if (is_open())
         ifstream::close();
 }
 
-void TBook::open(const string& fName) {
+/**
+ * Opens a book file
+ * @param fname the filename 
+ */
+void book_t::open(const string &fname) {
 
     // Close old file before opening the new
     close();
 
-    fileName = fName;
-    ifstream::open(fileName.c_str(), ifstream::in | ifstream::binary);
+    file_name = fname;
+    ifstream::open(file_name.c_str(), ifstream::in | ifstream::binary);
 
     // Silently return when asked to open a non-exsistent file
     if (!is_open()) {
@@ -332,7 +345,7 @@ void TBook::open(const string& fName) {
 
     // Get the book size in number of entries
     seekg(0, ios::end);
-    bookSize = long(tellg()) / EntrySize;
+    book_size = long(tellg()) / ENTRY_SIZE;
     seekg(0, ios::beg);
 
     if (!good()) {
@@ -340,29 +353,28 @@ void TBook::open(const string& fName) {
     }
 }
 
-
-/// Book::file_name() returns the file name of the currently active book,
-/// or the empty string if no book is open.
-
-const string TBook::file_name() {
-    return is_open() ? fileName : "";
+/**
+ * Book::file_name() returns the file name of the currently active book,
+ * or the empty string if no book is open.
+ */
+const string book_t::get_file_name() {
+    return is_open() ? file_name : "";
 }
 
-
-
-/// Book::find_key() takes a book key as input, and does a binary search
-/// through the book file for the given key. The index to the first book
-/// entry with the same key as the input is returned. When the key is not
-/// found in the book file, bookSize is returned.
-
-int TBook::find_key(U64 key) {
+/**
+ *  Book::find_key() takes a book key as input, and does a binary search
+ * through the book file for the given key. The index to the first book
+ * entry with the same key as the input is returned. When the key is not
+ * found in the book file, book_size is returned.
+ */
+int book_t::find_key(U64 key) {
 
     int left, right, mid;
-    TBookEntry entry;
+    book_entry_t entry;
 
     // Binary search (finds the leftmost entry)
     left = 0;
-    right = bookSize - 1;
+    right = book_size - 1;
 
     assert(left <= right);
 
@@ -382,20 +394,21 @@ int TBook::find_key(U64 key) {
     assert(left == right);
 
     read_entry(entry, left);
-    return entry.key == key ? left : bookSize;
+    return entry.key == key ? left : book_size;
 }
 
 
-/// Book::read_entry() takes a BookEntry reference and an integer index as
-/// input, and looks up the opening book entry at the given index in the book
-/// file. The book entry is copied to the first input parameter.
+/**
+ * Book::read_entry() takes a BookEntry reference and an integer index as
+ * input, and looks up the opening book entry at the given index in the book
+ * file. The book entry is copied to the first input parameter.
+ */
+void book_t::read_entry(book_entry_t& entry, int idx) {
 
-void TBook::read_entry(TBookEntry& entry, int idx) {
-
-    assert(idx >= 0 && idx < bookSize);
+    assert(idx >= 0 && idx < book_size);
     assert(is_open());
 
-    seekg(idx * EntrySize, ios_base::beg);
+    seekg(idx * ENTRY_SIZE, ios_base::beg);
 
     *this >> entry;
 
@@ -408,7 +421,7 @@ void TBook::read_entry(TBookEntry& entry, int idx) {
 /// Book::read_integer() reads size chars from the file stream
 /// and converts them in an integer number.
 
-U64 TBook::read_integer(int size) {
+U64 book_t::read_integer(int size) {
 
     char buf[8];
     U64 n = 0;
@@ -423,7 +436,7 @@ U64 TBook::read_integer(int size) {
     return n;
 }
 
-U64 TBook::polyglot_key(board_t* pos) {
+U64 book_t::polyglot_key(board_t* pos) {
     static const int PolyGlotPiece[] = {0, 1, 3, 5, 7, 9, 11, 0, 2, 4, 6, 8, 10};
 
     U64 result = 0;
@@ -431,29 +444,29 @@ U64 TBook::polyglot_key(board_t* pos) {
 
     while (occupied) {
         int sq = pop(occupied);
-        result ^= Random64[PolyGlotPiece[pos->matrix[sq]]*64 + sq];
+        result ^= RANDOM64[PolyGlotPiece[pos->matrix[sq]]*64 + sq];
     }
 
     if (pos->has_castle_right(CASTLE_K)) {
-        result ^= Random64[CASTLE_OFFSET + 0];
+        result ^= RANDOM64[CASTLE_OFFSET + 0];
     }
     if (pos->has_castle_right(CASTLE_Q)) {
-        result ^= Random64[CASTLE_OFFSET + 1];
+        result ^= RANDOM64[CASTLE_OFFSET + 1];
     }
     if (pos->has_castle_right(CASTLE_k)) {
-        result ^= Random64[CASTLE_OFFSET + 2];
+        result ^= RANDOM64[CASTLE_OFFSET + 2];
     }
     if (pos->has_castle_right(CASTLE_q)) {
-        result ^= Random64[CASTLE_OFFSET + 3];
+        result ^= RANDOM64[CASTLE_OFFSET + 3];
     }
 
     if (pos->stack->enpassant_sq >= a3 //polyglot only considers en passant if ep captures are possible
             && ((pos->stack->wtm && (BPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->bb[WPAWN]))
             || (pos->stack->wtm == false && (WPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->bb[BPAWN])))) {
-        result ^= Random64[EP_OFFSET + FILE(pos->stack->enpassant_sq)];
+        result ^= RANDOM64[EP_OFFSET + FILE(pos->stack->enpassant_sq)];
 
     }
-    result ^= pos->stack->wtm ? Random64[STM_OFFSET] : 0;
+    result ^= pos->stack->wtm ? RANDOM64[STM_OFFSET] : 0;
     return result;
 }
 

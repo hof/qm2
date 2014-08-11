@@ -126,13 +126,13 @@ void * TEngine::_think(void* engineObjPtr) {
     TMove ponderMove;
     resultMove.setMove(0);
     ponderMove.setMove(0);
-    TBook * book = new TBook();
+    book_t * book = new book_t();
     book->open("book.bin");
     bool book_move = false;
     bool book_ponder_move = false;
     for (int book_step = 0; book_step < 2; book_step++) {
         TMoveList * bookMoves = &searchData->stack->moveList;
-        int count = book->findMoves(root, bookMoves);
+        int count = book->find(root, bookMoves);
         if (count > 0) {
             srand(time(NULL));
             int randomScore = 0;
@@ -176,7 +176,7 @@ void * TEngine::_think(void* engineObjPtr) {
     if (book_ponder_move == false && searchData->initRootMoves() > 0) {
         if (book_move) {
             //no ponder move.. only consider book_moves, but let the engine decide which one to play
-            book->findMoves(root, &searchData->stack->moveList);
+            book->find(root, &searchData->stack->moveList);
             searchData->root.matchMoves(&searchData->stack->moveList);
             tm->requestLessTime();
         } else if (searchData->root.MoveCount == 1) {
@@ -638,7 +638,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     std::cout << "\nLEARNING MODE" << std::endl;
     std::cout << "Depth: " << MAXDEPTH << std::endl;
 
-    TBook * book = new TBook();
+    book_t * book = new book_t();
     book->open("book.bin");
     string start_positions[MAXGAMESCOUNT + 1];
     for (int p = 0; p < MAXGAMESCOUNT + 1; p++) {
@@ -946,7 +946,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     return NULL;
 }
 
-void TEngine::_create_start_positions(TSearch * sd_root, TBook * book, string * poslist, int &x, const int max) {
+void TEngine::_create_start_positions(TSearch * sd_root, book_t * book, string * poslist, int &x, const int max) {
 
     TMoveList * bookMoves = &sd_root->stack->moveList;
     TMove actualMove;
@@ -955,7 +955,7 @@ void TEngine::_create_start_positions(TSearch * sd_root, TBook * book, string * 
         gen++;
         while (sd_root->pos->current_ply < MAX_PLY) {
             actualMove.setMove(0);
-            int count = book->findMoves(sd_root->pos, bookMoves);
+            int count = book->find(sd_root->pos, bookMoves);
             if (count > 0) {
                 int randomScore = 0;
                 for (int pickMove = 0; pickMove < 2; pickMove++) {
