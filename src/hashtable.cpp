@@ -21,7 +21,6 @@
 
 #include "hashtable.h"
 #include "search.h"
-#include "search.h"
 
 THashTable::THashTable(int totalSizeInMb) {
     const int ttEntrySize = sizeof (TTranspositionTableEntry);
@@ -30,13 +29,13 @@ THashTable::THashTable(int totalSizeInMb) {
     const int sizeOfPawnTable = MIN(256, totalSizeInMb >> 2);
     const int sizeOfTranspositionTable = MAX(1, totalSizeInMb - sizeOfMaterialTable - sizeOfPawnTable);
     const int maxEntriesPerTranspositionTable = (sizeOfTranspositionTable * 1024 * 1024) / (ttTableCount * ttEntrySize);
-    const int ttTableSize = maxEntriesPerTranspositionTable ? bitScanReverse(maxEntriesPerTranspositionTable) : 0;
+    const int ttTableSize = maxEntriesPerTranspositionTable ? bsr(maxEntriesPerTranspositionTable) : 0;
     const int materialTableEntrySize = sizeof (TMaterialTableEntry);
     const int maxEntriesMaterialTable = (sizeOfMaterialTable * 1024 * 1024) / materialTableEntrySize;
-    const int materialTableSize = maxEntriesMaterialTable ? bitScanReverse(maxEntriesMaterialTable) : 0;
+    const int materialTableSize = maxEntriesMaterialTable ? bsr(maxEntriesMaterialTable) : 0;
     const int pawnTableEntrySize = sizeof (TPawnTableEntry);
     const int maxEntriesPawnTable = (sizeOfPawnTable * 1024 * 1024) / pawnTableEntrySize;
-    const int pawnTableSize = maxEntriesPawnTable ? bitScanReverse(maxEntriesPawnTable) : 0;
+    const int pawnTableSize = maxEntriesPawnTable ? bsr(maxEntriesPawnTable) : 0;
 
     _ttSize = 1 << ttTableSize;
     alwaysReplaceTable = new TTranspositionTableEntry[_ttSize];
@@ -84,7 +83,7 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
     if ((hashedKey ^ hashedData) == hash_code) {
         TMove move;
         move.setMove(TTMOVE(hashedData));
-        TBoard * pos = searchData->pos;
+        board_t * pos = searchData->pos;
         if (move.piece && pos->valid(&move) && pos->legal(&move)) {
             hashHit = true;
             searchData->stack->ttMove1.setMove(&move);
@@ -117,7 +116,7 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
     if ((hashedKey ^ hashedData2) == hash_code) {
         TMove move;
         move.setMove(TTMOVE(hashedData2));
-        TBoard * pos = searchData->pos;
+        board_t * pos = searchData->pos;
         bool equalMove = move.piece && move.equals(&searchData->stack->ttMove1);
         bool legal = equalMove || (pos->valid(&move) && pos->legal(&move));
         if (legal) {

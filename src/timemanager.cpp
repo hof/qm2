@@ -22,7 +22,7 @@
  * In emergency situations more time can be used. For easy moves less time can be used.
  */
 
-#include "defs.h"
+#include "bits.h"
 #include "timemanager.h"
 
 void TTimeManager::set(int myTime, int oppTime, int myInc, int oppInc, int movesLeft) {

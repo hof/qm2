@@ -245,7 +245,7 @@ namespace {
 
 }
 
-int TBook::findMoves(TBoard * pos, TMoveList * list) {
+int TBook::findMoves(board_t * pos, TMoveList * list) {
     list->clear();
 
     if (!is_open() || this->bookSize == 0) {
@@ -265,7 +265,7 @@ int TBook::findMoves(TBoard * pos, TMoveList * list) {
     return list->last - list->first;
 }
 
-void TBook::readPolyglotMove(TBoard* pos, TMove * move, int polyglotMove) {
+void TBook::readPolyglotMove(board_t* pos, TMove * move, int polyglotMove) {
     int tsq = polyglotMove & 63;
     int ssq = (polyglotMove >> 6) & 63;
     int piece = pos->matrix[ssq];
@@ -423,33 +423,33 @@ U64 TBook::read_integer(int size) {
     return n;
 }
 
-U64 TBook::polyglot_key(TBoard* pos) {
+U64 TBook::polyglot_key(board_t* pos) {
     static const int PolyGlotPiece[] = {0, 1, 3, 5, 7, 9, 11, 0, 2, 4, 6, 8, 10};
 
     U64 result = 0;
-    U64 occupied = pos->boards[ALLPIECES];
+    U64 occupied = pos->bb[ALLPIECES];
 
     while (occupied) {
-        int sq = popFirst(occupied);
+        int sq = pop(occupied);
         result ^= Random64[PolyGlotPiece[pos->matrix[sq]]*64 + sq];
     }
 
-    if (pos->castleRight(CASTLE_K)) {
+    if (pos->has_castle_right(CASTLE_K)) {
         result ^= Random64[CASTLE_OFFSET + 0];
     }
-    if (pos->castleRight(CASTLE_Q)) {
+    if (pos->has_castle_right(CASTLE_Q)) {
         result ^= Random64[CASTLE_OFFSET + 1];
     }
-    if (pos->castleRight(CASTLE_k)) {
+    if (pos->has_castle_right(CASTLE_k)) {
         result ^= Random64[CASTLE_OFFSET + 2];
     }
-    if (pos->castleRight(CASTLE_q)) {
+    if (pos->has_castle_right(CASTLE_q)) {
         result ^= Random64[CASTLE_OFFSET + 3];
     }
 
     if (pos->stack->enpassant_sq >= a3 //polyglot only considers en passant if ep captures are possible
-            && ((pos->stack->wtm && (BPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->boards[WPAWN]))
-            || (pos->stack->wtm == false && (WPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->boards[BPAWN])))) {
+            && ((pos->stack->wtm && (BPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->bb[WPAWN]))
+            || (pos->stack->wtm == false && (WPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->bb[BPAWN])))) {
         result ^= Random64[EP_OFFSET + FILE(pos->stack->enpassant_sq)];
 
     }

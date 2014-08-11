@@ -22,7 +22,7 @@
 #ifndef HASHCODES_H 
 #define HASHCODES_H 
 
-#include "defs.h"
+#include "bits.h"
 
 #define HASH_PIECE(key,pc,sq) ((key) ^= HashNumbers[pc][sq])
 #define HASH_ADD_PIECE(key,pc,sq) ((key) ^= HashNumbers[pc][sq])

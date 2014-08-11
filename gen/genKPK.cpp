@@ -133,7 +133,7 @@ namespace kpk_bitbase {
         } while (true);
         U64 king_moves_w = KING_MOVES[wk] & ~(KING_MOVES[bk] | BIT(wp));
         while (king_moves_w) {
-            tsq = POP(king_moves_w);
+            tsq = pop(king_moves_w);
             assert(tsq != wp && distance(tsq, bk) > 1);
             int next = t[BLACK][bk][index(tsq, wp)];
             assert(next != INVALID);
@@ -153,7 +153,7 @@ namespace kpk_bitbase {
         U64 king_moves_b = KING_MOVES[bk] & ~attacks_w;
         assert(king_moves_b != 0);
         while (king_moves_b) {
-            int tsq = POP(king_moves_b);
+            int tsq = pop(king_moves_b);
             assert(tsq != wp && tsq != wk && distance(wk, tsq) > 1);
             int next = t[WHITE][tsq][idx];
             assert(next != INVALID);

@@ -90,7 +90,7 @@ void initPST() {
         scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
         U64 caps = WPAWN_CAPTURES[sq];
         while (caps) {
-            int ix = POP(caps);
+            int ix = pop(caps);
             scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
         }
         scores[sq].mul(8);
@@ -108,7 +108,7 @@ void initPST() {
         scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
         U64 caps = KNIGHT_MOVES[sq];
         while (caps) {
-            int ix = POP(caps);
+            int ix = pop(caps);
             scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
         }
         scores[sq].mul(3); //mobility is extra important because knights move slow
@@ -122,7 +122,7 @@ void initPST() {
         scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
         U64 caps = BISHOP_MOVES[sq];
         while (caps) {
-            int ix = POP(caps);
+            int ix = pop(caps);
             scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
         }
         if (sq == g2 || sq == b2) {
@@ -145,7 +145,7 @@ void initPST() {
         scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
         U64 caps = QUEEN_MOVES[sq];
         while (caps) {
-            int ix = POP(caps);
+            int ix = pop(caps);
             scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
         }
         scores[sq].mg = ROOK_FILE_BONUS[FILE(sq)] / 2 + PROGRESS[RANK(sq)];
@@ -159,7 +159,7 @@ void initPST() {
         scores[sq].add(mobility_weight[FLIP_SQUARE(sq)]);
         U64 caps = KING_MOVES[sq];
         while (caps) {
-            int ix = POP(caps);
+            int ix = pop(caps);
             scores[sq].add(mobility_weight[FLIP_SQUARE(ix)]);
         }
         if (BIT(sq) & LARGE_CENTER) {

@@ -44,7 +44,7 @@ void TMovePicker::push(TSearch * searchData, TMove * move, int score) {
     list->last = current;
 }
 
-inline TMove * TMovePicker::popBest(TBoard * pos, TMoveList * list) {
+inline TMove * TMovePicker::popBest(board_t * pos, TMoveList * list) {
     if (list->first == list->last) {
         return NULL;
     }
@@ -72,14 +72,14 @@ TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, i
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
     moveList->stage = depth < ONE_PLY ? CAPTURES : HASH1;
-    searchData->stack->captureMask = searchData->pos->boards[ALLPIECES];
+    searchData->stack->captureMask = searchData->pos->bb[ALLPIECES];
     return pickNextMove(searchData, depth, alpha, beta);
 }
 
 TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, int beta) {
     U64 mask;
     TMoveList * moveList = &searchData->stack->moveList;
-    TBoard * pos = searchData->pos;
+    board_t * pos = searchData->pos;
 
     /*
      * 1. If there are moves present in the moveList, this means
@@ -156,8 +156,8 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     return result;
                 }
             case CAPTURES:
-                mask = pos->boards[ALLPIECES];
-                if (searchData->stack->inCheck) {
+                mask = pos->bb[ALLPIECES];
+                if (searchData->stack->in_check) {
                     mask &= pos->stack->checkers;
                 }
                 genCaptures(pos, moveList, mask);
@@ -166,7 +166,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                         if (moveList->excluded(move)) {
                             move->score = MOVE_EXCLUDED;
                         } else {
-                            move->score = depth > LOW_DEPTH ? pos->SEE(move) : MVVLVA(move);
+                            move->score = depth > LOW_DEPTH ? pos->see(move) : MVVLVA(move);
                         }
                     }
                     result = popBest(pos, moveList);
@@ -182,7 +182,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                         if (moveList->excluded(move)) {
                             move->score = MOVE_EXCLUDED;
                         } else if ((move->promotion == WQUEEN || move->promotion == BQUEEN)
-                                && pos->SEE(move) >= 0) {
+                                && pos->see(move) >= 0) {
                             move->score = 800;
                         } else {
                             move->score = -move->piece;
@@ -230,7 +230,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     }
                 }
             case CASTLING:
-                if (searchData->stack->inCheck == false) {
+                if (searchData->stack->in_check == false) {
                     genCastles(pos, moveList);
                     if (moveList->current != moveList->last) {
                         for (TMove * move = moveList->current; move != moveList->last; move++) {
@@ -248,7 +248,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     }
                 }
             case QUIET_MOVES:
-                if (depth >= 0 || searchData->stack->inCheck) {
+                if (depth >= 0 || searchData->stack->in_check) {
                     moveList->minimumScore = -MOVE_INFINITY;
                     genQuietMoves(pos, moveList);
                     for (TMove * move = moveList->current; move != moveList->last; move++) {

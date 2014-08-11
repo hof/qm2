@@ -72,10 +72,10 @@ public:
     void copy(TMoveList * list);
 };
 
-void genQuietMoves(TBoard * board, TMoveList * list);
-void genPromotions(TBoard * board, TMoveList * list);
-void genCastles(TBoard * board, TMoveList * list);
-void genCaptures(TBoard * board, TMoveList * list, U64 targets);
+void genQuietMoves(board_t * board, TMoveList * list);
+void genPromotions(board_t * board, TMoveList * list);
+void genCastles(board_t * board, TMoveList * list);
+void genCaptures(board_t * board, TMoveList * list, U64 targets);
 
 #endif	/* W0MOVEGEN_H */
 

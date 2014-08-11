@@ -28,7 +28,7 @@
 #ifndef SEARCH_H
 #define	SEARCH_H
 
-#include "defs.h"
+#include "bits.h"
 #include "evaluate.h"
 #include "board.h"
 #include "move.h"
@@ -130,7 +130,7 @@ struct TSearchStack {
     TMove bestMove;
 
     U64 hash_code;
-    bool inCheck;
+    bool in_check;
 
     TMove mateKiller;
     TMove killer1;
@@ -174,7 +174,7 @@ class TSearch {
 protected:
     TSearchStack _stack[MAX_PLY + 1];
 public:
-    TBoard * pos;
+    board_t * pos;
     TSearchStack * stack;
     TSearchStack * rootStack;
 
@@ -216,8 +216,8 @@ public:
     TSearch(const char * fen,       
             THashTable * globalHashTable,
             TOutputHandler * outputH) {
-        pos = new TBoard();
-        pos->fromFen(fen);
+        pos = new board_t();
+        pos->create(fen);
         memset(history, 0, sizeof (history));
         InitPST();
         hashTable = globalHashTable;
@@ -285,7 +285,7 @@ public:
         skipNull = true;
         stack->move.setMove(0);
         stack++;
-        stack->inCheck = false;
+        stack->in_check = false;
         stack->eval_result = SCORE_INVALID;
         pos->forward();
         assert(stack == &_stack[pos->current_ply]);
@@ -301,7 +301,7 @@ public:
     inline void forward(TMove * move, bool givesCheck) {
         stack->move.setMove(move);
         stack++;
-        stack->inCheck = givesCheck;
+        stack->in_check = givesCheck;
         stack->eval_result = SCORE_INVALID;
         pos->forward(move);
         assert(stack == &_stack[pos->current_ply]);

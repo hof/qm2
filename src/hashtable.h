@@ -24,7 +24,8 @@
 #ifndef HASHTABLE_H
 #define	HASHTABLE_H
 
-#include "defs.h"
+#include "bits.h"
+#include "score.h"
 #include "move.h"
 
 class TSearch;

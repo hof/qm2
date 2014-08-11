@@ -27,7 +27,7 @@
 #ifndef TIMEMANAGER_H
 #define	TIMEMANAGER_H
 
-#include "defs.h"
+#include "bits.h"
 #include <time.h>
 #include <string.h>
 

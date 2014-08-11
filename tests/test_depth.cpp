@@ -20,9 +20,9 @@ struct TStats {
 };
 
 void countNodes(TEngine * engine, TStats * stats, const char * fen) {
-    TBoard pos;
-    pos.fromFen(fen);
-    engine->newGame(pos.asFen());
+    board_t pos;
+    pos.create(fen);
+    engine->newGame(pos.to_string());
     //std::cout << pos.asFen() << std::endl;
     clock_t start = clock();
     engine->think();

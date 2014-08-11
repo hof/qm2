@@ -63,7 +63,7 @@ enum MovePickingStage {
 class TMovePicker {
 protected:
 
-    TMove * popBest(TBoard * pos, TMoveList * list);
+    TMove * popBest(board_t * pos, TMoveList * list);
 
 public:
 

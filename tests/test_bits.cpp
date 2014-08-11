@@ -53,74 +53,74 @@ int main(int argc, char** argv) {
     U64 x5 = bit32 | bit40 | bit62;
 
     /*
-     * BSF test
+     * bsf test
      */
-    std::cout << "1. BSF test" << std::endl;
-    if (BSF(x0) != 0) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSF(x0) != 0: " << BSF(x0) << std::endl;
+    std::cout << "1. bsf test" << std::endl;
+    if (bsf(x0) != 0) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsf(x0) != 0: " << bsf(x0) << std::endl;
     }
-    if (BSF(x1) != 1) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSF(x1) != 1: " << BSF(x1) << std::endl;
+    if (bsf(x1) != 1) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsf(x1) != 1: " << bsf(x1) << std::endl;
     }
-    if (BSF(x2) != 20) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSF(x2) != 20: " << BSF(x2) << std::endl;
+    if (bsf(x2) != 20) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsf(x2) != 20: " << bsf(x2) << std::endl;
     }
-    if (BSF(x3) != 31) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSF(x3) != 31: " << BSF(x3) << std::endl;
+    if (bsf(x3) != 31) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsf(x3) != 31: " << bsf(x3) << std::endl;
     }
-    if (BSF(x4) != 1) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSF(x4) != 1: " << BSF(x4) << std::endl;
+    if (bsf(x4) != 1) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsf(x4) != 1: " << bsf(x4) << std::endl;
     }
-    if (BSF(x5) != 32) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSF(x5) != 32: " << BSF(x5) << std::endl;
+    if (bsf(x5) != 32) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsf(x5) != 32: " << bsf(x5) << std::endl;
     }
     std::cout << "   done" << std::endl << std::endl;
 
     /*
-     * BSR test
+     * bsr test
      */
-    std::cout << "2. BSR test" << std::endl;
-    if (BSR(x0) != 63) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSR(x0) != 63: " << BSR(x0) << std::endl;
+    std::cout << "2. bsr test" << std::endl;
+    if (bsr(x0) != 63) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsr(x0) != 63: " << bsr(x0) << std::endl;
     }
-    if (BSR(x1) != 62) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSR(x1) != 62: " << BSR(x1) << std::endl;
+    if (bsr(x1) != 62) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsr(x1) != 62: " << bsr(x1) << std::endl;
     }
-    if (BSR(x2) != 40) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSR(x2) != 40: " << BSR(x2) << std::endl;
+    if (bsr(x2) != 40) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsr(x2) != 40: " << bsr(x2) << std::endl;
     }
-    if (BSR(x3) != 32) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSR(x3) != 32: " << BSR(x3) << std::endl;
+    if (bsr(x3) != 32) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsr(x3) != 32: " << bsr(x3) << std::endl;
     }
-    if (BSR(x4) != 31) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSR(x4) != 31: " << BSR(x4) << std::endl;
+    if (bsr(x4) != 31) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsr(x4) != 31: " << bsr(x4) << std::endl;
     }
-    if (BSR(x5) != 62) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=BSR(x5) != 62: " << BSR(x5) << std::endl;
+    if (bsr(x5) != 62) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bsr(x5) != 62: " << bsr(x5) << std::endl;
     }
     std::cout << "   done" << std::endl << std::endl;
 
     /*
      * PopCount test
      */
-    std::cout << "3. popCount test" << std::endl;
-    if (popCount(x0) != 2) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popCount(x0) != 2: " << popCount(x0) << std::endl;
+    std::cout << "3. popcnt test" << std::endl;
+    if (popcnt(x0) != 2) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popcnt(x0) != 2: " << popcnt(x0) << std::endl;
     }
-    if (popCount(x1) != 6) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popCount(x1) != 6: " << popCount(x1) << std::endl;
+    if (popcnt(x1) != 6) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popcnt(x1) != 6: " << popcnt(x1) << std::endl;
     }
-    if (popCount(x2) != 4) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popCount(x2) != 4: " << popCount(x2) << std::endl;
+    if (popcnt(x2) != 4) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popcnt(x2) != 4: " << popcnt(x2) << std::endl;
     }
-    if (popCount(x3) != 2) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popCount(x3) != 2: " << popCount(x3) << std::endl;
+    if (popcnt(x3) != 2) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popcnt(x3) != 2: " << popcnt(x3) << std::endl;
     }
-    if (popCount(x4) != 3) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popCount(x4) != 3: " << popCount(x4) << std::endl;
+    if (popcnt(x4) != 3) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popcnt(x4) != 3: " << popcnt(x4) << std::endl;
     }
-    if (popCount(x5) != 3) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popCount(x5) != 3: " << popCount(x5) << std::endl;
+    if (popcnt(x5) != 3) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=popcnt(x5) != 3: " << popcnt(x5) << std::endl;
     }
     std::cout << "   done" << std::endl << std::endl;
 
@@ -130,7 +130,7 @@ int main(int argc, char** argv) {
      */
 
     U64 bb = BIT(a4);
-    int sq = BSF(bb);
+    int sq = bsf(bb);
     if (sq != a4) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=bb=SQ2BB(a4);BB2SQ(bb) != a4: " << sq << std::endl;
     }
@@ -142,8 +142,8 @@ int main(int argc, char** argv) {
 
     if (nfill != nfill_expected) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=nfill != nfill_expected: " << nfill << " != " << nfill_expected << std::endl;
-        printBB("nfill", nfill);
-        printBB("nfill_expected", nfill_expected);
+        bb_print("nfill", nfill);
+        bb_print("nfill_expected", nfill_expected);
     }
 
     U64 sfill = FRONTFILL_B(bb);
@@ -151,8 +151,8 @@ int main(int argc, char** argv) {
             | BIT(h1) | (FILE_G ^ BIT(g7) ^ BIT(g8));
     if (sfill != sfill_expected) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=sfill != sfill_expected: " << sfill << " != " << sfill_expected << std::endl;
-        printBB("sfill", sfill);
-        printBB("sfill_expected", sfill_expected);
+        bb_print("sfill", sfill);
+        bb_print("sfill_expected", sfill_expected);
     }
 
     U64 ffill = FILEFILL(bb);
@@ -160,8 +160,8 @@ int main(int argc, char** argv) {
 
     if (ffill != ffill_expected) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=sfill != sfill_expected: " << ffill << " != " << ffill_expected << std::endl;
-        printBB("ffill", ffill);
-        printBB("ffill_expected", ffill_expected);
+        bb_print("ffill", ffill);
+        bb_print("ffill_expected", ffill_expected);
     }
 
     U64 openf = ~FILEFILL(bb);
@@ -169,22 +169,22 @@ int main(int argc, char** argv) {
 
     if (openf != openf_expected) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=openf != openf_expected: " << openf << " != " << openf_expected << std::endl;
-        printBB("openf", openf);
-        printBB("openf_expected", openf_expected);
+        bb_print("openf", openf);
+        bb_print("openf_expected", openf_expected);
     }
 
     U64 nshift = UP1(RANK_8 | RANK_1);
     if (nshift != RANK_2) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=nshift != nshift_expected: " << nshift << " != " << RANK_2 << std::endl;
-        printBB("nshift", nshift);
-        printBB("nshift_expected", RANK_2);
+        bb_print("nshift", nshift);
+        bb_print("nshift_expected", RANK_2);
     }
 
     U64 sshift = DOWN1(RANK_8 | RANK_1);
     if (sshift != RANK_7) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=sshift != sshift_expected: " << sshift << " != " << RANK_7 << std::endl;
-        printBB("sshift", nshift);
-        printBB("sshift_expected", RANK_2);
+        bb_print("sshift", nshift);
+        bb_print("sshift_expected", RANK_2);
     }
 
 

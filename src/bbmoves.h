@@ -27,7 +27,7 @@
 #ifndef _bbmovesh
 #define _bbmovesh
 
-#include "defs.h"
+#include "bits.h"
 
 const U64 KING_MOVES[64] = {
     C64(0x0000000000000302), C64(0x0000000000000705), C64(0x0000000000000E0A), C64(0x0000000000001C14),

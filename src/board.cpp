@@ -18,7 +18,7 @@
  * 
  * File: board.cpp
  * Board representation:
- * - Bitboards for each piece and all (white/black) occupied squares
+ * - Bitbb for each piece and all (white/black) occupied squares
  * - Matrix[64]
  * - Piece placement arrays for each piece
  */
@@ -26,7 +26,6 @@
 #include <cstdlib>
 #include <stdio.h>
 #include <iostream>
-#include <string.h>
 #include "board.h"
 #include "hashcodes.h"
 #include "evaluate.h"
@@ -34,20 +33,84 @@
 /**
  * Empty and initialize the board structure
  */
-void TBoard::clear() {
+void board_t::clear() {
     _stack[0].clear();
     stack = &_stack[0];
     current_ply = 0;
     root_ply = 0;
-    memset(boards, 0, sizeof(boards));
+    memset(bb, 0, sizeof (bb));
     memset(matrix, 0, sizeof (matrix));
+}
+
+/**
+ * Add a piece to the board (e.g. a promotion)
+ * @param piece the piece type to be added
+ * @param sq the location square of the piece (a1..h8)
+ * @param hash update the hash codes or not
+ */
+void board_t::add_piece(int piece, int sq, bool hash = false) {
+    if (hash) {
+        HASH_ADD_PIECE(stack->material_hash, piece, count(piece) + _bishop_ix(piece, sq));
+        HASH_ADD_PIECE(stack->hash_code, piece, sq);
+        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
+            HASH_ADD_PIECE(stack->pawn_hash, piece, sq);
+        }
+    }
+    U64 bit = BIT(sq);
+    bb[piece] ^= bit;
+    bb[WPIECES + (piece > WKING)] ^= bit;
+    bb[ALLPIECES] ^= bit;
+    matrix[sq] = piece;
+}
+
+/**
+ * Remove a piece from the board (e.g. a capture)
+ * @param piece the piece type to be removed
+ * @param sq the square location of the piece (a1..h8)
+ * @param hash update the hash codes or not
+ */
+void board_t::remove_piece(int piece, int sq, bool hash = false) {
+    U64 bit = BIT(sq);
+    bb[piece] ^= bit;
+    bb[WPIECES + (piece > WKING)] ^= bit;
+    bb[ALLPIECES] ^= bit;
+    matrix[sq] = EMPTY;
+    if (hash) {
+        HASH_REMOVE_PIECE(stack->material_hash, piece, count(piece) + _bishop_ix(piece, sq));
+        HASH_REMOVE_PIECE(stack->hash_code, piece, sq);
+        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
+            HASH_REMOVE_PIECE(stack->pawn_hash, piece, sq);
+        }
+    }
+}
+
+/**
+ * Move a piece on the board
+ * @param piece the moving piece type
+ * @param ssq source square, where the piece if moving from
+ * @param tsq target square, where the piece is moving to
+ * @param hash update the hash codes or not
+ */
+void board_t::move_piece(int piece, int ssq, int tsq, bool hash = false) {
+    U64 updateMask = BIT(ssq) | BIT(tsq);
+    bb[piece] ^= updateMask;
+    bb[WPIECES + (piece > WKING)] ^= updateMask;
+    bb[ALLPIECES] ^= updateMask;
+    matrix[ssq] = EMPTY;
+    matrix[tsq] = piece;
+    if (hash) {
+        HASH_MOVE_PIECE(stack->hash_code, piece, ssq, tsq);
+        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
+            HASH_MOVE_PIECE(stack->pawn_hash, piece, ssq, tsq);
+        }
+    }
 }
 
 /**
  * Do the move in the current position and update the board structure 
  * @param move move object, the move to make
  */
-void TBoard::forward(TMove * move) {
+void board_t::forward(TMove * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
     int piece = move->piece;
@@ -75,23 +138,23 @@ void TBoard::forward(TMove * move) {
                 assert(matrix[tsq] == EMPTY);
                 assert(stack->enpassant_sq == tsq);
                 assert(tsq >= a6 ? matrix[tsq - 8] == BPAWN : matrix[tsq + 8] == WPAWN);
-                removePieceFull(capture, tsq >= a6 ? tsq - 8 : tsq + 8);
+                remove_piece(capture, tsq >= a6 ? tsq - 8 : tsq + 8, true);
             } else {
                 assert(capture == matrix[tsq]);
-                removePieceFull(capture, tsq);
+                remove_piece(capture, tsq, true);
             }
         }
         if (promotion) {
-            removePieceFull(piece, ssq);
-            addPieceFull(promotion, tsq);
+            remove_piece(piece, ssq, true);
+            add_piece(promotion, tsq, true);
         } else {
-            movePieceFull(piece, ssq, tsq);
+            move_piece(piece, ssq, tsq, true);
         }
         stack->enpassant_sq = EMPTY;
         stack->fifty_count = 0;
     } else { //not a capture or promotion
         assert(matrix[tsq] == EMPTY);
-        movePieceFull(piece, ssq, tsq);
+        move_piece(piece, ssq, tsq, true);
         stack->fifty_count++;
         stack->enpassant_sq = EMPTY;
         if (piece == WPAWN) {
@@ -116,16 +179,16 @@ void TBoard::forward(TMove * move) {
         if (move->castle) {
             switch (move->castle) {
                 case CASTLE_K:
-                    movePieceFull(WROOK, h1, f1);
+                    move_piece(WROOK, h1, f1, true);
                     break;
                 case CASTLE_Q:
-                    movePieceFull(WROOK, a1, d1);
+                    move_piece(WROOK, a1, d1, true);
                     break;
                 case CASTLE_k:
-                    movePieceFull(BROOK, h8, f8);
+                    move_piece(BROOK, h8, f8, true);
                     break;
                 case CASTLE_q:
-                    movePieceFull(BROOK, a8, d8);
+                    move_piece(BROOK, a8, d8, true);
                     break;
                 default:
                     assert(false);
@@ -134,22 +197,22 @@ void TBoard::forward(TMove * move) {
         /*
          * Removal of castling rights
          */
-        if (castleRight(CASTLE_K) && (ssq == h1 || ssq == e1 || tsq == h1)) {
+        if (has_castle_right(CASTLE_K) && (ssq == h1 || ssq == e1 || tsq == h1)) {
             stack->castling_flags ^= CASTLE_K;
             HASH_CASTLE_K(stack->hash_code);
             HASH_CASTLE_K(stack->pawn_hash);
         }
-        if (castleRight(CASTLE_Q) && (ssq == a1 || ssq == e1 || tsq == a1)) {
+        if (has_castle_right(CASTLE_Q) && (ssq == a1 || ssq == e1 || tsq == a1)) {
             stack->castling_flags ^= CASTLE_Q;
             HASH_CASTLE_Q(stack->hash_code);
             HASH_CASTLE_Q(stack->pawn_hash);
         }
-        if (castleRight(CASTLE_k) && (ssq == h8 || ssq == e8 || tsq == h8)) {
+        if (has_castle_right(CASTLE_k) && (ssq == h8 || ssq == e8 || tsq == h8)) {
             stack->castling_flags ^= CASTLE_k;
             HASH_CASTLE_k(stack->hash_code);
             HASH_CASTLE_k(stack->pawn_hash);
         }
-        if (castleRight(CASTLE_q) && (ssq == a8 || ssq == e8 || tsq == a8)) {
+        if (has_castle_right(CASTLE_q) && (ssq == a8 || ssq == e8 || tsq == a8)) {
             stack->castling_flags ^= CASTLE_q;
             HASH_CASTLE_q(stack->hash_code);
             HASH_CASTLE_q(stack->pawn_hash);
@@ -169,7 +232,7 @@ void TBoard::forward(TMove * move) {
  * Undo the move, updating the board structure
  * @param move the move to unmake
  */
-void TBoard::backward(TMove * move) {
+void board_t::backward(TMove * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
     int promotion = move->promotion;
@@ -179,33 +242,33 @@ void TBoard::backward(TMove * move) {
     if (capture || promotion) {
         if (promotion) {
             piece = move->piece;
-            addPiece(piece, ssq);
-            removePiece(promotion, tsq);
+            add_piece(piece, ssq);
+            remove_piece(promotion, tsq);
         } else {
-            movePiece(piece, tsq, ssq);
+            move_piece(piece, tsq, ssq);
         }
         if (capture) {
             if (move->en_passant) {
                 tsq = tsq >= a6 ? tsq - 8 : tsq + 8;
             }
-            addPiece(capture, tsq);
+            add_piece(capture, tsq);
         }
     } else { //not a capture and not a promotion
-        movePiece(piece, tsq, ssq);
+        move_piece(piece, tsq, ssq);
         /* castling: move the rook */
         if (move->castle) {
             switch (move->castle) {
                 case CASTLE_K:
-                    movePiece(WROOK, f1, h1);
+                    move_piece(WROOK, f1, h1);
                     break;
                 case CASTLE_Q:
-                    movePiece(WROOK, d1, a1);
+                    move_piece(WROOK, d1, a1);
                     break;
                 case CASTLE_k:
-                    movePiece(BROOK, f8, h8);
+                    move_piece(BROOK, f8, h8);
                     break;
                 case CASTLE_q:
-                    movePiece(BROOK, d8, a8);
+                    move_piece(BROOK, d8, a8);
                     break;
                 default:
                     assert(false);
@@ -220,7 +283,7 @@ void TBoard::backward(TMove * move) {
 /**
  * Do a nullmove: update board structure, e.g. switch side to move
  */
-void TBoard::forward() { //do a null move
+void board_t::forward() { 
     (stack + 1)->copy(stack);
     stack++;
     current_ply++;
@@ -231,9 +294,9 @@ void TBoard::forward() { //do a null move
 }
 
 /**
- * Undo a nullmove: restore board structure
+ * Undo a nullmove: just restore board structure
  */
-void TBoard::backward() { //undo a null move
+void board_t::backward() { 
     current_ply--;
     stack--;
 }
@@ -244,7 +307,7 @@ void TBoard::backward() { //undo a null move
  * @param move the move to test for validity, not yet performed in the position
  * @return true if the move is valid in the current position, false otherwise 
  */
-bool TBoard::valid(TMove * move) {
+bool board_t::valid(TMove * move) {
     int piece = move->piece;
     if (stack->wtm != (piece <= WKING)) {
         return false;
@@ -259,7 +322,7 @@ bool TBoard::valid(TMove * move) {
                 || (!stack->wtm && piece == BPAWN && matrix[tsq + 8] == WPAWN));
     } else if (move->castle) {
         int castle = move->castle;
-        if (!castleRight(castle)) {
+        if (!has_castle_right(castle)) {
             return false;
         }
         switch (castle) {
@@ -267,16 +330,16 @@ bool TBoard::valid(TMove * move) {
                 break;
             case CASTLE_K:
                 return matrix[h1] == WROOK && matrix[f1] == EMPTY && matrix[g1] == EMPTY
-                        && !attackedByBlack(f1) && !attackedByBlack(g1) && !attackedByBlack(e1);
+                        && !is_attacked(f1, BLACK) && !is_attacked(g1, BLACK) && !is_attacked(e1, BLACK);
             case CASTLE_Q:
                 return matrix[a1] == WROOK && matrix[b1] == EMPTY && matrix[c1] == EMPTY && matrix[d1] == EMPTY
-                        && !attackedByBlack(e1) && !attackedByBlack(d1) && !attackedByBlack(c1);
+                        && !is_attacked(e1, BLACK) && !is_attacked(d1, BLACK) && !is_attacked(c1, BLACK);
             case CASTLE_k:
                 return matrix[h8] == BROOK && matrix[f8] == EMPTY && matrix[g8] == EMPTY
-                        && !attackedByWhite(f8) && !attackedByWhite(g8) && !attackedByWhite(e8);
+                        && !is_attacked(f8, WHITE) && !is_attacked(g8, WHITE) && !is_attacked(e8, WHITE);
             case CASTLE_q:
                 return matrix[a8] == BROOK && matrix[b8] == EMPTY && matrix[c8] == EMPTY && matrix[d8] == EMPTY
-                        && !attackedByWhite(e8) && !attackedByWhite(d8) && !attackedByWhite(c8);
+                        && !is_attacked(e8, WHITE) && !is_attacked(d8, WHITE) && !is_attacked(c8, WHITE);
             default:
                 assert(false);
         }
@@ -299,11 +362,11 @@ bool TBoard::valid(TMove * move) {
         case WKNIGHT:
             return true;
         case WBISHOP:
-            return magic::bishop_moves(ssq, boards[ALLPIECES]) & BIT(tsq);
+            return magic::bishop_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case WROOK:
-            return magic::rook_moves(ssq, boards[ALLPIECES]) & BIT(tsq);
+            return magic::rook_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case WQUEEN:
-            return magic::queen_moves(ssq, boards[ALLPIECES]) & BIT(tsq);
+            return magic::queen_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case WKING:
             return true;
         case BPAWN:
@@ -311,11 +374,11 @@ bool TBoard::valid(TMove * move) {
         case BKNIGHT:
             return true;
         case BBISHOP:
-            return magic::bishop_moves(ssq, boards[ALLPIECES]) & BIT(tsq);
+            return magic::bishop_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case BROOK:
-            return magic::rook_moves(ssq, boards[ALLPIECES]) & BIT(tsq);
+            return magic::rook_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case BQUEEN:
-            return magic::queen_moves(ssq, boards[ALLPIECES]) & BIT(tsq);
+            return magic::queen_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case BKING:
             return true;
         default:
@@ -332,12 +395,12 @@ bool TBoard::valid(TMove * move) {
  * NOTE: this version does not consider if we are in check or not which leaves some
  * room for further optimization.
  */
-bool TBoard::legal(TMove * move) {
+bool board_t::legal(TMove * move) {
     int piece = move->piece;
     int tsq = move->tsq;
     assert(piece >= WPAWN && piece <= BKING && tsq >= a1 && tsq <= h8);
     U64 tsq_bit = BIT(tsq);
-    U64 occ = boards[ALLPIECES] & ~tsq_bit;
+    U64 occ = bb[ALLPIECES] & ~tsq_bit;
     if (stack->wtm) {
         move->en_passant = stack->enpassant_sq && tsq == stack->enpassant_sq && piece == WPAWN;
         if (move->en_passant) {
@@ -348,9 +411,9 @@ bool TBoard::legal(TMove * move) {
         int kpos_list[2] = {get_sq(WKING), tsq};
         int kpos = kpos_list[piece == WKING];
 
-        if ((boards[BKNIGHT] & occ & KNIGHT_MOVES[kpos])
-                || (boards[BPAWN] & occ & WPAWN_CAPTURES[kpos])
-                || (piece == WKING && KING_MOVES[kpos] & boards[BKING])) {
+        if ((bb[BKNIGHT] & occ & KNIGHT_MOVES[kpos])
+                || (bb[BPAWN] & occ & WPAWN_CAPTURES[kpos])
+                || (piece == WKING && KING_MOVES[kpos] & bb[BKING])) {
             return false;
         }
 
@@ -358,12 +421,12 @@ bool TBoard::legal(TMove * move) {
         if (move->ssq == e1 && piece == WKING) {
             if (tsq == g1) {
                 move->castle = CASTLE_K;
-                if (attackedByBlack(e1) || attackedByBlack(f1) || attackedByBlack(g1)) {
+                if (is_attacked(e1, BLACK) || is_attacked(f1, BLACK) || is_attacked(g1, BLACK)) {
                     return false;
                 }
             } else if (tsq == c1) {
                 move->castle = CASTLE_Q;
-                if (attackedByBlack(e1) || attackedByBlack(d1) || attackedByBlack(c1)) {
+                if (is_attacked(e1, BLACK) || is_attacked(d1, BLACK) || is_attacked(c1, BLACK)) {
                     return false;
                 }
             }
@@ -375,10 +438,10 @@ bool TBoard::legal(TMove * move) {
         //   on the same path as a sliding attack.
         //   note we deliberately dont update occupied for rooks for castling moves
         //   but en-passant update is required 
-        U64 opp_sliders = (boards[BBISHOP] | boards[BROOK] | boards[BQUEEN]) & ~tsq_bit;
+        U64 opp_sliders = (bb[BBISHOP] | bb[BROOK] | bb[BQUEEN]) & ~tsq_bit;
         if (QUEEN_MOVES[kpos] & opp_sliders) {
-            U64 opp_diag_sliders = opp_sliders & ~boards[BROOK];
-            U64 opp_hv_sliders = opp_sliders & ~boards[BBISHOP];
+            U64 opp_diag_sliders = opp_sliders & ~bb[BROOK];
+            U64 opp_hv_sliders = opp_sliders & ~bb[BBISHOP];
             occ ^= BIT(move->ssq);
             occ |= tsq_bit;
             return !(magic::bishop_moves(kpos, occ) & opp_diag_sliders)
@@ -394,9 +457,9 @@ bool TBoard::legal(TMove * move) {
         int kpos_list[2] = {get_sq(BKING), tsq};
         int kpos = kpos_list[piece == BKING];
 
-        if ((boards[WKNIGHT] & occ & KNIGHT_MOVES[kpos])
-                || (boards[WPAWN] & occ & BPAWN_CAPTURES[kpos])
-                || (piece == BKING && KING_MOVES[kpos] & boards[WKING])) {
+        if ((bb[WKNIGHT] & occ & KNIGHT_MOVES[kpos])
+                || (bb[WPAWN] & occ & BPAWN_CAPTURES[kpos])
+                || (piece == BKING && KING_MOVES[kpos] & bb[WKING])) {
             return false;
         }
 
@@ -404,12 +467,12 @@ bool TBoard::legal(TMove * move) {
         if (move->ssq == e8 && piece == BKING) {
             if (tsq == g8) {
                 move->castle = CASTLE_k;
-                if (attackedByWhite(e8) || attackedByWhite(f8) || attackedByWhite(g8)) {
+                if (is_attacked(e8, WHITE) || is_attacked(f8, WHITE) || is_attacked(g8, WHITE)) {
                     return false;
                 }
             } else if (tsq == c8) {
                 move->castle = CASTLE_q;
-                if (attackedByWhite(e8) || attackedByWhite(d8) || attackedByWhite(c8)) {
+                if (is_attacked(e8, WHITE) || is_attacked(d8, WHITE) || is_attacked(c8, WHITE)) {
                     return false;
                 }
             }
@@ -423,10 +486,10 @@ bool TBoard::legal(TMove * move) {
         //   but en-passant update is required 
 
 
-        U64 opp_sliders = (boards[WBISHOP] | boards[WROOK] | boards[WQUEEN]) & ~tsq_bit;
+        U64 opp_sliders = (bb[WBISHOP] | bb[WROOK] | bb[WQUEEN]) & ~tsq_bit;
         if (QUEEN_MOVES[kpos] & opp_sliders) {
-            U64 opp_diag_sliders = opp_sliders & ~boards[WROOK];
-            U64 opp_hv_sliders = opp_sliders & ~boards[WBISHOP];
+            U64 opp_diag_sliders = opp_sliders & ~bb[WROOK];
+            U64 opp_hv_sliders = opp_sliders & ~bb[WBISHOP];
             occ ^= BIT(move->ssq);
             occ |= tsq_bit;
             return !(magic::bishop_moves(kpos, occ) & opp_diag_sliders)
@@ -441,7 +504,7 @@ bool TBoard::legal(TMove * move) {
  * @param move the move to verify
  * @return 0: no check, 1: simple, direct check, 2: exposed check 
  */
-int TBoard::givesCheck(TMove * move) {
+int board_t::gives_check(TMove * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
     int piece = move->piece;
@@ -468,24 +531,24 @@ int TBoard::givesCheck(TMove * move) {
                 break;
             case WBISHOP:
                 if (BISHOP_MOVES[kpos] & tsq_bit) {
-                    checkers = magic::bishop_moves(kpos, boards[ALLPIECES]) & tsq_bit;
+                    checkers = magic::bishop_moves(kpos, bb[ALLPIECES]) & tsq_bit;
                 }
                 break;
             case WROOK:
                 if (ROOK_MOVES[kpos] & tsq_bit) {
-                    checkers = magic::rook_moves(kpos, boards[ALLPIECES]) & tsq_bit;
+                    checkers = magic::rook_moves(kpos, bb[ALLPIECES]) & tsq_bit;
                 }
                 break;
             case WQUEEN:
                 if (QUEEN_MOVES[kpos] & tsq_bit) {
-                    checkers = magic::queen_moves(kpos, boards[ALLPIECES]) & tsq_bit;
+                    checkers = magic::queen_moves(kpos, bb[ALLPIECES]) & tsq_bit;
                 }
             case WKING:
                 if (move->castle) {
                     if (move->castle == CASTLE_K) {
-                        checkers = magic::rook_moves(kpos, boards[ALLPIECES]^BIT(ssq)) & BIT(f1);
+                        checkers = magic::rook_moves(kpos, bb[ALLPIECES]^BIT(ssq)) & BIT(f1);
                     } else {
-                        checkers = magic::rook_moves(kpos, boards[ALLPIECES]^BIT(ssq)) & BIT(d1);
+                        checkers = magic::rook_moves(kpos, bb[ALLPIECES]^BIT(ssq)) & BIT(d1);
                     }
                 }
                 break;
@@ -497,24 +560,24 @@ int TBoard::givesCheck(TMove * move) {
                 break;
             case BBISHOP:
                 if (BISHOP_MOVES[kpos] & tsq_bit) {
-                    checkers = magic::bishop_moves(kpos, boards[ALLPIECES]) & tsq_bit;
+                    checkers = magic::bishop_moves(kpos, bb[ALLPIECES]) & tsq_bit;
                 }
                 break;
             case BROOK:
                 if (ROOK_MOVES[kpos] & tsq_bit) {
-                    checkers = magic::rook_moves(kpos, boards[ALLPIECES]) & tsq_bit;
+                    checkers = magic::rook_moves(kpos, bb[ALLPIECES]) & tsq_bit;
                 }
                 break;
             case BQUEEN:
                 if (QUEEN_MOVES[kpos] & tsq_bit) {
-                    checkers = magic::queen_moves(kpos, boards[ALLPIECES]) & tsq_bit;
+                    checkers = magic::queen_moves(kpos, bb[ALLPIECES]) & tsq_bit;
                 }
             case BKING:
                 if (move->castle) {
                     if (move->castle == CASTLE_k) {
-                        checkers = magic::rook_moves(kpos, boards[ALLPIECES]^BIT(ssq)) & BIT(f8);
+                        checkers = magic::rook_moves(kpos, bb[ALLPIECES]^BIT(ssq)) & BIT(f8);
                     } else {
-                        checkers = magic::rook_moves(kpos, boards[ALLPIECES]^BIT(ssq)) & BIT(d8);
+                        checkers = magic::rook_moves(kpos, bb[ALLPIECES]^BIT(ssq)) & BIT(d8);
                     }
                 }
                 break;
@@ -530,32 +593,32 @@ int TBoard::givesCheck(TMove * move) {
     //is it an exposed check?
     if ((check_mask & ssq_bit) || move->en_passant) {
         U64 sliders = piece <= WKING ?
-                boards[WBISHOP] | boards[WQUEEN] | boards[WROOK]
+                bb[WBISHOP] | bb[WQUEEN] | bb[WROOK]
                 :
-                boards[BBISHOP] | boards[BQUEEN] | boards[BROOK];
+                bb[BBISHOP] | bb[BQUEEN] | bb[BROOK];
 
         U64 exclude = ssq_bit | tsq_bit;
         sliders &= ~exclude;
         sliders &= QUEEN_MOVES[kpos];
         if (sliders) {
-            U64 occ = (boards[ALLPIECES] ^ ssq_bit) | tsq_bit;
+            U64 occ = (bb[ALLPIECES] ^ ssq_bit) | tsq_bit;
             if (move->en_passant) {
-                occ ^= BIT(tsq + (kpos == get_sq(WKING)? 8 : -8));
+                occ ^= BIT(tsq + (kpos == get_sq(WKING) ? 8 : -8));
             }
             U64 diag = magic::bishop_moves(kpos, occ);
-            U64 sliders_diag = sliders & ~(boards[WROOK] | boards[BROOK]);
+            U64 sliders_diag = sliders & ~(bb[WROOK] | bb[BROOK]);
             checkers = diag & sliders_diag;
             if (checkers) {
                 (stack + 1)->checkers = checkers;
-                (stack + 1)->checker_sq = BSF(checkers);
+                (stack + 1)->checker_sq = bsf(checkers);
                 return 2;
             }
             U64 hor_ver = magic::rook_moves(kpos, occ);
-            sliders &= ~(boards[WBISHOP] | boards[BBISHOP]);
+            sliders &= ~(bb[WBISHOP] | bb[BBISHOP]);
             checkers = hor_ver & sliders;
             if (checkers) {
                 (stack + 1)->checkers = checkers;
-                (stack + 1)->checker_sq = BSF(checkers);
+                (stack + 1)->checker_sq = bsf(checkers);
                 return 2;
             }
         }
@@ -571,7 +634,7 @@ int TBoard::givesCheck(TMove * move) {
         } else {
             U64 checkMask = QUEEN_MOVES[kpos];
             if (checkMask & tsq_bit) {
-                U64 occ = boards[ALLPIECES] ^ ssq_bit;
+                U64 occ = bb[ALLPIECES] ^ ssq_bit;
                 switch (piece) {
                     case EMPTY:
                     case WPAWN:
@@ -620,11 +683,9 @@ int TBoard::givesCheck(TMove * move) {
  * @param piece this will be set to the piece type 
  * @return bitboard with the location of the smallest attacker
  */
-U64 TBoard::getSmallestAttacker(U64 attacks, bool wtm, uint8_t & piece) {
-    uint8_t first_piece = PAWN[wtm];
-    uint8_t last_piece = first_piece + (WKING - WPAWN);
-    for (piece = first_piece; piece <= last_piece; piece++) {
-        U64 subset = attacks & boards[piece];
+U64 board_t::smallest_attacker(U64 attacks, bool wtm, int & piece) {
+    for (piece = PAWN[wtm]; piece <= KING[wtm]; piece++) {
+        U64 subset = attacks & bb[piece];
         if (subset) {
             return subset & -subset;
         }
@@ -637,9 +698,9 @@ U64 TBoard::getSmallestAttacker(U64 attacks, bool wtm, uint8_t & piece) {
  * @param move the move to verify
  * @return expected gain or loss by playing this move as a number in centipawns (e.g +300 when fully winning a knight)
  */
-int TBoard::SEE(TMove * move) {
-    uint8_t captured_piece = move->capture;
-    uint8_t moving_piece = move->piece;
+int board_t::see(TMove * move) {
+    int captured_piece = move->capture;
+    int moving_piece = move->piece;
     int captured_val = PIECE_VALUE[captured_piece];
 
     /*
@@ -664,8 +725,8 @@ int TBoard::SEE(TMove * move) {
      * another pawn, return a negative score quickly
      */
     int tsq = move->tsq;
-    if ((moving_piece > BPAWN && captured_piece == WPAWN && BPAWN_CAPTURES[tsq] & boards[WPAWN])
-            || (moving_piece < WKING && moving_piece > WPAWN && captured_piece == BPAWN && WPAWN_CAPTURES[tsq] & boards[BPAWN])) {
+    if ((moving_piece > BPAWN && captured_piece == WPAWN && BPAWN_CAPTURES[tsq] & bb[WPAWN])
+            || (moving_piece < WKING && moving_piece > WPAWN && captured_piece == BPAWN && WPAWN_CAPTURES[tsq] & bb[BPAWN])) {
         return captured_val - piece_val;
     }
 
@@ -673,13 +734,13 @@ int TBoard::SEE(TMove * move) {
      * 3. full static exchange evaluation using the swap algoritm
      */
     bool wtm = moving_piece > WKING;
-    U64 attacks = attacksTo(tsq);
+    U64 attacks = attacks_to(tsq);
     int gain[32];
     int depth = 0;
     U64 from_bit = BIT(move->ssq);
-    U64 occ = boards[ALLPIECES];
-    const U64 diag_sliders = boards[WBISHOP] | boards[WQUEEN] | boards[BBISHOP] | boards[BQUEEN];
-    const U64 hor_ver_sliders = boards[WROOK] | boards[WQUEEN] | boards[BROOK] | boards[BQUEEN];
+    U64 occ = bb[ALLPIECES];
+    const U64 diag_sliders = bb[WBISHOP] | bb[WQUEEN] | bb[BBISHOP] | bb[BQUEEN];
+    const U64 hor_ver_sliders = bb[WROOK] | bb[WQUEEN] | bb[BROOK] | bb[BQUEEN];
     const U64 xrays = diag_sliders | hor_ver_sliders;
 
     if (!captured_piece && (moving_piece == WPAWN || moving_piece == BPAWN)) {
@@ -698,7 +759,7 @@ int TBoard::SEE(TMove * move) {
             attacks |= magic::bishop_moves(tsq, occ) & occ & diag_sliders;
             attacks |= magic::rook_moves(tsq, occ) & occ & hor_ver_sliders;
         }
-        from_bit = getSmallestAttacker(attacks, wtm, moving_piece);
+        from_bit = smallest_attacker(attacks, wtm, moving_piece);
         wtm = !wtm;
     } while (from_bit);
     while (--depth) {
@@ -711,12 +772,12 @@ int TBoard::SEE(TMove * move) {
  * Verify if the position on the board is a trivial, theoretical draw
  * @return true: it's a draw; false: not a trivial draw
  */
-bool TBoard::isDraw() {
-    if (boards[WPAWN] || boards[BPAWN]
-            || boards[WROOK] || boards[BROOK]
-            || boards[WQUEEN] || boards[BQUEEN]
-            || (boards[WKNIGHT] && boards[WBISHOP]) || (boards[BKNIGHT] && boards[BBISHOP])
-            || gt_1(boards[WBISHOP]) || gt_1(boards[BBISHOP])) {
+bool board_t::is_draw() {
+    if (bb[WPAWN] || bb[BPAWN]
+            || bb[WROOK] || bb[BROOK]
+            || bb[WQUEEN] || bb[BQUEEN]
+            || (bb[WKNIGHT] && bb[WBISHOP]) || (bb[BKNIGHT] && bb[BBISHOP])
+            || gt_1(bb[WBISHOP]) || gt_1(bb[BBISHOP])) {
         return false; //not a draw.. there is mating material on the board
     }
     int wn = count(WKNIGHT);
@@ -729,32 +790,68 @@ bool TBoard::isDraw() {
     }
 
     //at this point a side can have: a) no pieces, b) 1 knight, c) 2 knights or d) 1 bishop.
-    int wb = count(WBISHOP);
-    int bb = count(BBISHOP);
+    int wbc = count(WBISHOP);
+    int bbc = count(BBISHOP);
     assert(wn <= 2 && wb <= 1);
     assert(bn <= 2 && bb <= 1);
     assert(!(wb >= 1 && wn >= 1));
     assert(!(bb >= 1 && bn >= 1));
 
-    int wminors = wb + wn;
-    int bminors = bb + bn;
+    int wminors = wbc + wn;
+    int bminors = bbc + bn;
     if ((wminors == 0 && bminors == 1)
             || (bminors == 0 && wminors == 1)) {
         return true; //simple case of 1 minor vs no minors (KBK or KNK)
     }
 
     //for other cases, mates are only possible with a king on the edge
-    if ((boards[WKING] & EDGE) || (boards[BKING] & EDGE)) {
+    if ((bb[WKING] & EDGE) || (bb[BKING] & EDGE)) {
         return false;
     }
     return true; //save to assume theoretical draw, when no king is on the edge
+}
+
+bool board_t::is_eg(endgame_t eg, bool us) {
+    switch (eg) {
+        case OPP_BISHOPS:
+            if (bb[WROOK] || bb[BROOK]
+                    || bb[WKNIGHT] || bb[WKNIGHT]
+                    || bb[WQUEEN] || bb[BQUEEN]
+                    || bb[WBISHOP] == 0 || bb[BBISHOP] == 0
+                    || gt_1(bb[WBISHOP]) || gt_1(bb[BBISHOP])) {
+                return false;
+            }
+            return bool(bb[WBISHOP] & WHITE_SQUARES) == bool(bb[BBISHOP] & BLACK_SQUARES);
+        case KBBKN:
+            if (bb[WPAWN] || bb[BPAWN]
+                    || bb[WROOK] || bb[BROOK]
+                    || bb[WQUEEN] || bb[BQUEEN]
+                    || bb[KNIGHT[us]] || bb[BISHOP[!us]]
+                    || gt_1(bb[KNIGHT[us]])) {
+                return false;
+            }
+            return has_bishop_pair(us);
+        case KBPsK:
+            return bb[PAWN[!us]] == 0 && bb[PAWN[us]] != 0
+                    && bb[WROOK] == 0 && bb[BROOK] == 0
+                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0
+                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
+                    && is_1(bb[BISHOP[us]]) && bb[BISHOP[!us]] == 0; 
+        case KNPK:
+            return bb[PAWN[!us]] == 0 && is_1(bb[PAWN[us]])
+                    && bb[WROOK] == 0 && bb[BROOK] == 0
+                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0
+                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
+                    && is_1(bb[KNIGHT[us]]) && bb[KNIGHT[!us]] == 0;
+        default: return false;
+    }
 }
 
 /**
  * Construct the board structure from a FEN string
  * @param fen the FEN string
  */
-void TBoard::fromFen(const char* fen) {
+void board_t::create(const char* fen) {
     //initialize:
     clear();
     char offset = a8;
@@ -784,40 +881,40 @@ void TBoard::fromFen(const char* fen) {
             case '7': pos += 7;
                 break;
             case 'p':
-                addPieceFull(BPAWN, pos++);
+                add_piece(BPAWN, pos++, true);
                 break;
             case 'n':
-                addPieceFull(BKNIGHT, pos++);
+                add_piece(BKNIGHT, pos++, true);
                 break;
             case 'b':
-                addPieceFull(BBISHOP, pos++);
+                add_piece(BBISHOP, pos++, true);
                 break;
             case 'r':
-                addPieceFull(BROOK, pos++);
+                add_piece(BROOK, pos++, true);
                 break;
             case 'q':
-                addPieceFull(BQUEEN, pos++);
+                add_piece(BQUEEN, pos++, true);
                 break;
             case 'k':
-                addPieceFull(BKING, pos++);
+                add_piece(BKING, pos++, true);
                 break;
             case 'P':
-                addPieceFull(WPAWN, pos++);
+                add_piece(WPAWN, pos++, true);
                 break;
             case 'N':
-                addPieceFull(WKNIGHT, pos++);
+                add_piece(WKNIGHT, pos++, true);
                 break;
             case 'B':
-                addPieceFull(WBISHOP, pos++);
+                add_piece(WBISHOP, pos++, true);
                 break;
             case 'R':
-                addPieceFull(WROOK, pos++);
+                add_piece(WROOK, pos++, true);
                 break;
             case 'Q':
-                addPieceFull(WQUEEN, pos++);
+                add_piece(WQUEEN, pos++, true);
                 break;
             case 'K':
-                addPieceFull(WKING, pos++);
+                add_piece(WKING, pos++, true);
                 break;
         }
         if (offset < 0) {
@@ -944,8 +1041,8 @@ half_move:
  * Display the board structure as a FEN string
  * @return FEN string
  */
-string TBoard::asFen() {
-    string result = "";
+std::string board_t::to_string() {
+    std::string result = "";
     int offset = 56;
     int es = 0;
     char buf[16];
@@ -976,17 +1073,17 @@ string TBoard::asFen() {
         offset -= 8;
     }
     result += stack->wtm ? " w " : " b ";
-    if (castleRight(CASTLE_ANY)) {
-        if (castleRight(CASTLE_K)) {
+    if (has_castle_right(CASTLE_ANY)) {
+        if (has_castle_right(CASTLE_K)) {
             result += 'K';
         }
-        if (castleRight(CASTLE_Q)) {
+        if (has_castle_right(CASTLE_Q)) {
             result += 'Q';
         }
-        if (castleRight(CASTLE_k)) {
+        if (has_castle_right(CASTLE_k)) {
             result += 'k';
         }
-        if (castleRight(CASTLE_q)) {
+        if (has_castle_right(CASTLE_q)) {
             result += 'q';
         }
     } else {
@@ -1004,7 +1101,7 @@ string TBoard::asFen() {
     sprintf(buf, "%d", stack->fifty_count);
     result += buf;
     result += " ";
-    sprintf(buf, "%d", getGamePly() / 2);
+    sprintf(buf, "%d", (root_ply + current_ply) / 2);
     result += buf;
     return result;
 }
@@ -1013,16 +1110,16 @@ string TBoard::asFen() {
  * Flip the board, useful for testing on white/black bugs. A flipped
  * board should give exactly the same search and evaluation results.
  */
-void TBoard::flip() {
-    boards[ALLPIECES] = flipBB(boards[ALLPIECES]);
-    U64 tmp = boards[WPIECES];
-    boards[WPIECES] = flipBB(boards[BPIECES]);
-    boards[BPIECES] = flipBB(tmp);
+void board_t::flip() {
+    bb[ALLPIECES] = bb_flip(bb[ALLPIECES]);
+    U64 tmp = bb[WPIECES];
+    bb[WPIECES] = bb_flip(bb[BPIECES]);
+    bb[BPIECES] = bb_flip(tmp);
     for (int sq = 0; sq <= 31; sq++) {
         if (sq >= WPAWN && sq <= WKING) {
-            U64 occ = boards[sq];
-            boards[sq] = flipBB(boards[sq + WKING]);
-            boards[sq + WKING] = flipBB(occ);  
+            U64 occ = bb[sq];
+            bb[sq] = bb_flip(bb[sq + WKING]);
+            bb[sq + WKING] = bb_flip(occ);
         }
         int fsq = FLIP_SQUARE(sq);
         int pc1 = matrix[sq];

@@ -28,13 +28,13 @@
 U64 searchPerft(TSearch *searchData, int depth, int alpha, int beta) {
     U64 result = 0;
     TMovePicker * mp = searchData->movePicker;
-    TBoard * pos = searchData->pos;
+    board_t * pos = searchData->pos;
     for (TMove * move = mp->pickFirstMove(searchData, depth, alpha, beta); move;
             move = mp->pickNextMove(searchData, depth, alpha, beta)) {
         if (depth <= 1) {
             result += 1;
         } else {
-            bool givesCheck = pos->givesCheck(move);
+            bool givesCheck = pos->gives_check(move);
             searchData->forward(move, givesCheck);
             result += searchPerft(searchData, depth - 1, -beta, -alpha);
             searchData->backward(move);
@@ -64,14 +64,14 @@ U64 rootPerft(TSearch *searchData, int depth) {
 
 void divide(TSearch * searchData, int depth) {
     TMoveList * moveList = &searchData->stack->moveList;
-    TBoard * pos = searchData->pos;
-    std::cout << pos->asFen() << std::endl;
+    board_t * pos = searchData->pos;
+    std::cout << pos->to_string() << std::endl;
     moveList->clear();
     TMovePicker * mp = searchData->movePicker;
     for (TMove * move = mp->pickFirstMove(searchData, depth, -32000, 32000); move;
             move = mp->pickNextMove(searchData, depth, -32000, 32000)) {
         std::cout << move->asString() << " ";
-        searchData->forward(move, pos->givesCheck(move));
+        searchData->forward(move, pos->gives_check(move));
         std::cout << searchPerft(searchData, depth, -32000, 32000) << std::endl;
         searchData->backward(move);
 
@@ -85,7 +85,7 @@ void testMoveGeneration(string fen, int targetValues[], int maxDepth, THashTable
     std::cout << "\n\ntest_genmoves test testMoveGeneration " << fen << std::endl;
     TOutputHandler outputHandler;
     TSearch * searchData = new TSearch(fen.c_str(), hashTable, &outputHandler);
-    std::string fen2 = searchData->pos->asFen();
+    std::string fen2 = searchData->pos->to_string();
     if (fen2 != fen) {
         std::cout << "%TEST_FAILED% time=0 testname=testMoveGeneration (test_genmoves) message=basic fen mismatch " << fen2 << std::endl;
     }
@@ -98,7 +98,7 @@ void testMoveGeneration(string fen, int targetValues[], int maxDepth, THashTable
             divide(searchData, i);
             break;
         }
-        string fen_test = searchData->pos->asFen();
+        string fen_test = searchData->pos->to_string();
         if (fen.compare(fen_test) != 0) {
             std::cout << "%TEST_FAILED% time=0 testname=testMoveGeneration (test_genmoves) message=depth "
                     << i + 1 << ": fen mismatch " << fen_test << std::endl;

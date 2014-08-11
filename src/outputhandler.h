@@ -31,7 +31,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "defs.h"
+#include "bits.h"
 #include "move.h"
 #include <fstream>
 #include <sstream>

@@ -24,10 +24,10 @@
 #ifndef MOVE_H
 #define	MOVE_H
 
-#include "defs.h"
+#include "bits.h"
 using std::string;
 
-class TBoard;
+class board_t;
 
 class TMove {
 public:
@@ -108,7 +108,7 @@ public:
     }
 
     string asString();
-    void fromString(TBoard * pos, const char * moveStr);
+    void fromString(board_t * pos, const char * moveStr);
 
     inline int asInt() {
         int result = piece;

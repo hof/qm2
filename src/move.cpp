@@ -20,7 +20,7 @@
  */
 
 #include "move.h"
-#include "defs.h"
+#include "bits.h"
 #include "board.h"
 
 string TMove::asString() { //default: xboard notation
@@ -42,7 +42,7 @@ string TMove::asString() { //default: xboard notation
     return result;
 }
 
-void TMove::fromString(TBoard * pos, const char * moveStr) { //default: xboard notation
+void TMove::fromString(board_t * pos, const char * moveStr) { //default: xboard notation
     int file = *moveStr++ -'a';
     int rank = *moveStr++ -'1';
     ssq = (rank << 3) | file;

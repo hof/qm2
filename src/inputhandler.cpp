@@ -227,8 +227,8 @@ bool TInputHandler::handlePosition(TInputParser& parser) {
             _fen = _defaultFen;
             parser >> token;
         }
-        TBoard pos;
-        pos.fromFen(_fen.c_str());
+        board_t pos;
+        pos.create(_fen.c_str());
         if (token == "moves") {
             THashTable * hash = hashTable();
             hash->repTable[pos.stack->fifty_count] = pos.stack->hash_code;
@@ -238,11 +238,11 @@ bool TInputHandler::handlePosition(TInputParser& parser) {
                 pos.forward(&move);
                 hash->repTable[pos.stack->fifty_count] = pos.stack->hash_code;
                 if (pos.current_ply > MAX_PLY - 2) {
-                    pos.fromFen(pos.asFen().c_str()); //reset to prevent overflow
+                    pos.create(pos.to_string().c_str()); //reset to prevent overflow
                 }
             }
         }
-        _fen = pos.asFen();
+        _fen = pos.to_string();
     }
     return result;
 }
@@ -250,15 +250,15 @@ bool TInputHandler::handlePosition(TInputParser& parser) {
 bool TInputHandler::handleForward(TInputParser& parser) {
     bool result = true;
     std::string token;
-    TBoard pos;
-    pos.fromFen(_fen.c_str());
+    board_t pos;
+    pos.create(_fen.c_str());
     while (parser >> token) {
 
         TMove move;
         move.fromString(&pos, token.c_str());
         pos.forward(&move);
     }
-    _fen = pos.asFen();
+    _fen = pos.to_string();
     return result;
 }
 

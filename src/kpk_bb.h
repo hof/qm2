@@ -24,7 +24,7 @@
 #ifndef KPK_BB_H
 #define	KPK_BB_H
 
-#include "defs.h"
+#include "bits.h"
 
 namespace KPK {
 

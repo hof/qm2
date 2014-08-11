@@ -21,7 +21,7 @@
  */
 
 #include "outputhandler.h"
-#include "defs.h"
+#include "bits.h"
 #include "move.h"
 #include "search.h"
 

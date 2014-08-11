@@ -64,7 +64,7 @@ void * TEngine::_think(void* engineObjPtr) {
             engine->_hashTable,
             engine->_outputHandler);
 
-    TBoard * root = searchData->pos;
+    board_t * root = searchData->pos;
     TTimeManager * tm = searchData->timeManager;
 
     int maxDepth = game.maxDepth;
@@ -429,7 +429,7 @@ void TEngine::analyse() {
     w.clear();
     b.clear();
 
-    std::cout << s->pos->asFen().c_str() << std::endl;
+    std::cout << s->pos->to_string().c_str() << std::endl;
     std::cout << "Game Phase: " << phase << std::endl;
     std::cout << "Eval Component | White MG   EG | Black MG   EG |  Total MG   EG   Tot  \n";
     std::cout << "---------------+---------------+---------------+---------------------\n";
@@ -683,7 +683,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                 std::cout << "\nError: no start position (book.bin missing?)" << std::endl;
                 break;
             }
-            sd_game->pos->fromFen(fen.c_str());
+            sd_game->pos->create(fen.c_str());
             int plyCount = 0;
             int prevScore = 0;
             bool gameover = false;
@@ -710,7 +710,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                     sd_game->resetStack();
                     int moveCount = sd_game->initRootMoves();
                     if (moveCount == 0) {
-                        if (sd_game->pos->inCheck()) { //current engine lost
+                        if (sd_game->pos->in_check()) { //current engine lost
                             stats[1 + learning_side]++;
                         } else {
                             stats[0]++; //draw by stalemate. 
@@ -746,7 +746,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                     nodes[1 - learning_side] += sd_game->nodes;
 
                     //stop conditions
-                    if (sd_game->pos->stack->fifty_count >= 20 || sd_game->pos->isDraw()) {
+                    if (sd_game->pos->stack->fifty_count >= 20 || sd_game->pos->is_draw()) {
                         stats[0]++; //draw
                         gameover = true;
                         break;
@@ -776,7 +776,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                     prevScore = resultScore;
                     plyCount++;
                     //std::cout << plyCount << ": " << resultScore << " " << actualMove.asString() << " " << sd_game->pos->asFen() << std::endl; //for debugging
-                    sd_game->forward(&actualMove, sd_game->pos->givesCheck(&actualMove));
+                    sd_game->forward(&actualMove, sd_game->pos->gives_check(&actualMove));
                 }
 
             } while (gameover == false);
@@ -973,12 +973,12 @@ void TEngine::_create_start_positions(TSearch * sd_root, TBook * book, string * 
             if (actualMove.piece == 0) {
                 break;
             }
-            sd_root->forward(&actualMove, sd_root->pos->givesCheck(&actualMove));
+            sd_root->forward(&actualMove, sd_root->pos->gives_check(&actualMove));
         };
 
         //add to search positions
-        poslist[x++] = sd_root->pos->asFen();
-        poslist[x++] = sd_root->pos->asFen();
+        poslist[x++] = sd_root->pos->to_string();
+        poslist[x++] = sd_root->pos->to_string();
 
         //revert to root
         while (sd_root->pos->current_ply > 0) {

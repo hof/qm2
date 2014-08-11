@@ -28,7 +28,7 @@
 #ifndef SCORE_H
 #define	SCORE_H
 
-#include "defs.h"
+#include "bits.h"
 
 #define MAX_GAMEPHASES 16 //use grain size of 16 gamephases
 

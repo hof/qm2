@@ -24,7 +24,7 @@
 
 U64 moveGenerationPerft(TSearch *searchData, int depth) {
     U64 result = 0;
-    TBoard * pos = searchData->pos;
+    board_t * pos = searchData->pos;
     TMoveList * moveList = &searchData->stack->moveList;
     moveList->clear();
     genCaptures(pos, moveList, FULL_BOARD);
@@ -50,8 +50,8 @@ U64 moveGenerationPerft(TSearch *searchData, int depth) {
 
 void movePerftDivide(TSearch * searchData, int depth) {
     TMoveList * moveList = &searchData->stack->moveList;
-    TBoard * pos = searchData->pos;
-    std::cout << pos->asFen() << std::endl;
+    board_t * pos = searchData->pos;
+    std::cout << pos->to_string() << std::endl;
     moveList->clear();
     genCaptures(pos, moveList, FULL_BOARD);
     genPromotions(pos, moveList);
@@ -77,7 +77,7 @@ void movePerftDivide(TSearch * searchData, int depth) {
  */
 void testMoveGeneration(string fen, int targetValues[], int maxDepth, TSearch * searchData) {
     std::cout << "\n\ntest_genmoves test testMoveGeneration " << fen << std::endl;
-    searchData->pos->fromFen(fen.c_str());
+    searchData->pos->create(fen.c_str());
     for (int i = 0; i < maxDepth; i++) {
         int count = moveGenerationPerft(searchData, i + 1);
         if (count != targetValues[i]) {

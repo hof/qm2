@@ -29,13 +29,13 @@ struct TTestResult {
 TTestResult testForMove(TEngine * engine, string fen, string move, int targetScore) {
     TTestResult result;
     TMove bm;
-    TBoard pos;
-    pos.fromFen(fen.c_str());
+    board_t pos;
+    pos.create(fen.c_str());
     bm.fromString(&pos, move.c_str());
 
     engine->testPosition(bm, targetScore, 30 * 1000, 0);
-    engine->newGame(pos.asFen());
-    std::cout << "Position: " << pos.asFen() << " best move: " << bm.asString() << std::endl;
+    engine->newGame(pos.to_string());
+    std::cout << "Position: " << pos.to_string() << " best move: " << bm.asString() << std::endl;
 
     engine->think();
     engine->stopAllThreads();
