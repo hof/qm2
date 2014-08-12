@@ -31,6 +31,60 @@
 #include "evaluate.h"
 
 /**
+ * Clears board stack
+ */
+void board_stack_t::clear() {
+    enpassant_sq = 0;
+    castling_flags = 0;
+    fifty_count = 0;
+    wtm = true;
+    hash_code = 0;
+    material_hash = 0;
+    pawn_hash = 0;
+    checkers = 0;
+}
+
+/**
+ * Flips board stack (e.g. the castling rights and side to move)
+ */
+void board_stack_t::flip() {
+    wtm = !wtm;
+    HASH_STM(hash_code);
+    if (enpassant_sq) {
+        enpassant_sq = FLIP_SQUARE(enpassant_sq);
+    }
+    checkers = bb_flip(checkers);
+    uint8_t flags = castling_flags;
+    castling_flags = 0;
+    if (flags & CASTLE_K) {
+        castling_flags |= CASTLE_k;
+    }
+    if (flags & CASTLE_Q) {
+        castling_flags |= CASTLE_q;
+    }
+    if (flags & CASTLE_k) {
+        castling_flags |= CASTLE_K;
+    }
+    if (flags & CASTLE_q) {
+        castling_flags |= CASTLE_Q;
+    }
+}
+
+/**
+ * Copies a board stack
+ * @param b_stack the board stack to copy
+ */
+void board_stack_t::copy(board_stack_t * b_stack) {
+    enpassant_sq = b_stack->enpassant_sq;
+    castling_flags = b_stack->castling_flags;
+    fifty_count = b_stack->fifty_count;
+    wtm = b_stack->wtm;
+    hash_code = b_stack->hash_code;
+    material_hash = b_stack->material_hash;
+    pawn_hash = b_stack->pawn_hash;
+}
+
+/**
  * Empty and initialize the board structure
  */
 void board_t::clear() {
@@ -92,10 +146,10 @@ void board_t::remove_piece(int piece, int sq, bool hash = false) {
  * @param hash update the hash codes or not
  */
 void board_t::move_piece(int piece, int ssq, int tsq, bool hash = false) {
-    U64 updateMask = BIT(ssq) | BIT(tsq);
-    bb[piece] ^= updateMask;
-    bb[WPIECES + (piece > WKING)] ^= updateMask;
-    bb[ALLPIECES] ^= updateMask;
+    U64 update_mask = BIT(ssq) | BIT(tsq);
+    bb[piece] ^= update_mask;
+    bb[WPIECES + (piece > WKING)] ^= update_mask;
+    bb[ALLPIECES] ^= update_mask;
     matrix[ssq] = EMPTY;
     matrix[tsq] = piece;
     if (hash) {
@@ -110,7 +164,7 @@ void board_t::move_piece(int piece, int ssq, int tsq, bool hash = false) {
  * Do the move in the current position and update the board structure 
  * @param move move object, the move to make
  */
-void board_t::forward(TMove * move) {
+void board_t::forward(move_t * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
     int piece = move->piece;
@@ -224,7 +278,7 @@ void board_t::forward(TMove * move) {
     stack->wtm = !stack->wtm;
     HASH_STM(stack->hash_code);
 
-    assert(matrix[*white_king_sq] == WKING && matrix[*black_king_sq] == BKING);
+    assert(matrix[get_sq(WKING)] == WKING && matrix[get_sq(BKING)] == BKING);
     assert(piece == matrix[tsq] || (promotion && promotion == matrix[tsq]));
 }
 
@@ -232,7 +286,7 @@ void board_t::forward(TMove * move) {
  * Undo the move, updating the board structure
  * @param move the move to unmake
  */
-void board_t::backward(TMove * move) {
+void board_t::backward(move_t * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
     int promotion = move->promotion;
@@ -283,7 +337,7 @@ void board_t::backward(TMove * move) {
 /**
  * Do a nullmove: update board structure, e.g. switch side to move
  */
-void board_t::forward() { 
+void board_t::forward() {
     (stack + 1)->copy(stack);
     stack++;
     current_ply++;
@@ -296,7 +350,7 @@ void board_t::forward() {
 /**
  * Undo a nullmove: just restore board structure
  */
-void board_t::backward() { 
+void board_t::backward() {
     current_ply--;
     stack--;
 }
@@ -307,7 +361,7 @@ void board_t::backward() {
  * @param move the move to test for validity, not yet performed in the position
  * @return true if the move is valid in the current position, false otherwise 
  */
-bool board_t::valid(TMove * move) {
+bool board_t::valid(move_t * move) {
     int piece = move->piece;
     if (stack->wtm != (piece <= WKING)) {
         return false;
@@ -395,7 +449,7 @@ bool board_t::valid(TMove * move) {
  * NOTE: this version does not consider if we are in check or not which leaves some
  * room for further optimization.
  */
-bool board_t::legal(TMove * move) {
+bool board_t::legal(move_t * move) {
     int piece = move->piece;
     int tsq = move->tsq;
     assert(piece >= WPAWN && piece <= BKING && tsq >= a1 && tsq <= h8);
@@ -504,7 +558,7 @@ bool board_t::legal(TMove * move) {
  * @param move the move to verify
  * @return 0: no check, 1: simple, direct check, 2: exposed check 
  */
-int board_t::gives_check(TMove * move) {
+int board_t::gives_check(move_t * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
     int piece = move->piece;
@@ -698,7 +752,7 @@ U64 board_t::smallest_attacker(U64 attacks, bool wtm, int & piece) {
  * @param move the move to verify
  * @return expected gain or loss by playing this move as a number in centipawns (e.g +300 when fully winning a knight)
  */
-int board_t::see(TMove * move) {
+int board_t::see(move_t * move) {
     int captured_piece = move->capture;
     int moving_piece = move->piece;
     int captured_val = PIECE_VALUE[captured_piece];
@@ -792,10 +846,10 @@ bool board_t::is_draw() {
     //at this point a side can have: a) no pieces, b) 1 knight, c) 2 knights or d) 1 bishop.
     int wbc = count(WBISHOP);
     int bbc = count(BBISHOP);
-    assert(wn <= 2 && wb <= 1);
-    assert(bn <= 2 && bb <= 1);
-    assert(!(wb >= 1 && wn >= 1));
-    assert(!(bb >= 1 && bn >= 1));
+    assert(wn <= 2 && wbc <= 1);
+    assert(bn <= 2 && bbc <= 1);
+    assert(!(wbc >= 1 && wn >= 1));
+    assert(!(bbc >= 1 && bn >= 1));
 
     int wminors = wbc + wn;
     int bminors = bbc + bn;
@@ -836,7 +890,7 @@ bool board_t::is_eg(endgame_t eg, bool us) {
                     && bb[WROOK] == 0 && bb[BROOK] == 0
                     && bb[WQUEEN] == 0 && bb[BQUEEN] == 0
                     && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && is_1(bb[BISHOP[us]]) && bb[BISHOP[!us]] == 0; 
+                    && is_1(bb[BISHOP[us]]) && bb[BISHOP[!us]] == 0;
         case KNPK:
             return bb[PAWN[!us]] == 0 && is_1(bb[PAWN[us]])
                     && bb[WROOK] == 0 && bb[BROOK] == 0

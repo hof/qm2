@@ -42,7 +42,7 @@ struct TGameSettings {
     TOpponent opponent;
     int maxDepth;
     int maxNodes;
-    TMove targetMove;
+    move_t targetMove;
     int targetScore;
     U64 maxTimePerMove;
     int whiteTime;
@@ -73,21 +73,20 @@ class TEngine : public TThreadsManager {
 private:
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
-    string _rootFen;
+    std::string _rootFen;
     THashTable * _hashTable;
     TInputHandler * _inputHandler;
     TOutputHandler * _outputHandler;
     U64 _nodesSearched;
     bool _testSucces;
-    TMove _resultMove;
+    move_t _resultMove;
     int _resultScore;
     volatile bool _engineStop;
     volatile bool _enginePonder;
 
 public:
     TGameSettings gameSettings;
-    void _create_start_positions(TSearch * root, book_t * book, string * pos, int &x, const int max);
-    
+    void _create_start_positions(TSearch * root, book_t * book, std::string * pos, int &x, const int max);
 
     TEngine() : TThreadsManager() {
         gameSettings.clear();
@@ -99,7 +98,7 @@ public:
         _engineStop = false;
         _enginePonder = false;
         _rootFen = "";
-        _resultMove.setMove(0);
+        _resultMove.set(0);
         _resultScore = 0;
     }
 
@@ -139,20 +138,20 @@ public:
         this->stopAllThreads();
     }
 
-    void testPosition(TMove bestMove, int score, int maxTime, int maxDepth);
+    void testPosition(move_t bestMove, int score, int maxTime, int maxDepth);
 
-    inline void newGame(string fen) {
-        _resultMove.setMove(0);
+    inline void newGame(std::string fen) {
+        _resultMove.set(0);
         _resultScore = 0;
         setPosition(fen);
         clearHash();
     }
-    
+
     inline void setOpponent(TOpponent * opponent) {
         gameSettings.opponent.copy(opponent);
     }
 
-    inline void setPosition(string fen) {
+    inline void setPosition(std::string fen) {
         _rootFen = fen;
     }
 
@@ -176,8 +175,8 @@ public:
         _testSucces = testResult;
     }
 
-    inline void setMove(TMove * move) {
-        _resultMove.setMove(move);
+    inline void setMove(move_t * move) {
+        _resultMove.set(move);
     }
 
     inline void setScore(int score) {
@@ -188,7 +187,7 @@ public:
         return _resultScore;
     }
 
-    inline TMove getMove() {
+    inline move_t getMove() {
         return _resultMove;
     }
 
@@ -203,9 +202,19 @@ public:
     }
 
     void analyse();
-    
-   
+
+
 };
+
+namespace engine {
+    void stop();
+    void go();
+    void new_game(std::string fen);
+    void set_position(std::string fen);
+    void set_ponder(bool ponder);
+    TGameSettings * game_settings();
+}
+
 
 #endif	/* ENGINE_H */
 

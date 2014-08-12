@@ -20,7 +20,7 @@
  */
 
 THashTable *globalHashTable;
-TEngine * engine;
+TEngine * global_engine;
 TOutputHandler oh;
 bool test_stop;
 
@@ -41,9 +41,9 @@ int testEval(int idx, std::string fen, int min_score, int max_score) {
     TSearch * s = new TSearch(fen.c_str(), globalHashTable, &oh);
     int score = evaluate(s);
     if (score < min_score) {
-        testFail(idx, "<", score, min_score, fen, engine);
+        testFail(idx, "<", score, min_score, fen, global_engine);
     } else if (score > max_score) {
-        testFail(idx, ">", score, max_score, fen, engine);
+        testFail(idx, ">", score, max_score, fen, global_engine);
     }
     delete s;
     return score;
@@ -57,11 +57,11 @@ void testKingAttackZero(int idx, std::string fen) {
     evaluate(s);
     int score = s->stack->king_score[WHITE].mg;
     if (score != 0) {
-        testFail(idx, "!=", 0, score, fen, engine);
+        testFail(idx, "!=", 0, score, fen, global_engine);
     } else {
         score = s->stack->king_score[BLACK].mg;
         if (score != 0) {
-            testFail(idx, "!=", 0, score, fen, engine);
+            testFail(idx, "!=", 0, score, fen, global_engine);
         }
     }
     delete s;
@@ -195,14 +195,14 @@ int main(int argc, char** argv) {
     test_stop = false;
     magic::init();
     globalHashTable = new THashTable(128);
-    engine = new TEngine();
-    engine->setHashTable(globalHashTable);
-    engine->gameSettings.maxDepth = 20;
-    engine->setOutputHandler(&oh);
+    global_engine = new TEngine();
+    global_engine->setHashTable(globalHashTable);
+    global_engine->gameSettings.maxDepth = 20;
+    global_engine->setOutputHandler(&oh);
     testEvaluationSuite();
     std::cout << "%TEST_FINISHED% time=0 test1 (evaluation_test)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=0" << std::endl;
-    delete engine;
+    delete global_engine;
     delete globalHashTable;
     return (EXIT_SUCCESS);
 }

@@ -81,12 +81,12 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
     U64 hashedKey = ttEntry->key;
     U64 hashedData = ttEntry->value;
     if ((hashedKey ^ hashedData) == hash_code) {
-        TMove move;
-        move.setMove(TTMOVE(hashedData));
+        move_t move;
+        move.set(TTMOVE(hashedData));
         board_t * pos = searchData->pos;
         if (move.piece && pos->valid(&move) && pos->legal(&move)) {
             hashHit = true;
-            searchData->stack->ttMove1.setMove(&move);
+            searchData->stack->ttMove1.set(&move);
             int nodeType = TTFLAG(hashedData);
             hashedDepth1 = TTDEPTH(hashedData);
             searchData->stack->ttDepth1 = hashedDepth1;
@@ -114,15 +114,15 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
     int hashedDepth2 = 0;
     hashedKey = ttEntry->key;
     if ((hashedKey ^ hashedData2) == hash_code) {
-        TMove move;
-        move.setMove(TTMOVE(hashedData2));
+        move_t move;
+        move.set(TTMOVE(hashedData2));
         board_t * pos = searchData->pos;
         bool equalMove = move.piece && move.equals(&searchData->stack->ttMove1);
         bool legal = equalMove || (pos->valid(&move) && pos->legal(&move));
         if (legal) {
             hashHit = true;
             if (!equalMove) {
-                searchData->stack->ttMove2.setMove(&move);
+                searchData->stack->ttMove2.set(&move);
             }
             int nodeType = TTFLAG(hashedData2);
             hashedDepth2 = TTDEPTH(hashedData2);

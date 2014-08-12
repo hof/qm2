@@ -912,7 +912,7 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
      *   b) did not move or capture any knight
      */
     if (sd->stack->equal_pawns) {
-        TMove * prevMove = &(sd->stack - 1)->move;
+        move_t * prevMove = &(sd->stack - 1)->move;
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->knight_score[us]);
             sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
@@ -974,7 +974,7 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
      *   b) did not move or capture any bishop
      */
     if (sd->stack->equal_pawns) {
-        TMove * prevMove = &(sd->stack - 1)->move;
+        move_t * prevMove = &(sd->stack - 1)->move;
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->bishop_score[us]);
             sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
@@ -1066,7 +1066,7 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
      *   b) did not move or capture any rook
      */
     if (sd->stack->equal_pawns) {
-        TMove * prevMove = &(sd->stack - 1)->move;
+        move_t * prevMove = &(sd->stack - 1)->move;
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->rook_score[us]);
             sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
@@ -1173,7 +1173,7 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
      *   b) did not move or capture any bishop
      */
     if (sd->stack->equal_pawns) {
-        TMove * prevMove = &(sd->stack - 1)->move;
+        move_t * prevMove = &(sd->stack - 1)->move;
         if (prevMove->piece != pc && prevMove->capture != pc) {
             result->set((sd->stack - 1)->queen_score[us]);
             sd->stack->king_attack[pc] = (sd->stack - 1)->king_attack[pc];
@@ -1597,7 +1597,6 @@ inline short evaluateEndgame(TSearch * s, short score) {
 
     //endgame with only pawns (KK, KPK, KPPK, KPKP, etc.)
     if (!has_pieces[us] && !has_pieces[them]) {
-        assert(pos->onlyPawns());
         assert(s->stack->phase == 16);
         bool utm = pos->stack->wtm == (us == WHITE);
 

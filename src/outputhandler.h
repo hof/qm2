@@ -89,7 +89,7 @@ public:
         output("readyok");
     }
 
-    void sendBestMove(TMove bestMove, TMove ponderMove);
+    void sendBestMove(move_t bestMove, move_t ponderMove);
 
     void sendPV(int cpScore, int depth, int selDepth, U64 nodes, int time, const char * pv, int type);
 

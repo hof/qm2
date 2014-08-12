@@ -43,6 +43,35 @@
 
 using namespace std;
 
+namespace engine {
+    
+    TEngine _engine;
+    
+    void stop() {
+        _engine.stop();
+    }
+    
+    void go() {
+        _engine.think();
+    }
+    
+    void new_game(std::string fen) {
+        _engine.newGame(fen);
+    }
+    
+    void set_position(std::string fen) {
+        _engine.setPosition(fen);
+    }
+    
+    void set_ponder(bool ponder) {
+        _engine.setPonder(ponder);
+    }
+    
+    TGameSettings * game_settings() {
+        return &_engine.gameSettings;
+    }
+}
+
 /**
  * Thread function for searching and finding a best move in a chess position
  * @param engineObjPtr pointer to the (parent) engine object
@@ -75,7 +104,7 @@ void * TEngine::_think(void* engineObjPtr) {
     int whiteInc = game.whiteIncrement;
     int blackInc = game.blackIncrement;
     int movesToGo = game.movesLeft;
-    TMove targetMove = game.targetMove;
+    move_t targetMove = game.targetMove;
     int targetScore = game.targetScore;
     bool ponder = game.ponder;
     double learnFactor = game.learnFactor;
@@ -106,7 +135,7 @@ void * TEngine::_think(void* engineObjPtr) {
     if (examineSearch) {
         searchData->examineSearch = examineSearch;
         for (int i = 0; i < examineSearch; i++) {
-            searchData->examinePath[i].setMove(&game.examinePath[i]);
+            searchData->examinePath[i].set(&game.examinePath[i]);
         }
     }
 #endif
@@ -122,16 +151,16 @@ void * TEngine::_think(void* engineObjPtr) {
      * Find and play a book move if available, looking up 
      * a Polyglot Book file named "book.bin"
      */
-    TMove resultMove;
-    TMove ponderMove;
-    resultMove.setMove(0);
-    ponderMove.setMove(0);
+    move_t resultMove;
+    move_t ponderMove;
+    resultMove.set(0);
+    ponderMove.set(0);
     book_t * book = new book_t();
     book->open("book.bin");
     bool book_move = false;
     bool book_ponder_move = false;
     for (int book_step = 0; book_step < 2; book_step++) {
-        TMoveList * bookMoves = &searchData->stack->moveList;
+        move::list_t * bookMoves = &searchData->stack->moveList;
         int count = book->find(root, bookMoves);
         if (count > 0) {
             srand(time(NULL));
@@ -139,20 +168,20 @@ void * TEngine::_think(void* engineObjPtr) {
             int totalBookScore = 1;
             for (int pickMove = 0; pickMove < 2; pickMove++) {
                 int totalScore = 0;
-                for (TMove * bookMove = bookMoves->first; bookMove != bookMoves->last; bookMove++) {
+                for (move_t * bookMove = bookMoves->first; bookMove != bookMoves->last; bookMove++) {
                     totalScore += bookMove->score;
                     if (pickMove && totalScore >= randomScore) {
                         if (book_step == 0) {
                             book_move = true;
-                            resultMove.setMove(bookMove);
+                            resultMove.set(bookMove);
                             engine->setMove(bookMove);
                             engine->setScore(0);
                             root->forward(&resultMove);
                         } else if (book_step == 1) {
                             book_ponder_move = true;
-                            ponderMove.setMove(bookMove);
+                            ponderMove.set(bookMove);
                             if (searchData->outputHandler) {
-                                std::string book_pv = resultMove.asString() + " " + ponderMove.asString();
+                                std::string book_pv = resultMove.to_string() + " " + ponderMove.to_string();
                                 searchData->outputHandler->sendPV((bookMove->score) / totalBookScore, 1, 1, count, searchData->timeManager->elapsed(), book_pv.c_str(), (int) EXACT);
                             }
                         }
@@ -213,13 +242,13 @@ void * TEngine::_think(void* engineObjPtr) {
                 resultScore = score;
             }
             if (searchData->stack->pvCount > 0) {
-                TMove firstMove = searchData->stack->pvMoves[0];
+                move_t firstMove = searchData->stack->pvMoves[0];
                 if (firstMove.piece) {
                     move_changed = resultMove.equals(&firstMove) == false;
-                    resultMove.setMove(&firstMove);
-                    ponderMove.setMove(0);
+                    resultMove.set(&firstMove);
+                    ponderMove.set(0);
                     if (searchData->stack->pvCount > 1) {
-                        ponderMove.setMove(&searchData->stack->pvMoves[1]);
+                        ponderMove.set(&searchData->stack->pvMoves[1]);
                     }
                     engine->setMove(&firstMove);
                     engine->setScore(resultScore);
@@ -464,7 +493,7 @@ void TEngine::setOutputHandler(TOutputHandler * outputHandler) {
     _outputHandler = outputHandler;
 }
 
-void TEngine::testPosition(TMove bestMove, int score, int maxTime, int maxDepth) {
+void TEngine::testPosition(move_t bestMove, int score, int maxTime, int maxDepth) {
     _testSucces = false;
     gameSettings.targetMove = bestMove;
     gameSettings.targetScore = score;
@@ -649,7 +678,7 @@ void * TEngine::_learn(void * engineObjPtr) {
      * Self-play, using the generated start positions once for each side
      */
     THashTable * hash_list[2] = {hash1, hash2};
-    TMove actualMove;
+    move_t actualMove;
     U64 gamesPlayed = 0;
     U64 batch = 0;
     U64 totalNodes[2] = {0, 0};
@@ -734,9 +763,9 @@ void * TEngine::_learn(void * engineObjPtr) {
                             resultScore = score;
                         }
                         if (sd_game->stack->pvCount > 0) {
-                            TMove firstMove = sd_game->stack->pvMoves[0];
+                            move_t firstMove = sd_game->stack->pvMoves[0];
                             if (firstMove.piece) {
-                                actualMove.setMove(&firstMove);
+                                actualMove.set(&firstMove);
                             }
                         }
                         depth += ONE_PLY;
@@ -948,22 +977,22 @@ void * TEngine::_learn(void * engineObjPtr) {
 
 void TEngine::_create_start_positions(TSearch * sd_root, book_t * book, string * poslist, int &x, const int max) {
 
-    TMoveList * bookMoves = &sd_root->stack->moveList;
-    TMove actualMove;
+    move::list_t * bookMoves = &sd_root->stack->moveList;
+    move_t actualMove;
     int gen = 0;
     while (x < max) {
         gen++;
         while (sd_root->pos->current_ply < MAX_PLY) {
-            actualMove.setMove(0);
+            actualMove.set(0);
             int count = book->find(sd_root->pos, bookMoves);
             if (count > 0) {
                 int randomScore = 0;
                 for (int pickMove = 0; pickMove < 2; pickMove++) {
                     int totalScore = 0;
-                    for (TMove * bookMove = bookMoves->first; bookMove != bookMoves->last; bookMove++) {
+                    for (move_t * bookMove = bookMoves->first; bookMove != bookMoves->last; bookMove++) {
                         totalScore += bookMove->score;
                         if (pickMove && totalScore >= randomScore) {
-                            actualMove.setMove(bookMove);
+                            actualMove.set(bookMove);
                             break;
                         }
                     }
@@ -982,7 +1011,7 @@ void TEngine::_create_start_positions(TSearch * sd_root, book_t * book, string *
 
         //revert to root
         while (sd_root->pos->current_ply > 0) {
-            TMove * move = &(sd_root->stack - 1)->move;
+            move_t * move = &(sd_root->stack - 1)->move;
             sd_root->backward(move);
         }
         if (x > 0 && x % 250 == 0) {

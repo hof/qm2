@@ -25,13 +25,13 @@
 U64 moveGenerationPerft(TSearch *searchData, int depth) {
     U64 result = 0;
     board_t * pos = searchData->pos;
-    TMoveList * moveList = &searchData->stack->moveList;
+    move::list_t * moveList = &searchData->stack->moveList;
     moveList->clear();
-    genCaptures(pos, moveList, FULL_BOARD);
-    genPromotions(pos, moveList);
-    genCastles(pos, moveList);
-    genQuietMoves(pos, moveList);
-    for (TMove * move = moveList->first; move != moveList->last; move++) {
+    move::gen_captures(pos, moveList, FULL_BOARD);
+    move::gen_promotions(pos, moveList);
+    move::gen_castles(pos, moveList);
+    move::gen_quiet_moves(pos, moveList);
+    for (move_t * move = moveList->first; move != moveList->last; move++) {
         if (pos->legal(move)) {
             if (depth <= 1) {
                 result += 1;
@@ -49,16 +49,16 @@ U64 moveGenerationPerft(TSearch *searchData, int depth) {
 }
 
 void movePerftDivide(TSearch * searchData, int depth) {
-    TMoveList * moveList = &searchData->stack->moveList;
+    move::list_t * moveList = &searchData->stack->moveList;
     board_t * pos = searchData->pos;
     std::cout << pos->to_string() << std::endl;
     moveList->clear();
-    genCaptures(pos, moveList, FULL_BOARD);
-    genPromotions(pos, moveList);
-    genCastles(pos, moveList);
-    genQuietMoves(pos, moveList);
-    for (TMove * move = moveList->first; move != moveList->last; move++) {
-        std::cout << move->asString() << " ";
+    move::gen_captures(pos, moveList, FULL_BOARD);
+    move::gen_promotions(pos, moveList);
+    move::gen_castles(pos, moveList);
+    move::gen_quiet_moves(pos, moveList);
+    for (move_t * move = moveList->first; move != moveList->last; move++) {
+        std::cout << move->to_string() << " ";
         if (pos->legal(move)) {
             pos->forward(move);
             searchData->stack++;
@@ -75,7 +75,7 @@ void movePerftDivide(TSearch * searchData, int depth) {
 /**
  * Move generaration test (perft test)
  */
-void testMoveGeneration(string fen, int targetValues[], int maxDepth, TSearch * searchData) {
+void testMoveGeneration(std::string fen, int targetValues[], int maxDepth, TSearch * searchData) {
     std::cout << "\n\ntest_genmoves test testMoveGeneration " << fen << std::endl;
     searchData->pos->create(fen.c_str());
     for (int i = 0; i < maxDepth; i++) {

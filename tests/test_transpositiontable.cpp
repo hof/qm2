@@ -29,8 +29,8 @@ void test_tt() {
     TSearch * searchData = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", hashTable, &oh); 
     
     //test storing and retrieving
-    TMove * move = searchData->movePicker->pickFirstMove(searchData, 0, -SCORE_INFINITE, SCORE_INFINITE);
-    searchData->hashTable->ttStore(searchData, move->asInt(), -12345, 127, -SCORE_INFINITE, SCORE_INFINITE);
+    move_t * move = searchData->movePicker->pickFirstMove(searchData, 0, -SCORE_INFINITE, SCORE_INFINITE);
+    searchData->hashTable->ttStore(searchData, move->to_int(), -12345, 127, -SCORE_INFINITE, SCORE_INFINITE);
     searchData->hashTable->ttLookup(searchData, 127, -SCORE_INFINITE, SCORE_INFINITE);
     if (searchData->stack->ttScore == TT_EMPTY) {
        std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=store/retrieve error" << std::endl; 

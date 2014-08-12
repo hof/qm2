@@ -19,14 +19,14 @@
  */
 
 
-bool testForMove(TEngine * engine, string fen, string move, int targetScore) {
-    TMove bm;
+bool testForMove(TEngine * engine, std::string fen, std::string move, int targetScore) {
+    move_t bm;
     board_t pos;
     pos.create(fen.c_str());
-    bm.fromString(&pos, move.c_str());
+    bm.set(&pos, move.c_str());
     engine->testPosition(bm, targetScore, 10 * 1000, 0);
     engine->newGame(pos.to_string());
-    std::cout << "Position: " << pos.to_string() << " best move: " << bm.asString() << std::endl;
+    std::cout << "Position: " << pos.to_string() << " best move: " << bm.to_string() << std::endl;
     engine->think();
     engine->stopAllThreads();
     return engine->getTestResult();

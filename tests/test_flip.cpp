@@ -9,7 +9,7 @@
  */
 
 THashTable *globalHashTable;
-TEngine * engine;
+TEngine * global_engine;
 TOutputHandler oh;
 bool stop_test;
 
@@ -55,29 +55,29 @@ bool flipTest(int test_num, const char * fen) {
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=Evaluation does not match" << std::endl;
         std::cout << "original: " << fen1 << " score: " << score1 << " phase: " << phase1 << std::endl;
         std::cout << "flipped:  " << fen2 << " score: " << score2 << " phase: " << phase2 << std::endl;
-        engine->newGame(pos.to_string());
-        engine->analyse();
+        global_engine->newGame(pos.to_string());
+        global_engine->analyse();
         pos.flip();
-        engine->newGame(pos.to_string());
-        engine->analyse();
+        global_engine->newGame(pos.to_string());
+        global_engine->analyse();
         return false;
     }
 
-    engine->clearHash();
-    engine->newGame(pos.to_string());
-    engine->think();
-    engine->stopAllThreads();
-    int nodes1 = engine->getNodesSearched();
-    score1 = engine->getScore();
+    global_engine->clearHash();
+    global_engine->newGame(pos.to_string());
+    global_engine->think();
+    global_engine->stopAllThreads();
+    int nodes1 = global_engine->getNodesSearched();
+    score1 = global_engine->getScore();
 
     pos.flip();
     
-    engine->clearHash();
-    engine->newGame(pos.to_string());
-    engine->think();
-    engine->stopAllThreads();
-    int nodes2 = engine->getNodesSearched();
-    score2 = engine->getScore();
+    global_engine->clearHash();
+    global_engine->newGame(pos.to_string());
+    global_engine->think();
+    global_engine->stopAllThreads();
+    int nodes2 = global_engine->getNodesSearched();
+    score2 = global_engine->getScore();
     
     if (score1 != score2) {
         std::cout << "\ntesting position " << test_num << ": " << pos.to_string() << std::endl;
@@ -165,10 +165,10 @@ void flipTestSuite(TEngine * engine, int depth) {
 int main(int argc, char** argv) {
     magic::init();
     globalHashTable = new THashTable(16);
-    engine = new TEngine();
-    engine->setHashTable(globalHashTable);
+    global_engine = new TEngine();
+    global_engine->setHashTable(globalHashTable);
     
-    engine->setOutputHandler(NULL);
+    global_engine->setOutputHandler(NULL);
     static const int MAX_TEST_DEPTH = 1;
     stop_test = false;
 
@@ -180,12 +180,12 @@ int main(int argc, char** argv) {
     std::cout << "%TEST_STARTED% flip (flip_test)\n" << std::endl;
     std::cout << "flip_test flip" << std::endl;
     begin = clock();
-    flipTestSuite(engine, MAX_TEST_DEPTH);
+    flipTestSuite(global_engine, MAX_TEST_DEPTH);
     now = clock();
     double elapsed = (now - begin) / CLOCKS_PER_SEC;
     std::cout << "%TEST_FINISHED% time=" << elapsed << " flip (flip_test)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=0" << elapsed << std::endl;
-    delete engine;
+    delete global_engine;
     delete globalHashTable;
     return (EXIT_SUCCESS);
 }

@@ -71,7 +71,7 @@ enum SEARCH_CONSTANTS {
 
 class TRootMove {
 public:
-    TMove Move;
+    move_t Move;
     bool GivesCheck;
     int Nodes;
     int PV;
@@ -81,12 +81,12 @@ public:
     int checker_sq;
     U64 checkers;
 
-    void init(TMove * move, int initialValue, bool givesCheck, int see) {
+    void init(move_t * move, int initialValue, bool givesCheck, int see) {
         Nodes = 0;
         PV = 0;
         Value = -SCORE_INFINITE;
         InitialValue = initialValue;
-        Move.setMove(move);
+        Move.set(move);
         GivesCheck = givesCheck;
         SEE = see;
     }
@@ -115,35 +115,35 @@ public:
 
 class TRoot {
 public:
-    TRootMove Moves[MAX_MOVECHOICES + 1];
+    TRootMove Moves[move::MAX_MOVES + 1];
     int MoveCount;
     int FiftyCount;
     bool InCheck;
     void sortMoves();
-    void matchMoves(TMoveList * list);
+    void matchMoves(move::list_t * list);
 };
 
 struct TSearchStack {
-    TMoveList moveList;
+    move::list_t moveList;
     NodeType nodeType;
-    TMove move;
-    TMove bestMove;
+    move_t move;
+    move_t bestMove;
 
     U64 hash_code;
     bool in_check;
 
-    TMove mateKiller;
-    TMove killer1;
-    TMove killer2;
+    move_t mateKiller;
+    move_t killer1;
+    move_t killer2;
 
     int pvCount;
-    TMove pvMoves[MAX_PLY + 1];
+    move_t pvMoves[MAX_PLY + 1];
 
     int ttScore;
     int ttDepth1;
     int ttDepth2;
-    TMove ttMove1;
-    TMove ttMove2;
+    move_t ttMove1;
+    move_t ttMove2;
 
     //eval info
     short phase;
@@ -211,7 +211,7 @@ public:
     
     short LMR[32][64]; //depth,  move number
 
-    TMoveList tempList;
+    move::list_t tempList;
 
     TSearch(const char * fen,       
             THashTable * globalHashTable,
@@ -263,16 +263,16 @@ public:
         
     }
     
-    inline void updateKillers(TMove * move) {
+    inline void updateKillers(move_t * move) {
         if (!stack->killer1.equals(move)) {
-            stack->killer2.setMove(&stack->killer1);
-            stack->killer1.setMove(move);
+            stack->killer2.set(&stack->killer1);
+            stack->killer1.set(move);
         }
     }
 
-    inline void updatePV(TMove * move) {
-        stack->pvMoves[0].setMove(move);
-        memcpy(stack->pvMoves + 1, (stack + 1)->pvMoves, (stack + 1)->pvCount * sizeof (TMove));
+    inline void updatePV(move_t * move) {
+        stack->pvMoves[0].set(move);
+        memcpy(stack->pvMoves + 1, (stack + 1)->pvMoves, (stack + 1)->pvCount * sizeof (move_t));
         stack->pvCount = (stack + 1)->pvCount + 1;
     }
 
@@ -283,7 +283,7 @@ public:
 
     inline void forward() { //null move
         skipNull = true;
-        stack->move.setMove(0);
+        stack->move.set(0);
         stack++;
         stack->in_check = false;
         stack->eval_result = SCORE_INVALID;
@@ -298,8 +298,8 @@ public:
         assert(stack == &_stack[pos->current_ply]);
     }
 
-    inline void forward(TMove * move, bool givesCheck) {
-        stack->move.setMove(move);
+    inline void forward(move_t * move, bool givesCheck) {
+        stack->move.set(move);
         stack++;
         stack->in_check = givesCheck;
         stack->eval_result = SCORE_INVALID;
@@ -307,7 +307,7 @@ public:
         assert(stack == &_stack[pos->current_ply]);
     }
 
-    inline void backward(TMove * move) {
+    inline void backward(move_t * move) {
         stack--;
         pos->backward(move);
         assert(stack == &_stack[pos->current_ply]);
@@ -323,7 +323,7 @@ public:
         return type;
     }
 
-    inline void updateHistoryScore(TMove * move, int depth) {
+    inline void updateHistoryScore(move_t * move, int depth) {
         int pc = move->piece;
         int tsq = move->tsq;
         depth = depth / ONE_PLY;
@@ -373,9 +373,9 @@ public:
         return 0;;
     }
     
-    int extendMove(TMove * move, int gives_check);
+    int extendMove(move_t * move, int gives_check);
     
-    inline bool passedPawn(TMove * move) {
+    inline bool passedPawn(move_t * move) {
         return BIT(move->ssq) & stack->passers;
     }
 

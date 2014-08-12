@@ -23,19 +23,19 @@ struct TTestResult {
     bool solved;
     int nodes;
     int score;
-    TMove move;
+    move_t move;
 };
 
-TTestResult testForMove(TEngine * engine, string fen, string move, int targetScore) {
+TTestResult testForMove(TEngine * engine, std::string fen, std::string move, int targetScore) {
     TTestResult result;
-    TMove bm;
+    move_t bm;
     board_t pos;
     pos.create(fen.c_str());
-    bm.fromString(&pos, move.c_str());
+    bm.set(&pos, move.c_str());
 
     engine->testPosition(bm, targetScore, 30 * 1000, 0);
     engine->newGame(pos.to_string());
-    std::cout << "Position: " << pos.to_string() << " best move: " << bm.asString() << std::endl;
+    std::cout << "Position: " << pos.to_string() << " best move: " << bm.to_string() << std::endl;
 
     engine->think();
     engine->stopAllThreads();
@@ -93,7 +93,7 @@ void test_wac(TEngine * engine) {
     U64 totalNodes = 0;
     for (int i = 0; i < TEST_SIZE; i++) {
         std::cout << "Position " << (i + 1) << ": " << (results[i].solved ? "Passed" : "Failed")
-                << " " << results[i].move.asString() 
+                << " " << results[i].move.to_string() 
                 << " score: " << results[i].score
                 << " nodes: " << results[i].nodes / 1000 << "K" << std::endl;
         solved += results[i].solved;

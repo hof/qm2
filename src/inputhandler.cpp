@@ -233,8 +233,8 @@ bool TInputHandler::handlePosition(TInputParser& parser) {
             THashTable * hash = hashTable();
             hash->repTable[pos.stack->fifty_count] = pos.stack->hash_code;
             while (parser >> token) {
-                TMove move;
-                move.fromString(&pos, token.c_str());
+                move_t move;
+                move.set(&pos, token.c_str());
                 pos.forward(&move);
                 hash->repTable[pos.stack->fifty_count] = pos.stack->hash_code;
                 if (pos.current_ply > MAX_PLY - 2) {
@@ -254,8 +254,8 @@ bool TInputHandler::handleForward(TInputParser& parser) {
     pos.create(_fen.c_str());
     while (parser >> token) {
 
-        TMove move;
-        move.fromString(&pos, token.c_str());
+        move_t move;
+        move.set(&pos, token.c_str());
         pos.forward(&move);
     }
     _fen = pos.to_string();

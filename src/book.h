@@ -55,8 +55,8 @@ public:
     void close();
     const std::string get_file_name();
     static U64 polyglot_key(board_t* pos);
-    int find(board_t * pos, TMoveList * list);
-    void read_polyglot_move(board_t * pos, TMove * move, int polyglotMove);
+    int find(board_t * pos, move::list_t * list);
+    void read_polyglot_move(board_t * pos, move_t * move, int polyglotMove);
 
 private:
     std::string file_name;

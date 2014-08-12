@@ -1,4 +1,5 @@
 add_library(MAX2SRC 
+        uci_console.cpp
 	inputhandler.cpp
 	outputhandler.cpp	
 	hashcodes.cpp

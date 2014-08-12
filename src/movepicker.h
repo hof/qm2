@@ -63,15 +63,15 @@ enum MovePickingStage {
 class TMovePicker {
 protected:
 
-    TMove * popBest(board_t * pos, TMoveList * list);
+    move_t * popBest(board_t * pos, move::list_t * list);
 
 public:
 
-    TMove * pickNextMove(TSearch * searchData, int depth, int alpha, int beta);
-    TMove * pickFirstMove(TSearch * searchData, int depth, int alpha, int beta);
-    short countEvasions(TSearch * sd, TMove * firstMove);
+    move_t * pickNextMove(TSearch * searchData, int depth, int alpha, int beta);
+    move_t * pickFirstMove(TSearch * searchData, int depth, int alpha, int beta);
+    short countEvasions(TSearch * sd, move_t * firstMove);
     
-    void push(TSearch * searchData, TMove * move, int score);
+    void push(TSearch * searchData, move_t * move, int score);
 };
 
 #endif	/* MOVEPICKER_H */

@@ -97,13 +97,13 @@ void TOutputHandler::sendHashTableStats(int ttHits, int ptHits, int mtHits, int 
     output(outputString);
 }
 
-void TOutputHandler::sendBestMove(TMove bestMove, TMove ponderMove) {
+void TOutputHandler::sendBestMove(move_t bestMove, move_t ponderMove) {
     if (bestMove.piece) {
         std::string outputString = "bestmove ";
-        outputString += bestMove.asString();
+        outputString += bestMove.to_string();
         if (ponderMove.piece) {
             outputString += " ponder ";
-            outputString += ponderMove.asString();
+            outputString += ponderMove.to_string();
         }
         output(outputString);
     }

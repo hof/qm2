@@ -245,7 +245,7 @@ namespace {
  * @param list list of moves
  * @return amount of book moves found
  */
-int book_t::find(board_t * pos, TMoveList * list) {
+int book_t::find(board_t * pos, move::list_t * list) {
     list->clear();
 
     if (!is_open() || this->book_size == 0) {
@@ -258,7 +258,7 @@ int book_t::find(board_t * pos, TMoveList * list) {
         if (entry.key != key) {
             break;
         }
-        TMove * move = list->last++;
+        move_t * move = list->last++;
         read_polyglot_move(pos, move, entry.move);
         move->score = entry.weight;
     }
@@ -271,12 +271,12 @@ int book_t::find(board_t * pos, TMoveList * list) {
  * @param move engine's move
  * @param polyglotMove polyglot move
  */
-void book_t::read_polyglot_move(board_t *pos, TMove * move, int polyglot_move) {
+void book_t::read_polyglot_move(board_t *pos, move_t * move, int polyglot_move) {
     int tsq = polyglot_move & 63;
     int ssq = (polyglot_move >> 6) & 63;
     int piece = pos->matrix[ssq];
 
-    move->setMove(piece, ssq, tsq);
+    move->set(piece, ssq, tsq);
     move->capture = pos->matrix[tsq];
     move->castle = 0;
     move->en_passant = false;

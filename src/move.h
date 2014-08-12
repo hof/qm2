@@ -25,21 +25,11 @@
 #define	MOVE_H
 
 #include "bits.h"
-using std::string;
 
-class board_t;
+struct board_t;
 
-class TMove {
+class move_t {
 public:
-    //int _move; //[4: 0..3 piece]
-    //[6: 4..9 from (ssq)]
-    //[6: 10..15 to (tsq)]
-    //[4: 16..19 captured]
-    //[4: 20..23 changed into (promoted)]
-    //[4: 24..27 castling]
-    //[1: en-passant 28]
-    //[3: special 29
-
     uint8_t piece;
     uint8_t ssq;
     uint8_t tsq;
@@ -47,93 +37,56 @@ public:
     uint8_t promotion;
     uint8_t castle;
     bool en_passant;
-    uint8_t special; 
+    uint8_t special;
     int score;
 
-    void setMove(TMove * move) {
-        piece = move->piece;
-        ssq = move->ssq;
-        tsq = move->tsq;
-        capture = move->capture;
-        promotion = move->promotion;
-        en_passant = move->en_passant;
-        castle = move->castle;
-        special = move->special;
-        score = 0;
+    void set(move_t * move);
+    void set(int move);
+    void set(int pc, int from, int to, int captured_piece, int promotion_piece);
+    void set(board_t * pos, const char * move_str);
+    std::string to_string();
+    int to_int();
+
+    /**
+     * Sets a quiet move
+     * @param pc piece
+     * @param from source square
+     * @param to target square
+     */
+    void set(int pc, int from, int to) {
+        set(pc, from, to, 0, 0);
     }
 
-    void setMove(int move) {
-        assert(move >= 0);
-        piece = move & 0x0F;
-        ssq = move >> 4 & 0x3F;
-        tsq = move >> 10 & 0x3F;
-        capture = move >> 16 & 0x0F;
-        promotion = move >> 20 & 0x0F;
-        en_passant = (move & (0x01 << 28)) == (0x01 << 28);
-        castle = move >> 24 & 0x0F;
-        special = move >> 29 & 0x07;
-        score = 0;
+    /**
+     * Sets a simple capture move
+     * @param pc piece
+     * @param from from square
+     * @param to target square
+     * @param captured_piece captured piece 
+     */
+    void set(int pc, int from, int to, int captured_piece) {
+        set(pc, from, to, captured_piece, 0);
     }
 
-    inline void setMove(char pc, char from, char to) {
-        piece = pc;
-        ssq = from;
-        tsq = to;
-        promotion = 0;
-        capture = 0;
-    }
-    
-    inline void setPromotion(char pc, char from, char to, char promotionPiece) {
-        piece = pc;
-        ssq = from;
-        tsq = to;
-        promotion = promotionPiece;
-        capture = 0;
-    }
-    
-    inline void setCapture(char pc, char from, char to, char capturedPiece) {
-        piece = pc;
-        ssq = from;
-        tsq = to;
-        promotion = 0;
-        capture = capturedPiece;;
-    }
-    
-    inline void setPromotionCapture(char pc, char from, char to, char promotionPiece, char capturedPiece) {
-        piece = pc;
-        ssq = from;
-        tsq = to;
-        promotion = promotionPiece;
-        capture = capturedPiece;
-    }
-
-    string asString();
-    void fromString(board_t * pos, const char * moveStr);
-
-    inline int asInt() {
-        int result = piece;
-        result |= ssq << 4;
-        result |= tsq << 10;
-        result |= capture << 16;
-        result |= promotion << 20;
-        result |= castle << 24;
-        result |= en_passant << 28;
-        result |= special << 29;
-        assert(result >= 0);
-        return result;
-    }
-
-    inline bool equals(TMove * move) {
+    /**
+     * Tests if two moves are equal
+     * @param move move to test
+     * @return true if equal, false otherwise
+     */
+    bool equals(move_t * move) {
         return ssq == move->ssq
                 && tsq == move->tsq
                 && piece == move->piece
                 && promotion == move->promotion;
     }
 
-    inline void clear() {
+    /**
+     * Empties a move 
+     */
+    void clear() {
         piece = 0;
     }
-   
+
 };
 
 #endif	/* MOVE_H */

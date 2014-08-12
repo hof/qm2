@@ -21,61 +21,47 @@
  * Created on 10 april 2011, 22:46
  */
 
-#ifndef W0MOVEGEN_H
-#define	W0MOVEGEN_H
+#ifndef MOVEGEN_H
+#define	MOVEGEN_H
 
 #include "move.h"
 #include "board.h"
 
-#define	MAX_MOVECHOICES 256
-#define MAX_EXCLUDECHOICES 8
+namespace move {
 
-#define MOVE_EXCLUDED -32001
-#define MOVE_ILLEGAL -32002
-#define MOVE_INFINITY 32000
-#define MOVE_LEGAL    31000
+    const int MAX_MOVES = 255;
+    const int MAX_EXCLUDES = 7;
+    const int EXCLUDED = -32001;
+    const int ILLEGAL = -32002;
+    const int INF = 32000;
+    const int LEGAL = 31000;
 
-class TMoveList {
-public:
-    TMove _list[MAX_MOVECHOICES + 1];
-    TMove _exclude[MAX_EXCLUDECHOICES + 1];
-    int stage;
-    int minimumScore;
-    TMove * current;
-    TMove * first;
-    TMove * last;
-    TMove * currentX;
-    TMove * lastX;
-    TMove * firstX;
-    TMove * pop;
+    class list_t {
+    public:
+        move_t _list[MAX_MOVES + 1];
+        move_t _exclude[MAX_EXCLUDES + 1];
+        int stage;
+        int minimum_score;
+        move_t * current;
+        move_t * first;
+        move_t * last;
+        move_t * current_excluded;
+        move_t * last_excluded;
+        move_t * first_excluded;
+        move_t * pop;
 
-    inline void clear() {
-        stage = 0;
-        minimumScore = 0;
-        current = first = last = &_list[0];
-        currentX = firstX = lastX = &_exclude[0];
-    }
+        list_t();
+        void clear();
+        bool is_excluded(move_t * move);
+        void copy(list_t * list);
+        
+    };
 
-    TMoveList() {
-        clear();
-        pop = &_list[MAX_MOVECHOICES];
-    }
+    void gen_quiet_moves(board_t * board, list_t * list);
+    void gen_promotions(board_t * board, list_t * list);
+    void gen_castles(board_t * board, list_t * list);
+    void gen_captures(board_t * board, list_t * list, U64 targets);
+}
 
-    inline bool excluded(TMove * move) {
-        for (TMove * curX = firstX; curX != lastX; curX++) {
-            if (move->equals(curX)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    void copy(TMoveList * list);
-};
-
-void genQuietMoves(board_t * board, TMoveList * list);
-void genPromotions(board_t * board, TMoveList * list);
-void genCastles(board_t * board, TMoveList * list);
-void genCaptures(board_t * board, TMoveList * list, U64 targets);
-
-#endif	/* W0MOVEGEN_H */
+#endif	/* MOVEGEN_H */
 

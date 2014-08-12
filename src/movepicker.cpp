@@ -30,28 +30,28 @@
 #include "search.h"
 #include "move.h"
 
-void TMovePicker::push(TSearch * searchData, TMove * move, int score) {
-    TMoveList * list = &searchData->stack->moveList;
-    for (TMove * m = list->first; m != list->last; m++) {
+void TMovePicker::push(TSearch * searchData, move_t * move, int score) {
+    move::list_t * list = &searchData->stack->moveList;
+    for (move_t * m = list->first; m != list->last; m++) {
         if (move->equals(m)) {
             m->score = score;
             return;
         }
     }
-    TMove * current = list->last;
-    (current++)->setMove(move);
+    move_t * current = list->last;
+    (current++)->set(move);
     move->score = score;
     list->last = current;
 }
 
-inline TMove * TMovePicker::popBest(board_t * pos, TMoveList * list) {
+inline move_t * TMovePicker::popBest(board_t * pos, move::list_t * list) {
     if (list->first == list->last) {
         return NULL;
     }
-    int edge = list->minimumScore;
+    int edge = list->minimum_score;
     do {
-        TMove * best = list->first;
-        for (TMove * move = best + 1; move != list->last; move++) {
+        move_t * best = list->first;
+        for (move_t * move = best + 1; move != list->last; move++) {
             if (move->score > best->score) {
                 best = move;
             }
@@ -60,25 +60,25 @@ inline TMove * TMovePicker::popBest(board_t * pos, TMoveList * list) {
             return NULL;
         }
         if (pos->legal(best)) {
-            best->score = MOVE_EXCLUDED;
+            best->score = move::EXCLUDED;
             return best;
         }
-        best->score = MOVE_ILLEGAL;
+        best->score = move::ILLEGAL;
     } while (true);
     return NULL;
 }
 
-TMove * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, int beta) {
-    TMoveList * moveList = &searchData->stack->moveList;
+move_t * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, int beta) {
+    move::list_t * moveList = &searchData->stack->moveList;
     moveList->clear();
     moveList->stage = depth < ONE_PLY ? CAPTURES : HASH1;
     searchData->stack->captureMask = searchData->pos->bb[ALLPIECES];
     return pickNextMove(searchData, depth, alpha, beta);
 }
 
-TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, int beta) {
+move_t * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, int beta) {
     U64 mask;
-    TMoveList * moveList = &searchData->stack->moveList;
+    move::list_t * moveList = &searchData->stack->moveList;
     board_t * pos = searchData->pos;
 
     /*
@@ -88,7 +88,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
      * A last-minute legality check is performed so the movepicker 
      * always returns fully legal moves.
      */
-    TMove * result = popBest(pos, moveList);
+    move_t * result = popBest(pos, moveList);
 
     /*
      * 2. Proceed to the next stage if no move was found
@@ -100,9 +100,9 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                  * Return the hashmove from depth-preferred table
                  */
                 result = &searchData->stack->ttMove1;
-                if (result->piece && !moveList->excluded(result)) {
+                if (result->piece && !moveList->is_excluded(result)) {
                     moveList->stage = HASH2;
-                    moveList->lastX++->setMove(result);
+                    moveList->last_excluded++->set(result);
                     return result;
                 }
             case HASH2:
@@ -110,14 +110,14 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                  * Return the hashmove from always-replace table
                  */
                 result = &searchData->stack->ttMove2;
-                if (result->piece && !moveList->excluded(result)) {
+                if (result->piece && !moveList->is_excluded(result)) {
                     moveList->stage = MATEKILLER;
-                    moveList->lastX++->setMove(result);
+                    moveList->last_excluded++->set(result);
                     return result;
                 }
 
             case IID:
-                if (depth > LOW_DEPTH && moveList->firstX == moveList->lastX) {
+                if (depth > LOW_DEPTH && moveList->first_excluded == moveList->last_excluded) {
                     //find a good first move to try by doing a shallow search
                     bool skipNull = searchData->skipNull;
                     searchData->skipNull = true;
@@ -137,7 +137,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                         /*
                          * Re-clear the movelist and return IID move
                          */
-                        moveList->lastX++->setMove(result);
+                        moveList->last_excluded++->set(result);
                         moveList->stage = MATEKILLER;
                         return result;
                     }
@@ -148,11 +148,11 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
             case MATEKILLER:
                 result = &searchData->stack->mateKiller;
                 if (result->piece
-                        && !moveList->excluded(result)
+                        && !moveList->is_excluded(result)
                         && pos->valid(result)
                         && pos->legal(result)) {
                     moveList->stage = CAPTURES;
-                    moveList->lastX++->setMove(result);
+                    moveList->last_excluded++->set(result);
                     return result;
                 }
             case CAPTURES:
@@ -160,11 +160,11 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 if (searchData->stack->in_check) {
                     mask &= pos->stack->checkers;
                 }
-                genCaptures(pos, moveList, mask);
+                move::gen_captures(pos, moveList, mask);
                 if (moveList->current != moveList->last) {
-                    for (TMove * move = moveList->current; move != moveList->last; move++) {
-                        if (moveList->excluded(move)) {
-                            move->score = MOVE_EXCLUDED;
+                    for (move_t * move = moveList->current; move != moveList->last; move++) {
+                        if (moveList->is_excluded(move)) {
+                            move->score = move::EXCLUDED;
                         } else {
                             move->score = depth > LOW_DEPTH ? pos->see(move) : MVVLVA(move);
                         }
@@ -176,11 +176,11 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     }
                 }
             case PROMOTIONS:
-                genPromotions(pos, moveList);
+                move::gen_promotions(pos, moveList);
                 if (moveList->current != moveList->last) {
-                    for (TMove * move = moveList->current; move != moveList->last; move++) {
-                        if (moveList->excluded(move)) {
-                            move->score = MOVE_EXCLUDED;
+                    for (move_t * move = moveList->current; move != moveList->last; move++) {
+                        if (moveList->is_excluded(move)) {
+                            move->score = move::EXCLUDED;
                         } else if ((move->promotion == WQUEEN || move->promotion == BQUEEN)
                                 && pos->see(move) >= 0) {
                             move->score = 800;
@@ -199,9 +199,9 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     result = &searchData->stack->killer1;
                     if (result->piece
                             && pos->valid(result)
-                            && !moveList->excluded(result)
+                            && !moveList->is_excluded(result)
                             && pos->legal(result)) {
-                        moveList->lastX++->setMove(result);
+                        moveList->last_excluded++->set(result);
                         moveList->stage = KILLER2;
                         assert(result->capture == EMPTY && result->promotion == EMPTY);
                         return result;
@@ -212,9 +212,9 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                     result = &searchData->stack->killer2;
                     if (result->piece
                             && pos->valid(result)
-                            && !moveList->excluded(result)
+                            && !moveList->is_excluded(result)
                             && pos->legal(result)) {
-                        moveList->lastX++->setMove(result);
+                        moveList->last_excluded++->set(result);
                         moveList->stage = MINORPROMOTIONS;
                         assert(result->capture == EMPTY && result->promotion == EMPTY);
                         return result;
@@ -222,7 +222,7 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 }
             case MINORPROMOTIONS: //and captures with see < 0
                 if (depth <= LOW_DEPTH) {
-                    moveList->minimumScore = -MOVE_INFINITY;
+                    moveList->minimum_score = -move::INF;
                     result = popBest(pos, moveList);
                     if (result) {
                         moveList->stage = CASTLING;
@@ -231,11 +231,11 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 }
             case CASTLING:
                 if (searchData->stack->in_check == false) {
-                    genCastles(pos, moveList);
+                    move::gen_castles(pos, moveList);
                     if (moveList->current != moveList->last) {
-                        for (TMove * move = moveList->current; move != moveList->last; move++) {
-                            if (moveList->excluded(move)) {
-                                move->score = MOVE_EXCLUDED;
+                        for (move_t * move = moveList->current; move != moveList->last; move++) {
+                            if (moveList->is_excluded(move)) {
+                                move->score = move::EXCLUDED;
                             } else {
                                 move->score = 100;
                             }
@@ -249,11 +249,11 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
                 }
             case QUIET_MOVES:
                 if (depth >= 0 || searchData->stack->in_check) {
-                    moveList->minimumScore = -MOVE_INFINITY;
-                    genQuietMoves(pos, moveList);
-                    for (TMove * move = moveList->current; move != moveList->last; move++) {
-                        if (moveList->excluded(move)) {
-                            move->score = MOVE_EXCLUDED;
+                    moveList->minimum_score = -move::INF;
+                    move::gen_quiet_moves(pos, moveList);
+                    for (move_t * move = moveList->current; move != moveList->last; move++) {
+                        if (moveList->is_excluded(move)) {
+                            move->score = move::EXCLUDED;
                         } else {
                             move->score = searchData->history[move->piece][move->tsq];
                         }
@@ -270,15 +270,15 @@ TMove * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, in
     return result;
 }
 
-short TMovePicker::countEvasions(TSearch * sd, TMove * firstMove) {
+short TMovePicker::countEvasions(TSearch * sd, move_t * firstMove) {
     assert(firstMove != NULL);
     int result = 1;
     const short MAXLEGALCOUNT = 3;
-    TMove * pushback[MAXLEGALCOUNT];
+    move_t * pushback[MAXLEGALCOUNT];
 
     //get and count legal moves
     while (result < MAXLEGALCOUNT) {
-        TMove * m = pickNextMove(sd, 1, -SCORE_INFINITE, SCORE_INFINITE);
+        move_t * m = pickNextMove(sd, 1, -SCORE_INFINITE, SCORE_INFINITE);
         if (m == NULL) {
             break;
         }

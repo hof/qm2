@@ -68,7 +68,8 @@ enum endgame_t {
     OPP_BISHOPS, KBBKN, KBPsK, KNPK
 };
 
-struct board_stack_t {
+class board_stack_t {
+public:
     int enpassant_sq;
     int castling_flags;
     int fifty_count;
@@ -78,56 +79,17 @@ struct board_stack_t {
     U64 material_hash;
     U64 pawn_hash;
     U64 checkers;
-
-    void clear() {
-        enpassant_sq = 0;
-        castling_flags = 0;
-        fifty_count = 0;
-        wtm = true;
-        hash_code = 0;
-        material_hash = 0;
-        pawn_hash = 0;
-        checkers = 0;
-    }
-
-    void flip() {
-        wtm = !wtm;
-        HASH_STM(hash_code);
-        if (enpassant_sq) {
-            enpassant_sq = FLIP_SQUARE(enpassant_sq);
-        }
-        checkers = bb_flip(checkers);
-        uint8_t flags = castling_flags;
-        castling_flags = 0;
-        if (flags & CASTLE_K) {
-            castling_flags |= CASTLE_k;
-        }
-        if (flags & CASTLE_Q) {
-            castling_flags |= CASTLE_q;
-        }
-        if (flags & CASTLE_k) {
-            castling_flags |= CASTLE_K;
-        }
-        if (flags & CASTLE_q) {
-            castling_flags |= CASTLE_Q;
-        }
-    }
-
-    void copy(board_stack_t * bFlags) {
-        enpassant_sq = bFlags->enpassant_sq;
-        castling_flags = bFlags->castling_flags;
-        fifty_count = bFlags->fifty_count;
-        wtm = bFlags->wtm;
-        hash_code = bFlags->hash_code;
-        material_hash = bFlags->material_hash;
-        pawn_hash = bFlags->pawn_hash;
-    }
+    
+    void clear();
+    void flip();
+    void copy(board_stack_t * b_stack);
 };
 
 
 //Board representation structure
 
-struct board_t {
+class board_t {
+public:
     U64 bb[BPIECES + 1];
     int matrix[64];
 
@@ -141,15 +103,15 @@ struct board_t {
     void flip();
     bool is_draw();
     void create(const char* fen);
-    string to_string();
+    std::string to_string();
 
-    void forward(TMove * move);
-    void backward(TMove * move);
+    void forward(move_t * move);
+    void backward(move_t * move);
     void forward();
     void backward();
-    bool legal(TMove * move);
-    bool valid(TMove * move);
-    int gives_check(TMove * move);
+    bool legal(move_t * move);
+    bool valid(move_t * move);
+    int gives_check(move_t * move);
 
     void add_piece(int piece, int sq, bool hash);
     void remove_piece(int piece, int sq, bool hash);
@@ -158,7 +120,7 @@ struct board_t {
     bool is_eg(endgame_t eg, bool us);
     
     U64 smallest_attacker(U64 attacks, bool wtm, int &piece);
-    int see(TMove * capture);
+    int see(move_t * capture);
 
     /**
      * Counts amount of piece for a given piece type

@@ -50,7 +50,7 @@ void TSearch::poll() {
 std::string TSearch::getPVString() {
     std::string result = "";
     for (int i = 0; i < stack->pvCount; i++) {
-        result += stack->pvMoves[i].asString() + " ";
+        result += stack->pvMoves[i].to_string() + " ";
     }
     return result;
 }
@@ -62,7 +62,7 @@ int TSearch::initRootMoves() {
     setNodeType(-SCORE_INFINITE, SCORE_INFINITE);
     hashTable->repStore(this, pos->stack->hash_code, pos->stack->fifty_count);
     hashTable->ttLookup(this, 0, -SCORE_INFINITE, SCORE_INFINITE);
-    for (TMove * move = movePicker->pickFirstMove(this, ONE_PLY, -SCORE_INFINITE, SCORE_INFINITE);
+    for (move_t * move = movePicker->pickFirstMove(this, ONE_PLY, -SCORE_INFINITE, SCORE_INFINITE);
             move; move = movePicker->pickNextMove(this, ONE_PLY, -SCORE_INFINITE, SCORE_INFINITE)) {
         TRootMove * rMove = &root.Moves[root.MoveCount++];
         rMove->init(move, 1000 - root.MoveCount, pos->gives_check(move), pos->see(move));
@@ -96,16 +96,16 @@ void TRoot::sortMoves() {
 /* 
  * Copy moves 
  */
-void TRoot::matchMoves(TMoveList * list) {
+void TRoot::matchMoves(move::list_t * list) {
     if (list->first == list->last) {
         return;
     }
     for (int j = 0; j < MoveCount;) {
         bool match = false;
         TRootMove rMove = Moves[j];
-        std::cout << rMove.Move.asString() << " ";
+        std::cout << rMove.Move.to_string() << " ";
         ;
-        for (TMove * m = list->first; m != list->last; m++) {
+        for (move_t * m = list->first; m != list->last; m++) {
             if (rMove.Move.equals(m)) {
                 match = true;
                 break;
@@ -150,9 +150,9 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
     rMove->Nodes += nodes - nodesBeforeMove;
     rMove->PV = sortBaseScoreForPV;
     rMove->Value = best;
-    stack->bestMove.setMove(&rMove->Move);
+    stack->bestMove.set(&rMove->Move);
     if (!rMove->Move.equals(&stack->pvMoves[0])) {
-        stack->pvMoves[0].setMove(&rMove->Move);
+        stack->pvMoves[0].set(&rMove->Move);
         stack->pvCount = 1;
     }
     if (stopSearch) {
@@ -210,10 +210,10 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
         }
         if (score > best) {
             rMove->PV = sortBaseScoreForPV + i;
-            stack->bestMove.setMove(&rMove->Move);
+            stack->bestMove.set(&rMove->Move);
             if (score >= beta) {
                 if (!rMove->Move.equals(&stack->pvMoves[0])) {
-                    stack->pvMoves[0].setMove(&rMove->Move);
+                    stack->pvMoves[0].set(&rMove->Move);
                     stack->pvCount = 1;
                 }
                 return score;
@@ -243,7 +243,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
 /**
  * Move Extensions
  */
-int TSearch::extendMove(TMove * move, int gives_check) {
+int TSearch::extendMove(move_t * move, int gives_check) {
     if (gives_check > 0) {
         if (gives_check > 1) { //double check or exposed check
             return ONE_PLY;
@@ -346,8 +346,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     int new_depth = depth - ONE_PLY;
     bool in_check = stack->in_check;
     assert(new_depth >= 0);
-    assert((stack->phase == 16) == pos->onlyPawns());
-
+    
     //a) Fail-high pruning (return if static evaluation score is already much better than beta)
     if (!in_check
             && new_depth <= LOW_DEPTH
@@ -383,7 +382,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         } else {
             mate_threat = null_score < -SCORE_DEEPEST_MATE;
             if (mate_threat) {
-                TMove * threat = &(stack + 1)->bestMove;
+                move_t * threat = &(stack + 1)->bestMove;
                 if (!threat->capture && !threat->promotion) {
                     updateHistoryScore(threat, rdepth);
                 }
@@ -399,24 +398,24 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * If no move is returned, the position is either MATE or STALEMATE, 
      * otherwise search the first move with full alpha beta window.
      */
-    TMove * first_move = movePicker->pickFirstMove(this, depth, alpha, beta);
+    move_t * first_move = movePicker->pickFirstMove(this, depth, alpha, beta);
     if (!first_move) { //no legal move: it's checkmate or stalemate
         return in_check ? -SCORE_MATE + pos->current_ply : drawScore();
     }
     int gives_check = pos->gives_check(first_move);
     int extend_move = extendMove(first_move, gives_check);
-    stack->bestMove.setMove(first_move);
+    stack->bestMove.set(first_move);
     forward(first_move, gives_check);
     int best = -pvs(-beta, -alpha, new_depth + extend_move);
     backward(first_move);
     if (best > alpha) {
         if (best >= beta) {
-            hashTable->ttStore(this, first_move->asInt(), best, depth, alpha, beta);
+            hashTable->ttStore(this, first_move->to_int(), best, depth, alpha, beta);
             if (!first_move->capture && !first_move->promotion) {
                 if (best < SCORE_DEEPEST_MATE) {
                     updateKillers(first_move);
                 } else {
-                    stack->mateKiller.setMove(first_move);
+                    stack->mateKiller.set(first_move);
                 }
                 updateHistoryScore(first_move, depth);
             }
@@ -437,7 +436,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      */
     int searched_moves = 1;
     int max_reduce = MAX(0, new_depth - ONE_PLY);
-    while (TMove * move = movePicker->pickNextMove(this, depth, alpha, beta)) {
+    while (move_t * move = movePicker->pickNextMove(this, depth, alpha, beta)) {
         assert(stack->bestMove.equals(move) == false);
         assert(first_move->equals(move) == false);
         gives_check = pos->gives_check(move);
@@ -475,8 +474,9 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         extend_move = extendMove(move, gives_check);
         int reduce = 0;
 
-        if (!skip_prune && max_reduce > 0 && depth >= 6 && searched_moves >= 3) {
-            reduce = (searched_moves >= 6) ? depth / 3 : ONE_PLY;
+        if (!skip_prune && max_reduce > 0 && searched_moves >= 3) {
+            reduce = searched_moves < 6? ONE_PLY : depth / 3;
+            reduce = MIN(reduce, max_reduce);
         }
         assert(reduce == 0 || extend_move == 0);
 
@@ -500,20 +500,20 @@ int TSearch::pvs(int alpha, int beta, int depth) {
          * above beta (beta cutoff)
          */
         if (score > best) {
-            stack->bestMove.setMove(move);
+            stack->bestMove.set(move);
             if (score >= beta) {
                 // Beta Cutoff, hash the results, update killers and history table
-                hashTable->ttStore(this, move->asInt(), score, depth, alpha, beta);
+                hashTable->ttStore(this, move->to_int(), score, depth, alpha, beta);
                 if (!move->capture && !move->promotion) {
                     if (best < SCORE_DEEPEST_MATE) {
                         updateKillers(move);
                     } else {
-                        stack->mateKiller.setMove(move);
+                        stack->mateKiller.set(move);
                     }
                     updateHistoryScore(move, depth);
-                    for (TMove * cur = stack->moveList.first;
+                    for (move_t * cur = stack->moveList.first;
                             cur != stack->moveList.last; cur++) {
-                        if (cur->score == MOVE_EXCLUDED && cur != move) {
+                        if (cur->score == move::EXCLUDED && cur != move) {
                             updateHistoryScore(cur, -depth);
                         }
                     }
@@ -532,7 +532,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     /*
      * 15. Store the result in the hash table and return
      */
-    hashTable->ttStore(this, stack->bestMove.asInt(), best, depth, alpha, beta);
+    hashTable->ttStore(this, stack->bestMove.to_int(), best, depth, alpha, beta);
     return best;
 }
 
@@ -583,14 +583,13 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
     }
 
     int eval = evaluate(this); //always do an eval - it's incremental
-    assert((stack->phase == 16) == pos->onlyPawns());
-
+    
     //if not in check, generate captures, promotions and (upto some plies ) quiet checks
     if (eval >= beta && !stack->in_check) { //return evaluation score is it's already above beta (stand-pat idea)
         return eval;
     }
 
-    TMove * move = movePicker->pickFirstMove(this, depth, alpha, beta);
+    move_t * move = movePicker->pickFirstMove(this, depth, alpha, beta);
     if (!move) { //return evaluation score if there are no quiescence moves
         return stack->in_check ? -SCORE_MATE + pos->current_ply : eval;
     }
@@ -634,10 +633,10 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
         int score = -qsearch(-beta, -alpha, depth - ONE_PLY);
         backward(move);
         if (score >= beta) {
-            stack->bestMove.setMove(move);
+            stack->bestMove.set(move);
             return score;
         } else if (score > alpha) {
-            stack->bestMove.setMove(move);
+            stack->bestMove.set(move);
             alpha = score;
         }
     } while ((move = movePicker->pickNextMove(this, depth, alpha, beta)));
@@ -650,14 +649,14 @@ void TSearch::debug_print_search(int alpha, int beta) {
     board_t pos2;
     memcpy(&pos2, pos, sizeof (board_t));
     while (pos2.current_ply > 0) {
-        TMove * move = &getStack(pos2.current_ply - 1)->move;
+        move_t * move = &getStack(pos2.current_ply - 1)->move;
         move->piece ? pos2.backward(move) : pos2.backward();
     }
 
     std::cout << "ROOT FEN: " << pos2.to_string() << std::endl;
     std::cout << "Path ";
     for (int i = 0; i < pos->current_ply; i++) {
-        std::cout << " " << getStack(i)->move.asString();
+        std::cout << " " << getStack(i)->move.to_string();
     }
     std::cout << "\nFEN: " << pos->to_string() << std::endl;
     std::cout << "Hash: " << pos->stack->hash_code << std::endl;

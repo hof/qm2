@@ -33,8 +33,8 @@ void testPolyglotKeys() {
      * FEN=rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1
      * key=823c9b50fd114196
      */
-    TMove * move = new TMove();
-    move->setMove(WPAWN, e2, e4);
+    move_t * move = new move_t();
+    move->set(WPAWN, e2, e4);
     board->forward(move);
 
     board_t * board_test = new board_t();
@@ -52,7 +52,7 @@ void testPolyglotKeys() {
      * FEN=rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2
      * key=0756b94461c50fb0
      */
-    move->setMove(BPAWN, d7, d5);
+    move->set(BPAWN, d7, d5);
     board->forward(move);
     board_test->create("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2");
     key = book_t::polyglot_key(board);
@@ -66,7 +66,7 @@ void testPolyglotKeys() {
      * FEN=rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2
      * key=662fafb965db29d4
      */
-    move->setMove(WPAWN, e4, e5);
+    move->set(WPAWN, e4, e5);
     board->forward(move);
     board_test->create("rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2");
     key = book_t::polyglot_key(board);
@@ -81,7 +81,7 @@ void testPolyglotKeys() {
      * FEN=rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3
      * key=22a48b5a8e47ff78
      */
-    move->setMove(BPAWN, f7, f5);
+    move->set(BPAWN, f7, f5);
     board->forward(move);
     board_test->create("rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3");
     key = book_t::polyglot_key(board);
@@ -95,7 +95,7 @@ void testPolyglotKeys() {
      * FEN=rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPPKPPP/RNBQ1BNR b kq - 0 3
      * key=652a607ca3f242c1
      */
-    move->setMove(WKING, e1, e2);
+    move->set(WKING, e1, e2);
     board->forward(move);
     board_test->create("rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPPKPPP/RNBQ1BNR b kq - 0 3");
     key = book_t::polyglot_key(board);
@@ -109,7 +109,7 @@ void testPolyglotKeys() {
      * FEN=rnbq1bnr/ppp1pkpp/8/3pPp2/8/8/PPPPKPPP/RNBQ1BNR w - - 0 4
      * key=00fdd303c946bdd9
      */
-    move->setMove(BKING, e8, f7);
+    move->set(BKING, e8, f7);
     board->forward(move);
     board_test->create("rnbq1bnr/ppp1pkpp/8/3pPp2/8/8/PPPPKPPP/RNBQ1BNR w - - 0 4");
     key = book_t::polyglot_key(board);
