@@ -278,7 +278,7 @@ short TMovePicker::countEvasions(TSearch * sd, move_t * firstMove) {
 
     //get and count legal moves
     while (result < MAXLEGALCOUNT) {
-        move_t * m = pickNextMove(sd, 1, -SCORE_INFINITE, SCORE_INFINITE);
+        move_t * m = pickNextMove(sd, 1, -score::INF, score::INF);
         if (m == NULL) {
             break;
         }
@@ -287,7 +287,7 @@ short TMovePicker::countEvasions(TSearch * sd, move_t * firstMove) {
 
     //push moves back on the list
     for (int i = firstMove != NULL; i < result; i++) {
-        push(sd, pushback[i], SCORE_INFINITE - i);
+        push(sd, pushback[i], score::INF - i);
     }
 
     return result;

@@ -212,15 +212,15 @@ void * TEngine::_think(void* engineObjPtr) {
             tm->requestLessTime();
         }
         searchData->stack->eval_result = evaluate(searchData);
-        int alpha = -SCORE_INFINITE;
-        int beta = SCORE_INFINITE;
-        int prev_score = -SCORE_INFINITE;
-        const int windows[] = {20, 40, 80, 160, 320, 640, 1280, SCORE_INFINITE, SCORE_INFINITE};
+        int alpha = -score::INF;
+        int beta = score::INF;
+        int prev_score = -score::INF;
+        const int windows[] = {20, 40, 80, 160, 320, 640, 1280, score::INF, score::INF};
         const int MAX_WINDOW = 2 * VQUEEN;
         int alpha_window = 0;
         int beta_window = 0;
-        int lowest = SCORE_INFINITE;
-        int highest = -SCORE_INFINITE;
+        int lowest = score::INF;
+        int highest = -score::INF;
         int depth = ONE_PLY;
         int resultScore = 0;
         bool move_changed = false;
@@ -300,10 +300,10 @@ void * TEngine::_think(void* engineObjPtr) {
             }
 
             //stop if a mate is found and the iteration depth is deeper than the mate depth
-            if (MATE_IN_PLY(resultScore) && type == EXACT && depth / ONE_PLY > MATE_IN_PLY(resultScore)) {
+            if (score::mate_in_ply(resultScore) && type == EXACT && depth / ONE_PLY > score::mate_in_ply(resultScore)) {
                 break;
             }
-            if (MATED_IN_PLY(resultScore) && type == EXACT && depth / ONE_PLY > MATED_IN_PLY(resultScore)) {
+            if (score::mated_in_ply(resultScore) && type == EXACT && depth / ONE_PLY > score::mated_in_ply(resultScore)) {
                 break;
             }
 
@@ -341,12 +341,12 @@ void * TEngine::_think(void* engineObjPtr) {
             }
 
             if (alpha < -MAX_WINDOW) {
-                alpha = -SCORE_INFINITE;
+                alpha = -score::INF;
             } else {
                 alpha = ((alpha + 1) & ~1) - 1; //make uneven
             }
             if (beta > MAX_WINDOW) {
-                beta = SCORE_INFINITE;
+                beta = score::INF;
             } else {
                 beta = ((beta - 1) & ~1) + 1; //make uneven
             }
@@ -365,14 +365,13 @@ void * TEngine::_think(void* engineObjPtr) {
 
             int hashHits = searchData->hashProbes ? U64(searchData->hashHits * 100) / searchData->hashProbes : 0;
             int ptHits = searchData->pawnTableProbes ? U64(searchData->pawnTableHits * 100) / searchData->pawnTableProbes : 0;
-            int mtHits = searchData->materialTableProbes ? U64(searchData->materialTableHits * 100) / searchData->materialTableProbes : 0;
             int etHits = searchData->evalTableProbes ? U64(searchData->evalTableHits * 100) / searchData->evalTableProbes : 0;
 
             searchData->outputHandler->sendEvalStats(
                     searchData->evaluations,
                     searchData->pawnEvals,
                     searchData->fullEvaluations);
-            searchData->outputHandler->sendHashTableStats(hashHits, ptHits, mtHits, etHits);
+            searchData->outputHandler->sendHashTableStats(hashHits, ptHits, 0, etHits);
         }
     }
     if (searchData->outputHandler) {
@@ -408,7 +407,7 @@ void print_row(std::string cap, short score) {
     std::cout << std::endl;
 }
 
-void print_row(std::string cap, TScore & total, int phase) {
+void print_row(std::string cap, score_t & total, int phase) {
     std::cout << std::setw(14);
     std::cout << cap;
     std::cout << " | ";
@@ -422,8 +421,8 @@ void print_row(std::string cap, TScore & total, int phase) {
     std::cout << std::endl;
 }
 
-void print_row(std::string cap, TScore & w, TScore & b, int phase) {
-    TScore total;
+void print_row(std::string cap, score_t & w, score_t & b, int phase) {
+    score_t total;
     total.clear();
     total.add(w);
     total.sub(b);
@@ -452,9 +451,9 @@ void TEngine::analyse() {
     s->stack->eval_result = evaluate(s);
     int phase = s->stack->phase;
     bool wtm = s->pos->stack->wtm;
-    TScore tempo_score;
+    score_t tempo_score;
     tempo_score.set(TEMPO[wtm]);
-    TScore w, b;
+    score_t w, b;
     w.clear();
     b.clear();
 
@@ -655,8 +654,8 @@ void * TEngine::_learn(void * engineObjPtr) {
 
     int x = 0;
     double bestFactor = 1.0;
-    double upperBound = SCORE_INFINITE;
-    double lowerBound = -SCORE_INFINITE;
+    double upperBound = score::INF;
+    double lowerBound = -score::INF;
 
 
     /*
@@ -758,7 +757,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                      */
                     sd_game->stopSearch = false;
                     while (depth <= (MAXDEPTH) * ONE_PLY && !sd_game->stopSearch) {
-                        int score = sd_game->pvs_root(-SCORE_INFINITE, SCORE_INFINITE, depth);
+                        int score = sd_game->pvs_root(-score::INF, score::INF, depth);
                         if (!sd_game->stopSearch) {
                             resultScore = score;
                         }
@@ -888,10 +887,10 @@ void * TEngine::_learn(void * engineObjPtr) {
             } else {
                 std::cout << "Engine(" << strongest << ") is equal in strength to engine(" << opponent << ")" << std::endl;
             }
-            if (upperBound == SCORE_INFINITE) { //assume the bound is close
+            if (upperBound == score::INF) { //assume the bound is close
                 upperBound = bestFactor + 4 * MAX_WINDOW;
             }
-            if (lowerBound == -SCORE_INFINITE) { //assume the bound is close
+            if (lowerBound == -score::INF) { //assume the bound is close
                 lowerBound = bestFactor - 4 * MAX_WINDOW;
             }
             if (strongest < opponent) {

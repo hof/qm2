@@ -37,8 +37,8 @@ class TSearch;
 int evaluate(TSearch * searchData);
 
 void InitPST();
-extern TSCORE_PST PST;
-extern const TScore TEMPO[2];
+extern pst_t PST;
+extern const score_t TEMPO[2];
 
 enum EVALUATION_CONSTANTS {
     MAX_PIECES = 16,

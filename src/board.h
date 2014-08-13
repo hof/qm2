@@ -25,7 +25,6 @@
 #ifndef BOARD_H
 #define	BOARD_H
 
-#include "bits.h"
 #include "move.h"
 #include "bbmoves.h"
 #include "hashcodes.h"

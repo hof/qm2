@@ -30,39 +30,56 @@
 
 #include "bits.h"
 
-#define MAX_GAMEPHASES 16 //use grain size of 16 gamephases
+namespace score {
 
-enum SCORE_CONSTANTS {
-    SCORE_INFINITE = 32000,
-    SCORE_ILLEGAL = 32001,
-    SCORE_INVALID = 32002,
-    SCORE_MATE = 30000,
-    SCORE_DEEPEST_MATE = 29500,
-    SCORE_WIN = 5000,
-    SCORE_DRAW = 0
-};
+    enum constants {
+        MAX_PHASE = 16,
+        INF = 32000,
+        ILLEGAL = 32001,
+        INVALID = 32002,
+        MATE = 30000,
+        DEEPEST_MATE = 29500,
+        WIN = 5000,
+        DRAW = 0
+    };
 
-#define MATE_IN_PLY(s) ((s)>SCORE_DEEPEST_MATE? SCORE_MATE-s : 0)
-#define MATED_IN_PLY(s) ((s)<-SCORE_DEEPEST_MATE? SCORE_MATE+s : 0)
+    /**
+     * Returns distance to mate
+     * @param score 
+     * @return ply distance 
+     */
+    inline int mate_in_ply(int score) {
+        return score > DEEPEST_MATE ? MATE - score : 0;
+    }
 
-struct TScore {
+    /**
+     * Returns distance to getting mated
+     * @param score
+     * @return ply distance
+     */
+    inline int mated_in_ply(int score) {
+        return score<-DEEPEST_MATE ? MATE + score : 0;
+    }
+}
+
+struct score_t {
     int16_t mg; //middle game value
     int16_t eg; //end game value
 
-    TScore() : mg(0), eg(0) {
+    score_t() : mg(0), eg(0) {
     }
 
-    TScore(const TScore & s) {
+    score_t(const score_t & s) {
         mg = s.mg;
         eg = s.eg;
     }
 
-    TScore(short x, short y) {
+    score_t(short x, short y) {
         mg = x;
         eg = y;
     }
 
-    TScore(short x) {
+    score_t(short x) {
         mg = x;
         eg = x;
     }
@@ -75,32 +92,32 @@ struct TScore {
         print();
         std::cout << "-> " << get(phase);
     }
-    
+
     void print(std::string txt) {
         std::cout << txt << ": (" << mg << ", " << eg << ") ";
     }
 
-    inline void add(const TScore * s) {
+    inline void add(const score_t * s) {
         mg += s->mg;
         eg += s->eg;
     }
 
     inline short get(short phase) {
-        assert(phase >= 0 && phase <= MAX_GAMEPHASES);
-        return (mg * (MAX_GAMEPHASES - phase) + eg * phase) / MAX_GAMEPHASES;
+        assert(phase >= 0 && phase <= score::MAX_PHASE);
+        return (mg * (score::MAX_PHASE - phase) + eg * phase) / score::MAX_PHASE;
     }
 
-    inline void set(const TScore & s) {
+    inline void set(const score_t & s) {
         mg = s.mg;
         eg = s.eg;
     }
 
-    inline void set(const TScore * s) {
+    inline void set(const score_t * s) {
         mg = s->mg;
         eg = s->eg;
     }
 
-    inline void nset(const TScore & s) {
+    inline void nset(const score_t & s) {
         mg = -s.mg;
         eg = -s.eg;
     }
@@ -115,17 +132,17 @@ struct TScore {
         eg += y;
     }
 
-    inline void add(const TScore & s) {
+    inline void add(const score_t & s) {
         mg += s.mg;
         eg += s.eg;
     }
 
-    inline void sub(const TScore & s) {
+    inline void sub(const score_t & s) {
         mg -= s.mg;
         eg -= s.eg;
     }
 
-    inline void sub(const TScore * s) {
+    inline void sub(const score_t * s) {
         mg -= s->mg;
         eg -= s->eg;
     }
@@ -146,17 +163,16 @@ struct TScore {
     }
 
     inline void round() {
-        static const short GRAIN = 0xFFFF & ~((1 << 1) - 1);
-        mg &= GRAIN;
-        eg &= GRAIN;
+        mg = (2 * mg) / 2;
+        eg = (2 * eg) / 2;
     }
 
-    inline void max(const TScore & s) {
+    inline void max(const score_t & s) {
         mg = mg >= s.mg ? mg : s.mg;
         eg = eg >= s.eg ? eg : s.eg;
     }
 
-    inline void min(const TScore & s) {
+    inline void min(const score_t & s) {
         mg = mg <= s.mg ? mg : s.mg;
         eg = eg <= s.eg ? eg : s.eg;
     }
@@ -167,19 +183,19 @@ struct TScore {
     }
 
     inline void half() {
-        mg = mg / 2;;
-        eg  = eg /2;
+        mg = mg / 2;
+        eg = eg / 2;
     }
 
     inline bool valid() {
-        return mg != SCORE_INVALID && eg != SCORE_INVALID;
+        return mg != score::INVALID && eg != score::INVALID;
     }
 
 };
 
-typedef TScore TSCORE_PST[7][64];
+typedef score_t pst_t[7][64];
 
-#define S(x,y) TScore(x,y)
+#define S(x,y) score_t(x,y)
 
 #define MUL256(x,y) (((x)*(y))/256)
 

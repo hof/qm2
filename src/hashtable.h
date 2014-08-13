@@ -24,25 +24,97 @@
 #ifndef HASHTABLE_H
 #define	HASHTABLE_H
 
-#include "bits.h"
 #include "score.h"
 #include "move.h"
 
 class TSearch;
 
-struct TMaterialTableEntry {
-    U64 key;
-    short value;
-    uint8_t phase;
-    uint8_t flags;
+class material_table_t {
+private:
+
+    struct entry_t {
+        U64 key;
+        int16_t value;
+        uint8_t phase;
+        uint8_t flags;
+    };
+
+    int size;
+    int max_hash_key;
+    entry_t * table;
+
+    int index(U64 hash_code) {
+        return hash_code & max_hash_key;
+    }
+
+public:
+    bool enabled;
+
+    material_table_t(int size_in_MB);
+    void set_size(int size_in_MB);
+    void store(U64 key, int value, int phase, int flags);
+    bool retrieve(U64 key, int & value, int & phase, int & flags);
+
+    ~material_table_t() {
+        delete [] table;
+    }
+
+    void clear() {
+        memset(table, 0, sizeof (entry_t) * size);
+    }
+
 };
 
-struct TPawnTableEntry {
-    U64 key;
-    U64 passers; //using rank 1 and 8 for flags
-    TScore pawn_score;
-    int8_t king_attack[2];
-    uint8_t pawn_flags;
+namespace material_table {
+    const int TABLE_SIZE = 1; //MB
+    void store(U64 key, int value, int phase, int flags);
+    bool retrieve(U64 key, int & value, int & phase, int & flags);
+    void clear();
+    void set_size(int size_in_MB);
+};
+
+class pawn_table_t {
+private:
+
+    struct entry_t {
+        U64 key;
+        U64 passers;
+        score_t score;
+        int8_t king_attack[2];
+        uint8_t flags;
+    };
+
+    int size;
+    int max_hash_key;
+    entry_t * table;
+
+    int index(U64 hash_code) {
+        return hash_code & max_hash_key;
+    }
+
+public:
+    bool enabled;
+
+    pawn_table_t(int size_in_MB);
+    void set_size(int size_in_MB);
+    void store(U64 key, U64 passers, score_t score, int king_attack[2], int flags);
+    bool retrieve(U64 key, U64 & passers, score_t & score, int (& king_attack)[2], int & flags);
+
+    ~pawn_table_t() {
+        delete [] table;
+    }
+
+    void clear() {
+        memset(table, 0, sizeof (entry_t) * size);
+    }
+};
+
+namespace pawn_table {
+    const int TABLE_SIZE = 4; 
+    void store(U64 key, U64 passers, score_t score, int king_attack[2], int flags);
+    bool retrieve(U64 key, U64 & passers, score_t & score, int (& king_attack)[2], int & flags);
+    void clear();
+    void set_size(int size_in_MB);
 };
 
 enum TranspositionTableEntryType {
@@ -77,16 +149,10 @@ struct TTranspositionTableEntry {
     }
 };
 
-
-
 class THashTable {
 protected:
     int _ttMaxHashKey;
-    int _materialMaxHashKey;
-    int _pawnMaxHashKey;
     int _ttSize;
-    int _mtSize;
-    int _ptSize;
     int _repTableSize;
 public:
     THashTable(int totalSizeInMb);
@@ -94,29 +160,18 @@ public:
 
     TTranspositionTableEntry * depthPrefTable;
     TTranspositionTableEntry * alwaysReplaceTable;
-    TMaterialTableEntry * materialTable;
-    TPawnTableEntry * pawnTable;
+
+    
     U64 repTable[100];
 
     inline int getTTHashKey(U64 hashCode) {
         return hashCode & _ttMaxHashKey;
     }
 
-    inline int getMaterialHashKey(U64 hashCode) {
-        return hashCode & _materialMaxHashKey;
-    }
-
-    inline int getPawnHashKey(U64 pawnHashCode) {
-        return pawnHashCode & _pawnMaxHashKey;
-    }
-   
     static void ttLookup(TSearch * searchData, int depth, int alpha, int beta);
     static void ttStore(TSearch * searchData, int move, int score, int depth, int alpha, int beta);
-    static void mtLookup(TSearch * searchData);
-    static void mtStore(TSearch * searchData);
     static void repStore(TSearch * searchData, U64 hashCode, int fiftyCount);
-    static void ptLookup(TSearch * searchData);
-    static void ptStore(TSearch * searchData);
+    
     void clear();
 
 

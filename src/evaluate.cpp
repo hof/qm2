@@ -32,17 +32,17 @@
 //#define PRINT_PASSED_PAWN 
 
 inline short evaluateMaterial(TSearch * sd);
-inline TScore * evaluatePawnsAndKings(TSearch * sd);
-inline TScore * evaluateKnights(TSearch * sd, bool white);
-inline TScore * evaluateBishops(TSearch * sd, bool white);
-inline TScore * evaluateRooks(TSearch * sd, bool white);
-inline TScore * evaluateQueens(TSearch * sd, bool white);
-inline TScore * evaluatePassers(TSearch * sd, bool white);
+inline score_t * evaluatePawnsAndKings(TSearch * sd);
+inline score_t * evaluateKnights(TSearch * sd, bool white);
+inline score_t * evaluateBishops(TSearch * sd, bool white);
+inline score_t * evaluateRooks(TSearch * sd, bool white);
+inline score_t * evaluateQueens(TSearch * sd, bool white);
+inline score_t * evaluatePassers(TSearch * sd, bool white);
 inline int evaluatePasserVsK(TSearch * sd, bool white, int sq);
-inline TScore * evaluateKingAttack(TSearch * sd, bool white);
+inline score_t * evaluateKingAttack(TSearch * sd, bool white);
 int short evaluateEndgame(TSearch * sd, short score);
 
-TSCORE_PST PST;
+pst_t PST;
 
 /**
  * Initialize the Piece Square Tables
@@ -71,9 +71,9 @@ void InitPST() {
  *******************************************************************************/
 
 
-const TScore TEMPO[2] = {S(-10, 0), S(10, 0)};
+const score_t TEMPO[2] = {S(-10, 0), S(10, 0)};
 
-const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
+const score_t IMBALANCE[9][9] = {//index: major piece units, minor pieces
 
     //4 major pieces down (-20 pawns))
     { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-200, -100),
@@ -121,12 +121,12 @@ const TScore IMBALANCE[9][9] = {//index: major piece units, minor pieces
         /*+1*/ S(200, 100), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
 };
 
-const TScore SVPAWN = S(VPAWN, VPAWN); //middle and endgame values
-const TScore SVKNIGHT = S(VKNIGHT, VKNIGHT);
-const TScore SVBISHOP = S(VBISHOP, VBISHOP);
-const TScore SVROOK = S(VROOK, VROOK + 50);
-const TScore SVQUEEN = S(VQUEEN, VQUEEN + 100);
-const TScore SVKING = S(VKING, VKING);
+const score_t SVPAWN = S(VPAWN, VPAWN); //middle and endgame values
+const score_t SVKNIGHT = S(VKNIGHT, VKNIGHT);
+const score_t SVBISHOP = S(VBISHOP, VBISHOP);
+const score_t SVROOK = S(VROOK, VROOK + 50);
+const score_t SVQUEEN = S(VQUEEN, VQUEEN + 100);
+const score_t SVKING = S(VKING, VKING);
 
 const short VMATING_POWER = 20;
 const short VMATING_MATERIAL = 50;
@@ -154,12 +154,12 @@ const short ATTACKED_PIECE = -32; //piece attacked by a pawn
 
 uint8_t PFLAG_CLOSED_CENTER = 1;
 
-const TScore DEFENDED_PAWN[2] = {S(0, 2), S(2, 4)}; //closed, open file
-const TScore ISOLATED_PAWN[2] = {S(-10, -20), S(-20, -20)}; //closed, open file
-const TScore WEAK_PAWN[2] = {S(-12, -8), S(-16, -10)}; //closed, open file
-const TScore DOUBLED_PAWN = S(-10, -20);
+const score_t DEFENDED_PAWN[2] = {S(0, 2), S(2, 4)}; //closed, open file
+const score_t ISOLATED_PAWN[2] = {S(-10, -20), S(-20, -20)}; //closed, open file
+const score_t WEAK_PAWN[2] = {S(-12, -8), S(-16, -10)}; //closed, open file
+const score_t DOUBLED_PAWN = S(-10, -20);
 
-const TScore PASSED_PAWN[64] = {
+const score_t PASSED_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
     S(150, 170), S(140, 160), S(130, 150), S(120, 140), S(120, 140), S(130, 150), S(140, 160), S(150, 170),
     S(65, 100), S(50, 80), S(50, 80), S(40, 60), S(40, 60), S(50, 80), S(50, 80), S(65, 100),
@@ -171,7 +171,7 @@ const TScore PASSED_PAWN[64] = {
 };
 
 
-const TScore CANDIDATE[64] = {
+const score_t CANDIDATE[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
     S(35, 70), S(35, 70), S(35, 70), S(35, 70), S(35, 70), S(35, 70), S(35, 70), S(35, 70),
@@ -225,7 +225,7 @@ const int8_t SHELTER_CASTLING_KINGSIDE = -3; //attack units for having the optio
 
 const int8_t SHELTER_CASTLING_QUEENSIDE = -2; //attack units for having the right to safely castle queenside
 
-const TScore BLOCKED_CENTER_PAWN = S(-10, -4);
+const score_t BLOCKED_CENTER_PAWN = S(-10, -4);
 
 #define KA_ENCODE(p,s) (MIN(p,3)|(MIN(s,15)<<2))
 #define KA_UNITS(k) ((k) & 3)
@@ -235,22 +235,22 @@ const TScore BLOCKED_CENTER_PAWN = S(-10, -4);
  * Knight Values 
  *******************************************************************************/
 
-const TScore KNIGHT_MOBILITY[9] = {
+const score_t KNIGHT_MOBILITY[9] = {
     S(-22, -22), S(-18, -18), S(-14, -14), S(-10, -10),
     S(-8, -8), S(-6, -6), S(-4, -4), S(-2, -2), S(0, 0)
 };
 
 
 
-const TScore KNIGHT_PAWN_WIDTH[8] = {//indexed by opponent pawn width
+const score_t KNIGHT_PAWN_WIDTH[8] = {//indexed by opponent pawn width
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, -5), S(0, -10), S(0, -15), S(0, -20)
 };
 
-const TScore KNIGHT_PAWN_COUNT[9] = {//indexed by opponent pawn count
+const score_t KNIGHT_PAWN_COUNT[9] = {//indexed by opponent pawn count
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(4, 4), S(8, 8), S(12, 12)
 };
 
-const TScore KNIGHT_OUTPOST[64] = {
+const score_t KNIGHT_OUTPOST[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
     S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2),
     S(8, 2), S(8, 2), S(12, 2), S(16, 2), S(16, 2), S(12, 2), S(8, 2), S(8, 2),
@@ -267,22 +267,22 @@ const TScore KNIGHT_OUTPOST[64] = {
 
 const int8_t VBISHOPPAIR = 40;
 
-const TScore BISHOP_MOBILITY[14] = {
+const score_t BISHOP_MOBILITY[14] = {
     S(-30, -30), S(-20, -20), S(-12, -12), S(-6, -6),
     S(-2, -2), S(0, 0), S(4, 4), S(8, 8), S(12, 12),
     S(14, 14), S(16, 16), S(18, 18), S(20, 20), S(22, 22)
 };
 
-const TScore TRAPPED_BISHOP = S(-60, -80);
+const score_t TRAPPED_BISHOP = S(-60, -80);
 
-const TScore ACTIVE_BISHOP = S(6, 6);
+const score_t ACTIVE_BISHOP = S(6, 6);
 
 U64 BISHOP_PATTERNS[2] = {//black, white
     BIT(d6) | BIT(d7) | BIT(e6) | BIT(d7) | BIT(a2) | BIT(h2),
     BIT(d3) | BIT(d2) | BIT(e3) | BIT(d2) | BIT(a7) | BIT(h7),
 };
 
-const TScore BISHOP_OUTPOST[64] = {
+const score_t BISHOP_OUTPOST[64] = {
     S(-10, -10), S(4, 2), S(4, 2), S(4, 2), S(4, 2), S(4, 2), S(4, 2), S(-10, -10),
     S(4, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(4, 2),
     S(4, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(8, 2), S(4, 2),
@@ -297,13 +297,13 @@ const TScore BISHOP_OUTPOST[64] = {
  * Rook Values 
  *******************************************************************************/
 
-const TScore ROOK_7TH = S(10, 10);
-const TScore ROOK_1ST = S(10, 0); //back rank protection
-const TScore ROOK_SEMIOPEN_FILE = S(10, 10);
-const TScore ROOK_OPEN_FILE = S(17, 17);
-const TScore ROOK_GOOD_SIDE = S(8, 16); //Rule of Tarrasch 
-const TScore ROOK_WRONG_SIDE = S(-8, -16);
-const TScore ROOK_CLOSED_FILE = S(-5, -5);
+const score_t ROOK_7TH = S(10, 10);
+const score_t ROOK_1ST = S(10, 0); //back rank protection
+const score_t ROOK_SEMIOPEN_FILE = S(10, 10);
+const score_t ROOK_OPEN_FILE = S(17, 17);
+const score_t ROOK_GOOD_SIDE = S(8, 16); //Rule of Tarrasch 
+const score_t ROOK_WRONG_SIDE = S(-8, -16);
+const score_t ROOK_CLOSED_FILE = S(-5, -5);
 const short ROOK_ATTACK = 12;
 
 U64 ROOK_PATTERNS[2] = {//black, white
@@ -311,13 +311,13 @@ U64 ROOK_PATTERNS[2] = {//black, white
     BIT(h1) | BIT(g1) | BIT(h2) | BIT(g2) | BIT(a1) | BIT(b1) | BIT(a2) | BIT(b2)
 };
 
-const TScore TRAPPED_ROOK = S(-40, -80);
+const score_t TRAPPED_ROOK = S(-40, -80);
 
 /*******************************************************************************
  * Queen Values
  *******************************************************************************/
 
-const TScore QUEEN_MOBILITY[29] = {
+const score_t QUEEN_MOBILITY[29] = {
     S(-10, -20), S(-4, -10), S(-2, -4), S(0, -2), S(1, 0), S(2, 2), S(3, 4), S(4, 6),
     S(5, 8), S(6, 10), S(6, 12), S(7, 14), S(7, 16), S(8, 17), S(8, 18), S(9, 19),
     S(9, 20), S(10, 21), S(10, 21), S(11, 22), S(11, 22), S(11, 22), S(12, 23), S(12, 23),
@@ -329,17 +329,17 @@ const TScore QUEEN_MOBILITY[29] = {
  *******************************************************************************/
 
 int evaluate(TSearch * sd) {
-    if (sd->stack->eval_result != SCORE_INVALID) {
+    if (sd->stack->eval_result != score::INVALID) {
         return sd->stack->eval_result;
     }
 
     sd->stack->equal_pawns = sd->pos->current_ply > 0
             && sd->pos->stack->pawn_hash == (sd->pos->stack - 1)->pawn_hash
-            && (sd->stack - 1)->eval_result != SCORE_INVALID;
+            && (sd->stack - 1)->eval_result != score::INVALID;
 
     bool wtm = sd->pos->stack->wtm;
     int result = evaluateMaterial(sd); //sets stack->phase (required) 
-    TScore * score = &sd->stack->eval_score;
+    score_t * score = &sd->stack->eval_score;
     score->set(evaluatePawnsAndKings(sd)); //initializes mobility and attack masks (required)
     score->add(evaluateKnights(sd, WHITE));
     score->sub(evaluateKnights(sd, BLACK));
@@ -382,9 +382,10 @@ inline short evaluateMaterial(TSearch * sd) {
      *    so the material balance did not change. This is easy to verify with 
      *    the material hash
      */
-    if (sd->pos->current_ply > 0 &&
-            (sd->pos->stack - 1)->material_hash == sd->pos->stack->material_hash
-            && (sd->stack - 1)->eval_result != SCORE_INVALID) {
+    board_t * pos = sd->pos;
+    if (pos->current_ply > 0 &&
+            (pos->stack - 1)->material_hash == pos->stack->material_hash
+            && (sd->stack - 1)->eval_result != score::INVALID) {
         sd->stack->material_score = (sd->stack - 1)->material_score;
         sd->stack->phase = (sd->stack - 1)->phase;
         sd->stack->material_flags = (sd->stack - 1)->material_flags;
@@ -392,19 +393,22 @@ inline short evaluateMaterial(TSearch * sd) {
     }
 
     /*
-     * 2. Probe the hash table for the material score
+     * 2. Probe the material table
      */
-    sd->hashTable->mtLookup(sd);
-    if (sd->stack->material_score != SCORE_INVALID) {
-        return sd->stack->material_score;
+    int value, phase, flags;
+    if (material_table::retrieve(pos->stack->material_hash, value, phase, flags)) {
+        sd->stack->material_score = value;
+        sd->stack->phase = phase;
+        sd->stack->material_flags = flags;
+        return value;
     }
 
     /*
      * 3. Calculate material value and store in material hash table
      */
-    TScore result;
+    score_t result;
     result.clear();
-    board_t * pos = sd->pos;
+
     int wpawns = pos->count(WPAWN);
     int bpawns = pos->count(BPAWN);
     int wknights = pos->count(WKNIGHT);
@@ -423,7 +427,7 @@ inline short evaluateMaterial(TSearch * sd) {
     /*
      * Game phase
      */
-    int phase = MAX_GAMEPHASES /* 16 */
+    phase = score::MAX_PHASE /* 16 */
             - wminors - bminors /* max: 8 */
             - wrooks - brooks /* max:4 */
             - 2 * (wqueens + bqueens) /* max: 4 */;
@@ -474,7 +478,7 @@ inline short evaluateMaterial(TSearch * sd) {
     /*
      * Material Balance
      */
-    uint8_t flags = 0;
+    flags = 0;
     bool balance = (wminors == bminors) && (wrooks + 2 * wqueens) == (brooks + 2 * bqueens);
     if (!balance) { //material imbalance
 
@@ -509,11 +513,11 @@ inline short evaluateMaterial(TSearch * sd) {
     /*
      * Store result in material table and return
      */
-    int value = result.get(phase);
+    value = result.get(phase);
     sd->stack->material_score = value;
     sd->stack->material_flags = flags;
     sd->stack->phase = phase;
-    sd->hashTable->mtStore(sd);
+    material_table::store(pos->stack->material_hash, value, phase, flags);
     return value;
 }
 
@@ -522,7 +526,7 @@ inline short evaluateMaterial(TSearch * sd) {
  * @param sd search metadata object
  */
 
-inline TScore * evaluatePawnsAndKings(TSearch * sd) {
+inline score_t * evaluatePawnsAndKings(TSearch * sd) {
 
     /*
      * 1. Get the score from the last stack record if the latest move did not
@@ -549,30 +553,39 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     int bkpos = pos->get_sq(BKING);
     sd->stack->mob[WHITE] = ~(pos->bb[WPAWN] | pos->pawn_attacks(BLACK) | pos->bb[WKING]);
     sd->stack->mob[BLACK] = ~(pos->bb[BPAWN] | pos->pawn_attacks(WHITE) | pos->bb[BKING]);
-    sd->stack->attack[WHITE] = (pos->bb[BPAWN] | pos->bb[BKING]);
-    sd->stack->attack[BLACK] = (pos->bb[WPAWN] | pos->bb[WKING]);
+    sd->stack->attack[WHITE] = pos->bb[BPAWN] | pos->bb[BKING];
+    sd->stack->attack[BLACK] = pos->bb[WPAWN] | pos->bb[WKING];
     sd->stack->king_attack_zone[WHITE] = magic::queen_moves(bkpos, pos->pawns_kings()) & sd->stack->mob[WHITE];
     sd->stack->king_attack_zone[BLACK] = magic::queen_moves(wkpos, pos->pawns_kings()) & sd->stack->mob[BLACK];
 
     /*
      * 2. Probe the hash table for the pawn score
      */
-    sd->hashTable->ptLookup(sd);
-    if (sd->stack->pawn_score.valid()) {
+    U64 passers;
+    int king_attack[2];
+    int flags;
+    score_t pawn_score;
+    
+    if (pawn_table::retrieve(pos->stack->pawn_hash, passers, pawn_score, king_attack, flags)) {
+        sd->stack->passers = passers;
+        sd->stack->king_attack[BPAWN] = king_attack[BLACK];
+        sd->stack->king_attack[WPAWN] = king_attack[WHITE];
+        sd->stack->pawn_flags = flags;
+        sd->stack->pawn_score.set(pawn_score);
         return &sd->stack->pawn_score;
     }
+
 
     /*
      * 3. Calculate pawn evaluation score
      */
-    TScore * pawn_score = &sd->stack->pawn_score;
 
-    sd->stack->king_attack[WPAWN] = 0;
-    sd->stack->king_attack[BPAWN] = 0;
-    sd->stack->pawn_flags = 0;
-    pawn_score->clear();
+    king_attack[BLACK] = 0;
+    king_attack[WHITE] = 0;
+    flags = 0;
+    passers = 0;
+    pawn_score.clear();
 
-    U64 passers = 0;
     U64 openW = ~FILEFILL(pos->bb[WPAWN]);
     U64 openB = ~FILEFILL(pos->bb[BPAWN]);
     U64 wUp = UP1(pos->bb[WPAWN]);
@@ -605,7 +618,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
     U64 wpawns = pos->bb[WPAWN];
     while (wpawns) {
-        int sq = pop(wpawns);;
+        int sq = pop(wpawns);
         int isq = FLIP_SQUARE(sq);
         U64 sqBit = BIT(sq);
         U64 up = fill_north(sqBit);
@@ -625,28 +638,28 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         std::cout << "WP " << PRINT_SQUARE(sq) << ": ";
 #endif
 
-        pawn_score->add(PST[WPAWN][isq]);
+        pawn_score.add(PST[WPAWN][isq]);
 
 #ifdef PRINT_PAWN_EVAL        
         std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][isq]);
 #endif
 
         if (isolated) {
-            pawn_score->add(ISOLATED_PAWN[open]);
+            pawn_score.add(ISOLATED_PAWN[open]);
 
 #ifdef PRINT_PAWN_EVAL
             std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
 #endif
 
         } else if (weak) {
-            pawn_score->add(WEAK_PAWN[open]);
+            pawn_score.add(WEAK_PAWN[open]);
 
 #ifdef PRINT_PAWN_EVAL
             std::cout << "weak: " << PRINT_SCORE(WEAK_PAWN[open]);
 #endif
         }
         if (doubled) {
-            pawn_score->add(DOUBLED_PAWN);
+            pawn_score.add(DOUBLED_PAWN);
 
 #ifdef PRINT_PAWN_EVAL
             std::cout << "doubled: " << PRINT_SCORE(DOUBLED_PAWN);
@@ -654,7 +667,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
         }
         if (defended) {
-            pawn_score->add(DEFENDED_PAWN[open]);
+            pawn_score.add(DEFENDED_PAWN[open]);
 
 #ifdef PRINT_PAWN_EVAL
             std::cout << "defended: " << PRINT_SCORE(DEFENDED_PAWN[open]);
@@ -662,7 +675,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 
         }
         if (candidate) {
-            pawn_score->add(CANDIDATE[isq]);
+            pawn_score.add(CANDIDATE[isq]);
 
 #ifdef PRINT_PAWN_EVAL
             std::cout << "candidate: " << PRINT_SCORE(CANDIDATE[isq]);
@@ -681,7 +694,7 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
             blocked_center_pawns++;
         }
 
-        sd->stack->king_attack[WPAWN] += popcnt0(WPAWN_CAPTURES[sq] & kcz_b);
+        king_attack[WHITE] += popcnt0(WPAWN_CAPTURES[sq] & kcz_b);
 
 
 #ifdef PRINT_PAWN_EVAL
@@ -689,7 +702,6 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
 #endif
     }
 
-   
     U64 bpawns = pos->bb[BPAWN];
     while (bpawns) {
         int sq = pop(bpawns);
@@ -711,37 +723,37 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         std::cout << "BP " << PRINT_SQUARE(sq) << ": ";
 #endif
 
-        pawn_score->sub(PST[WPAWN][sq]);
+        pawn_score.sub(PST[WPAWN][sq]);
 
 #ifdef PRINT_PAWN_EVAL
         std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][sq]);
 #endif
 
         if (isolated) {
-            pawn_score->sub(ISOLATED_PAWN[open]);
+            pawn_score.sub(ISOLATED_PAWN[open]);
 #ifdef PRINT_PAWN_EVAL
             std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
 #endif
         } else if (weak) {
-            pawn_score->sub(WEAK_PAWN[open]);
+            pawn_score.sub(WEAK_PAWN[open]);
 #ifdef PRINT_PAWN_EVAL
             std::cout << "weak: " << PRINT_SCORE(WEAK_PAWN[open]);
 #endif
         }
         if (doubled) {
-            pawn_score->sub(DOUBLED_PAWN);
+            pawn_score.sub(DOUBLED_PAWN);
 #ifdef PRINT_PAWN_EVAL
             std::cout << "doubled: " << PRINT_SCORE(DOUBLED_PAWN);
 #endif
         }
         if (defended) {
-            pawn_score->sub(DEFENDED_PAWN[open]);
+            pawn_score.sub(DEFENDED_PAWN[open]);
 #ifdef PRINT_PAWN_EVAL
             std::cout << "defended: " << PRINT_SCORE(DEFENDED_PAWN[open]);
 #endif
         }
         if (candidate) {
-            pawn_score->sub(CANDIDATE[sq]);
+            pawn_score.sub(CANDIDATE[sq]);
 #ifdef PRINT_PAWN_EVAL
             std::cout << "candidate: " << PRINT_SCORE(CANDIDATE[sq]);
 #endif
@@ -762,12 +774,12 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
         std::cout << std::endl;
 #endif
 
-        sd->stack->king_attack[BPAWN] += popcnt0(BPAWN_CAPTURES[sq] & kcz_w);
+        king_attack[BLACK] += popcnt0(BPAWN_CAPTURES[sq] & kcz_w);
 
     }
 
     if (blocked_center_pawns > 2) {
-        sd->stack->pawn_flags |= PFLAG_CLOSED_CENTER;
+        flags |= PFLAG_CLOSED_CENTER;
     }
 
 #ifdef PRINT_PAWN_EVAL
@@ -776,15 +788,15 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     std::cout << std::endl;
 #endif
 
-    pawn_score->add(PST[WKING][ISQ(wkpos, WHITE)]);
-    pawn_score->sub(PST[WKING][ISQ(bkpos, BLACK)]);
+    pawn_score.add(PST[WKING][ISQ(wkpos, WHITE)]);
+    pawn_score.sub(PST[WKING][ISQ(bkpos, BLACK)]);
 
     /*
      * 4. Calculate King Shelter Attack units
      */
-    sd->stack->king_attack[BPAWN] += SHELTER_KPOS[FLIP_SQUARE(wkpos)];
+    king_attack[BLACK] += SHELTER_KPOS[FLIP_SQUARE(wkpos)];
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (pos): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
+    std::cout << "attack on WK (pos): " << (int) king_attack[BLACK] << std::endl;
 #endif
 
     //1. reward having the right to castle
@@ -792,14 +804,14 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
             && ((pos->matrix[h2] == WPAWN && pos->matrix[g2] == WPAWN)
             || (pos->matrix[f2] == WPAWN && pos->matrix[h2] == WPAWN && pos->matrix[g3] == WPAWN)
             || (pos->matrix[h3] == WPAWN && pos->matrix[g2] == WPAWN && pos->matrix[f2] == WPAWN))) {
-        sd->stack->king_attack[BPAWN] += SHELTER_CASTLING_KINGSIDE;
+        king_attack[BLACK] += SHELTER_CASTLING_KINGSIDE;
     } else if (pos->stack->castling_flags & CASTLE_Q
             && ((pos->matrix[a2] == WPAWN && pos->matrix[b2] == WPAWN && pos->matrix[c2] == WPAWN)
             || (pos->matrix[a2] == WPAWN && pos->matrix[b3] == WPAWN && pos->matrix[c2] == WPAWN))) {
-        sd->stack->king_attack[BPAWN] += SHELTER_CASTLING_QUEENSIDE;
+        king_attack[BLACK] += SHELTER_CASTLING_QUEENSIDE;
     }
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (castling): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
+    std::cout << "attack on WK (castling): " << (int) king_attack[BLACK] << std::endl;
 #endif
 
     //2. rewards for having shelter and storm pawns
@@ -807,36 +819,36 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
     U64 shelterPawns = kingFront & pos->bb[WPAWN];
     while (shelterPawns) {
         int sq = pop(shelterPawns);
-        sd->stack->king_attack[BPAWN] += SHELTER_PAWN[FLIP_SQUARE(sq)];
+        king_attack[BLACK] += SHELTER_PAWN[FLIP_SQUARE(sq)];
     }
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (shelter): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
+    std::cout << "attack on WK (shelter): " << (int) king_attack[BLACK] << std::endl;
 #endif
 
     U64 stormPawns = kingFront & pos->bb[BPAWN];
     while (stormPawns) {
         int sq = pop(stormPawns);
-        sd->stack->king_attack[BPAWN] += STORM_PAWN[FLIP_SQUARE(sq)];
+        king_attack[BLACK] += STORM_PAWN[FLIP_SQUARE(sq)];
     }
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (storm): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
+    std::cout << "attack on WK (storm): " << (int) king_attack[BLACK] << std::endl;
 #endif
 
     //3. penalize (half)open files on the king
     U64 open = (openW | openB) & kingFront & RANK_8;
     if (open) {
-        sd->stack->king_attack[BPAWN] += SHELTER_OPEN_FILES[popcnt0(open)];
+        king_attack[BLACK] += SHELTER_OPEN_FILES[popcnt0(open)];
         if (open & (FILE_A | FILE_H)) {
-            sd->stack->king_attack[BPAWN] += SHELTER_OPEN_EDGE_FILE;
+            king_attack[BLACK] += SHELTER_OPEN_EDGE_FILE;
         }
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (open files): " << (int) sd->stack->king_attack[BPAWN] << std::endl;
+    std::cout << "attack on WK (open files): " << (int) king_attack[BLACK] << std::endl;
 #endif
 
     //black king shelter
-    sd->stack->king_attack[WPAWN] += SHELTER_KPOS[bkpos];
+    king_attack[WHITE] += SHELTER_KPOS[bkpos];
 
 #ifdef PRINT_PAWN_EVAL
     std::cout << "attack on BK (pos): " << (int) sd->stack->king_attack[WPAWN] << std::endl;
@@ -846,56 +858,61 @@ inline TScore * evaluatePawnsAndKings(TSearch * sd) {
             && ((pos->matrix[h7] == BPAWN && pos->matrix[g7] == BPAWN)
             || (pos->matrix[f7] == BPAWN && pos->matrix[h7] == BPAWN && pos->matrix[g6] == BPAWN)
             || (pos->matrix[h6] == BPAWN && pos->matrix[g7] == BPAWN && pos->matrix[f7] == BPAWN))) {
-        sd->stack->king_attack[WPAWN] += SHELTER_CASTLING_KINGSIDE;
+        king_attack[WHITE] += SHELTER_CASTLING_KINGSIDE;
     } else if (pos->stack->castling_flags & CASTLE_q
             && ((pos->matrix[a7] == BPAWN && pos->matrix[b7] == BPAWN && pos->matrix[c7] == BPAWN)
             || (pos->matrix[a7] == BPAWN && pos->matrix[b6] == BPAWN && pos->matrix[c7] == BPAWN))) {
-        sd->stack->king_attack[WPAWN] += SHELTER_CASTLING_QUEENSIDE;
+        king_attack[WHITE] += SHELTER_CASTLING_QUEENSIDE;
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (castling): " << (int) sd->stack->king_attack[WPAWN] << std::endl;
+    std::cout << "attack on BK (castling): " << (int) king_attack[WHITE] << std::endl;
 #endif
     //2. reward having pawns in front of the king
     kingFront = (BACKWARD_RANKS[RANK(bkpos)] | KING_MOVES[bkpos]) & PAWN_SCOPE[FILE(bkpos)];
     shelterPawns = kingFront & pos->bb[BPAWN];
     while (shelterPawns) {
         int sq = pop(shelterPawns);
-        sd->stack->king_attack[WPAWN] += SHELTER_PAWN[sq];
+        king_attack[WHITE] += SHELTER_PAWN[sq];
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (shelter): " << (int) sd->stack->king_attack[WPAWN] << std::endl;
+    std::cout << "attack on BK (shelter): " << (int) king_attack[WHITE] << std::endl;
 #endif
     stormPawns = kingFront & pos->bb[WPAWN];
     while (stormPawns) {
         int sq = pop(stormPawns);
-        sd->stack->king_attack[WPAWN] += STORM_PAWN[sq];
+        king_attack[WHITE] += STORM_PAWN[sq];
     }
 
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (storm): " << (int) sd->stack->king_attack[WPAWN] << std::endl;
+    std::cout << "attack on BK (storm): " << (int) king_attack[WHITE] << std::endl;
 #endif
     //3. penalize (half)open files on the king
     open = (openW | openB) & kingFront & RANK_1;
     if (open) {
-        sd->stack->king_attack[WPAWN] += SHELTER_OPEN_FILES[popcnt0(open)];
+        king_attack[WHITE] += SHELTER_OPEN_FILES[popcnt0(open)];
         if (open & (FILE_A | FILE_H)) {
-            sd->stack->king_attack[WPAWN] += SHELTER_OPEN_EDGE_FILE;
+            king_attack[WHITE] += SHELTER_OPEN_EDGE_FILE;
         }
     }
-
 #ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (open files): " << (int) sd->stack->king_attack[WPAWN] << std::endl;
+    std::cout << "attack on BK (open files): " << (int) king_attack[WHITE] << std::endl;
 #endif
+
     sd->stack->passers = passers;
-    sd->hashTable->ptStore(sd);
+    sd->stack->king_attack[WPAWN] = king_attack[WHITE];
+    sd->stack->king_attack[BPAWN] = king_attack[BLACK];
+    sd->stack->pawn_flags = flags;
+    sd->stack->pawn_score.set(pawn_score);
+
+    pawn_table::store(pos->stack->pawn_hash, passers, pawn_score, king_attack, flags);
     return &sd->stack->pawn_score;
 }
 
-inline TScore * evaluateKnights(TSearch * sd, bool us) {
+inline score_t * evaluateKnights(TSearch * sd, bool us) {
 
-    TScore * result = &sd->stack->knight_score[us];
+    score_t * result = &sd->stack->knight_score[us];
     board_t * pos = sd->pos;
     int pc = KNIGHT[us];
     result->clear();
@@ -923,8 +940,8 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
     /*
      * 3. Calculate the score and store on the stack
      */
-    
-    
+
+
     bool them = !us;
     int pawn_width = bb_width(pos->bb[PAWN[them]]);
     int pawn_count = pos->count(PAWN[them]);
@@ -956,8 +973,8 @@ inline TScore * evaluateKnights(TSearch * sd, bool us) {
     return result;
 }
 
-inline TScore * evaluateBishops(TSearch * sd, bool us) {
-    TScore * result = &sd->stack->bishop_score[us];
+inline score_t * evaluateBishops(TSearch * sd, bool us) {
+    score_t * result = &sd->stack->bishop_score[us];
     board_t * pos = sd->pos;
     int pc = BISHOP[us];
     result->clear();
@@ -1045,11 +1062,11 @@ inline TScore * evaluateBishops(TSearch * sd, bool us) {
     return result;
 }
 
-inline TScore * evaluateRooks(TSearch * sd, bool us) {
-    
+inline score_t * evaluateRooks(TSearch * sd, bool us) {
+
     static const U64 BACKRANKS[2] = {RANK_1 | RANK_2, RANK_7 | RANK_8};
-    
-    TScore * result = &sd->stack->rook_score[us];
+
+    score_t * result = &sd->stack->rook_score[us];
     board_t * pos = sd->pos;
     int pc = ROOK[us];
     result->clear();
@@ -1155,8 +1172,8 @@ inline TScore * evaluateRooks(TSearch * sd, bool us) {
     return result;
 }
 
-inline TScore * evaluateQueens(TSearch * sd, bool us) {
-    TScore * result = &sd->stack->queen_score[us];
+inline score_t * evaluateQueens(TSearch * sd, bool us) {
+    score_t * result = &sd->stack->queen_score[us];
     board_t * pos = sd->pos;
     int pc = QUEEN[us];
     result->clear();
@@ -1209,8 +1226,8 @@ inline TScore * evaluateQueens(TSearch * sd, bool us) {
     return result;
 }
 
-inline TScore * evaluatePassers(TSearch * sd, bool us) {
-    TScore * result = &sd->stack->passer_score[us];
+inline score_t * evaluatePassers(TSearch * sd, bool us) {
+    score_t * result = &sd->stack->passer_score[us];
     result->clear();
     U64 passers = sd->stack->passers & sd->pos->bb[PAWN[us]];
     if (passers == 0) {
@@ -1227,7 +1244,7 @@ inline TScore * evaluatePassers(TSearch * sd, bool us) {
         std::cout << "\npassed pawn " << sq << ": ";
 #endif
         int ix = us == WHITE ? FLIP_SQUARE(sq) : sq;
-        TScore bonus;
+        score_t bonus;
         bonus.set(PASSED_PAWN[ix]);
         result->add(bonus);
 
@@ -1393,8 +1410,8 @@ const int16_t KING_SHELTER_MUL[8] = {
     128, 160, 192, 224, 256, 272, 288, 304
 };
 
-inline TScore * evaluateKingAttack(TSearch * sd, bool us) {
-    TScore * result = &sd->stack->king_score[us];
+inline score_t * evaluateKingAttack(TSearch * sd, bool us) {
+    score_t * result = &sd->stack->king_score[us];
     result->clear();
     board_t * pos = sd->pos;
     if (pos->bb[QUEEN[us]] == 0) {
@@ -1582,7 +1599,7 @@ inline bool blockedPawns(TSearch * s, bool us) {
 }
 
 inline short evaluateEndgame(TSearch * s, short score) {
-    static const int SCORE_SURE_WIN[2] = {-SCORE_WIN, SCORE_WIN};
+    static const int SCORE_SURE_WIN[2] = {-score::WIN, score::WIN};
     static const int BONUS[2] = {-10, 10};
 
     board_t * pos = s->pos;
@@ -1614,7 +1631,7 @@ inline short evaluateEndgame(TSearch * s, short score) {
 
         //KPK
         if (pawn_count[them] == 0 && pawn_count[us] == 1) {
-            bool won = KPK::probe(utm, pos->get_sq(KING[us]), pos->get_sq(KING[them]), 
+            bool won = KPK::probe(utm, pos->get_sq(KING[us]), pos->get_sq(KING[them]),
                     pos->get_sq(PAWN[us]), us == BLACK);
             if (won) {
                 return score + SCORE_SURE_WIN[us] / 2;
@@ -1679,15 +1696,18 @@ inline short evaluateEndgame(TSearch * s, short score) {
         }
         return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 8;
     }
-    
+
     //we have no pawns and no winning edge
     if (pawn_count[us] == 0 && !winning_edge[us]) {
         if (mating_power[us]) {
+            if (pos->bb[QUEEN[us]] && !pos->bb[QUEEN[them]]) {
+                return DRAW(score, 2) + cornerKing(s, them) / 2;
+            }
             return DRAW(score, 16) + cornerKing(s, them) / 8;
         }
         return DRAW(score, 16);
     }
-    
+
     //minor piece and pawn(s) vs lone king
     if (pawn_count[them] == 0 && !has_pieces[them] && !mating_power[us]) {
         if (s->stack->passer_score[us].eg > VROOK) {

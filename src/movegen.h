@@ -24,7 +24,6 @@
 #ifndef MOVEGEN_H
 #define	MOVEGEN_H
 
-#include "move.h"
 #include "board.h"
 
 namespace move {

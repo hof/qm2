@@ -84,7 +84,7 @@ public:
     void init(move_t * move, int initialValue, bool givesCheck, int see) {
         Nodes = 0;
         PV = 0;
-        Value = -SCORE_INFINITE;
+        Value = -score::INF;
         InitialValue = initialValue;
         Move.set(move);
         GivesCheck = givesCheck;
@@ -150,17 +150,17 @@ struct TSearchStack {
     bool equal_pawns; //false if a pawn or king has moved
     short eval_result;
     short eg_score;
-    TScore eval_score;
-    short material_score;
+    score_t eval_score;
+    int16_t material_score;
     uint8_t material_flags;
     uint8_t pawn_flags;
-    TScore pawn_score;
-    TScore knight_score[2];
-    TScore bishop_score[2];
-    TScore rook_score[2];
-    TScore queen_score[2];
-    TScore king_score[2];
-    TScore passer_score[2];
+    score_t pawn_score;
+    score_t knight_score[2];
+    score_t bishop_score[2];
+    score_t rook_score[2];
+    score_t queen_score[2];
+    score_t king_score[2];
+    score_t passer_score[2];
     
     U64 passers;
     U64 mob[2];
@@ -186,8 +186,6 @@ public:
     U64 evaluations;
     U64 fullEvaluations;
     U64 pawnEvals;
-    U64 materialTableHits;
-    U64 materialTableProbes;
     U64 pawnTableHits;
     U64 pawnTableProbes;
     U64 evalTableHits;
@@ -201,7 +199,7 @@ public:
     double learnFactor;
     TRoot root;
     
-    TScore drawContempt;
+    score_t drawContempt;
 
     TMovePicker * movePicker;
     THashTable * hashTable;
@@ -232,8 +230,6 @@ public:
         fullEvaluations = 0;
         drawContempt = -50;
         pawnEvals = 0;
-        materialTableHits = 0;
-        materialTableProbes = 0;
         pawnTableHits = 0;
         pawnTableProbes = 0;
         evalTableHits = 0;
@@ -247,7 +243,7 @@ public:
         selDepth = 0;
         learnFactor = 1.0;
         rootStack = stack = &_stack[0];
-        stack->eval_result = SCORE_INVALID;
+        stack->eval_result = score::INVALID;
         stack->nodeType = PVNODE;
         assert(hashTable);
     }
@@ -286,7 +282,7 @@ public:
         stack->move.set(0);
         stack++;
         stack->in_check = false;
-        stack->eval_result = SCORE_INVALID;
+        stack->eval_result = score::INVALID;
         pos->forward();
         assert(stack == &_stack[pos->current_ply]);
     }
@@ -302,7 +298,7 @@ public:
         stack->move.set(move);
         stack++;
         stack->in_check = givesCheck;
-        stack->eval_result = SCORE_INVALID;
+        stack->eval_result = score::INVALID;
         pos->forward(move);
         assert(stack == &_stack[pos->current_ply]);
     }
@@ -347,7 +343,7 @@ public:
     inline void resetStack() {
         pos->current_ply = 0;
         stack = rootStack;
-        stack->eval_result = SCORE_INVALID;
+        stack->eval_result = score::INVALID;
         pos->_stack[0].copy(this->pos->stack);
         pos->stack = &this->pos->_stack[0];
         nodes = 0;
@@ -362,8 +358,8 @@ public:
     int initRootMoves();
 
     inline int MateScore(int score) {
-        return (score >= -SCORE_MATE && score <= -SCORE_MATE + MAX_PLY)
-                || (score >= SCORE_MATE - MAX_PLY && score <= SCORE_MATE);
+        return (score >= -score::MATE && score <= -score::MATE + MAX_PLY)
+                || (score >= score::MATE - MAX_PLY && score <= score::MATE);
     }
     int pvs_root(int alpha, int beta, int depth);
     int pvs(int alpha, int beta, int depth);

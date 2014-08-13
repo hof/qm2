@@ -24,18 +24,19 @@
 
 #include "bits.h"
 
-#define HASH_PIECE(key,pc,sq) ((key) ^= HashNumbers[pc][sq])
-#define HASH_ADD_PIECE(key,pc,sq) ((key) ^= HashNumbers[pc][sq])
-#define HASH_REMOVE_PIECE(key,pc,sq) ((key) ^= HashNumbers[pc][sq])
-#define HASH_MOVE_PIECE(key,pc,ssq,tsq) ((key) ^= HashNumbers[pc][ssq] ^ HashNumbers[pc][tsq])
-#define HASH_EP(key,sq) ((key) ^= HashNumbers[0][sq]) 
+namespace hash {
+    extern const U64 codes[14][64];
+}
+
+#define HASH_ADD_PIECE(key,pc,sq) ((key) ^= hash::codes[pc][sq])
+#define HASH_REMOVE_PIECE(key,pc,sq) ((key) ^= hash::codes[pc][sq])
+#define HASH_MOVE_PIECE(key,pc,ssq,tsq) ((key) ^= hash::codes[pc][ssq] ^ hash::codes[pc][tsq])
+#define HASH_EP(key,sq) ((key) ^= hash::codes[0][sq]) 
 #define HASH_CASTLE_K(key) ((key) ^= C64(0x47bc71a493da706e)) 
 #define HASH_CASTLE_Q(key) ((key) ^= C64(0x6338be439fd357dc))
 #define HASH_CASTLE_k(key) ((key) ^= C64(0x6fed622e98f98b7e))
 #define HASH_CASTLE_q(key) ((key) ^= C64(0xce107ca2947d2d58))
 #define HASH_STM(key) ((key) ^= C64(0xe7d626abae228509))
 #define HASH_EXCLUDED_MOVE(key) ((key) ^= C64(0xb3a62fabadd68509))
-
-extern const U64 HashNumbers[14][64];
 
 #endif 

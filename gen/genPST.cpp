@@ -25,13 +25,11 @@
 #include <iostream>
 #include <cmath>
 #include <iomanip>  //setw
-#include "bbmoves.h"
 #include "board.h"
-#include "movegen.h"
 
-TSCORE_PST PST;
+pst_t PST;
 
-void savePST(TScore scores[], int wpiece) {
+void savePST(score_t scores[], int wpiece) {
     /*  tuned multipliers:        X    P    N    B    R    Q    K  */
     const double PCMUL_MG[7] = {0.0, 0.6, 1.0, 0.6, 1.0, 1.0, 1.0};
     const double PCMUL_EG[7] = {0.0, 1.0, 1.0, 0.6, 1.0, 1.0, 1.0};
@@ -64,8 +62,8 @@ void savePST(TScore scores[], int wpiece) {
 }
 
 void initPST() {
-    TScore scores[64];
-    const TScore mobility_weight[64] = {
+    score_t scores[64];
+    const score_t mobility_weight[64] = {
         S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2),
         S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2),
         S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2), S(2, 2),

@@ -22,34 +22,145 @@
 #include "hashtable.h"
 #include "search.h"
 
+material_table_t::material_table_t(int size_in_MB) {
+    table = NULL;
+    enabled = true;
+    set_size(size_in_MB);
+}
+
+void material_table_t::set_size(int size_in_MB) {
+    if (table) {
+        delete[] table;
+    }
+    int entry_size = sizeof (entry_t);
+    int max_entries = (size_in_MB * 1024 * 1024) / entry_size;
+    size = 1 << (max_entries ? bsr(max_entries) : 0);
+    table = new entry_t[size];
+    max_hash_key = size - 1;
+}
+
+bool material_table_t::retrieve(U64 key, int & value, int & phase, int & flags) {
+    entry_t & entry = table[index(key)];
+    if ((entry.key ^ entry.value) != key || !enabled) {
+        return false;
+    }
+    value = entry.value;
+    phase = entry.phase;
+    flags = entry.flags;
+    return true;
+}
+
+void material_table_t::store(U64 key, int value, int phase, int flags) {
+    entry_t & entry = table[index(key)];
+    entry.value = value;
+    entry.phase = phase;
+    entry.flags = flags;
+    entry.key = key ^ value;
+}
+
+namespace material_table {
+
+    material_table_t _global_table(TABLE_SIZE);
+
+    void store(U64 key, int value, int phase, int flags) {
+        _global_table.store(key, value, phase, flags);
+    }
+
+    bool retrieve(U64 key, int & value, int & phase, int & flags) {
+        return _global_table.retrieve(key, value, phase, flags);
+    }
+
+    void clear() {
+        _global_table.clear();
+    }
+
+    void set_size(int size_in_mb) {
+        _global_table.set_size(size_in_mb);
+    }
+
+};
+
+pawn_table_t::pawn_table_t(int size_in_MB) {
+    table = NULL;
+    enabled = true;
+    set_size(size_in_MB);
+}
+
+void pawn_table_t::set_size(int size_in_MB) {
+    if (table) {
+        delete[] table;
+    }
+    int entry_size = sizeof (entry_t);
+    int max_entries = (size_in_MB * 1024 * 1024) / entry_size;
+    size = 1 << (max_entries ? bsr(max_entries) : 0);
+    table = new entry_t[size];
+    max_hash_key = size - 1;
+}
+
+void pawn_table_t::store(U64 key, U64 passers, score_t score, int king_attack[2], int flags) {
+    entry_t & entry = table[index(key)];
+    entry.key = key ^ score.eg;
+    entry.passers = passers;
+    entry.score.set(score);
+    entry.king_attack[BLACK] = king_attack[BLACK];
+    entry.king_attack[WHITE] = king_attack[WHITE];
+    entry.flags = flags;
+}
+
+bool pawn_table_t::retrieve(U64 key, U64 & passers, score_t & score, int (& king_attack)[2], int & flags) {
+    entry_t & entry = table[index(key)];
+    if ((entry.key ^ entry.score.eg) != key || !enabled) {
+        return false;
+    }
+    passers = entry.passers;
+    score.set(entry.score);
+    king_attack[BLACK] = entry.king_attack[BLACK];
+    king_attack[WHITE] = entry.king_attack[WHITE];
+    flags = entry.flags;
+    return true;
+}
+
+namespace pawn_table {
+
+    pawn_table_t _global_table(TABLE_SIZE);
+
+    void store(U64 key, U64 passers, score_t score, int king_attack[2], int flags) {
+        _global_table.store(key, passers, score, king_attack, flags);
+    }
+
+    bool retrieve(U64 key, U64 & passers, score_t & score, int (& king_attack)[2], int & flags) {
+        return _global_table.retrieve(key, passers, score, king_attack, flags);
+    }
+
+    void clear() {
+        _global_table.clear();
+    }
+
+    void set_size(int size_in_mb) {
+        _global_table.set_size(size_in_mb);
+    }
+
+};
+
 THashTable::THashTable(int totalSizeInMb) {
     const int ttEntrySize = sizeof (TTranspositionTableEntry);
     const int ttTableCount = 2;
-    const int sizeOfMaterialTable = 1;
+
     const int sizeOfPawnTable = MIN(256, totalSizeInMb >> 2);
-    const int sizeOfTranspositionTable = MAX(1, totalSizeInMb - sizeOfMaterialTable - sizeOfPawnTable);
+    const int sizeOfTranspositionTable = MAX(1, totalSizeInMb - sizeOfPawnTable);
     const int maxEntriesPerTranspositionTable = (sizeOfTranspositionTable * 1024 * 1024) / (ttTableCount * ttEntrySize);
     const int ttTableSize = maxEntriesPerTranspositionTable ? bsr(maxEntriesPerTranspositionTable) : 0;
-    const int materialTableEntrySize = sizeof (TMaterialTableEntry);
-    const int maxEntriesMaterialTable = (sizeOfMaterialTable * 1024 * 1024) / materialTableEntrySize;
-    const int materialTableSize = maxEntriesMaterialTable ? bsr(maxEntriesMaterialTable) : 0;
-    const int pawnTableEntrySize = sizeof (TPawnTableEntry);
-    const int maxEntriesPawnTable = (sizeOfPawnTable * 1024 * 1024) / pawnTableEntrySize;
-    const int pawnTableSize = maxEntriesPawnTable ? bsr(maxEntriesPawnTable) : 0;
+
 
     _ttSize = 1 << ttTableSize;
     alwaysReplaceTable = new TTranspositionTableEntry[_ttSize];
     depthPrefTable = new TTranspositionTableEntry[_ttSize];
 
-    _mtSize = 1 << materialTableSize;
-    materialTable = new TMaterialTableEntry[_mtSize];
-
-    _ptSize = 1 << pawnTableSize;
-    pawnTable = new TPawnTableEntry[_ptSize];
+    
 
     _ttMaxHashKey = _ttSize - 1;
-    _materialMaxHashKey = _mtSize - 1;
-    _pawnMaxHashKey = _ptSize - 1;
+
+   
 
     _repTableSize = 100;
 
@@ -59,7 +170,6 @@ THashTable::THashTable(int totalSizeInMb) {
 THashTable::~THashTable() {
     delete[] alwaysReplaceTable;
     delete[] depthPrefTable;
-    delete[] pawnTable;
 }
 
 void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) {
@@ -95,13 +205,13 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
                     ((nodeType == TT_EXACT)
                     || (nodeType == TT_UPPERBOUND && hashedScore <= alpha)
                     || (nodeType == TT_LOWERBOUND && hashedScore >= beta))) {
-                if (hashedScore > SCORE_MATE - MAX_PLY) {
+                if (hashedScore > score::MATE - MAX_PLY) {
                     hashedScore -= pos->current_ply;
-                } else if (hashedScore < -SCORE_MATE + MAX_PLY) {
+                } else if (hashedScore < -score::MATE + MAX_PLY) {
                     hashedScore += pos->current_ply;
                 }
                 searchData->stack->ttScore = hashedScore;
-                assert(hashedScore > -SCORE_MATE && hashedScore < SCORE_MATE);
+                assert(hashedScore > -score::MATE && hashedScore < score::MATE);
             }
         }
     }
@@ -132,15 +242,15 @@ void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) 
                     ((nodeType == TT_EXACT)
                     || (nodeType == TT_UPPERBOUND && hashedScore <= alpha)
                     || (nodeType == TT_LOWERBOUND && hashedScore >= beta))) {
-                if (hashedScore > SCORE_MATE - MAX_PLY) {
+                if (hashedScore > score::MATE - MAX_PLY) {
                     hashedScore -= pos->current_ply;
-                } else if (hashedScore < -SCORE_MATE + MAX_PLY) {
+                } else if (hashedScore < -score::MATE + MAX_PLY) {
                     hashedScore += pos->current_ply;
                 }
                 if (searchData->stack->ttScore == TT_EMPTY || hashedDepth2 > hashedDepth1) {
                     searchData->stack->ttScore = hashedScore;
                 }
-                assert(searchData->stack->ttScore > -SCORE_MATE && searchData->stack->ttScore < SCORE_MATE);
+                assert(searchData->stack->ttScore > -score::MATE && searchData->stack->ttScore < score::MATE);
             }
         }
     }
@@ -154,7 +264,7 @@ void THashTable::repStore(TSearch * searchData, U64 hash_code, int fiftyCount) {
 }
 
 void THashTable::ttStore(TSearch * searchData, int move, int score, int depth, int alpha, int beta) {
-    if (searchData->stopSearch || score == SCORE_INVALID || score == -SCORE_INVALID || depth >= MAX_PLY) {
+    if (searchData->stopSearch || score == score::INVALID || score == -score::INVALID || depth >= MAX_PLY) {
         return;
     }
 
@@ -172,12 +282,12 @@ void THashTable::ttStore(TSearch * searchData, int move, int score, int depth, i
     TTranspositionTableEntry * ttEntry = &hashTable->depthPrefTable[hashKey];
     U64 hashValue = ttEntry->value;
 
-    if (score > SCORE_MATE - MAX_PLY) {
+    if (score > score::MATE - MAX_PLY) {
         score += searchData->pos->current_ply;
-    } else if (score < -SCORE_MATE + MAX_PLY) {
+    } else if (score < -score::MATE + MAX_PLY) {
         score -= searchData->pos->current_ply;
     }
-    assert(score < SCORE_MATE && score > -SCORE_MATE);
+    assert(score < score::MATE && score > -score::MATE);
 
 
     U64 newHashValue = ttEntry->encode(root_ply, depth, score, flags, move);
@@ -197,66 +307,9 @@ void THashTable::ttStore(TSearch * searchData, int move, int score, int depth, i
     ttEntry->value = newHashValue;
 }
 
-void THashTable::mtLookup(TSearch * searchData) {
-    searchData->materialTableProbes++;
-    THashTable * hashTable = searchData->hashTable;
-    TMaterialTableEntry * materialTable = hashTable->materialTable;
-    U64 material_hash = searchData->pos->stack->material_hash;
-    TMaterialTableEntry entry = materialTable[hashTable->getMaterialHashKey(material_hash)];
-    if ((entry.key ^ entry.value) == material_hash) {
-        searchData->materialTableHits++;
-        searchData->stack->material_score = entry.value;
-        searchData->stack->phase = entry.phase;
-        searchData->stack->material_flags = entry.flags;
-    } else {
-        searchData->stack->material_score = SCORE_INVALID;
-    }
-}
-
-void THashTable::mtStore(TSearch * searchData) {
-    THashTable * hashTable = searchData->hashTable;
-    TMaterialTableEntry * materialTable = hashTable->materialTable;
-    U64 material_hash = searchData->pos->stack->material_hash;
-    TMaterialTableEntry * entry = &materialTable[hashTable->getMaterialHashKey(material_hash)];
-    entry->value = searchData->stack->material_score;
-    entry->phase = searchData->stack->phase;
-    entry->flags = searchData->stack->material_flags;
-    entry->key = material_hash^entry->value;
-}
-
-void THashTable::ptLookup(TSearch * sd) {
-    sd->pawnTableProbes++;
-    THashTable * hashTable = sd->hashTable;
-    U64 pawn_hash = sd->pos->stack->pawn_hash;
-    TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawn_hash)];
-    if ((entry->key ^ entry->pawn_score.mg) == pawn_hash) {
-        sd->stack->pawn_score.set(entry->pawn_score);
-        sd->stack->king_attack[WPAWN] = entry->king_attack[WHITE];
-        sd->stack->king_attack[BPAWN] = entry->king_attack[BLACK];
-        sd->stack->passers = entry->passers;
-        sd->stack->pawn_flags = entry->pawn_flags;
-        sd->pawnTableHits++;
-    } else {
-        sd->stack->pawn_score.set(SCORE_INVALID);
-    }
-}
-
-void THashTable::ptStore(TSearch * sd) {
-    THashTable * hashTable = sd->hashTable;
-    U64 pawn_hash = sd->pos->stack->pawn_hash;
-    TPawnTableEntry * entry = &hashTable->pawnTable[hashTable->getPawnHashKey(pawn_hash)];
-    entry->pawn_score.set(sd->stack->pawn_score);
-    entry->king_attack[WHITE] = sd->stack->king_attack[WPAWN];
-    entry->king_attack[BLACK] = sd->stack->king_attack[BPAWN];
-    entry->passers = sd->stack->passers;
-    entry->pawn_flags = sd->stack->pawn_flags;
-    entry->key = (pawn_hash ^ sd->stack->pawn_score.mg);
-}
 
 void THashTable::clear() {
     memset(depthPrefTable, 0, sizeof (TTranspositionTableEntry) * _ttSize);
     memset(alwaysReplaceTable, 0, sizeof (TTranspositionTableEntry) * _ttSize);
-    memset(materialTable, 0, sizeof (TMaterialTableEntry) * _mtSize);
-    memset(pawnTable, 0, sizeof (TPawnTableEntry) * _ptSize);
     memset(repTable, 0, sizeof (U64) * _repTableSize);
 }

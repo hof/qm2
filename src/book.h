@@ -33,8 +33,6 @@
 #include <fstream>
 #include <string>
 
-#include "move.h"
-#include "board.h"
 #include "movegen.h"
 
 struct book_entry_t {

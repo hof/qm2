@@ -30,14 +30,14 @@ void TOutputHandler::sendPV(int cpScore, int depth, int selDepth, U64 nodes, int
     outputString += ntos(depth);
     outputString += " seldepth ";
     outputString += ntos(MAX(depth, selDepth));
-    if (ABS(cpScore) < SCORE_MATE-MAX_PLY) {
+    if (ABS(cpScore) < score::MATE-MAX_PLY) {
         outputString += " score cp "; //info score cp 14  depth 2 nodes 255 time 15 pv f1c4 f8c5 
         outputString += ntos(cpScore);
         if (type) {
             outputString += type == 1 ? " upperbound" : " lowerbound";
         }
     } else {
-        int mateInMoves = (SCORE_MATE - ABS(cpScore)+1)/2;
+        int mateInMoves = (score::MATE - ABS(cpScore)+1)/2;
         outputString += " score mate "; //info mate 12 (in moves, not plies!)
         outputString += ntos(cpScore>0? mateInMoves : -mateInMoves);
     }

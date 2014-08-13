@@ -59,11 +59,11 @@ int TSearch::initRootMoves() {
     int result = 0;
     root.MoveCount = 0;
     root.FiftyCount = pos->stack->fifty_count;
-    setNodeType(-SCORE_INFINITE, SCORE_INFINITE);
+    setNodeType(-score::INF, score::INF);
     hashTable->repStore(this, pos->stack->hash_code, pos->stack->fifty_count);
-    hashTable->ttLookup(this, 0, -SCORE_INFINITE, SCORE_INFINITE);
-    for (move_t * move = movePicker->pickFirstMove(this, ONE_PLY, -SCORE_INFINITE, SCORE_INFINITE);
-            move; move = movePicker->pickNextMove(this, ONE_PLY, -SCORE_INFINITE, SCORE_INFINITE)) {
+    hashTable->ttLookup(this, 0, -score::INF, score::INF);
+    for (move_t * move = movePicker->pickFirstMove(this, ONE_PLY, -score::INF, score::INF);
+            move; move = movePicker->pickNextMove(this, ONE_PLY, -score::INF, score::INF)) {
         TRootMove * rMove = &root.Moves[root.MoveCount++];
         rMove->init(move, 1000 - root.MoveCount, pos->gives_check(move), pos->see(move));
         if (rMove->GivesCheck) {
@@ -73,7 +73,7 @@ int TSearch::initRootMoves() {
     }
     root.InCheck = pos->in_check();
     stack->hash_code = pos->stack->hash_code;
-    stack->eval_result = SCORE_INVALID;
+    stack->eval_result = score::INVALID;
     result = root.MoveCount;
     return result;
 }
@@ -297,16 +297,16 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * if we already know we will win/loose by mate in n, 
      * it is not needed to search deeper than n
      */
-    if ((SCORE_MATE - pos->current_ply) < beta) {
-        beta = SCORE_MATE - pos->current_ply;
-        if (alpha >= (SCORE_MATE - pos->current_ply)) {
-            return SCORE_MATE - pos->current_ply;
+    if ((score::MATE - pos->current_ply) < beta) {
+        beta = score::MATE - pos->current_ply;
+        if (alpha >= (score::MATE - pos->current_ply)) {
+            return score::MATE - pos->current_ply;
         }
     }
-    if ((-SCORE_MATE + pos->current_ply) > alpha) {
-        alpha = -SCORE_MATE + pos->current_ply;
-        if (beta <= (-SCORE_MATE + pos->current_ply)) {
-            return -SCORE_MATE + pos->current_ply;
+    if ((-score::MATE + pos->current_ply) > alpha) {
+        alpha = -score::MATE + pos->current_ply;
+        if (beta <= (-score::MATE + pos->current_ply)) {
+            return -score::MATE + pos->current_ply;
         }
     }
 
@@ -317,7 +317,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         return drawScore();
     }
     if (pos->stack->fifty_count > 3) {
-        if (pos->stack->fifty_count >= 100) {
+        if (pos->stack->fifty_count >= (100 + stack->in_check)) {
             return drawScore(); //draw by 50 reversible moves
         }
         int stopPly = pos->current_ply - pos->stack->fifty_count;
@@ -351,7 +351,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     if (!in_check
             && new_depth <= LOW_DEPTH
             && (eval - FUTILITY_MARGIN * depth) >= beta
-            && beta > -SCORE_DEEPEST_MATE
+            && beta > -score::DEEPEST_MATE
             && pos->has_pieces(pos->stack->wtm)) {
         return eval - FUTILITY_MARGIN * depth;
     }
@@ -367,7 +367,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             && !in_check
             && new_depth > 0
             && eval >= beta
-            && beta > -SCORE_DEEPEST_MATE
+            && beta > -score::DEEPEST_MATE
             && pos->has_pieces(pos->stack->wtm)) {
         int rdepth = new_depth - (3 * ONE_PLY);
         rdepth = MAX(rdepth, 0);
@@ -375,12 +375,12 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         int null_score = -pvs(-beta, -alpha, rdepth);
         backward();
         if (null_score >= beta) {
-            if (null_score > SCORE_DEEPEST_MATE) {
+            if (null_score > score::DEEPEST_MATE) {
                 return beta; // not return unproven mate scores
             }
             return null_score;
         } else {
-            mate_threat = null_score < -SCORE_DEEPEST_MATE;
+            mate_threat = null_score < -score::DEEPEST_MATE;
             if (mate_threat) {
                 move_t * threat = &(stack + 1)->bestMove;
                 if (!threat->capture && !threat->promotion) {
@@ -400,7 +400,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      */
     move_t * first_move = movePicker->pickFirstMove(this, depth, alpha, beta);
     if (!first_move) { //no legal move: it's checkmate or stalemate
-        return in_check ? -SCORE_MATE + pos->current_ply : drawScore();
+        return in_check ? -score::MATE + pos->current_ply : drawScore();
     }
     int gives_check = pos->gives_check(first_move);
     int extend_move = extendMove(first_move, gives_check);
@@ -412,7 +412,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         if (best >= beta) {
             hashTable->ttStore(this, first_move->to_int(), best, depth, alpha, beta);
             if (!first_move->capture && !first_move->promotion) {
-                if (best < SCORE_DEEPEST_MATE) {
+                if (best < score::DEEPEST_MATE) {
                     updateKillers(first_move);
                 } else {
                     stack->mateKiller.set(first_move);
@@ -442,7 +442,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         gives_check = pos->gives_check(move);
         bool skip_prune = stack->moveList.stage < QUIET_MOVES
                 || in_check || gives_check > 0 || move->capture || move->promotion
-                || move->castle || passedPawn(move) || beta < -SCORE_DEEPEST_MATE;
+                || move->castle || passedPawn(move) || beta < -score::DEEPEST_MATE;
 
         /*
          * 11. forward futility pruning at low depths
@@ -505,7 +505,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 // Beta Cutoff, hash the results, update killers and history table
                 hashTable->ttStore(this, move->to_int(), score, depth, alpha, beta);
                 if (!move->capture && !move->promotion) {
-                    if (best < SCORE_DEEPEST_MATE) {
+                    if (best < score::DEEPEST_MATE) {
                         updateKillers(move);
                     } else {
                         stack->mateKiller.set(move);
@@ -552,7 +552,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
 
     //return obvious draws
     if (pos->stack->fifty_count > 3) { //draw by repetition or fifty quiet moves
-        if (pos->stack->fifty_count >= 100) {
+        if (pos->stack->fifty_count >= (100 + stack->in_check)) {
             return drawScore();
         }
         int stopPly = pos->current_ply - pos->stack->fifty_count;
@@ -569,16 +569,16 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
     }
 
     //mate distance pruning
-    if ((SCORE_MATE - pos->current_ply) < beta) {
-        beta = SCORE_MATE - pos->current_ply;
-        if (alpha >= (SCORE_MATE - pos->current_ply)) {
-            return SCORE_MATE - pos->current_ply;
+    if ((score::MATE - pos->current_ply) < beta) {
+        beta = score::MATE - pos->current_ply;
+        if (alpha >= (score::MATE - pos->current_ply)) {
+            return score::MATE - pos->current_ply;
         }
     }
-    if ((-SCORE_MATE + pos->current_ply) > alpha) {
-        alpha = -SCORE_MATE + pos->current_ply;
-        if (beta <= (-SCORE_MATE + pos->current_ply)) {
-            return -SCORE_MATE + pos->current_ply;
+    if ((-score::MATE + pos->current_ply) > alpha) {
+        alpha = -score::MATE + pos->current_ply;
+        if (beta <= (-score::MATE + pos->current_ply)) {
+            return -score::MATE + pos->current_ply;
         }
     }
 
@@ -591,7 +591,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
 
     move_t * move = movePicker->pickFirstMove(this, depth, alpha, beta);
     if (!move) { //return evaluation score if there are no quiescence moves
-        return stack->in_check ? -SCORE_MATE + pos->current_ply : eval;
+        return stack->in_check ? -score::MATE + pos->current_ply : eval;
     }
     if (!stack->in_check) {
         alpha = MAX(eval, alpha);
