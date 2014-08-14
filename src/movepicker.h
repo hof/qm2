@@ -37,9 +37,6 @@
 class TSearch;
 
 enum MovePickingStage {
-    HASH1,
-    HASH2,
-    IID,
     MATEKILLER,
     CAPTURES,
     PROMOTIONS,
@@ -47,14 +44,7 @@ enum MovePickingStage {
     KILLER2,
     MINORPROMOTIONS,
     CASTLING,
-    THREATMOVE,
     QUIET_MOVES,
-    Q_EVASIONS,
-    Q_HASH1,
-    Q_HASH2,
-    Q_CAPTURES,
-    Q_PROMOTIONS,
-    Q_QUIET_CHECKS,
     STOP
 };
 

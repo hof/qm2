@@ -25,10 +25,14 @@
 material_table_t::material_table_t(int size_in_MB) {
     table = NULL;
     enabled = true;
+    size_in_mb = -1;
     set_size(size_in_MB);
 }
 
 void material_table_t::set_size(int size_in_MB) {
+    if (size_in_mb == size_in_MB) {
+        return;
+    }
     if (table) {
         delete[] table;
     }
@@ -37,6 +41,7 @@ void material_table_t::set_size(int size_in_MB) {
     size = 1 << (max_entries ? bsr(max_entries) : 0);
     table = new entry_t[size];
     max_hash_key = size - 1;
+    size_in_mb = size_in_MB;
 }
 
 bool material_table_t::retrieve(U64 key, int & value, int & phase, int & flags) {
@@ -78,15 +83,27 @@ namespace material_table {
         _global_table.set_size(size_in_mb);
     }
 
+    void enable() {
+        _global_table.enabled = true;
+    }
+
+    void disable() {
+        _global_table.enabled = false;
+    }
+
 };
 
 pawn_table_t::pawn_table_t(int size_in_MB) {
     table = NULL;
     enabled = true;
+    size_in_mb = -1;
     set_size(size_in_MB);
 }
 
 void pawn_table_t::set_size(int size_in_MB) {
+    if (size_in_mb == size_in_MB) {
+        return;
+    }
     if (table) {
         delete[] table;
     }
@@ -95,6 +112,7 @@ void pawn_table_t::set_size(int size_in_MB) {
     size = 1 << (max_entries ? bsr(max_entries) : 0);
     table = new entry_t[size];
     max_hash_key = size - 1;
+    size_in_mb = size_in_MB;
 }
 
 void pawn_table_t::store(U64 key, U64 passers, score_t score, int king_attack[2], int flags) {
@@ -140,176 +158,160 @@ namespace pawn_table {
         _global_table.set_size(size_in_mb);
     }
 
+    void enable() {
+        _global_table.enabled = true;
+    }
+
+    void disable() {
+        _global_table.enabled = false;
+    }
 };
 
-THashTable::THashTable(int totalSizeInMb) {
-    const int ttEntrySize = sizeof (TTranspositionTableEntry);
-    const int ttTableCount = 2;
+namespace rep_table {
 
-    const int sizeOfPawnTable = MIN(256, totalSizeInMb >> 2);
-    const int sizeOfTranspositionTable = MAX(1, totalSizeInMb - sizeOfPawnTable);
-    const int maxEntriesPerTranspositionTable = (sizeOfTranspositionTable * 1024 * 1024) / (ttTableCount * ttEntrySize);
-    const int ttTableSize = maxEntriesPerTranspositionTable ? bsr(maxEntriesPerTranspositionTable) : 0;
+    U64 _rep_table[100];
 
+    void store(int fifty_count, U64 hash_code) {
+        assert(fifty_count >= 0 && fifty_count < 100);
+        _rep_table[fifty_count] = hash_code;
+    };
 
-    _ttSize = 1 << ttTableSize;
-    alwaysReplaceTable = new TTranspositionTableEntry[_ttSize];
-    depthPrefTable = new TTranspositionTableEntry[_ttSize];
-
-    
-
-    _ttMaxHashKey = _ttSize - 1;
-
-   
-
-    _repTableSize = 100;
-
-    clear();
-}
-
-THashTable::~THashTable() {
-    delete[] alwaysReplaceTable;
-    delete[] depthPrefTable;
-}
-
-void THashTable::ttLookup(TSearch * searchData, int depth, int alpha, int beta) {
-    bool hashHit = false;
-    int hashedDepth1 = 0;
-    searchData->stack->ttScore = TT_EMPTY;
-    searchData->stack->ttMove1.piece = EMPTY;
-    searchData->stack->ttMove2.piece = EMPTY;
-    THashTable * hashTable = searchData->hashTable;
-
-    U64 hash_code = searchData->pos->stack->hash_code;
-    int hashKey = hashTable->getTTHashKey(hash_code);
-
-    /*
-     * 1) Probe the depth preferred table
-     */
-    searchData->hashProbes++;
-    TTranspositionTableEntry * ttEntry = &hashTable->depthPrefTable[hashKey];
-    U64 hashedKey = ttEntry->key;
-    U64 hashedData = ttEntry->value;
-    if ((hashedKey ^ hashedData) == hash_code) {
-        move_t move;
-        move.set(TTMOVE(hashedData));
-        board_t * pos = searchData->pos;
-        if (move.piece && pos->valid(&move) && pos->legal(&move)) {
-            hashHit = true;
-            searchData->stack->ttMove1.set(&move);
-            int nodeType = TTFLAG(hashedData);
-            hashedDepth1 = TTDEPTH(hashedData);
-            searchData->stack->ttDepth1 = hashedDepth1;
-            int hashedScore = TTSCORE(hashedData);
-            if (hashedDepth1 >= depth &&
-                    ((nodeType == TT_EXACT)
-                    || (nodeType == TT_UPPERBOUND && hashedScore <= alpha)
-                    || (nodeType == TT_LOWERBOUND && hashedScore >= beta))) {
-                if (hashedScore > score::MATE - MAX_PLY) {
-                    hashedScore -= pos->current_ply;
-                } else if (hashedScore < -score::MATE + MAX_PLY) {
-                    hashedScore += pos->current_ply;
-                }
-                searchData->stack->ttScore = hashedScore;
-                assert(hashedScore > -score::MATE && hashedScore < score::MATE);
-            }
-        }
-    }
-
-    /*
-     * 2) Probe the always replace table
-     */
-    ttEntry = &hashTable->alwaysReplaceTable[hashKey];
-    U64 hashedData2 = ttEntry->value;
-    int hashedDepth2 = 0;
-    hashedKey = ttEntry->key;
-    if ((hashedKey ^ hashedData2) == hash_code) {
-        move_t move;
-        move.set(TTMOVE(hashedData2));
-        board_t * pos = searchData->pos;
-        bool equalMove = move.piece && move.equals(&searchData->stack->ttMove1);
-        bool legal = equalMove || (pos->valid(&move) && pos->legal(&move));
-        if (legal) {
-            hashHit = true;
-            if (!equalMove) {
-                searchData->stack->ttMove2.set(&move);
-            }
-            int nodeType = TTFLAG(hashedData2);
-            hashedDepth2 = TTDEPTH(hashedData2);
-            searchData->stack->ttDepth2 = hashedDepth2;
-            int hashedScore = TTSCORE(hashedData2);
-            if (hashedDepth2 >= depth &&
-                    ((nodeType == TT_EXACT)
-                    || (nodeType == TT_UPPERBOUND && hashedScore <= alpha)
-                    || (nodeType == TT_LOWERBOUND && hashedScore >= beta))) {
-                if (hashedScore > score::MATE - MAX_PLY) {
-                    hashedScore -= pos->current_ply;
-                } else if (hashedScore < -score::MATE + MAX_PLY) {
-                    hashedScore += pos->current_ply;
-                }
-                if (searchData->stack->ttScore == TT_EMPTY || hashedDepth2 > hashedDepth1) {
-                    searchData->stack->ttScore = hashedScore;
-                }
-                assert(searchData->stack->ttScore > -score::MATE && searchData->stack->ttScore < score::MATE);
-            }
-        }
-    }
-    searchData->hashHits += hashHit;
-}
-
-void THashTable::repStore(TSearch * searchData, U64 hash_code, int fiftyCount) {
-    if (fiftyCount < 100 && fiftyCount >= 0) {
-        searchData->hashTable->repTable[fiftyCount] = hash_code;
+    U64 retrieve(int fifty_count) {
+        assert(fifty_count >= 0 && fifty_count < 100);
+        return _rep_table[fifty_count];
     }
 }
 
-void THashTable::ttStore(TSearch * searchData, int move, int score, int depth, int alpha, int beta) {
-    if (searchData->stopSearch || score == score::INVALID || score == -score::INVALID || depth >= MAX_PLY) {
+trans_table_t::trans_table_t(int size_in_MB) {
+    table = NULL;
+    enabled = true;
+    size_in_mb = -1;
+    set_size(size_in_MB);
+}
+
+void trans_table_t::set_size(int size_in_MB) {
+    if (size_in_mb == size_in_MB) {
         return;
     }
-
-    THashTable * hashTable = searchData->hashTable;
-    int root_ply = searchData->pos->root_ply % 64;
-    int flags = score >= beta ? TT_LOWERBOUND : (score <= alpha ? TT_UPPERBOUND : TT_EXACT);
-    assert(flags);
-
-    U64 hash_code = searchData->pos->stack->hash_code;
-
-    assert(move > 0 || depth == 0);
-
-    int hashKey = hashTable->getTTHashKey(hash_code);
-
-    TTranspositionTableEntry * ttEntry = &hashTable->depthPrefTable[hashKey];
-    U64 hashValue = ttEntry->value;
-
-    if (score > score::MATE - MAX_PLY) {
-        score += searchData->pos->current_ply;
-    } else if (score < -score::MATE + MAX_PLY) {
-        score -= searchData->pos->current_ply;
+    if (table) {
+        delete[] table;
     }
-    assert(score < score::MATE && score > -score::MATE);
-
-
-    U64 newHashValue = ttEntry->encode(root_ply, depth, score, flags, move);
-
-    int hashedGamePly = TTPLY(hashValue);
-    int hashedDepth = TTDEPTH(hashValue);
-
-
-    if (root_ply != hashedGamePly || hashedDepth <= depth) {
-
-        ttEntry->key = (hash_code ^ newHashValue);
-        ttEntry->value = newHashValue;
-
-    }
-    ttEntry = &hashTable->alwaysReplaceTable[hashKey];
-    ttEntry->key = (hash_code ^ newHashValue);
-    ttEntry->value = newHashValue;
+    int entry_size = sizeof (entry_t);
+    int max_entries = (size_in_MB * 1024 * 1024) / entry_size;
+    size = 1 << (max_entries ? bsr(max_entries) : 0);
+    table = new entry_t[size];
+    max_hash_key = size - 1;
+    size_in_mb = size_in_MB;
 }
 
-
-void THashTable::clear() {
-    memset(depthPrefTable, 0, sizeof (TTranspositionTableEntry) * _ttSize);
-    memset(alwaysReplaceTable, 0, sizeof (TTranspositionTableEntry) * _ttSize);
-    memset(repTable, 0, sizeof (U64) * _repTableSize);
+int trans_table_t::make_score(int score, int ply) {
+    if (score > score::DEEPEST_MATE) {
+        return score + ply;
+    }
+    if (score < -score::DEEPEST_MATE) {
+        return score - ply;
+    }
+    return score;
 }
+
+int trans_table_t::unmake_score(int score, int ply) {
+    if (score > score::DEEPEST_MATE) {
+        return score - ply;
+    } else if (score < -score::DEEPEST_MATE) {
+        return score + ply;
+    }
+    return score;
+}
+
+void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int flags) {
+    entry_t * best_entry = NULL;
+    int best_score = -score::INF;
+    age = age % 64;
+    score = make_score(score, ply);
+    U64 value = encode(age, depth, score, move, flags);
+    int ix = index(key);
+    int bix = ix;
+    for (int i = 0; i < BUCKETS; i++) {
+        bix = (ix + i) & max_hash_key;
+        entry_t & entry = table[bix];
+        if ((entry.key ^ entry.value) == key) { //overwrite; note the entry did not work anyway)  
+            entry.value = value;
+            entry.key = value ^ key;
+            return;
+        }
+        int s = 256 - decode_depth(entry.value);
+        int age_diff = age - decode_age(entry.value);
+        if (age_diff > 0) {
+            s += age_diff * 256;
+        } else if (age_diff < 0) {
+            s += (63 + age_diff) * 256;
+        }
+        if (s > best_score) {
+            best_score = s;
+            best_entry = &entry;
+        }
+    }
+    //no match; store in bucket with 1) oldest age and 2) lowest depth
+    assert(best_entry != NULL);
+    best_entry->value = value;
+    best_entry->key = value ^ key;
+}
+
+bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags) {
+    move = 0;
+    if (enabled) {
+        int ix = index(key);
+        int bix = ix;
+        for (int i = 0; i < BUCKETS; i++) {
+            bix = (ix + i) & max_hash_key;
+            entry_t & entry = table[bix];
+            if ((entry.key ^ entry.value) == key) {
+                move = decode_move(entry.value);
+                score = unmake_score(decode_score(entry.value), ply);
+                flags = decode_flag(entry.value);
+                int entry_depth = decode_depth(entry.value);
+                if (entry_depth >= depth) {
+                    return true;
+                } else if (score::is_mate(score)) {
+                    if (score > 0) {
+                        flags &= ~score::UPPERBOUND;
+                    } else {
+                        flags &= ~score::LOWERBOUND;
+                    }
+                    return true;
+                }
+                return false;
+            }
+        }
+    }
+    return false;
+}
+
+namespace trans_table {
+
+    trans_table_t _global_table(TABLE_SIZE);
+
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag) {
+        _global_table.store(key, age, ply, depth, score, move, flag);
+    }
+
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags) {
+        return _global_table.retrieve(key, ply, depth, score, move, flags);
+    }
+
+    void clear() {
+        _global_table.clear();
+    }
+
+    void set_size(int size_in_mb) {
+        _global_table.set_size(size_in_mb);
+    }
+
+    void enable() {
+        _global_table.enabled = true;
+    }
+
+    void disable() {
+        _global_table.enabled = false;
+    }
+};

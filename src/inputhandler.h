@@ -63,11 +63,7 @@ private:
     bool handleLearn(TInputParser &parser);
     bool handleTestEval(TInputParser &parser);
     TEngine * _engine;
-    THashTable * _hashTable;
     TOutputHandler * _outputHandler;
-    static const int DEFAULT_HASHSIZE = 128; //size in Mb
-    int _hashSize;
-    int _hashSizeRequest;
     std::string _defaultFen;
     std::string _opponentString;
     TOpponent _opponent;
@@ -76,9 +72,6 @@ public:
 
     TInputHandler() {
         _engine = NULL;
-        _hashTable = NULL;
-        _hashSize = DEFAULT_HASHSIZE;
-        _hashSizeRequest = _hashSize;
         _outputHandler = NULL;
         _defaultFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         _fen = _defaultFen;
@@ -90,33 +83,11 @@ public:
         if (_engine) {
             delete _engine;
         }
-        if (_hashTable) {
-            delete _hashTable;
-        }
         if (_outputHandler) {
             delete _outputHandler;
         }
     }
     bool handle(std::string cmd);
-
-    THashTable * hashTable() {
-        if (_hashTable && _hashSize != _hashSizeRequest) {
-            delete _hashTable;
-            _hashTable = NULL;
-            _hashSize = _hashSizeRequest;
-        }
-        if (_hashTable == NULL) {
-            _hashSize = _hashSizeRequest;
-            _hashTable = new THashTable(_hashSize);
-        }
-        return _hashTable;
-    }
-
-    void clearHashTable() {
-        if (_hashTable) {
-            _hashTable->clear();
-        }
-    }
 
     TEngine * engine() {
         if (_engine == NULL) {

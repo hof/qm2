@@ -74,7 +74,6 @@ private:
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
     std::string _rootFen;
-    THashTable * _hashTable;
     TInputHandler * _inputHandler;
     TOutputHandler * _outputHandler;
     U64 _nodesSearched;
@@ -92,7 +91,6 @@ public:
         gameSettings.clear();
         _nodesSearched = 0;
         _testSucces = false;
-        _hashTable = NULL;
         _inputHandler = NULL;
         _outputHandler = NULL;
         _engineStop = false;
@@ -144,7 +142,7 @@ public:
         _resultMove.set(0);
         _resultScore = 0;
         setPosition(fen);
-        clearHash();
+        trans_table::clear();
     }
 
     inline void setOpponent(TOpponent * opponent) {
@@ -153,10 +151,6 @@ public:
 
     inline void setPosition(std::string fen) {
         _rootFen = fen;
-    }
-
-    inline void setHashTable(THashTable * hashTable) {
-        _hashTable = hashTable;
     }
 
     inline void setNodesSearched(U64 nodesSearched) {
@@ -193,12 +187,6 @@ public:
 
     inline bool getTestResult() {
         return _testSucces;
-    }
-
-    inline void clearHash() {
-        if (_hashTable) {
-            _hashTable->clear();
-        }
     }
 
     void analyse();

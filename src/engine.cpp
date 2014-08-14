@@ -90,7 +90,6 @@ void * TEngine::_think(void* engineObjPtr) {
     game.opponent.copy(&engine->gameSettings.opponent);
 
     TSearch * searchData = new TSearch(engine->_rootFen.c_str(),
-            engine->_hashTable,
             engine->_outputHandler);
 
     board_t * root = searchData->pos;
@@ -447,7 +446,7 @@ void print_row(std::string cap, score_t & w, score_t & b, int phase) {
 
 void TEngine::analyse() {
 
-    TSearch * s = new TSearch(_rootFen.c_str(), _hashTable, _outputHandler);
+    TSearch * s = new TSearch(_rootFen.c_str(), _outputHandler);
     s->stack->eval_result = evaluate(s);
     int phase = s->stack->phase;
     bool wtm = s->pos->stack->wtm;
@@ -633,20 +632,17 @@ void * TEngine::_learn(void * engineObjPtr) {
     double STOP_WINDOW = 0.24; //stop if the difference between lower and upperbound is <= this value
     const int STOPSCORE = 120; //if the score is higher than this for both sides, the game is consider a win
     const int MAXPLIES = 200; //maximum game length in plies
-    const int HASH_SIZE_IN_MB = 1;
 
 
     /*
      * Initialize, normally it's not needed to change anything from here
      */
 
-    THashTable * hash1 = new THashTable(HASH_SIZE_IN_MB); //each side uses it's own hash table
-    THashTable * hash2 = new THashTable(HASH_SIZE_IN_MB);
+    
     TEngine * engine = (TEngine*) engineObjPtr;
-    TSearch * sd_root = new TSearch(engine->_rootFen.c_str(),
-            hash1, NULL);
-    TSearch * sd_game = new TSearch(engine->_rootFen.c_str(),
-            hash1, NULL);
+    trans_table::disable();
+    TSearch * sd_root = new TSearch(engine->_rootFen.c_str(), NULL);
+    TSearch * sd_game = new TSearch(engine->_rootFen.c_str(), NULL);
 
     engine->gameSettings.maxDepth = MAXDEPTH;
     sd_root->timeManager->setEndTime(INFINITE_TIME);
@@ -676,7 +672,6 @@ void * TEngine::_learn(void * engineObjPtr) {
     /*
      * Self-play, using the generated start positions once for each side
      */
-    THashTable * hash_list[2] = {hash1, hash2};
     move_t actualMove;
     U64 gamesPlayed = 0;
     U64 batch = 0;
@@ -694,8 +689,6 @@ void * TEngine::_learn(void * engineObjPtr) {
         int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
         U64 nodes[2] = {0, 0}; //total node counts for both sides
         std::cout << "\nEngine(" << strongest << ") vs Engine(" << opponent << ")" << std::endl;
-        hash1->clear(); //clear hash: the evaluation scores changed.
-        hash2->clear();
         batch = 0;
         x = 0;
         for (int game = 0; game < maxgames; game++) {
@@ -748,7 +741,6 @@ void * TEngine::_learn(void * engineObjPtr) {
 
                     }
                     sd_game->stack->eval_result = evaluate(sd_game);
-                    sd_game->hashTable = hash_list[learning_side]; //each side has it's own hash
                     int depth = ONE_PLY;
                     int resultScore = 0;
 
@@ -966,8 +958,6 @@ void * TEngine::_learn(void * engineObjPtr) {
     delete sd_root;
     delete sd_game;
     delete book;
-    delete hash1;
-    delete hash2;
 
     pthread_exit(NULL);
 

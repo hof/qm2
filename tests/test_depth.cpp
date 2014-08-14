@@ -112,8 +112,6 @@ void depth_test(TEngine * engine, TStats * stats, int depth) {
 int main(int argc, char** argv) {
     magic::init();
     TEngine * engine = new TEngine();
-    THashTable *globalHashTable = new THashTable(256);
-    engine->setHashTable(globalHashTable);
     engine->setOutputHandler(NULL);
     static const int MAX_TEST_DEPTH = 10;
     TStats stats[MAX_TEST_DEPTH+1];
@@ -150,7 +148,6 @@ int main(int argc, char** argv) {
 
 
     delete engine;
-    delete globalHashTable;
     return (EXIT_SUCCESS);
 }
 

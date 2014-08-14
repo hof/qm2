@@ -19,7 +19,6 @@
  * Simple C++ Test Suite
  */
 
-THashTable *globalHashTable;
 TEngine * global_engine;
 TOutputHandler oh;
 bool test_stop;
@@ -38,7 +37,7 @@ int testEval(int idx, std::string fen, int min_score, int max_score) {
     if (test_stop) {
         return 0;
     }
-    TSearch * s = new TSearch(fen.c_str(), globalHashTable, &oh);
+    TSearch * s = new TSearch(fen.c_str(), &oh);
     int score = evaluate(s);
     if (score < min_score) {
         testFail(idx, "<", score, min_score, fen, global_engine);
@@ -53,7 +52,7 @@ void testKingAttackZero(int idx, std::string fen) {
     if (test_stop) {
         return;
     }
-    TSearch * s = new TSearch(fen.c_str(), globalHashTable, &oh);
+    TSearch * s = new TSearch(fen.c_str(), &oh);
     evaluate(s);
     int score = s->stack->king_score[WHITE].mg;
     if (score != 0) {
@@ -144,7 +143,7 @@ void testEvaluationSuite() {
      */
     
     //Extra major piece, unclear
-    testEval(2001, "K2k4/PR6/8/8/2q5/8/8/8 w - - 0 169", 0, 0);
+    testEval(2001, "K2k4/PR6/8/8/2q5/8/8/8 w - - 0 169", -300, -100);
     
     //KPKP
     //testEval(14, "7K/8/k1P5/7p/8/8/8/8 w - - 0 1", SCORE_DRAW_MIN, SCORE_DRAW_MAX); //famous study by Réti
@@ -198,16 +197,13 @@ int main(int argc, char** argv) {
     std::cout << "%TEST_STARTED% test1 (evaluation_test)" << std::endl;
     test_stop = false;
     magic::init();
-    globalHashTable = new THashTable(128);
     global_engine = new TEngine();
-    global_engine->setHashTable(globalHashTable);
     global_engine->gameSettings.maxDepth = 20;
     global_engine->setOutputHandler(&oh);
     testEvaluationSuite();
     std::cout << "%TEST_FINISHED% time=0 test1 (evaluation_test)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=0" << std::endl;
     delete global_engine;
-    delete globalHashTable;
     return (EXIT_SUCCESS);
 }
 

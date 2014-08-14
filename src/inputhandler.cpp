@@ -117,7 +117,6 @@ bool TInputHandler::handleGo(TInputParser& parser) {
 
         }
     }
-    engine()->setHashTable(hashTable());
     engine()->setOutputHandler(outputHandler());
     engine()->setPonder(engine()->gameSettings.ponder);
     engine()->setInputHandler(this);
@@ -168,7 +167,7 @@ bool TInputHandler::handleSetOption(TInputParser& parser) {
                     //at this point, we have a name, value pair
                     if (name == "Hash") {
                         handled = true;
-                        _hashSizeRequest = fromString<int>(value);
+                        trans_table::set_size(fromString<int>(value));
                     } else if (name == "UCI_Opponent") {
                         //value GM 2800 human Gary Kasparow"
                         //value none none computer Shredder"
@@ -230,13 +229,12 @@ bool TInputHandler::handlePosition(TInputParser& parser) {
         board_t pos;
         pos.create(_fen.c_str());
         if (token == "moves") {
-            THashTable * hash = hashTable();
-            hash->repTable[pos.stack->fifty_count] = pos.stack->hash_code;
+            rep_table::store(pos.stack->fifty_count, pos.stack->hash_code);
             while (parser >> token) {
                 move_t move;
                 move.set(&pos, token.c_str());
                 pos.forward(&move);
-                hash->repTable[pos.stack->fifty_count] = pos.stack->hash_code;
+                rep_table::store(pos.stack->fifty_count, pos.stack->hash_code);
                 if (pos.current_ply > MAX_PLY - 2) {
                     pos.create(pos.to_string().c_str()); //reset to prevent overflow
                 }
@@ -270,7 +268,6 @@ bool TInputHandler::handleForward(TInputParser& parser) {
 bool TInputHandler::handleLearn(TInputParser& parser) {
     bool result = true;
     engine()->gameSettings.clear();
-    engine()->setHashTable(hashTable());
     engine()->setOutputHandler(NULL);
     engine()->setPonder(false);
     engine()->setInputHandler(this);
@@ -287,7 +284,6 @@ bool TInputHandler::handleLearn(TInputParser& parser) {
 bool TInputHandler::handleTestEval(TInputParser& parser) {
     bool result = true;
     engine()->gameSettings.clear();
-    engine()->setHashTable(hashTable());
     engine()->setPonder(false);
     engine()->setInputHandler(this);
     engine()->setOutputHandler(outputHandler());

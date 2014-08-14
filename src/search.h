@@ -202,7 +202,6 @@ public:
     score_t drawContempt;
 
     TMovePicker * movePicker;
-    THashTable * hashTable;
     TOutputHandler * outputHandler;
     TTimeManager * timeManager;
     int history[BKING + 1][64];
@@ -212,13 +211,11 @@ public:
     move::list_t tempList;
 
     TSearch(const char * fen,       
-            THashTable * globalHashTable,
             TOutputHandler * outputH) {
         pos = new board_t();
         pos->create(fen);
         memset(history, 0, sizeof (history));
         InitPST();
-        hashTable = globalHashTable;
         outputHandler = outputH;
         movePicker = new TMovePicker();
         timeManager = new TTimeManager();
@@ -245,7 +242,6 @@ public:
         rootStack = stack = &_stack[0];
         stack->eval_result = score::INVALID;
         stack->nodeType = PVNODE;
-        assert(hashTable);
     }
 
     ~TSearch() {
@@ -376,6 +372,7 @@ public:
     }
 
     void debug_print_search(int alpha, int beta);
+
 };
 
 

@@ -102,9 +102,9 @@ int main(int argc, char** argv) {
     clock_t begin;
     clock_t now;
 
-    THashTable * hashTable = new THashTable(0);
+    trans_table::disable();
     TOutputHandler outputHandler;
-    TSearch * searchData = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", hashTable, &outputHandler);
+    TSearch * searchData = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", &outputHandler);
 
 
 
@@ -135,7 +135,6 @@ int main(int argc, char** argv) {
     std::cout << "%TEST_FINISHED% time=" << (now - begin) / CLOCKS_PER_SEC << " testMoveGeneration (test_genmoves)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=" << (now - begin) / CLOCKS_PER_SEC << std::endl;
 
-    delete hashTable;
     delete searchData;
 
     return (EXIT_SUCCESS);

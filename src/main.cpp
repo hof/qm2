@@ -23,6 +23,7 @@
 
 #include <cstdlib>
 #include <iostream>
+
 #include "inputhandler.h"
 
 using namespace std;
@@ -37,3 +38,20 @@ int main(int argc, char** argv) {
     delete inputHandler;
     return 0;
 }
+
+
+/*
+#include "uci_console.h"
+
+using namespace std;
+
+int main(int argc, char** argv) {
+    string cmd;
+    magic::init();
+    do {
+        if (!getline(cin, cmd))
+            cmd = "quit";
+    } while (uci::in(cmd));
+    return 0;
+}
+ */

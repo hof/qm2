@@ -60,12 +60,21 @@ int TSearch::initRootMoves() {
     root.MoveCount = 0;
     root.FiftyCount = pos->stack->fifty_count;
     setNodeType(-score::INF, score::INF);
-    hashTable->repStore(this, pos->stack->hash_code, pos->stack->fifty_count);
-    hashTable->ttLookup(this, 0, -score::INF, score::INF);
+    rep_table::store(pos->stack->fifty_count, pos->stack->hash_code);
+    
+    int trans_move = 0;
+    int trans_flags = 0;
+    int score = 0;
+    trans_table::retrieve(pos->stack->hash_code, 0, 0, score, trans_move, trans_flags);
+    
     for (move_t * move = movePicker->pickFirstMove(this, ONE_PLY, -score::INF, score::INF);
             move; move = movePicker->pickNextMove(this, ONE_PLY, -score::INF, score::INF)) {
         TRootMove * rMove = &root.Moves[root.MoveCount++];
-        rMove->init(move, 1000 - root.MoveCount, pos->gives_check(move), pos->see(move));
+        int move_score = 1000 - root.MoveCount;
+        if (move->to_int() == trans_move) {
+            move_score += 10000;
+        }
+        rMove->init(move, move_score, pos->gives_check(move), pos->see(move));
         if (rMove->GivesCheck) {
             rMove->checker_sq = (pos->stack + 1)->checker_sq;
             rMove->checkers = (pos->stack + 1)->checkers;
@@ -324,9 +333,8 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         for (int ply = pos->current_ply - 4; ply >= stopPly; ply -= 2) { //draw by repetition
             if (ply >= 0 && getStack(ply)->hash_code == pos->stack->hash_code) {
                 return drawScore();
-            } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->stack->hash_code) {
+            } else if (ply < 0 && rep_table::retrieve(root.FiftyCount + ply) == pos->stack->hash_code) {
                 return drawScore();
-
             }
         }
     }
@@ -334,9 +342,15 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     /*
      * 4. Transposition table lookup
      */
-    hashTable->ttLookup(this, depth, alpha, beta);
-    if (stack->ttScore != TT_EMPTY) {
-        return stack->ttScore;
+    int tmove = 0;
+    int tflag = 0;
+    int tscore = 0;
+    if (trans_table::retrieve(pos->stack->hash_code, pos->current_ply, depth, tscore, tmove, tflag)) {
+        if ((tflag == score::LOWERBOUND && tscore >= beta) 
+                || (tflag == score::UPPERBOUND && tscore <= alpha)
+                || tflag == score::EXACT) {
+            return tscore;
+        }
     }
 
     /*
@@ -378,6 +392,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             if (null_score > score::DEEPEST_MATE) {
                 return beta; // not return unproven mate scores
             }
+            trans_table::store(pos->stack->hash_code, pos->root_ply, pos->current_ply, depth, null_score, 0, score::LOWERBOUND);
             return null_score;
         } else {
             mate_threat = null_score < -score::DEEPEST_MATE;
@@ -410,7 +425,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     backward(first_move);
     if (best > alpha) {
         if (best >= beta) {
-            hashTable->ttStore(this, first_move->to_int(), best, depth, alpha, beta);
+            trans_table::store(pos->stack->hash_code, pos->root_ply, pos->current_ply, depth, best, first_move->to_int(), score::LOWERBOUND);
             if (!first_move->capture && !first_move->promotion) {
                 if (best < score::DEEPEST_MATE) {
                     updateKillers(first_move);
@@ -503,7 +518,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
             stack->bestMove.set(move);
             if (score >= beta) {
                 // Beta Cutoff, hash the results, update killers and history table
-                hashTable->ttStore(this, move->to_int(), score, depth, alpha, beta);
+                trans_table::store(pos->stack->hash_code, pos->root_ply, pos->current_ply, depth, score, move->to_int(), score::LOWERBOUND);
                 if (!move->capture && !move->promotion) {
                     if (best < score::DEEPEST_MATE) {
                         updateKillers(move);
@@ -532,7 +547,8 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     /*
      * 15. Store the result in the hash table and return
      */
-    hashTable->ttStore(this, stack->bestMove.to_int(), best, depth, alpha, beta);
+    int flag = score::flags(best, alpha, beta);
+    trans_table::store(pos->stack->hash_code, pos->root_ply, pos->current_ply, depth, best, stack->bestMove.to_int(), flag);
     return best;
 }
 
@@ -559,7 +575,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
         for (int ply = pos->current_ply - 4; ply >= stopPly; ply -= 2) {
             if (ply >= 0 && getStack(ply)->hash_code == pos->stack->hash_code) {
                 return drawScore();
-            } else if (ply < 0 && hashTable->repTable[root.FiftyCount + ply] == pos->stack->hash_code) {
+            } else if (ply < 0 && rep_table::retrieve(root.FiftyCount + ply) == pos->stack->hash_code) {
                 return drawScore();
             }
         }

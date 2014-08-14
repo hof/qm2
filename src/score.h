@@ -40,7 +40,10 @@ namespace score {
         MATE = 30000,
         DEEPEST_MATE = 29500,
         WIN = 5000,
-        DRAW = 0
+        DRAW = 0,
+        LOWERBOUND = 1,
+        UPPERBOUND = 2,
+        EXACT = 3
     };
 
     /**
@@ -58,7 +61,25 @@ namespace score {
      * @return ply distance
      */
     inline int mated_in_ply(int score) {
-        return score<-DEEPEST_MATE ? MATE + score : 0;
+        return score < -DEEPEST_MATE ? MATE + score : 0;
+    }
+
+    /**
+     * Test if score is a mate score
+     * @param score score to test
+     * @return true if mate(d), false otherwise
+     */
+    inline bool is_mate(int score) {
+        return score < -DEEPEST_MATE || score > DEEPEST_MATE;
+    }
+
+    /**
+     * Returns if a score is a lower bound, upper bound or exact
+     * @param score score to test
+     * @return bound flag
+     */
+    inline int flags(int score, int alpha, int beta) {
+        return score >= beta ? LOWERBOUND : (score <= alpha ? UPPERBOUND : EXACT);
     }
 }
 

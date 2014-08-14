@@ -39,6 +39,7 @@ private:
         uint8_t flags;
     };
 
+    int size_in_mb;
     int size;
     int max_hash_key;
     entry_t * table;
@@ -71,6 +72,8 @@ namespace material_table {
     bool retrieve(U64 key, int & value, int & phase, int & flags);
     void clear();
     void set_size(int size_in_MB);
+    void enable();
+    void disable();
 };
 
 class pawn_table_t {
@@ -84,6 +87,7 @@ private:
         uint8_t flags;
     };
 
+    int size_in_mb;
     int size;
     int max_hash_key;
     entry_t * table;
@@ -110,72 +114,106 @@ public:
 };
 
 namespace pawn_table {
-    const int TABLE_SIZE = 4; 
+    const int TABLE_SIZE = 4;
     void store(U64 key, U64 passers, score_t score, int king_attack[2], int flags);
     bool retrieve(U64 key, U64 & passers, score_t & score, int (& king_attack)[2], int & flags);
     void clear();
     void set_size(int size_in_MB);
+    void enable();
+    void disable();
 };
 
-enum TranspositionTableEntryType {
-    TT_LOWERBOUND = 1,
-    TT_UPPERBOUND = 2,
-    TT_EXACT = 3,
-    TT_EMPTY = 32002
+
+namespace rep_table {
+    void store(int fifty_count, U64 hash_code);
+    U64 retrieve(int fifty_count);
 };
 
-#define TTMOVE(h)  ((h) & 0x0FFFFFFFF)
-#define TTFLAG(h)  (((h) >> 32) & 3)
-#define TTSCORE(h) ((signed short) (((h) >> 34) & 0x0FFFF))
-#define TTDEPTH(h)  (((h) >> 50) & 255)
-#define TTPLY(h)    (((h) >> 58) & 63)
+class trans_table_t {
+private:
 
-struct TTranspositionTableEntry {
-    U64 key;
-    U64 value;
-    //32: bit 0..31 : move  
-    //2: bit 32..33: flag (upperbound, lowerboard, exact, 1,2 or 3)
-    //16: bit 34..49: score (-32K upto 32K)
-    //7: bit 50..57: depth (upto 255 half ply)
-    //7: bit 58..63: gameply (upto 63) for aging
+    static const int BUCKETS = 4;
+    
+    struct entry_t {
+        U64 key;
+        U64 value;
+    };
 
-    static inline U64 encode(int gamePly, int depth, int score, int flag, int move) {
-        assert(gamePly < 64);
-        assert(depth < 255);
-        assert(score < 32000 && score > -32000);
-        assert(flag <= 3);
-        U64 result = move | (U64(flag) << 32) | (U64((unsigned short) score) << 34) | (U64(depth) << 50) | (U64(gamePly) << 58);
+    int size_in_mb;
+    int size;
+    int max_hash_key;
+    entry_t * table;
+    
+    int index(U64 hash_code) {
+        return hash_code & max_hash_key;
+    }
+
+    /**
+     * Encodes ply, depth, score, flag and move into single U64 integer
+     * 0..31 | 32..33 (flag)        | 34..49 | 50..57 | 58..63
+     * move  | up=1, low=2, exact=3 | score  | depth  | age (using root ply)
+     */
+    U64 encode(int age, int depth, int score, int move, int flag) {
+        assert(age >= 0 && age <= 63);
+        assert(depth >= 0 && depth <= 255);
+        assert(score < score::INF && score > -score::INF);
+        assert(flag >= 0 && flag <= 3);
+        U64 result = move | (U64(flag) << 32) | (U64((unsigned short) score) << 34) | (U64(depth) << 50) | (U64(age) << 58);
         return result;
     }
-};
-
-class THashTable {
-protected:
-    int _ttMaxHashKey;
-    int _ttSize;
-    int _repTableSize;
-public:
-    THashTable(int totalSizeInMb);
-    ~THashTable();
-
-    TTranspositionTableEntry * depthPrefTable;
-    TTranspositionTableEntry * alwaysReplaceTable;
-
     
-    U64 repTable[100];
-
-    inline int getTTHashKey(U64 hashCode) {
-        return hashCode & _ttMaxHashKey;
+    uint32_t decode_move(U64 x) {
+        return x & 0x0FFFFFFFF;
     }
-
-    static void ttLookup(TSearch * searchData, int depth, int alpha, int beta);
-    static void ttStore(TSearch * searchData, int move, int score, int depth, int alpha, int beta);
-    static void repStore(TSearch * searchData, U64 hashCode, int fiftyCount);
     
-    void clear();
+    uint8_t decode_flag(U64 x) {
+        return (x >> 32) & 3;
+    }
+    
+    int16_t decode_score(U64 x) {
+        return (x >> 34) & 0x0FFFF;
+    }
+    
+    uint8_t decode_depth(U64 x) {
+        return (x >> 50) & 255;
+    }
+    
+    uint8_t decode_age(U64 x) {
+        return (x >> 58) & 63;
+    }
+    
+    int make_score(int score, int ply);
+    
+    int unmake_score(int score, int ply);
 
+public:
+    bool enabled;
 
+    trans_table_t(int size_in_MB);
+    void set_size(int size_in_MB);
+    
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag);
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags);
+
+    ~trans_table_t() {
+        delete [] table;
+    }
+    
+    void clear() {
+        memset(table, 0, sizeof (entry_t) * size);
+    }
 };
+
+namespace trans_table {
+    const int TABLE_SIZE = 128;
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag);
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags);
+    void clear();
+    void set_size(int size_in_MB);
+    void enable();
+    void disable();
+};
+
 
 
 #endif	/* HASHTABLE_H */

@@ -8,7 +8,6 @@
  * Simple C++ Test Suite
  */
 
-THashTable *globalHashTable;
 TEngine * global_engine;
 TOutputHandler oh;
 bool stop_test;
@@ -42,8 +41,8 @@ bool flipTest(int test_num, const char * fen) {
     }
 
     //test 2: evaluation and phase should be equal
-    TSearch * s1 = new TSearch(fen1.c_str(), globalHashTable, NULL);
-    TSearch * s2 = new TSearch(fen2.c_str(), globalHashTable, NULL);
+    TSearch * s1 = new TSearch(fen1.c_str(), NULL);
+    TSearch * s2 = new TSearch(fen2.c_str(), NULL);
     int score1 = evaluate(s1);
     int phase1 = s1->stack->phase;
     int score2 = evaluate(s2);
@@ -63,7 +62,6 @@ bool flipTest(int test_num, const char * fen) {
         return false;
     }
 
-    global_engine->clearHash();
     global_engine->newGame(pos.to_string());
     global_engine->think();
     global_engine->stopAllThreads();
@@ -72,7 +70,6 @@ bool flipTest(int test_num, const char * fen) {
 
     pos.flip();
     
-    global_engine->clearHash();
     global_engine->newGame(pos.to_string());
     global_engine->think();
     global_engine->stopAllThreads();
@@ -164,9 +161,8 @@ void flipTestSuite(TEngine * engine, int depth) {
 
 int main(int argc, char** argv) {
     magic::init();
-    globalHashTable = new THashTable(16);
     global_engine = new TEngine();
-    global_engine->setHashTable(globalHashTable);
+    trans_table::disable();
     
     global_engine->setOutputHandler(NULL);
     static const int MAX_TEST_DEPTH = 1;
@@ -186,7 +182,6 @@ int main(int argc, char** argv) {
     std::cout << "%TEST_FINISHED% time=" << elapsed << " flip (flip_test)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=0" << elapsed << std::endl;
     delete global_engine;
-    delete globalHashTable;
     return (EXIT_SUCCESS);
 }
 

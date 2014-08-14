@@ -104,9 +104,7 @@ int main(int argc, char** argv) {
 
     magic::init();
     TEngine * engine = new TEngine();
-    THashTable *globalHashTable = new THashTable(256);
     TOutputHandler oh;
-    engine->setHashTable(globalHashTable);
     engine->setOutputHandler(&oh);
     
     std::cout << "%TEST_STARTED% test_positions (test_bratkokopec)\n" << std::endl;
@@ -116,7 +114,5 @@ int main(int argc, char** argv) {
     std::cout << "%SUITE_FINISHED% time=0" << std::endl;
 
     delete engine;
-    delete globalHashTable;
-
     return (EXIT_SUCCESS);
 }

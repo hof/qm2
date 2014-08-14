@@ -71,7 +71,7 @@ inline move_t * TMovePicker::popBest(board_t * pos, move::list_t * list) {
 move_t * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, int beta) {
     move::list_t * moveList = &searchData->stack->moveList;
     moveList->clear();
-    moveList->stage = depth < ONE_PLY ? CAPTURES : HASH1;
+    moveList->stage = depth < ONE_PLY ? CAPTURES : MATEKILLER;
     searchData->stack->captureMask = searchData->pos->bb[ALLPIECES];
     return pickNextMove(searchData, depth, alpha, beta);
 }
@@ -95,56 +95,6 @@ move_t * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, i
      */
     if (!result) {
         switch (moveList->stage) {
-            case HASH1:
-                /*
-                 * Return the hashmove from depth-preferred table
-                 */
-                result = &searchData->stack->ttMove1;
-                if (result->piece && !moveList->is_excluded(result)) {
-                    moveList->stage = HASH2;
-                    moveList->last_excluded++->set(result);
-                    return result;
-                }
-            case HASH2:
-                /*
-                 * Return the hashmove from always-replace table
-                 */
-                result = &searchData->stack->ttMove2;
-                if (result->piece && !moveList->is_excluded(result)) {
-                    moveList->stage = MATEKILLER;
-                    moveList->last_excluded++->set(result);
-                    return result;
-                }
-
-            case IID:
-                if (depth > LOW_DEPTH && moveList->first_excluded == moveList->last_excluded) {
-                    //find a good first move to try by doing a shallow search
-                    bool skipNull = searchData->skipNull;
-                    searchData->skipNull = true;
-                    int iid_depth = depth - (2 * ONE_PLY) - (depth >> 2); //(3 * ONE_PLY);
-                    iid_depth -= searchData->stack->nodeType != PVNODE;
-                    iid_depth -= searchData->stack->nodeType == ALLNODE;
-                    iid_depth = MAX(ONE_PLY, iid_depth);
-                    searchData->pvs(alpha, beta, iid_depth);
-                    searchData->skipNull = skipNull;
-                    searchData->hashTable->ttLookup(searchData, iid_depth, alpha, beta);
-                    moveList->clear();
-                    result = &searchData->stack->ttMove1;
-                    if (result->piece == EMPTY) {
-                        result = &searchData->stack->ttMove2;
-                    }
-                    if (result->piece) {
-                        /*
-                         * Re-clear the movelist and return IID move
-                         */
-                        moveList->last_excluded++->set(result);
-                        moveList->stage = MATEKILLER;
-                        return result;
-                    }
-                    //at this point, the position must be (stale)mate as no move was found
-                    //or the search was aborted.. continue anyway (robust))
-                    moveList->stage = MATEKILLER; //this line is kept to place a breakpoint. todo: assert (stale)mate
-                }
             case MATEKILLER:
                 result = &searchData->stack->mateKiller;
                 if (result->piece
