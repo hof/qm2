@@ -83,8 +83,7 @@ void divide(TSearch * searchData, int depth) {
  */
 void testMoveGeneration(std::string fen, int targetValues[], int maxDepth) {
     std::cout << "\n\ntest_genmoves test testMoveGeneration " << fen << std::endl;
-    TOutputHandler outputHandler;
-    TSearch * searchData = new TSearch(fen.c_str(), &outputHandler);
+    TSearch * searchData = new TSearch(fen.c_str());
     std::string fen2 = searchData->pos->to_string();
     if (fen2 != fen) {
         std::cout << "%TEST_FAILED% time=0 testname=testMoveGeneration (test_genmoves) message=basic fen mismatch " << fen2 << std::endl;

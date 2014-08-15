@@ -88,7 +88,7 @@ void test_tt() {
         }
     }
 
-    TSearch * sd = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", NULL);
+    TSearch * sd = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     move_t * tmove = sd->movePicker->pickFirstMove(sd, 0, -score::INF, score::INF);
     trans_table::store(sd->pos->stack->hash_code, sd->pos->root_ply, sd->pos->current_ply, 123, -12345, tmove->to_int(), 3);
 
@@ -109,8 +109,8 @@ void test_tt() {
     //search with less than 50.000 nodes
 
     magic::init();
-    TEngine * engine = new TEngine();
-    engine->setOutputHandler(NULL);
+    uci::silent(true);
+    TEngine * engine = engine::instance();
     engine->gameSettings.maxDepth = 15;
     engine->newGame("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - -");
     engine->think();
@@ -120,7 +120,6 @@ void test_tt() {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=hashtable not effective" << std::endl;
     }
     delete sd;
-    delete engine;
 }
 
 int main(int argc, char** argv) {

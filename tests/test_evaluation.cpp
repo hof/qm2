@@ -20,7 +20,6 @@
  */
 
 TEngine * global_engine;
-TOutputHandler oh;
 bool test_stop;
 
 void testFail(int idx, std::string operation, int score, int bound, std::string fen, TEngine * engine) {
@@ -37,7 +36,7 @@ int testEval(int idx, std::string fen, int min_score, int max_score) {
     if (test_stop) {
         return 0;
     }
-    TSearch * s = new TSearch(fen.c_str(), &oh);
+    TSearch * s = new TSearch(fen.c_str());
     int score = evaluate(s);
     if (score < min_score) {
         testFail(idx, "<", score, min_score, fen, global_engine);
@@ -52,7 +51,7 @@ void testKingAttackZero(int idx, std::string fen) {
     if (test_stop) {
         return;
     }
-    TSearch * s = new TSearch(fen.c_str(), &oh);
+    TSearch * s = new TSearch(fen.c_str());
     evaluate(s);
     int score = s->stack->king_score[WHITE].mg;
     if (score != 0) {
@@ -197,13 +196,11 @@ int main(int argc, char** argv) {
     std::cout << "%TEST_STARTED% test1 (evaluation_test)" << std::endl;
     test_stop = false;
     magic::init();
-    global_engine = new TEngine();
+    global_engine = engine::instance();
     global_engine->gameSettings.maxDepth = 20;
-    global_engine->setOutputHandler(&oh);
     testEvaluationSuite();
     std::cout << "%TEST_FINISHED% time=0 test1 (evaluation_test)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=0" << std::endl;
-    delete global_engine;
     return (EXIT_SUCCESS);
 }
 

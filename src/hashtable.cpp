@@ -20,7 +20,6 @@
  */
 
 #include "hashtable.h"
-#include "search.h"
 
 material_table_t::material_table_t(int size_in_MB) {
     table = NULL;

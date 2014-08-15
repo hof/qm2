@@ -111,8 +111,7 @@ void depth_test(TEngine * engine, TStats * stats, int depth) {
 
 int main(int argc, char** argv) {
     magic::init();
-    TEngine * engine = new TEngine();
-    engine->setOutputHandler(NULL);
+   
     static const int MAX_TEST_DEPTH = 10;
     TStats stats[MAX_TEST_DEPTH+1];
 
@@ -128,7 +127,7 @@ int main(int argc, char** argv) {
     U64 totalNodes = 0;
     begin = clock();
     for (int depth = 1; depth <= MAX_TEST_DEPTH; depth++) {
-        depth_test(engine, &stats[depth], depth);
+        depth_test(engine::instance(), &stats[depth], depth);
         if (depth > 5) {
             double bf = (1.0 * stats[depth].Nodes) / stats[depth-1].Nodes;
             avgBF += bf;
@@ -146,8 +145,6 @@ int main(int argc, char** argv) {
     std::cout << "%TEST_FINISHED% time=" << elapsed << " depth (depth_test)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=0" << elapsed << std::endl;
 
-
-    delete engine;
     return (EXIT_SUCCESS);
 }
 

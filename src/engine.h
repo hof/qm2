@@ -27,16 +27,14 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <threadsmanager.h>
-#include "board.h"
-#include "hashtable.h"
-#include "move.h"
-#include "outputhandler.h"
+#include "search.h"
+#include "book.h"
+#include "uci_console.h"
 #include "evaluate.h"
 #include "opponent.h"
 
 class TInputHandler;
-class book_t;
-class TSearch;
+
 
 struct TGameSettings {
     TOpponent opponent;
@@ -74,8 +72,6 @@ private:
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
     std::string _rootFen;
-    TInputHandler * _inputHandler;
-    TOutputHandler * _outputHandler;
     U64 _nodesSearched;
     bool _testSucces;
     move_t _resultMove;
@@ -91,8 +87,6 @@ public:
         gameSettings.clear();
         _nodesSearched = 0;
         _testSucces = false;
-        _inputHandler = NULL;
-        _outputHandler = NULL;
         _engineStop = false;
         _enginePonder = false;
         _rootFen = "";
@@ -107,32 +101,20 @@ public:
     inline void think() {
         stop();
         _engineStop = false;
-        if (_outputHandler) {
-            _outputHandler->engineStop = false;
-        }
         this->createThread(_think, this);
     }
 
     inline void learn() {
         _engineStop = false;
-        if (_outputHandler) {
-            _outputHandler->engineStop = false;
-        }
         this->createThread(_learn, this);
     }
 
     inline void setPonder(bool doPonder) {
         _enginePonder = doPonder;
-        if (_outputHandler) {
-            _outputHandler->enginePonder = _enginePonder;
-        }
     }
 
     inline void stop() {
         _engineStop = true;
-        if (_outputHandler) {
-            _outputHandler->engineStop = true;
-        }
         this->stopAllThreads();
     }
 
@@ -156,10 +138,6 @@ public:
     inline void setNodesSearched(U64 nodesSearched) {
         _nodesSearched = nodesSearched;
     }
-
-    void setInputHandler(TInputHandler * inputHandler);
-
-    void setOutputHandler(TOutputHandler * outputHandler);
 
     inline U64 getNodesSearched() {
         return _nodesSearched;
@@ -197,10 +175,15 @@ public:
 namespace engine {
     void stop();
     void go();
+    void analyse();
+    void learn();
     void new_game(std::string fen);
     void set_position(std::string fen);
     void set_ponder(bool ponder);
     TGameSettings * game_settings();
+    bool is_stopped();
+    bool is_ponder();
+    TEngine * instance();
 }
 
 

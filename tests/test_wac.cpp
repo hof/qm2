@@ -113,9 +113,7 @@ int main(int argc, char** argv) {
     clock_t begin;
 
     magic::init();
-    TEngine * engine = new TEngine();
-    TOutputHandler oh;
-    engine->setOutputHandler(&oh);
+    TEngine * engine = engine::instance();
 
     std::cout << "%TEST_STARTED% test_positions (test_wac)\n" << std::endl;
     begin = clock();
@@ -124,8 +122,6 @@ int main(int argc, char** argv) {
     std::cout << "%TEST_FINISHED% time=" << elapsed << " test_positions (test_wac)" << std::endl;
 
     std::cout << "%SUITE_FINISHED% time=" << elapsed << std::endl;
-
-    delete engine;
 
     return (EXIT_SUCCESS);
 }

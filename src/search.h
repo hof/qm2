@@ -35,7 +35,6 @@
 #include "movegen.h"
 #include "movepicker.h"
 #include "hashtable.h"
-#include "outputhandler.h"
 #include "timemanager.h"
 #include <string.h>
 #include <cstdlib>
@@ -142,8 +141,7 @@ struct TSearchStack {
     int ttScore;
     int ttDepth1;
     int ttDepth2;
-    move_t ttMove1;
-    move_t ttMove2;
+    move_t tt_move;
 
     //eval info
     short phase;
@@ -202,7 +200,6 @@ public:
     score_t drawContempt;
 
     TMovePicker * movePicker;
-    TOutputHandler * outputHandler;
     TTimeManager * timeManager;
     int history[BKING + 1][64];
     
@@ -210,13 +207,11 @@ public:
 
     move::list_t tempList;
 
-    TSearch(const char * fen,       
-            TOutputHandler * outputH) {
+    TSearch(const char * fen) {
         pos = new board_t();
         pos->create(fen);
         memset(history, 0, sizeof (history));
         InitPST();
-        outputHandler = outputH;
         movePicker = new TMovePicker();
         timeManager = new TTimeManager();
         nodes = 0;

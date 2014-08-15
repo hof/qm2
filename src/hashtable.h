@@ -24,10 +24,7 @@
 #ifndef HASHTABLE_H
 #define	HASHTABLE_H
 
-#include "score.h"
-#include "move.h"
-
-class TSearch;
+#include "board.h"
 
 class material_table_t {
 private:

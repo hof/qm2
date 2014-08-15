@@ -103,8 +103,7 @@ int main(int argc, char** argv) {
     clock_t now;
 
     trans_table::disable();
-    TOutputHandler outputHandler;
-    TSearch * searchData = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", &outputHandler);
+    TSearch * searchData = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
 
 

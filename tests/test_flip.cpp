@@ -9,7 +9,6 @@
  */
 
 TEngine * global_engine;
-TOutputHandler oh;
 bool stop_test;
 
 bool flipTest(int test_num, const char * fen) {
@@ -41,8 +40,8 @@ bool flipTest(int test_num, const char * fen) {
     }
 
     //test 2: evaluation and phase should be equal
-    TSearch * s1 = new TSearch(fen1.c_str(), NULL);
-    TSearch * s2 = new TSearch(fen2.c_str(), NULL);
+    TSearch * s1 = new TSearch(fen1.c_str());
+    TSearch * s2 = new TSearch(fen2.c_str());
     int score1 = evaluate(s1);
     int phase1 = s1->stack->phase;
     int score2 = evaluate(s2);
@@ -161,10 +160,9 @@ void flipTestSuite(TEngine * engine, int depth) {
 
 int main(int argc, char** argv) {
     magic::init();
-    global_engine = new TEngine();
+    global_engine = engine::instance();
     trans_table::disable();
-    
-    global_engine->setOutputHandler(NULL);
+    uci::silent(true);
     static const int MAX_TEST_DEPTH = 1;
     stop_test = false;
 
@@ -181,7 +179,6 @@ int main(int argc, char** argv) {
     double elapsed = (now - begin) / CLOCKS_PER_SEC;
     std::cout << "%TEST_FINISHED% time=" << elapsed << " flip (flip_test)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=0" << elapsed << std::endl;
-    delete global_engine;
     return (EXIT_SUCCESS);
 }
 

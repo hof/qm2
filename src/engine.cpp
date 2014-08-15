@@ -33,42 +33,63 @@
 #include "movegen.h"
 #include "book.h"
 #include "evaluate.h"
-#include "search.h"
-#include "search.h"
-#include "bbmoves.h"
 #include "timemanager.h"
-#include "inputhandler.h"
-#include "outputhandler.h"
-#include "score.h"
 
 using namespace std;
 
 namespace engine {
-    
+
     TEngine _engine;
-    
+    volatile bool _stopped = false;
+    volatile bool _ponder = false;
+
     void stop() {
+        _stopped = true;
         _engine.stop();
     }
-    
+
     void go() {
+        _stopped = false;
         _engine.think();
     }
     
+    void analyse() {
+        _stopped = false;
+        _engine.analyse();
+    }
+    
+    void learn() {
+        _stopped = false;
+        _engine.learn();
+    }
+
     void new_game(std::string fen) {
         _engine.newGame(fen);
     }
-    
+
     void set_position(std::string fen) {
         _engine.setPosition(fen);
     }
-    
+
     void set_ponder(bool ponder) {
+        _ponder = ponder;
         _engine.setPonder(ponder);
     }
-    
+
     TGameSettings * game_settings() {
         return &_engine.gameSettings;
+    }
+
+    bool is_stopped() {
+        return _stopped;
+    }
+    
+    bool is_ponder() {
+        return _ponder;
+    }
+    
+    TEngine * instance() { 
+        return &_engine;
     }
 }
 
@@ -85,12 +106,21 @@ void * TEngine::_think(void* engineObjPtr) {
      * - game settings
      * - thinking stop conditions
      */
+
+
     TEngine * engine = (TEngine*) engineObjPtr;
+
+
+
     TGameSettings game = engine->gameSettings;
+
+
+
     game.opponent.copy(&engine->gameSettings.opponent);
 
-    TSearch * searchData = new TSearch(engine->_rootFen.c_str(),
-            engine->_outputHandler);
+    TSearch * searchData = new TSearch(engine->_rootFen.c_str());
+
+
 
     board_t * root = searchData->pos;
     TTimeManager * tm = searchData->timeManager;
@@ -129,15 +159,6 @@ void * TEngine::_think(void* engineObjPtr) {
     searchData->maxNodes = maxNodes;
     searchData->learnFactor = learnFactor;
     searchData->ponder = ponder;
-
-#ifdef PRINTSEARCH
-    if (examineSearch) {
-        searchData->examineSearch = examineSearch;
-        for (int i = 0; i < examineSearch; i++) {
-            searchData->examinePath[i].set(&game.examinePath[i]);
-        }
-    }
-#endif
 
     /*
      * Claim draws by 
@@ -179,10 +200,11 @@ void * TEngine::_think(void* engineObjPtr) {
                         } else if (book_step == 1) {
                             book_ponder_move = true;
                             ponderMove.set(bookMove);
-                            if (searchData->outputHandler) {
-                                std::string book_pv = resultMove.to_string() + " " + ponderMove.to_string();
-                                searchData->outputHandler->sendPV((bookMove->score) / totalBookScore, 1, 1, count, searchData->timeManager->elapsed(), book_pv.c_str(), (int) EXACT);
-                            }
+
+                            std::string book_pv = resultMove.to_string() + " " + ponderMove.to_string();
+                            uci::send_pv((bookMove->score) / totalBookScore, 1, 1, 
+                                    count, searchData->timeManager->elapsed(), 
+                                    book_pv.c_str(), score::EXACT);
                         }
                         break;
                     }
@@ -200,7 +222,6 @@ void * TEngine::_think(void* engineObjPtr) {
      * Find a move by Principle Variation Search (fail-soft) in an 
      * internal iterative deepening framework with aspiration search.
      */
-
     if (book_ponder_move == false && searchData->initRootMoves() > 0) {
         if (book_move) {
             //no ponder move.. only consider book_moves, but let the engine decide which one to play
@@ -229,8 +250,6 @@ void * TEngine::_think(void* engineObjPtr) {
 
             int iteration_start_time = tm->elapsed();
 
-            //std::cout << "pvs (" << alpha << ", " << beta << ", " << depth << ")" << std::endl;
-
             int score = searchData->pvs_root(alpha, beta, depth);
             int type = score <= alpha ? FAILLOW : score >= beta ? FAILHIGH : EXACT;
 
@@ -252,9 +271,10 @@ void * TEngine::_think(void* engineObjPtr) {
                     engine->setMove(&firstMove);
                     engine->setScore(resultScore);
                 }
-                if (searchData->outputHandler && searchData->stopSearch) {
-                    searchData->outputHandler->sendPV(resultScore, depth / ONE_PLY, searchData->selDepth,
-                            searchData->nodes + searchData->pruned_nodes, tm->elapsed(), searchData->getPVString().c_str(), type);
+                if (searchData->stopSearch) {
+                  uci::send_pv(resultScore, depth / ONE_PLY, searchData->selDepth,
+                            searchData->nodes + searchData->pruned_nodes, tm->elapsed(), searchData->getPVString().c_str(), score::flags(resultScore, alpha, beta));
+                 
                 }
             }
 
@@ -354,32 +374,15 @@ void * TEngine::_think(void* engineObjPtr) {
             move_changed = false;
             searchData->root.sortMoves();
         }
-
-        /*
-         * Update and output search statistics
-         */
         engine->setNodesSearched(searchData->nodes);
-        bool sendDebugInfo = false;
-        if (searchData->nodes && sendDebugInfo && searchData->outputHandler) {
-
-            int hashHits = searchData->hashProbes ? U64(searchData->hashHits * 100) / searchData->hashProbes : 0;
-            int ptHits = searchData->pawnTableProbes ? U64(searchData->pawnTableHits * 100) / searchData->pawnTableProbes : 0;
-            int etHits = searchData->evalTableProbes ? U64(searchData->evalTableHits * 100) / searchData->evalTableProbes : 0;
-
-            searchData->outputHandler->sendEvalStats(
-                    searchData->evaluations,
-                    searchData->pawnEvals,
-                    searchData->fullEvaluations);
-            searchData->outputHandler->sendHashTableStats(hashHits, ptHits, 0, etHits);
-        }
+        
     }
-    if (searchData->outputHandler) {
-        searchData->outputHandler->sendBestMove(resultMove, ponderMove);
-    }
+    uci::send_bestmove(resultMove, ponderMove);
 
     /*
      * Clean up and terminate the thinking thread
      */
+
     delete searchData;
     delete book;
     pthread_exit(NULL);
@@ -446,7 +449,7 @@ void print_row(std::string cap, score_t & w, score_t & b, int phase) {
 
 void TEngine::analyse() {
 
-    TSearch * s = new TSearch(_rootFen.c_str(), _outputHandler);
+    TSearch * s = new TSearch(_rootFen.c_str());
     s->stack->eval_result = evaluate(s);
     int phase = s->stack->phase;
     bool wtm = s->pos->stack->wtm;
@@ -481,14 +484,6 @@ void TEngine::analyse() {
     print_row("Total", s->stack->eval_result);
 
     delete s;
-}
-
-void TEngine::setInputHandler(TInputHandler * inputHandler) {
-    _inputHandler = inputHandler;
-}
-
-void TEngine::setOutputHandler(TOutputHandler * outputHandler) {
-    _outputHandler = outputHandler;
 }
 
 void TEngine::testPosition(move_t bestMove, int score, int maxTime, int maxDepth) {
@@ -622,7 +617,6 @@ void * TEngine::_learn(void * engineObjPtr) {
     /*
      * Constants
      */
-
     const int MAXDEPTH = 1; //default: depth 2
     const int MINGAMESCOUNT = 3350;
     const int MAXGAMESCOUNT = 100000; //step 0: 1/10, step 1: 1/2, step2: upto 1/1
@@ -633,16 +627,13 @@ void * TEngine::_learn(void * engineObjPtr) {
     const int STOPSCORE = 120; //if the score is higher than this for both sides, the game is consider a win
     const int MAXPLIES = 200; //maximum game length in plies
 
-
     /*
      * Initialize, normally it's not needed to change anything from here
      */
-
-    
     TEngine * engine = (TEngine*) engineObjPtr;
     trans_table::disable();
-    TSearch * sd_root = new TSearch(engine->_rootFen.c_str(), NULL);
-    TSearch * sd_game = new TSearch(engine->_rootFen.c_str(), NULL);
+    TSearch * sd_root = new TSearch(engine->_rootFen.c_str());
+    TSearch * sd_game = new TSearch(engine->_rootFen.c_str());
 
     engine->gameSettings.maxDepth = MAXDEPTH;
     sd_root->timeManager->setEndTime(INFINITE_TIME);
@@ -652,6 +643,9 @@ void * TEngine::_learn(void * engineObjPtr) {
     double bestFactor = 1.0;
     double upperBound = score::INF;
     double lowerBound = -score::INF;
+    
+    uci::silent(true);
+    trans_table::disable();
 
 
     /*
@@ -955,6 +949,10 @@ void * TEngine::_learn(void * engineObjPtr) {
     /*
      * Clean up and terminate the learning thread
      */
+    
+    uci::silent(false);
+    trans_table::enable();
+    
     delete sd_root;
     delete sd_game;
     delete book;

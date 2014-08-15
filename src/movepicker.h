@@ -37,6 +37,7 @@
 class TSearch;
 
 enum MovePickingStage {
+    HASH,
     MATEKILLER,
     CAPTURES,
     PROMOTIONS,

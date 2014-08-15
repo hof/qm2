@@ -71,7 +71,7 @@ inline move_t * TMovePicker::popBest(board_t * pos, move::list_t * list) {
 move_t * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, int beta) {
     move::list_t * moveList = &searchData->stack->moveList;
     moveList->clear();
-    moveList->stage = depth < ONE_PLY ? CAPTURES : MATEKILLER;
+    moveList->stage = depth < ONE_PLY ? CAPTURES : HASH;
     searchData->stack->captureMask = searchData->pos->bb[ALLPIECES];
     return pickNextMove(searchData, depth, alpha, beta);
 }
@@ -95,6 +95,15 @@ move_t * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, i
      */
     if (!result) {
         switch (moveList->stage) {
+            case HASH:
+                result = &searchData->stack->tt_move;
+                if (result->piece) {
+                    assert(pos->valid(result));
+                    assert(pos->legal(result));
+                    moveList->stage = MATEKILLER;
+                    moveList->last_excluded++->set(result);
+                    return result;
+                }
             case MATEKILLER:
                 result = &searchData->stack->mateKiller;
                 if (result->piece

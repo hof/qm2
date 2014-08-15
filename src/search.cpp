@@ -26,6 +26,7 @@
  */
 
 #include "search.h"
+#include "engine.h"
 #include <cstdlib>
 #include <iostream>
 #include <string.h>
@@ -37,13 +38,13 @@ static const short LMR_MAX = 6; //in half plies
 static const short QS_DELTA = 200; //qsearch delta pruning margin
 
 bool TSearch::pondering() {
-    return ponder || (outputHandler && outputHandler->enginePonder == true);
+    return ponder || engine::is_ponder();
 }
 
 void TSearch::poll() {
     nodesUntilPoll = NODESBETWEENPOLLS;
-    stopSearch = (timeManager->timeIsUp() && (!ponder || (outputHandler && outputHandler->enginePonder == false)))
-            || (outputHandler && outputHandler->engineStop == true)
+    stopSearch = (timeManager->timeIsUp() && (!ponder || engine::is_ponder() == false))
+            || engine::is_stopped()
             || (maxNodes > 0 && nodes > maxNodes);
 }
 
@@ -61,12 +62,12 @@ int TSearch::initRootMoves() {
     root.FiftyCount = pos->stack->fifty_count;
     setNodeType(-score::INF, score::INF);
     rep_table::store(pos->stack->fifty_count, pos->stack->hash_code);
-    
+
     int trans_move = 0;
     int trans_flags = 0;
     int score = 0;
     trans_table::retrieve(pos->stack->hash_code, 0, 0, score, trans_move, trans_flags);
-    
+
     for (move_t * move = movePicker->pickFirstMove(this, ONE_PLY, -score::INF, score::INF);
             move; move = movePicker->pickNextMove(this, ONE_PLY, -score::INF, score::INF)) {
         TRootMove * rMove = &root.Moves[root.MoveCount++];
@@ -171,28 +172,14 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
         return best; //return to adjust the aspiration window
     }
     if (best >= beta) {
-        if (outputHandler && depth > LOW_DEPTH) {
-            outputHandler->sendPV(best,
-                    depth / ONE_PLY,
-                    selDepth,
-                    nodes + pruned_nodes,
-                    timeManager->elapsed(),
-                    getPVString().c_str(),
-                    best <= alpha ? FAILLOW : best >= beta ? FAILHIGH : EXACT);
-        }
+        uci::send_pv(best, depth / ONE_PLY, selDepth, nodes + pruned_nodes, timeManager->elapsed(),
+                getPVString().c_str(), score::flags(best, alpha, beta));
         return best;
     }
     if (best > alpha) {
         updatePV(&rMove->Move);
-        if (outputHandler && depth > LOW_DEPTH) {
-            outputHandler->sendPV(best,
-                    depth / ONE_PLY,
-                    selDepth,
-                    nodes + pruned_nodes,
-                    timeManager->elapsed(),
-                    getPVString().c_str(),
-                    best <= alpha ? FAILLOW : best >= beta ? FAILHIGH : EXACT);
-        }
+        uci::send_pv(best, depth / ONE_PLY, selDepth, nodes + pruned_nodes, timeManager->elapsed(),
+                getPVString().c_str(), score::flags(best, alpha, beta));
         alpha = best;
     }
 
@@ -230,16 +217,9 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
             best = score;
             if (score > alpha) {
                 updatePV(&rMove->Move);
-                //trace(best, alpha, beta);
-                if (outputHandler && depth > LOW_DEPTH) { //send the new pv right away
-                    outputHandler->sendPV(best,
-                            depth / ONE_PLY,
-                            selDepth,
-                            nodes + pruned_nodes,
-                            timeManager->elapsed(),
-                            getPVString().c_str(),
-                            best <= alpha ? FAILLOW : best >= beta ? FAILHIGH : EXACT);
-                }
+                uci::send_pv(best, depth / ONE_PLY, selDepth, nodes + pruned_nodes, 
+                        timeManager->elapsed(), getPVString().c_str(), 
+                        score::flags(best, alpha, beta));
                 alpha = score;
             }
         } else {
@@ -281,7 +261,6 @@ int TSearch::extendMove(move_t * move, int gives_check) {
 int TSearch::pvs(int alpha, int beta, int depth) {
 
     stack->pvCount = 0;
-
 
     /*
      * 1. If no more depth remaining, return quiescence value
@@ -346,12 +325,13 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     int tflag = 0;
     int tscore = 0;
     if (trans_table::retrieve(pos->stack->hash_code, pos->current_ply, depth, tscore, tmove, tflag)) {
-        if ((tflag == score::LOWERBOUND && tscore >= beta) 
+        if ((tflag == score::LOWERBOUND && tscore >= beta)
                 || (tflag == score::UPPERBOUND && tscore <= alpha)
                 || tflag == score::EXACT) {
             return tscore;
         }
     }
+    stack->tt_move.set(tmove);
 
     /*
      * 5. Pruning: Fail-high and Nullmove
@@ -360,7 +340,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
     int new_depth = depth - ONE_PLY;
     bool in_check = stack->in_check;
     assert(new_depth >= 0);
-    
+
     //a) Fail-high pruning (return if static evaluation score is already much better than beta)
     if (!in_check
             && new_depth <= LOW_DEPTH
@@ -403,6 +383,20 @@ int TSearch::pvs(int alpha, int beta, int depth) {
                 }
             }
         }
+    }
+
+
+
+    /*
+     * IID 
+     */
+    if (type == PVNODE && depth > LOW_DEPTH && tmove == 0) {
+        skipNull = true;
+        stack->bestMove.set(0);
+        int iid_depth = depth - (2 * ONE_PLY) - (depth >> 2);
+        iid_depth = MAX(ONE_PLY, iid_depth);
+        int iid_score = pvs(alpha, beta, iid_depth);
+        stack->tt_move.set(&stack->bestMove);
     }
     skipNull = false;
 
@@ -490,7 +484,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         int reduce = 0;
 
         if (!skip_prune && max_reduce > 0 && searched_moves >= 3) {
-            reduce = searched_moves < 6? ONE_PLY : depth / 3;
+            reduce = searched_moves < 6 ? ONE_PLY : depth / 3;
             reduce = MIN(reduce, max_reduce);
         }
         assert(reduce == 0 || extend_move == 0);
@@ -599,7 +593,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
     }
 
     int eval = evaluate(this); //always do an eval - it's incremental
-    
+
     //if not in check, generate captures, promotions and (upto some plies ) quiet checks
     if (eval >= beta && !stack->in_check) { //return evaluation score is it's already above beta (stand-pat idea)
         return eval;
