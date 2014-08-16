@@ -29,10 +29,6 @@
 #ifndef BOOK_H
 #define	BOOK_H
 
-#include <cstdlib>
-#include <fstream>
-#include <string>
-
 #include "movegen.h"
 
 struct book_entry_t {

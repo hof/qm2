@@ -135,12 +135,43 @@ const short REDUNDANT_ROOK = -10;
 const short REDUNDANT_KNIGHT = -8;
 const short REDUNDANT_QUEEN = -20;
 
-uint8_t MFLAG_EG = 1; //do endgame evaluation
-uint8_t MFLAG_KING_ATTACK_FORCE_W = 2; //do  king attack evaluation (white)
-uint8_t MFLAG_KING_ATTACK_FORCE_B = 4; //do king attack evaluation (black)
-uint8_t MFLAG_IMBALANCE = 8; //material imbalance
-uint8_t MFLAG_MATING_POWER_W = 16;
-uint8_t MFLAG_MATING_POWER_B = 32;
+enum mflag_t {
+    MFLAG_EG = 128,
+    MFLAG_MATING_POWER_W = 64,
+    MFLAG_MATING_POWER_B = 32,
+    MFLAG_KING_ATTACK_FORCE_W = 16,
+    MFLAG_KING_ATTACK_FORCE_B = 8,
+    MFLAG_IMBALANCE = 7
+};
+
+enum mflag_imbalance_t {
+    IMB_NONE = 0,
+    IMB_MINOR_W = 1,
+    IMB_MAJOR_W = 2,
+    IMB_MINOR_B = 5,
+    IMB_MAJOR_B = 6
+};
+/* 
+ * 0  | 1   | 2   | 3   | 4   | 5 ..   7  | 
+ * EG | AFW | AFB | MPW | MPB | IMBALANCE | 
+ * 
+ * Imbalance: 000 - 0) no imbalance
+ *            001 - 1) minor imbalance favoring white
+ *            010 - 2) major imbalance favoring white
+ *            011 - 3) (reserved for white)
+ *            100 - 4) (reserved for black)
+ *            101 - 5) minor imbalance favoring black
+ *            110 - 6) major imbalance favoring black
+ *            111 - 7) (reserved for black) 
+ */
+
+bool has_imbalance(int flags, bool us) {
+    return (flags & MFLAG_IMBALANCE) && bool(flags & 4) == !us;
+}
+
+bool has_major_imbalance(int flags) {
+    return flags & 2;
+}
 
 const short TRADEDOWN_PAWNS_MUL[9] = {
     210, 226, 238, 248, 256, 256, 256, 256, 256
@@ -261,6 +292,8 @@ const score_t KNIGHT_OUTPOST[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0)
 };
 
+const score_t KNIGHT_ATTACK = S(10, 10);
+
 /*******************************************************************************
  * Bishop Values 
  *******************************************************************************/
@@ -275,7 +308,7 @@ const score_t BISHOP_MOBILITY[14] = {
 
 const score_t TRAPPED_BISHOP = S(-60, -80);
 
-const score_t ACTIVE_BISHOP = S(6, 6);
+const score_t BISHOP_ATTACK = S(10, 10);
 
 U64 BISHOP_PATTERNS[2] = {//black, white
     BIT(d6) | BIT(d7) | BIT(e6) | BIT(d7) | BIT(a2) | BIT(h2),
@@ -470,10 +503,7 @@ inline short evaluateMaterial(TSearch * sd) {
             result.sub(REDUNDANT_QUEEN);
         }
     }
-    if (wpawns != bpawns) {
-        result.mg += (wpawns - bpawns) * SVPAWN.mg;
-        result.eg += (wpawns - bpawns) * SVPAWN.eg;
-    }
+    
 
     /*
      * Material Balance
@@ -481,11 +511,24 @@ inline short evaluateMaterial(TSearch * sd) {
     flags = 0;
     bool balance = (wminors == bminors) && (wrooks + 2 * wqueens) == (brooks + 2 * bqueens);
     if (!balance) { //material imbalance
-
-        flags |= MFLAG_IMBALANCE;
+        int power = result.get(phase);
+        if (power > 450) {
+            flags = IMB_MAJOR_W;
+        } else if (power > 100) {
+            flags = IMB_MINOR_W;
+        } else if (power < -450) {
+            flags = IMB_MAJOR_B;
+        } else if (power < -100) {
+            flags = IMB_MINOR_B;
+        }
         int minors_ix = MAX(0, 4 + wminors - bminors);
         int majors_ix = MAX(0, 4 + wrooks + 2 * wqueens - brooks - 2 * bqueens);
         result.add(IMBALANCE[MIN(majors_ix, 8)][MIN(minors_ix, 8)]);
+    }
+    
+    if (wpawns != bpawns) {
+        result.mg += (wpawns - bpawns) * SVPAWN.mg;
+        result.eg += (wpawns - bpawns) * SVPAWN.eg;
     }
 
     /*
@@ -790,6 +833,16 @@ inline score_t * evaluatePawnsAndKings(TSearch * sd) {
 
     pawn_score.add(PST[WKING][ISQ(wkpos, WHITE)]);
     pawn_score.sub(PST[WKING][ISQ(bkpos, BLACK)]);
+    
+    U64 ka_w = KING_MOVES[wkpos] & sd->stack->mob[WHITE] & sd->stack->attack[WHITE];
+    U64 ka_b = KING_MOVES[bkpos] & sd->stack->mob[BLACK] & sd->stack->attack[BLACK];
+    if (ka_w) {
+        pawn_score.add(0, 10);
+    }
+    if (ka_b) {
+        pawn_score.sub(0, 10);
+    }
+    
 
     /*
      * 4. Calculate King Shelter Attack units
@@ -957,6 +1010,10 @@ inline score_t * evaluateKnights(TSearch * sd, bool us) {
         result->add(KNIGHT_MOBILITY[mob_count]);
         result->add(KNIGHT_PAWN_WIDTH[pawn_width]);
         result->add(KNIGHT_PAWN_COUNT[pawn_count]);
+        
+        if (moves & sd->stack->attack[us]) {
+            result->add(KNIGHT_ATTACK);
+        }
 
         if (pos->is_attacked_by_pawn(sq, us)) {
             result->add(KNIGHT_OUTPOST[ISQ(sq, us)]);
@@ -1020,9 +1077,9 @@ inline score_t * evaluateBishops(TSearch * sd, bool us) {
         int count = popcnt0(moves);
         result->add(BISHOP_MOBILITY[count]);
         if (moves & sd->stack->attack[us]) {
-            result->add(ACTIVE_BISHOP);
+            result->add(BISHOP_ATTACK);
         } else {
-            result->sub(ACTIVE_BISHOP);
+            result->sub(BISHOP_ATTACK);
         }
         if (pos->is_attacked_by_pawn(sq, us)) {
             result->add(BISHOP_OUTPOST[ISQ(sq, us)]);
@@ -1328,6 +1385,13 @@ inline score_t * evaluatePassers(TSearch * sd, bool us) {
     result->print();
     std::cout << std::endl;
 #endif
+    if (has_imbalance(sd->stack->material_flags, them)) {
+        if (has_major_imbalance(sd->stack->material_flags)) {
+            result->mul256(128);
+        } else {
+            result->mul256(196);
+        }
+    }
     return result;
 }
 
@@ -1700,10 +1764,13 @@ inline short evaluateEndgame(TSearch * s, short score) {
     //we have no pawns and no winning edge
     if (pawn_count[us] == 0 && !winning_edge[us]) {
         if (mating_power[us]) {
-            if (pos->bb[QUEEN[us]] && !pos->bb[QUEEN[them]]) {
-                return DRAW(score, 2) + cornerKing(s, them) / 2;
+            if (has_imbalance(s->stack->material_flags, us)) {
+                if (has_major_imbalance(s->stack->material_flags)) {
+                    return score + cornerKing(s, them) / 4;
+                }
+                return DRAW(score, 2) + cornerKing(s, them) / 4;
             }
-            return DRAW(score, 16) + cornerKing(s, them) / 8;
+            return DRAW(score, 8) + cornerKing(s, them) / 8;
         }
         return DRAW(score, 16);
     }

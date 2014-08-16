@@ -63,7 +63,7 @@ bool flipTest(int test_num, const char * fen) {
 
     global_engine->newGame(pos.to_string());
     global_engine->think();
-    global_engine->stopAllThreads();
+    global_engine->stop_all();
     int nodes1 = global_engine->getNodesSearched();
     score1 = global_engine->getScore();
 
@@ -71,7 +71,7 @@ bool flipTest(int test_num, const char * fen) {
     
     global_engine->newGame(pos.to_string());
     global_engine->think();
-    global_engine->stopAllThreads();
+    global_engine->stop_all();
     int nodes2 = global_engine->getNodesSearched();
     score2 = global_engine->getScore();
     

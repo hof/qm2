@@ -199,7 +199,7 @@ public:
     
     score_t drawContempt;
 
-    TMovePicker * movePicker;
+    move_picker_t * movePicker;
     TTimeManager * timeManager;
     int history[BKING + 1][64];
     
@@ -212,7 +212,7 @@ public:
         pos->create(fen);
         memset(history, 0, sizeof (history));
         InitPST();
-        movePicker = new TMovePicker();
+        movePicker = new move_picker_t();
         timeManager = new TTimeManager();
         nodes = 0;
         pruned_nodes = 0;

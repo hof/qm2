@@ -68,8 +68,8 @@ int TSearch::initRootMoves() {
     int score = 0;
     trans_table::retrieve(pos->stack->hash_code, 0, 0, score, trans_move, trans_flags);
 
-    for (move_t * move = movePicker->pickFirstMove(this, ONE_PLY, -score::INF, score::INF);
-            move; move = movePicker->pickNextMove(this, ONE_PLY, -score::INF, score::INF)) {
+    for (move_t * move = movePicker->first(this, ONE_PLY, -score::INF, score::INF);
+            move; move = movePicker->next(this, ONE_PLY, -score::INF, score::INF)) {
         TRootMove * rMove = &root.Moves[root.MoveCount++];
         int move_score = 1000 - root.MoveCount;
         if (move->to_int() == trans_move) {
@@ -179,7 +179,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
     if (best > alpha) {
         updatePV(&rMove->Move);
         uci::send_pv(best, depth / ONE_PLY, selDepth, nodes + pruned_nodes, timeManager->elapsed(),
-                getPVString().c_str(), score::flags(best, alpha, beta));
+                    getPVString().c_str(), score::flags(best, alpha, beta));
         alpha = best;
     }
 
@@ -217,9 +217,9 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
             best = score;
             if (score > alpha) {
                 updatePV(&rMove->Move);
-                uci::send_pv(best, depth / ONE_PLY, selDepth, nodes + pruned_nodes, 
-                        timeManager->elapsed(), getPVString().c_str(), 
-                        score::flags(best, alpha, beta));
+                uci::send_pv(best, depth / ONE_PLY, selDepth, nodes + pruned_nodes,
+                            timeManager->elapsed(), getPVString().c_str(),
+                            score::flags(best, alpha, beta));
                 alpha = score;
             }
         } else {
@@ -407,7 +407,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * If no move is returned, the position is either MATE or STALEMATE, 
      * otherwise search the first move with full alpha beta window.
      */
-    move_t * first_move = movePicker->pickFirstMove(this, depth, alpha, beta);
+    move_t * first_move = movePicker->first(this, depth, alpha, beta);
     if (!first_move) { //no legal move: it's checkmate or stalemate
         return in_check ? -score::MATE + pos->current_ply : drawScore();
     }
@@ -445,7 +445,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      */
     int searched_moves = 1;
     int max_reduce = MAX(0, new_depth - ONE_PLY);
-    while (move_t * move = movePicker->pickNextMove(this, depth, alpha, beta)) {
+    while (move_t * move = movePicker->next(this, depth, alpha, beta)) {
         assert(stack->bestMove.equals(move) == false);
         assert(first_move->equals(move) == false);
         gives_check = pos->gives_check(move);
@@ -599,7 +599,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
         return eval;
     }
 
-    move_t * move = movePicker->pickFirstMove(this, depth, alpha, beta);
+    move_t * move = movePicker->first(this, depth, alpha, beta);
     if (!move) { //return evaluation score if there are no quiescence moves
         return stack->in_check ? -score::MATE + pos->current_ply : eval;
     }
@@ -649,7 +649,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
             stack->bestMove.set(move);
             alpha = score;
         }
-    } while ((move = movePicker->pickNextMove(this, depth, alpha, beta)));
+    } while ((move = movePicker->next(this, depth, alpha, beta)));
     return alpha;
 }
 

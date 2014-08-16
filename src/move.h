@@ -86,7 +86,7 @@ public:
     void clear() {
         piece = 0;
     }
-
+    
 };
 
 #endif	/* MOVE_H */

@@ -20,7 +20,6 @@
  */
 
 #include "move.h"
-#include "bits.h"
 #include "board.h"
 
 /**

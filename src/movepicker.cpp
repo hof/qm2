@@ -28,10 +28,8 @@
 
 #include "movepicker.h"
 #include "search.h"
-#include "move.h"
 
-void TMovePicker::push(TSearch * searchData, move_t * move, int score) {
-    move::list_t * list = &searchData->stack->moveList;
+void move_picker_t::push(move::list_t * list, move_t * move, int score) {
     for (move_t * m = list->first; m != list->last; m++) {
         if (move->equals(m)) {
             m->score = score;
@@ -44,7 +42,7 @@ void TMovePicker::push(TSearch * searchData, move_t * move, int score) {
     list->last = current;
 }
 
-inline move_t * TMovePicker::popBest(board_t * pos, move::list_t * list) {
+move_t * move_picker_t::pop(board_t * brd, move::list_t * list) {
     if (list->first == list->last) {
         return NULL;
     }
@@ -59,7 +57,7 @@ inline move_t * TMovePicker::popBest(board_t * pos, move::list_t * list) {
         if (best->score < edge) {
             return NULL;
         }
-        if (pos->legal(best)) {
+        if (brd->legal(best)) {
             best->score = move::EXCLUDED;
             return best;
         }
@@ -68,176 +66,173 @@ inline move_t * TMovePicker::popBest(board_t * pos, move::list_t * list) {
     return NULL;
 }
 
-move_t * TMovePicker::pickFirstMove(TSearch * searchData, int depth, int alpha, int beta) {
-    move::list_t * moveList = &searchData->stack->moveList;
-    moveList->clear();
-    moveList->stage = depth < ONE_PLY ? CAPTURES : HASH;
-    searchData->stack->captureMask = searchData->pos->bb[ALLPIECES];
-    return pickNextMove(searchData, depth, alpha, beta);
+move_t * move_picker_t::first(TSearch * s, int depth, int alpha, int beta) {
+    move::list_t * list = &s->stack->moveList;
+    list->clear();
+    list->stage = depth < ONE_PLY ? CAPTURES : HASH;
+    return next(s, depth, alpha, beta);
 }
 
-move_t * TMovePicker::pickNextMove(TSearch * searchData, int depth, int alpha, int beta) {
+move_t * move_picker_t::next(TSearch * s, int depth, int alpha, int beta) {
     U64 mask;
-    move::list_t * moveList = &searchData->stack->moveList;
-    board_t * pos = searchData->pos;
+    board_t * brd = s->pos;
+    move::list_t * list = &s->stack->moveList;
+    /*
+     * 1. Pop the best move from the list. If a move is found, a just-in-time 
+     * legality check is done and the movepicker returns a valid, legal, move.
+     */
+    move_t * result = pop(brd, list);
+    if (result) {
+        return result;
+    }
 
     /*
-     * 1. If there are moves present in the moveList, this means
-     * they are already scored by the Movepicker. They are also valid (semilegal) 
-     * and we can return the best one. 
-     * A last-minute legality check is performed so the movepicker 
-     * always returns fully legal moves.
+     * 2. If no move was found, proceed to the next stage and get or generate
+     * (some) moves.
      */
-    move_t * result = popBest(pos, moveList);
-
-    /*
-     * 2. Proceed to the next stage if no move was found
-     */
-    if (!result) {
-        switch (moveList->stage) {
-            case HASH:
-                result = &searchData->stack->tt_move;
-                if (result->piece) {
-                    assert(pos->valid(result));
-                    assert(pos->legal(result));
-                    moveList->stage = MATEKILLER;
-                    moveList->last_excluded++->set(result);
+    switch (list->stage) {
+        case HASH:
+            result = &s->stack->tt_move;
+            if (result->piece) {
+                assert(brd->valid(result));
+                assert(brd->legal(result));
+                list->stage = MATEKILLER;
+                list->last_excluded++->set(result);
+                return result;
+            }
+        case MATEKILLER:
+            result = &s->stack->mateKiller;
+            if (result->piece
+                    && !list->is_excluded(result)
+                    && brd->valid(result)
+                    && brd->legal(result)) {
+                list->stage = CAPTURES;
+                list->last_excluded++->set(result);
+                return result;
+            }
+        case CAPTURES:
+            mask = brd->bb[ALLPIECES];
+            if (s->stack->in_check) {
+                mask &= brd->stack->checkers;
+            }
+            move::gen_captures(brd, list, mask);
+            if (list->current != list->last) {
+                for (move_t * move = list->current; move != list->last; move++) {
+                    if (list->is_excluded(move)) {
+                        move->score = move::EXCLUDED;
+                    } else {
+                        move->score = depth > LOW_DEPTH ? brd->see(move) : brd->mvvlva(move);
+                    }
+                }
+                result = pop(brd, list);
+                if (result) {
+                    list->stage = PROMOTIONS;
                     return result;
                 }
-            case MATEKILLER:
-                result = &searchData->stack->mateKiller;
+            }
+        case PROMOTIONS:
+            move::gen_promotions(brd, list);
+            if (list->current != list->last) {
+                for (move_t * move = list->current; move != list->last; move++) {
+                    if (list->is_excluded(move)) {
+                        move->score = move::EXCLUDED;
+                    } else if ((move->promotion == WQUEEN || move->promotion == BQUEEN)
+                            && brd->see(move) >= 0) {
+                        move->score = 800;
+                    } else {
+                        move->score = -move->piece;
+                    }
+                }
+                result = pop(brd, list);
+                if (result) {
+                    list->stage = KILLER1;
+                    return result;
+                }
+            }
+        case KILLER1:
+            if (depth >= ONE_PLY) {
+                result = &s->stack->killer1;
                 if (result->piece
-                        && !moveList->is_excluded(result)
-                        && pos->valid(result)
-                        && pos->legal(result)) {
-                    moveList->stage = CAPTURES;
-                    moveList->last_excluded++->set(result);
+                        && brd->valid(result)
+                        && !list->is_excluded(result)
+                        && brd->legal(result)) {
+                    list->last_excluded++->set(result);
+                    list->stage = KILLER2;
+                    assert(result->capture == EMPTY && result->promotion == EMPTY);
                     return result;
                 }
-            case CAPTURES:
-                mask = pos->bb[ALLPIECES];
-                if (searchData->stack->in_check) {
-                    mask &= pos->stack->checkers;
-                }
-                move::gen_captures(pos, moveList, mask);
-                if (moveList->current != moveList->last) {
-                    for (move_t * move = moveList->current; move != moveList->last; move++) {
-                        if (moveList->is_excluded(move)) {
-                            move->score = move::EXCLUDED;
-                        } else {
-                            move->score = depth > LOW_DEPTH ? pos->see(move) : MVVLVA(move);
-                        }
-                    }
-                    result = popBest(pos, moveList);
-                    if (result) {
-                        moveList->stage = PROMOTIONS;
-                        return result;
-                    }
-                }
-            case PROMOTIONS:
-                move::gen_promotions(pos, moveList);
-                if (moveList->current != moveList->last) {
-                    for (move_t * move = moveList->current; move != moveList->last; move++) {
-                        if (moveList->is_excluded(move)) {
-                            move->score = move::EXCLUDED;
-                        } else if ((move->promotion == WQUEEN || move->promotion == BQUEEN)
-                                && pos->see(move) >= 0) {
-                            move->score = 800;
-                        } else {
-                            move->score = -move->piece;
-                        }
-                    }
-                    result = popBest(pos, moveList);
-                    if (result) {
-                        moveList->stage = KILLER1;
-                        return result;
-                    }
-                }
-            case KILLER1:
-                if (depth >= ONE_PLY) {
-                    result = &searchData->stack->killer1;
-                    if (result->piece
-                            && pos->valid(result)
-                            && !moveList->is_excluded(result)
-                            && pos->legal(result)) {
-                        moveList->last_excluded++->set(result);
-                        moveList->stage = KILLER2;
-                        assert(result->capture == EMPTY && result->promotion == EMPTY);
-                        return result;
-                    }
-                }
-            case KILLER2:
-                if (depth >= ONE_PLY) {
-                    result = &searchData->stack->killer2;
-                    if (result->piece
-                            && pos->valid(result)
-                            && !moveList->is_excluded(result)
-                            && pos->legal(result)) {
-                        moveList->last_excluded++->set(result);
-                        moveList->stage = MINORPROMOTIONS;
-                        assert(result->capture == EMPTY && result->promotion == EMPTY);
-                        return result;
-                    }
-                }
-            case MINORPROMOTIONS: //and captures with see < 0
-                if (depth <= LOW_DEPTH) {
-                    moveList->minimum_score = -move::INF;
-                    result = popBest(pos, moveList);
-                    if (result) {
-                        moveList->stage = CASTLING;
-                        return result;
-                    }
-                }
-            case CASTLING:
-                if (searchData->stack->in_check == false) {
-                    move::gen_castles(pos, moveList);
-                    if (moveList->current != moveList->last) {
-                        for (move_t * move = moveList->current; move != moveList->last; move++) {
-                            if (moveList->is_excluded(move)) {
-                                move->score = move::EXCLUDED;
-                            } else {
-                                move->score = 100;
-                            }
-                        }
-                        result = popBest(pos, moveList);
-                        if (result) {
-                            moveList->stage = QUIET_MOVES;
-                            return result;
-                        }
-                    }
-                }
-            case QUIET_MOVES:
-                if (depth >= 0 || searchData->stack->in_check) {
-                    moveList->minimum_score = -move::INF;
-                    move::gen_quiet_moves(pos, moveList);
-                    for (move_t * move = moveList->current; move != moveList->last; move++) {
-                        if (moveList->is_excluded(move)) {
-                            move->score = move::EXCLUDED;
-                        } else {
-                            move->score = searchData->history[move->piece][move->tsq];
-                        }
-                    }
-                    moveList->stage = STOP;
-                    result = popBest(pos, moveList);
+            }
+        case KILLER2:
+            if (depth >= ONE_PLY) {
+                result = &s->stack->killer2;
+                if (result->piece
+                        && brd->valid(result)
+                        && !list->is_excluded(result)
+                        && brd->legal(result)) {
+                    list->last_excluded++->set(result);
+                    list->stage = MINORPROMOTIONS;
+                    assert(result->capture == EMPTY && result->promotion == EMPTY);
                     return result;
                 }
-            case STOP:
-            default:
-                return NULL;
-        }
+            }
+        case MINORPROMOTIONS: //and captures with see < 0
+            if (depth <= LOW_DEPTH) {
+                list->minimum_score = -move::INF;
+                result = pop(brd, list);
+                if (result) {
+                    list->stage = CASTLING;
+                    return result;
+                }
+            }
+        case CASTLING:
+            if (s->stack->in_check == false) {
+                move::gen_castles(brd, list);
+                for (move_t * move = list->current; move != list->last; move++) {
+                    if (list->is_excluded(move)) {
+                        move->score = move::EXCLUDED;
+                    } else {
+                        move->score = 100;
+                    }
+                }
+                result = pop(brd, list);
+                if (result) {
+                    list->stage = QUIET_MOVES;
+                    return result;
+                }
+
+            }
+        case QUIET_MOVES:
+            if (depth >= 0 || s->stack->in_check) {
+                list->minimum_score = -move::INF;
+                move::gen_quiet_moves(brd, list);
+                for (move_t * move = list->current; move != list->last; move++) {
+                    if (list->is_excluded(move)) {
+                        move->score = move::EXCLUDED;
+                    } else {
+                        move->score = s->history[move->piece][move->tsq];
+                    }
+                }
+                list->stage = STOP;
+                result = pop(brd, list);
+                return result;
+            }
+        case STOP:
+        default:
+            return NULL;
     }
     return result;
 }
 
-short TMovePicker::countEvasions(TSearch * sd, move_t * firstMove) {
-    assert(firstMove != NULL);
+int move_picker_t::count_evasions(TSearch * s, move_t * first_move) {
+    assert(first_move != NULL);
+    move::list_t * list = &s->stack->moveList;
     int result = 1;
     const short MAXLEGALCOUNT = 3;
     move_t * pushback[MAXLEGALCOUNT];
 
     //get and count legal moves
     while (result < MAXLEGALCOUNT) {
-        move_t * m = pickNextMove(sd, 1, -score::INF, score::INF);
+        move_t * m = next(s, 1, -score::INF, score::INF);
         if (m == NULL) {
             break;
         }
@@ -245,10 +240,9 @@ short TMovePicker::countEvasions(TSearch * sd, move_t * firstMove) {
     }
 
     //push moves back on the list
-    for (int i = firstMove != NULL; i < result; i++) {
-        push(sd, pushback[i], score::INF - i);
+    for (int i = first_move != NULL; i < result; i++) {
+        push(list, pushback[i], score::INF - i);
     }
-
     return result;
 }
 

@@ -28,8 +28,6 @@
 #ifndef SCORE_H
 #define	SCORE_H
 
-#include "bits.h"
-
 namespace score {
 
     enum constants {
@@ -118,97 +116,107 @@ struct score_t {
         std::cout << txt << ": (" << mg << ", " << eg << ") ";
     }
 
-    inline void add(const score_t * s) {
+    void add(const score_t * s) {
         mg += s->mg;
         eg += s->eg;
     }
 
-    inline short get(short phase) {
+    short get(short phase) {
         assert(phase >= 0 && phase <= score::MAX_PHASE);
         return (mg * (score::MAX_PHASE - phase) + eg * phase) / score::MAX_PHASE;
     }
 
-    inline void set(const score_t & s) {
+    void set(const score_t & s) {
         mg = s.mg;
         eg = s.eg;
     }
 
-    inline void set(const score_t * s) {
+    void set(const score_t * s) {
         mg = s->mg;
         eg = s->eg;
     }
 
-    inline void nset(const score_t & s) {
+    void nset(const score_t & s) {
         mg = -s.mg;
         eg = -s.eg;
     }
 
-    inline void set(const short x, const short y) {
+    void set(const short x, const short y) {
         mg = x;
         eg = y;
     }
 
-    inline void add(const short x, const short y) {
+    void add(const short x, const short y) {
         mg += x;
         eg += y;
     }
 
-    inline void add(const score_t & s) {
+    void add(const score_t & s) {
         mg += s.mg;
         eg += s.eg;
     }
 
-    inline void sub(const score_t & s) {
+    void sub(const score_t & s) {
         mg -= s.mg;
         eg -= s.eg;
     }
 
-    inline void sub(const score_t * s) {
+    void sub(const score_t * s) {
         mg -= s->mg;
         eg -= s->eg;
     }
 
-    inline void sub(const short x, const short y) {
+    void sub(const short x, const short y) {
         mg -= x;
         eg -= y;
     }
 
-    inline void mul(const double x) {
+    void mul(const double x) {
         mg *= x;
         eg *= x;
     }
 
-    inline void mul(const double & x, const double & y) {
+    void mul(const double & x, const double & y) {
         mg *= x;
         eg *= y;
     }
+    
+    void mul256(const short x) {
+        mg = int(mg * x) / 256;
+        eg = int(eg * x) / 256;
+    }
+    
+    void mul256(const short x, const short y) {
+        mg = (mg * x) / 256;
+        eg = (eg * y) / 256;
+    }
 
-    inline void round() {
+    void round() {
         mg = (2 * mg) / 2;
         eg = (2 * eg) / 2;
     }
 
-    inline void max(const score_t & s) {
+    void max(const score_t & s) {
         mg = mg >= s.mg ? mg : s.mg;
         eg = eg >= s.eg ? eg : s.eg;
     }
 
-    inline void min(const score_t & s) {
+    void min(const score_t & s) {
         mg = mg <= s.mg ? mg : s.mg;
         eg = eg <= s.eg ? eg : s.eg;
     }
 
-    inline void clear() {
+    void clear() {
         mg = 0;
         eg = 0;
     }
 
-    inline void half() {
+    void half() {
         mg = mg / 2;
         eg = eg / 2;
     }
 
-    inline bool valid() {
+    bool valid() {
         return mg != score::INVALID && eg != score::INVALID;
     }
 

@@ -23,12 +23,14 @@
  * - Piece placement arrays for each piece
  */
 
-#include <cstdlib>
-#include <stdio.h>
-#include <iostream>
 #include "board.h"
 #include "hashcodes.h"
-#include "evaluate.h"
+
+namespace board {
+    const int PVAL[BKING + 1] = {
+        0, 100, 300, 300, 500, 900, 10000, 100, 300, 300, 500, 900, 10000
+    };
+};
 
 /**
  * Clears board stack
@@ -748,6 +750,14 @@ U64 board_t::smallest_attacker(U64 attacks, bool wtm, int & piece) {
 }
 
 /**
+ * Returns MVVLVA score 
+ * @return 
+ */
+int board_t::mvvlva(move_t * move) {
+    return board::PVAL[move->capture] + board::PVAL[move->promotion] - move->piece;
+}
+
+/**
  * SEE, Static Exchange Evaluator. Verify if a move or capture wins or looses material
  * @param move the move to verify
  * @return expected gain or loss by playing this move as a number in centipawns (e.g +300 when fully winning a knight)
@@ -755,7 +765,7 @@ U64 board_t::smallest_attacker(U64 attacks, bool wtm, int & piece) {
 int board_t::see(move_t * move) {
     int captured_piece = move->capture;
     int moving_piece = move->piece;
-    int captured_val = PIECE_VALUE[captured_piece];
+    int captured_val = board::PVAL[captured_piece];
 
     /*
      * 0. If the king captures, it's always a gain
@@ -769,7 +779,7 @@ int board_t::see(move_t * move) {
      * return quickly as we are (almost) sure this capture gains material.
      * (e.g. pawn x knight)
      */
-    int piece_val = PIECE_VALUE[moving_piece];
+    int piece_val = board::PVAL[moving_piece];
     if (piece_val < captured_val) {
         return captured_val - piece_val;
     }
@@ -806,7 +816,7 @@ int board_t::see(move_t * move) {
     gain[0] = captured_val;
     do {
         depth++;
-        gain[depth] = PIECE_VALUE[moving_piece] - gain[depth - 1];
+        gain[depth] = board::PVAL[moving_piece] - gain[depth - 1];
         attacks ^= from_bit;
         occ ^= from_bit;
         if (from_bit & xrays) {

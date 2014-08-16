@@ -25,6 +25,7 @@
 #define	HASHTABLE_H
 
 #include "board.h"
+#include "score.h"
 
 class material_table_t {
 private:

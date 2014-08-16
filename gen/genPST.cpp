@@ -26,6 +26,7 @@
 #include <cmath>
 #include <iomanip>  //setw
 #include "board.h"
+#include "score.h"
 
 pst_t PST;
 

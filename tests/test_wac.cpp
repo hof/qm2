@@ -38,7 +38,7 @@ TTestResult testForMove(TEngine * engine, std::string fen, std::string move, int
     std::cout << "Position: " << pos.to_string() << " best move: " << bm.to_string() << std::endl;
 
     engine->think();
-    engine->stopAllThreads();
+    engine->stop_all();
     result.solved = engine->getTestResult();
     result.nodes = engine->getNodesSearched();
     result.move = engine->getMove();

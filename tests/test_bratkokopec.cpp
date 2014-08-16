@@ -26,7 +26,7 @@ bool testForMove(std::string fen, std::string move, int targetScore) {
     engine::new_game(pos.to_string());
     std::cout << "Position: " << pos.to_string() << " best move: " << bm.to_string() << std::endl;
     engine::go();
-    engine::instance()->stopAllThreads();
+    engine::instance()->stop_all();
     return engine::instance()->getTestResult();
 }
 

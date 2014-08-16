@@ -16,12 +16,9 @@
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  *  
  * File: movepicker.h
- * Move Picker class to use by the search. The move picker handles move 
+ * Move Picker class to use by the search. The move picker handles ordered move 
  * generation in phases, typically following this order:
- * - Hash moves
- * - Killer Moves
- * - Captures
- * - Quiet Moves
+ 
  * All moves returned are legal. If the move picker does not return any move, 
  * it's a (stale)mate.
  *
@@ -31,12 +28,11 @@
 #ifndef MOVEPICKER_H
 #define	MOVEPICKER_H
 
-#include <cstdlib>
-
 #include "movegen.h"
+
 class TSearch;
 
-enum MovePickingStage {
+enum move_stage_t {
     HASH,
     MATEKILLER,
     CAPTURES,
@@ -49,20 +45,16 @@ enum MovePickingStage {
     STOP
 };
 
-#define MVVLVA(m) (PIECE_VALUE[m->capture] + PIECE_VALUE[m->promotion] - m->piece)
-
-class TMovePicker {
-protected:
-
-    move_t * popBest(board_t * pos, move::list_t * list);
+class move_picker_t {
+private:
+    move_t * pop(board_t * brd, move::list_t * list);
+    void push(move::list_t * list, move_t * move, int score);
 
 public:
-
-    move_t * pickNextMove(TSearch * searchData, int depth, int alpha, int beta);
-    move_t * pickFirstMove(TSearch * searchData, int depth, int alpha, int beta);
-    short countEvasions(TSearch * sd, move_t * firstMove);
+    move_t * first(TSearch * s, int depth, int alpha, int beta);
+    move_t * next(TSearch * s, int depth, int alpha, int beta);
+    int count_evasions(TSearch * s, move_t * first_move);
     
-    void push(TSearch * searchData, move_t * move, int score);
 };
 
 #endif	/* MOVEPICKER_H */

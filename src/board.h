@@ -25,10 +25,8 @@
 #ifndef BOARD_H
 #define	BOARD_H
 
-#include "move.h"
 #include "bbmoves.h"
-#include "hashcodes.h"
-#include "score.h"
+#include "move.h"
 
 enum square_t {
     a1, b1, c1, d1, e1, f1, g1, h1,
@@ -78,7 +76,7 @@ public:
     U64 material_hash;
     U64 pawn_hash;
     U64 checkers;
-    
+
     void clear();
     void flip();
     void copy(board_stack_t * b_stack);
@@ -115,11 +113,12 @@ public:
     void add_piece(int piece, int sq, bool hash);
     void remove_piece(int piece, int sq, bool hash);
     void move_piece(int piece, int ssq, int tsq, bool hash);
-    
+
     bool is_eg(endgame_t eg, bool us);
-    
+
     U64 smallest_attacker(U64 attacks, bool wtm, int &piece);
     int see(move_t * capture);
+    int mvvlva(move_t * capture);
 
     /**
      * Counts amount of piece for a given piece type
@@ -222,7 +221,7 @@ public:
     bool in_check() {
         return is_attacked(get_sq(KING[stack->wtm]), !stack->wtm);
     }
-    
+
     /**
      * Test if a square is attacked
      * @param sq the square to investigate
@@ -230,7 +229,7 @@ public:
      * @return true if the square is attacked, false otherwise
      */
     bool is_attacked(int sq, bool white) {
-        return white?
+        return white ?
                 bb[WKNIGHT] & KNIGHT_MOVES[sq]
                 || bb[WPAWN] & BPAWN_CAPTURES[sq]
                 || bb[WKING] & KING_MOVES[sq]
@@ -257,16 +256,16 @@ public:
                 | (magic::bishop_moves(sq, bb[ALLPIECES]) & (bb[WBISHOP] | bb[WQUEEN] | bb[BBISHOP] | bb[BQUEEN]))
                 | (magic::rook_moves(sq, bb[ALLPIECES]) & (bb[WROOK] | bb[WQUEEN] | bb[BROOK] | bb[BQUEEN]));
     }
-    
+
     /**
      * Get all pawn attacks for white or black
      * @param white white (true) or black (false)
      * @return bitboard populated with pawn attacks
      */
     U64 pawn_attacks(bool white) {
-        return white? UPLEFT1(bb[WPAWN]) | UPRIGHT1(bb[WPAWN])
+        return white ? UPLEFT1(bb[WPAWN]) | UPRIGHT1(bb[WPAWN])
                 :
-             DOWNLEFT1(bb[BPAWN]) | DOWNRIGHT1(bb[BPAWN]);
+                DOWNLEFT1(bb[BPAWN]) | DOWNRIGHT1(bb[BPAWN]);
     }
 
     /**
@@ -286,7 +285,7 @@ public:
      * @return true if the square is attacked by a pawn
      */
     bool is_attacked_by_pawn(int sq, bool white) {
-        return white? BPAWN_CAPTURES[sq] & bb[WPAWN] : WPAWN_CAPTURES[sq] & bb[BPAWN];
+        return white ? BPAWN_CAPTURES[sq] & bb[WPAWN] : WPAWN_CAPTURES[sq] & bb[BPAWN];
     }
 
 };

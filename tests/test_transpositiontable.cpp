@@ -5,14 +5,12 @@
  * Created on 16-mei-2011, 21:56:13
  */
 
-#include <stdlib.h>
-#include <iostream>
-
 #include "board.h"
 #include "search.h"
 #include "search.h"
 #include "engine.h"
 #include "evaluate.h"
+#include "hashcodes.h"
 
 /*
  * Simple C++ Test Suite
@@ -89,7 +87,7 @@ void test_tt() {
     }
 
     TSearch * sd = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    move_t * tmove = sd->movePicker->pickFirstMove(sd, 0, -score::INF, score::INF);
+    move_t * tmove = sd->movePicker->first(sd, 0, -score::INF, score::INF);
     trans_table::store(sd->pos->stack->hash_code, sd->pos->root_ply, sd->pos->current_ply, 123, -12345, tmove->to_int(), 3);
 
     result = trans_table::retrieve(sd->pos->stack->hash_code, sd->pos->current_ply, 123, score, move, flag);
@@ -114,7 +112,7 @@ void test_tt() {
     engine->gameSettings.maxDepth = 15;
     engine->newGame("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - -");
     engine->think();
-    engine->stopAllThreads();
+    engine->stop_all();
 
     if (engine->getNodesSearched() > 50000) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=hashtable not effective" << std::endl;

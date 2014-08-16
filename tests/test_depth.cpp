@@ -26,7 +26,7 @@ void countNodes(TEngine * engine, TStats * stats, const char * fen) {
     //std::cout << pos.asFen() << std::endl;
     clock_t start = clock();
     engine->think();
-    engine->stopAllThreads();
+    engine->stop_all();
     stats->Elapsed += clock()-start;
     stats->Nodes += engine->getNodesSearched();
 }

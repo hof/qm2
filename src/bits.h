@@ -33,7 +33,10 @@
 #include <assert.h>
 #include <stdint.h>
 #include <iostream>
+#include <stdio.h>
 #include <string.h>
+#include <cstdlib>
+#include <fstream>
 
 typedef uint64_t U64;
 

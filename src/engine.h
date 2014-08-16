@@ -26,7 +26,7 @@
 
 #include <unistd.h>
 #include <sys/time.h>
-#include <threadsmanager.h>
+#include <threads.h>
 #include "search.h"
 #include "book.h"
 #include "uci_console.h"
@@ -67,7 +67,7 @@ struct TGameSettings {
     }
 };
 
-class TEngine : public TThreadsManager {
+class TEngine : public threads_t {
 private:
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
@@ -83,7 +83,7 @@ public:
     TGameSettings gameSettings;
     void _create_start_positions(TSearch * root, book_t * book, std::string * pos, int &x, const int max);
 
-    TEngine() : TThreadsManager() {
+    TEngine() : threads_t() {
         gameSettings.clear();
         _nodesSearched = 0;
         _testSucces = false;
@@ -101,12 +101,12 @@ public:
     inline void think() {
         stop();
         _engineStop = false;
-        this->createThread(_think, this);
+        this->create(_think, this);
     }
 
     inline void learn() {
         _engineStop = false;
-        this->createThread(_learn, this);
+        this->create(_learn, this);
     }
 
     inline void setPonder(bool doPonder) {
@@ -115,7 +115,7 @@ public:
 
     inline void stop() {
         _engineStop = true;
-        this->stopAllThreads();
+        this->stop_all();
     }
 
     void testPosition(move_t bestMove, int score, int maxTime, int maxDepth);
