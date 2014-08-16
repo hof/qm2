@@ -66,19 +66,15 @@ struct search_stack_t {
     move_t tt_move;
     move_t killer[3];
     move_t pv_moves[MAX_PLY + 1];
-
     bool in_check;
     bool equal_pawns;
-
     uint8_t pv_count;
     uint8_t phase;
     uint8_t material_flags;
     uint8_t pawn_flags;
-
     int16_t eval_result;
     int16_t eg_score;
     int16_t material_score;
-
     score_t eval_score;
     score_t pawn_score;
     score_t knight_score[2];
@@ -87,13 +83,11 @@ struct search_stack_t {
     score_t queen_score[2];
     score_t king_score[2];
     score_t passer_score[2];
-
     U64 hash_code;
     U64 passers;
     U64 mob[2];
     U64 attack[2];
     U64 king_attack_zone[2];
-
     int8_t king_attack[BKING + 1];
 };
 
@@ -126,7 +120,7 @@ public:
     int pvs_root(int alpha, int beta, int depth);
     int pvs(int alpha, int beta, int depth);
     int qsearch(int alpha, int beta, int depth);
-    int extendmove(move_t * move, int gives_check);
+    int extend_move(move_t * move, int gives_check);
     void debug_print_search(int alpha, int beta);
     void forward();
     void backward();

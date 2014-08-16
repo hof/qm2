@@ -26,19 +26,25 @@
  */
 
 #include "search.h"
-#include "hashtable.h"
 #include "engine.h"
 #include "evaluate.h"
 #include "timeman.h"
 
-static const short FUTILITY_MARGIN = 50;
-static const short LMR_MIN = 0; //in half plies
-static const short LMR_MAX = 6; //in half plies
+namespace {
+    enum search_constants_t {
+        FUTILITY_MARGIN = 50,
+        QS_DELTA = 200,
+        NODES_BETWEEN_POLLS = 5000
+    };
+};
 
-static const short QS_DELTA = 200; //qsearch delta pruning margin
-
-static const int NODES_BETWEEN_POLLS = 5000;
-
+/**
+ * Initialize sort values for root move
+ * @param m move
+ * @param val initial value
+ * @param checks if the move checks the opponent
+ * @param see_value static exchange value
+ */
 void root_move_t::init(move_t * m, int val, bool checks, int see_value) {
     nodes = 0;
     pv = 0;
@@ -49,6 +55,11 @@ void root_move_t::init(move_t * m, int val, bool checks, int see_value) {
     see = see_value;
 }
 
+/**
+ * Compare two root moves for sorting
+ * @param m move
+ * @return int < 0 -> m is better; >= 0 m is not better
+ */
 int root_move_t::compare(root_move_t * m) {
     int result = pv - m->pv;
     if (result) {
@@ -70,6 +81,10 @@ int root_move_t::compare(root_move_t * m) {
     return result;
 }
 
+/**
+ * Constructor
+ * @param fen string representing the board position
+ */
 search_t::search_t(const char * fen) {
     brd.create(fen);
     memset(history, 0, sizeof (history));
@@ -88,6 +103,9 @@ search_t::search_t(const char * fen) {
     stack->eval_result = score::INVALID;
 }
 
+/**
+ * Poll to test is the search should be aborted
+ */
 void search_t::poll() {
     next_poll = NODES_BETWEEN_POLLS;
     stop_all = (time_man::time_is_up() && (!ponder || engine::is_ponder() == false))
@@ -95,7 +113,10 @@ void search_t::poll() {
             || (max_nodes > 0 && nodes > max_nodes);
 }
 
-void search_t::forward() { //null move
+/**
+ * Do a null move
+ */
+void search_t::forward() {
     skip_null = true;
     stack->current_move.set(0);
     stack++;
@@ -105,32 +126,52 @@ void search_t::forward() { //null move
     assert(stack == &_stack[brd.current_ply]);
 }
 
-void search_t::backward() { //null move
+/**
+ * Undo a null move
+ */
+void search_t::backward() { 
     stack--;
     brd.backward();
     skip_null = false;
     assert(stack == &_stack[brd.current_ply]);
 }
 
-void search_t::forward(move_t * move, bool givesCheck) {
+/**
+ * Make a move, going one ply deeper in the search
+ * @param move 
+ * @param gives_check
+ */
+void search_t::forward(move_t * move, bool gives_check) {
     stack->current_move.set(move);
     stack++;
-    stack->in_check = givesCheck;
+    stack->in_check = gives_check;
     stack->eval_result = score::INVALID;
     brd.forward(move);
     assert(stack == &_stack[brd.current_ply]);
 }
 
+/**
+ * Undo a move
+ * @param move
+ */
 void search_t::backward(move_t * move) {
     stack--;
     brd.backward(move);
     assert(stack == &_stack[brd.current_ply]);
 }
 
+/**
+ * Test if the search is pondering
+ * @return bool true if pondering 
+ */
 bool search_t::pondering() {
     return ponder || engine::is_ponder();
 }
 
+/**
+ * Converts principle variation to a string
+ * @return pv string
+ */
 std::string search_t::pv_to_string() {
     std::string result = "";
     for (int i = 0; i < stack->pv_count; i++) {
@@ -139,6 +180,11 @@ std::string search_t::pv_to_string() {
     return result;
 }
 
+/**
+ * Update history sort scores for quiet moves
+ * @param move a quiet move
+ * @param depth current search depth
+ */
 void search_t::update_history(move_t * move, int depth) {
     const int HISTORY_MAX = 5000;
     int pc = move->piece;
@@ -153,6 +199,10 @@ void search_t::update_history(move_t * move, int depth) {
     }
 }
 
+/**
+ * Initialize moves for the root position
+ * @return int amount of legal moves
+ */
 int search_t::init_root_moves() {
     int result = 0;
     root.move_count = 0;
@@ -185,7 +235,7 @@ int search_t::init_root_moves() {
 }
 
 /*
- * Sort moves (simple insertion sort)
+ * Sort algorithm for root moves (simple insertion sort)
  */
 void root_t::sort_moves() {
     for (int j = 1; j < move_count; j++) {
@@ -200,7 +250,7 @@ void root_t::sort_moves() {
 }
 
 /* 
- * Copy moves 
+ * Copy root moves from another list
  */
 void root_t::match_moves(move::list_t * list) {
     if (list->first == list->last) {
@@ -242,7 +292,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
      * otherwise search the first move with full alpha beta window.
      */
     assert(root.move_count > 0);
-    int nodesBeforemove = nodes;
+    int nodes_before = nodes;
     root_move_t * rmove = &root.moves[0];
     forward(&rmove->move, rmove->gives_check);
     if (rmove->gives_check) {
@@ -252,9 +302,9 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     int new_depth = depth - 1;
     int best = -pvs(-beta, -alpha, new_depth);
     backward(&rmove->move);
-    int sortBaseScoreForPV = 1000 * depth;
-    rmove->nodes += nodes - nodesBeforemove;
-    rmove->pv = sortBaseScoreForPV;
+    int pv_score = 1000 * depth;
+    rmove->nodes += nodes - nodes_before;
+    rmove->pv = pv_score;
     rmove->value = best;
     stack->best_move.set(&rmove->move);
     if (!rmove->move.equals(&stack->pv_moves[0])) {
@@ -284,7 +334,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
      */
     for (int i = 1; i < root.move_count; i++) {
         rmove = &root.moves[i];
-        nodesBeforemove = nodes;
+        nodes_before = nodes;
         forward(&rmove->move, rmove->gives_check);
         if (rmove->gives_check) {
             brd.stack->checker_sq = rmove->checker_sq;
@@ -295,13 +345,13 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             score = -pvs(-beta, -alpha, new_depth);
         }
         backward(&rmove->move);
-        rmove->nodes += nodes - nodesBeforemove;
+        rmove->nodes += nodes - nodes_before;
         rmove->value = score;
         if (stop_all) {
             return alpha;
         }
         if (score > best) {
-            rmove->pv = sortBaseScoreForPV + i;
+            rmove->pv = pv_score + i;
             stack->best_move.set(&rmove->move);
             if (score >= beta) {
                 if (!rmove->move.equals(&stack->pv_moves[0])) {
@@ -326,9 +376,9 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
 }
 
 /**
- * move Extensions
+ * Move extensions
  */
-int search_t::extendmove(move_t * move, int gives_check) {
+int search_t::extend_move(move_t * move, int gives_check) {
     if (gives_check > 0) {
         if (gives_check > 1) { //double check or exposed check
             return 1;
@@ -505,10 +555,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
         return in_check ? -score::MATE + brd.current_ply : draw_score();
     }
     int gives_check = brd.gives_check(first_move);
-    int extend_move = extendmove(first_move, gives_check);
+    int extend = extend_move(first_move, gives_check);
     stack->best_move.set(first_move);
     forward(first_move, gives_check);
-    int best = -pvs(-beta, -alpha, new_depth + extend_move);
+    int best = -pvs(-beta, -alpha, new_depth + extend);
     backward(first_move);
     if (best > alpha) {
         if (best >= beta) {
@@ -573,27 +623,27 @@ int search_t::pvs(int alpha, int beta, int depth) {
         /*
          * 12. Late move Reductions (LMR) 
          */
-        extend_move = extendmove(move, gives_check);
+        extend = extend_move(move, gives_check);
         int reduce = 0;
 
         if (!skip_prune && max_reduce > 0 && searched_moves >= 3) {
             reduce = searched_moves < 6 ? 1 : depth / 3;
             reduce = MIN(reduce, max_reduce);
         }
-        assert(reduce == 0 || extend_move == 0);
+        assert(reduce == 0 || extend == 0);
 
         /*
          * 13. Go forward and search next node
          */
         forward(move, gives_check);
-        int score = -pvs(-alpha - 1, -alpha, new_depth - reduce + extend_move);
+        int score = -pvs(-alpha - 1, -alpha, new_depth - reduce + extend);
         if (score > alpha && reduce > 0) {
             //research without reductions
-            score = -pvs(-alpha - 1, -alpha, new_depth + extend_move);
+            score = -pvs(-alpha - 1, -alpha, new_depth + extend);
         }
         if (pv && score > alpha) {
             //full window research
-            score = -pvs(-beta, -alpha, new_depth + extend_move);
+            score = -pvs(-beta, -alpha, new_depth + extend);
         }
         backward(move);
 
