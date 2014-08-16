@@ -66,17 +66,17 @@ move_t * move_picker_t::pop(board_t * brd, move::list_t * list) {
     return NULL;
 }
 
-move_t * move_picker_t::first(TSearch * s, int depth, int alpha, int beta) {
-    move::list_t * list = &s->stack->moveList;
+move_t * move_picker_t::first(search_t * s, int depth, int alpha, int beta) {
+    move::list_t * list = &s->stack->move_list;
     list->clear();
-    list->stage = depth < ONE_PLY ? CAPTURES : HASH;
+    list->stage = depth < 1 ? CAPTURES : HASH;
     return next(s, depth, alpha, beta);
 }
 
-move_t * move_picker_t::next(TSearch * s, int depth, int alpha, int beta) {
+move_t * move_picker_t::next(search_t * s, int depth, int alpha, int beta) {
     U64 mask;
-    board_t * brd = s->pos;
-    move::list_t * list = &s->stack->moveList;
+    board_t * brd = &s->brd;
+    move::list_t * list = &s->stack->move_list;
     /*
      * 1. Pop the best move from the list. If a move is found, a just-in-time 
      * legality check is done and the movepicker returns a valid, legal, move.
@@ -101,7 +101,7 @@ move_t * move_picker_t::next(TSearch * s, int depth, int alpha, int beta) {
                 return result;
             }
         case MATEKILLER:
-            result = &s->stack->mateKiller;
+            result = &s->stack->killer[0];
             if (result->piece
                     && !list->is_excluded(result)
                     && brd->valid(result)
@@ -121,7 +121,7 @@ move_t * move_picker_t::next(TSearch * s, int depth, int alpha, int beta) {
                     if (list->is_excluded(move)) {
                         move->score = move::EXCLUDED;
                     } else {
-                        move->score = depth > LOW_DEPTH ? brd->see(move) : brd->mvvlva(move);
+                        move->score = depth > 3 ? brd->see(move) : brd->mvvlva(move);
                     }
                 }
                 result = pop(brd, list);
@@ -150,8 +150,8 @@ move_t * move_picker_t::next(TSearch * s, int depth, int alpha, int beta) {
                 }
             }
         case KILLER1:
-            if (depth >= ONE_PLY) {
-                result = &s->stack->killer1;
+            if (depth >= 1) {
+                result = &s->stack->killer[1];
                 if (result->piece
                         && brd->valid(result)
                         && !list->is_excluded(result)
@@ -163,8 +163,8 @@ move_t * move_picker_t::next(TSearch * s, int depth, int alpha, int beta) {
                 }
             }
         case KILLER2:
-            if (depth >= ONE_PLY) {
-                result = &s->stack->killer2;
+            if (depth >= 1) {
+                result = &s->stack->killer[2];
                 if (result->piece
                         && brd->valid(result)
                         && !list->is_excluded(result)
@@ -176,7 +176,7 @@ move_t * move_picker_t::next(TSearch * s, int depth, int alpha, int beta) {
                 }
             }
         case MINORPROMOTIONS: //and captures with see < 0
-            if (depth <= LOW_DEPTH) {
+            if (depth <= 3) {
                 list->minimum_score = -move::INF;
                 result = pop(brd, list);
                 if (result) {
@@ -223,9 +223,9 @@ move_t * move_picker_t::next(TSearch * s, int depth, int alpha, int beta) {
     return result;
 }
 
-int move_picker_t::count_evasions(TSearch * s, move_t * first_move) {
+int move_picker_t::count_evasions(search_t * s, move_t * first_move) {
     assert(first_move != NULL);
-    move::list_t * list = &s->stack->moveList;
+    move::list_t * list = &s->stack->move_list;
     int result = 1;
     const short MAXLEGALCOUNT = 3;
     move_t * pushback[MAXLEGALCOUNT];
@@ -253,11 +253,11 @@ namespace move {
         return &_picker;
     }
     
-    move_t * first(TSearch * s, int depth, int alpha, int beta) {
+    move_t * first(search_t * s, int depth, int alpha, int beta) {
         return _picker.first(s, depth, alpha, beta);
     }
     
-    move_t * next(TSearch * s, int depth, int alpha, int beta) {
+    move_t * next(search_t * s, int depth, int alpha, int beta) {
         return _picker.next(s, depth, alpha, beta);
     }
 };

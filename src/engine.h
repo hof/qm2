@@ -26,14 +26,14 @@
 
 #include <unistd.h>
 #include <sys/time.h>
-#include <threads.h>
+#include "threadman.h"
 #include "search.h"
 #include "book.h"
 #include "uci_console.h"
 #include "evaluate.h"
 #include "opponent.h"
+#include "hashtable.h"
 
-class TInputHandler;
 
 
 struct TGameSettings {
@@ -81,7 +81,7 @@ private:
 
 public:
     TGameSettings gameSettings;
-    void _create_start_positions(TSearch * root, book_t * book, std::string * pos, int &x, const int max);
+    void _create_start_positions(search_t * root, book_t * book, std::string * pos, int &x, const int max);
 
     TEngine() : threads_t() {
         gameSettings.clear();

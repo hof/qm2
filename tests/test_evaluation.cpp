@@ -36,7 +36,7 @@ int testEval(int idx, std::string fen, int min_score, int max_score) {
     if (test_stop) {
         return 0;
     }
-    TSearch * s = new TSearch(fen.c_str());
+    search_t * s = new search_t(fen.c_str());
     int score = evaluate(s);
     if (score < min_score) {
         testFail(idx, "<", score, min_score, fen, global_engine);
@@ -51,7 +51,7 @@ void testKingAttackZero(int idx, std::string fen) {
     if (test_stop) {
         return;
     }
-    TSearch * s = new TSearch(fen.c_str());
+    search_t * s = new search_t(fen.c_str());
     evaluate(s);
     int score = s->stack->king_score[WHITE].mg;
     if (score != 0) {

@@ -22,16 +22,16 @@
  * Simple C++ Test Suite
  */
 
-U64 moveGenerationPerft(TSearch *searchData, int depth) {
+U64 moveGenerationPerft(search_t *searchData, int depth) {
     U64 result = 0;
-    board_t * pos = searchData->pos;
-    move::list_t * moveList = &searchData->stack->moveList;
-    moveList->clear();
-    move::gen_captures(pos, moveList, FULL_BOARD);
-    move::gen_promotions(pos, moveList);
-    move::gen_castles(pos, moveList);
-    move::gen_quiet_moves(pos, moveList);
-    for (move_t * move = moveList->first; move != moveList->last; move++) {
+    board_t * pos = &searchData->brd;
+    move::list_t * move_list = &searchData->stack->move_list;
+    move_list->clear();
+    move::gen_captures(pos, move_list, FULL_BOARD);
+    move::gen_promotions(pos, move_list);
+    move::gen_castles(pos, move_list);
+    move::gen_quiet_moves(pos, move_list);
+    for (move_t * move = move_list->first; move != move_list->last; move++) {
         if (pos->legal(move)) {
             if (depth <= 1) {
                 result += 1;
@@ -48,16 +48,16 @@ U64 moveGenerationPerft(TSearch *searchData, int depth) {
     return result;
 }
 
-void movePerftDivide(TSearch * searchData, int depth) {
-    move::list_t * moveList = &searchData->stack->moveList;
-    board_t * pos = searchData->pos;
+void movePerftDivide(search_t * searchData, int depth) {
+    move::list_t * move_list = &searchData->stack->move_list;
+    board_t * pos = &searchData->brd;
     std::cout << pos->to_string() << std::endl;
-    moveList->clear();
-    move::gen_captures(pos, moveList, FULL_BOARD);
-    move::gen_promotions(pos, moveList);
-    move::gen_castles(pos, moveList);
-    move::gen_quiet_moves(pos, moveList);
-    for (move_t * move = moveList->first; move != moveList->last; move++) {
+    move_list->clear();
+    move::gen_captures(pos, move_list, FULL_BOARD);
+    move::gen_promotions(pos, move_list);
+    move::gen_castles(pos, move_list);
+    move::gen_quiet_moves(pos, move_list);
+    for (move_t * move = move_list->first; move != move_list->last; move++) {
         std::cout << move->to_string() << " ";
         if (pos->legal(move)) {
             pos->forward(move);
@@ -75,9 +75,9 @@ void movePerftDivide(TSearch * searchData, int depth) {
 /**
  * Move generaration test (perft test)
  */
-void testMoveGeneration(std::string fen, int targetValues[], int maxDepth, TSearch * searchData) {
+void testMoveGeneration(std::string fen, int targetValues[], int maxDepth, search_t * searchData) {
     std::cout << "\n\ntest_genmoves test testMoveGeneration " << fen << std::endl;
-    searchData->pos->create(fen.c_str());
+    searchData->brd.create(fen.c_str());
     for (int i = 0; i < maxDepth; i++) {
         int count = moveGenerationPerft(searchData, i + 1);
         if (count != targetValues[i]) {
@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
     clock_t now;
 
     trans_table::disable();
-    TSearch * searchData = new TSearch("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    search_t * searchData = new search_t("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
 
 

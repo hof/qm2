@@ -40,8 +40,8 @@ bool flipTest(int test_num, const char * fen) {
     }
 
     //test 2: evaluation and phase should be equal
-    TSearch * s1 = new TSearch(fen1.c_str());
-    TSearch * s2 = new TSearch(fen2.c_str());
+    search_t * s1 = new search_t(fen1.c_str());
+    search_t * s2 = new search_t(fen2.c_str());
     int score1 = evaluate(s1);
     int phase1 = s1->stack->phase;
     int score2 = evaluate(s2);

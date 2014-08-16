@@ -118,25 +118,25 @@ void * TEngine::_think(void* engineObjPtr) {
 
     game.opponent.copy(&engine->gameSettings.opponent);
 
-    TSearch * searchData = new TSearch(engine->_rootFen.c_str());
+    search_t * searchData = new search_t(engine->_rootFen.c_str());
 
 
 
-    board_t * root = searchData->pos;
+    board_t * root = &searchData->brd;
     time_manager_t * tm = time_man::instance();
 
     int maxDepth = game.maxDepth;
-    U64 maxNodes = game.maxNodes;
+    U64 max_nodes = game.maxNodes;
     int maxTime = game.maxTimePerMove;
     int whiteTime = game.whiteTime;
     int blackTime = game.blackTime;
     int whiteInc = game.whiteIncrement;
     int blackInc = game.blackIncrement;
     int movesToGo = game.movesLeft;
-    move_t targetMove = game.targetMove;
+    move_t targetmove = game.targetMove;
     int targetScore = game.targetScore;
     bool ponder = game.ponder;
-    double learnFactor = game.learnFactor;
+    double learn = game.learnFactor;
     evaluate(searchData);
 
     tm->set_start();
@@ -155,9 +155,8 @@ void * TEngine::_think(void* engineObjPtr) {
         tm->set_max(time_man::INFINITE_TIME);
     }
 
-    searchData->drawContempt.set(0, 0); //todo: unused for now
-    searchData->maxNodes = maxNodes;
-    searchData->learnFactor = learnFactor;
+    searchData->max_nodes = max_nodes;
+    searchData->learn = learn;
     searchData->ponder = ponder;
 
     /*
@@ -171,38 +170,38 @@ void * TEngine::_think(void* engineObjPtr) {
      * Find and play a book move if available, looking up 
      * a Polyglot Book file named "book.bin"
      */
-    move_t resultMove;
-    move_t ponderMove;
-    resultMove.set(0);
-    ponderMove.set(0);
+    move_t resultmove;
+    move_t pondermove;
+    resultmove.set(0);
+    pondermove.set(0);
     book_t * book = new book_t();
     book->open("book.bin");
     bool book_move = false;
     bool book_ponder_move = false;
     for (int book_step = 0; book_step < 2; book_step++) {
-        move::list_t * bookMoves = &searchData->stack->moveList;
-        int count = book->find(root, bookMoves);
+        move::list_t * bookmoves = &searchData->stack->move_list;
+        int count = book->find(root, bookmoves);
         if (count > 0) {
             srand(time(NULL));
             int randomScore = 0;
             int totalBookScore = 1;
-            for (int pickMove = 0; pickMove < 2; pickMove++) {
+            for (int pickmove = 0; pickmove < 2; pickmove++) {
                 int totalScore = 0;
-                for (move_t * bookMove = bookMoves->first; bookMove != bookMoves->last; bookMove++) {
-                    totalScore += bookMove->score;
-                    if (pickMove && totalScore >= randomScore) {
+                for (move_t * bookmove = bookmoves->first; bookmove != bookmoves->last; bookmove++) {
+                    totalScore += bookmove->score;
+                    if (pickmove && totalScore >= randomScore) {
                         if (book_step == 0) {
                             book_move = true;
-                            resultMove.set(bookMove);
-                            engine->setMove(bookMove);
+                            resultmove.set(bookmove);
+                            engine->setMove(bookmove);
                             engine->setScore(0);
-                            root->forward(&resultMove);
+                            root->forward(&resultmove);
                         } else if (book_step == 1) {
                             book_ponder_move = true;
-                            ponderMove.set(bookMove);
+                            pondermove.set(bookmove);
 
-                            std::string book_pv = resultMove.to_string() + " " + ponderMove.to_string();
-                            uci::send_pv((bookMove->score) / totalBookScore, 1, 1, 
+                            std::string book_pv = resultmove.to_string() + " " + pondermove.to_string();
+                            uci::send_pv((bookmove->score) / totalBookScore, 1, 1, 
                                     count, tm->elapsed(), 
                                     book_pv.c_str(), score::EXACT);
                         }
@@ -215,20 +214,20 @@ void * TEngine::_think(void* engineObjPtr) {
         }
     }
     if (book_move) {
-        root->backward(&resultMove);
+        root->backward(&resultmove);
     }
 
     /*
      * Find a move by Principle Variation Search (fail-soft) in an 
      * internal iterative deepening framework with aspiration search.
      */
-    if (book_ponder_move == false && searchData->initRootMoves() > 0) {
+    if (book_ponder_move == false && searchData->init_root_moves() > 0) {
         if (book_move) {
             //no ponder move.. only consider book_moves, but let the engine decide which one to play
-            book->find(root, &searchData->stack->moveList);
-            searchData->root.matchMoves(&searchData->stack->moveList);
+            book->find(root, &searchData->stack->move_list);
+            searchData->root.match_moves(&searchData->stack->move_list);
             tm->request_less();
-        } else if (searchData->root.MoveCount == 1) {
+        } else if (searchData->root.move_count == 1) {
             tm->request_less();
         }
         searchData->stack->eval_result = evaluate(searchData);
@@ -241,39 +240,39 @@ void * TEngine::_think(void* engineObjPtr) {
         int beta_window = 0;
         int lowest = score::INF;
         int highest = -score::INF;
-        int depth = ONE_PLY;
+        int depth = 1;
         int resultScore = 0;
         bool move_changed = false;
         bool score_changed = false;
         bool easy_move = true;
-        while (depth <= maxDepth * ONE_PLY && !searchData->stopSearch) {
+        while (depth <= maxDepth && !searchData->stop_all) {
 
             int iteration_start_time = tm->elapsed();
 
             int score = searchData->pvs_root(alpha, beta, depth);
-            int type = score <= alpha ? FAILLOW : score >= beta ? FAILHIGH : EXACT;
+            int type = score::flags(score, alpha, beta);
 
             /*
              * Update and output PV
              */
-            if (!searchData->stopSearch) {
+            if (!searchData->stop_all) {
                 resultScore = score;
             }
-            if (searchData->stack->pvCount > 0) {
-                move_t firstMove = searchData->stack->pvMoves[0];
-                if (firstMove.piece) {
-                    move_changed = resultMove.equals(&firstMove) == false;
-                    resultMove.set(&firstMove);
-                    ponderMove.set(0);
-                    if (searchData->stack->pvCount > 1) {
-                        ponderMove.set(&searchData->stack->pvMoves[1]);
+            if (searchData->stack->pv_count > 0) {
+                move_t firstmove = searchData->stack->pv_moves[0];
+                if (firstmove.piece) {
+                    move_changed = resultmove.equals(&firstmove) == false;
+                    resultmove.set(&firstmove);
+                    pondermove.set(0);
+                    if (searchData->stack->pv_count > 1) {
+                        pondermove.set(&searchData->stack->pv_moves[1]);
                     }
-                    engine->setMove(&firstMove);
+                    engine->setMove(&firstmove);
                     engine->setScore(resultScore);
                 }
-                if (searchData->stopSearch) {
-                  uci::send_pv(resultScore, depth / ONE_PLY, searchData->selDepth,
-                            searchData->nodes + searchData->pruned_nodes, tm->elapsed(), searchData->getPVString().c_str(), score::flags(resultScore, alpha, beta));
+                if (searchData->stop_all) {
+                  uci::send_pv(resultScore, depth, searchData->sel_depth,
+                            searchData->nodes + searchData->pruned_nodes, tm->elapsed(), searchData->pv_to_string().c_str(), score::flags(resultScore, alpha, beta));
                  
                 }
             }
@@ -288,8 +287,8 @@ void * TEngine::_think(void* engineObjPtr) {
             easy_move &= move_changed == false;
             easy_move &= score_changed == false;
 
-            if (!searchData->stopSearch && depth > HIGH_DEPTH && !book_move) {
-                if (ponderMove.piece == EMPTY) {
+            if (!searchData->stop_all && depth > 8 && !book_move) {
+                if (pondermove.piece == EMPTY) {
                     tm->request_more();
                 } else if (move_changed) {
                     tm->request_more();
@@ -306,29 +305,29 @@ void * TEngine::_think(void* engineObjPtr) {
              */
 
             //stop if running a test and the move and score are found
-            if (targetScore && targetMove.piece && targetMove.equals(&resultMove) && score >= targetScore) {
+            if (targetScore && targetmove.piece && targetmove.equals(&resultmove) && score >= targetScore) {
                 engine->setTestResult(true);
                 break;
             }
 
             //stop if stopsearch is set (time is up) or max amount of nodes is reached
             searchData->poll();
-            if (searchData->stopSearch
-                    || (maxNodes > 0 && searchData->nodes > maxNodes)) {
+            if (searchData->stop_all
+                    || (max_nodes > 0 && searchData->nodes > max_nodes)) {
                 break;
             }
 
             //stop if a mate is found and the iteration depth is deeper than the mate depth
-            if (score::mate_in_ply(resultScore) && type == EXACT && depth / ONE_PLY > score::mate_in_ply(resultScore)) {
+            if (score::mate_in_ply(resultScore) && type == score::EXACT && depth > score::mate_in_ply(resultScore)) {
                 break;
             }
-            if (score::mated_in_ply(resultScore) && type == EXACT && depth / ONE_PLY > score::mated_in_ply(resultScore)) {
+            if (score::mated_in_ply(resultScore) && type == score::EXACT && depth > score::mated_in_ply(resultScore)) {
                 break;
             }
 
             //stop if there is no time to find a new pv in a next iteration
             int iteration_time = tm->elapsed() - iteration_start_time;
-            if (type == EXACT && !tm->is_available(iteration_time / 2)) {
+            if (type == score::EXACT && !tm->is_available(iteration_time / 2)) {
                 break;
             }
 
@@ -356,7 +355,7 @@ void * TEngine::_think(void* engineObjPtr) {
                     lowest = MAX(lowest, score - windows[1]);
                     highest = MIN(highest, score + windows[1]);
                 }
-                depth += ONE_PLY;
+                depth ++;
             }
 
             if (alpha < -MAX_WINDOW) {
@@ -372,12 +371,12 @@ void * TEngine::_think(void* engineObjPtr) {
 
             prev_score = score;
             move_changed = false;
-            searchData->root.sortMoves();
+            searchData->root.sort_moves();
         }
         engine->setNodesSearched(searchData->nodes);
         
     }
-    uci::send_bestmove(resultMove, ponderMove);
+    uci::send_bestmove(resultmove, pondermove);
 
     /*
      * Clean up and terminate the thinking thread
@@ -449,17 +448,17 @@ void print_row(std::string cap, score_t & w, score_t & b, int phase) {
 
 void TEngine::analyse() {
 
-    TSearch * s = new TSearch(_rootFen.c_str());
+    search_t * s = new search_t(_rootFen.c_str());
     s->stack->eval_result = evaluate(s);
     int phase = s->stack->phase;
-    bool wtm = s->pos->stack->wtm;
+    bool wtm = s->brd.stack->wtm;
     score_t tempo_score;
     tempo_score.set(TEMPO[wtm]);
     score_t w, b;
     w.clear();
     b.clear();
 
-    std::cout << s->pos->to_string().c_str() << std::endl;
+    std::cout << s->brd.to_string().c_str() << std::endl;
     std::cout << "Game Phase: " << phase << std::endl;
     std::cout << "Eval Component | White MG   EG | Black MG   EG |  Total MG   EG   Tot  \n";
     std::cout << "---------------+---------------+---------------+---------------------\n";
@@ -472,7 +471,7 @@ void TEngine::analyse() {
     print_row("Queens", s->stack->queen_score[WHITE], s->stack->queen_score[BLACK], phase);
     print_row("Passers", s->stack->passer_score[WHITE], s->stack->passer_score[BLACK], phase);
     print_row("King Attack", s->stack->king_score[WHITE], s->stack->king_score[BLACK], phase);
-    if (s->pos->stack->wtm == false) {
+    if (s->brd.stack->wtm == false) {
         std::cout << "---------------+---------------+---------------+---------------------\n";
         print_row("Black to move", s->stack->eg_score);
     }
@@ -486,9 +485,9 @@ void TEngine::analyse() {
     delete s;
 }
 
-void TEngine::testPosition(move_t bestMove, int score, int maxTime, int maxDepth) {
+void TEngine::testPosition(move_t bestmove, int score, int maxTime, int maxDepth) {
     _testSucces = false;
-    gameSettings.targetMove = bestMove;
+    gameSettings.targetMove = bestmove;
     gameSettings.targetScore = score;
     gameSettings.maxTimePerMove = maxTime;
     gameSettings.maxDepth = maxDepth ? maxDepth : MAX_PLY;
@@ -632,8 +631,8 @@ void * TEngine::_learn(void * engineObjPtr) {
      */
     TEngine * engine = (TEngine*) engineObjPtr;
     trans_table::disable();
-    TSearch * sd_root = new TSearch(engine->_rootFen.c_str());
-    TSearch * sd_game = new TSearch(engine->_rootFen.c_str());
+    search_t * sd_root = new search_t(engine->_rootFen.c_str());
+    search_t * sd_game = new search_t(engine->_rootFen.c_str());
 
     engine->gameSettings.maxDepth = MAXDEPTH;
     time_man::instance()->set_end(time_man::INFINITE_TIME);
@@ -665,7 +664,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     /*
      * Self-play, using the generated start positions once for each side
      */
-    move_t actualMove;
+    move_t actualmove;
     U64 gamesPlayed = 0;
     U64 batch = 0;
     U64 totalNodes[2] = {0, 0};
@@ -697,7 +696,7 @@ void * TEngine::_learn(void * engineObjPtr) {
                 std::cout << "\nError: no start position (book.bin missing?)" << std::endl;
                 break;
             }
-            sd_game->pos->create(fen.c_str());
+            sd_game->brd.create(fen.c_str());
             int plyCount = 0;
             int prevScore = 0;
             bool gameover = false;
@@ -710,21 +709,21 @@ void * TEngine::_learn(void * engineObjPtr) {
                      * 2) engine(base) vs engine(learn)
                      */
                     if (game % 2 == 0) {
-                        sd_game->learnFactor = side_to_move ? strongest : opponent;
+                        sd_game->learn = side_to_move ? strongest : opponent;
                     } else {
-                        sd_game->learnFactor = side_to_move ? opponent : strongest;
+                        sd_game->learn = side_to_move ? opponent : strongest;
                     }
-                    bool learning_side = sd_game->learnFactor == strongest;
+                    bool learning_side = sd_game->learn == strongest;
 
 
                     /*
                      * Prepare search: cleanup and reset search stack. 
                      */
-                    actualMove.clear();
-                    sd_game->resetStack();
-                    int moveCount = sd_game->initRootMoves();
-                    if (moveCount == 0) {
-                        if (sd_game->pos->in_check()) { //current engine lost
+                    actualmove.clear();
+                    sd_game->reset_stack();
+                    int move_count = sd_game->init_root_moves();
+                    if (move_count == 0) {
+                        if (sd_game->brd.in_check()) { //current engine lost
                             stats[1 + learning_side]++;
                         } else {
                             stats[0]++; //draw by stalemate. 
@@ -734,32 +733,32 @@ void * TEngine::_learn(void * engineObjPtr) {
 
                     }
                     sd_game->stack->eval_result = evaluate(sd_game);
-                    int depth = ONE_PLY;
+                    int depth = 1;
                     int resultScore = 0;
 
                     /*
                      * Normal PVS search without aspiration windows
                      */
-                    sd_game->stopSearch = false;
-                    while (depth <= (MAXDEPTH) * ONE_PLY && !sd_game->stopSearch) {
+                    sd_game->stop_all = false;
+                    while (depth <= MAXDEPTH && !sd_game->stop_all) {
                         int score = sd_game->pvs_root(-score::INF, score::INF, depth);
-                        if (!sd_game->stopSearch) {
+                        if (!sd_game->stop_all) {
                             resultScore = score;
                         }
-                        if (sd_game->stack->pvCount > 0) {
-                            move_t firstMove = sd_game->stack->pvMoves[0];
-                            if (firstMove.piece) {
-                                actualMove.set(&firstMove);
+                        if (sd_game->stack->pv_count > 0) {
+                            move_t firstmove = sd_game->stack->pv_moves[0];
+                            if (firstmove.piece) {
+                                actualmove.set(&firstmove);
                             }
                         }
-                        depth += ONE_PLY;
-                        sd_game->root.sortMoves();
+                        depth ++;
+                        sd_game->root.sort_moves();
                     }
 
                     nodes[1 - learning_side] += sd_game->nodes;
 
                     //stop conditions
-                    if (sd_game->pos->stack->fifty_count >= 20 || sd_game->pos->is_draw()) {
+                    if (sd_game->brd.stack->fifty_count >= 20 || sd_game->brd.is_draw()) {
                         stats[0]++; //draw
                         gameover = true;
                         break;
@@ -788,8 +787,8 @@ void * TEngine::_learn(void * engineObjPtr) {
 
                     prevScore = resultScore;
                     plyCount++;
-                    //std::cout << plyCount << ": " << resultScore << " " << actualMove.asString() << " " << sd_game->pos->asFen() << std::endl; //for debugging
-                    sd_game->forward(&actualMove, sd_game->pos->gives_check(&actualMove));
+                    //std::cout << plyCount << ": " << resultScore << " " << actualmove.asString() << " " << sd_game->brd.asFen() << std::endl; //for debugging
+                    sd_game->forward(&actualmove, sd_game->brd.gives_check(&actualmove));
                 }
 
             } while (gameover == false);
@@ -961,43 +960,43 @@ void * TEngine::_learn(void * engineObjPtr) {
     return NULL;
 }
 
-void TEngine::_create_start_positions(TSearch * sd_root, book_t * book, string * poslist, int &x, const int max) {
+void TEngine::_create_start_positions(search_t * sd_root, book_t * book, string * poslist, int &x, const int max) {
 
-    move::list_t * bookMoves = &sd_root->stack->moveList;
-    move_t actualMove;
+    move::list_t * bookmoves = &sd_root->stack->move_list;
+    move_t actualmove;
     int gen = 0;
     while (x < max) {
         gen++;
-        while (sd_root->pos->current_ply < MAX_PLY) {
-            actualMove.set(0);
-            int count = book->find(sd_root->pos, bookMoves);
+        while (sd_root->brd.current_ply < MAX_PLY) {
+            actualmove.set(0);
+            int count = book->find(&sd_root->brd, bookmoves);
             if (count > 0) {
                 int randomScore = 0;
-                for (int pickMove = 0; pickMove < 2; pickMove++) {
+                for (int pickmove = 0; pickmove < 2; pickmove++) {
                     int totalScore = 0;
-                    for (move_t * bookMove = bookMoves->first; bookMove != bookMoves->last; bookMove++) {
-                        totalScore += bookMove->score;
-                        if (pickMove && totalScore >= randomScore) {
-                            actualMove.set(bookMove);
+                    for (move_t * bookmove = bookmoves->first; bookmove != bookmoves->last; bookmove++) {
+                        totalScore += bookmove->score;
+                        if (pickmove && totalScore >= randomScore) {
+                            actualmove.set(bookmove);
                             break;
                         }
                     }
                     randomScore = (rand() % totalScore) + 1;
                 }
             }
-            if (actualMove.piece == 0) {
+            if (actualmove.piece == 0) {
                 break;
             }
-            sd_root->forward(&actualMove, sd_root->pos->gives_check(&actualMove));
+            sd_root->forward(&actualmove, sd_root->brd.gives_check(&actualmove));
         };
 
         //add to search positions
-        poslist[x++] = sd_root->pos->to_string();
-        poslist[x++] = sd_root->pos->to_string();
+        poslist[x++] = sd_root->brd.to_string();
+        poslist[x++] = sd_root->brd.to_string();
 
         //revert to root
-        while (sd_root->pos->current_ply > 0) {
-            move_t * move = &(sd_root->stack - 1)->move;
+        while (sd_root->brd.current_ply > 0) {
+            move_t * move = &(sd_root->stack - 1)->current_move;
             sd_root->backward(move);
         }
         if (x > 0 && x % 250 == 0) {

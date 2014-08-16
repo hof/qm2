@@ -32,9 +32,9 @@
 
 
 
-class TSearch;
+class search_t;
 
-int evaluate(TSearch * searchData);
+int evaluate(search_t * searchData);
 
 void InitPST();
 extern pst_t PST;

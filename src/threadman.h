@@ -21,8 +21,8 @@
  * Created on 26 april 2011, 19:31
  */
 
-#ifndef THREADS_H
-#define	THREADS_H
+#ifndef THREADMAN_H
+#define	THREADMAN_H
 
 #include <pthread.h>
 
@@ -107,5 +107,5 @@ private:
 };
 
 
-#endif	/* THREADS_H */
+#endif	/* THREADMAN_H */
 
