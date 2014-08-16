@@ -11,7 +11,7 @@ add_library(MAX2SRC
 	book.cpp
 	evaluate.cpp
 	search.cpp
-	timemanager.cpp
+	timeman.cpp
 )
 
 include_directories(${MAX2_SOURCE_DIR}/src)

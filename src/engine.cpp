@@ -33,15 +33,15 @@
 #include "movegen.h"
 #include "book.h"
 #include "evaluate.h"
-#include "timemanager.h"
+#include "timeman.h"
 
 using namespace std;
 
 namespace engine {
 
     TEngine _engine;
-    volatile bool _stopped = false;
-    volatile bool _ponder = false;
+    bool _stopped = false;
+    bool _ponder = false;
 
     void stop() {
         _stopped = true;
@@ -123,7 +123,7 @@ void * TEngine::_think(void* engineObjPtr) {
 
 
     board_t * root = searchData->pos;
-    TTimeManager * tm = searchData->timeManager;
+    time_manager_t * tm = time_man::instance();
 
     int maxDepth = game.maxDepth;
     U64 maxNodes = game.maxNodes;
@@ -139,20 +139,20 @@ void * TEngine::_think(void* engineObjPtr) {
     double learnFactor = game.learnFactor;
     evaluate(searchData);
 
-    tm->setStartTime();
+    tm->set_start();
     int myTime = root->stack->wtm ? whiteTime : blackTime;
     int oppTime = root->stack->wtm ? blackTime : whiteTime;
     int myInc = root->stack->wtm ? whiteInc : blackInc;
     int oppInc = root->stack->wtm ? blackInc : whiteInc;
 
     if (maxTime) {
-        tm->setEndTime(maxTime);
-        tm->setMaxTime(maxTime);
+        tm->set_end(maxTime);
+        tm->set_max(maxTime);
     } else if (whiteTime || blackTime) {
         tm->set(myTime, oppTime, myInc, oppInc, movesToGo);
     } else {
-        tm->setEndTime(INFINITE_TIME);
-        tm->setMaxTime(INFINITE_TIME);
+        tm->set_end(time_man::INFINITE_TIME);
+        tm->set_max(time_man::INFINITE_TIME);
     }
 
     searchData->drawContempt.set(0, 0); //todo: unused for now
@@ -203,7 +203,7 @@ void * TEngine::_think(void* engineObjPtr) {
 
                             std::string book_pv = resultMove.to_string() + " " + ponderMove.to_string();
                             uci::send_pv((bookMove->score) / totalBookScore, 1, 1, 
-                                    count, searchData->timeManager->elapsed(), 
+                                    count, tm->elapsed(), 
                                     book_pv.c_str(), score::EXACT);
                         }
                         break;
@@ -227,9 +227,9 @@ void * TEngine::_think(void* engineObjPtr) {
             //no ponder move.. only consider book_moves, but let the engine decide which one to play
             book->find(root, &searchData->stack->moveList);
             searchData->root.matchMoves(&searchData->stack->moveList);
-            tm->requestLessTime();
+            tm->request_less();
         } else if (searchData->root.MoveCount == 1) {
-            tm->requestLessTime();
+            tm->request_less();
         }
         searchData->stack->eval_result = evaluate(searchData);
         int alpha = -score::INF;
@@ -290,14 +290,14 @@ void * TEngine::_think(void* engineObjPtr) {
 
             if (!searchData->stopSearch && depth > HIGH_DEPTH && !book_move) {
                 if (ponderMove.piece == EMPTY) {
-                    tm->requestMoreTime();
+                    tm->request_more();
                 } else if (move_changed) {
-                    tm->requestMoreTime();
+                    tm->request_more();
                 } else if (score_changed) {
-                    tm->requestMoreTime();
+                    tm->request_more();
                 } else if (easy_move) {
                     easy_move = false;
-                    tm->requestLessTime();
+                    tm->request_less();
                 }
             }
 
@@ -328,7 +328,7 @@ void * TEngine::_think(void* engineObjPtr) {
 
             //stop if there is no time to find a new pv in a next iteration
             int iteration_time = tm->elapsed() - iteration_start_time;
-            if (type == EXACT && !tm->available(iteration_time / 2)) {
+            if (type == EXACT && !tm->is_available(iteration_time / 2)) {
                 break;
             }
 
@@ -636,8 +636,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     TSearch * sd_game = new TSearch(engine->_rootFen.c_str());
 
     engine->gameSettings.maxDepth = MAXDEPTH;
-    sd_root->timeManager->setEndTime(INFINITE_TIME);
-    sd_game->timeManager->setEndTime(INFINITE_TIME);
+    time_man::instance()->set_end(time_man::INFINITE_TIME);
 
     int x = 0;
     double bestFactor = 1.0;

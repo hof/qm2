@@ -35,10 +35,8 @@
 #include "movegen.h"
 #include "movepicker.h"
 #include "hashtable.h"
-#include "timemanager.h"
-#include <string.h>
-#include <cstdlib>
-#include <iostream>
+#include "timeman.h"
+
 
 enum NodeType {
     UNKNOWN = 0,
@@ -199,8 +197,8 @@ public:
     
     score_t drawContempt;
 
-    move_picker_t * movePicker;
-    TTimeManager * timeManager;
+    
+    
     int history[BKING + 1][64];
     
     short LMR[32][64]; //depth,  move number
@@ -212,8 +210,8 @@ public:
         pos->create(fen);
         memset(history, 0, sizeof (history));
         InitPST();
-        movePicker = new move_picker_t();
-        timeManager = new TTimeManager();
+        
+        
         nodes = 0;
         pruned_nodes = 0;
         hashProbes = 0;
@@ -241,8 +239,6 @@ public:
 
     ~TSearch() {
         delete pos;
-        delete movePicker;
-        delete timeManager;
     }
 
     inline void clearHistory() {

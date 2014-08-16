@@ -43,7 +43,7 @@ bool TSearch::pondering() {
 
 void TSearch::poll() {
     nodesUntilPoll = NODESBETWEENPOLLS;
-    stopSearch = (timeManager->timeIsUp() && (!ponder || engine::is_ponder() == false))
+    stopSearch = (time_man::time_is_up() && (!ponder || engine::is_ponder() == false))
             || engine::is_stopped()
             || (maxNodes > 0 && nodes > maxNodes);
 }
@@ -68,8 +68,8 @@ int TSearch::initRootMoves() {
     int score = 0;
     trans_table::retrieve(pos->stack->hash_code, 0, 0, score, trans_move, trans_flags);
 
-    for (move_t * move = movePicker->first(this, ONE_PLY, -score::INF, score::INF);
-            move; move = movePicker->next(this, ONE_PLY, -score::INF, score::INF)) {
+    for (move_t * move = move::first(this, ONE_PLY, -score::INF, score::INF);
+            move; move = move::next(this, ONE_PLY, -score::INF, score::INF)) {
         TRootMove * rMove = &root.Moves[root.MoveCount++];
         int move_score = 1000 - root.MoveCount;
         if (move->to_int() == trans_move) {
@@ -172,13 +172,13 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
         return best; //return to adjust the aspiration window
     }
     if (best >= beta) {
-        uci::send_pv(best, depth / ONE_PLY, selDepth, nodes + pruned_nodes, timeManager->elapsed(),
+        uci::send_pv(best, depth / ONE_PLY, selDepth, nodes + pruned_nodes, time_man::elapsed(),
                 getPVString().c_str(), score::flags(best, alpha, beta));
         return best;
     }
     if (best > alpha) {
         updatePV(&rMove->Move);
-        uci::send_pv(best, depth / ONE_PLY, selDepth, nodes + pruned_nodes, timeManager->elapsed(),
+        uci::send_pv(best, depth / ONE_PLY, selDepth, nodes + pruned_nodes, time_man::elapsed(),
                     getPVString().c_str(), score::flags(best, alpha, beta));
         alpha = best;
     }
@@ -218,7 +218,7 @@ int TSearch::pvs_root(int alpha, int beta, int depth) {
             if (score > alpha) {
                 updatePV(&rMove->Move);
                 uci::send_pv(best, depth / ONE_PLY, selDepth, nodes + pruned_nodes,
-                            timeManager->elapsed(), getPVString().c_str(),
+                            time_man::elapsed(), getPVString().c_str(),
                             score::flags(best, alpha, beta));
                 alpha = score;
             }
@@ -395,7 +395,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
         stack->bestMove.set(0);
         int iid_depth = depth - (2 * ONE_PLY) - (depth >> 2);
         iid_depth = MAX(ONE_PLY, iid_depth);
-        int iid_score = pvs(alpha, beta, iid_depth);
+        /*int iid_score = */pvs(alpha, beta, iid_depth);
         stack->tt_move.set(&stack->bestMove);
     }
     skipNull = false;
@@ -407,7 +407,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      * If no move is returned, the position is either MATE or STALEMATE, 
      * otherwise search the first move with full alpha beta window.
      */
-    move_t * first_move = movePicker->first(this, depth, alpha, beta);
+    move_t * first_move = move::first(this, depth, alpha, beta);
     if (!first_move) { //no legal move: it's checkmate or stalemate
         return in_check ? -score::MATE + pos->current_ply : drawScore();
     }
@@ -445,7 +445,7 @@ int TSearch::pvs(int alpha, int beta, int depth) {
      */
     int searched_moves = 1;
     int max_reduce = MAX(0, new_depth - ONE_PLY);
-    while (move_t * move = movePicker->next(this, depth, alpha, beta)) {
+    while (move_t * move = move::next(this, depth, alpha, beta)) {
         assert(stack->bestMove.equals(move) == false);
         assert(first_move->equals(move) == false);
         gives_check = pos->gives_check(move);
@@ -599,7 +599,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
         return eval;
     }
 
-    move_t * move = movePicker->first(this, depth, alpha, beta);
+    move_t * move = move::first(this, depth, alpha, beta);
     if (!move) { //return evaluation score if there are no quiescence moves
         return stack->in_check ? -score::MATE + pos->current_ply : eval;
     }
@@ -649,7 +649,7 @@ int TSearch::qsearch(int alpha, int beta, int depth) {
             stack->bestMove.set(move);
             alpha = score;
         }
-    } while ((move = movePicker->next(this, depth, alpha, beta)));
+    } while ((move = move::next(this, depth, alpha, beta)));
     return alpha;
 }
 

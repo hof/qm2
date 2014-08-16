@@ -26,7 +26,7 @@ namespace uci {
 
     const std::string start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     std::string fen = start_fen;
-    volatile bool _silent = false;
+    bool _silent = false;
 
     std::string itoa(int64_t number) {
         std::stringstream tmp;

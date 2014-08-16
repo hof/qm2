@@ -76,8 +76,8 @@ private:
     bool _testSucces;
     move_t _resultMove;
     int _resultScore;
-    volatile bool _engineStop;
-    volatile bool _enginePonder;
+    bool _engineStop;
+    bool _enginePonder;
 
 public:
     TGameSettings gameSettings;

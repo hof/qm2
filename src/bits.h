@@ -37,6 +37,7 @@
 #include <string.h>
 #include <cstdlib>
 #include <fstream>
+#include <time.h>
 
 typedef uint64_t U64;
 

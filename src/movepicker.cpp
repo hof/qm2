@@ -246,3 +246,19 @@ int move_picker_t::count_evasions(TSearch * s, move_t * first_move) {
     return result;
 }
 
+namespace move {
+    move_picker_t _picker;
+    
+    move_picker_t * picker() {
+        return &_picker;
+    }
+    
+    move_t * first(TSearch * s, int depth, int alpha, int beta) {
+        return _picker.first(s, depth, alpha, beta);
+    }
+    
+    move_t * next(TSearch * s, int depth, int alpha, int beta) {
+        return _picker.next(s, depth, alpha, beta);
+    }
+};
+

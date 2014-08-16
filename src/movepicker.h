@@ -53,8 +53,13 @@ private:
 public:
     move_t * first(TSearch * s, int depth, int alpha, int beta);
     move_t * next(TSearch * s, int depth, int alpha, int beta);
-    int count_evasions(TSearch * s, move_t * first_move);
-    
+    int count_evasions(TSearch * s, move_t * first_move);   
+};
+
+namespace move {
+    move_picker_t * picker();
+    move_t * first(TSearch * s, int depth, int alpha, int beta);
+    move_t * next(TSearch * s, int depth, int alpha, int beta); 
 };
 
 #endif	/* MOVEPICKER_H */

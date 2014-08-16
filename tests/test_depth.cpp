@@ -111,7 +111,8 @@ void depth_test(TEngine * engine, TStats * stats, int depth) {
 
 int main(int argc, char** argv) {
     magic::init();
-   
+    uci::silent(true);
+    
     static const int MAX_TEST_DEPTH = 10;
     TStats stats[MAX_TEST_DEPTH+1];
 
