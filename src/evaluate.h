@@ -25,39 +25,25 @@
 #define	EVALUATE_H
 
 #include "board.h"
-#include <cstdlib>
-#include <iostream>
 #include "score.h"
 
-
-
-
 class search_t;
-
-int evaluate(search_t * searchData);
-
-void InitPST();
 extern pst_t PST;
 extern const score_t TEMPO[2];
 
-enum EVALUATION_CONSTANTS {
-    MAX_PIECES = 16,
-    MAX_CLOSED_POSITION = 32, //maximum value indicating how much closed the position is
-    GRAIN_SIZE = 4 //used for rounding evaluation score (and hopefully get more cutoffs and less "noise")
+int evaluate(search_t * s);
+void init_pst();
+
+enum piece_val_t {
+    VPAWN = 100,
+    VKNIGHT = 325,
+    VBISHOP = 325,
+    VROOK = 500,
+    VQUEEN = 925,
+    VKING = 20000,
 };
 
-/*******************************************************************************
- * Generic evaluation bonuses
- *******************************************************************************/
-
-const short VPAWN = 100;
-const short VKNIGHT = 325;
-const short VBISHOP = 325;
-const short VROOK = 500;
-const short VQUEEN = 925;
-const short VKING = 20000;
-
-const short PIECE_VALUE[13] = {
+const uint16_t PIECE_VALUE[13] = {
     0, VPAWN, VKNIGHT, VBISHOP, VROOK, VQUEEN, VKING,
     VPAWN, VKNIGHT, VBISHOP, VROOK, VQUEEN, VKING
 };

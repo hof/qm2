@@ -235,7 +235,7 @@ void * TEngine::_think(void* engineObjPtr) {
         int beta = score::INF;
         int prev_score = -score::INF;
         const int windows[] = {20, 40, 80, 160, 320, 640, 1280, score::INF, score::INF};
-        const int MAX_WINDOW = 2 * VQUEEN;
+        const int MAX_WINDOW = 2000;
         int alpha_window = 0;
         int beta_window = 0;
         int lowest = score::INF;
@@ -283,7 +283,7 @@ void * TEngine::_think(void* engineObjPtr) {
              * - Evaluation shows large positional values
              * - PV or pondermove is not set
              */
-            score_changed = ABS(prev_score - score) > (VPAWN / 4);
+            score_changed = ABS(prev_score - score) > 25;
             easy_move &= move_changed == false;
             easy_move &= score_changed == false;
 

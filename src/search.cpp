@@ -88,7 +88,7 @@ int root_move_t::compare(root_move_t * m) {
 search_t::search_t(const char * fen) {
     brd.create(fen);
     memset(history, 0, sizeof (history));
-    InitPST();
+    init_pst();
     nodes = 0;
     pruned_nodes = 0;
     learn = 1.0;

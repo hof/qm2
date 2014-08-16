@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  *  
- * File: evlauate.cpp
+ * File: evaluate.cpp
  * Evalution functions for traditional chess
  */
 
@@ -31,23 +31,27 @@
 //#define PRINT_KING_SAFETY
 //#define PRINT_PASSED_PAWN 
 
-inline short evaluateMaterial(search_t * sd);
-inline score_t * evaluatePawnsAndKings(search_t * sd);
-inline score_t * evaluateKnights(search_t * sd, bool white);
-inline score_t * evaluateBishops(search_t * sd, bool white);
-inline score_t * evaluateRooks(search_t * sd, bool white);
-inline score_t * evaluateQueens(search_t * sd, bool white);
-inline score_t * evaluatePassers(search_t * sd, bool white);
-inline int evaluatePasserVsK(search_t * sd, bool white, int sq);
-inline score_t * evaluateKingAttack(search_t * sd, bool white);
-int short evaluateEndgame(search_t * sd, short score);
-
 pst_t PST;
+
+enum {
+    GRAIN_SIZE = 4
+};
+
+int eval_material(search_t * sd);
+int eval_unstoppable_pawn(search_t * sd, bool white, int sq);
+int eval_endgame(search_t * sd, short score);
+score_t * eval_pawns_and_kings(search_t * sd);
+score_t * eval_knights(search_t * sd, bool white);
+score_t * eval_bishops(search_t * sd, bool white);
+score_t * eval_rooks(search_t * sd, bool white);
+score_t * eval_queens(search_t * sd, bool white);
+score_t * eval_passed_pawns(search_t * sd, bool white);
+score_t * eval_king_attack(search_t * sd, bool white);
 
 /**
  * Initialize the Piece Square Tables
  */
-void InitPST() {
+void init_pst() {
     for (int sq = a1; sq <= h8; sq++) {
         PST[EMPTY][sq].mg = 0;
         PST[EMPTY][sq].eg = 0;
@@ -151,6 +155,7 @@ enum mflag_imbalance_t {
     IMB_MINOR_B = 5,
     IMB_MAJOR_B = 6
 };
+
 /* 
  * 0  | 1   | 2   | 3   | 4   | 5 ..   7  | 
  * EG | AFW | AFB | MPW | MPB | IMBALANCE | 
@@ -200,7 +205,6 @@ const score_t PASSED_PAWN[64] = {
     S(10, 20), S(8, 10), S(8, 10), S(8, 10), S(8, 10), S(8, 10), S(8, 10), S(10, 20),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
 };
-
 
 const score_t CANDIDATE[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
@@ -270,8 +274,6 @@ const score_t KNIGHT_MOBILITY[9] = {
     S(-22, -22), S(-18, -18), S(-14, -14), S(-10, -10),
     S(-8, -8), S(-6, -6), S(-4, -4), S(-2, -2), S(0, 0)
 };
-
-
 
 const score_t KNIGHT_PAWN_WIDTH[8] = {//indexed by opponent pawn width
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, -5), S(0, -10), S(0, -15), S(0, -20)
@@ -371,26 +373,26 @@ int evaluate(search_t * sd) {
             && (sd->stack - 1)->eval_result != score::INVALID;
 
     bool wtm = sd->brd.stack->wtm;
-    int result = evaluateMaterial(sd); //sets stack->phase (required) 
+    int result = eval_material(sd); //sets stack->phase (required) 
     score_t * score = &sd->stack->eval_score;
-    score->set(evaluatePawnsAndKings(sd)); //initializes mobility and attack masks (required)
-    score->add(evaluateKnights(sd, WHITE));
-    score->sub(evaluateKnights(sd, BLACK));
-    score->add(evaluateBishops(sd, WHITE));
-    score->sub(evaluateBishops(sd, BLACK));
-    score->add(evaluateRooks(sd, WHITE));
-    score->sub(evaluateRooks(sd, BLACK));
-    score->add(evaluateQueens(sd, WHITE));
-    score->sub(evaluateQueens(sd, BLACK));
-    score->add(evaluatePassers(sd, WHITE));
-    score->sub(evaluatePassers(sd, BLACK));
-    score->add(evaluateKingAttack(sd, WHITE)); //must be after piece evals
-    score->sub(evaluateKingAttack(sd, BLACK)); //must be after piece evals
+    score->set(eval_pawns_and_kings(sd)); //initializes mobility and attack masks (required)
+    score->add(eval_knights(sd, WHITE));
+    score->sub(eval_knights(sd, BLACK));
+    score->add(eval_bishops(sd, WHITE));
+    score->sub(eval_bishops(sd, BLACK));
+    score->add(eval_rooks(sd, WHITE));
+    score->sub(eval_rooks(sd, BLACK));
+    score->add(eval_queens(sd, WHITE));
+    score->sub(eval_queens(sd, BLACK));
+    score->add(eval_passed_pawns(sd, WHITE));
+    score->sub(eval_passed_pawns(sd, BLACK));
+    score->add(eval_king_attack(sd, WHITE)); //must be after piece evals
+    score->sub(eval_king_attack(sd, BLACK)); //must be after piece evals
     score->add(TEMPO[wtm]);
     result += score->get(sd->stack->phase);
     sd->stack->eg_score = result;
     if (sd->stack->material_flags & MFLAG_EG) {
-        result = evaluateEndgame(sd, result);
+        result = eval_endgame(sd, result);
     }
     if (!wtm) {
         result = -result;
@@ -408,7 +410,7 @@ int evaluate(search_t * sd) {
  * Evaluate material score and set the current game phase
  * @param sd search meta-data object
  */
-inline short evaluateMaterial(search_t * sd) {
+int eval_material(search_t * sd) {
 
     /*
      * 1. Get the score from the last stack record if the previous move was quiet, 
@@ -503,7 +505,7 @@ inline short evaluateMaterial(search_t * sd) {
             result.sub(REDUNDANT_QUEEN);
         }
     }
-    
+
 
     /*
      * Material Balance
@@ -525,7 +527,7 @@ inline short evaluateMaterial(search_t * sd) {
         int majors_ix = MAX(0, 4 + wrooks + 2 * wqueens - brooks - 2 * bqueens);
         result.add(IMBALANCE[MIN(majors_ix, 8)][MIN(minors_ix, 8)]);
     }
-    
+
     if (wpawns != bpawns) {
         result.mg += (wpawns - bpawns) * SVPAWN.mg;
         result.eg += (wpawns - bpawns) * SVPAWN.eg;
@@ -569,7 +571,7 @@ inline short evaluateMaterial(search_t * sd) {
  * @param sd search metadata object
  */
 
-inline score_t * evaluatePawnsAndKings(search_t * sd) {
+score_t * eval_pawns_and_kings(search_t * sd) {
 
     /*
      * 1. Get the score from the last stack record if the latest move did not
@@ -608,7 +610,7 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
     int king_attack[2];
     int flags;
     score_t pawn_score;
-    
+
     if (pawn_table::retrieve(pos->stack->pawn_hash, passers, pawn_score, king_attack, flags)) {
         sd->stack->passers = passers;
         sd->stack->king_attack[BPAWN] = king_attack[BLACK];
@@ -629,53 +631,75 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
     passers = 0;
     pawn_score.clear();
 
-    U64 openW = ~FILEFILL(pos->bb[WPAWN]);
-    U64 openB = ~FILEFILL(pos->bb[BPAWN]);
-    U64 wUp = UP1(pos->bb[WPAWN]);
-    U64 bDown = DOWN1(pos->bb[BPAWN]);
-    U64 upLeftW = UPLEFT1(pos->bb[WPAWN]);
-    U64 upRightW = UPRIGHT1(pos->bb[WPAWN]);
-    U64 downLeftB = DOWNLEFT1(pos->bb[BPAWN]);
-    U64 downRightB = DOWNRIGHT1(pos->bb[BPAWN]);
-    U64 wAttacks = upRightW | upLeftW;
-    U64 bAttacks = downLeftB | downRightB;
-    U64 wBlocked = DOWN1(wUp & pos->bb[BPAWN]) & ~bAttacks;
-    U64 bBlocked = UP1(bDown & pos->bb[WPAWN]) & ~wAttacks;
-    U64 wSafe = (upLeftW & upRightW) | ~bAttacks | ((upLeftW ^ upRightW) & ~(downLeftB & downRightB));
-    U64 bSafe = (downLeftB & downRightB) | ~wAttacks | ((downLeftB ^ downRightB) & ~(upLeftW & upRightW));
-    U64 wMoves = UP1(pos->bb[WPAWN] & ~wBlocked) & wSafe;
-    U64 bMoves = DOWN1(pos->bb[BPAWN] & ~bBlocked) & bSafe;
-    wMoves |= UP1(wMoves & RANK_3 & ~bAttacks & ~DOWN1((pos->bb[BPAWN] | pos->bb[WPAWN]))) & wSafe;
-    bMoves |= DOWN1(bMoves & RANK_6 & ~wAttacks & ~UP1((pos->bb[WPAWN] | pos->bb[BPAWN]))) & bSafe;
-    U64 wAttackRange = wAttacks | UPLEFT1(wMoves) | UPRIGHT1(wMoves);
-    U64 bAttackRange = bAttacks | DOWNLEFT1(bMoves) | DOWNRIGHT1(bMoves);
-    U64 wIsolated = pos->bb[WPAWN] & ~(FILEFILL(wAttacks));
-    U64 bIsolated = pos->bb[BPAWN] & ~(FILEFILL(bAttacks));
-    U64 wDoubled = DOWN1(fill_south(pos->bb[WPAWN])) & pos->bb[WPAWN];
-    U64 bDoubled = UP1(fill_north(pos->bb[BPAWN])) & pos->bb[BPAWN];
+    const U64 open_files[2] = {
+        ~FILEFILL(pos->bb[BPAWN]),
+        ~FILEFILL(pos->bb[WPAWN])
+    };
+    const U64 up_all[2] = {
+        DOWN1(pos->bb[BPAWN]),
+        UP1(pos->bb[WPAWN])
+    };
+    const U64 up_left[2] = {
+        DOWNLEFT1(pos->bb[BPAWN]),
+        UPLEFT1(pos->bb[WPAWN])
+    };
+    const U64 up_right[2] = {
+        DOWNRIGHT1(pos->bb[BPAWN]),
+        UPRIGHT1(pos->bb[WPAWN])
+    };
+    const U64 attacks[2] = {
+        up_left[BLACK] | up_right[BLACK],
+        up_right[WHITE] | up_left[WHITE]
+    };
+    const U64 blocked_pawns[2] = {
+        UP1(up_all[BLACK] & pos->bb[WPAWN]) & ~attacks[WHITE],
+        DOWN1(up_all[WHITE] & pos->bb[BPAWN]) & ~attacks[BLACK]
+    };
+    const U64 safe[2] = {
+        (up_left[BLACK] & up_right[BLACK]) | ~attacks[WHITE] | ((up_left[BLACK] ^ up_right[BLACK]) & ~(up_left[WHITE] & up_right[WHITE])),
+        (up_left[WHITE] & up_right[WHITE]) | ~attacks[BLACK] | ((up_left[WHITE] ^ up_right[WHITE]) & ~(up_left[BLACK] & up_right[BLACK]))
+    };
+    const U64 isolated_pawns[2] = {
+        pos->bb[BPAWN] & ~(FILEFILL(attacks[BLACK])),
+        pos->bb[WPAWN] & ~(FILEFILL(attacks[WHITE]))
+    };
+    const U64 doubled_pawns[2] = {
+        UP1(fill_north(pos->bb[BPAWN])) & pos->bb[BPAWN],
+        DOWN1(fill_south(pos->bb[WPAWN])) & pos->bb[WPAWN]
+    };
 
-    U64 kcz_w = KING_ZONE[wkpos];
-    U64 kcz_b = KING_ZONE[bkpos];
+    U64 moves[2] = {
+        DOWN1(pos->bb[BPAWN] & ~blocked_pawns[BLACK]) & safe[BLACK],
+        UP1(pos->bb[WPAWN] & ~blocked_pawns[WHITE]) & safe[WHITE]
+    };
+    moves[WHITE] |= UP1(moves[WHITE] & RANK_3 & ~attacks[BLACK] & ~DOWN1((pos->bb[BPAWN] | pos->bb[WPAWN]))) & safe[WHITE];
+    moves[BLACK] |= DOWN1(moves[BLACK] & RANK_6 & ~attacks[WHITE] & ~UP1((pos->bb[WPAWN] | pos->bb[BPAWN]))) & safe[BLACK];
 
+    const U64 attack_range[2] = {
+        attacks[BLACK] | DOWNLEFT1(moves[BLACK]) | DOWNRIGHT1(moves[BLACK]),
+        attacks[WHITE] | UPLEFT1(moves[WHITE]) | UPRIGHT1(moves[WHITE])
+    };
+
+    const U64 kcz[2] = {KING_ZONE[bkpos], KING_ZONE[wkpos]};
     int blocked_center_pawns = 0;
 
     U64 wpawns = pos->bb[WPAWN];
     while (wpawns) {
         int sq = pop(wpawns);
         int isq = FLIP_SQUARE(sq);
-        U64 sqBit = BIT(sq);
-        U64 up = fill_north(sqBit);
-        bool open = sqBit & openB;
-        bool doubled = sqBit & wDoubled;
-        bool isolated = sqBit & wIsolated;
-        bool defended = sqBit & wAttacks;
-        bool blocked = sqBit & wBlocked;
-        bool push_defend = !blocked && (UP1(sqBit) & wAttackRange);
-        bool push_double_defend = !blocked && (UP2(sqBit & RANK_2) & wMoves & wAttackRange);
-        bool lost = sqBit & ~wAttackRange;
+        U64 sq_bit = BIT(sq);
+        U64 up = fill_north(sq_bit);
+        bool open = sq_bit & open_files[BLACK];
+        bool doubled = sq_bit & doubled_pawns[WHITE];
+        bool isolated = sq_bit & isolated_pawns[WHITE];
+        bool defended = sq_bit & attacks[WHITE];
+        bool blocked = sq_bit & blocked_pawns[WHITE];
+        bool push_defend = !blocked && (UP1(sq_bit) & attack_range[WHITE]);
+        bool push_double_defend = !blocked && (UP2(sq_bit & RANK_2) & moves[WHITE] & attack_range[WHITE]);
+        bool lost = sq_bit & ~attack_range[WHITE];
         bool weak = !defended && lost && !push_defend && !push_double_defend;
-        bool passed = !doubled && !(up & (bAttacks | pos->bb[BPAWN]));
-        bool candidate = open && !doubled && !passed && !(up & ~wSafe);
+        bool passed = !doubled && !(up & (attacks[BLACK] | pos->bb[BPAWN]));
+        bool candidate = open && !doubled && !passed && !(up & ~safe[WHITE]);
 
 #ifdef PRINT_PAWN_EVAL
         std::cout << "WP " << PRINT_SQUARE(sq) << ": ";
@@ -729,15 +753,15 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
 #ifdef PRINT_PAWN_EVAL
             std::cout << "passed ";
 #endif
-            passers |= sqBit;
+            passers |= sq_bit;
 
         }
 
-        if (blocked && (sqBit & CENTER)) {
+        if (blocked && (sq_bit & CENTER)) {
             blocked_center_pawns++;
         }
 
-        king_attack[WHITE] += popcnt0(WPAWN_CAPTURES[sq] & kcz_b);
+        king_attack[WHITE] += popcnt0(WPAWN_CAPTURES[sq] & kcz[BLACK]);
 
 
 #ifdef PRINT_PAWN_EVAL
@@ -748,19 +772,19 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
     U64 bpawns = pos->bb[BPAWN];
     while (bpawns) {
         int sq = pop(bpawns);
-        U64 sqBit = BIT(sq);
-        U64 down = fill_south(sqBit);
-        bool open = sqBit & openW;
-        bool doubled = sqBit & bDoubled;
-        bool isolated = sqBit & bIsolated;
-        bool blocked = sqBit & bBlocked;
-        bool defended = sqBit & bAttacks;
-        bool push_defend = !blocked && (DOWN1(sqBit) & bAttackRange);
-        bool push_double_defend = !blocked && (DOWN2(sqBit & RANK_7) & bMoves & bAttackRange);
-        bool lost = sqBit & ~bAttackRange;
+        U64 sq_bit = BIT(sq);
+        U64 down = fill_south(sq_bit);
+        bool open = sq_bit & open_files[WHITE];
+        bool doubled = sq_bit & doubled_pawns[BLACK];
+        bool isolated = sq_bit & isolated_pawns[BLACK];
+        bool blocked = sq_bit & blocked_pawns[BLACK];
+        bool defended = sq_bit & attacks[BLACK];
+        bool push_defend = !blocked && (DOWN1(sq_bit) & attack_range[BLACK]);
+        bool push_double_defend = !blocked && (DOWN2(sq_bit & RANK_7) & moves[BLACK] & attack_range[BLACK]);
+        bool lost = sq_bit & ~attack_range[BLACK];
         bool weak = !defended && lost && !push_defend && !push_double_defend;
-        bool passed = !doubled && !(down & (wAttacks | pos->bb[WPAWN]));
-        bool candidate = open && !doubled && !passed && !(down & ~bSafe);
+        bool passed = !doubled && !(down & (attacks[WHITE] | pos->bb[WPAWN]));
+        bool candidate = open && !doubled && !passed && !(down & ~safe[BLACK]);
 
 #ifdef PRINT_PAWN_EVAL
         std::cout << "BP " << PRINT_SQUARE(sq) << ": ";
@@ -805,11 +829,11 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
 #ifdef PRINT_PAWN_EVAL
             std::cout << "passed: ";
 #endif
-            passers |= sqBit;
+            passers |= sq_bit;
 
         }
 
-        if (blocked && (sqBit & CENTER)) {
+        if (blocked && (sq_bit & CENTER)) {
             blocked_center_pawns++;
         }
 
@@ -817,7 +841,7 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
         std::cout << std::endl;
 #endif
 
-        king_attack[BLACK] += popcnt0(BPAWN_CAPTURES[sq] & kcz_w);
+        king_attack[BLACK] += popcnt0(BPAWN_CAPTURES[sq] & kcz[WHITE]);
 
     }
 
@@ -833,7 +857,7 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
 
     pawn_score.add(PST[WKING][ISQ(wkpos, WHITE)]);
     pawn_score.sub(PST[WKING][ISQ(bkpos, BLACK)]);
-    
+
     U64 ka_w = KING_MOVES[wkpos] & sd->stack->mob[WHITE] & sd->stack->attack[WHITE];
     U64 ka_b = KING_MOVES[bkpos] & sd->stack->mob[BLACK] & sd->stack->attack[BLACK];
     if (ka_w) {
@@ -842,7 +866,7 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
     if (ka_b) {
         pawn_score.sub(0, 10);
     }
-    
+
 
     /*
      * 4. Calculate King Shelter Attack units
@@ -868,19 +892,19 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
 #endif
 
     //2. rewards for having shelter and storm pawns
-    U64 kingFront = (FORWARD_RANKS[RANK(wkpos)] | KING_MOVES[wkpos]) & PAWN_SCOPE[FILE(wkpos)];
-    U64 shelterPawns = kingFront & pos->bb[WPAWN];
-    while (shelterPawns) {
-        int sq = pop(shelterPawns);
+    U64 king_front = (FORWARD_RANKS[RANK(wkpos)] | KING_MOVES[wkpos]) & PAWN_SCOPE[FILE(wkpos)];
+    U64 shelter_pawns = king_front & pos->bb[WPAWN];
+    while (shelter_pawns) {
+        int sq = pop(shelter_pawns);
         king_attack[BLACK] += SHELTER_PAWN[FLIP_SQUARE(sq)];
     }
 #ifdef PRINT_PAWN_EVAL
     std::cout << "attack on WK (shelter): " << (int) king_attack[BLACK] << std::endl;
 #endif
 
-    U64 stormPawns = kingFront & pos->bb[BPAWN];
-    while (stormPawns) {
-        int sq = pop(stormPawns);
+    U64 storm_pawns = king_front & pos->bb[BPAWN];
+    while (storm_pawns) {
+        int sq = pop(storm_pawns);
         king_attack[BLACK] += STORM_PAWN[FLIP_SQUARE(sq)];
     }
 #ifdef PRINT_PAWN_EVAL
@@ -888,7 +912,7 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
 #endif
 
     //3. penalize (half)open files on the king
-    U64 open = (openW | openB) & kingFront & RANK_8;
+    U64 open = (open_files[WHITE] | open_files[BLACK]) & king_front & RANK_8;
     if (open) {
         king_attack[BLACK] += SHELTER_OPEN_FILES[popcnt0(open)];
         if (open & (FILE_A | FILE_H)) {
@@ -922,19 +946,19 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
     std::cout << "attack on BK (castling): " << (int) king_attack[WHITE] << std::endl;
 #endif
     //2. reward having pawns in front of the king
-    kingFront = (BACKWARD_RANKS[RANK(bkpos)] | KING_MOVES[bkpos]) & PAWN_SCOPE[FILE(bkpos)];
-    shelterPawns = kingFront & pos->bb[BPAWN];
-    while (shelterPawns) {
-        int sq = pop(shelterPawns);
+    king_front = (BACKWARD_RANKS[RANK(bkpos)] | KING_MOVES[bkpos]) & PAWN_SCOPE[FILE(bkpos)];
+    shelter_pawns = king_front & pos->bb[BPAWN];
+    while (shelter_pawns) {
+        int sq = pop(shelter_pawns);
         king_attack[WHITE] += SHELTER_PAWN[sq];
     }
 
 #ifdef PRINT_PAWN_EVAL
     std::cout << "attack on BK (shelter): " << (int) king_attack[WHITE] << std::endl;
 #endif
-    stormPawns = kingFront & pos->bb[WPAWN];
-    while (stormPawns) {
-        int sq = pop(stormPawns);
+    storm_pawns = king_front & pos->bb[WPAWN];
+    while (storm_pawns) {
+        int sq = pop(storm_pawns);
         king_attack[WHITE] += STORM_PAWN[sq];
     }
 
@@ -942,7 +966,7 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
     std::cout << "attack on BK (storm): " << (int) king_attack[WHITE] << std::endl;
 #endif
     //3. penalize (half)open files on the king
-    open = (openW | openB) & kingFront & RANK_1;
+    open = (open_files[WHITE] | open_files[BLACK]) & king_front & RANK_1;
     if (open) {
         king_attack[WHITE] += SHELTER_OPEN_FILES[popcnt0(open)];
         if (open & (FILE_A | FILE_H)) {
@@ -963,7 +987,7 @@ inline score_t * evaluatePawnsAndKings(search_t * sd) {
     return &sd->stack->pawn_score;
 }
 
-inline score_t * evaluateKnights(search_t * sd, bool us) {
+score_t * eval_knights(search_t * sd, bool us) {
 
     score_t * result = &sd->stack->knight_score[us];
     board_t * pos = &sd->brd;
@@ -1010,7 +1034,7 @@ inline score_t * evaluateKnights(search_t * sd, bool us) {
         result->add(KNIGHT_MOBILITY[mob_count]);
         result->add(KNIGHT_PAWN_WIDTH[pawn_width]);
         result->add(KNIGHT_PAWN_COUNT[pawn_count]);
-        
+
         if (moves & sd->stack->attack[us]) {
             result->add(KNIGHT_ATTACK);
         }
@@ -1030,7 +1054,7 @@ inline score_t * evaluateKnights(search_t * sd, bool us) {
     return result;
 }
 
-inline score_t * evaluateBishops(search_t * sd, bool us) {
+score_t * eval_bishops(search_t * sd, bool us) {
     score_t * result = &sd->stack->bishop_score[us];
     board_t * pos = &sd->brd;
     int pc = BISHOP[us];
@@ -1119,7 +1143,7 @@ inline score_t * evaluateBishops(search_t * sd, bool us) {
     return result;
 }
 
-inline score_t * evaluateRooks(search_t * sd, bool us) {
+score_t * eval_rooks(search_t * sd, bool us) {
 
     static const U64 BACKRANKS[2] = {RANK_1 | RANK_2, RANK_7 | RANK_8};
 
@@ -1229,7 +1253,7 @@ inline score_t * evaluateRooks(search_t * sd, bool us) {
     return result;
 }
 
-inline score_t * evaluateQueens(search_t * sd, bool us) {
+score_t * eval_queens(search_t * sd, bool us) {
     score_t * result = &sd->stack->queen_score[us];
     board_t * pos = &sd->brd;
     int pc = QUEEN[us];
@@ -1283,7 +1307,7 @@ inline score_t * evaluateQueens(search_t * sd, bool us) {
     return result;
 }
 
-inline score_t * evaluatePassers(search_t * sd, bool us) {
+score_t * eval_passed_pawns(search_t * sd, bool us) {
     score_t * result = &sd->stack->passer_score[us];
     result->clear();
     U64 passers = sd->stack->passers & sd->brd.bb[PAWN[us]];
@@ -1310,7 +1334,7 @@ inline score_t * evaluatePassers(search_t * sd, bool us) {
         bonus.print();
 #endif
         if (p_vs_k) {
-            unstoppable = MAX(unstoppable, evaluatePasserVsK(sd, us, sq));
+            unstoppable = MAX(unstoppable, eval_unstoppable_pawn(sd, us, sq));
         }
         if (BIT(sq) & exclude) {
             continue;
@@ -1395,7 +1419,7 @@ inline score_t * evaluatePassers(search_t * sd, bool us) {
     return result;
 }
 
-int evaluatePasserVsK(search_t * sd, bool us, int sq) {
+int eval_unstoppable_pawn(search_t * sd, bool us, int sq) {
 
     //is the pawn unstoppable by the nme king?
     U64 path = fill_up(BIT(sq), us) ^ BIT(sq);
@@ -1474,7 +1498,7 @@ const int16_t KING_SHELTER_MUL[8] = {
     128, 160, 192, 224, 256, 272, 288, 304
 };
 
-inline score_t * evaluateKingAttack(search_t * sd, bool us) {
+score_t * eval_king_attack(search_t * sd, bool us) {
     score_t * result = &sd->stack->king_score[us];
     result->clear();
     board_t * pos = &sd->brd;
@@ -1590,7 +1614,7 @@ inline score_t * evaluateKingAttack(search_t * sd, bool us) {
     return result;
 }
 
-inline short DRAW(int score, int div) {
+short DRAW(int score, int div) {
     if (score == 0 || div == 0) {
         return 0;
     }
@@ -1606,7 +1630,7 @@ inline short DRAW(int score, int div) {
  * @param white white or black king
  * @return score value related to distance to corner and distance between kings
  */
-inline short cornerKing(search_t * s, bool them) {
+short eval_corner_king(search_t * s, bool them) {
     static const uint8_t EDGE[8] = {50, 30, 10, 0, 0, 10, 30, 50};
     static const uint8_t CORNER[8] = {250, 200, 150, 120, 90, 60, 30, 0};
     static const uint8_t KING[8] = {0, 100, 80, 60, 45, 30, 15, 0};
@@ -1636,7 +1660,7 @@ inline short cornerKing(search_t * s, bool them) {
     return result;
 }
 
-inline bool blockedPawns(search_t * s, bool us) {
+bool blocked_pawns(search_t * s, bool us) {
     U64 pawns = s->brd.bb[PAWN[us]];
     int direction = us == WHITE ? 8 : -8;
     bool them = !us;
@@ -1662,7 +1686,7 @@ inline bool blockedPawns(search_t * s, bool us) {
     return true;
 }
 
-inline short evaluateEndgame(search_t * s, short score) {
+int eval_endgame(search_t * s, short score) {
     static const int SCORE_SURE_WIN[2] = {-score::WIN, score::WIN};
     static const int BONUS[2] = {-10, 10};
 
@@ -1725,7 +1749,7 @@ inline short evaluateEndgame(search_t * s, short score) {
 
     //opponent has nothing, we have mating power (KRK, KBNK and better)
     if (pawn_count[them] == 0 && !has_pieces[them] && mating_power[us]) {
-        return score + SCORE_SURE_WIN[us] + cornerKing(s, them);
+        return score + SCORE_SURE_WIN[us] + eval_corner_king(s, them);
     }
 
 
@@ -1740,15 +1764,15 @@ inline short evaluateEndgame(search_t * s, short score) {
             return DRAW(score, 16);
         }
         if (pos->is_eg(KBBKN, us)) { //an exception
-            return score + SCORE_SURE_WIN[us] / 2 + cornerKing(s, them);
+            return score + SCORE_SURE_WIN[us] / 2 + eval_corner_king(s, them);
         }
         if (!winning_edge[us]) {
-            return DRAW(score, 16) + cornerKing(s, them) / 2;
+            return DRAW(score, 16) + eval_corner_king(s, them) / 2;
         }
         if (!mating_power[them]) {
-            return score + SCORE_SURE_WIN[us] / 4 + cornerKing(s, them);
+            return score + SCORE_SURE_WIN[us] / 4 + eval_corner_king(s, them);
         }
-        return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 4;
+        return score + SCORE_SURE_WIN[us] / 8 + eval_corner_king(s, them) / 4;
     }
 
     assert(pawn_count[them] || pawn_count[us]);
@@ -1756,9 +1780,9 @@ inline short evaluateEndgame(search_t * s, short score) {
     //cases with a clear, decisive material advantage; opponent has no pawns
     if (pawn_count[them] == 0 && mating_power[us] && winning_edge[us]) {
         if (!mating_power[them]) {
-            return score + SCORE_SURE_WIN[us] / 4 + cornerKing(s, them) / 4;
+            return score + SCORE_SURE_WIN[us] / 4 + eval_corner_king(s, them) / 4;
         }
-        return score + SCORE_SURE_WIN[us] / 8 + cornerKing(s, them) / 8;
+        return score + SCORE_SURE_WIN[us] / 8 + eval_corner_king(s, them) / 8;
     }
 
     //we have no pawns and no winning edge
@@ -1766,11 +1790,11 @@ inline short evaluateEndgame(search_t * s, short score) {
         if (mating_power[us]) {
             if (has_imbalance(s->stack->material_flags, us)) {
                 if (has_major_imbalance(s->stack->material_flags)) {
-                    return score + cornerKing(s, them) / 4;
+                    return score + eval_corner_king(s, them) / 4;
                 }
-                return DRAW(score, 2) + cornerKing(s, them) / 4;
+                return DRAW(score, 2) + eval_corner_king(s, them) / 4;
             }
-            return DRAW(score, 8) + cornerKing(s, them) / 8;
+            return DRAW(score, 8) + eval_corner_king(s, them) / 8;
         }
         return DRAW(score, 16);
     }
@@ -1812,7 +1836,7 @@ inline short evaluateEndgame(search_t * s, short score) {
 
     //minor piece(s) and pawn vs piece(s) that can sacrifice to force a draw
     if (pawn_count[them] == 0 && pawn_count[us] == 1 && !mating_power[us] && has_pieces[them]) {
-        if (blockedPawns(s, us)) {
+        if (blocked_pawns(s, us)) {
             return DRAW(score, 8);
         }
         return DRAW(score, 4);
@@ -1822,7 +1846,7 @@ inline short evaluateEndgame(search_t * s, short score) {
     if (pos->is_eg(OPP_BISHOPS, us)) {
         static const int PF[9] = {128, 16, 8, 4, 2, 2, 2, 2, 2};
         int pf = PF[pawn_count[us]];
-        if (blockedPawns(s, us)) {
+        if (blocked_pawns(s, us)) {
             pf *= 2;
         }
         return DRAW(score, pf);
