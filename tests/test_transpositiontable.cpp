@@ -105,13 +105,13 @@ void test_tt() {
 
     magic::init();
     uci::silent(true);
-    TEngine * engine = engine::instance();
+    engine_t * engine = engine::instance();
     engine::settings()->max_depth = 15;
-    engine->newGame("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - -");
+    engine->new_game("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - -");
     engine->think();
     engine->stop_all();
 
-    if (engine->getNodesSearched() > 50000) {
+    if (engine->get_total_nodes() > 50000) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=hashtable not effective" << std::endl;
     }
     delete sd;

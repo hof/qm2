@@ -19,23 +19,13 @@
  * Implements the chess engine
  */
 
-//#include <cstdlib>
-//#include <iostream>
-//#include <unistd.h>
-//#include <time.h>
-//#include <istream>
-//#include <sstream>
-
-
 #include "engine.h"
-#include "game.h"
 
 using namespace std;
 
-
 namespace engine {
 
-    TEngine _engine;
+    engine_t _engine;
     bool _stopped = false;
     bool _ponder = false;
 
@@ -60,16 +50,16 @@ namespace engine {
     }
 
     void new_game(std::string fen) {
-        _engine.newGame(fen);
+        _engine.new_game(fen);
     }
 
     void set_position(std::string fen) {
-        _engine.setPosition(fen);
+        _engine.set_position(fen);
     }
 
     void set_ponder(bool ponder) {
         _ponder = ponder;
-        _engine.setPonder(ponder);
+        _engine.set_ponder(ponder);
     }
 
     bool is_stopped() {
@@ -80,13 +70,38 @@ namespace engine {
         return _ponder;
     }
 
-    TEngine * instance() {
+    engine_t * instance() {
         return &_engine;
     }
-    
+
     game_t * settings() {
         return _engine.settings();
     }
+}
+
+/**
+ * Construct engine thread
+ */
+engine_t::engine_t() : threads_t() {
+    _total_nodes = 0;
+    _target_found = false;
+    _stop_all = false;
+    _ponder = false;
+    _root_fen = "";
+    _result_move.set(0);
+    _result_score = 0;
+    _game.clear();
+}
+
+/**
+ * Initialize the engine for starting a new game
+ * @param fen position represented by a FEN string
+ */
+void engine_t::new_game(std::string fen) {
+    _result_move.set(0);
+    _result_score = 0;
+    trans_table::clear();
+    set_position(fen);
 }
 
 /**
@@ -94,26 +109,26 @@ namespace engine {
  * @param engineObjPtr pointer to the (parent) engine object
  * @return NULL
  */
-void * TEngine::_think(void* engineObjPtr) {
+void * engine_t::_think(void* engineObjPtr) {
     /*
      * Initialize:
-     * - searchData object
+     * - s object
      * - time management
      * - game settings
      * - thinking stop conditions
      */
 
 
-    TEngine * engine = (TEngine*) engineObjPtr;
+    engine_t * engine = (engine_t*) engineObjPtr;
 
     game_t game;
     game.copy(engine->settings());
 
-    search_t * searchData = new search_t(engine->_rootFen.c_str());
+    search_t * s = new search_t(engine->_root_fen.c_str());
 
 
 
-    board_t * root = &searchData->brd;
+    board_t * root = &s->brd;
     time_manager_t * tm = time_man::instance();
 
     int max_depth = game.max_depth;
@@ -128,7 +143,7 @@ void * TEngine::_think(void* engineObjPtr) {
     int target_score = game.target_score;
     bool ponder = game.ponder;
     double learn = game.learn_factor;
-    evaluate(searchData);
+    evaluate(s);
 
     tm->set_start();
     int myTime = root->stack->wtm ? white_time : black_time;
@@ -146,9 +161,9 @@ void * TEngine::_think(void* engineObjPtr) {
         tm->set_max(time_man::INFINITE_TIME);
     }
 
-    searchData->max_nodes = max_nodes;
-    searchData->learn = learn;
-    searchData->ponder = ponder;
+    s->max_nodes = max_nodes;
+    s->learn = learn;
+    s->ponder = ponder;
     engine->set_target_found(false);
 
     /*
@@ -171,7 +186,7 @@ void * TEngine::_think(void* engineObjPtr) {
     bool book_move = false;
     bool book_ponder_move = false;
     for (int book_step = 0; book_step < 2; book_step++) {
-        move::list_t * bookmoves = &searchData->stack->move_list;
+        move::list_t * bookmoves = &s->stack->move_list;
         int count = book->find(root, bookmoves);
         if (count > 0) {
             srand(time(NULL));
@@ -185,8 +200,8 @@ void * TEngine::_think(void* engineObjPtr) {
                         if (book_step == 0) {
                             book_move = true;
                             result_move.set(bookmove);
-                            engine->setMove(bookmove);
-                            engine->setScore(0);
+                            engine->set_move(bookmove);
+                            engine->set_score(0);
                             root->forward(&result_move);
                         } else if (book_step == 1) {
                             book_ponder_move = true;
@@ -213,16 +228,16 @@ void * TEngine::_think(void* engineObjPtr) {
      * Find a move by Principle Variation Search (fail-soft) in an 
      * internal iterative deepening framework with aspiration search.
      */
-    if (book_ponder_move == false && searchData->init_root_moves() > 0) {
+    if (book_ponder_move == false && s->init_root_moves() > 0) {
         if (book_move) {
             //no ponder move.. only consider book_moves, but let the engine decide which one to play
-            book->find(root, &searchData->stack->move_list);
-            searchData->root.match_moves(&searchData->stack->move_list);
+            book->find(root, &s->stack->move_list);
+            s->root.match_moves(&s->stack->move_list);
             tm->request_less();
-        } else if (searchData->root.move_count == 1) {
+        } else if (s->root.move_count == 1) {
             tm->request_less();
         }
-        searchData->stack->eval_result = evaluate(searchData);
+        s->stack->eval_result = evaluate(s);
         int alpha = -score::INF;
         int beta = score::INF;
         int prev_score = -score::INF;
@@ -237,34 +252,34 @@ void * TEngine::_think(void* engineObjPtr) {
         bool move_changed = false;
         bool score_changed = false;
         bool easy_move = true;
-        while (depth <= max_depth && !searchData->stop_all) {
+        while (depth <= max_depth && !s->stop_all) {
 
             int iteration_start_time = tm->elapsed();
 
-            int score = searchData->pvs_root(alpha, beta, depth);
+            int score = s->pvs_root(alpha, beta, depth);
             int type = score::flags(score, alpha, beta);
 
             /*
              * Update and output PV
              */
-            if (!searchData->stop_all) {
+            if (!s->stop_all) {
                 resultScore = score;
             }
-            if (searchData->stack->pv_count > 0) {
-                move_t firstmove = searchData->stack->pv_moves[0];
+            if (s->stack->pv_count > 0) {
+                move_t firstmove = s->stack->pv_moves[0];
                 if (firstmove.piece) {
                     move_changed = result_move.equals(&firstmove) == false;
                     result_move.set(&firstmove);
                     pondermove.set(0);
-                    if (searchData->stack->pv_count > 1) {
-                        pondermove.set(&searchData->stack->pv_moves[1]);
+                    if (s->stack->pv_count > 1) {
+                        pondermove.set(&s->stack->pv_moves[1]);
                     }
-                    engine->setMove(&firstmove);
-                    engine->setScore(resultScore);
+                    engine->set_move(&firstmove);
+                    engine->set_score(resultScore);
                 }
-                if (searchData->stop_all) {
-                    uci::send_pv(resultScore, depth, searchData->sel_depth,
-                            searchData->nodes + searchData->pruned_nodes, tm->elapsed(), searchData->pv_to_string().c_str(), score::flags(resultScore, alpha, beta));
+                if (s->stop_all) {
+                    uci::send_pv(resultScore, depth, s->sel_depth,
+                            s->nodes + s->pruned_nodes, tm->elapsed(), s->pv_to_string().c_str(), score::flags(resultScore, alpha, beta));
 
                 }
             }
@@ -279,7 +294,7 @@ void * TEngine::_think(void* engineObjPtr) {
             easy_move &= move_changed == false;
             easy_move &= score_changed == false;
 
-            if (!searchData->stop_all && depth > 8 && !book_move) {
+            if (!s->stop_all && depth > 8 && !book_move) {
                 if (pondermove.piece == EMPTY) {
                     tm->request_more();
                 } else if (move_changed) {
@@ -303,9 +318,9 @@ void * TEngine::_think(void* engineObjPtr) {
             }
 
             //stop if stopsearch is set (time is up) or max amount of nodes is reached
-            searchData->poll();
-            if (searchData->stop_all
-                    || (max_nodes > 0 && searchData->nodes > max_nodes)) {
+            s->poll();
+            if (s->stop_all
+                    || (max_nodes > 0 && s->nodes > max_nodes)) {
                 break;
             }
 
@@ -363,9 +378,9 @@ void * TEngine::_think(void* engineObjPtr) {
 
             prev_score = score;
             move_changed = false;
-            searchData->root.sort_moves();
+            s->root.sort_moves();
         }
-        engine->setNodesSearched(searchData->nodes);
+        engine->set_total_nodes(s->nodes);
 
     }
     uci::send_bestmove(result_move, pondermove);
@@ -374,7 +389,7 @@ void * TEngine::_think(void* engineObjPtr) {
      * Clean up and terminate the thinking thread
      */
 
-    delete searchData;
+    delete s;
     delete book;
     pthread_exit(NULL);
     return NULL;
@@ -438,9 +453,9 @@ void print_row(std::string cap, score_t & w, score_t & b, int phase) {
     std::cout << std::endl;
 }
 
-void TEngine::analyse() {
+void engine_t::analyse() {
 
-    search_t * s = new search_t(_rootFen.c_str());
+    search_t * s = new search_t(_root_fen.c_str());
     s->stack->eval_result = evaluate(s);
     int phase = s->stack->phase;
     bool wtm = s->brd.stack->wtm;
@@ -595,7 +610,7 @@ Nodes Total: 506986082 nodes. (1288601 nodes/sec)
  * @param engineObjPtr pointer to engine object
  * @return void
  */
-void * TEngine::_learn(void * engineObjPtr) {
+void * engine_t::_learn(void * engineObjPtr) {
 
     /*
      * Constants
@@ -613,10 +628,10 @@ void * TEngine::_learn(void * engineObjPtr) {
     /*
      * Initialize, normally it's not needed to change anything from here
      */
-    TEngine * engine = (TEngine*) engineObjPtr;
+    engine_t * engine = (engine_t*) engineObjPtr;
     trans_table::disable();
-    search_t * sd_root = new search_t(engine->_rootFen.c_str());
-    search_t * sd_game = new search_t(engine->_rootFen.c_str());
+    search_t * sd_root = new search_t(engine->_root_fen.c_str());
+    search_t * sd_game = new search_t(engine->_root_fen.c_str());
 
     engine->settings()->max_depth = MAXDEPTH;
     time_man::instance()->set_end(time_man::INFINITE_TIME);
@@ -944,7 +959,7 @@ void * TEngine::_learn(void * engineObjPtr) {
     return NULL;
 }
 
-void TEngine::_create_start_positions(search_t * sd_root, book_t * book, string * poslist, int &x, const int max) {
+void engine_t::_create_start_positions(search_t * sd_root, book_t * book, string * poslist, int &x, const int max) {
 
     move::list_t * bookmoves = &sd_root->stack->move_list;
     move_t actualmove;

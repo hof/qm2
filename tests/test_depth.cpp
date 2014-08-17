@@ -16,19 +16,19 @@ struct TStats {
     U64 Elapsed;
 };
 
-void countNodes(TEngine * engine, TStats * stats, const char * fen) {
+void countNodes(engine_t * engine, TStats * stats, const char * fen) {
     board_t pos;
     pos.create(fen);
-    engine->newGame(pos.to_string());
+    engine->new_game(pos.to_string());
     //std::cout << pos.asFen() << std::endl;
     clock_t start = clock();
     engine->think();
     engine->stop_all();
     stats->Elapsed += clock()-start;
-    stats->Nodes += engine->getNodesSearched();
+    stats->Nodes += engine->get_total_nodes();
 }
 
-void depth_test(TEngine * engine, TStats * stats, int depth) {
+void depth_test(engine_t * engine, TStats * stats, int depth) {
     engine::settings()->max_depth = depth;
     stats->Elapsed = 0;
     stats->Nodes = 0;

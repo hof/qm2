@@ -19,32 +19,32 @@ struct TTestResult {
     move_t move;
 };
 
-TTestResult testForMove(TEngine * engine, std::string fen, std::string move, int targetScore) {
+TTestResult testForMove(engine_t * engine, std::string fen, std::string move, int target_score) {
     TTestResult result;
     move_t bm;
     board_t pos;
     pos.create(fen.c_str());
     bm.set(&pos, move.c_str());
 
-    engine::settings()->test_for(&bm, targetScore, 30 * 1000);
-    engine->newGame(pos.to_string());
+    engine::settings()->test_for(&bm, target_score, 30 * 1000);
+    engine->new_game(pos.to_string());
     std::cout << "Position: " << pos.to_string() << " best move: " << bm.to_string() << std::endl;
 
     engine->think();
     engine->stop_all();
     result.solved = engine->target_found();
-    result.nodes = engine->getNodesSearched();
-    result.move = engine->getMove();
-    result.score = engine->getScore();
+    result.nodes = engine->get_total_nodes();
+    result.move = engine->get_move();
+    result.score = engine->get_score();
     return result;
 }
 
-void test_wac(TEngine * engine) {
+void test_wac(engine_t * engine) {
     std::cout << "test_positions test wac" << std::endl;
 
     static const int TEST_SIZE = 25;
     int solved = 0;
-    int targetScore = TEST_SIZE;
+    int target_score = TEST_SIZE;
 
     TTestResult results[TEST_SIZE];
     int current = 0;
@@ -94,7 +94,7 @@ void test_wac(TEngine * engine) {
     }
     std::cout << "Solved " << solved << " positions out of " << TEST_SIZE << std::endl;
     std::cout << "Nodes " << totalNodes / 1000 << "K " << std::endl;
-    if (solved < targetScore) {
+    if (solved < target_score) {
         std::cout << "%TEST_FAILED% time=0 testname=wac (test_wac) message=solved: " << solved << " out of " << TEST_SIZE << std::endl;
     }
 }
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
     clock_t begin;
 
     magic::init();
-    TEngine * engine = engine::instance();
+    engine_t * engine = engine::instance();
 
     std::cout << "%TEST_STARTED% test_positions (test_wac)\n" << std::endl;
     begin = clock();

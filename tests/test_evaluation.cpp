@@ -11,16 +11,16 @@
  * Simple C++ Test Suite
  */
 
-TEngine * global_engine;
+engine_t * global_engine;
 bool test_stop;
 
-void testFail(int idx, std::string operation, int score, int bound, std::string fen, TEngine * engine) {
+void testFail(int idx, std::string operation, int score, int bound, std::string fen, engine_t * engine) {
     test_stop = true;
     std::cout << "Test " << idx << ": " << fen;
     std::cout << ": " << score << " " << operation << " " << bound << " ";
     std::cout << std::endl;
     std::cout << "%TEST_FAILED% time=0 testname=evaluation (test_evaluation) message=evaluation test failed" << std::endl;
-    engine->newGame(fen.c_str());
+    engine->new_game(fen.c_str());
     engine->analyse();
 }
 

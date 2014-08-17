@@ -27,116 +27,98 @@
 #include "evaluate.h"
 #include "search.h"
 #include "movepicker.h"
-#include "opponent.h"
 #include "book.h"
 #include "threadman.h"
 #include "uci_console.h"
 #include "timeman.h"
+#include "opponent.h"
 #include "game.h"
 
-class TEngine : public threads_t {
+class engine_t : public threads_t {
 private:
     game_t _game;
+    std::string _root_fen;
+    U64 _total_nodes;
+    bool _target_found;
+    bool _stop_all;
+    bool _ponder;
+    move_t _result_move;
+    int _result_score;
+    
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
-    std::string _rootFen;
-    U64 _nodesSearched;
-    bool _target_found;
-    move_t _resultMove;
-    int _resultScore;
-    bool _engineStop;
-    bool _enginePonder;
-
-public:
+    
     void _create_start_positions(search_t * root, book_t * book, std::string * pos, int &x, const int max);
 
-    TEngine() : threads_t() {
-        _nodesSearched = 0;
-        _target_found = false;
-        _engineStop = false;
-        _enginePonder = false;
-        _rootFen = "";
-        _resultMove.set(0);
-        _resultScore = 0;
-        _game.clear();
-    }
+public:
+    
+    engine_t();
+    void new_game(std::string fen);
+    void analyse();
     
     game_t * settings() { 
         return & _game;
     }
 
-    int CPUCount() {
+    int cpu_count() {
         return sysconf(_SC_NPROCESSORS_ONLN);
     }
 
     void think() {
         stop();
-        _engineStop = false;
+        _stop_all = false;
         this->create(_think, this);
     }
 
     void learn() {
-        _engineStop = false;
+        _stop_all = false;
         this->create(_learn, this);
     }
 
-    void setPonder(bool doPonder) {
-        _enginePonder = doPonder;
+    void set_ponder(bool do_ponder) {
+        _ponder = do_ponder;
     }
 
     void stop() {
-        _engineStop = true;
+        _stop_all = true;
         this->stop_all();
     }
 
-    void newGame(std::string fen) {
-        _resultMove.set(0);
-        _resultScore = 0;
-        setPosition(fen);
-        trans_table::clear();
+    void set_position(std::string fen) {
+        _root_fen = fen;
     }
 
-    
-
-    void setPosition(std::string fen) {
-        _rootFen = fen;
+    void set_total_nodes(U64 total_nodes) {
+        _total_nodes = total_nodes;
     }
 
-    void setNodesSearched(U64 nodesSearched) {
-        _nodesSearched = nodesSearched;
-    }
-
-    U64 getNodesSearched() {
-        return _nodesSearched;
+    U64 get_total_nodes() {
+        return _total_nodes;
     }
 
     void set_target_found(bool found) {
         _target_found = found;
     }
 
-    void setMove(move_t * move) {
-        _resultMove.set(move);
+    void set_move(move_t * move) {
+        _result_move.set(move);
     }
 
-    void setScore(int score) {
-        _resultScore = score;
+    void set_score(int score) {
+        _result_score = score;
     }
 
-    int getScore() {
-        return _resultScore;
+    int get_score() {
+        return _result_score;
     }
 
-    move_t getMove() {
-        return _resultMove;
+    move_t get_move() {
+        return _result_move;
     }
 
     bool target_found() {
         return _target_found;
     }
-
-    void analyse();
-
-
 };
 
 namespace engine {
@@ -150,9 +132,8 @@ namespace engine {
     bool is_stopped();
     bool is_ponder();
     game_t * settings();
-    TEngine * instance();
+    engine_t * instance();
 }
-
 
 #endif	/* ENGINE_H */
 

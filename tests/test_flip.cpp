@@ -5,7 +5,7 @@
  * Simple C++ Test Suite
  */
 
-TEngine * global_engine;
+engine_t * global_engine;
 bool stop_test;
 
 bool flipTest(int test_num, const char * fen) {
@@ -50,27 +50,27 @@ bool flipTest(int test_num, const char * fen) {
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=Evaluation does not match" << std::endl;
         std::cout << "original: " << fen1 << " score: " << score1 << " phase: " << phase1 << std::endl;
         std::cout << "flipped:  " << fen2 << " score: " << score2 << " phase: " << phase2 << std::endl;
-        global_engine->newGame(pos.to_string());
+        global_engine->new_game(pos.to_string());
         global_engine->analyse();
         pos.flip();
-        global_engine->newGame(pos.to_string());
+        global_engine->new_game(pos.to_string());
         global_engine->analyse();
         return false;
     }
 
-    global_engine->newGame(pos.to_string());
+    global_engine->new_game(pos.to_string());
     global_engine->think();
     global_engine->stop_all();
-    int nodes1 = global_engine->getNodesSearched();
-    score1 = global_engine->getScore();
+    int nodes1 = global_engine->get_total_nodes();
+    score1 = global_engine->get_score();
 
     pos.flip();
     
-    global_engine->newGame(pos.to_string());
+    global_engine->new_game(pos.to_string());
     global_engine->think();
     global_engine->stop_all();
-    int nodes2 = global_engine->getNodesSearched();
-    score2 = global_engine->getScore();
+    int nodes2 = global_engine->get_total_nodes();
+    score2 = global_engine->get_score();
     
     if (score1 != score2) {
         std::cout << "\ntesting position " << test_num << ": " << pos.to_string() << std::endl;
@@ -83,7 +83,7 @@ bool flipTest(int test_num, const char * fen) {
     return true;
 }
 
-void flipTestSuite(TEngine * engine, int depth) {
+void flipTestSuite(engine_t * engine, int depth) {
     engine::settings()->max_depth = depth;
     flipTest(1, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     flipTest(2, "8/7p/5k2/5p2/p1p2P2/Pr1pPK2/1P1R3P/8 b - - 0 1");
