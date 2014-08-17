@@ -5,11 +5,8 @@
  * Created on 16-mei-2011, 21:56:13
  */
 
-#include "board.h"
-#include "search.h"
-#include "search.h"
 #include "engine.h"
-#include "evaluate.h"
+#include "hashtable.h"
 #include "hashcodes.h"
 
 /*
@@ -109,7 +106,7 @@ void test_tt() {
     magic::init();
     uci::silent(true);
     TEngine * engine = engine::instance();
-    engine->gameSettings.maxDepth = 15;
+    engine::settings()->max_depth = 15;
     engine->newGame("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - -");
     engine->think();
     engine->stop_all();

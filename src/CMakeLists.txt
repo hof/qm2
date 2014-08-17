@@ -1,17 +1,19 @@
 add_library(MAX2SRC 
-        uci_console.cpp	
+        bbmoves.cpp	
 	hashcodes.cpp
-	hashtable.cpp
-	bbmoves.cpp
-	move.cpp
+        move.cpp
+	board.cpp
+	timeman.cpp	
+        hashtable.cpp
 	movegen.cpp
 	movepicker.cpp
-	board.cpp
-	engine.cpp
 	book.cpp
 	evaluate.cpp
 	search.cpp
-	timeman.cpp
+	opponent.cpp
+        game.cpp      
+        engine.cpp
+        uci_console.cpp
 )
 
 include_directories(${MAX2_SOURCE_DIR}/src)

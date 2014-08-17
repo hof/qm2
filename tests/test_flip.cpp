@@ -1,7 +1,4 @@
-#include <stdlib.h>
-#include <iostream>
 
-#include "search.h"
 #include "engine.h"
 
 /*
@@ -87,7 +84,7 @@ bool flipTest(int test_num, const char * fen) {
 }
 
 void flipTestSuite(TEngine * engine, int depth) {
-    engine->gameSettings.maxDepth = depth;
+    engine::settings()->max_depth = depth;
     flipTest(1, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     flipTest(2, "8/7p/5k2/5p2/p1p2P2/Pr1pPK2/1P1R3P/8 b - - 0 1");
     flipTest(3, "2kr3r/pp1q1ppp/5n2/1Nb5/2Pp1B2/7Q/P4PPP/1R3RK1 w - - 0 1");

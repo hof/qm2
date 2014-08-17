@@ -5,15 +5,8 @@
  * Created on 21-mei-2011, 1:01:08
  */
 
-#include <stdlib.h>
-#include <iostream>
-#include <string.h>
-#include <time.h>
-#include "bbmoves.h"
-#include "board.h"
-#include "movegen.h"
+
 #include "engine.h"
-#include "search.h"
 
 /*
  * Simple C++ Test Suite
@@ -33,13 +26,13 @@ TTestResult testForMove(TEngine * engine, std::string fen, std::string move, int
     pos.create(fen.c_str());
     bm.set(&pos, move.c_str());
 
-    engine->testPosition(bm, targetScore, 30 * 1000, 0);
+    engine::settings()->test_for(&bm, targetScore, 30 * 1000);
     engine->newGame(pos.to_string());
     std::cout << "Position: " << pos.to_string() << " best move: " << bm.to_string() << std::endl;
 
     engine->think();
     engine->stop_all();
-    result.solved = engine->getTestResult();
+    result.solved = engine->target_found();
     result.nodes = engine->getNodesSearched();
     result.move = engine->getMove();
     result.score = engine->getScore();

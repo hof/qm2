@@ -5,9 +5,6 @@
  * Created on 27-jul-2011, 22:11:29
  */
 
-#include <stdlib.h>
-#include <iostream>
-
 #include "engine.h"
 
 /*
@@ -32,7 +29,7 @@ void countNodes(TEngine * engine, TStats * stats, const char * fen) {
 }
 
 void depth_test(TEngine * engine, TStats * stats, int depth) {
-    engine->gameSettings.maxDepth = depth;
+    engine::settings()->max_depth = depth;
     stats->Elapsed = 0;
     stats->Nodes = 0;
     

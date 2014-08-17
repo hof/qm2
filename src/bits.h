@@ -38,6 +38,8 @@
 #include <cstdlib>
 #include <fstream>
 #include <time.h>
+#include <iomanip>  //setw
+#include <math.h> 
 
 typedef uint64_t U64;
 

@@ -24,147 +24,114 @@
 #ifndef ENGINE_H
 #define	ENGINE_H
 
-#include <unistd.h>
-#include <sys/time.h>
-#include "threadman.h"
-#include "search.h"
-#include "book.h"
-#include "uci_console.h"
 #include "evaluate.h"
+#include "search.h"
+#include "movepicker.h"
 #include "opponent.h"
-#include "hashtable.h"
-
-
-
-struct TGameSettings {
-    TOpponent opponent;
-    int maxDepth;
-    int maxNodes;
-    move_t targetMove;
-    int targetScore;
-    U64 maxTimePerMove;
-    int whiteTime;
-    int blackTime;
-    int whiteIncrement;
-    int blackIncrement;
-    int movesLeft;
-    bool ponder;
-    double learnFactor;
-
-    void clear() {
-        opponent.clear();
-        maxDepth = MAX_PLY;
-        maxTimePerMove = 0;
-        targetScore = 0;
-        whiteTime = 0;
-        blackTime = 0;
-        whiteIncrement = 0;
-        blackIncrement = 0;
-        movesLeft = 0;
-        maxNodes = 0;
-        ponder = false;
-        learnFactor = 1.0;
-    }
-};
+#include "book.h"
+#include "threadman.h"
+#include "uci_console.h"
+#include "timeman.h"
+#include "game.h"
 
 class TEngine : public threads_t {
 private:
+    game_t _game;
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
     std::string _rootFen;
     U64 _nodesSearched;
-    bool _testSucces;
+    bool _target_found;
     move_t _resultMove;
     int _resultScore;
     bool _engineStop;
     bool _enginePonder;
 
 public:
-    TGameSettings gameSettings;
     void _create_start_positions(search_t * root, book_t * book, std::string * pos, int &x, const int max);
 
     TEngine() : threads_t() {
-        gameSettings.clear();
         _nodesSearched = 0;
-        _testSucces = false;
+        _target_found = false;
         _engineStop = false;
         _enginePonder = false;
         _rootFen = "";
         _resultMove.set(0);
         _resultScore = 0;
+        _game.clear();
+    }
+    
+    game_t * settings() { 
+        return & _game;
     }
 
-    inline int CPUCount() {
+    int CPUCount() {
         return sysconf(_SC_NPROCESSORS_ONLN);
     }
 
-    inline void think() {
+    void think() {
         stop();
         _engineStop = false;
         this->create(_think, this);
     }
 
-    inline void learn() {
+    void learn() {
         _engineStop = false;
         this->create(_learn, this);
     }
 
-    inline void setPonder(bool doPonder) {
+    void setPonder(bool doPonder) {
         _enginePonder = doPonder;
     }
 
-    inline void stop() {
+    void stop() {
         _engineStop = true;
         this->stop_all();
     }
 
-    void testPosition(move_t bestMove, int score, int maxTime, int maxDepth);
-
-    inline void newGame(std::string fen) {
+    void newGame(std::string fen) {
         _resultMove.set(0);
         _resultScore = 0;
         setPosition(fen);
         trans_table::clear();
     }
 
-    inline void setOpponent(TOpponent * opponent) {
-        gameSettings.opponent.copy(opponent);
-    }
+    
 
-    inline void setPosition(std::string fen) {
+    void setPosition(std::string fen) {
         _rootFen = fen;
     }
 
-    inline void setNodesSearched(U64 nodesSearched) {
+    void setNodesSearched(U64 nodesSearched) {
         _nodesSearched = nodesSearched;
     }
 
-    inline U64 getNodesSearched() {
+    U64 getNodesSearched() {
         return _nodesSearched;
     }
 
-    inline void setTestResult(bool testResult) {
-        _testSucces = testResult;
+    void set_target_found(bool found) {
+        _target_found = found;
     }
 
-    inline void setMove(move_t * move) {
+    void setMove(move_t * move) {
         _resultMove.set(move);
     }
 
-    inline void setScore(int score) {
+    void setScore(int score) {
         _resultScore = score;
     }
 
-    inline int getScore() {
+    int getScore() {
         return _resultScore;
     }
 
-    inline move_t getMove() {
+    move_t getMove() {
         return _resultMove;
     }
 
-    inline bool getTestResult() {
-        return _testSucces;
+    bool target_found() {
+        return _target_found;
     }
 
     void analyse();
@@ -180,9 +147,9 @@ namespace engine {
     void new_game(std::string fen);
     void set_position(std::string fen);
     void set_ponder(bool ponder);
-    TGameSettings * game_settings();
     bool is_stopped();
     bool is_ponder();
+    game_t * settings();
     TEngine * instance();
 }
 

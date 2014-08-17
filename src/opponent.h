@@ -24,57 +24,37 @@
 #ifndef OPPONENT_H
 #define	OPPONENT_H
 
-struct TOpponent {
-    std::string Title;
-    std::string Name;
-    bool Computer;
-    int Rating;
+#include "bits.h"
 
-    TOpponent() {
+class opponent_t {
+public:
+    std::string title;
+    std::string name;
+    bool is_computer;
+    int elo_rating;
+
+    void clear();
+    void copy(opponent_t * c);
+    std::string to_string();
+    
+    opponent_t() {
         clear();
     }
-
-    void clear() {
-        Title = "";
-        Name = "Unknown";
-        Computer = true;
-        Rating = 0;
-    }
-
-    void copy(TOpponent * c) {
-        Title = c->Title;
-        Name = c->Name;
-        Computer = c->Computer;
-        Rating = c->Rating;
-    }
     
-    int DrawContempt(int myRating=2400) {
-        int result = 0;
-        if (Rating > 0) {
-            int diff = myRating - Rating;
-            result = Computer? 2 * diff/10 : 3*diff/10; //2400 vs 2200: +- 40 : +- 60
-            result = MIN(result, 250);
-            result = MAX(result, -250);
-        } else {
-            result = Computer? -16: -60;
-        }
-        return result;
-    }
-
-    void print() {
-        if (Title != "" && Title != "none") {
-            std::cout << Title << " ";
-        }
-        std::cout << Name;
-        if (Computer) {
-            std::cout << " (C)";
-        }
-        if (Rating > 0) {
-            std::cout << " " << Rating;
-        }
+    int draw_contempt(int my_rating=2400) {
+        return 0;
     }
 };
 
+namespace opponent {
+    opponent_t * instance(); 
+    int draw_contempt(int my_rating);
+    std::string title();
+    std::string name();
+    int elo_rating();
+    bool is_computer();
+    void set(std::string name, int elo_rating, bool is_computer, std::string title);
+};
 
 #endif	/* OPPONENT_H */
 

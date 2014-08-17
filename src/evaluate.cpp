@@ -27,15 +27,22 @@
 #include "pst.h"
 #include "kpk_bb.h"
 
-//#define PRINT_PAWN_EVAL 
-//#define PRINT_KING_SAFETY
-//#define PRINT_PASSED_PAWN 
+#define TRACE_EVAL
+
+namespace {
+
+    void trace(std::string msg) {
+#ifdef TRACE_EVAL
+        std::cout << msg;
+#endif
+    }
+
+    enum {
+        GRAIN_SIZE = 4
+    };
+};
 
 pst_t PST;
-
-enum {
-    GRAIN_SIZE = 4
-};
 
 int eval_material(search_t * sd);
 int eval_unstoppable_pawn(search_t * sd, bool white, int sq);
@@ -701,22 +708,11 @@ score_t * eval_pawns_and_kings(search_t * sd) {
         bool passed = !doubled && !(up & (attacks[BLACK] | pos->bb[BPAWN]));
         bool candidate = open && !doubled && !passed && !(up & ~safe[WHITE]);
 
-#ifdef PRINT_PAWN_EVAL
-        std::cout << "WP " << PRINT_SQUARE(sq) << ": ";
-#endif
-
         pawn_score.add(PST[WPAWN][isq]);
-
-#ifdef PRINT_PAWN_EVAL        
-        std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][isq]);
-#endif
 
         if (isolated) {
             pawn_score.add(ISOLATED_PAWN[open]);
 
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
-#endif
 
         } else if (weak) {
             pawn_score.add(WEAK_PAWN[open]);

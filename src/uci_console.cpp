@@ -133,35 +133,34 @@ namespace uci {
     bool handle_go(input_parser_t &parser) {
         bool result = true;
         std::string token;
-        engine::game_settings()->clear();
+        engine::settings()->clear();
         while (parser >> token) {
             if (token == "infinite") {
-                engine::game_settings()->maxDepth = MAX_PLY;
+                engine::settings()->max_depth = MAX_PLY;
             } else if (token == "ponder") {
-                engine::game_settings()->maxDepth = MAX_PLY;
-                engine::game_settings()->ponder = true;
+                engine::settings()->max_depth = MAX_PLY;
+                engine::settings()->ponder = true;
             } else if (token == "wtime") {
-                parser >> engine::game_settings()->whiteTime;
+                parser >> engine::settings()->white_time;
             } else if (token == "btime") {
-                parser >> engine::game_settings()->blackTime;
+                parser >> engine::settings()->black_time;
             } else if (token == "winc") {
-                parser >> engine::game_settings()->whiteIncrement;
+                parser >> engine::settings()->white_increment;
             } else if (token == "binc") {
-                parser >> engine::game_settings()->blackIncrement;
+                parser >> engine::settings()->black_increment;
             } else if (token == "movestogo") {
-                parser >> engine::game_settings()->movesLeft;
+                parser >> engine::settings()->moves_left;
             } else if (token == "depth") {
-                parser >> engine::game_settings()->maxDepth;
+                parser >> engine::settings()->max_depth;
             } else if (token == "nodes") {
-                parser >> engine::game_settings()->maxNodes;
+                parser >> engine::settings()->max_nodes;
             } else if (token == "movetime") {
-                parser >> engine::game_settings()->maxTimePerMove;
+                parser >> engine::settings()->max_time_per_move;
             } else if (token == "searchmoves") {
 
             }
         }
-
-        engine::set_ponder(engine::game_settings()->ponder);
+        engine::set_ponder(engine::settings()->ponder);
         engine::set_position(fen);
         engine::go();
         return result;
@@ -283,7 +282,7 @@ namespace uci {
      */
     bool handle_learn(input_parser_t & parser) {
         bool result = true;
-        engine::game_settings()->clear();
+        engine::settings()->clear();
         engine::set_ponder(false);
         engine::set_position(fen);
         engine::learn();
@@ -295,9 +294,9 @@ namespace uci {
      */
     bool handle_eval(input_parser_t & parser) {
         bool result = true;
-        engine::game_settings()->clear();
+        engine::settings()->clear();
         engine::set_ponder(false);
-        engine::game_settings()->maxDepth = 1;
+        engine::settings()->max_depth = 1;
         std::string token;
         std::string pfen = "";
         while (parser >> token) {

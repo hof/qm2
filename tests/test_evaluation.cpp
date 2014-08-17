@@ -5,15 +5,7 @@
  * Created on 31-mei-2011, 16:39:55
  */
 
-#include <stdlib.h>
-#include <iostream>
-#include <cmath>
-#include <iomanip>  //setw
-#include "bbmoves.h"
-#include "board.h"
-#include "movegen.h"
 #include "engine.h"
-#include "search.h"
 
 /*
  * Simple C++ Test Suite
@@ -67,8 +59,8 @@ void testKingAttackZero(int idx, std::string fen) {
 
 void testEvaluationSuite() {
 
-    const int DRAW_MAX = VPAWN / 10;
-    const int DRAWISH_MAX = VPAWN / 5;
+    const int DRAW_MAX = 100 / 10;
+    const int DRAWISH_MAX = 100 / 5;
     const int SCORE_MAX = 2 * score::WIN;
 
     /*
@@ -197,7 +189,7 @@ int main(int argc, char** argv) {
     test_stop = false;
     magic::init();
     global_engine = engine::instance();
-    global_engine->gameSettings.maxDepth = 20;
+    engine::settings()->max_depth = 20;
     testEvaluationSuite();
     std::cout << "%TEST_FINISHED% time=0 test1 (evaluation_test)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=0" << std::endl;

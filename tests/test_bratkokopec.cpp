@@ -5,14 +5,9 @@
  * Created on 21-mei-2011, 1:01:08
  */
 
-#include <stdlib.h>
-#include <iostream>
-#include "bbmoves.h"
-#include "board.h"
-#include "movegen.h"
 #include "engine.h"
-#include "search.h"
-#include <string.h>
+
+
 
 /*
  * Simple C++ Test Suite
@@ -22,12 +17,12 @@ bool testForMove(std::string fen, std::string move, int targetScore) {
     board_t pos;
     pos.create(fen.c_str());
     bm.set(&pos, move.c_str());
-    engine::instance()->testPosition(bm, targetScore, 10 * 1000, 0);
+    engine::settings()->test_for(&bm, targetScore, 10*1000);
     engine::new_game(pos.to_string());
     std::cout << "Position: " << pos.to_string() << " best move: " << bm.to_string() << std::endl;
     engine::go();
     engine::instance()->stop_all();
-    return engine::instance()->getTestResult();
+    return engine::instance()->target_found();
 }
 
 void test_bratkokopec() {

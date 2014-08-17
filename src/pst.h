@@ -15,12 +15,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  *  
- * File: pst.tcc
+ * File: pst.h
  * Piece Square Tables to include in the evaluation function
  */
 
-#ifndef PST_TCC
-#define	PST_TCC
+#ifndef PST_H
+#define	PST_H
 
 int8_t PST_PAWN_MG[64] = {
      0,   0,   0,   0,   0,   0,   0,   0,
@@ -154,5 +154,5 @@ int8_t PST_KING_EG[64] = {
    -36, -24, -24, -24, -24, -24, -24, -36
 };
 
-#endif	/* PST_TCC */
+#endif	/* PST_H */
 
