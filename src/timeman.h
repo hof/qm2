@@ -34,23 +34,20 @@ class time_manager_t;
 namespace time_man {
     const double ONE_MS = CLOCKS_PER_SEC / 1000;
     const int OVERHEAD_TIME = 500;
-    const double EMERGENCY_FACTOR = 2.0;
     const int INFINITE_TIME = 24 * 60 * 60 * 1000;
 };
 
 class time_manager_t {
 private:
-    clock_t start;
-    clock_t end;
-    clock_t max;
+    clock_t start; //in ticks
+    clock_t max; //in ticks
+    int tot; 
 
 public:
     time_manager_t();
     void clear();
     void set(int my_time, int opp_time, int my_inc, int opp_inc, int moves_left);
-    bool request_more();
-    bool request_less();
-
+    
     clock_t ticks(int time_in_ms) {
         return time_in_ms * time_man::ONE_MS;
     }
@@ -63,26 +60,20 @@ public:
         max = start + ticks(ms);
     }
 
-    void set_end(int ms) {
-        end = start + ticks(ms);
-    }
-
     bool time_is_up() {
-        return clock() >= end;
-    }
-
-    bool is_available(int ms) {
-        return (clock() + ticks(ms)) <= end;
-    }
-
-    int available() {
-        clock_t ticks = end - clock();
-        return ticks / time_man::ONE_MS;
+        return clock() >= max;
     }
 
     int elapsed() {
         clock_t ticks = clock() - start;
         return ticks / time_man::ONE_MS;
+    }
+    
+    int reserved() {
+        if (tot <= 0) {
+            tot = (max - start) / time_man::ONE_MS;
+        }
+        return tot;
     }
 };
 

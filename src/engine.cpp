@@ -411,7 +411,7 @@ void * engine_t::_learn(void * engineObjPtr) {
     clock_t begin;
     begin = clock();
     std::string fen = "";
-    srand(time(NULL));
+    
     double strongest = +bestFactor;
     double opponent = -bestFactor;
 

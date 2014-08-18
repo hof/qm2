@@ -88,7 +88,7 @@ int root_move_t::compare(root_move_t * m) {
  */
 void search_t::init(const char * fen, game_t * g) {
     brd.init(fen);
-    game = g? g : game::instance();
+    game = g ? g : game::instance();
     game->init_tm(brd.stack->wtm);
     memset(history, 0, sizeof (history));
     init_pst();
@@ -106,207 +106,104 @@ void search_t::init(const char * fen, game_t * g) {
 }
 
 /**
+ * Lookup current position in book
+ */
+bool search_t::book_lookup() {
+    bool result = false;
+    book::open("book.bin");
+    move::list_t * bmoves = &stack->move_list;
+    int total_score = book::find(&brd, bmoves);
+    if (total_score > 0) {
+        int rnd = (rand() % total_score) + 1;
+        int score = 0;
+        for (move_t * bmove = bmoves->first; bmove != bmoves->last; bmove++) {
+            score += bmove->score;
+            if (score >= rnd) {
+                result = true;
+                result_move.set(bmove);
+                break;
+            }
+        }
+    }
+    book::close();
+    return result;
+}
+
+/**
  * Starts the searching
  */
 void search_t::go() {
-    book_t * book = new book_t();
-    book->open("book.bin");
-    bool book_move = false;
-    bool book_ponder_move = false;
-    for (int book_step = 0; book_step < 2; book_step++) {
-        move::list_t * bmoves = &stack->move_list;
-        int count = book->find(&brd, bmoves);
-        if (count > 0) {
-            srand(time(NULL));
-            int randomScore = 0;
-            int totalBookScore = 1;
-            for (int pickmove = 0; pickmove < 2; pickmove++) {
-                int totalScore = 0;
-                for (move_t * bmove = bmoves->first; bmove != bmoves->last; bmove++) {
-                    totalScore += bmove->score;
-                    if (pickmove && totalScore >= randomScore) {
-                        if (book_step == 0) {
-                            book_move = true;
-                            result_move.set(bmove);
-                            brd.forward(&result_move);
-                        } else if (book_step == 1) {
-                            book_ponder_move = true;
-                            ponder_move.set(bmove);
-
-                            std::string book_pv = result_move.to_string() + " " + ponder_move.to_string();
-                            uci::send_pv((bmove->score) / totalBookScore, 1, 1,
-                                    count, game->tm.elapsed(),
-                                    book_pv.c_str(), score::EXACT);
-                        }
-                        break;
-                    }
-                }
-                totalBookScore = totalScore;
-                randomScore = (rand() % totalScore) + 1;
-            }
-        }
-    }
-    if (book_move) {
-        brd.backward(&result_move);
-    }
-
-    /*
-     * Find a move by Principle Variation Search (fail-soft) in an 
-     * internal iterative deepening framework with aspiration search.
-     */
-    evaluate(this);
-    if (book_ponder_move == false && init_root_moves() > 0) {
-        if (book_move) {
-            //no ponder move.. only consider book_moves, but let the engine decide which one to play
-            book->find(&brd, &stack->move_list);
-            root.match_moves(&stack->move_list);
-            game->tm.request_less();
-        } else if (root.move_count == 1) {
-            game->tm.request_less();
-        }
-        stack->eval_result = evaluate(this);
-        int alpha = -score::INF;
-        int beta = score::INF;
-        int prev_score = -score::INF;
-        const int windows[] = {20, 40, 80, 160, 320, 640, 1280, score::INF, score::INF};
-        const int MAX_WINDOW = 2000;
-        int alpha_window = 0;
-        int beta_window = 0;
-        int lowest = score::INF;
-        int highest = -score::INF;
-        int depth = 1;
-        bool move_changed = false;
-        bool score_changed = false;
-        bool easy_move = true;
-        while (depth <= game->max_depth && !stop_all) {
-
-            int iteration_start_time = game->tm.elapsed();
-
-            int score = pvs_root(alpha, beta, depth);
-            int type = score::flags(score, alpha, beta);
-
-            /*
-             * Update and output PV
-             */
-            if (!stop_all) {
-                result_score = score;
-            }
-            if (stack->pv_count > 0) {
-                move_t first_move = stack->pv_moves[0];
-                if (first_move.piece) {
-                    move_changed = result_move.equals(&first_move) == false;
-                    result_move.set(&first_move);
-                    ponder_move.set(0);
-                    if (stack->pv_count > 1) {
-                        ponder_move.set(&stack->pv_moves[1]);
-                    }
-                }
-                if (stop_all) {
-                    uci::send_pv(result_score, depth, sel_depth,
-                            nodes + pruned_nodes, game->tm.elapsed(), pv_to_string().c_str(), score::flags(result_score, alpha, beta));
-
-                }
-            }
-
-            /*
-             * Increase time for time based search when 
-             * - We opened the aspiration window on high depths
-             * - Evaluation shows large positional values
-             * - PV or ponder_move is not set
-             */
-            score_changed = ABS(prev_score - score) > 25;
-            easy_move &= move_changed == false;
-            easy_move &= score_changed == false;
-
-            if (!stop_all && depth > 8 && !book_move) {
-                if (ponder_move.piece == EMPTY) {
-                    game->tm.request_more();
-                } else if (move_changed) {
-                    game->tm.request_more();
-                } else if (score_changed) {
-                    game->tm.request_more();
-                } else if (easy_move) {
-                    easy_move = false;
-                    game->tm.request_less();
-                }
-            }
-
-            /* 
-             * Stop conditions
-             */
-
-            //stop if running a test and the move and score are found
-            if (game->target_score && game->target_move.piece
-                    && score >= game->target_score
-                    && game->target_move.equals(&result_move)) {
-                break;
-            }
-
-            //stop if stopsearch is set (time is up) or max amount of nodes is reached
-            poll();
-            if (stop_all
-                    || (game->max_nodes > 0 && nodes > game->max_nodes)) {
-                break;
-            }
-
-            //stop if a mate is found and the iteration depth is deeper than the mate depth
-            if (score::mate_in_ply(result_score) && type == score::EXACT && depth > score::mate_in_ply(result_score)) {
-                break;
-            }
-            if (score::mated_in_ply(result_score) && type == score::EXACT && depth > score::mated_in_ply(result_score)) {
-                break;
-            }
-
-            //stop if there is no time to find a new pv in a next iteration
-            int iteration_time = game->tm.elapsed() - iteration_start_time;
-            if (type == score::EXACT && !game->tm.is_available(iteration_time / 2)) {
-                break;
-            }
-
-            /*
-             * Prepare next search
-             * - Increase depth if the score is between the bounds
-             * - Otherwise open the aspiration window further and research 
-             *   on the same depth. Open it fully in case of mate-scores.
-             */
-            lowest = MIN(score, lowest);
-            highest = MAX(score, highest);
-
-            if (score <= alpha) {
-                alpha_window++;
-                alpha = MIN(lowest, score - windows[alpha_window]);
-            } else if (score >= beta) {
-                beta_window++;
-                beta = MAX(highest, score + windows[beta_window]);
-            } else {
-                alpha = MIN(lowest, score - windows[0]);
-                beta = MAX(highest, score + windows[0]);
-                alpha_window = beta_window = 0;
-                //reset highest and lowest every 5 ply
-                if (depth % 10 == 0) {
-                    lowest = MAX(lowest, score - windows[1]);
-                    highest = MIN(highest, score + windows[1]);
-                }
-                depth++;
-            }
-
-            if (alpha < -MAX_WINDOW) {
-                alpha = -score::INF;
-            } else {
-                alpha = ((alpha + 1) & ~1) - 1; //make uneven
-            }
-            if (beta > MAX_WINDOW) {
-                beta = score::INF;
-            } else {
-                beta = ((beta - 1) & ~1) + 1; //make uneven
-            }
-
-            prev_score = score;
-            move_changed = false;
-            root.sort_moves();
-        }
+    assert(result_move.piece == 0 && ponder_move.piece == 0);
+    if (book_lookup()) { //book hit
+        uci::send_pv(result_score, 0, 0, 0, game->tm.elapsed(),
+                result_move.to_string().c_str(), score::EXACT);
+    } else if (init_root_moves() > 0) { //do iid search
+        iterative_deepening();
     }
     uci::send_bestmove(result_move, ponder_move);
+}
+
+void search_t::iterative_deepening() {
+    bool is_easy = root.move_count <= 1 || (root.moves[0].see > 0 && root.moves[1].see <= 0);
+    int last_score = -score::INF;
+    move_t easy_move;
+    easy_move.set(&root.moves[0].move);
+    int max_time = game->tm.reserved();
+    bool timed_search = game->white_time || game->black_time;
+    int depth;
+    for (depth = 1; depth <= game->max_depth; depth++) {
+        int score = aspiration(depth, last_score);
+        poll();
+        if (stop_all) {
+            break;
+        }
+        is_easy &= result_move.equals(&easy_move) && score + 50 < last_score;
+        int elapsed = game->tm.elapsed();
+        if (timed_search && !pondering() && root.move_count <= 1 && elapsed > max_time / 8) {
+            break;
+        }
+        if (timed_search && !pondering() && is_easy && elapsed > max_time / 4) {
+            break;
+        }
+        if (timed_search && !pondering() && elapsed > max_time / 2) {
+            break;
+        }
+        if (timed_search && score::mate_in_ply(score) && depth > score::mate_in_ply(score)) {
+            break;
+        }
+        if (depth >= 6 && game->target_score && score >= game->target_score &&
+                game->target_move.piece && game->target_move.equals(&result_move)) {
+            break;
+        }
+        last_score = score;
+        root.sort_moves();
+    }
+    uci::send_pv(result_score, depth, sel_depth,
+            nodes + pruned_nodes, game->tm.elapsed(), pv_to_string().c_str(), score::EXACT);
+    assert(stack->pv_count > 0);
+    if (stack->pv_count > 1) {
+        ponder_move.set(&stack->pv_moves[1]);
+    }
+}
+
+int search_t::aspiration(int depth, int last_score) {
+    if (depth >= 6 && !score::is_mate(last_score)) {
+        for (int window = 50; window < 500; window *= 2) {
+            int alpha = last_score - window;
+            int beta = last_score + window;
+            int score = pvs_root(alpha, beta, depth);
+            if (stop_all) {
+                return score;
+            }
+            if (score > alpha && score < beta) {
+                return score;
+            }
+            if (score::is_mate(score)) {
+                break;
+            }
+        }
+    }
+    return pvs_root(-score::INF, score::INF, depth);
 }
 
 /**
@@ -323,6 +220,7 @@ void search_t::poll() {
  * Do a null move
  */
 void search_t::forward() {
+
     skip_null = true;
     stack->current_move.set(0);
     stack++;
@@ -336,6 +234,7 @@ void search_t::forward() {
  * Undo a null move
  */
 void search_t::backward() {
+
     stack--;
     brd.backward();
     skip_null = false;
@@ -348,6 +247,7 @@ void search_t::backward() {
  * @param gives_check
  */
 void search_t::forward(move_t * move, bool gives_check) {
+
     stack->current_move.set(move);
     stack++;
     stack->in_check = gives_check;
@@ -361,6 +261,7 @@ void search_t::forward(move_t * move, bool gives_check) {
  * @param move
  */
 void search_t::backward(move_t * move) {
+
     stack--;
     brd.backward(move);
     assert(stack == &_stack[brd.current_ply]);
@@ -371,6 +272,7 @@ void search_t::backward(move_t * move) {
  * @return bool true if pondering 
  */
 bool search_t::pondering() {
+
     return game->ponder || engine::is_ponder();
 }
 
@@ -381,6 +283,7 @@ bool search_t::pondering() {
 std::string search_t::pv_to_string() {
     std::string result = "";
     for (int i = 0; i < stack->pv_count; i++) {
+
         result += stack->pv_moves[i].to_string() + " ";
     }
     return result;
@@ -399,6 +302,7 @@ void search_t::update_history(move_t * move, int depth) {
     if (ABS(history[pc][tsq]) > HISTORY_MAX) {
         for (int pc = WPAWN; pc <= BKING; pc++) {
             for (int sq = a1; sq <= h8; sq++) {
+
                 history[pc][sq] >>= 1;
             }
         }
@@ -410,23 +314,15 @@ void search_t::update_history(move_t * move, int depth) {
  * @return int amount of legal moves
  */
 int search_t::init_root_moves() {
-    int result = 0;
     root.move_count = 0;
     root.fifty_count = brd.stack->fifty_count;
     rep_table::store(brd.stack->fifty_count, brd.stack->hash_code);
-
-    int trans_move = 0;
-    int trans_flags = 0;
-    int score = 0;
-    trans_table::retrieve(brd.stack->hash_code, 0, 0, score, trans_move, trans_flags);
-
+    int tt_move, tt_flags, tt_score;
+    trans_table::retrieve(brd.stack->hash_code, 0, 0, tt_score, tt_move, tt_flags);
     for (move_t * move = move::first(this, 1, -score::INF, score::INF);
             move; move = move::next(this, 1, -score::INF, score::INF)) {
         root_move_t * rmove = &root.moves[root.move_count++];
         int move_score = 1000 - root.move_count;
-        if (move->to_int() == trans_move) {
-            move_score += 10000;
-        }
         rmove->init(move, move_score, brd.gives_check(move), brd.see(move));
         if (rmove->gives_check) {
             rmove->checker_sq = (brd.stack + 1)->checker_sq;
@@ -435,9 +331,9 @@ int search_t::init_root_moves() {
     }
     root.in_check = brd.in_check();
     stack->hash_code = brd.stack->hash_code;
-    stack->eval_result = score::INVALID;
-    result = root.move_count;
-    return result;
+    stack->eval_result = evaluate(this);
+
+    return root.move_count;
 }
 
 /*
@@ -448,6 +344,7 @@ void root_t::sort_moves() {
         root_move_t rmove = moves[j];
         int i = j - 1;
         while (i >= 0 && rmove.compare(&moves[i]) > 0) {
+
             moves[i + 1] = moves[i];
             i--;
         }
@@ -476,6 +373,7 @@ void root_t::match_moves(move::list_t * list) {
         if (match == false) {
             moves[j] = moves[move_count - 1];
             move_count--;
+
             continue;
         }
         j++;
@@ -513,6 +411,8 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     rmove->pv = pv_score;
     rmove->value = best;
     stack->best_move.set(&rmove->move);
+    result_score = best;
+    result_move.set(&rmove->move);
     if (!rmove->move.equals(&stack->pv_moves[0])) {
         stack->pv_moves[0].set(&rmove->move);
         stack->pv_count = 1;
@@ -534,7 +434,6 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
                 pv_to_string().c_str(), score::flags(best, alpha, beta));
         alpha = best;
     }
-
     /*
      * Search remaining moves with a zero width window
      */
@@ -559,6 +458,8 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         if (score > best) {
             rmove->pv = pv_score + i;
             stack->best_move.set(&rmove->move);
+            result_score = score;
+            result_move.set(&rmove->move);
             if (score >= beta) {
                 if (!rmove->move.equals(&stack->pv_moves[0])) {
                     stack->pv_moves[0].set(&rmove->move);
@@ -596,6 +497,7 @@ int search_t::extend_move(move_t * move, int gives_check) {
             return 1;
         }
         if (brd.see(move) >= 0) {
+
             return 1;
         }
         return 0;
@@ -892,6 +794,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
     int flag = score::flags(best, alpha, beta);
     trans_table::store(brd.stack->hash_code, brd.root_ply, brd.current_ply, depth, best, stack->best_move.to_int(), flag);
+
     return best;
 }
 
@@ -1000,6 +903,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             alpha = score;
         }
     } while ((move = move::next(this, depth, alpha, beta)));
+
     return alpha;
 }
 
@@ -1016,6 +920,7 @@ void search_t::debug_print_search(int alpha, int beta) {
     std::cout << "ROOT FEN: " << brd2.to_string() << std::endl;
     std::cout << "Path ";
     for (int i = 0; i < brd.current_ply; i++) {
+
         std::cout << " " << get_stack(i)->current_move.to_string();
     }
     std::cout << "\nFEN: " << brd.to_string() << std::endl;

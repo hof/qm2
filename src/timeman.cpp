@@ -25,7 +25,7 @@
 #include "timeman.h"
 
 void time_manager_t::set(int my_time, int opp_time, int my_inc, int opp_inc, int moves_left) {
-    int M = my_inc > 0 ? 25 : 30; //assume the game is decided after this amount of moves
+    int M = my_inc > 0 ? 20 : 30; //assume the game is decided after this amount of moves
     M = moves_left ? MIN(moves_left + 1, M) : M; //for classic time controls (X moves in Y minutes)
     int limit = my_time - time_man::OVERHEAD_TIME;
 
@@ -54,14 +54,8 @@ void time_manager_t::set(int my_time, int opp_time, int my_inc, int opp_inc, int
      * Make sure the time never exceeds the limit
      */
     result = MIN(result, limit);
-
-    /*
-     * Determine how much more time to give for difficult positions 
-     * (never exceeding the limit)
-     */
-    int max_result = MIN(result * time_man::EMERGENCY_FACTOR, limit);
-    this->set_end(result);
-    this->set_max(max_result);
+    tot = result;
+    this->set_max(result);
 }
 
 time_manager_t::time_manager_t() {
@@ -70,27 +64,6 @@ time_manager_t::time_manager_t() {
 
 void time_manager_t::clear() {
     start = 0;
-    end = 0;
     max = 0;
-}
-
-bool time_manager_t::request_more() {
-    clock_t ticks_available = max - end;
-    if (ticks_available > ticks(500)) {
-        end += (ticks_available / 2);
-        return true;
-    }
-    end = max;
-    return false;
-}
-
-bool time_manager_t::request_less() {
-    if (max != end) {
-        clock_t ticks_available = end - start;
-        if (ticks_available > ticks(0)) {
-            end -= ticks_available / 2;
-            return true;
-        }
-    }
-    return false;
+    tot = 0;
 }

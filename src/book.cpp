@@ -243,26 +243,30 @@ namespace {
  * Finds all book moves for a position and places them in a list
  * @param pos board structure
  * @param list list of moves
- * @return amount of book moves found
+ * @return total weight of all moves (or 0 if no move was found)
  */
-int book_t::find(board_t * pos, move::list_t * list) {
+int book_t::find(board_t * brd, move::list_t * list) {
+    int result = 0;
     list->clear();
-
     if (!is_open() || this->book_size == 0) {
         return 0;
     }
     book_entry_t entry;
-    U64 key = this->polyglot_key(pos);
+    U64 key = this->polyglot_key(brd);
     for (int idx = find_key(key); idx < this->book_size; idx++) {
         read_entry(entry, idx);
         if (entry.key != key) {
             break;
         }
+        if (entry.weight <= 0) {
+            continue;
+        }
         move_t * move = list->last++;
-        read_polyglot_move(pos, move, entry.move);
+        read_polyglot_move(brd, move, entry.move);
         move->score = entry.weight;
+        result += move->score;
     }
-    return list->last - list->first;
+    return result;
 }
 
 /**
@@ -271,16 +275,15 @@ int book_t::find(board_t * pos, move::list_t * list) {
  * @param move engine's move
  * @param polyglotMove polyglot move
  */
-void book_t::read_polyglot_move(board_t *pos, move_t * move, int polyglot_move) {
+void book_t::read_polyglot_move(board_t * brd, move_t * move, int polyglot_move) {
     int tsq = polyglot_move & 63;
     int ssq = (polyglot_move >> 6) & 63;
-    int piece = pos->matrix[ssq];
-
+    int piece = brd->matrix[ssq];
     move->set(piece, ssq, tsq);
-    move->capture = pos->matrix[tsq];
+    move->capture = brd->matrix[tsq];
     move->castle = 0;
     move->en_passant = false;
-    if (pos->stack->enpassant_sq && tsq == pos->stack->enpassant_sq) {
+    if (brd->stack->enpassant_sq && tsq == brd->stack->enpassant_sq) {
         if (piece == WPAWN) {
             move->capture = BPAWN;
             move->en_passant = true;
@@ -289,11 +292,9 @@ void book_t::read_polyglot_move(board_t *pos, move_t * move, int polyglot_move) 
             move->en_passant = true;
         }
     }
-
-    //"normal" moves
     int promotion = (polyglot_move >> 12) & 7; //none 0, knight 1, bishop 2, rook 3, queen 4
     if (promotion) {
-        promotion += pos->stack->wtm ? 1 : 7; //WKNIGHT == 2; BKNIGHT == 8;
+        promotion += brd->stack->wtm ? 1 : 7; //WKNIGHT == 2; BKNIGHT == 8;
         move->promotion = promotion;
     } else if (piece == BKING && ssq == e8) {
         if (tsq == h8) {

@@ -30,6 +30,7 @@ using namespace std;
 int main(int argc, char** argv) {
     string cmd;
     magic::init();
+    srand(time(NULL)); 
     do {
         if (!getline(cin, cmd))
             cmd = "quit";

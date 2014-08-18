@@ -119,6 +119,9 @@ public:
     }
     void init(const char * fen, game_t * g);
     void go();
+    void iterative_deepening();
+    int aspiration(int depth, int last_score);
+    bool book_lookup();
     int pvs_root(int alpha, int beta, int depth);
     int pvs(int alpha, int beta, int depth);
     int qsearch(int alpha, int beta, int depth);
