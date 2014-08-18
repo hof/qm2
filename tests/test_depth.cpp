@@ -17,9 +17,9 @@ struct TStats {
 };
 
 void countNodes(engine_t * engine, TStats * stats, const char * fen) {
-    board_t pos;
-    pos.create(fen);
-    engine->new_game(pos.to_string());
+    board_t brd;
+    brd.init(fen);
+    engine->new_game(brd.to_string());
     //std::cout << pos.asFen() << std::endl;
     clock_t start = clock();
     engine->think();

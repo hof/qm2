@@ -65,6 +65,10 @@ void time_manager_t::set(int my_time, int opp_time, int my_inc, int opp_inc, int
 }
 
 time_manager_t::time_manager_t() {
+    clear();
+}
+
+void time_manager_t::clear() {
     start = 0;
     end = 0;
     max = 0;
@@ -90,31 +94,3 @@ bool time_manager_t::request_less() {
     }
     return false;
 }
-
-namespace time_man {
-    time_manager_t _timeman;
-    
-    time_manager_t * instance() {
-        return & _timeman;
-    }
-    
-    void set(int my_time, int opp_time, int my_inc, int opp_inc, int moves_left) {
-        _timeman.set(my_time, opp_time, my_inc, opp_inc, moves_left);
-    }
-    
-    bool request_more() {
-        return _timeman.request_more();
-    }
-    
-    bool request_less() {
-        return _timeman.request_less();
-    }
-    
-    bool time_is_up() {
-        return _timeman.time_is_up();
-    }
-    
-    int elapsed() {
-        return _timeman.elapsed();
-    }
-};

@@ -29,6 +29,7 @@
 #define	SEARCH_H
 
 #include "board.h"
+#include "game.h"
 #include "movepicker.h"
 #include "hashtable.h"
 
@@ -96,6 +97,7 @@ private:
     search_stack_t _stack[MAX_PLY];
 
 public:
+    game_t * game;
     board_t brd;
     root_t root;
     search_stack_t * stack;
@@ -103,24 +105,28 @@ public:
     uint8_t LMR[32][64]; //depth,  move number
     U64 nodes;
     U64 pruned_nodes;
-    U64 max_nodes;
-    bool ponder;
     bool stop_all;
     bool skip_null;
     int next_poll;
     int sel_depth;
+    int result_score;
     int history[BKING + 1][64];
-    double learn;
+    move_t result_move;
+    move_t ponder_move;
 
-    search_t(const char * fen);
-    std::string pv_to_string();
-    void poll();
-    bool pondering();
-    int init_root_moves();
+    search_t(const char * fen, game_t * g = NULL) {
+        init(fen, g);
+    }
+    void init(const char * fen, game_t * g);
+    void go();
     int pvs_root(int alpha, int beta, int depth);
     int pvs(int alpha, int beta, int depth);
     int qsearch(int alpha, int beta, int depth);
     int extend_move(move_t * move, int gives_check);
+    std::string pv_to_string();
+    void poll();
+    bool pondering();
+    int init_root_moves();
     void debug_print_search(int alpha, int beta);
     void forward();
     void backward();

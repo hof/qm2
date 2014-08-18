@@ -31,8 +31,6 @@
 #include "threadman.h"
 #include "uci_console.h"
 #include "timeman.h"
-#include "opponent.h"
-#include "game.h"
 
 class engine_t : public threads_t {
 private:
@@ -54,6 +52,7 @@ public:
     
     engine_t();
     void new_game(std::string fen);
+    void copy_results(search_t * s);
     void analyse();
     
     game_t * settings() { 

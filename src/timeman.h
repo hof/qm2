@@ -33,16 +33,9 @@ class time_manager_t;
 
 namespace time_man {
     const double ONE_MS = CLOCKS_PER_SEC / 1000;
+    const int OVERHEAD_TIME = 500;
+    const double EMERGENCY_FACTOR = 2.0;
     const int INFINITE_TIME = 24 * 60 * 60 * 1000;
-    const int OVERHEAD_TIME = 500; //reserve this for interface / connection overhead
-    const double EMERGENCY_FACTOR = 2.0; //double the time in case of emergency
-    
-    time_manager_t * instance();
-    void set(int my_time, int opp_time, int my_inc, int opp_inc, int moves_left);
-    bool request_more();
-    bool request_less();
-    bool time_is_up();
-    int elapsed();
 };
 
 class time_manager_t {
@@ -53,6 +46,7 @@ private:
 
 public:
     time_manager_t();
+    void clear();
     void set(int my_time, int opp_time, int my_inc, int opp_inc, int moves_left);
     bool request_more();
     bool request_less();

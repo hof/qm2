@@ -23,6 +23,7 @@
 
 void game_t::clear() {
     opponent.clear();
+    tm.clear();
     target_move.set(0);
     max_depth = MAX_PLY;
     max_time_per_move = 0;
@@ -35,6 +36,7 @@ void game_t::clear() {
     max_nodes = 0;
     ponder = false;
     learn_factor = 1.0;
+
 }
 
 void game_t::copy(game_t* game) {
@@ -51,6 +53,21 @@ void game_t::copy(game_t* game) {
     max_nodes = game->max_nodes;
     ponder = game->ponder;
     learn_factor = game->learn_factor;
+    tm = game->tm;
+}
+
+void game_t::init_tm(bool us) {
+    tm.set_start();
+    if (max_time_per_move) {
+        tm.set_end(max_time_per_move);
+        tm.set_max(max_time_per_move);
+    } else if (white_time || black_time) {
+        tm.set(time(us), time(!us), increment(us), increment(!us), moves_left);
+    } else {
+        tm.set_end(time_man::INFINITE_TIME);
+        tm.set_max(time_man::INFINITE_TIME);
+    }
+
 }
 
 void game_t::test_for(move_t * move, int score, int max_t, int max_d) {
@@ -59,5 +76,13 @@ void game_t::test_for(move_t * move, int score, int max_t, int max_d) {
     target_score = score;
     max_time_per_move = max_t;
     max_depth = max_d;
+}
+
+namespace game {
+    game_t _game;
+
+    game_t * instance() {
+        return & _game;
+    }
 }
 

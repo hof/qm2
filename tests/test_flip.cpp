@@ -13,22 +13,22 @@ bool flipTest(int test_num, const char * fen) {
         return false;
     }
     stop_test = true;
-    board_t pos;
-    pos.create(fen);
+    board_t brd;
+    brd.init(fen);
     
-    std::string fen1 = pos.to_string();
+    std::string fen1 = brd.to_string();
 
     //flip
-    pos.flip();
-    std::string fen2 = pos.to_string();
+    brd.flip();
+    std::string fen2 = brd.to_string();
 
     //flip back
-    pos.flip();
-    std::string fen3 = pos.to_string();
+    brd.flip();
+    std::string fen3 = brd.to_string();
 
     //test 1: fen notations should be equal
     if (fen1 != fen3) {
-        std::cout << "\ntesting position " << test_num << ": " << pos.to_string() << std::endl;
+        std::cout << "\ntesting position " << test_num << ": " << brd.to_string() << std::endl;
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=FEN does not match" << std::endl;
         std::cout << "original: " << fen1 << std::endl;
         std::cout << "flipped:  " << fen2 << std::endl;
@@ -46,34 +46,34 @@ bool flipTest(int test_num, const char * fen) {
     delete s1;
     delete s2;
     if (score1 != score2 || phase1 != phase2) {
-        std::cout << "\ntesting position " << test_num << ": " << pos.to_string() << std::endl;
+        std::cout << "\ntesting position " << test_num << ": " << brd.to_string() << std::endl;
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=Evaluation does not match" << std::endl;
         std::cout << "original: " << fen1 << " score: " << score1 << " phase: " << phase1 << std::endl;
         std::cout << "flipped:  " << fen2 << " score: " << score2 << " phase: " << phase2 << std::endl;
-        global_engine->new_game(pos.to_string());
+        global_engine->new_game(brd.to_string());
         global_engine->analyse();
-        pos.flip();
-        global_engine->new_game(pos.to_string());
+        brd.flip();
+        global_engine->new_game(brd.to_string());
         global_engine->analyse();
         return false;
     }
 
-    global_engine->new_game(pos.to_string());
+    global_engine->new_game(brd.to_string());
     global_engine->think();
     global_engine->stop_all();
     int nodes1 = global_engine->get_total_nodes();
     score1 = global_engine->get_score();
 
-    pos.flip();
+    brd.flip();
     
-    global_engine->new_game(pos.to_string());
+    global_engine->new_game(brd.to_string());
     global_engine->think();
     global_engine->stop_all();
     int nodes2 = global_engine->get_total_nodes();
     score2 = global_engine->get_score();
     
     if (score1 != score2) {
-        std::cout << "\ntesting position " << test_num << ": " << pos.to_string() << std::endl;
+        std::cout << "\ntesting position " << test_num << ": " << brd.to_string() << std::endl;
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=Search does not match" << std::endl;
         std::cout << "original: " << fen1 << " score: " << score1 << " nodes: " << nodes1 << std::endl;
         std::cout << "flipped:  " << fen2 << " score: " << score2 << " nodes: " << nodes2 << std::endl;

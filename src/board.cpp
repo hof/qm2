@@ -912,10 +912,10 @@ bool board_t::is_eg(endgame_t eg, bool us) {
 }
 
 /**
- * Construct the board structure from a FEN string
+ * Initializes / resets the board structure from a FEN string
  * @param fen the FEN string
  */
-void board_t::create(const char* fen) {
+void board_t::init(const char* fen) {
     //initialize:
     clear();
     char offset = a8;

@@ -25,53 +25,53 @@
  * Simple C++ Test Suite
  */
 
-U64 searchPerft(search_t *searchData, int depth, int alpha, int beta) {
+U64 searchPerft(search_t *s, int depth, int alpha, int beta) {
     U64 result = 0;
-    board_t * pos = &searchData->brd;
-    for (move_t * move = move::first(searchData, depth, alpha, beta); move;
-            move = move::next(searchData, depth, alpha, beta)) {
+    board_t * brd = &s->brd;
+    for (move_t * move = move::first(s, depth, alpha, beta); move;
+            move = move::next(s, depth, alpha, beta)) {
         if (depth <= 1) {
             result += 1;
         } else {
-            bool givesCheck = pos->gives_check(move);
-            searchData->forward(move, givesCheck);
-            result += searchPerft(searchData, depth - 1, -beta, -alpha);
-            searchData->backward(move);
+            bool givesCheck = brd->gives_check(move);
+            s->forward(move, givesCheck);
+            result += searchPerft(s, depth - 1, -beta, -alpha);
+            s->backward(move);
         }
     }
     return result;
 }
 
-U64 rootPerft(search_t *searchData, int depth) {
+U64 rootPerft(search_t *s, int depth) {
     U64 result = 0;
-    for (int i = 0; i < searchData->root.move_count; i++) {
-        root_move_t * rMove = &searchData->root.moves[i];
+    for (int i = 0; i < s->root.move_count; i++) {
+        root_move_t * rMove = &s->root.moves[i];
         if (depth <= 1) {
             result += 1;
         } else {
-            searchData->forward(&rMove->move, rMove->gives_check);
+            s->forward(&rMove->move, rMove->gives_check);
             if (rMove->gives_check) {
-                searchData->brd.stack->checker_sq = rMove->checker_sq;
-                searchData->brd.stack->checkers = rMove->checkers;
+                s->brd.stack->checker_sq = rMove->checker_sq;
+                s->brd.stack->checkers = rMove->checkers;
             }
-            result += searchPerft(searchData, depth - 1, -32000, 32000);
-            searchData->backward(&rMove->move);
+            result += searchPerft(s, depth - 1, -32000, 32000);
+            s->backward(&rMove->move);
         }
     }
     return result;
 }
 
-void divide(search_t * searchData, int depth) {
-    move::list_t * move_list = &searchData->stack->move_list;
-    board_t * pos = &searchData->brd;
-    std::cout << pos->to_string() << std::endl;
+void divide(search_t * s, int depth) {
+    move::list_t * move_list = &s->stack->move_list;
+    board_t * brd = &s->brd;
+    std::cout << brd->to_string() << std::endl;
     move_list->clear();
-    for (move_t * move = move::first(searchData, depth, -32000, 32000); move;
-            move = move::next(searchData, depth, -32000, 32000)) {
+    for (move_t * move = move::first(s, depth, -32000, 32000); move;
+            move = move::next(s, depth, -32000, 32000)) {
         std::cout << move->to_string() << " ";
-        searchData->forward(move, pos->gives_check(move));
-        std::cout << searchPerft(searchData, depth, -32000, 32000) << std::endl;
-        searchData->backward(move);
+        s->forward(move, brd->gives_check(move));
+        std::cout << searchPerft(s, depth, -32000, 32000) << std::endl;
+        s->backward(move);
 
     }
 }
@@ -81,28 +81,28 @@ void divide(search_t * searchData, int depth) {
  */
 void testMoveGeneration(std::string fen, int targetValues[], int maxDepth) {
     std::cout << "\n\ntest_genmoves test testMoveGeneration " << fen << std::endl;
-    search_t * searchData = new search_t(fen.c_str());
-    std::string fen2 = searchData->brd.to_string();
+    search_t * s = new search_t(fen.c_str());
+    std::string fen2 = s->brd.to_string();
     if (fen2 != fen) {
         std::cout << "%TEST_FAILED% time=0 testname=testMoveGeneration (test_genmoves) message=basic fen mismatch " << fen2 << std::endl;
     }
-    searchData->init_root_moves();
+    s->init_root_moves();
     for (int i = 0; i < maxDepth; i++) {
-        int count = rootPerft(searchData, i + 1);
+        int count = rootPerft(s, i + 1);
         if (count != targetValues[i]) {
             std::cout << "%TEST_FAILED% time=0 testname=testMoveGeneration (test_genmoves) message=depth "
                     << i + 1 << " node mismatch: " << count << std::endl;
-            divide(searchData, i);
+            divide(s, i);
             break;
         }
-        std::string fen_test = searchData->brd.to_string();
+        std::string fen_test = s->brd.to_string();
         if (fen.compare(fen_test) != 0) {
             std::cout << "%TEST_FAILED% time=0 testname=testMoveGeneration (test_genmoves) message=depth "
                     << i + 1 << ": fen mismatch " << fen_test << std::endl;
             break;
         }
     }
-    delete searchData;
+    delete s;
 }
 
 int arraySum(int anArray[], int arraySize) {

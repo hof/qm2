@@ -46,15 +46,5 @@ public:
     }
 };
 
-namespace opponent {
-    opponent_t * instance(); 
-    int draw_contempt(int my_rating);
-    std::string title();
-    std::string name();
-    int elo_rating();
-    bool is_computer();
-    void set(std::string name, int elo_rating, bool is_computer, std::string title);
-};
-
 #endif	/* OPPONENT_H */
 

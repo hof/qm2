@@ -105,293 +105,34 @@ void engine_t::new_game(std::string fen) {
 }
 
 /**
+ * Copies search results
+ * @param s search object
+ */
+void engine_t::copy_results(search_t * s) {
+    set_target_found(s->result_move.equals(&_game.target_move));
+    set_move(&s->result_move);
+    set_score(s->result_score);
+    set_total_nodes(s->nodes);
+}
+
+/**
  * Thread function for searching and finding a best move in a chess position
  * @param engineObjPtr pointer to the (parent) engine object
  * @return NULL
  */
-void * engine_t::_think(void* engineObjPtr) {
-    /*
-     * Initialize:
-     * - s object
-     * - time management
-     * - game settings
-     * - thinking stop conditions
-     */
-
-
-    engine_t * engine = (engine_t*) engineObjPtr;
-
-    game_t game;
-    game.copy(engine->settings());
-
-    search_t * s = new search_t(engine->_root_fen.c_str());
-
-
-
-    board_t * root = &s->brd;
-    time_manager_t * tm = time_man::instance();
-
-    int max_depth = game.max_depth;
-    U64 max_nodes = game.max_nodes;
-    int maxTime = game.max_time_per_move;
-    int white_time = game.white_time;
-    int black_time = game.black_time;
-    int whiteInc = game.white_increment;
-    int blackInc = game.black_increment;
-    int movesToGo = game.moves_left;
-    move_t target_move = game.target_move;
-    int target_score = game.target_score;
-    bool ponder = game.ponder;
-    double learn = game.learn_factor;
-    evaluate(s);
-
-    tm->set_start();
-    int myTime = root->stack->wtm ? white_time : black_time;
-    int oppTime = root->stack->wtm ? black_time : white_time;
-    int myInc = root->stack->wtm ? whiteInc : blackInc;
-    int oppInc = root->stack->wtm ? blackInc : whiteInc;
-
-    if (maxTime) {
-        tm->set_end(maxTime);
-        tm->set_max(maxTime);
-    } else if (white_time || black_time) {
-        tm->set(myTime, oppTime, myInc, oppInc, movesToGo);
-    } else {
-        tm->set_end(time_man::INFINITE_TIME);
-        tm->set_max(time_man::INFINITE_TIME);
-    }
-
-    s->max_nodes = max_nodes;
-    s->learn = learn;
-    s->ponder = ponder;
-    engine->set_target_found(false);
-
-    /*
-     * Claim draws by 
-     * - fifty move rule
-     * - lack of material
-     * - repetition
-     */
-
-    /*
-     * Find and play a book move if available, looking up 
-     * a Polyglot Book file named "book.bin"
-     */
-    move_t result_move;
-    move_t pondermove;
-    result_move.set(0);
-    pondermove.set(0);
-    book_t * book = new book_t();
-    book->open("book.bin");
-    bool book_move = false;
-    bool book_ponder_move = false;
-    for (int book_step = 0; book_step < 2; book_step++) {
-        move::list_t * bookmoves = &s->stack->move_list;
-        int count = book->find(root, bookmoves);
-        if (count > 0) {
-            srand(time(NULL));
-            int randomScore = 0;
-            int totalBookScore = 1;
-            for (int pickmove = 0; pickmove < 2; pickmove++) {
-                int totalScore = 0;
-                for (move_t * bookmove = bookmoves->first; bookmove != bookmoves->last; bookmove++) {
-                    totalScore += bookmove->score;
-                    if (pickmove && totalScore >= randomScore) {
-                        if (book_step == 0) {
-                            book_move = true;
-                            result_move.set(bookmove);
-                            engine->set_move(bookmove);
-                            engine->set_score(0);
-                            root->forward(&result_move);
-                        } else if (book_step == 1) {
-                            book_ponder_move = true;
-                            pondermove.set(bookmove);
-
-                            std::string book_pv = result_move.to_string() + " " + pondermove.to_string();
-                            uci::send_pv((bookmove->score) / totalBookScore, 1, 1,
-                                    count, tm->elapsed(),
-                                    book_pv.c_str(), score::EXACT);
-                        }
-                        break;
-                    }
-                }
-                totalBookScore = totalScore;
-                randomScore = (rand() % totalScore) + 1;
-            }
-        }
-    }
-    if (book_move) {
-        root->backward(&result_move);
-    }
-
-    /*
-     * Find a move by Principle Variation Search (fail-soft) in an 
-     * internal iterative deepening framework with aspiration search.
-     */
-    if (book_ponder_move == false && s->init_root_moves() > 0) {
-        if (book_move) {
-            //no ponder move.. only consider book_moves, but let the engine decide which one to play
-            book->find(root, &s->stack->move_list);
-            s->root.match_moves(&s->stack->move_list);
-            tm->request_less();
-        } else if (s->root.move_count == 1) {
-            tm->request_less();
-        }
-        s->stack->eval_result = evaluate(s);
-        int alpha = -score::INF;
-        int beta = score::INF;
-        int prev_score = -score::INF;
-        const int windows[] = {20, 40, 80, 160, 320, 640, 1280, score::INF, score::INF};
-        const int MAX_WINDOW = 2000;
-        int alpha_window = 0;
-        int beta_window = 0;
-        int lowest = score::INF;
-        int highest = -score::INF;
-        int depth = 1;
-        int resultScore = 0;
-        bool move_changed = false;
-        bool score_changed = false;
-        bool easy_move = true;
-        while (depth <= max_depth && !s->stop_all) {
-
-            int iteration_start_time = tm->elapsed();
-
-            int score = s->pvs_root(alpha, beta, depth);
-            int type = score::flags(score, alpha, beta);
-
-            /*
-             * Update and output PV
-             */
-            if (!s->stop_all) {
-                resultScore = score;
-            }
-            if (s->stack->pv_count > 0) {
-                move_t firstmove = s->stack->pv_moves[0];
-                if (firstmove.piece) {
-                    move_changed = result_move.equals(&firstmove) == false;
-                    result_move.set(&firstmove);
-                    pondermove.set(0);
-                    if (s->stack->pv_count > 1) {
-                        pondermove.set(&s->stack->pv_moves[1]);
-                    }
-                    engine->set_move(&firstmove);
-                    engine->set_score(resultScore);
-                }
-                if (s->stop_all) {
-                    uci::send_pv(resultScore, depth, s->sel_depth,
-                            s->nodes + s->pruned_nodes, tm->elapsed(), s->pv_to_string().c_str(), score::flags(resultScore, alpha, beta));
-
-                }
-            }
-
-            /*
-             * Increase time for time based search when 
-             * - We opened the aspiration window on high depths
-             * - Evaluation shows large positional values
-             * - PV or pondermove is not set
-             */
-            score_changed = ABS(prev_score - score) > 25;
-            easy_move &= move_changed == false;
-            easy_move &= score_changed == false;
-
-            if (!s->stop_all && depth > 8 && !book_move) {
-                if (pondermove.piece == EMPTY) {
-                    tm->request_more();
-                } else if (move_changed) {
-                    tm->request_more();
-                } else if (score_changed) {
-                    tm->request_more();
-                } else if (easy_move) {
-                    easy_move = false;
-                    tm->request_less();
-                }
-            }
-
-            /* 
-             * Stop conditions
-             */
-
-            //stop if running a test and the move and score are found
-            if (target_score && target_move.piece && target_move.equals(&result_move) && score >= target_score) {
-                engine->set_target_found(true);
-                break;
-            }
-
-            //stop if stopsearch is set (time is up) or max amount of nodes is reached
-            s->poll();
-            if (s->stop_all
-                    || (max_nodes > 0 && s->nodes > max_nodes)) {
-                break;
-            }
-
-            //stop if a mate is found and the iteration depth is deeper than the mate depth
-            if (score::mate_in_ply(resultScore) && type == score::EXACT && depth > score::mate_in_ply(resultScore)) {
-                break;
-            }
-            if (score::mated_in_ply(resultScore) && type == score::EXACT && depth > score::mated_in_ply(resultScore)) {
-                break;
-            }
-
-            //stop if there is no time to find a new pv in a next iteration
-            int iteration_time = tm->elapsed() - iteration_start_time;
-            if (type == score::EXACT && !tm->is_available(iteration_time / 2)) {
-                break;
-            }
-
-            /*
-             * Prepare next search
-             * - Increase depth if the score is between the bounds
-             * - Otherwise open the aspiration window further and research 
-             *   on the same depth. Open it fully in case of mate-scores.
-             */
-            lowest = MIN(score, lowest);
-            highest = MAX(score, highest);
-
-            if (score <= alpha) {
-                alpha_window++;
-                alpha = MIN(lowest, score - windows[alpha_window]);
-            } else if (score >= beta) {
-                beta_window++;
-                beta = MAX(highest, score + windows[beta_window]);
-            } else {
-                alpha = MIN(lowest, score - windows[0]);
-                beta = MAX(highest, score + windows[0]);
-                alpha_window = beta_window = 0;
-                //reset highest and lowest every 5 ply
-                if (depth % 10 == 0) {
-                    lowest = MAX(lowest, score - windows[1]);
-                    highest = MIN(highest, score + windows[1]);
-                }
-                depth++;
-            }
-
-            if (alpha < -MAX_WINDOW) {
-                alpha = -score::INF;
-            } else {
-                alpha = ((alpha + 1) & ~1) - 1; //make uneven
-            }
-            if (beta > MAX_WINDOW) {
-                beta = score::INF;
-            } else {
-                beta = ((beta - 1) & ~1) + 1; //make uneven
-            }
-
-            prev_score = score;
-            move_changed = false;
-            s->root.sort_moves();
-        }
-        engine->set_total_nodes(s->nodes);
-
-    }
-    uci::send_bestmove(result_move, pondermove);
-
-    /*
-     * Clean up and terminate the thinking thread
-     */
-
+void * engine_t::_think(void * engine_p) { 
+    
+    //initialize
+    engine_t * engine = (engine_t*) engine_p;
+    search_t * s = new search_t(engine->_root_fen.c_str(), engine->settings());
+    
+    //think
+    s->go();
+    
+    //copy search results and clean up
+    engine->copy_results(s);
     delete s;
-    delete book;
-    pthread_exit(NULL);
+    pthread_exit(NULL); 
     return NULL;
 }
 
@@ -634,7 +375,7 @@ void * engine_t::_learn(void * engineObjPtr) {
     search_t * sd_game = new search_t(engine->_root_fen.c_str());
 
     engine->settings()->max_depth = MAXDEPTH;
-    time_man::instance()->set_end(time_man::INFINITE_TIME);
+    engine->settings()->init_tm(true);
 
     int x = 0;
     double bestFactor = 1.0;
@@ -695,8 +436,8 @@ void * engine_t::_learn(void * engineObjPtr) {
                 std::cout << "\nError: no start position (book.bin missing?)" << std::endl;
                 break;
             }
-            sd_game->brd.create(fen.c_str());
-            int plyCount = 0;
+            sd_game->brd.init(fen.c_str());
+            int ply_count = 0;
             int prevScore = 0;
             bool gameover = false;
             do {
@@ -708,12 +449,11 @@ void * engine_t::_learn(void * engineObjPtr) {
                      * 2) engine(base) vs engine(learn)
                      */
                     if (game % 2 == 0) {
-                        sd_game->learn = side_to_move ? strongest : opponent;
+                        sd_game->game->learn_factor = side_to_move ? strongest : opponent;
                     } else {
-                        sd_game->learn = side_to_move ? opponent : strongest;
+                        sd_game->game->learn_factor = side_to_move ? opponent : strongest;
                     }
-                    bool learning_side = sd_game->learn == strongest;
-
+                    bool learning_side = sd_game->game->learn_factor == strongest;
 
                     /*
                      * Prepare search: cleanup and reset search stack. 
@@ -777,7 +517,7 @@ void * engine_t::_learn(void * engineObjPtr) {
                         break;
                     }
 
-                    if (plyCount >= MAXPLIES) {
+                    if (ply_count >= MAXPLIES) {
                         //too long game, abort as draw
                         stats[0]++; //draw
                         gameover = true;
@@ -785,8 +525,8 @@ void * engine_t::_learn(void * engineObjPtr) {
                     }
 
                     prevScore = resultScore;
-                    plyCount++;
-                    //std::cout << plyCount << ": " << resultScore << " " << actualmove.asString() << " " << sd_game->brd.asFen() << std::endl; //for debugging
+                    ply_count++;
+                    //std::cout << ply_count << ": " << resultScore << " " << actualmove.asString() << " " << sd_game->brd.asFen() << std::endl; //for debugging
                     sd_game->forward(&actualmove, sd_game->brd.gives_check(&actualmove));
                 }
 

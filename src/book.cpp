@@ -470,6 +470,21 @@ U64 book_t::polyglot_key(board_t* pos) {
     return result;
 }
 
+namespace book {
+    book_t _book;
+    
+    void open(const std::string& file_name) {
+        _book.open(file_name);
+    }
+    
+    void close() {
+        _book.close();
+    }
+    
+    int find(board_t * pos, move::list_t * list) {
+        _book.find(pos, list);
+    }
+};
 
 
 

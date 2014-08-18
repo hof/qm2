@@ -183,21 +183,21 @@ namespace uci {
                 fen = start_fen;
                 parser >> token;
             }
-            board_t pos;
-            pos.create(fen.c_str());
+            board_t brd;
+            brd.init(fen.c_str());
             if (token == "moves") {
-                rep_table::store(pos.stack->fifty_count, pos.stack->hash_code);
+                rep_table::store(brd.stack->fifty_count, brd.stack->hash_code);
                 while (parser >> token) {
                     move_t move;
-                    move.set(&pos, token.c_str());
-                    pos.forward(&move);
-                    rep_table::store(pos.stack->fifty_count, pos.stack->hash_code);
-                    if (pos.current_ply > MAX_PLY - 2) {
-                        pos.create(pos.to_string().c_str()); //preventing overflow
+                    move.set(&brd, token.c_str());
+                    brd.forward(&move);
+                    rep_table::store(brd.stack->fifty_count, brd.stack->hash_code);
+                    if (brd.current_ply > MAX_PLY - 2) {
+                        brd.init(brd.to_string().c_str()); //preventing overflow
                     }
                 }
             }
-            fen = pos.to_string();
+            fen = brd.to_string();
         }
         return result;
     }
@@ -205,14 +205,14 @@ namespace uci {
     bool handle_forward(input_parser_t & parser) {
         bool result = true;
         std::string token;
-        board_t pos;
+        board_t brd;
         move_t move;
-        pos.create(fen.c_str());
+        brd.init(fen.c_str());
         while (parser >> token) {
-            move.set(&pos, token.c_str());
-            pos.forward(&move);
+            move.set(&brd, token.c_str());
+            brd.forward(&move);
         }
-        fen = pos.to_string();
+        fen = brd.to_string();
         return result;
     }
 

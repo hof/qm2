@@ -49,38 +49,3 @@ std::string opponent_t::to_string() {
     }
     return result;
 }
-
-namespace opponent {
-    opponent_t _opponent;
-    
-    opponent_t * instance() {
-        return & _opponent;
-    }
-    
-    int draw_contempt(int my_rating = 2400) {
-        return _opponent.draw_contempt(my_rating);
-    }
-    
-    std::string title() {
-        return _opponent.title;
-    }
-    
-    std::string name() {
-        return _opponent.name;
-    }
-    
-    int elo_rating() {
-        return _opponent.elo_rating;
-    }
-    
-    bool is_computer() {
-        return _opponent.is_computer;
-    }
-    
-    void set(std::string name, int elo_rating, bool is_computer, std::string title = ""){
-        _opponent.name = name;
-        _opponent.title = title;
-        _opponent.is_computer = is_computer;
-        _opponent.elo_rating = elo_rating;
-    }
-}

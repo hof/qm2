@@ -99,7 +99,7 @@ public:
     void clear();
     void flip();
     bool is_draw();
-    void create(const char* fen);
+    void init(const char* fen);
     std::string to_string();
 
     void forward(move_t * move);

@@ -22,13 +22,13 @@ struct TTestResult {
 TTestResult testForMove(engine_t * engine, std::string fen, std::string move, int target_score) {
     TTestResult result;
     move_t bm;
-    board_t pos;
-    pos.create(fen.c_str());
-    bm.set(&pos, move.c_str());
+    board_t brd;
+    brd.init(fen.c_str());
+    bm.set(&brd, move.c_str());
 
     engine::settings()->test_for(&bm, target_score, 30 * 1000);
-    engine->new_game(pos.to_string());
-    std::cout << "Position: " << pos.to_string() << " best move: " << bm.to_string() << std::endl;
+    engine->new_game(brd.to_string());
+    std::cout << "Position: " << brd.to_string() << " best move: " << bm.to_string() << std::endl;
 
     engine->think();
     engine->stop_all();

@@ -30,6 +30,7 @@
 
 class threads_t {
 public:
+
     threads_t() {
         _count = 0;
         _stop_all = false;
@@ -48,14 +49,14 @@ public:
     int create(void* function_ptr(void *ptr), void* params) {
         if (this->_count < MAX_THREADS) {
             pthread_t thread = get(_count);
-            if (pthread_create( &thread, NULL, function_ptr, params) == 0) {
+            if (pthread_create(&thread, NULL, function_ptr, params) == 0) {
                 this->_threads[this->_count++] = thread;
             }
         }
         return this->_count;
     }
 
-    void wait_for(int ix)  {
+    void wait_for(int ix) {
         pthread_t thread = this->get(ix);
         if (thread && ix < this->_count) {
             pthread_join(thread, NULL);
@@ -80,13 +81,12 @@ private:
     bool _stop_all;
     pthread_t _threads[MAX_THREADS];
 
-    pthread_cond_t _cond; 
-    pthread_mutex_t _mutex; 
+    pthread_cond_t _cond;
+    pthread_mutex_t _mutex;
     pthread_spinlock_t _spin;
 
-
     inline pthread_t get(int index) {
-        return (index >= 0 && index < MAX_THREADS)? _threads[index] : 0;
+        return (index >= 0 && index < MAX_THREADS) ? _threads[index] : 0;
     }
 
     void mutex_lock() {
@@ -96,7 +96,7 @@ private:
     void mutex_release() {
         pthread_mutex_unlock(&this->_mutex);
     }
-    
+
     void spin_lock() {
         pthread_spin_lock(&this->_spin);
     }

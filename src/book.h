@@ -45,12 +45,12 @@ public:
     ~book_t() {
         close();
     }
-    void open(const std::string& fName);
+    void open(const std::string& file_name);
     void close();
     const std::string get_file_name();
     static U64 polyglot_key(board_t* pos);
     int find(board_t * pos, move::list_t * list);
-    void read_polyglot_move(board_t * pos, move_t * move, int polyglotMove);
+    void read_polyglot_move(board_t * pos, move_t * move, int polyglot_move);
 
 private:
     std::string file_name;
@@ -73,6 +73,12 @@ private:
         *this >> e.key >> e.move >> e.weight >> e.learn1 >> e.learn2;
     }
     
+};
+
+namespace book {
+    void open(const std::string& file_name);
+    void close();
+    int find(board_t * pos, move::list_t * list);
 };
 
 #endif	/* BOOK_H */

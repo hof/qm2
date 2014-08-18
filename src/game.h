@@ -24,15 +24,17 @@
 
 #include "opponent.h"
 #include "move.h"
+#include "timeman.h"
 
 class game_t {
 public:
+    time_manager_t tm;
     opponent_t opponent;
+    U64 max_nodes;
+    U64 max_time_per_move;
     int max_depth;
-    int max_nodes;
     move_t target_move;
     int target_score;
-    U64 max_time_per_move;
     int white_time;
     int black_time;
     int white_increment;
@@ -44,6 +46,7 @@ public:
     void clear();
     void copy(game_t * game);
     void test_for(move_t * move, int score, int max_time, int max_depth = MAX_PLY);
+    void init_tm(bool white);
 
     game_t() {
         clear();
@@ -52,6 +55,18 @@ public:
     void set_opponent(opponent_t * opp) {
         opponent.copy(opp);
     }
+    
+    int time(bool white) {
+        return white? white_time : black_time;
+    }
+    
+    int increment(bool white) {
+        return white? white_increment : black_increment;
+    }
+};
+
+namespace game {
+    game_t * instance();
 };
 
 #endif	/* GAME_H */

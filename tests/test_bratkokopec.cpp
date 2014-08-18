@@ -14,12 +14,12 @@
  */
 bool testForMove(std::string fen, std::string move, int targetScore) {
     move_t bm;
-    board_t pos;
-    pos.create(fen.c_str());
-    bm.set(&pos, move.c_str());
+    board_t brd;
+    brd.init(fen.c_str());
+    bm.set(&brd, move.c_str());
     engine::settings()->test_for(&bm, targetScore, 10*1000);
-    engine::new_game(pos.to_string());
-    std::cout << "Position: " << pos.to_string() << " best move: " << bm.to_string() << std::endl;
+    engine::new_game(brd.to_string());
+    std::cout << "Position: " << brd.to_string() << " best move: " << bm.to_string() << std::endl;
     engine::go();
     engine::instance()->stop_all();
     return engine::instance()->target_found();
