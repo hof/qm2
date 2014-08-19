@@ -109,8 +109,8 @@ void engine_t::new_game(std::string fen) {
  * @param s search object
  */
 void engine_t::copy_results(search_t * s) {
-    set_target_found(s->result_move.equals(&_game.target_move));
-    set_move(&s->result_move);
+    set_target_found(s->stack->best_move.equals(&_game.target_move));
+    set_move(&s->stack->best_move);
     set_score(s->result_score);
     set_total_nodes(s->nodes);
 }
@@ -491,7 +491,7 @@ void * engine_t::_learn(void * engineObjPtr) {
                             }
                         }
                         depth++;
-                        sd_game->root.sort_moves();
+                        sd_game->root.sort_moves(&actualmove);
                     }
 
                     nodes[1 - learning_side] += sd_game->nodes;

@@ -332,6 +332,8 @@ void book_t::close() {
  * @param fname the filename 
  */
 void book_t::open(const string &fname) {
+    
+    srand(time(NULL)); 
 
     // Close old file before opening the new
     close();
@@ -483,7 +485,7 @@ namespace book {
     }
     
     int find(board_t * pos, move::list_t * list) {
-        _book.find(pos, list);
+        return _book.find(pos, list);
     }
 };
 

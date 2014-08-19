@@ -46,11 +46,8 @@ namespace {
  * @param checks if the move checks the opponent
  * @param see_value static exchange value
  */
-void root_move_t::init(move_t * m, int val, bool checks, int see_value) {
+void root_move_t::init(move_t * m, bool checks, int see_value) {
     nodes = 0;
-    pv = 0;
-    value = -score::INF;
-    initial_value = val;
     move.set(m);
     gives_check = checks;
     see = see_value;
@@ -59,27 +56,17 @@ void root_move_t::init(move_t * m, int val, bool checks, int see_value) {
 /**
  * Compare two root moves for sorting
  * @param m move
+ * @param best_move best move found so far
  * @return int < 0 -> m is better; >= 0 m is not better
  */
-int root_move_t::compare(root_move_t * m) {
-    int result = pv - m->pv;
-    if (result) {
-        return result;
+int root_move_t::compare(root_move_t * m, move_t * best_move) {
+    if (this->move.equals(best_move)) {
+        return 1;
     }
-    result = value - m->value;
-    if (result) {
-        return result;
+    if (m->move.equals(best_move)) {
+        return -1;
     }
-    result = nodes - m->nodes;
-    if (result) {
-        return result;
-    }
-    result = initial_value - m->initial_value;
-    if (result) {
-        return result;
-    }
-    result = see - m->see;
-    return result;
+    return nodes - m->nodes;
 }
 
 /**
@@ -92,7 +79,6 @@ void search_t::init(const char * fen, game_t * g) {
     game->init_tm(brd.stack->wtm);
     memset(history, 0, sizeof (history));
     init_pst();
-    result_move.set(0);
     ponder_move.set(0);
     nodes = 0;
     pruned_nodes = 0;
@@ -102,6 +88,7 @@ void search_t::init(const char * fen, game_t * g) {
     sel_depth = 0;
     root_stack = stack = &_stack[0];
     stack->eval_result = score::INVALID;
+    stack->best_move.set(0);
     result_score = 0;
 }
 
@@ -120,7 +107,7 @@ bool search_t::book_lookup() {
             score += bmove->score;
             if (score >= rnd) {
                 result = true;
-                result_move.set(bmove);
+                stack->best_move.set(bmove);
                 break;
             }
         }
@@ -133,14 +120,14 @@ bool search_t::book_lookup() {
  * Starts the searching
  */
 void search_t::go() {
-    assert(result_move.piece == 0 && ponder_move.piece == 0);
+    assert(stack->best_move.piece == 0 && ponder_move.piece == 0);
     if (book_lookup()) { //book hit
         uci::send_pv(result_score, 0, 0, 0, game->tm.elapsed(),
-                result_move.to_string().c_str(), score::EXACT);
+                stack->best_move.to_string().c_str(), score::EXACT);
     } else if (init_root_moves() > 0) { //do iid search
         iterative_deepening();
     }
-    uci::send_bestmove(result_move, ponder_move);
+    uci::send_bestmove(stack->best_move, ponder_move);
 }
 
 void search_t::iterative_deepening() {
@@ -157,7 +144,7 @@ void search_t::iterative_deepening() {
         if (stop_all) {
             break;
         }
-        is_easy &= result_move.equals(&easy_move) && score + 50 < last_score;
+        is_easy &= stack->best_move.equals(&easy_move) && score + 50 < last_score;
         int elapsed = game->tm.elapsed();
         if (timed_search && !pondering() && root.move_count <= 1 && elapsed > max_time / 8) {
             break;
@@ -172,11 +159,11 @@ void search_t::iterative_deepening() {
             break;
         }
         if (depth >= 6 && game->target_score && score >= game->target_score &&
-                game->target_move.piece && game->target_move.equals(&result_move)) {
+                game->target_move.piece && game->target_move.equals(&stack->best_move)) {
             break;
         }
         last_score = score;
-        root.sort_moves();
+        root.sort_moves(&stack->best_move);
     }
     uci::send_pv(result_score, depth, sel_depth,
             nodes + pruned_nodes, game->tm.elapsed(), pv_to_string().c_str(), score::EXACT);
@@ -188,7 +175,7 @@ void search_t::iterative_deepening() {
 
 int search_t::aspiration(int depth, int last_score) {
     if (depth >= 6 && !score::is_mate(last_score)) {
-        for (int window = 50; window < 500; window *= 2) {
+        for (int window = 40; window < 900; window *= 2) {
             int alpha = last_score - window;
             int beta = last_score + window;
             int score = pvs_root(alpha, beta, depth);
@@ -322,8 +309,7 @@ int search_t::init_root_moves() {
     for (move_t * move = move::first(this, 1, -score::INF, score::INF);
             move; move = move::next(this, 1, -score::INF, score::INF)) {
         root_move_t * rmove = &root.moves[root.move_count++];
-        int move_score = 1000 - root.move_count;
-        rmove->init(move, move_score, brd.gives_check(move), brd.see(move));
+        rmove->init(move, brd.gives_check(move), brd.see(move));
         if (rmove->gives_check) {
             rmove->checker_sq = (brd.stack + 1)->checker_sq;
             rmove->checkers = (brd.stack + 1)->checkers;
@@ -332,19 +318,17 @@ int search_t::init_root_moves() {
     root.in_check = brd.in_check();
     stack->hash_code = brd.stack->hash_code;
     stack->eval_result = evaluate(this);
-
     return root.move_count;
 }
 
 /*
  * Sort algorithm for root moves (simple insertion sort)
  */
-void root_t::sort_moves() {
+void root_t::sort_moves(move_t * best_move) {
     for (int j = 1; j < move_count; j++) {
         root_move_t rmove = moves[j];
         int i = j - 1;
-        while (i >= 0 && rmove.compare(&moves[i]) > 0) {
-
+        while (i >= 0 && rmove.compare(&moves[i], best_move) > 0) {
             moves[i + 1] = moves[i];
             i--;
         }
@@ -383,100 +367,66 @@ void root_t::match_moves(move::list_t * list) {
 /**
  * Principle Variation Search (root node)
  * Difference with normal (non-root) search:
- * - Sending new PVs to the interface
- * - Sort order based on amount of nodes of the subtrees
+ * - Sending new PVs asap to the interface
+ * - Sort order based on pv and amount of nodes of the subtrees
  * - No pruning, reductions, extensions and hash table lookup/store
  */
 int search_t::pvs_root(int alpha, int beta, int depth) {
-    /*
-     * Principle variation search (PVS). 
-     * Generate the first move from pv, hash or internal iterative deepening,
-     * all handled by the movepicker. 
-     * If no move is returned, the position is either MATE or STALEMATE, 
-     * otherwise search the first move with full alpha beta window.
-     */
+
     assert(root.move_count > 0);
-    int nodes_before = nodes;
-    root_move_t * rmove = &root.moves[0];
-    forward(&rmove->move, rmove->gives_check);
-    if (rmove->gives_check) {
-        brd.stack->checker_sq = rmove->checker_sq;
-        brd.stack->checkers = rmove->checkers;
-    }
     int new_depth = depth - 1;
-    int best = -pvs(-beta, -alpha, new_depth);
-    backward(&rmove->move);
-    int pv_score = 1000 * depth;
-    rmove->nodes += nodes - nodes_before;
-    rmove->pv = pv_score;
-    rmove->value = best;
-    stack->best_move.set(&rmove->move);
-    result_score = best;
-    result_move.set(&rmove->move);
-    if (!rmove->move.equals(&stack->pv_moves[0])) {
-        stack->pv_moves[0].set(&rmove->move);
-        stack->pv_count = 1;
-    }
-    if (stop_all) {
-        return alpha;
-    }
-    if (best < alpha) {
-        return best; //return to adjust the aspiration window
-    }
-    if (best >= beta) {
-        uci::send_pv(best, depth, sel_depth, nodes + pruned_nodes, game->tm.elapsed(),
-                pv_to_string().c_str(), score::flags(best, alpha, beta));
-        return best;
-    }
-    if (best > alpha) {
-        update_pv(&rmove->move);
-        uci::send_pv(best, depth, sel_depth, nodes + pruned_nodes, game->tm.elapsed(),
-                pv_to_string().c_str(), score::flags(best, alpha, beta));
-        alpha = best;
-    }
+    int best = -score::INF;
+    
     /*
-     * Search remaining moves with a zero width window
+    std::cout << "\npvs root (alpha, beta, depth) = (" << alpha << "," << beta << ", " << depth << ") " << std::endl;
+    for (int i = 0; i < root.move_count; i++) {
+        root_move_t * rmove = &root.moves[i];
+        std::cout << rmove->move.to_string()
+                << " n: " << rmove->nodes
+                << ";  \n";
+    }
+    std::cout << std::endl;
+    */
+    
+    /*
+     * Moves loop
      */
-    for (int i = 1; i < root.move_count; i++) {
-        rmove = &root.moves[i];
-        nodes_before = nodes;
+    for (int i = 0; i < root.move_count; i++) {
+        root_move_t * rmove = &root.moves[i];
+        int nodes_before = nodes;
         forward(&rmove->move, rmove->gives_check);
         if (rmove->gives_check) {
             brd.stack->checker_sq = rmove->checker_sq;
             brd.stack->checkers = rmove->checkers;
         }
-        int score = -pvs(-alpha - 1, -alpha, new_depth);
-        if (score > alpha && stop_all == false) {
+        int score;
+        if (i > 0) {
+            score = -pvs(-alpha - 1, -alpha, new_depth);
+        }
+        if (i == 0 || score > alpha) {
             score = -pvs(-beta, -alpha, new_depth);
         }
         backward(&rmove->move);
         rmove->nodes += nodes - nodes_before;
-        rmove->value = score;
         if (stop_all) {
             return alpha;
         }
         if (score > best) {
-            rmove->pv = pv_score + i;
-            stack->best_move.set(&rmove->move);
+            best = score;
             result_score = score;
-            result_move.set(&rmove->move);
-            if (score >= beta) {
-                if (!rmove->move.equals(&stack->pv_moves[0])) {
-                    stack->pv_moves[0].set(&rmove->move);
-                    stack->pv_count = 1;
-                }
+            rmove->nodes += i;
+            stack->best_move.set(&rmove->move);
+            bool exact = score::flags(score, alpha, beta) == score::EXACT;
+            if (exact || false == rmove->move.equals(&stack->pv_moves[0])) {
+                update_pv(&rmove->move);
+            }
+            uci::send_pv(best, depth, sel_depth, nodes + pruned_nodes, game->tm.elapsed(),
+                    pv_to_string().c_str(), score::flags(best, alpha, beta));
+            if (!exact) { //adjust asp. window
                 return score;
             }
-            best = score;
-            if (score > alpha) {
-                update_pv(&rmove->move);
-                uci::send_pv(best, depth, sel_depth, nodes + pruned_nodes,
-                        game->tm.elapsed(), pv_to_string().c_str(),
-                        score::flags(best, alpha, beta));
-                alpha = score;
-            }
-        } else {
-            rmove->pv = rmove->pv / 32;
+            assert(alpha < best);
+            alpha = best;
         }
     }
     return best;
@@ -497,7 +447,6 @@ int search_t::extend_move(move_t * move, int gives_check) {
             return 1;
         }
         if (brd.see(move) >= 0) {
-
             return 1;
         }
         return 0;

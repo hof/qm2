@@ -38,15 +38,12 @@ public:
     move_t move;
     bool gives_check;
     int nodes;
-    int pv;
-    int value;
-    int initial_value;
     int see;
     int checker_sq;
     U64 checkers;
 
-    void init(move_t * m, int val, bool checks, int see_value);
-    int compare(root_move_t * m);
+    void init(move_t * m, bool checks, int see_value);
+    int compare(root_move_t * m, move_t * best_move);
 };
 
 class root_t {
@@ -56,7 +53,7 @@ public:
     int fifty_count;
     bool in_check;
 
-    void sort_moves();
+    void sort_moves(move_t * best_move);
     void match_moves(move::list_t * list);
 };
 
@@ -111,7 +108,6 @@ public:
     int sel_depth;
     int result_score;
     int history[BKING + 1][64];
-    move_t result_move;
     move_t ponder_move;
 
     search_t(const char * fen, game_t * g = NULL) {
