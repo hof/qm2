@@ -213,7 +213,6 @@ bool search_t::abort(bool force_poll = false) {
  * Do a null move
  */
 void search_t::forward() {
-
     skip_null = true;
     stack->current_move.clear();
     stack++;
@@ -227,7 +226,6 @@ void search_t::forward() {
  * Undo a null move
  */
 void search_t::backward() {
-
     stack--;
     brd.backward();
     skip_null = false;
@@ -560,8 +558,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int delta = FUTILITY_MARGIN * depth;
     bool in_check = stack->in_check;
     if (!in_check
-            && depth <= 4
             && (eval - delta) >= beta
+            && depth <= 4
             && beta > -score::DEEPEST_MATE
             && brd.has_pieces(brd.stack->wtm)) {
         return eval - delta;
@@ -576,7 +574,12 @@ int search_t::pvs(int alpha, int beta, int depth) {
             && beta > -score::DEEPEST_MATE
             && brd.has_pieces(brd.stack->wtm)) {
         forward();
-        int null_score = depth > 3? -pvs(-beta, -alpha, depth - 1 - 3) : -qsearch_static(-beta, 100);
+        int null_score;
+        if (depth <= 3) {
+            null_score = -qsearch_static(-alpha, 100);
+        } else {
+            null_score = -pvs(-beta, -alpha, depth - 1 - 3 - depth / 4);
+        }
         backward();
         if (null_score >= beta) {
             trans_table::store(brd.stack->hash_code, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
@@ -598,9 +601,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
     bool pv = alpha + 1 < beta;
     if (pv && depth > 3 && tt_move == 0) {
         skip_null = true;
-        int iid_depth = depth - 2 - depth / 4;
-        iid_depth = MAX(1, iid_depth);
-        /*int iid_score = */pvs(alpha, beta, iid_depth);
+        int iid_score = pvs(alpha, beta, depth - 2 - depth / 4);
+        if (score::is_mate(iid_score)) {
+            return iid_score;
+        }
         stack->tt_move.set(&stack->best_move);
     }
     skip_null = false;
@@ -872,7 +876,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             alpha = score;
         }
     } while ((move = move::next(this, depth)));
-
     return alpha;
 }
 
@@ -907,7 +910,6 @@ int search_t::qsearch_static(int beta, int gain) {
     assert(best < beta);
     return best;
 }
-
 
 bool search_t::is_dangerous_check(move_t * const move, const int gives_check) {
     if (gives_check == 0) {
