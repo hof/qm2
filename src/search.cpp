@@ -37,7 +37,7 @@ namespace {
         QS_DELTA = 100,
         NODES_BETWEEN_POLLS = 5000
     };
-    
+
 };
 
 /**
@@ -394,7 +394,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
                 << ";  \n";
     }
     std::cout << std::endl;
-    */
+     */
 
     /*
      * Moves loop
@@ -493,47 +493,46 @@ int search_t::pvs(int alpha, int beta, int depth) {
     /*
      * 1. If no more depth remaining, return quiescence value
      */
+
     if (depth < 1) {
         return qsearch(alpha, beta, 0);
     }
 
-    //time check
+    /*
+     * 2. Stop conditions
+     */
+
+    //time 
     nodes++;
     if (abort()) {
         return alpha;
     }
-    
+
     //ceiling
     if (brd.ply > sel_depth) {
         sel_depth = brd.ply;
-        if (brd.ply >= (MAX_PLY-1)) {
-            return alpha;
+        if (brd.ply >= (MAX_PLY - 1)) {
+            return evaluate(this);
         }
     }
-    
+
     assert(depth >= 1 && depth <= MAX_PLY);
 
-    /* 
-     * 2. Mate distance pruning: 
-     * if we already know we will win/loose by mate in n, 
-     * it is not needed to search deeper than n
-     */
+    //mate distance pruning (if mate(d) in n: don't search deeper)
     if ((score::MATE - brd.ply) < beta) {
         beta = score::MATE - brd.ply;
-        if (alpha >= (score::MATE - brd.ply)) {
-            return score::MATE - brd.ply;
+        if (alpha >= beta) {
+            return beta;
         }
     }
     if ((-score::MATE + brd.ply) > alpha) {
         alpha = -score::MATE + brd.ply;
-        if (beta <= (-score::MATE + brd.ply)) {
-            return -score::MATE + brd.ply;
+        if (beta <= alpha) {
+            return alpha;
         }
     }
 
-    /*
-     * 3. Return obvious draws 
-     */
+    //draw by lack of material or fifty quiet moves
     if (is_draw()) {
         return draw_score();
     }
@@ -766,45 +765,60 @@ int search_t::pvs(int alpha, int beta, int depth) {
  */
 int search_t::qsearch(int alpha, int beta, int depth) {
 
-    //time check
+    /*
+     * 2. Stop conditions
+     */
+
+    //time 
     nodes++;
     if (abort()) {
         return alpha;
     }
 
+    //ceiling
     if (brd.ply >= (MAX_PLY - 1)) {
-        return alpha;
+        return evaluate(this);
     }
 
-    //mate distance pruning
+    assert(depth <= 0);
+
+    //mate distance pruning (if mate(d) in n: don't search deeper)
     if ((score::MATE - brd.ply) < beta) {
         beta = score::MATE - brd.ply;
-        if (alpha >= (score::MATE - brd.ply)) {
-            return score::MATE - brd.ply;
+        if (alpha >= beta) {
+            return beta;
         }
     }
     if ((-score::MATE + brd.ply) > alpha) {
         alpha = -score::MATE + brd.ply;
-        if (beta <= (-score::MATE + brd.ply)) {
-            return -score::MATE + brd.ply;
+        if (beta <= alpha) {
+            return alpha;
         }
     }
-    
-    //obvious draws
+
+    //draw by lack of material or fifty quiet moves
     if (is_draw()) {
         return draw_score();
     }
 
-    int eval = evaluate(this); //always do an eval - it's incremental
+    int eval = evaluate(this); 
+    bool in_check = stack->in_check;
 
-    //if not in check, generate captures, promotions and (upto some plies ) quiet checks
-    if (eval >= beta && !stack->in_check) { //return evaluation score is it's already above beta (stand-pat idea)
-        return eval;
+    //stand-pat: return if eval is "good enough"
+    if (eval >= beta && !in_check) { 
+        return eval; 
     }
 
+    //get first move; if there's none it's mate, stalemate, or there are no captures/promotions
     move_t * move = move::first(this, depth);
-    if (!move) { //return evaluation score if there are no quiescence moves
-        return stack->in_check ? -score::MATE + brd.ply : eval;
+    if (!move) { 
+        if (in_check) {
+            return -score::MATE + brd.ply;
+        } else if (depth == 0) {
+            return draw_score();
+        } else {
+            return eval;
+        }  
     }
     if (!stack->in_check) {
         alpha = MAX(eval, alpha);
