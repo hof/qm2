@@ -602,7 +602,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     /*
      * IID 
      */
-    bool pv = is_pv(alpha, beta);
+    bool pv = alpha + 1 < beta;
     if (pv && depth > 3 && tt_move == 0) {
         skip_null = true;
         stack->best_move.clear();
@@ -662,6 +662,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         assert(stack->best_move.equals(move) == false);
         assert(first_move->equals(move) == false);
         gives_check = brd.gives_check(move);
+        
         bool skip_prune = stack->move_list.stage < QUIET_MOVES
                 || in_check || gives_check > 0 || move->capture || move->promotion
                 || move->castle || is_passed_pawn(move) || beta < -score::DEEPEST_MATE;
@@ -766,7 +767,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 int search_t::qsearch(int alpha, int beta, int depth) {
 
     /*
-     * 2. Stop conditions
+     * 1. Stop conditions
      */
 
     //time 
@@ -801,65 +802,78 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return draw_score();
     }
 
-    int eval = evaluate(this); 
-    bool in_check = stack->in_check;
+    const int eval = evaluate(this);
+    const bool in_check = stack->in_check;
 
     //stand-pat: return if eval is "good enough"
-    if (eval >= beta && !in_check) { 
-        return eval; 
+    if (eval >= beta && !in_check) {
+        return eval;
     }
 
     //get first move; if there's none it's mate, stalemate, or there are no captures/promotions
     move_t * move = move::first(this, depth);
-    if (!move) { 
+    if (!move) {
         if (in_check) {
             return -score::MATE + brd.ply;
         } else if (depth == 0) {
             return draw_score();
         } else {
             return eval;
-        }  
+        }
     }
-    if (!stack->in_check) {
-        alpha = MAX(eval, alpha);
+
+    /*
+     * 2. Moves loop
+     */
+
+    //prepare moves loop
+    if (eval > alpha && !in_check) {
+        alpha = eval;
     }
     stack->hash_code = brd.stack->hash_code;
-    bool pv = is_pv(alpha, beta);
-    do { //loop through quiescence moves
+    const int delta = depth ? FUTILITY_MARGIN : QS_DELTA;
+
+    //do the loop 
+    do {
+        
+        /*
+         * 3. Move pruning
+         */
+        
         int gives_check = brd.gives_check(move);
-        if (!stack->in_check && !move->capture && !move->promotion && !move->castle &&
-                (gives_check == 0 || (gives_check == 1 && brd.min_gain(move) < 0 && brd.see(move) < 0))) {
+        bool dangerous = in_check || move->capture || move->promotion || move->castle
+                || is_dangerous_check(move, gives_check);
+
+        //prune all quiet moves
+        if (!dangerous) {
             pruned_nodes++;
             continue;
         }
-
-        //pruning (delta futility and negative see), skipped for checks
-        if (!stack->in_check && gives_check == 0 && !pv) {
-
-            //1. delta futility pruning: the captured piece + max. positional gain should raise alpha
-            int gain = PIECE_VALUE[move->capture];
-            if (move->promotion) {
-                if (move->promotion != WQUEEN && move->promotion != BQUEEN) {
-                    pruned_nodes++;
-                    continue;
-                }
-                gain += PIECE_VALUE[move->promotion] - VPAWN;
-            }
-            int delta = depth >= 0 ? QS_DELTA : FUTILITY_MARGIN;
-            if (eval + gain + delta < alpha) {
-                pruned_nodes++;
-                continue;
-            }
-
-            //2. prune moves when see is negative
-            if (brd.min_gain(move) < 0 && brd.see(move) < 0) {
-                pruned_nodes++;
-                continue;
-            }
+        
+        //delta pruning
+        bool skip_prune = in_check || gives_check;
+        if (!skip_prune && eval + delta + brd.max_gain(move) <= alpha) {
+            pruned_nodes++;
+            continue;
         }
+        
+        //SEE pruning
+        if (!skip_prune && brd.min_gain(move) < 0 && brd.see(move) < 0) {
+            pruned_nodes++;
+            continue;
+        }
+        
+        /*
+         * Go forward and search next node
+         */
+ 
         forward(move, gives_check);
         int score = -qsearch(-beta, -alpha, depth - 1);
         backward(move);
+        
+        /*
+         * Handle results: beta cutoff or improved alpha
+         */
         if (score >= beta) {
             stack->best_move.set(move);
             return score;
@@ -870,6 +884,17 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     } while ((move = move::next(this, depth)));
 
     return alpha;
+}
+
+bool search_t::is_dangerous_check(move_t * const move, const int gives_check) {
+    if (gives_check == 0) {
+        return false;
+    } else if (gives_check > 1) {
+        return true;
+    } else {
+        assert(gives_check == 1);
+        return brd.min_gain(move) >= 0 || brd.see(move) >= 0;
+    }
 }
 
 void search_t::debug_print_search(int alpha, int beta) {

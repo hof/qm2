@@ -134,10 +134,7 @@ public:
     void backward(move_t * move);
     void update_history(move_t * move, int depth);
     void reset_stack();
-
-    bool is_pv(int alpha, int beta) {
-        return alpha + 1 < beta;
-    }
+    bool is_dangerous_check(move_t * const move, const int gives_check);
 
     void clear_history() {
         memset(history, 0, sizeof (history));
