@@ -66,14 +66,14 @@ move_t * move_picker_t::pop(board_t * brd, move::list_t * list) {
     return NULL;
 }
 
-move_t * move_picker_t::first(search_t * s, int depth, int alpha, int beta) {
+move_t * move_picker_t::first(search_t * s, int depth) {
     move::list_t * list = &s->stack->move_list;
     list->clear();
-    list->stage = depth < 1 ? CAPTURES : HASH;
-    return next(s, depth, alpha, beta);
+    list->stage = depth > 0? HASH : CAPTURES;
+    return next(s, depth);
 }
 
-move_t * move_picker_t::next(search_t * s, int depth, int alpha, int beta) {
+move_t * move_picker_t::next(search_t * s, int depth) {
     U64 mask;
     board_t * brd = &s->brd;
     move::list_t * list = &s->stack->move_list;
@@ -232,7 +232,7 @@ int move_picker_t::count_evasions(search_t * s, move_t * first_move) {
 
     //get and count legal moves
     while (result < MAXLEGALCOUNT) {
-        move_t * m = next(s, 1, -score::INF, score::INF);
+        move_t * m = next(s, 1);
         if (m == NULL) {
             break;
         }
@@ -253,12 +253,12 @@ namespace move {
         return &_picker;
     }
     
-    move_t * first(search_t * s, int depth, int alpha, int beta) {
-        return _picker.first(s, depth, alpha, beta);
+    move_t * first(search_t * s, int depth) {
+        return _picker.first(s, depth);
     }
     
-    move_t * next(search_t * s, int depth, int alpha, int beta) {
-        return _picker.next(s, depth, alpha, beta);
+    move_t * next(search_t * s, int depth) {
+        return _picker.next(s, depth);
     }
 };
 

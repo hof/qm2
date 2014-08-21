@@ -306,8 +306,8 @@ int search_t::init_root_moves() {
     rep_table::store(brd.stack->fifty_count, brd.stack->hash_code);
     int tt_move, tt_flags, tt_score;
     trans_table::retrieve(brd.stack->hash_code, 0, 0, tt_score, tt_move, tt_flags);
-    for (move_t * move = move::first(this, 1, -score::INF, score::INF);
-            move; move = move::next(this, 1, -score::INF, score::INF)) {
+    for (move_t * move = move::first(this, 1);
+            move; move = move::next(this, 1)) {
         root_move_t * rmove = &root.moves[root.move_count++];
         rmove->init(move, brd.gives_check(move), brd.see(move));
         if (rmove->gives_check) {
@@ -607,7 +607,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * If no move is returned, the position is either MATE or STALEMATE, 
      * otherwise search the first move with full alpha beta window.
      */
-    move_t * first_move = move::first(this, depth, alpha, beta);
+    move_t * first_move = move::first(this, depth);
     if (!first_move) { //no legal move: it's checkmate or stalemate
         return in_check ? -score::MATE + brd.current_ply : draw_score();
     }
@@ -645,7 +645,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
     int searched_moves = 1;
     int max_reduce = MAX(0, new_depth - 1);
-    while (move_t * move = move::next(this, depth, alpha, beta)) {
+    while (move_t * move = move::next(this, depth)) {
         assert(stack->best_move.equals(move) == false);
         assert(first_move->equals(move) == false);
         gives_check = brd.gives_check(move);
@@ -800,7 +800,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return eval;
     }
 
-    move_t * move = move::first(this, depth, alpha, beta);
+    move_t * move = move::first(this, depth);
     if (!move) { //return evaluation score if there are no quiescence moves
         return stack->in_check ? -score::MATE + brd.current_ply : eval;
     }
@@ -836,7 +836,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             }
 
             //2. prune moves when see is negative
-            if (brd.see(move) < 0) {
+            if (brd.min_gain(move) < 0 && brd.see(move) < 0) {
                 pruned_nodes++;
                 continue;
             }
@@ -851,7 +851,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             stack->best_move.set(move);
             alpha = score;
         }
-    } while ((move = move::next(this, depth, alpha, beta)));
+    } while ((move = move::next(this, depth)));
 
     return alpha;
 }

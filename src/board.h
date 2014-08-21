@@ -65,6 +65,12 @@ enum endgame_t {
     OPP_BISHOPS, KBBKN, KBPsK, KNPK
 };
 
+namespace board {
+    const int PVAL[BKING + 1] = {
+        0, 100, 300, 300, 500, 900, 10000, 100, 300, 300, 500, 900, 10000
+    };
+};
+
 class board_stack_t {
 public:
     int enpassant_sq;
@@ -118,7 +124,10 @@ public:
 
     U64 smallest_attacker(U64 attacks, bool wtm, int &piece);
     int see(move_t * capture);
+    int max_gain(move_t * capture);
+    int min_gain(move_t * capture);
     int mvvlva(move_t * capture);
+    bool equal_cap(move_t * mv);
 
     /**
      * Counts amount of piece for a given piece type

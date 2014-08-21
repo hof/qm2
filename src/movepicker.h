@@ -51,15 +51,15 @@ private:
     void push(move::list_t * list, move_t * move, int score);
 
 public:
-    move_t * first(search_t * s, int depth, int alpha, int beta);
-    move_t * next(search_t * s, int depth, int alpha, int beta);
+    move_t * first(search_t * s, int depth);
+    move_t * next(search_t * s, int depth);
     int count_evasions(search_t * s, move_t * first_move);   
 };
 
 namespace move {
     move_picker_t * picker();
-    move_t * first(search_t * s, int depth, int alpha, int beta);
-    move_t * next(search_t * s, int depth, int alpha, int beta); 
+    move_t * first(search_t * s, int depth);
+    move_t * next(search_t * s, int depth); 
 };
 
 #endif	/* MOVEPICKER_H */

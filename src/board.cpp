@@ -26,12 +26,6 @@
 #include "board.h"
 #include "hashcodes.h"
 
-namespace board {
-    const int PVAL[BKING + 1] = {
-        0, 100, 300, 300, 500, 900, 10000, 100, 300, 300, 500, 900, 10000
-    };
-};
-
 /**
  * Clears board stack
  */
@@ -757,16 +751,28 @@ int board_t::mvvlva(move_t * move) {
     return board::PVAL[move->capture] + board::PVAL[move->promotion] - move->piece;
 }
 
+int board_t::max_gain(move_t * move) {
+    int result = board::PVAL[move->capture];
+    if (move->promotion) {
+        result += board::PVAL[move->promotion] - board::PVAL[WPAWN];
+    }
+    return result;
+}
+
+int board_t::min_gain(move_t * move) {
+    return board::PVAL[move->capture] - board::PVAL[move->piece];
+}
+
 /**
  * SEE, Static Exchange Evaluator. Verify if a move or capture wins or looses material
  * @param move the move to verify
- * @return expected gain or loss by playing this move as a number in centipawns (e.g +300 when fully winning a knight)
+ * @return expected gain or loss by playing this move as a number in centipawns (e.g +300 when winning a knight)
  */
 int board_t::see(move_t * move) {
     int captured_piece = move->capture;
     int moving_piece = move->piece;
     int captured_val = board::PVAL[captured_piece];
-
+    
     /*
      * 0. If the king captures, it's always a gain
      */
@@ -775,7 +781,7 @@ int board_t::see(move_t * move) {
     }
 
     /*
-     * 1. if a lower valued piece captures a higher valued piece 
+     * 1. if a piece captures a higher valued piece 
      * return quickly as we are (almost) sure this capture gains material.
      * (e.g. pawn x knight)
      */
@@ -785,27 +791,27 @@ int board_t::see(move_t * move) {
     }
 
     /*
-     * 2. if a piece (not pawn) captures a pawn and that pawn is defended by
-     * another pawn, return a negative score quickly
+     * 2. if a piece captures a lower value piece that is defended by
+     * a pawn, return a negative score quickly
+     * (e.g. rook captures knight that is defended by a pawn)
      */
     int tsq = move->tsq;
-    if ((moving_piece > BPAWN && captured_piece == WPAWN && BPAWN_CAPTURES[tsq] & bb[WPAWN])
-            || (moving_piece < WKING && moving_piece > WPAWN && captured_piece == BPAWN && WPAWN_CAPTURES[tsq] & bb[BPAWN])) {
-        return captured_val - piece_val;
+    bool wtm = moving_piece > WKING;
+    if (captured_val && piece_val > captured_val && is_attacked_by_pawn(tsq, wtm)) {
+        return captured_val - piece_val;   
     }
 
     /*
      * 3. full static exchange evaluation using the swap algoritm
      */
-    bool wtm = moving_piece > WKING;
-    U64 attacks = attacks_to(tsq);
     int gain[32];
     int depth = 0;
+    U64 attacks = attacks_to(tsq);
     U64 from_bit = BIT(move->ssq);
     U64 occ = bb[ALLPIECES];
     const U64 diag_sliders = bb[WBISHOP] | bb[WQUEEN] | bb[BBISHOP] | bb[BQUEEN];
     const U64 hor_ver_sliders = bb[WROOK] | bb[WQUEEN] | bb[BROOK] | bb[BQUEEN];
-    const U64 xrays = diag_sliders | hor_ver_sliders;
+    const U64 xrays = diag_sliders | hor_ver_sliders | bb[WPAWN] | bb[BPAWN];
 
     if (!captured_piece && (moving_piece == WPAWN || moving_piece == BPAWN)) {
         //set the non-capturing pawn move ssq bit in the attacks bitboard, 

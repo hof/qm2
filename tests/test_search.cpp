@@ -28,8 +28,7 @@
 U64 searchPerft(search_t *s, int depth, int alpha, int beta) {
     U64 result = 0;
     board_t * brd = &s->brd;
-    for (move_t * move = move::first(s, depth, alpha, beta); move;
-            move = move::next(s, depth, alpha, beta)) {
+    for (move_t * move = move::first(s, depth); move; move = move::next(s, depth)) {
         if (depth <= 1) {
             result += 1;
         } else {
@@ -66,8 +65,7 @@ void divide(search_t * s, int depth) {
     board_t * brd = &s->brd;
     std::cout << brd->to_string() << std::endl;
     move_list->clear();
-    for (move_t * move = move::first(s, depth, -32000, 32000); move;
-            move = move::next(s, depth, -32000, 32000)) {
+    for (move_t * move = move::first(s, depth); move; move = move::next(s, depth)) {
         std::cout << move->to_string() << " ";
         s->forward(move, brd->gives_check(move));
         std::cout << searchPerft(s, depth, -32000, 32000) << std::endl;

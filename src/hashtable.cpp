@@ -223,6 +223,7 @@ int trans_table_t::unmake_score(int score, int ply) {
 }
 
 void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int flags) {
+    assert(depth > 0);
     entry_t * best_entry = NULL;
     int best_score = -score::INF;
     age = age % 64;
@@ -257,6 +258,7 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
 }
 
 bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags) {
+    assert(depth >= 0);
     move = 0;
     if (enabled) {
         int ix = index(key);
