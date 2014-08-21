@@ -494,8 +494,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * 1. If no more depth remaining, return quiescence value
      */
     if (depth < 1) {
-        sel_depth = MAX(sel_depth, brd.ply);
-        return qsearch(alpha, beta, depth);
+        return qsearch(alpha, beta, 0);
     }
 
     //time check
@@ -503,10 +502,16 @@ int search_t::pvs(int alpha, int beta, int depth) {
     if (abort()) {
         return alpha;
     }
-    if (brd.ply >= (MAX_PLY - 1)) {
-        return alpha;
+    
+    //ceiling
+    if (brd.ply > sel_depth) {
+        sel_depth = brd.ply;
+        if (brd.ply >= (MAX_PLY-1)) {
+            return alpha;
+        }
     }
-    assert(depth >= ONE_PLY && depth < 256);
+    
+    assert(depth >= 1 && depth <= MAX_PLY);
 
     /* 
      * 2. Mate distance pruning: 
@@ -545,18 +550,17 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
     }
     stack->tt_move.set(tt_move);
+    assert(tt_move == 0 || brd.valid(&stack->tt_move));
 
     /*
      * 5. Pruning: Fail-high and Nullmove
      */
     int eval = evaluate(this);
-    int new_depth = depth - 1;
     bool in_check = stack->in_check;
-    assert(new_depth >= 0);
 
     //a) Fail-high pruning (return if static evaluation score is already much better than beta)
     if (!in_check
-            && new_depth <= 3
+            && depth <= 4
             && (eval - FUTILITY_MARGIN * depth) >= beta
             && beta > -score::DEEPEST_MATE
             && brd.has_pieces(brd.stack->wtm)) {
@@ -568,11 +572,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
     bool mate_threat = false;
     if (!skip_null
             && !in_check
-            && new_depth > 0
+            && depth > 1
             && eval >= beta
             && beta > -score::DEEPEST_MATE
             && brd.has_pieces(brd.stack->wtm)) {
-        int rdepth = new_depth - 3;
+        int rdepth = depth - 4;
         rdepth = MAX(rdepth, 0);
         forward();
         int null_score = -pvs(-beta, -alpha, rdepth);
@@ -625,7 +629,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int extend = extend_move(first_move, gives_check);
     stack->best_move.set(first_move);
     forward(first_move, gives_check);
-    int best = -pvs(-beta, -alpha, new_depth + extend);
+    int best = -pvs(-beta, -alpha, depth - 1 + extend);
     backward(first_move);
     if (best > alpha) {
         if (best >= beta) {
@@ -654,7 +658,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * - All remaining moves
      */
     int searched_moves = 1;
-    int max_reduce = MAX(0, new_depth - 1);
+    int max_reduce = MAX(0, depth - 2);
     while (move_t * move = move::next(this, depth)) {
         assert(stack->best_move.equals(move) == false);
         assert(first_move->equals(move) == false);
@@ -670,7 +674,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         if (!skip_prune
                 && !pv
                 && (eval < alpha || best >= alpha)
-                && new_depth <= 3
+                && depth <= 4
                 ) {
             int mc_max = 2 + ((depth * depth) / 4);
             if (searched_moves > mc_max) {
@@ -703,14 +707,14 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * 13. Go forward and search next node
          */
         forward(move, gives_check);
-        int score = -pvs(-alpha - 1, -alpha, new_depth - reduce + extend);
+        int score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
         if (score > alpha && reduce > 0) {
             //research without reductions
-            score = -pvs(-alpha - 1, -alpha, new_depth + extend);
+            score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
         }
         if (pv && score > alpha) {
             //full window research
-            score = -pvs(-beta, -alpha, new_depth + extend);
+            score = -pvs(-beta, -alpha, depth - 1 + extend);
         }
         backward(move);
 
