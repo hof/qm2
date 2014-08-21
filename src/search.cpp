@@ -34,7 +34,6 @@ namespace {
 
     enum search_constants_t {
         FUTILITY_MARGIN = 50,
-        QS_DELTA = 100,
         NODES_BETWEEN_POLLS = 5000
     };
 
@@ -491,7 +490,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     stack->pv_count = 0;
 
     /*
-     * 1. If no more depth remaining, return quiescence value
+     * If no more depth remaining, return quiescence value
      */
 
     if (depth < 1) {
@@ -499,7 +498,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     /*
-     * 2. Stop conditions
+     * Stop conditions
      */
 
     //time 
@@ -538,8 +537,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     /*
-     * 4. Transposition table lookup
+     * Transposition table lookup
      */
+
     int tt_move = 0, tt_flag, tt_score;
     if (trans_table::retrieve(brd.stack->hash_code, brd.ply, depth, tt_score, tt_move, tt_flag)) {
         if ((tt_flag == score::LOWERBOUND && tt_score >= beta)
@@ -552,47 +552,39 @@ int search_t::pvs(int alpha, int beta, int depth) {
     assert(tt_move == 0 || brd.valid(&stack->tt_move));
 
     /*
-     * 5. Pruning: Fail-high and Nullmove
+     * Node pruning
      */
-    int eval = evaluate(this);
-    bool in_check = stack->in_check;
 
-    //a) Fail-high pruning (return if static evaluation score is already much better than beta)
+    //fail-high pruning (return if static evaluation score is already much better than beta)
+    int eval = evaluate(this);
+    int delta = FUTILITY_MARGIN * depth;
+    bool in_check = stack->in_check;
     if (!in_check
             && depth <= 4
-            && (eval - FUTILITY_MARGIN * depth) >= beta
+            && (eval - delta) >= beta
             && beta > -score::DEEPEST_MATE
             && brd.has_pieces(brd.stack->wtm)) {
-        return eval - FUTILITY_MARGIN * depth;
+        return eval - delta;
     }
 
-    //b) Null move pruning
+    //null move pruning
     stack->hash_code = brd.stack->hash_code;
-    bool mate_threat = false;
     if (!skip_null
             && !in_check
             && depth > 1
             && eval >= beta
             && beta > -score::DEEPEST_MATE
             && brd.has_pieces(brd.stack->wtm)) {
-        int rdepth = depth - 4;
-        rdepth = MAX(rdepth, 0);
         forward();
-        int null_score = -pvs(-beta, -alpha, rdepth);
+        int null_score = -pvs(-beta, -alpha, depth - 1 - 3);
         backward();
         if (null_score >= beta) {
-            if (null_score > score::DEEPEST_MATE) {
-                return beta; // not return unproven mate scores
-            }
             trans_table::store(brd.stack->hash_code, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
             return null_score;
-        } else {
-            mate_threat = null_score < -score::DEEPEST_MATE;
-            if (mate_threat) {
-                move_t * threat = &(stack + 1)->best_move;
-                if (!threat->capture && !threat->promotion) {
-                    update_history(threat, rdepth);
-                }
+        } else if (null_score < -score::DEEPEST_MATE) {
+            move_t * threat = &(stack + 1)->best_move;
+            if (!threat->capture && !threat->promotion) {
+                (stack + 1)->killer[0].set(threat);
             }
         }
     }
@@ -602,10 +594,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
     /*
      * IID 
      */
+    stack->best_move.clear();
     bool pv = alpha + 1 < beta;
     if (pv && depth > 3 && tt_move == 0) {
         skip_null = true;
-        stack->best_move.clear();
         int iid_depth = depth - 2 - depth / 4;
         iid_depth = MAX(1, iid_depth);
         /*int iid_score = */pvs(alpha, beta, iid_depth);
@@ -657,12 +649,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * - All remaining moves
      */
     int searched_moves = 1;
-    int max_reduce = MAX(0, depth - 2);
     while (move_t * move = move::next(this, depth)) {
         assert(stack->best_move.equals(move) == false);
         assert(first_move->equals(move) == false);
         gives_check = brd.gives_check(move);
-        
+
         bool skip_prune = stack->move_list.stage < QUIET_MOVES
                 || in_check || gives_check > 0 || move->capture || move->promotion
                 || move->castle || is_passed_pawn(move) || beta < -score::DEEPEST_MATE;
@@ -697,9 +688,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
         extend = extend_move(move, gives_check);
         int reduce = 0;
 
-        if (!skip_prune && max_reduce > 0 && searched_moves >= 3) {
+        if (!skip_prune && depth >= 3 && searched_moves >= 3) {
             reduce = searched_moves < 6 ? 1 : depth / 3;
-            reduce = MIN(reduce, max_reduce);
         }
         assert(reduce == 0 || extend == 0);
 
@@ -831,15 +821,15 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         alpha = eval;
     }
     stack->hash_code = brd.stack->hash_code;
-    const int delta = depth ? FUTILITY_MARGIN : QS_DELTA;
+    int delta = FUTILITY_MARGIN + (depth == 0) * FUTILITY_MARGIN;
 
     //do the loop 
     do {
-        
+
         /*
          * 3. Move pruning
          */
-        
+
         int gives_check = brd.gives_check(move);
         bool dangerous = in_check || move->capture || move->promotion || move->castle
                 || is_dangerous_check(move, gives_check);
@@ -849,28 +839,28 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             pruned_nodes++;
             continue;
         }
-        
+
         //delta pruning
         bool skip_prune = in_check || gives_check;
         if (!skip_prune && eval + delta + brd.max_gain(move) <= alpha) {
             pruned_nodes++;
             continue;
         }
-        
+
         //SEE pruning
         if (!skip_prune && brd.min_gain(move) < 0 && brd.see(move) < 0) {
             pruned_nodes++;
             continue;
         }
-        
+
         /*
          * Go forward and search next node
          */
- 
+
         forward(move, gives_check);
         int score = -qsearch(-beta, -alpha, depth - 1);
         backward(move);
-        
+
         /*
          * Handle results: beta cutoff or improved alpha
          */
