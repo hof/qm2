@@ -121,6 +121,7 @@ public:
     int pvs_root(int alpha, int beta, int depth);
     int pvs(int alpha, int beta, int depth);
     int qsearch(int alpha, int beta, int depth);
+    int qsearch_static(int beta, int gain);
     int extend_move(move_t * move, int gives_check);
     std::string pv_to_string();
     bool is_draw();

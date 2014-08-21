@@ -576,7 +576,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             && beta > -score::DEEPEST_MATE
             && brd.has_pieces(brd.stack->wtm)) {
         forward();
-        int null_score = -pvs(-beta, -alpha, depth - 1 - 3);
+        int null_score = depth > 3? -pvs(-beta, -alpha, depth - 1 - 3) : -qsearch_static(-beta, 100);
         backward();
         if (null_score >= beta) {
             trans_table::store(brd.stack->hash_code, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
@@ -875,6 +875,39 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
     return alpha;
 }
+
+int search_t::qsearch_static(int beta, int gain) {
+    int best = evaluate(this);
+    if (best >= beta) { // stand pat
+        return best;
+    }
+    int base = best + gain;
+    U64 done = 0;
+    stack->tt_move.set(0);
+    for (move_t * move = move::first(this, -1); move != NULL; move = move::next(this, -1)) {
+        U64 bit_tsq = BIT(move->tsq);
+        if (done & bit_tsq) {
+            pruned_nodes++;
+            continue;
+        }
+        done |= bit_tsq;
+        int see = brd.see(move);
+        if (see <= 0) {
+            pruned_nodes++;
+            continue;
+        }
+        int score = base + see;
+        if (score > best) {
+            best = score;
+            if (score >= beta) {
+                return score;
+            }
+        }
+    }
+    assert(best < beta);
+    return best;
+}
+
 
 bool search_t::is_dangerous_check(move_t * const move, const int gives_check) {
     if (gives_check == 0) {
