@@ -375,7 +375,7 @@ int evaluate(search_t * sd) {
         return sd->stack->eval_result;
     }
 
-    sd->stack->equal_pawns = sd->brd.current_ply > 0
+    sd->stack->equal_pawns = sd->brd.ply > 0
             && sd->brd.stack->pawn_hash == (sd->brd.stack - 1)->pawn_hash
             && (sd->stack - 1)->eval_result != score::INVALID;
 
@@ -425,7 +425,7 @@ int eval_material(search_t * sd) {
      *    the material hash
      */
     board_t * pos = &sd->brd;
-    if (pos->current_ply > 0 &&
+    if (pos->ply > 0 &&
             (pos->stack - 1)->material_hash == pos->stack->material_hash
             && (sd->stack - 1)->eval_result != score::INVALID) {
         sd->stack->material_score = (sd->stack - 1)->material_score;

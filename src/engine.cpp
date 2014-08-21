@@ -88,7 +88,7 @@ engine_t::engine_t() : threads_t() {
     _stop_all = false;
     _ponder = false;
     _root_fen = "";
-    _result_move.set(0);
+    _result_move.clear();
     _result_score = 0;
     _game.clear();
 }
@@ -98,7 +98,7 @@ engine_t::engine_t() : threads_t() {
  * @param fen position represented by a FEN string
  */
 void engine_t::new_game(std::string fen) {
-    _result_move.set(0);
+    _result_move.clear();
     _result_score = 0;
     trans_table::clear();
     set_position(fen);
@@ -706,8 +706,8 @@ void engine_t::_create_start_positions(search_t * sd_root, book_t * book, string
     int gen = 0;
     while (x < max) {
         gen++;
-        while (sd_root->brd.current_ply < MAX_PLY) {
-            actualmove.set(0);
+        while (sd_root->brd.ply < MAX_PLY) {
+            actualmove.clear();
             int count = book->find(&sd_root->brd, bookmoves);
             if (count > 0) {
                 int randomScore = 0;
@@ -734,7 +734,7 @@ void engine_t::_create_start_positions(search_t * sd_root, book_t * book, string
         poslist[x++] = sd_root->brd.to_string();
 
         //revert to root
-        while (sd_root->brd.current_ply > 0) {
+        while (sd_root->brd.ply > 0) {
             move_t * move = &(sd_root->stack - 1)->current_move;
             sd_root->backward(move);
         }

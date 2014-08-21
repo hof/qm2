@@ -86,7 +86,7 @@ void board_stack_t::copy(board_stack_t * b_stack) {
 void board_t::clear() {
     _stack[0].clear();
     stack = &_stack[0];
-    current_ply = 0;
+    ply = 0;
     root_ply = 0;
     memset(bb, 0, sizeof (bb));
     memset(matrix, 0, sizeof (matrix));
@@ -172,11 +172,11 @@ void board_t::forward(move_t * move) {
     assert(tsq >= a1 && tsq <= h8);
     assert(piece >= WPAWN && piece <= BKING);
     assert(piece == matrix[ssq]);
-    assert(current_ply < MAX_PLY);
+    assert(ply < MAX_PLY);
 
     (stack + 1)->copy(stack);
     stack++;
-    current_ply++;
+    ply++;
 
     HASH_EP(stack->hash_code, stack->enpassant_sq); //remove (a possible) ep square from hashcode
 
@@ -326,7 +326,7 @@ void board_t::backward(move_t * move) {
             }
         }
     }
-    current_ply--;
+    ply--;
     stack--;
 }
 
@@ -336,7 +336,7 @@ void board_t::backward(move_t * move) {
 void board_t::forward() {
     (stack + 1)->copy(stack);
     stack++;
-    current_ply++;
+    ply++;
     HASH_EP(stack->hash_code, stack->enpassant_sq); //remove enpassant_square if it is set
     stack->enpassant_sq = EMPTY;
     stack->wtm = !stack->wtm;
@@ -347,7 +347,7 @@ void board_t::forward() {
  * Undo a nullmove: just restore board structure
  */
 void board_t::backward() {
-    current_ply--;
+    ply--;
     stack--;
 }
 
@@ -1171,7 +1171,7 @@ std::string board_t::to_string() {
     sprintf(buf, "%d", stack->fifty_count);
     result += buf;
     result += " ";
-    sprintf(buf, "%d", (root_ply + current_ply) / 2);
+    sprintf(buf, "%d", (root_ply + ply) / 2);
     result += buf;
     return result;
 }

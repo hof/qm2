@@ -24,7 +24,7 @@
 void game_t::clear() {
     opponent.clear();
     tm.clear();
-    target_move.set(0);
+    target_move.clear();
     max_depth = MAX_PLY;
     max_time_per_move = 0;
     target_score = 0;

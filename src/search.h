@@ -123,7 +123,8 @@ public:
     int qsearch(int alpha, int beta, int depth);
     int extend_move(move_t * move, int gives_check);
     std::string pv_to_string();
-    void poll();
+    bool is_draw();
+    bool abort(bool force_poll);
     bool pondering();
     int init_root_moves();
     void debug_print_search(int alpha, int beta);

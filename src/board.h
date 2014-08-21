@@ -96,7 +96,7 @@ public:
     U64 bb[BPIECES + 1];
     int matrix[64];
 
-    int current_ply;
+    int ply;
     int root_ply;
 
     board_stack_t _stack[MAX_PLY + 1];

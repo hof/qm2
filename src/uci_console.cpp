@@ -192,7 +192,7 @@ namespace uci {
                     move.set(&brd, token.c_str());
                     brd.forward(&move);
                     rep_table::store(brd.stack->fifty_count, brd.stack->hash_code);
-                    if (brd.current_ply > MAX_PLY - 2) {
+                    if (brd.ply > MAX_PLY - 2) {
                         brd.init(brd.to_string().c_str()); //preventing overflow
                     }
                 }

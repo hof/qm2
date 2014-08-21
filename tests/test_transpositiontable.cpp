@@ -85,9 +85,9 @@ void test_tt() {
 
     search_t * sd = new search_t("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     move_t * tmove = move::first(sd, 0);
-    trans_table::store(sd->brd.stack->hash_code, sd->brd.root_ply, sd->brd.current_ply, 123, -12345, tmove->to_int(), 3);
+    trans_table::store(sd->brd.stack->hash_code, sd->brd.root_ply, sd->brd.ply, 123, -12345, tmove->to_int(), 3);
 
-    result = trans_table::retrieve(sd->brd.stack->hash_code, sd->brd.current_ply, 123, score, move, flag);
+    result = trans_table::retrieve(sd->brd.stack->hash_code, sd->brd.ply, 123, score, move, flag);
 
 
     if (result == false

@@ -34,9 +34,10 @@ namespace {
 
     enum search_constants_t {
         FUTILITY_MARGIN = 50,
-        QS_DELTA = 200,
+        QS_DELTA = 100,
         NODES_BETWEEN_POLLS = 5000
     };
+    
 };
 
 /**
@@ -79,7 +80,7 @@ void search_t::init(const char * fen, game_t * g) {
     game->init_tm(brd.stack->wtm);
     memset(history, 0, sizeof (history));
     init_pst();
-    ponder_move.set(0);
+    ponder_move.clear();
     nodes = 0;
     pruned_nodes = 0;
     stop_all = false;
@@ -88,7 +89,7 @@ void search_t::init(const char * fen, game_t * g) {
     sel_depth = 0;
     root_stack = stack = &_stack[0];
     stack->eval_result = score::INVALID;
-    stack->best_move.set(0);
+    stack->best_move.clear();
     result_score = 0;
 }
 
@@ -140,8 +141,7 @@ void search_t::iterative_deepening() {
     int depth;
     for (depth = 1; depth <= game->max_depth; depth++) {
         int score = aspiration(depth, last_score);
-        poll();
-        if (stop_all) {
+        if (abort(true)) {
             break;
         }
         is_easy &= stack->best_move.equals(&easy_move) && score + 50 < last_score;
@@ -165,7 +165,7 @@ void search_t::iterative_deepening() {
         last_score = score;
         root.sort_moves(&stack->best_move);
     }
-    uci::send_pv(result_score, depth, sel_depth,
+    uci::send_pv(result_score, MIN(depth, game->max_depth), sel_depth,
             nodes + pruned_nodes, game->tm.elapsed(), pv_to_string().c_str(), score::EXACT);
     assert(stack->pv_count > 0);
     if (stack->pv_count > 1) {
@@ -196,11 +196,18 @@ int search_t::aspiration(int depth, int last_score) {
 /**
  * Poll to test is the search should be aborted
  */
-void search_t::poll() {
+bool search_t::abort(bool force_poll = false) {
+    bool result = false;
+    if (game->max_nodes > 0 && nodes >= game->max_nodes) {
+        result = true;
+    } else if (stop_all || engine::is_stopped()) {
+        result = true;
+    } else if (force_poll || --next_poll <= 0) {
+        result = game->tm.time_is_up() && (!game->ponder || !engine::is_ponder());
+    }
     next_poll = NODES_BETWEEN_POLLS;
-    stop_all = (game->tm.time_is_up() && (!game->ponder || !engine::is_ponder()))
-            || engine::is_stopped()
-            || (game->max_nodes > 0 && nodes > game->max_nodes);
+    stop_all = result;
+    return result;
 }
 
 /**
@@ -209,12 +216,12 @@ void search_t::poll() {
 void search_t::forward() {
 
     skip_null = true;
-    stack->current_move.set(0);
+    stack->current_move.clear();
     stack++;
     stack->in_check = false;
     stack->eval_result = score::INVALID;
     brd.forward();
-    assert(stack == &_stack[brd.current_ply]);
+    assert(stack == &_stack[brd.ply]);
 }
 
 /**
@@ -225,7 +232,7 @@ void search_t::backward() {
     stack--;
     brd.backward();
     skip_null = false;
-    assert(stack == &_stack[brd.current_ply]);
+    assert(stack == &_stack[brd.ply]);
 }
 
 /**
@@ -240,7 +247,7 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->in_check = gives_check;
     stack->eval_result = score::INVALID;
     brd.forward(move);
-    assert(stack == &_stack[brd.current_ply]);
+    assert(stack == &_stack[brd.ply]);
 }
 
 /**
@@ -251,7 +258,7 @@ void search_t::backward(move_t * move) {
 
     stack--;
     brd.backward(move);
-    assert(stack == &_stack[brd.current_ply]);
+    assert(stack == &_stack[brd.ply]);
 }
 
 /**
@@ -289,7 +296,6 @@ void search_t::update_history(move_t * move, int depth) {
     if (ABS(history[pc][tsq]) > HISTORY_MAX) {
         for (int pc = WPAWN; pc <= BKING; pc++) {
             for (int sq = a1; sq <= h8; sq++) {
-
                 history[pc][sq] >>= 1;
             }
         }
@@ -302,6 +308,7 @@ void search_t::update_history(move_t * move, int depth) {
  */
 int search_t::init_root_moves() {
     root.move_count = 0;
+    root.moves[0].move.clear();
     root.fifty_count = brd.stack->fifty_count;
     rep_table::store(brd.stack->fifty_count, brd.stack->hash_code);
     int tt_move, tt_flags, tt_score;
@@ -318,6 +325,7 @@ int search_t::init_root_moves() {
     root.in_check = brd.in_check();
     stack->hash_code = brd.stack->hash_code;
     stack->eval_result = evaluate(this);
+    stack->best_move.set(&root.moves[0].move);
     return root.move_count;
 }
 
@@ -376,7 +384,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     assert(root.move_count > 0);
     int new_depth = depth - 1;
     int best = -score::INF;
-    
+
     /*
     std::cout << "\npvs root (alpha, beta, depth) = (" << alpha << "," << beta << ", " << depth << ") " << std::endl;
     for (int i = 0; i < root.move_count; i++) {
@@ -387,7 +395,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     }
     std::cout << std::endl;
     */
-    
+
     /*
      * Moves loop
      */
@@ -443,15 +451,32 @@ int search_t::extend_move(move_t * move, int gives_check) {
         if (move->capture) {
             return 1;
         }
-        if (move->piece == WPAWN || move->piece == BPAWN) {
-            return 1;
-        }
-        if (brd.see(move) >= 0) {
+        if (brd.min_gain(move) >= 0 || brd.see(move) >= 0) {
             return 1;
         }
         return 0;
     }
     return 0;
+}
+
+bool search_t::is_draw() {
+    if (brd.stack->fifty_count == 0 && brd.is_draw()) { //draw by no mating material
+        return true;
+    } else if (brd.stack->fifty_count > 3) {
+        if (brd.stack->fifty_count >= (100 + stack->in_check)) {
+            return true; //50 reversible moves
+        }
+        int stop_ply = brd.ply - brd.stack->fifty_count;
+        for (int ply = brd.ply - 4; ply >= stop_ply; ply -= 2) { //draw by repetition
+            if (ply >= 0 && get_stack(ply)->hash_code == brd.stack->hash_code) {
+                return true;
+            } else if (ply < 0 && rep_table::retrieve(root.fifty_count + ply) == brd.stack->hash_code) {
+                return true;
+            }
+        }
+    }
+    assert(brd.stack->fifty_count > 0 || brd.is_draw() == false);
+    return false;
 }
 
 /**
@@ -469,16 +494,16 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * 1. If no more depth remaining, return quiescence value
      */
     if (depth < 1) {
-        sel_depth = MAX(sel_depth, brd.current_ply);
+        sel_depth = MAX(sel_depth, brd.ply);
         return qsearch(alpha, beta, depth);
     }
 
     //time check
     nodes++;
-    if (next_poll <= 0) {
-        poll();
+    if (abort()) {
+        return alpha;
     }
-    if (stop_all || brd.current_ply >= (MAX_PLY - 1)) {
+    if (brd.ply >= (MAX_PLY - 1)) {
         return alpha;
     }
     assert(depth >= ONE_PLY && depth < 256);
@@ -488,53 +513,38 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * if we already know we will win/loose by mate in n, 
      * it is not needed to search deeper than n
      */
-    if ((score::MATE - brd.current_ply) < beta) {
-        beta = score::MATE - brd.current_ply;
-        if (alpha >= (score::MATE - brd.current_ply)) {
-            return score::MATE - brd.current_ply;
+    if ((score::MATE - brd.ply) < beta) {
+        beta = score::MATE - brd.ply;
+        if (alpha >= (score::MATE - brd.ply)) {
+            return score::MATE - brd.ply;
         }
     }
-    if ((-score::MATE + brd.current_ply) > alpha) {
-        alpha = -score::MATE + brd.current_ply;
-        if (beta <= (-score::MATE + brd.current_ply)) {
-            return -score::MATE + brd.current_ply;
+    if ((-score::MATE + brd.ply) > alpha) {
+        alpha = -score::MATE + brd.ply;
+        if (beta <= (-score::MATE + brd.ply)) {
+            return -score::MATE + brd.ply;
         }
     }
 
     /*
      * 3. Return obvious draws 
      */
-    if (brd.is_draw()) { //draw by no mating material
+    if (is_draw()) {
         return draw_score();
-    }
-    if (brd.stack->fifty_count > 3) {
-        if (brd.stack->fifty_count >= (100 + stack->in_check)) {
-            return draw_score(); //draw by 50 reversible moves
-        }
-        int stopPly = brd.current_ply - brd.stack->fifty_count;
-        for (int ply = brd.current_ply - 4; ply >= stopPly; ply -= 2) { //draw by repetition
-            if (ply >= 0 && get_stack(ply)->hash_code == brd.stack->hash_code) {
-                return draw_score();
-            } else if (ply < 0 && rep_table::retrieve(root.fifty_count + ply) == brd.stack->hash_code) {
-                return draw_score();
-            }
-        }
     }
 
     /*
      * 4. Transposition table lookup
      */
-    int tmove = 0;
-    int tflag = 0;
-    int tscore = 0;
-    if (trans_table::retrieve(brd.stack->hash_code, brd.current_ply, depth, tscore, tmove, tflag)) {
-        if ((tflag == score::LOWERBOUND && tscore >= beta)
-                || (tflag == score::UPPERBOUND && tscore <= alpha)
-                || tflag == score::EXACT) {
-            return tscore;
+    int tt_move = 0, tt_flag, tt_score;
+    if (trans_table::retrieve(brd.stack->hash_code, brd.ply, depth, tt_score, tt_move, tt_flag)) {
+        if ((tt_flag == score::LOWERBOUND && tt_score >= beta)
+                || (tt_flag == score::UPPERBOUND && tt_score <= alpha)
+                || tt_flag == score::EXACT) {
+            return tt_score;
         }
     }
-    stack->tt_move.set(tmove);
+    stack->tt_move.set(tt_move);
 
     /*
      * 5. Pruning: Fail-high and Nullmove
@@ -571,7 +581,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             if (null_score > score::DEEPEST_MATE) {
                 return beta; // not return unproven mate scores
             }
-            trans_table::store(brd.stack->hash_code, brd.root_ply, brd.current_ply, depth, null_score, 0, score::LOWERBOUND);
+            trans_table::store(brd.stack->hash_code, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
             return null_score;
         } else {
             mate_threat = null_score < -score::DEEPEST_MATE;
@@ -590,9 +600,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * IID 
      */
     bool pv = is_pv(alpha, beta);
-    if (pv && depth > 3 && tmove == 0) {
+    if (pv && depth > 3 && tt_move == 0) {
         skip_null = true;
-        stack->best_move.set(0);
+        stack->best_move.clear();
         int iid_depth = depth - 2 - depth / 4;
         iid_depth = MAX(1, iid_depth);
         /*int iid_score = */pvs(alpha, beta, iid_depth);
@@ -609,7 +619,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
     move_t * first_move = move::first(this, depth);
     if (!first_move) { //no legal move: it's checkmate or stalemate
-        return in_check ? -score::MATE + brd.current_ply : draw_score();
+        return in_check ? -score::MATE + brd.ply : draw_score();
     }
     int gives_check = brd.gives_check(first_move);
     int extend = extend_move(first_move, gives_check);
@@ -619,7 +629,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     backward(first_move);
     if (best > alpha) {
         if (best >= beta) {
-            trans_table::store(brd.stack->hash_code, brd.root_ply, brd.current_ply, depth, best, first_move->to_int(), score::LOWERBOUND);
+            trans_table::store(brd.stack->hash_code, brd.root_ply, brd.ply, depth, best, first_move->to_int(), score::LOWERBOUND);
             if (!first_move->capture && !first_move->promotion) {
                 if (best < score::DEEPEST_MATE) {
                     update_killers(first_move);
@@ -671,7 +681,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 pruned_nodes++;
                 continue;
             }
-            if (brd.see(move) < 0) {
+            if (brd.min_gain(move) < 0 && brd.see(move) < 0) {
                 pruned_nodes++;
                 continue;
             }
@@ -712,7 +722,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             stack->best_move.set(move);
             if (score >= beta) {
                 // Beta Cutoff, hash the results, update killers and history table
-                trans_table::store(brd.stack->hash_code, brd.root_ply, brd.current_ply, depth, score, move->to_int(), score::LOWERBOUND);
+                trans_table::store(brd.stack->hash_code, brd.root_ply, brd.ply, depth, score, move->to_int(), score::LOWERBOUND);
                 if (!move->capture && !move->promotion) {
                     if (best < score::DEEPEST_MATE) {
                         update_killers(move);
@@ -742,7 +752,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * 15. Store the result in the hash table and return
      */
     int flag = score::flags(best, alpha, beta);
-    trans_table::store(brd.stack->hash_code, brd.root_ply, brd.current_ply, depth, best, stack->best_move.to_int(), flag);
+    trans_table::store(brd.stack->hash_code, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
 
     return best;
 }
@@ -754,43 +764,31 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
     //time check
     nodes++;
-    if (--next_poll <= 0) {
-        poll();
-    }
-    if (stop_all || brd.current_ply >= (MAX_PLY - 1)) {
+    if (abort()) {
         return alpha;
     }
 
-    //return obvious draws
-    if (brd.stack->fifty_count > 3) { //draw by repetition or fifty quiet moves
-        if (brd.stack->fifty_count >= (100 + stack->in_check)) {
-            return draw_score();
-        }
-        int stopPly = brd.current_ply - brd.stack->fifty_count;
-        for (int ply = brd.current_ply - 4; ply >= stopPly; ply -= 2) {
-            if (ply >= 0 && get_stack(ply)->hash_code == brd.stack->hash_code) {
-                return draw_score();
-            } else if (ply < 0 && rep_table::retrieve(root.fifty_count + ply) == brd.stack->hash_code) {
-                return draw_score();
-            }
-        }
-    }
-    if (brd.is_draw()) { //draw by no mating material
-        return draw_score();
+    if (brd.ply >= (MAX_PLY - 1)) {
+        return alpha;
     }
 
     //mate distance pruning
-    if ((score::MATE - brd.current_ply) < beta) {
-        beta = score::MATE - brd.current_ply;
-        if (alpha >= (score::MATE - brd.current_ply)) {
-            return score::MATE - brd.current_ply;
+    if ((score::MATE - brd.ply) < beta) {
+        beta = score::MATE - brd.ply;
+        if (alpha >= (score::MATE - brd.ply)) {
+            return score::MATE - brd.ply;
         }
     }
-    if ((-score::MATE + brd.current_ply) > alpha) {
-        alpha = -score::MATE + brd.current_ply;
-        if (beta <= (-score::MATE + brd.current_ply)) {
-            return -score::MATE + brd.current_ply;
+    if ((-score::MATE + brd.ply) > alpha) {
+        alpha = -score::MATE + brd.ply;
+        if (beta <= (-score::MATE + brd.ply)) {
+            return -score::MATE + brd.ply;
         }
+    }
+    
+    //obvious draws
+    if (is_draw()) {
+        return draw_score();
     }
 
     int eval = evaluate(this); //always do an eval - it's incremental
@@ -802,7 +800,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
     move_t * move = move::first(this, depth);
     if (!move) { //return evaluation score if there are no quiescence moves
-        return stack->in_check ? -score::MATE + brd.current_ply : eval;
+        return stack->in_check ? -score::MATE + brd.ply : eval;
     }
     if (!stack->in_check) {
         alpha = MAX(eval, alpha);
@@ -812,7 +810,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     do { //loop through quiescence moves
         int gives_check = brd.gives_check(move);
         if (!stack->in_check && !move->capture && !move->promotion && !move->castle &&
-                (gives_check == 0 || (gives_check == 1 && brd.see(move) < 0))) {
+                (gives_check == 0 || (gives_check == 1 && brd.min_gain(move) < 0 && brd.see(move) < 0))) {
             pruned_nodes++;
             continue;
         }
@@ -861,14 +859,14 @@ void search_t::debug_print_search(int alpha, int beta) {
 
     board_t brd2;
     memcpy(&brd2, &brd, sizeof (board_t));
-    while (brd2.current_ply > 0) {
-        move_t * move = &get_stack(brd2.current_ply - 1)->current_move;
+    while (brd2.ply > 0) {
+        move_t * move = &get_stack(brd2.ply - 1)->current_move;
         move->piece ? brd2.backward(move) : brd2.backward();
     }
 
     std::cout << "ROOT FEN: " << brd2.to_string() << std::endl;
     std::cout << "Path ";
-    for (int i = 0; i < brd.current_ply; i++) {
+    for (int i = 0; i < brd.ply; i++) {
 
         std::cout << " " << get_stack(i)->current_move.to_string();
     }
@@ -889,7 +887,7 @@ void search_t::debug_print_search(int alpha, int beta) {
  * starts with a new stack. 
  */
 void search_t::reset_stack() {
-    brd.current_ply = 0;
+    brd.ply = 0;
     stack = root_stack;
     stack->eval_result = score::INVALID;
     brd._stack[0].copy(brd.stack);
