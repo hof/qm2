@@ -27,7 +27,7 @@
 #include "pst.h"
 #include "kpk_bb.h"
 
-#define TRACE_EVAL
+//#define TRACE_EVAL
 
 namespace {
 
@@ -1516,8 +1516,8 @@ score_t * eval_king_attack(search_t * sd, bool us) {
 
     U64 kaz = sd->stack->king_attack_zone[us];
 
-#ifdef PRINT_KING_SAFETY
-    printBB("\nKing Attack Zone", kaz);
+#ifdef TRACE_EVAL
+    bb_print("\nKing Attack Zone", kaz);
     std::cout << "Shelter: " << shelter_ix << " -> " << (int) KING_SHELTER[shelter_ix];
     std::cout << std::endl;
 #endif
@@ -1525,8 +1525,8 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     kaz &= ~(RANK[us][7] | RANK[us][8] | KING_MOVES[pos->get_sq(KING[!us])]);
     result->add(12 * popcnt0(kaz), 0);
 
-#ifdef PRINT_KING_SAFETY
-    printBB("\nKing Attack Zone (filtered)", kaz);
+#ifdef TRACE_EVAL 
+    bb_print("\nKing Attack Zone (filtered)", kaz);
     std::cout << "Zone: " << 12 * popcnt0(kaz);
     std::cout << "\nTotal: ";
     result->print();
@@ -1540,6 +1540,10 @@ score_t * eval_king_attack(search_t * sd, bool us) {
 
     if ((sd->stack->pawn_flags & PFLAG_CLOSED_CENTER) != 0) {
         result->half(); //reduce shelter score for closed positions
+    }
+    
+    if (max_1(pos->bb[KNIGHT[us]] | pos->bb[BISHOP[us]] | pos->bb[ROOK[us]])) {
+        result->half();
     }
 
     /*
@@ -1572,7 +1576,7 @@ score_t * eval_king_attack(search_t * sd, bool us) {
         return result;
     }
 
-#ifdef PRINT_KING_SAFETY
+#ifdef TRACE_EVAL
     std::cout << "Attacking Pieces: " << (attackers + 1) << std::endl;
     std::cout << "Attack Force: " << ka_units << std::endl;
     std::cout << "Controlled Squares: " << ka_squares << std::endl;
@@ -1582,26 +1586,26 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     int paix = 2 * ka_units + shelter_ix + ka_squares - 5;
     piece_attack_score = KING_ATTACK[range(0, 63, paix)];
 
-#ifdef PRINT_KING_SAFETY
+#ifdef TRACE_EVAL
     std::cout << "Total Piece Attack Index: " << paix << std::endl;
     std::cout << "Piece Attack Score: " << piece_attack_score << std::endl;
 #endif
 
     piece_attack_score = MUL256(piece_attack_score, KING_ATTACKERS_MUL[range(0, 7, attackers)]);
 
-#ifdef PRINT_KING_SAFETY
+#ifdef TRACE_EVAL
     std::cout << "Corrected Score (attackers): " << piece_attack_score << std::endl;
 #endif
 
     piece_attack_score = MUL256(piece_attack_score, KING_SHELTER_MUL[range(0, 7, shelter_ix)]);
 
-#ifdef PRINT_KING_SAFETY
+#ifdef TRACE_EVAL
     std::cout << "Corrected Score (shelter): " << piece_attack_score << std::endl;
 #endif
 
     result->add(piece_attack_score, 0);
 
-#ifdef PRINT_KING_SAFETY
+#ifdef TRACE_EVAL
     std::cout << "Total Piece Attack: " << piece_attack_score << std::endl;
     result->print();
     std::cout << std::endl;
