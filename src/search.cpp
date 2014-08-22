@@ -202,9 +202,9 @@ bool search_t::abort(bool force_poll = false) {
     } else if (stop_all || engine::is_stopped()) {
         result = true;
     } else if (force_poll || --next_poll <= 0) {
-        result = game->tm.time_is_up() && (!game->ponder || !engine::is_ponder());
+        next_poll = NODES_BETWEEN_POLLS;
+        result = !pondering() && game->tm.time_is_up();
     }
-    next_poll = NODES_BETWEEN_POLLS;
     stop_all = result;
     return result;
 }
@@ -263,8 +263,7 @@ void search_t::backward(move_t * move) {
  * @return bool true if pondering 
  */
 bool search_t::pondering() {
-
-    return game->ponder || engine::is_ponder();
+    return game->ponder && engine::is_ponder();
 }
 
 /**
