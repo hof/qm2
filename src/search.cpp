@@ -162,7 +162,6 @@ void search_t::iterative_deepening() {
             break;
         }
         last_score = score;
-        root.sort_moves(&stack->best_move);
     }
     uci::send_pv(result_score, MIN(depth, game->max_depth), sel_depth,
             nodes + pruned_nodes, game->tm.elapsed(), pv_to_string().c_str(), score::EXACT);
@@ -252,7 +251,6 @@ void search_t::forward(move_t * move, bool gives_check) {
  * @param move
  */
 void search_t::backward(move_t * move) {
-
     stack--;
     brd.backward(move);
     assert(stack == &_stack[brd.ply]);
@@ -273,7 +271,6 @@ bool search_t::pondering() {
 std::string search_t::pv_to_string() {
     std::string result = "";
     for (int i = 0; i < stack->pv_count; i++) {
-
         result += stack->pv_moves[i].to_string() + " ";
     }
     return result;
@@ -379,6 +376,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     assert(root.move_count > 0);
     int new_depth = depth - 1;
     int best = -score::INF;
+    root.sort_moves(&stack->best_move);
 
     /*
     std::cout << "\npvs root (alpha, beta, depth) = (" << alpha << "," << beta << ", " << depth << ") " << std::endl;
@@ -389,11 +387,12 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
                 << ";  \n";
     }
     std::cout << std::endl;
-     */
+    */
 
     /*
      * Moves loop
      */
+    
     for (int i = 0; i < root.move_count; i++) {
         root_move_t * rmove = &root.moves[i];
         int nodes_before = nodes;
@@ -627,24 +626,33 @@ int search_t::pvs(int alpha, int beta, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
-        bool is_dangerous = searched_moves == 0 || in_check
+        bool is_dangerous = in_check
                 || move->capture || move->promotion || move->castle
                 || stack->move_list.stage < QUIET_MOVES
                 || is_dangerous_check(move, gives_check)
                 || is_passed_pawn(move);
+        
+        //futile captures and promotions (delta pruning)
+        bool do_prune = searched_moves > 0 && (eval + delta < alpha || best >= alpha);
+        if (do_prune && depth <= 8 && (move->capture || move->promotion) && eval + delta + brd.max_gain(move) < alpha) {
+            pruned_nodes++;
+            continue;
+        }
 
-        bool do_prune = !is_dangerous && (eval < alpha || best >= alpha);
-
+        //futile quiet moves (futility pruning)
+        do_prune &= !is_dangerous;
         if (do_prune && depth <= 8 && eval + delta <= alpha) {
             pruned_nodes++;
             continue;
         }
 
-        if (!pv && do_prune && depth <= 15 && searched_moves > mc_max) {
+        //move count based / late move pruning
+        if (!pv && do_prune && depth <= 8 && searched_moves > mc_max) {
             pruned_nodes++;
             continue;
         }
 
+        //SEE pruning
         if (do_prune && depth <= 3 && brd.min_gain(move) < 0 && brd.see(move) < 0) {
             pruned_nodes++;
             continue;
