@@ -78,7 +78,7 @@ public:
     int fifty_count;
     int checker_sq;
     bool wtm; //white to move
-    U64 hash_code;
+    U64 tt_key;
     U64 material_hash;
     U64 pawn_hash;
     U64 checkers;

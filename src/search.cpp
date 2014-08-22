@@ -287,10 +287,9 @@ std::string search_t::pv_to_string() {
  */
 void search_t::update_history(move_t * move, int depth) {
     const int HISTORY_MAX = 5000;
-    int pc = move->piece;
-    int tsq = move->tsq;
-    history[pc][tsq] += depth * ABS(depth);
-    if (ABS(history[pc][tsq]) > HISTORY_MAX) {
+    int * record = &history[move->piece][move->tsq];
+    *record += depth * ABS(depth);
+    if (ABS(*record) > HISTORY_MAX) {
         for (int pc = WPAWN; pc <= BKING; pc++) {
             for (int sq = a1; sq <= h8; sq++) {
                 history[pc][sq] >>= 1;
@@ -307,9 +306,9 @@ int search_t::init_root_moves() {
     root.move_count = 0;
     root.moves[0].move.clear();
     root.fifty_count = brd.stack->fifty_count;
-    rep_table::store(brd.stack->fifty_count, brd.stack->hash_code);
+    rep_table::store(brd.stack->fifty_count, brd.stack->tt_key);
     int tt_move, tt_flags, tt_score;
-    trans_table::retrieve(brd.stack->hash_code, 0, 0, tt_score, tt_move, tt_flags);
+    trans_table::retrieve(brd.stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
     for (move_t * move = move::first(this, 1);
             move; move = move::next(this, 1)) {
         root_move_t * rmove = &root.moves[root.move_count++];
@@ -320,7 +319,7 @@ int search_t::init_root_moves() {
         }
     }
     root.in_check = brd.in_check();
-    stack->hash_code = brd.stack->hash_code;
+    stack->tt_key = brd.stack->tt_key;
     stack->eval_result = evaluate(this);
     stack->best_move.set(&root.moves[0].move);
     return root.move_count;
@@ -465,9 +464,9 @@ bool search_t::is_draw() {
         }
         int stop_ply = brd.ply - brd.stack->fifty_count;
         for (int ply = brd.ply - 4; ply >= stop_ply; ply -= 2) { //draw by repetition
-            if (ply >= 0 && get_stack(ply)->hash_code == brd.stack->hash_code) {
+            if (ply >= 0 && get_stack(ply)->tt_key == brd.stack->tt_key) {
                 return true;
-            } else if (ply < 0 && rep_table::retrieve(root.fifty_count + ply) == brd.stack->hash_code) {
+            } else if (ply < 0 && rep_table::retrieve(root.fifty_count + ply) == brd.stack->tt_key) {
                 return true;
             }
         }
@@ -538,8 +537,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Transposition table lookup
      */
 
+    stack->tt_key = brd.stack->tt_key; //keep the key on the stack for repetition table lookup
     int tt_move = 0, tt_flag, tt_score;
-    if (trans_table::retrieve(brd.stack->hash_code, brd.ply, depth, tt_score, tt_move, tt_flag)) {
+    if (trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag)) {
         if ((tt_flag == score::LOWERBOUND && tt_score >= beta)
                 || (tt_flag == score::UPPERBOUND && tt_score <= alpha)
                 || tt_flag == score::EXACT) {
@@ -566,7 +566,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     //null move pruning
-    stack->hash_code = brd.stack->hash_code;
     if (!skip_null
             && !in_check
             && depth > 1
@@ -582,7 +581,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
         backward();
         if (null_score >= beta) {
-            trans_table::store(brd.stack->hash_code, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
+            trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
             return null_score;
         } else if (null_score < -score::DEEPEST_MATE) {
             move_t * threat = &(stack + 1)->best_move;
@@ -591,8 +590,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
             }
         }
     }
-
-
 
     /*
      * IID 
@@ -610,126 +607,95 @@ int search_t::pvs(int alpha, int beta, int depth) {
     skip_null = false;
 
     /*
-     * 7. Principle variation search (PVS). 
-     * Generate the first move from pv, hash or internal iterative deepening,
-     * all handled by the movepicker instance. 
-     * If no move is returned, the position is either MATE or STALEMATE, 
-     * otherwise search the first move with full alpha beta window.
+     * Moves loop
      */
-    move_t * first_move = move::first(this, depth);
-    if (!first_move) { //no legal move: it's checkmate or stalemate
+
+    //if no first move, it's (stale) mate
+    move_t * move = move::first(this, depth);
+    if (!move) { //no legal move: it's checkmate or stalemate
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
-    int gives_check = brd.gives_check(first_move);
-    int extend = extend_move(first_move, gives_check);
-    stack->best_move.set(first_move);
-    forward(first_move, gives_check);
-    int best = -pvs(-beta, -alpha, depth - 1 + extend);
-    backward(first_move);
-    if (best > alpha) {
-        if (best >= beta) {
-            trans_table::store(brd.stack->hash_code, brd.root_ply, brd.ply, depth, best, first_move->to_int(), score::LOWERBOUND);
-            if (!first_move->capture && !first_move->promotion) {
-                if (best < score::DEEPEST_MATE) {
-                    update_killers(first_move);
-                } else {
-                    stack->killer[0].set(first_move);
-                }
-                update_history(first_move, depth);
-            }
-            return best;
-        }
-        update_pv(first_move);
-        alpha = best;
-    }
 
-    /*
-     * 10. Search remaining moves with a zero width window (beta == alpha+1), 
-     * in the following order:
-     * - Captures and queen promotions with a positive see value 
-     * - Killer moves
-     * - Castling
-     * - Non-captures with a positive static score
-     * - All remaining moves
-     */
-    int searched_moves = 1;
-    while (move_t * move = move::next(this, depth)) {
+    //prepare and do the loop
+    int best = -score::INF;
+    int searched_moves = 0;
+    int mc_max = 2 + ((depth * depth) / 4); 
+    do {
         assert(stack->best_move.equals(move) == false);
-        assert(first_move->equals(move) == false);
-        gives_check = brd.gives_check(move);
-
-        bool skip_prune = stack->move_list.stage < QUIET_MOVES
-                || in_check || gives_check > 0 || move->capture || move->promotion
-                || move->castle || is_passed_pawn(move) || beta < -score::DEEPEST_MATE;
 
         /*
-         * 11. forward futility pruning at low depths
-         * (moves without potential are skipped)
+         * Move pruning: skip all futile moves
          */
-        if (!skip_prune
-                && !pv
-                && (eval < alpha || best >= alpha)
-                && depth <= 4
-                ) {
-            int mc_max = 2 + ((depth * depth) / 4);
-            if (searched_moves > mc_max) {
-                pruned_nodes++;
-                continue;
-            }
-            if (eval + FUTILITY_MARGIN * depth <= alpha) {
-                pruned_nodes++;
-                continue;
-            }
-            if (brd.min_gain(move) < 0 && brd.see(move) < 0) {
-                pruned_nodes++;
-                continue;
-            }
+
+        int gives_check = brd.gives_check(move);
+        bool is_dangerous = searched_moves == 0 || in_check
+                || move->capture || move->promotion || move->castle
+                || stack->move_list.stage < QUIET_MOVES
+                || is_dangerous_check(move, gives_check)
+                || is_passed_pawn(move);
+
+        bool do_prune = !is_dangerous && (eval < alpha || best >= alpha);
+
+        if (do_prune && depth <= 8 && eval + delta <= alpha) {
+            pruned_nodes++;
+            continue;
+        }
+
+        if (!pv && do_prune && depth <= 15 && searched_moves > mc_max) {
+            pruned_nodes++;
+            continue;
+        }
+
+        if (do_prune && depth <= 3 && brd.min_gain(move) < 0 && brd.see(move) < 0) {
+            pruned_nodes++;
+            continue;
         }
 
         /*
-         * 12. Late move Reductions (LMR) 
+         * Late move Reductions (LMR) 
          */
-        extend = extend_move(move, gives_check);
-        int reduce = 0;
 
-        if (!skip_prune && depth >= 3 && searched_moves >= 3) {
-            reduce = searched_moves < 6 ? 1 : depth / 3;
+        int extend = extend_move(move, gives_check);
+        int reduce = 0;
+        if (depth >= 3 && searched_moves >= 3 && !is_dangerous) {
+            reduce = searched_moves < 6 ? 1 : 1 + depth / 4;
         }
         assert(reduce == 0 || extend == 0);
 
         /*
-         * 13. Go forward and search next node
+         * Go forward and search next node
          */
+
         forward(move, gives_check);
-        int score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
-        if (score > alpha && reduce > 0) {
-            //research without reductions
-            score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
-        }
-        if (pv && score > alpha) {
-            //full window research
+        int score;
+        if (pv && searched_moves == 0) {
             score = -pvs(-beta, -alpha, depth - 1 + extend);
+        } else {
+            score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
+            if (score > alpha && reduce > 0) {
+                //research without reductions
+                score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
+            }
+            if (pv && score > alpha) {
+                //full window research
+                score = -pvs(-beta, -alpha, depth - 1 + extend);
+            }
         }
         backward(move);
 
         /*
-         * 14. Update the best value for this node and return is the score is 
-         * above beta (beta cutoff)
+         * Handle results: update the best value / do a beta cutoff
          */
+
         if (score > best) {
             stack->best_move.set(move);
             if (score >= beta) {
-                // Beta Cutoff, hash the results, update killers and history table
-                trans_table::store(brd.stack->hash_code, brd.root_ply, brd.ply, depth, score, move->to_int(), score::LOWERBOUND);
+                trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_int(), score::LOWERBOUND);
                 if (!move->capture && !move->promotion) {
-                    if (best < score::DEEPEST_MATE) {
-                        update_killers(move);
-                    } else {
-                        stack->killer[0].set(move);
-                    }
+                    update_killers(move, score);
                     update_history(move, depth);
                     for (move_t * cur = stack->move_list.first;
-                            cur != stack->move_list.last; cur++) {
+                            searched_moves && cur != stack->move_list.last; cur++) {
                         if (cur->score == move::EXCLUDED && cur != move) {
                             update_history(cur, -depth);
                         }
@@ -744,14 +710,16 @@ int search_t::pvs(int alpha, int beta, int depth) {
             }
         }
         searched_moves++;
-    }
-
+    } while ((move = move::next(this, depth)));
+    
     /*
      * 15. Store the result in the hash table and return
      */
+    
+    assert(best > -SCORE::INF);
+    assert(stack->best_move.piece > 0);
     int flag = score::flags(best, alpha, beta);
-    trans_table::store(brd.stack->hash_code, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
-
+    trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
     return best;
 }
 
@@ -824,7 +792,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     if (eval > alpha && !in_check) {
         alpha = eval;
     }
-    stack->hash_code = brd.stack->hash_code;
+    stack->tt_key = brd.stack->tt_key;
     int delta = FUTILITY_MARGIN + (depth == 0) * FUTILITY_MARGIN;
 
     //do the loop 
@@ -939,7 +907,7 @@ void search_t::debug_print_search(int alpha, int beta) {
         std::cout << " " << get_stack(i)->current_move.to_string();
     }
     std::cout << "\nFEN: " << brd.to_string() << std::endl;
-    std::cout << "Hash: " << brd.stack->hash_code << std::endl;
+    std::cout << "Hash: " << brd.stack->tt_key << std::endl;
     std::cout << "nodes: " << nodes << std::endl;
     std::cout << "Skip nullmove: " << skip_null << std::endl;
 

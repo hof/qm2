@@ -81,7 +81,7 @@ struct search_stack_t {
     score_t queen_score[2];
     score_t king_score[2];
     score_t passer_score[2];
-    U64 hash_code;
+    U64 tt_key;
     U64 passers;
     U64 mob[2];
     U64 attack[2];
@@ -154,8 +154,10 @@ public:
         return &_stack[ply];
     }
 
-    void update_killers(move_t * move) {
-        if (!stack->killer[1].equals(move)) {
+    void update_killers(move_t * move, int score) {
+        if (score > score::DEEPEST_MATE) {
+            stack->killer[0].set(move);
+        } else if (!stack->killer[1].equals(move)) {
             stack->killer[2].set(&stack->killer[1]);
             stack->killer[1].set(move);
         }

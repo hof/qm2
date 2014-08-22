@@ -34,7 +34,7 @@ void board_stack_t::clear() {
     castling_flags = 0;
     fifty_count = 0;
     wtm = true;
-    hash_code = 0;
+    tt_key = 0;
     material_hash = 0;
     pawn_hash = 0;
     checkers = 0;
@@ -45,7 +45,7 @@ void board_stack_t::clear() {
  */
 void board_stack_t::flip() {
     wtm = !wtm;
-    HASH_STM(hash_code);
+    HASH_STM(tt_key);
     if (enpassant_sq) {
         enpassant_sq = FLIP_SQUARE(enpassant_sq);
     }
@@ -75,7 +75,7 @@ void board_stack_t::copy(board_stack_t * b_stack) {
     castling_flags = b_stack->castling_flags;
     fifty_count = b_stack->fifty_count;
     wtm = b_stack->wtm;
-    hash_code = b_stack->hash_code;
+    tt_key = b_stack->tt_key;
     material_hash = b_stack->material_hash;
     pawn_hash = b_stack->pawn_hash;
 }
@@ -101,7 +101,7 @@ void board_t::clear() {
 void board_t::add_piece(int piece, int sq, bool hash = false) {
     if (hash) {
         HASH_ADD_PIECE(stack->material_hash, piece, count(piece) + _bishop_ix(piece, sq));
-        HASH_ADD_PIECE(stack->hash_code, piece, sq);
+        HASH_ADD_PIECE(stack->tt_key, piece, sq);
         if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
             HASH_ADD_PIECE(stack->pawn_hash, piece, sq);
         }
@@ -127,7 +127,7 @@ void board_t::remove_piece(int piece, int sq, bool hash = false) {
     matrix[sq] = EMPTY;
     if (hash) {
         HASH_REMOVE_PIECE(stack->material_hash, piece, count(piece) + _bishop_ix(piece, sq));
-        HASH_REMOVE_PIECE(stack->hash_code, piece, sq);
+        HASH_REMOVE_PIECE(stack->tt_key, piece, sq);
         if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
             HASH_REMOVE_PIECE(stack->pawn_hash, piece, sq);
         }
@@ -149,7 +149,7 @@ void board_t::move_piece(int piece, int ssq, int tsq, bool hash = false) {
     matrix[ssq] = EMPTY;
     matrix[tsq] = piece;
     if (hash) {
-        HASH_MOVE_PIECE(stack->hash_code, piece, ssq, tsq);
+        HASH_MOVE_PIECE(stack->tt_key, piece, ssq, tsq);
         if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
             HASH_MOVE_PIECE(stack->pawn_hash, piece, ssq, tsq);
         }
@@ -178,7 +178,7 @@ void board_t::forward(move_t * move) {
     stack++;
     ply++;
 
-    HASH_EP(stack->hash_code, stack->enpassant_sq); //remove (a possible) ep square from hashcode
+    HASH_EP(stack->tt_key, stack->enpassant_sq); //remove (a possible) ep square from hashcode
 
     if (capture || promotion) {
         if (capture) {
@@ -210,13 +210,13 @@ void board_t::forward(move_t * move) {
         if (piece == WPAWN) {
             if (ssq <= h2 && tsq == ssq + 16) {
                 stack->enpassant_sq = tsq - 8;
-                HASH_EP(stack->hash_code, stack->enpassant_sq);
+                HASH_EP(stack->tt_key, stack->enpassant_sq);
             }
             stack->fifty_count = 0;
         } else if (piece == BPAWN) {
             if (ssq <= h7 && tsq == ssq - 16) {
                 stack->enpassant_sq = tsq + 8;
-                HASH_EP(stack->hash_code, stack->enpassant_sq);
+                HASH_EP(stack->tt_key, stack->enpassant_sq);
             }
             stack->fifty_count = 0;
         }
@@ -249,22 +249,22 @@ void board_t::forward(move_t * move) {
          */
         if (has_castle_right(CASTLE_K) && (ssq == h1 || ssq == e1 || tsq == h1)) {
             stack->castling_flags ^= CASTLE_K;
-            HASH_CASTLE_K(stack->hash_code);
+            HASH_CASTLE_K(stack->tt_key);
             HASH_CASTLE_K(stack->pawn_hash);
         }
         if (has_castle_right(CASTLE_Q) && (ssq == a1 || ssq == e1 || tsq == a1)) {
             stack->castling_flags ^= CASTLE_Q;
-            HASH_CASTLE_Q(stack->hash_code);
+            HASH_CASTLE_Q(stack->tt_key);
             HASH_CASTLE_Q(stack->pawn_hash);
         }
         if (has_castle_right(CASTLE_k) && (ssq == h8 || ssq == e8 || tsq == h8)) {
             stack->castling_flags ^= CASTLE_k;
-            HASH_CASTLE_k(stack->hash_code);
+            HASH_CASTLE_k(stack->tt_key);
             HASH_CASTLE_k(stack->pawn_hash);
         }
         if (has_castle_right(CASTLE_q) && (ssq == a8 || ssq == e8 || tsq == a8)) {
             stack->castling_flags ^= CASTLE_q;
-            HASH_CASTLE_q(stack->hash_code);
+            HASH_CASTLE_q(stack->tt_key);
             HASH_CASTLE_q(stack->pawn_hash);
         }
 
@@ -272,7 +272,7 @@ void board_t::forward(move_t * move) {
 
     // update flags and hashcode for the side to move
     stack->wtm = !stack->wtm;
-    HASH_STM(stack->hash_code);
+    HASH_STM(stack->tt_key);
 
     assert(matrix[get_sq(WKING)] == WKING && matrix[get_sq(BKING)] == BKING);
     assert(piece == matrix[tsq] || (promotion && promotion == matrix[tsq]));
@@ -337,10 +337,10 @@ void board_t::forward() {
     (stack + 1)->copy(stack);
     stack++;
     ply++;
-    HASH_EP(stack->hash_code, stack->enpassant_sq); //remove enpassant_square if it is set
+    HASH_EP(stack->tt_key, stack->enpassant_sq); //remove enpassant_square if it is set
     stack->enpassant_sq = EMPTY;
     stack->wtm = !stack->wtm;
-    HASH_STM(stack->hash_code);
+    HASH_STM(stack->tt_key);
 }
 
 /**
@@ -1026,7 +1026,7 @@ void board_t::init(const char* fen) {
                 i++;
                 if (fen[i] >= '1' && fen[i] <= '8') {
                     stack->enpassant_sq = (char((fen[i] - '1')*8 + (fen[i - 1] - 'a')));
-                    HASH_EP(stack->hash_code, stack->enpassant_sq);
+                    HASH_EP(stack->tt_key, stack->enpassant_sq);
                 }
                 i += 2;
                 goto half_move;
@@ -1034,25 +1034,25 @@ void board_t::init(const char* fen) {
             case 'k':
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_k;
-                HASH_CASTLE_k(stack->hash_code);
+                HASH_CASTLE_k(stack->tt_key);
                 HASH_CASTLE_k(stack->pawn_hash);
                 break;
             case 'q':
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_q;
-                HASH_CASTLE_q(stack->hash_code);
+                HASH_CASTLE_q(stack->tt_key);
                 HASH_CASTLE_q(stack->pawn_hash);
                 break;
             case 'K':
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_K;
-                HASH_CASTLE_K(stack->hash_code);
+                HASH_CASTLE_K(stack->tt_key);
                 HASH_CASTLE_K(stack->pawn_hash);
                 break;
             case 'Q':
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_Q;
-                HASH_CASTLE_Q(stack->hash_code);
+                HASH_CASTLE_Q(stack->tt_key);
                 HASH_CASTLE_Q(stack->pawn_hash);
                 break;
             case ' ':
@@ -1102,7 +1102,7 @@ half_move:
         stack->wtm = true;
     } else {
         stack->wtm = false;
-        HASH_STM(stack->hash_code);
+        HASH_STM(stack->tt_key);
         root_ply++;
     }
 }

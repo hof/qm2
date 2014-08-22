@@ -186,12 +186,12 @@ namespace uci {
             board_t brd;
             brd.init(fen.c_str());
             if (token == "moves") {
-                rep_table::store(brd.stack->fifty_count, brd.stack->hash_code);
+                rep_table::store(brd.stack->fifty_count, brd.stack->tt_key);
                 while (parser >> token) {
                     move_t move;
                     move.set(&brd, token.c_str());
                     brd.forward(&move);
-                    rep_table::store(brd.stack->fifty_count, brd.stack->hash_code);
+                    rep_table::store(brd.stack->fifty_count, brd.stack->tt_key);
                     if (brd.ply > MAX_PLY - 2) {
                         brd.init(brd.to_string().c_str()); //preventing overflow
                     }
