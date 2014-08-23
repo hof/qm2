@@ -74,7 +74,7 @@ bool flipTest(int test_num, const char * fen) {
     
     if (score1 != score2) {
         std::cout << "\ntesting position " << test_num << ": " << brd.to_string() << std::endl;
-        std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=Search does not match" << std::endl;
+        std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=Search (score) does not match" << std::endl;
         std::cout << "original: " << fen1 << " score: " << score1 << " nodes: " << nodes1 << std::endl;
         std::cout << "flipped:  " << fen2 << " score: " << score2 << " nodes: " << nodes2 << std::endl;
         return false;

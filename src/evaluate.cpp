@@ -1543,7 +1543,7 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     }
     
     if (max_1(pos->bb[KNIGHT[us]] | pos->bb[BISHOP[us]] | pos->bb[ROOK[us]])) {
-        result->half();
+       result->half();
     }
 
     /*

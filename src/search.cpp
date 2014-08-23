@@ -70,7 +70,7 @@ int root_move_t::compare(root_move_t * m, move_t * best_move) {
 }
 
 /**
- * Initialize to start a new search
+ * Initializes the object, preparing to start a new search
  * @param fen string representing the board position
  */
 void search_t::init(const char * fen, game_t * g) {
@@ -93,7 +93,7 @@ void search_t::init(const char * fen, game_t * g) {
 }
 
 /**
- * Lookup current position in book
+ * Lookup current position in polyglot book database (file book.bin)
  */
 bool search_t::book_lookup() {
     bool result = false;
@@ -122,7 +122,7 @@ bool search_t::book_lookup() {
 void search_t::go() {
     assert(stack->best_move.piece == 0 && ponder_move.piece == 0);
     if (book_lookup()) { //book hit
-        uci::send_pv(result_score, 0, 0, 0, game->tm.elapsed(),
+        uci::send_pv(result_score, 1, 1, 1, game->tm.elapsed(),
                 stack->best_move.to_string().c_str(), score::EXACT);
     } else if (init_root_moves() > 0) { //do iid search
         iterative_deepening();
@@ -130,6 +130,10 @@ void search_t::go() {
     uci::send_bestmove(stack->best_move, ponder_move);
 }
 
+/**
+ * Iterative deepening - call aspiration search iterating the depth. For timed
+ * searches, the function decides if a new iteration should be started or not.
+ */
 void search_t::iterative_deepening() {
     bool is_easy = root.move_count <= 1 || (root.moves[0].see > 0 && root.moves[1].see <= 0);
     int last_score = -score::INF;
@@ -171,6 +175,13 @@ void search_t::iterative_deepening() {
     }
 }
 
+/**
+ * Aspiration window search: call search with a small alpha, beta window and 
+ * gradually increase the window in case of a fail high or fail low
+ * @param depth depth search depth
+ * @param last_score score of last iteration
+ * @return search result score
+ */
 int search_t::aspiration(int depth, int last_score) {
     if (depth >= 6 && !score::is_mate(last_score)) {
         for (int window = 40; window < 900; window *= 2) {
@@ -282,7 +293,7 @@ std::string search_t::pv_to_string() {
  * @param depth current search depth
  */
 void search_t::update_history(move_t * move, int depth) {
-    const int HISTORY_MAX = 5000;
+    const int HISTORY_MAX = 10000;
     int * record = &history[move->piece][move->tsq];
     *record += depth * ABS(depth);
     if (ABS(*record) > HISTORY_MAX) {
@@ -321,7 +332,7 @@ int search_t::init_root_moves() {
     return root.move_count;
 }
 
-/*
+/**
  * Sort algorithm for root moves (simple insertion sort)
  */
 void root_t::sort_moves(move_t * best_move) {
@@ -336,34 +347,6 @@ void root_t::sort_moves(move_t * best_move) {
     }
 }
 
-/* 
- * Copy root moves from another list
- */
-void root_t::match_moves(move::list_t * list) {
-    if (list->first == list->last) {
-        return;
-    }
-    for (int j = 0; j < move_count;) {
-        bool match = false;
-        root_move_t rmove = moves[j];
-        std::cout << rmove.move.to_string() << " ";
-        ;
-        for (move_t * m = list->first; m != list->last; m++) {
-            if (rmove.move.equals(m)) {
-                match = true;
-                break;
-            }
-        }
-        if (match == false) {
-            moves[j] = moves[move_count - 1];
-            move_count--;
-
-            continue;
-        }
-        j++;
-    }
-}
-
 /**
  * Principle Variation Search (root node)
  * Difference with normal (non-root) search:
@@ -374,7 +357,6 @@ void root_t::match_moves(move::list_t * list) {
 int search_t::pvs_root(int alpha, int beta, int depth) {
 
     assert(root.move_count > 0);
-    int new_depth = depth - 1;
     int best = -score::INF;
     root.sort_moves(&stack->best_move);
 
@@ -387,12 +369,12 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
                 << ";  \n";
     }
     std::cout << std::endl;
-    */
+     */
 
     /*
      * Moves loop
      */
-    
+
     for (int i = 0; i < root.move_count; i++) {
         root_move_t * rmove = &root.moves[i];
         int nodes_before = nodes;
@@ -403,10 +385,10 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         }
         int score;
         if (i > 0) {
-            score = -pvs(-alpha - 1, -alpha, new_depth);
+            score = -pvs(-alpha - 1, -alpha, depth - 1);
         }
         if (i == 0 || score > alpha) {
-            score = -pvs(-beta, -alpha, new_depth);
+            score = -pvs(-beta, -alpha, depth - 1);
         }
         backward(&rmove->move);
         rmove->nodes += nodes - nodes_before;
@@ -453,6 +435,13 @@ int search_t::extend_move(move_t * move, int gives_check) {
     return 0;
 }
 
+/**
+ * Verifies is a position is drawn by 
+ * a) lack of material
+ * b) fifty quiet moves
+ * c) repetiton
+ * @return true if it's an official draw
+ */
 bool search_t::is_draw() {
     if (brd.stack->fifty_count == 0 && brd.is_draw()) { //draw by no mating material
         return true;
@@ -512,7 +501,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     assert(depth >= 1 && depth <= MAX_PLY);
 
-    //mate distance pruning (if mate(d) in n: don't search deeper)
+    //mate distance pruning: if mate(d) in n don't search deeper
     if ((score::MATE - brd.ply) < beta) {
         beta = score::MATE - brd.ply;
         if (alpha >= beta) {
@@ -590,8 +579,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     /*
-     * IID 
+     * Internal iterative deepening (IID)
      */
+
     stack->best_move.clear();
     bool pv = alpha + 1 < beta;
     if (pv && depth > 3 && tt_move == 0) {
@@ -617,7 +607,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     //prepare and do the loop
     int best = -score::INF;
     int searched_moves = 0;
-    int mc_max = 2 + ((depth * depth) / 4); 
+    int mc_max = 2 + ((depth * depth) / 4);
     do {
         assert(stack->best_move.equals(move) == false);
 
@@ -625,21 +615,21 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Move pruning: skip all futile moves
          */
 
-        int gives_check = brd.gives_check(move);
-        bool is_dangerous = in_check
-                || move->capture || move->promotion || move->castle
-                || stack->move_list.stage < QUIET_MOVES
-                || is_dangerous_check(move, gives_check)
-                || is_passed_pawn(move);
-        
         //futile captures and promotions (delta pruning)
-        bool do_prune = searched_moves > 0 && (eval + delta < alpha || best >= alpha);
-        if (do_prune && depth <= 8 && (move->capture || move->promotion) && eval + delta + brd.max_gain(move) < alpha) {
+        int gives_check = brd.gives_check(move);
+        bool do_prune = !in_check && searched_moves && (eval + delta < alpha || best >= alpha);
+        if (do_prune && depth <= 8 && !gives_check
+                && (move->capture || move->promotion)
+                && eval + delta + brd.max_gain(move) <= alpha) {
             pruned_nodes++;
             continue;
         }
 
         //futile quiet moves (futility pruning)
+        bool is_dangerous = move->capture || move->promotion || move->castle
+                || stack->move_list.stage < QUIET_MOVES
+                || is_dangerous_check(move, gives_check)
+                || is_passed_pawn(move);
         do_prune &= !is_dangerous;
         if (do_prune && depth <= 8 && eval + delta <= alpha) {
             pruned_nodes++;
@@ -647,7 +637,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
 
         //move count based / late move pruning
-        if (!pv && do_prune && depth <= 8 && searched_moves > mc_max) {
+        do_prune &= !pv;
+        if (do_prune && depth <= 8 && searched_moves > mc_max) {
             pruned_nodes++;
             continue;
         }
@@ -664,7 +655,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         int extend = extend_move(move, gives_check);
         int reduce = 0;
-        if (depth >= 3 && searched_moves >= 3 && !is_dangerous) {
+        if (depth >= 3 && searched_moves >= 3 && !is_dangerous && !in_check) {
             reduce = searched_moves < 6 ? 1 : 1 + depth / 4;
         }
         assert(reduce == 0 || extend == 0);
@@ -718,25 +709,33 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
         searched_moves++;
     } while ((move = move::next(this, depth)));
-    
+
     /*
-     * 15. Store the result in the hash table and return
+     * Store the result in the hash table and return
      */
-    
+
     assert(best > -SCORE::INF);
     assert(stack->best_move.piece > 0);
-    int flag = score::flags(best, alpha, beta);
+    int flag = score::flags(best, alpha, beta); //obs: not using "old-alpha" to keep long pv
     trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
     return best;
 }
 
-/*
- * Quiescence search
+/**
+ * Quiescence search - only consider tactical moves:
+ * At depth 0: captures, promotions and quiet checks
+ * At depth < 0: only captures and promotions
+ * @param alpha lowerbound value
+ * @param beta upperbound value
+ * @param depth depth (0 or lower)
+ * @return score
  */
 int search_t::qsearch(int alpha, int beta, int depth) {
 
+    assert(depth <= 0);
+
     /*
-     * 1. Stop conditions
+     * Stop conditions
      */
 
     //time 
@@ -749,8 +748,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     if (brd.ply >= (MAX_PLY - 1)) {
         return evaluate(this);
     }
-
-    assert(depth <= 0);
 
     //mate distance pruning (if mate(d) in n: don't search deeper)
     if ((score::MATE - brd.ply) < beta) {
@@ -774,7 +771,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     const int eval = evaluate(this);
     const bool in_check = stack->in_check;
 
-    //stand-pat: return if eval is "good enough"
+    //stand-pat: return if eval is already good enough
     if (eval >= beta && !in_check) {
         return eval;
     }
@@ -792,10 +789,10 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     }
 
     /*
-     * 2. Moves loop
+     * Moves loop
      */
 
-    //prepare moves loop
+    //prepare
     if (eval > alpha && !in_check) {
         alpha = eval;
     }
@@ -806,28 +803,42 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     do {
 
         /*
-         * 3. Move pruning
+         * Move pruning
          */
 
         int gives_check = brd.gives_check(move);
-        bool dangerous = in_check || move->capture || move->promotion || move->castle
+        bool dangerous = move->capture || move->promotion || move->castle
                 || is_dangerous_check(move, gives_check);
-
+        
         //prune all quiet moves
-        if (!dangerous) {
+        if (!dangerous && !in_check) {
             pruned_nodes++;
             continue;
         }
 
         //delta pruning
-        bool skip_prune = in_check || gives_check;
-        if (!skip_prune && eval + delta + brd.max_gain(move) <= alpha) {
-            pruned_nodes++;
-            continue;
+        bool do_prune = !in_check && !gives_check;
+        if (do_prune && eval + delta <= alpha) {
+            
+            //first test with maximum possible gain (easy and fast))
+            if (eval + delta + brd.max_gain(move) <= alpha) {
+                pruned_nodes++; 
+                continue;
+            }
+            
+            //more refined and expensive test with SEE
+            int see = brd.see(move);
+            if (see < 0 || eval + delta + see <= alpha) {
+                pruned_nodes++;
+                continue;
+            }
+            
+            //skip the next pruning rule
+            do_prune = false; 
         }
-
-        //SEE pruning
-        if (!skip_prune && brd.min_gain(move) < 0 && brd.see(move) < 0) {
+        
+        //SEE pruning - bad captures
+        if (do_prune && brd.min_gain(move) < 0 && brd.see(move) < 0) {
             pruned_nodes++;
             continue;
         }
@@ -854,6 +865,13 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     return alpha;
 }
 
+/**
+ * Static (non-recursive) quiescence search - only considering the most 
+ * dangerous capture/promotion to get the best "threat" for the null move search
+ * @param beta upperbound value
+ * @param gain delta value added to the raw capture/promotion value
+ * @return score of the best capture/promotion
+ */
 int search_t::qsearch_static(int beta, int gain) {
     int best = evaluate(this);
     if (best >= beta) { // stand pat
@@ -886,6 +904,12 @@ int search_t::qsearch_static(int beta, int gain) {
     return best;
 }
 
+/**
+ * Verifies if a check is dangerous: double/exposed checks or SEE >= 0
+ * @param move move to test
+ * @param gives_check check value: 0 -> no check, 1 -> simple check, 2 -> double/exposed check
+ * @return true if the check is considered dangerous
+ */
 bool search_t::is_dangerous_check(move_t * const move, const int gives_check) {
     if (gives_check == 0) {
         return false;
@@ -897,6 +921,12 @@ bool search_t::is_dangerous_check(move_t * const move, const int gives_check) {
     }
 }
 
+/**
+ * Prints the positon debug info and search path upto the point in the tree where 
+ * the function was called and exits the program
+ * @param alpha lowerbound value 
+ * @param beta upperbound value
+ */
 void search_t::debug_print_search(int alpha, int beta) {
     std::cout << "print search (" << alpha << ", " << beta << "): " << std::endl;
 
