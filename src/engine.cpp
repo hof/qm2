@@ -197,7 +197,6 @@ void print_row(std::string cap, score_t & w, score_t & b, int phase) {
 void engine_t::analyse() {
 
     search_t * s = new search_t(_root_fen.c_str());
-    s->stack->eval_result = evaluate(s);
     int phase = s->stack->phase;
     bool wtm = s->brd.stack->wtm;
     score_t tempo_score;
@@ -205,7 +204,6 @@ void engine_t::analyse() {
     score_t w, b;
     w.clear();
     b.clear();
-
     std::cout << s->brd.to_string().c_str() << std::endl;
     std::cout << "Game Phase: " << phase << std::endl;
     std::cout << "Eval Component | White MG   EG | Black MG   EG |  Total MG   EG   Tot  \n";

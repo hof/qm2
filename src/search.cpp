@@ -87,6 +87,7 @@ void search_t::init(const char * fen, game_t * g) {
     stack->best_move.clear();
     result_score = 0;
     init_pst();
+    stack->eval_result = score::INVALID; //required
     stack->eval_result = evaluate(this);
     init_history();
 }
@@ -143,8 +144,9 @@ void search_t::go() {
 }
 
 /**
- * Iterative deepening - call aspiration search iterating the depth. For timed
- * searches, the function decides if a new iteration should be started or not.
+ * Iterative deepening - call aspiration search iterating over the depth. 
+ * For timed searched, the function decides if a new iteration should be started 
+ * or not.
  */
 void search_t::iterative_deepening() {
     bool is_easy = root.move_count <= 1 || (root.moves[0].see > 0 && root.moves[1].see <= 0);
