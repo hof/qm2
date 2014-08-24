@@ -33,8 +33,7 @@
 namespace {
 
     enum search_constants_t {
-        FUTILITY_MARGIN = 50,
-        NODES_BETWEEN_POLLS = 5000
+        FUTILITY_MARGIN = 50
     };
 
 };
@@ -47,10 +46,10 @@ namespace {
  * @param see_value static exchange value
  */
 void root_move_t::init(move_t * m, bool checks, int see_value) {
-    nodes = 0;
     move.set(m);
     gives_check = checks;
     see = see_value;
+    nodes = see / 100;
 }
 
 /**
@@ -77,19 +76,32 @@ void search_t::init(const char * fen, game_t * g) {
     brd.init(fen);
     game = g ? g : game::instance();
     game->init_tm(brd.stack->wtm);
-    memset(history, 0, sizeof (history));
-    init_pst();
     ponder_move.clear();
     nodes = 0;
     pruned_nodes = 0;
     stop_all = false;
     skip_null = false;
-    next_poll = NODES_BETWEEN_POLLS;
+    next_poll = 0;
     sel_depth = 0;
     root_stack = stack = &_stack[0];
-    stack->eval_result = score::INVALID;
     stack->best_move.clear();
     result_score = 0;
+    init_pst();
+    stack->eval_result = evaluate(this);
+    init_history();
+}
+
+/**
+ * Initialize history sort order with piece-square table values
+ */
+void search_t::init_history() {
+    for (int sq = a1; sq <= h8; sq++) {
+        history[0][sq] = 0;
+        for (int pc = WPAWN; pc <= WKING; pc++) {
+            history[pc][sq] = PST[pc][ISQ(sq, true)].get(stack->phase);
+            history[pc + WKING][sq] = PST[pc][sq].get(stack->phase);
+        }
+    }
 }
 
 /**
@@ -122,7 +134,7 @@ bool search_t::book_lookup() {
 void search_t::go() {
     assert(stack->best_move.piece == 0 && ponder_move.piece == 0);
     if (book_lookup()) { //book hit
-        uci::send_pv(result_score, 1, 1, 1, game->tm.elapsed(),
+        uci::send_pv(1, 1, 1, 1, game->tm.elapsed(),
                 stack->best_move.to_string().c_str(), score::EXACT);
     } else if (init_root_moves() > 0) { //do iid search
         iterative_deepening();
@@ -138,6 +150,8 @@ void search_t::iterative_deepening() {
     bool is_easy = root.move_count <= 1 || (root.moves[0].see > 0 && root.moves[1].see <= 0);
     int last_score = -score::INF;
     move_t easy_move;
+    root.sort_moves(&stack->best_move);
+    stack->best_move.set(&root.moves[0].move);
     easy_move.set(&root.moves[0].move);
     int max_time = game->tm.reserved();
     bool timed_search = game->white_time || game->black_time;
@@ -206,6 +220,7 @@ int search_t::aspiration(int depth, int last_score) {
  * Poll to test is the search should be aborted
  */
 bool search_t::abort(bool force_poll = false) {
+    static const int NODES_BETWEEN_POLLS = 5000;
     bool result = false;
     if (game->max_nodes > 0 && nodes >= game->max_nodes) {
         result = true;
@@ -327,8 +342,7 @@ int search_t::init_root_moves() {
     }
     root.in_check = brd.in_check();
     stack->tt_key = brd.stack->tt_key;
-    stack->eval_result = evaluate(this);
-    stack->best_move.set(&root.moves[0].move);
+    stack->best_move.set(0);
     return root.move_count;
 }
 
@@ -359,17 +373,8 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     assert(root.move_count > 0);
     int best = -score::INF;
     root.sort_moves(&stack->best_move);
-
-    /*
-    std::cout << "\npvs root (alpha, beta, depth) = (" << alpha << "," << beta << ", " << depth << ") " << std::endl;
-    for (int i = 0; i < root.move_count; i++) {
-        root_move_t * rmove = &root.moves[i];
-        std::cout << rmove->move.to_string()
-                << " n: " << rmove->nodes
-                << ";  \n";
-    }
-    std::cout << std::endl;
-     */
+    
+    //trace_root(alpha, beta, depth);
 
     /*
      * Moves loop
@@ -495,7 +500,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     if (brd.ply > sel_depth) {
         sel_depth = brd.ply;
         if (brd.ply >= (MAX_PLY - 1)) {
-            return evaluate(this);
+            return alpha;
         }
     }
 
@@ -745,8 +750,11 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     }
 
     //ceiling
-    if (brd.ply >= (MAX_PLY - 1)) {
-        return evaluate(this);
+    if (brd.ply > sel_depth) {
+        sel_depth = brd.ply;
+        if (brd.ply >= (MAX_PLY - 1)) {
+            return alpha;
+        }
     }
 
     //mate distance pruning (if mate(d) in n: don't search deeper)
@@ -807,36 +815,23 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
+        
         bool dangerous = move->capture || move->promotion || move->castle
                 || is_dangerous_check(move, gives_check);
-        
+
         //prune all quiet moves
         if (!dangerous && !in_check) {
             pruned_nodes++;
             continue;
         }
-
+        
         //delta pruning
         bool do_prune = !in_check && !gives_check;
-        if (do_prune && eval + delta <= alpha) {
-            
-            //first test with maximum possible gain (easy and fast))
-            if (eval + delta + brd.max_gain(move) <= alpha) {
-                pruned_nodes++; 
-                continue;
-            }
-            
-            //more refined and expensive test with SEE
-            int see = brd.see(move);
-            if (see < 0 || eval + delta + see <= alpha) {
+        if (do_prune && eval + delta + brd.max_gain(move) <= alpha) {
                 pruned_nodes++;
                 continue;
-            }
-            
-            //skip the next pruning rule
-            do_prune = false; 
         }
-        
+
         //SEE pruning - bad captures
         if (do_prune && brd.min_gain(move) < 0 && brd.see(move) < 0) {
             pruned_nodes++;
@@ -921,37 +916,6 @@ bool search_t::is_dangerous_check(move_t * const move, const int gives_check) {
     }
 }
 
-/**
- * Prints the positon debug info and search path upto the point in the tree where 
- * the function was called and exits the program
- * @param alpha lowerbound value 
- * @param beta upperbound value
- */
-void search_t::debug_print_search(int alpha, int beta) {
-    std::cout << "print search (" << alpha << ", " << beta << "): " << std::endl;
-
-    board_t brd2;
-    memcpy(&brd2, &brd, sizeof (board_t));
-    while (brd2.ply > 0) {
-        move_t * move = &get_stack(brd2.ply - 1)->current_move;
-        move->piece ? brd2.backward(move) : brd2.backward();
-    }
-
-    std::cout << "ROOT FEN: " << brd2.to_string() << std::endl;
-    std::cout << "Path ";
-    for (int i = 0; i < brd.ply; i++) {
-
-        std::cout << " " << get_stack(i)->current_move.to_string();
-    }
-    std::cout << "\nFEN: " << brd.to_string() << std::endl;
-    std::cout << "Hash: " << brd.stack->tt_key << std::endl;
-    std::cout << "nodes: " << nodes << std::endl;
-    std::cout << "Skip nullmove: " << skip_null << std::endl;
-
-    std::cout << std::endl;
-    exit(0);
-}
-
 /*
  * Helper function to reset the search stack. 
  * This is used for self-playing games, where  
@@ -968,4 +932,48 @@ void search_t::reset_stack() {
     nodes = 0;
     pruned_nodes = 0;
     stack->pv_count = 0;
+}
+
+/**
+ * Prints the positon debug info and search path upto the point in the tree where 
+ * the function was called and exits the program
+ * @param alpha lowerbound value 
+ * @param beta upperbound value
+ */
+void search_t::debug_print_search(int alpha, int beta, int depth) {
+    std::cout << "print search (" << alpha << ", " << beta << ", "
+            << depth << "): " << std::endl;
+    board_t brd2;
+    memcpy(&brd2, &brd, sizeof (board_t));
+    while (brd2.ply > 0) {
+        move_t * move = &get_stack(brd2.ply - 1)->current_move;
+        move->piece ? brd2.backward(move) : brd2.backward();
+    }
+    std::cout << "ROOT FEN: " << brd2.to_string() << std::endl;
+    std::cout << "Path ";
+    for (int i = 0; i < brd.ply; i++) {
+
+        std::cout << " " << get_stack(i)->current_move.to_string();
+    }
+    std::cout << "\nFEN: " << brd.to_string() << std::endl;
+    std::cout << "Hash: " << brd.stack->tt_key << std::endl;
+    std::cout << "nodes: " << nodes << std::endl;
+    std::cout << "Skip nullmove: " << skip_null << std::endl;
+    std::cout << std::endl;
+    exit(0);
+}
+
+/**
+ * Print debug info on the root search
+ */
+void search_t::trace_root(int alpha, int beta, int depth) {
+    std::cout << "\npvs root (alpha, beta, depth) = (" << alpha << "," << beta << ", " << depth << ") " << std::endl;
+    for (int i = 0; i < root.move_count; i++) {
+        root_move_t * rmove = &root.moves[i];
+        std::cout << rmove->move.to_string()
+                << " n: " << rmove->nodes
+                << " h: " << history[rmove->move.piece][rmove->move.tsq]
+                << ";  \n";
+    }
+    std::cout << std::endl;
 }

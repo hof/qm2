@@ -128,7 +128,8 @@ public:
     bool abort(bool force_poll);
     bool pondering();
     int init_root_moves();
-    void debug_print_search(int alpha, int beta);
+    void debug_print_search(int alpha, int beta, int depth);
+    void trace_root(int alpha, int beta, int depth);
     void forward();
     void backward();
     void forward(move_t * move, bool givesCheck);
@@ -136,10 +137,7 @@ public:
     void update_history(move_t * move, int depth);
     void reset_stack();
     bool is_dangerous_check(move_t * const move, const int gives_check);
-
-    void clear_history() {
-        memset(history, 0, sizeof (history));
-    }
+    void init_history();
 
     int draw_score() {
         return 0;
