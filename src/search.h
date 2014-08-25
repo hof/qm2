@@ -122,7 +122,7 @@ public:
     int pvs(int alpha, int beta, int depth);
     int qsearch(int alpha, int beta, int depth);
     int qsearch_static(int beta, int gain);
-    int extend_move(move_t * move, int gives_check);
+    int extend_move(move_t * move, int gives_check, int depth, bool pv);
     std::string pv_to_string();
     bool is_draw();
     bool abort(bool force_poll);
@@ -137,12 +137,18 @@ public:
     void update_history(move_t * move, int depth);
     void reset_stack();
     bool is_dangerous_check(move_t * const move, const int gives_check);
+    bool is_killer(move_t * const move);
     void init_history();
 
     int draw_score() {
         return 0;
     }
 
+    bool is_recapture(move_t * move) {
+        move_t * prev_move = &(stack-1)->current_move;
+        return move->capture && prev_move->capture && move->tsq == prev_move->tsq;
+    }
+    
     bool is_passed_pawn(move_t * move) {
         return BIT(move->ssq) & stack->passers;
     }

@@ -1696,10 +1696,6 @@ int eval_endgame(search_t * s, short score) {
     int pawn_count[2] = {pos->count(BPAWN), pos->count(WPAWN)};
     bool has_pieces[2] = {pos->has_pieces(BLACK), pos->has_pieces(WHITE)};
 
-    /*
-     * 1. Cases where opponent has no pawns
-     */
-
     //endgame with only pawns (KK, KPK, KPPK, KPKP, etc.)
     if (!has_pieces[us] && !has_pieces[them]) {
         assert(s->stack->phase == 16);
@@ -1790,9 +1786,9 @@ int eval_endgame(search_t * s, short score) {
         if (mating_power[us]) {
             if (has_imbalance(s->stack->material_flags, us)) {
                 if (has_major_imbalance(s->stack->material_flags)) {
-                    return score + eval_corner_king(s, them) / 4;
+                    return DRAW(score, 2) + eval_corner_king(s, them) / 4;
                 }
-                return DRAW(score, 2) + eval_corner_king(s, them) / 4;
+                return DRAW(score, 4) + eval_corner_king(s, them) / 4;
             }
             return DRAW(score, 8) + eval_corner_king(s, them) / 8;
         }

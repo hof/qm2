@@ -136,6 +136,8 @@ void testEvaluationSuite() {
     //Extra major piece, unclear
     testEval(2001, "K2k4/PR6/8/8/2q5/8/8/8 w - - 0 169", -400, -200);
     
+    testEval(2010, "7r/8/8/5k2/4p3/2KNR3/8/8 w - - 12 1", 0, 100);
+    
     //KPKP
     //testEval(14, "7K/8/k1P5/7p/8/8/8/8 w - - 0 1", SCORE_DRAW_MIN, SCORE_DRAW_MAX); //famous study by Réti
     

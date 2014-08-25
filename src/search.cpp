@@ -375,7 +375,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     assert(root.move_count > 0);
     int best = -score::INF;
     root.sort_moves(&stack->best_move);
-    
+
     //trace_root(alpha, beta, depth);
 
     /*
@@ -426,17 +426,16 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
 /**
  * Move extensions
  */
-int search_t::extend_move(move_t * move, int gives_check) {
-    if (gives_check > 0) {
-        if (gives_check > 1) { //double check or exposed check
+int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
+
+    //checks
+    if (gives_check) {
+        assert(gives_check == 1 || gives_check == 2);
+        if (gives_check > 1 || pv) {
             return 1;
-        }
-        if (move->capture) {
+        } else if (brd.min_gain(move) >= 0 || brd.see(move) >= 0) {
             return 1;
-        }
-        if (brd.min_gain(move) >= 0 || brd.see(move) >= 0) {
-            return 1;
-        }
+        } 
         return 0;
     }
     return 0;
@@ -537,6 +536,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         if ((tt_flag == score::LOWERBOUND && tt_score >= beta)
                 || (tt_flag == score::UPPERBOUND && tt_score <= alpha)
                 || tt_flag == score::EXACT) {
+            stack->best_move.set(tt_move);
             return tt_score;
         }
     }
@@ -605,9 +605,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Moves loop
      */
 
-    //if no first move, it's (stale) mate
+    //if no first move, it's checkmate or stalemate
     move_t * move = move::first(this, depth);
-    if (!move) { //no legal move: it's checkmate or stalemate
+    if (!move) { 
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
 
@@ -634,7 +634,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         //futile quiet moves (futility pruning)
         bool is_dangerous = move->capture || move->promotion || move->castle
-                || stack->move_list.stage < QUIET_MOVES
                 || is_dangerous_check(move, gives_check)
                 || is_passed_pawn(move);
         do_prune &= !is_dangerous;
@@ -644,7 +643,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
 
         //move count based / late move pruning
-        do_prune &= !pv;
+        do_prune &= !pv && !is_killer(move);
         if (do_prune && depth <= 8 && searched_moves > mc_max) {
             pruned_nodes++;
             continue;
@@ -660,12 +659,13 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Late move Reductions (LMR) 
          */
 
-        int extend = extend_move(move, gives_check);
+        int extend = extend_move(move, gives_check, depth, pv);
         int reduce = 0;
-        if (depth >= 3 && searched_moves >= 3 && !is_dangerous && !in_check) {
+        if (depth >= 3 && searched_moves >= 3 && !is_dangerous && !in_check && !is_killer(move)) {
             reduce = searched_moves < 6 ? 1 : 1 + depth / 4;
         }
         assert(reduce == 0 || extend == 0);
+        assert(reduce == 0 || !stack->tt_move.equals(move));
 
         /*
          * Go forward and search next node
@@ -817,7 +817,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
-        
+
         bool dangerous = move->capture || move->promotion || move->castle
                 || is_dangerous_check(move, gives_check);
 
@@ -826,12 +826,12 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             pruned_nodes++;
             continue;
         }
-        
+
         //delta pruning
         bool do_prune = !in_check && !gives_check;
         if (do_prune && eval + delta + brd.max_gain(move) <= alpha) {
-                pruned_nodes++;
-                continue;
+            pruned_nodes++;
+            continue;
         }
 
         //SEE pruning - bad captures
@@ -902,6 +902,18 @@ int search_t::qsearch_static(int beta, int gain) {
 }
 
 /**
+ * Tests if a move equals one of the killer moves
+ */
+bool search_t::is_killer(move_t * const move) {
+    for (int i = 0; i < 3; i++) {
+        if (stack->killer[i].equals(move)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Verifies if a check is dangerous: double/exposed checks or SEE >= 0
  * @param move move to test
  * @param gives_check check value: 0 -> no check, 1 -> simple check, 2 -> double/exposed check
@@ -969,7 +981,8 @@ void search_t::debug_print_search(int alpha, int beta, int depth) {
  * Print debug info on the root search
  */
 void search_t::trace_root(int alpha, int beta, int depth) {
-    std::cout << "\npvs root (alpha, beta, depth) = (" << alpha << "," << beta << ", " << depth << ") " << std::endl;
+    std::cout << "\npvs root (alpha, beta, depth) = (" << alpha << "," 
+            << beta << ", " << depth << ") " << std::endl;
     for (int i = 0; i < root.move_count; i++) {
         root_move_t * rmove = &root.moves[i];
         std::cout << rmove->move.to_string()
