@@ -37,7 +37,7 @@ public:
     uint8_t promotion;
     uint8_t castle;
     bool en_passant;
-    uint8_t special;
+    bool exclude;
     int score;
 
     void set(move_t * move);

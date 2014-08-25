@@ -69,7 +69,7 @@ move_t * move_picker_t::pop(board_t * brd, move::list_t * list) {
 move_t * move_picker_t::first(search_t * s, int depth) {
     move::list_t * list = &s->stack->move_list;
     list->clear();
-    list->stage = depth > 0? HASH : CAPTURES;
+    list->stage = depth > 0 ? HASH : CAPTURES;
     return next(s, depth);
 }
 
@@ -120,8 +120,10 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 for (move_t * move = list->current; move != list->last; move++) {
                     if (list->is_excluded(move)) {
                         move->score = move::EXCLUDED;
+                    } else if (depth > 0) {
+                        move->score = brd->see(move);
                     } else {
-                        move->score = depth > 3 ? brd->see(move) : brd->mvvlva(move);
+                        move->score = brd->mvvlva(move);
                     }
                 }
                 result = pop(brd, list);
@@ -136,11 +138,10 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 for (move_t * move = list->current; move != list->last; move++) {
                     if (list->is_excluded(move)) {
                         move->score = move::EXCLUDED;
-                    } else if ((move->promotion == WQUEEN || move->promotion == BQUEEN)
-                            && brd->see(move) >= 0) {
-                        move->score = 800;
+                    } else if (depth <= 0 || brd->see(move) >= 0) {
+                        move->score = move->promotion;
                     } else {
-                        move->score = -move->piece;
+                        move->score = -100 + move->promotion;
                     }
                 }
                 result = pop(brd, list);
@@ -150,7 +151,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 }
             }
         case KILLER1:
-            if (depth >= 1) {
+            if (depth > 0) {
                 result = &s->stack->killer[1];
                 if (result->piece
                         && brd->valid(result)
@@ -163,7 +164,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 }
             }
         case KILLER2:
-            if (depth >= 1) {
+            if (depth > 0) {
                 result = &s->stack->killer[2];
                 if (result->piece
                         && brd->valid(result)
@@ -176,13 +177,11 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 }
             }
         case MINORPROMOTIONS: //and captures with see < 0
-            if (depth <= 3) {
-                list->minimum_score = -move::INF;
-                result = pop(brd, list);
-                if (result) {
-                    list->stage = CASTLING;
-                    return result;
-                }
+            list->minimum_score = -move::INF;
+            result = pop(brd, list);
+            if (result) {
+                list->stage = CASTLING;
+                return result;
             }
         case CASTLING:
             if (s->stack->in_check == false) {
@@ -248,15 +247,15 @@ int move_picker_t::count_evasions(search_t * s, move_t * first_move) {
 
 namespace move {
     move_picker_t _picker;
-    
+
     move_picker_t * picker() {
         return &_picker;
     }
-    
+
     move_t * first(search_t * s, int depth) {
         return _picker.first(s, depth);
     }
-    
+
     move_t * next(search_t * s, int depth) {
         return _picker.next(s, depth);
     }

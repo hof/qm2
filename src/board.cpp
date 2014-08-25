@@ -481,7 +481,7 @@ bool board_t::legal(move_t * move) {
                 }
             }
         }
-        move->special = 0;
+        
 
         //2. update the occupied bitboard and check for sliding attacks on the king
         //   which can happen when we move a piece which was pinned, or move the king
@@ -527,7 +527,6 @@ bool board_t::legal(move_t * move) {
                 }
             }
         }
-        move->special = 0;
 
         //2. update the occupied bitboard and check for sliding attacks on the king
         //   which can happen when we move a piece which was pinned, or move the king

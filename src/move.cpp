@@ -33,8 +33,8 @@ void move_t::set(move_t * move) {
     capture = move->capture;
     promotion = move->promotion;
     en_passant = move->en_passant;
+    exclude = move->exclude;
     castle = move->castle;
-    special = move->special;
     score = 0;
 }
 
@@ -50,8 +50,8 @@ void move_t::set(int move) {
     capture = move >> 16 & 0x0F;
     promotion = move >> 20 & 0x0F;
     en_passant = (move & (0x01 << 28)) == (0x01 << 28);
+    exclude = false;
     castle = move >> 24 & 0x0F;
-    special = move >> 29 & 0x07;
     score = 0;
 }
 
@@ -69,6 +69,7 @@ void move_t::set(int pc, int from, int to, int captured_piece, int promotion_pie
     tsq = to;
     promotion = promotion_piece;
     capture = captured_piece;
+    exclude = false;
 }
 
 /**
@@ -88,6 +89,7 @@ void move_t::set(board_t * board, const char * move_str) {
     capture = board->matrix[tsq];
     castle = 0;
     en_passant = false;
+    exclude = false;
     if (tsq == board->stack->enpassant_sq
             && (piece == WPAWN || piece == BPAWN)
             && board->stack->enpassant_sq) {
@@ -153,8 +155,8 @@ std::string move_t::to_string() {
 
 /**
  * Encodes and returns a move to a 32 bit integer
- * 0..3  | 4..9 | 10..5 | 16..19         | 20..23            | 24..27   | 28 | 29..31
- * piece | from | to    | captured piece | promoted to piece | castling | ep | reserved
+ * 0..3  | 4..9 | 10..5 | 16..19         | 20..23            | 24..27   | 28 | 
+ * piece | from | to    | captured piece | promoted to piece | castling | ep | 
  * 
  * @return integer representing move
  */
@@ -166,7 +168,6 @@ int move_t::to_int() {
     result |= promotion << 20;
     result |= castle << 24;
     result |= en_passant << 28;
-    result |= special << 29;
     assert(result >= 0);
     return result;
 }
