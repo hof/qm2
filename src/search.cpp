@@ -183,11 +183,12 @@ void search_t::iterative_deepening() {
         }
         last_score = score;
     }
-    uci::send_pv(result_score, MIN(depth, game->max_depth), sel_depth,
-            nodes + pruned_nodes, game->tm.elapsed(), pv_to_string().c_str(), score::EXACT);
-    assert(stack->pv_count > 0);
-    if (stack->pv_count > 1) {
-        ponder_move.set(&stack->pv_moves[1]);
+    if (stack->pv_count > 0) {
+        uci::send_pv(result_score, MIN(depth, game->max_depth), sel_depth,
+                nodes + pruned_nodes, game->tm.elapsed(), pv_to_string().c_str(), score::EXACT);
+        if (stack->pv_count > 1) {
+            ponder_move.set(&stack->pv_moves[1]);
+        }
     }
 }
 
@@ -479,7 +480,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     stack->pv_count = 0;
 
-
     /*
      * If no more depth remaining, return quiescence value
      */
@@ -505,8 +505,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             return alpha;
         }
     }
-
-    assert(depth >= 1 && depth <= MAX_PLY);
+    assert(depth > 0 && depth <= MAX_PLY);
 
     //mate distance pruning: if mate(d) in n don't search deeper
     if ((score::MATE - brd.ply) < beta) {
@@ -595,7 +594,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         int iid_score = pvs(alpha, beta, depth - 2 - depth / 4);
         if (score::is_mate(iid_score)) {
             return iid_score;
-        } 
+        }
         stack->tt_move.set(&stack->best_move);
     }
 
@@ -907,9 +906,11 @@ int search_t::qsearch_static(int beta, int gain) {
  * Tests if a move equals one of the killer moves
  */
 bool search_t::is_killer(move_t * const move) {
-    for (int i = 0; i < 3; i++) {
-        if (stack->killer[i].equals(move)) {
-            return true;
+    if (move->capture == EMPTY && move->promotion == EMPTY) {
+        for (int i = 0; i < 3; i++) {
+            if (stack->killer[i].equals(move)) {
+                return true;
+            }
         }
     }
     return false;

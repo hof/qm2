@@ -38,22 +38,15 @@ namespace move {
     class list_t {
     public:
         move_t _list[MAX_MOVES + 1];
-        move_t _exclude[MAX_EXCLUDES + 1];
         int stage;
         int minimum_score;
         move_t * current;
         move_t * first;
         move_t * last;
-        move_t * current_excluded;
-        move_t * last_excluded;
-        move_t * first_excluded;
-        move_t * pop;
+        move_t * best;
 
         list_t();
         void clear();
-        bool is_excluded(move_t * move);
-        void copy(list_t * list);
-        
     };
 
     void gen_quiet_moves(board_t * board, list_t * list);

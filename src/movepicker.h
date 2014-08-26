@@ -47,13 +47,11 @@ enum move_stage_t {
 
 class move_picker_t {
 private:
-    move_t * pop(board_t * brd, move::list_t * list);
-    void push(move::list_t * list, move_t * move, int score);
+    move_t * pop(search_t * s, move::list_t * list);
 
 public:
     move_t * first(search_t * s, int depth);
-    move_t * next(search_t * s, int depth);
-    int count_evasions(search_t * s, move_t * first_move);   
+    move_t * next(search_t * s, int depth); 
 };
 
 namespace move {

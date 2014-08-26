@@ -33,9 +33,8 @@ void move_t::set(move_t * move) {
     capture = move->capture;
     promotion = move->promotion;
     en_passant = move->en_passant;
-    exclude = move->exclude;
     castle = move->castle;
-    score = 0;
+    score = move->score;
 }
 
 /**
@@ -49,9 +48,8 @@ void move_t::set(int move) {
     tsq = move >> 10 & 0x3F;
     capture = move >> 16 & 0x0F;
     promotion = move >> 20 & 0x0F;
-    en_passant = (move & (0x01 << 28)) == (0x01 << 28);
-    exclude = false;
     castle = move >> 24 & 0x0F;
+    en_passant = (move & (0x01 << 28)) == (0x01 << 28);
     score = 0;
 }
 
@@ -69,7 +67,6 @@ void move_t::set(int pc, int from, int to, int captured_piece, int promotion_pie
     tsq = to;
     promotion = promotion_piece;
     capture = captured_piece;
-    exclude = false;
 }
 
 /**
@@ -89,7 +86,6 @@ void move_t::set(board_t * board, const char * move_str) {
     capture = board->matrix[tsq];
     castle = 0;
     en_passant = false;
-    exclude = false;
     if (tsq == board->stack->enpassant_sq
             && (piece == WPAWN || piece == BPAWN)
             && board->stack->enpassant_sq) {

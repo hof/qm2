@@ -29,7 +29,6 @@ namespace move {
      */
     list_t::list_t() {
         clear();
-        pop = &_list[MAX_MOVES];
     }
 
     /**
@@ -39,21 +38,7 @@ namespace move {
         stage = 0;
         minimum_score = 0;
         current = first = last = &_list[0];
-        current_excluded = first_excluded = last_excluded = &_exclude[0];
-    }
-
-    /**
-     * Tests if a move is excluded (hash moves, iid move and killers)
-     * @param move move to test
-     * @return true if the move is excluded, false otherwise
-     */
-    bool list_t::is_excluded(move_t * move) {
-        for (move_t * cur = first_excluded; cur != last_excluded; cur++) {
-            if (move->equals(cur)) {
-                return true;
-            }
-        }
-        return false;
+        best = &_list[MAX_MOVES];
     }
 
     /**
@@ -288,40 +273,4 @@ namespace move {
         list->last = current;
     }
 
-    /**
-     * Copy a movelist object from another movelist object
-     * @param list the movelist object to copy
-     */
-    void move::list_t::copy(move::list_t * list) {
-        int i = 0;
-        first = &_list[0];
-        first_excluded = &_exclude[0];
-        move_t * m = list->first;
-        while (m != list->last) {
-            _list[i].set(m);
-            _list[i].score = m->score;
-            if (m == list->first) {
-                first = &_list[i];
-            } else if (m == list->pop) {
-                pop = &_list[i];
-            }
-            i++;
-            m++;
-        }
-        last = &_list[i];
-        move_t * xm = list->first_excluded;
-        i = 0;
-        while (xm != list->last_excluded) {
-            _exclude[i].set(xm);
-            _exclude[i].score = xm->score;
-            if (xm == list->first_excluded) {
-                first_excluded = &_exclude[i];
-            }
-            i++;
-            xm++;
-        }
-        last_excluded = &_exclude[i];
-        minimum_score = list->minimum_score;
-        stage = list->stage;
-    }
 }
