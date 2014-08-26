@@ -435,7 +435,7 @@ int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
             return 1;
         } else if (brd.min_gain(move) >= 0 || brd.see(move) >= 0) {
             return 1;
-        } 
+        }
         return 0;
     }
     return 0;
@@ -478,6 +478,7 @@ bool search_t::is_draw() {
 int search_t::pvs(int alpha, int beta, int depth) {
 
     stack->pv_count = 0;
+
 
     /*
      * If no more depth remaining, return quiescence value
@@ -536,12 +537,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
         if ((tt_flag == score::LOWERBOUND && tt_score >= beta)
                 || (tt_flag == score::UPPERBOUND && tt_score <= alpha)
                 || tt_flag == score::EXACT) {
-            stack->best_move.set(tt_move);
             return tt_score;
         }
     }
     stack->tt_move.set(tt_move);
-    assert(tt_move == 0 || brd.valid(&stack->tt_move));
 
     /*
      * Node pruning
@@ -551,7 +550,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int eval = evaluate(this);
     int delta = FUTILITY_MARGIN * depth;
     bool in_check = stack->in_check;
-    if (!in_check
+    if (!skip_null
+            && !in_check
             && (eval - delta) >= beta
             && depth <= 4
             && beta > -score::DEEPEST_MATE
@@ -589,17 +589,15 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Internal iterative deepening (IID)
      */
 
-    stack->best_move.clear();
     bool pv = alpha + 1 < beta;
     if (pv && depth > 3 && tt_move == 0) {
         skip_null = true;
         int iid_score = pvs(alpha, beta, depth - 2 - depth / 4);
         if (score::is_mate(iid_score)) {
             return iid_score;
-        }
+        } 
         stack->tt_move.set(&stack->best_move);
     }
-    skip_null = false;
 
     /*
      * Moves loop
@@ -607,15 +605,18 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     //if no first move, it's checkmate or stalemate
     move_t * move = move::first(this, depth);
-    if (!move) { 
+    if (!move) {
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
 
     //prepare and do the loop
+    skip_null = false;
     int best = -score::INF;
+    stack->best_move.clear();
     int searched_moves = 0;
     int mc_max = 2 + ((depth * depth) / 4);
     do {
+        assert(brd.valid(move) && brd.legal(move));
         assert(stack->best_move.equals(move) == false);
 
         /*
@@ -661,11 +662,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         int extend = extend_move(move, gives_check, depth, pv);
         int reduce = 0;
-        if (depth >= 3 && searched_moves >= 3 && !is_dangerous && !in_check && !is_killer(move)) {
+        if (depth >= 3 && searched_moves >= 3 && !is_dangerous && !in_check
+                && !is_killer(move) && !extend) {
             reduce = searched_moves < 6 ? 1 : 1 + depth / 4;
         }
         assert(reduce == 0 || extend == 0);
-        assert(reduce == 0 || !stack->tt_move.equals(move));
 
         /*
          * Go forward and search next node
@@ -721,8 +722,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Store the result in the hash table and return
      */
 
-    assert(best > -SCORE::INF);
+    assert(best > -score::INF);
     assert(stack->best_move.piece > 0);
+    assert(brd.valid(&stack->best_move) && brd.legal(&stack->best_move));
     int flag = score::flags(best, alpha, beta); //obs: not using "old-alpha" to keep long pv
     trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
     return best;
@@ -981,7 +983,7 @@ void search_t::debug_print_search(int alpha, int beta, int depth) {
  * Print debug info on the root search
  */
 void search_t::trace_root(int alpha, int beta, int depth) {
-    std::cout << "\npvs root (alpha, beta, depth) = (" << alpha << "," 
+    std::cout << "\npvs root (alpha, beta, depth) = (" << alpha << ","
             << beta << ", " << depth << ") " << std::endl;
     for (int i = 0; i < root.move_count; i++) {
         root_move_t * rmove = &root.moves[i];
