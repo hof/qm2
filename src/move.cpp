@@ -131,19 +131,17 @@ void move_t::set(board_t * board, const char * move_str) {
  * @return string move string
  */
 std::string move_t::to_string() {
+    const char PIECE_SYMBOL[13] = {'.', 'p', 'n', 'b', 'r', 'q', 'k', 'p', 'n', 'b', 'r', 'q', 'k'};
     std::string result = "";
-    int ssq = this->ssq;
-    int tsq = this->tsq;
-    if (ssq == tsq) {
+    if (piece == 0 || ssq == tsq) {
         result = "null";
     } else {
         result = FILE_SYMBOL(ssq);
         result += RANK_SYMBOL(ssq);
         result += FILE_SYMBOL(tsq);
         result += RANK_SYMBOL(tsq);
-        if (this->promotion) {
-            const char PIECE_SYMBOL[13] = {'.', 'p', 'n', 'b', 'r', 'q', 'k', 'p', 'n', 'b', 'r', 'q', 'k'};
-            result += PIECE_SYMBOL[this->promotion];
+        if (promotion) {
+            result += PIECE_SYMBOL[promotion];
         }
     }
     return result;

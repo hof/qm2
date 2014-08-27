@@ -137,7 +137,7 @@ void search_t::go() {
     if (book_lookup()) { //book hit
         uci::send_pv(1, 1, 1, 1, game->tm.elapsed(),
                 stack->best_move.to_string().c_str(), score::EXACT);
-    } else if (init_root_moves() > 0) { //do iid search
+    } else if (init_root_moves() > 0) { //do id search
         iterative_deepening();
     }
     uci::send_bestmove(stack->best_move, ponder_move);
@@ -432,12 +432,11 @@ int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
     //checks
     if (gives_check) {
         assert(gives_check == 1 || gives_check == 2);
-        if (gives_check > 1 || pv) {
+        if (gives_check > 1 || pv || brd.min_gain(move) >= 0 || brd.see(move) >= 0) {
             return 1;
-        } else if (brd.min_gain(move) >= 0 || brd.see(move) >= 0) {
-            return 1;
+        } else {
+            return 0;
         }
-        return 0;
     }
     return 0;
 }
@@ -588,14 +587,17 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Internal iterative deepening (IID)
      */
 
+    stack->best_move.clear();
     bool pv = alpha + 1 < beta;
     if (pv && depth > 3 && tt_move == 0) {
         skip_null = true;
-        int iid_score = pvs(alpha, beta, depth - 2 - depth / 4);
+        int iid_score = pvs(alpha, beta, depth - 2);
         if (score::is_mate(iid_score)) {
             return iid_score;
+        } else if (stack->best_move.piece) {
+            stack->tt_move.set(&stack->best_move);
+            stack->best_move.clear();
         }
-        stack->tt_move.set(&stack->best_move);
     }
 
     /*
