@@ -207,11 +207,9 @@ int search_t::aspiration(int depth, int last_score) {
             int score = pvs_root(alpha, beta, depth);
             if (stop_all) {
                 return score;
-            }
-            if (score > alpha && score < beta) {
+            } else if (score > alpha && score < beta) {
                 return score;
-            }
-            if (score::is_mate(score)) {
+            } else if (score::is_mate(score)) {
                 break;
             }
         }
@@ -402,8 +400,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         rmove->nodes += nodes - nodes_before;
         if (stop_all) {
             return alpha;
-        }
-        if (score > best) {
+        } else if (score > best) {
             best = score;
             result_score = score;
             rmove->nodes += i;
@@ -572,7 +569,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
             null_score = -pvs(-beta, -alpha, depth - 1 - 3 - depth / 4);
         }
         backward();
-        if (null_score >= beta) {
+        if (stop_all) {
+            return alpha;
+        } else if (null_score >= beta) {
             trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
             return null_score;
         } else if (null_score < -score::DEEPEST_MATE) {
@@ -694,7 +693,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Handle results: update the best value / do a beta cutoff
          */
 
-        if (score > best) {
+        if (stop_all) {
+            return alpha;
+        } else if (score > best) {
             stack->best_move.set(move);
             if (score >= beta) {
                 trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_int(), score::LOWERBOUND);
@@ -723,8 +724,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Store the result in the hash table and return
      */
 
-    assert(best > -score::INF);
-    assert(stack->best_move.piece > 0);
+    assert(best > -score::INF && best < beta);
+    assert(!stop_all);
     assert(brd.valid(&stack->best_move) && brd.legal(&stack->best_move));
     int flag = score::flags(best, alpha, beta); //obs: not using "old-alpha" to keep long pv
     trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);

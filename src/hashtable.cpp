@@ -206,8 +206,7 @@ void trans_table_t::set_size(int size_in_MB) {
 int trans_table_t::make_score(int score, int ply) {
     if (score > score::DEEPEST_MATE) {
         return score + ply;
-    }
-    if (score < -score::DEEPEST_MATE) {
+    } else if (score < -score::DEEPEST_MATE) {
         return score - ply;
     }
     return score;
@@ -273,15 +272,10 @@ bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & mov
                 int entry_depth = decode_depth(entry.value);
                 if (entry_depth >= depth) {
                     return true;
-                } else if (score::is_mate(score)) {
-                    if (score > 0) {
-                        flags &= ~score::UPPERBOUND;
-                    } else {
-                        flags &= ~score::LOWERBOUND;
-                    }
+                } else if (score::is_mate(score) && flags == score::EXACT) {
+                    flags = score > 0? score::LOWERBOUND : score::UPPERBOUND;
                     return true;
                 }
-                return false;
             }
         }
     }

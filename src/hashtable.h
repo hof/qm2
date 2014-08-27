@@ -154,7 +154,8 @@ private:
     U64 encode(int age, int depth, int score, int move, int flag) {
         assert(age >= 0 && age <= 63);
         assert(depth >= 0 && depth <= 255);
-        assert(score < score::INF && score > -score::INF);
+        assert(score < score::INF);
+        assert(score > -score::INF);
         assert(flag >= 0 && flag <= 3);
         U64 result = move | (U64(flag) << 32) | (U64((unsigned short) score) << 34) | (U64(depth) << 50) | (U64(age) << 58);
         return result;
