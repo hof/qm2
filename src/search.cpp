@@ -425,16 +425,26 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
  * Move extensions
  */
 int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
-
-    //checks
-    if (gives_check) {
-        assert(gives_check == 1 || gives_check == 2);
-        if (gives_check > 1 || pv || brd.min_gain(move) >= 0 || brd.see(move) >= 0) {
-            return 1;
-        } else {
-            return 0;
-        }
-    } 
+    if (depth <= 4 && gives_check) {
+        return 1;
+    }
+    if (gives_check > 1) {
+        return 1;
+    }
+    if (depth <= 4 && move->capture && is_recapture(move) 
+            && (brd.max_gain(move) >= 0 || brd.see(move) >= 0)) {
+        return 1;
+    }
+    if (pv && gives_check) {
+        return 1;
+    }
+    if (pv && (move->capture || move->promotion) && brd.see(move) > 0) {
+        return 1;
+    }
+    if (pv && is_passed_pawn(move) && !move->promotion 
+            && (move->tsq >= a7 || move->tsq <= h2)) {
+        return 1;
+    }
     return 0;
 }
 
@@ -542,9 +552,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
 
     //return if static evaluation score is already much better than beta
+    bool in_check = stack->in_check;
+    bool pv = alpha + 1 < beta;
     int eval = evaluate(this);
     int delta = FUTILITY_MARGIN * depth;
-    bool in_check = stack->in_check;
     if (!skip_null
             && !in_check
             && eval - delta >= beta
@@ -575,9 +586,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
         } else if (null_score >= beta) {
             trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
             return null_score;
-        } else if (null_score < -score::DEEPEST_MATE) {
+        } else {
             threat_move = &(stack + 1)->best_move;
-            if (!threat_move->capture && !threat_move->promotion) {
+            if (null_score < -score::DEEPEST_MATE 
+                    && !threat_move->capture && !threat_move->promotion) {
                 (stack + 1)->killer[0].set(threat_move);
             }
         }
@@ -588,7 +600,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
 
     stack->best_move.clear();
-    bool pv = alpha + 1 < beta;
     if (pv && depth > 3 && tt_move == 0) {
         skip_null = true;
         int iid_score = pvs(alpha, beta, depth - 2);
@@ -627,6 +638,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         //futile captures and promotions (delta pruning)
         int gives_check = brd.gives_check(move);
         bool do_prune = !in_check && searched_moves && (eval + delta < alpha || best >= alpha);
+        
         if (do_prune && depth <= 3 && !gives_check
                 && (move->capture || move->promotion)
                 && eval + VPAWN + delta + brd.max_gain(move) <= alpha) {
@@ -635,7 +647,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
 
         //futile quiet moves (futility pruning)
-        bool is_dangerous = move->capture || move->promotion || move->castle
+        bool is_dangerous = in_check || move->capture || move->promotion || move->castle
                 || is_dangerous_check(move, gives_check)
                 || is_passed_pawn(move);
         do_prune &= !is_dangerous;
@@ -646,7 +658,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         //move count based / late move pruning
         do_prune &= !pv && !is_killer(move);
-        if (do_prune && depth <= 8 && searched_moves > mc_max) {
+        if (do_prune && depth <= 8 && searched_moves > mc_max && !is_evasive(move, threat_move)) {
             pruned_nodes++;
             continue;
         }
@@ -663,7 +675,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         int extend = extend_move(move, gives_check, depth, pv);
         int reduce = 0;
-        if (depth >= 3 && searched_moves >= 3 && !is_dangerous && !in_check
+        if (depth >= 3 && searched_moves >= 3 && !is_dangerous
                 && !is_killer(move) && !extend) {
             reduce = searched_moves < 6 ? 1 : 1 + depth / 4;
         }
@@ -917,6 +929,31 @@ bool search_t::is_killer(move_t * const move) {
             }
         }
     }
+    return false;
+}
+
+bool search_t::is_evasive(move_t * move, move_t * threat = NULL) {
+    if (move == NULL || move->capture || move->promotion 
+            || move->piece == WKING || move->piece == BKING) {
+        return false;
+    }
+    
+    if (threat != NULL && threat->tsq == move->ssq) {
+        return true;
+    }
+    
+    if (threat != NULL && move->tsq == threat->ssq) {
+        return true;
+    }
+    
+    int tsq = move->tsq;
+    move->tsq = move->ssq;
+    int see = brd.see(move);
+    move->tsq = tsq;
+    if (see < 0 && brd.see(move) >= 0) {
+        return true;
+    }
+    
     return false;
 }
 

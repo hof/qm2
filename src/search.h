@@ -138,6 +138,7 @@ public:
     void reset_stack();
     bool is_dangerous_check(move_t * const move, const int gives_check);
     bool is_killer(move_t * const move);
+    bool is_evasive(move_t * move, move_t * threat);
     void init_history();
 
     int draw_score() {
