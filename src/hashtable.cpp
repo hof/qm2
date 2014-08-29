@@ -270,12 +270,7 @@ bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & mov
                 score = unmake_score(decode_score(entry.value), ply);
                 flags = decode_flag(entry.value);
                 int entry_depth = decode_depth(entry.value);
-                if (entry_depth >= depth) {
-                    return true;
-                } else if (score::is_mate(score) && flags == score::EXACT) {
-                    flags = score > 0? score::LOWERBOUND : score::UPPERBOUND;
-                    return true;
-                }
+                return entry_depth >= depth;
             }
         }
     }

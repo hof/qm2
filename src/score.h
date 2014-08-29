@@ -70,6 +70,15 @@ namespace score {
     inline bool is_mate(int score) {
         return score < -DEEPEST_MATE || score > DEEPEST_MATE;
     }
+    
+    /**
+     * Test if score reached winning level
+     * @param score score to test
+     * @return true if win level, false otherwise
+     */
+    inline bool is_win(int score) {
+        return score < - WIN || score > WIN;
+    }
 
     /**
      * Returns if a score is a lower bound, upper bound or exact

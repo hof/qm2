@@ -145,10 +145,10 @@ public:
     }
 
     bool is_recapture(move_t * move) {
-        move_t * prev_move = &(stack-1)->current_move;
+        move_t * prev_move = &(stack - 1)->current_move;
         return move->capture && prev_move->capture && move->tsq == prev_move->tsq;
     }
-    
+
     bool is_passed_pawn(move_t * move) {
         return BIT(move->ssq) & stack->passers;
     }

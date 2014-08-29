@@ -200,7 +200,7 @@ void search_t::iterative_deepening() {
  * @return search result score
  */
 int search_t::aspiration(int depth, int last_score) {
-    if (depth >= 6 && !score::is_mate(last_score)) {
+    if (depth >= 6 && !score::is_win(last_score)) {
         for (int window = 40; window < 900; window *= 2) {
             int alpha = last_score - window;
             int beta = last_score + window;
@@ -209,7 +209,7 @@ int search_t::aspiration(int depth, int last_score) {
                 return score;
             } else if (score > alpha && score < beta) {
                 return score;
-            } else if (score::is_mate(score)) {
+            } else if (score::is_win(score)) {
                 break;
             }
         }
@@ -434,7 +434,7 @@ int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
         } else {
             return 0;
         }
-    }
+    } 
     return 0;
 }
 
@@ -541,13 +541,13 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Node pruning
      */
 
-    //fail-high pruning (return if static evaluation score is already much better than beta)
+    //return if static evaluation score is already much better than beta
     int eval = evaluate(this);
     int delta = FUTILITY_MARGIN * depth;
     bool in_check = stack->in_check;
     if (!skip_null
             && !in_check
-            && (eval - delta) >= beta
+            && eval - delta >= beta
             && depth <= 4
             && beta > -score::DEEPEST_MATE
             && brd.has_pieces(brd.stack->wtm)) {
@@ -555,6 +555,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     //null move pruning
+    move_t * threat_move = NULL;
     if (!skip_null
             && !in_check
             && depth > 1
@@ -575,9 +576,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
             trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
             return null_score;
         } else if (null_score < -score::DEEPEST_MATE) {
-            move_t * threat = &(stack + 1)->best_move;
-            if (!threat->capture && !threat->promotion) {
-                (stack + 1)->killer[0].set(threat);
+            threat_move = &(stack + 1)->best_move;
+            if (!threat_move->capture && !threat_move->promotion) {
+                (stack + 1)->killer[0].set(threat_move);
             }
         }
     }
@@ -626,9 +627,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
         //futile captures and promotions (delta pruning)
         int gives_check = brd.gives_check(move);
         bool do_prune = !in_check && searched_moves && (eval + delta < alpha || best >= alpha);
-        if (do_prune && depth <= 8 && !gives_check
+        if (do_prune && depth <= 3 && !gives_check
                 && (move->capture || move->promotion)
-                && eval + delta + brd.max_gain(move) <= alpha) {
+                && eval + VPAWN + delta + brd.max_gain(move) <= alpha) {
             pruned_nodes++;
             continue;
         }
