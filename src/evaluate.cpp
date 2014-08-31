@@ -371,6 +371,12 @@ const score_t QUEEN_MOBILITY[29] = {
  *******************************************************************************/
 
 int evaluate(search_t * sd) {
+    
+    if (sd->stack->in_check) {
+        sd->stack->eval_result = score::INVALID;
+        return score::INVALID;
+    }
+    
     if (sd->stack->eval_result != score::INVALID) {
         return sd->stack->eval_result;
     }
