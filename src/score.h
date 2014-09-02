@@ -43,6 +43,15 @@ namespace score {
         UPPERBOUND = 2,
         EXACT = 3
     };
+    
+    /**
+     * Tests if a score is valid (and not INF, ILLEGAL, INVALID)
+     * @param score score to test
+     * @return true is the score is valid, false otherwise
+     */
+    inline bool is_valid(int score) {
+        return score >= -MATE && score < MATE;
+    }
 
     /**
      * Returns distance to mate
@@ -50,6 +59,7 @@ namespace score {
      * @return ply distance 
      */
     inline int mate_in_ply(int score) {
+        assert(score::is_valid(score));
         return score > DEEPEST_MATE ? MATE - score : 0;
     }
 
@@ -59,6 +69,7 @@ namespace score {
      * @return ply distance
      */
     inline int mated_in_ply(int score) {
+        assert(score::is_valid(score));
         return score < -DEEPEST_MATE ? MATE + score : 0;
     }
 
@@ -68,6 +79,7 @@ namespace score {
      * @return true if mate(d), false otherwise
      */
     inline bool is_mate(int score) {
+        assert(score::is_valid(score));
         return score < -DEEPEST_MATE || score > DEEPEST_MATE;
     }
     
@@ -77,6 +89,7 @@ namespace score {
      * @return true if win level, false otherwise
      */
     inline bool is_win(int score) {
+        assert(score::is_valid(score));
         return score < - WIN || score > WIN;
     }
 
@@ -86,6 +99,7 @@ namespace score {
      * @return bound flag
      */
     inline int flags(int score, int alpha, int beta) {
+        assert(score::is_valid(score));
         return score >= beta ? LOWERBOUND : (score <= alpha ? UPPERBOUND : EXACT);
     }
 }
@@ -223,10 +237,6 @@ struct score_t {
     void half() {
         mg = mg / 2;
         eg = eg / 2;
-    }
-
-    bool valid() {
-        return mg != score::INVALID && eg != score::INVALID;
     }
 
 };

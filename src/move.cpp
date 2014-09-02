@@ -21,6 +21,7 @@
 
 #include "move.h"
 #include "board.h"
+#include "score.h"
 
 /**
  * Copies / sets a move from move object
@@ -50,7 +51,7 @@ void move_t::set(int move) {
     promotion = move >> 20 & 0x0F;
     castle = move >> 24 & 0x0F;
     en_passant = (move & (0x01 << 28)) == (0x01 << 28);
-    score = 0;
+    score = score::INVALID;
 }
 
 /**

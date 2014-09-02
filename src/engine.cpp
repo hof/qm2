@@ -221,7 +221,7 @@ void engine_t::analyse() {
         std::cout << "---------------+---------------+---------------+---------------------\n";
         print_row("Black to move", s->stack->eg_score);
     }
-    if ((s->stack->material_flags & 1) != 0) {
+    if ((s->stack->material_flags & 128) != 0) {
         print_row("EG Adjustment", s->stack->eval_result - s->stack->eg_score);
     }
 

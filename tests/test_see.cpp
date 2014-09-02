@@ -94,14 +94,13 @@ int see(board_t * brd, move_t * move) {
 bool assert_see(board_t * brd, move_t * mv, int expected) {
     int val_1 = brd->see(mv);
     int val_2 = see(brd, mv);
-    std::cout << brd->to_string() << " " << mv->to_string();
-    if (val_1 == expected && val_1 == val_2) {
-        std::cout << " ok";
-    } else {
+    bool ok = val_1 == expected && val_1 == val_2;
+    if (!ok) {
+        std::cout << brd->to_string() << " " << mv->to_string();
         std::cout << " FAIL " << expected << " != " << val_1 << " != " << val_2;
+        std::cout << std::endl;
     }
-    std::cout << std::endl;
-    return val_1 == expected && val_1 == val_2;
+    return ok;
 }
 
 int main(int argc, char** argv) {
@@ -158,7 +157,6 @@ int main(int argc, char** argv) {
     
     time(&now);
     std::cout << "%TEST_FINISHED% time=0 testPolyglotKeys (test_polyglot)" << std::endl;
-
     std::cout << "%SUITE_FINISHED% time=" << difftime(now, begin) << std::endl;
 
     return (EXIT_SUCCESS);

@@ -420,14 +420,11 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
  * Move extensions
  */
 int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
-    if (gives_check && depth <= 8) {
-        if (gives_check > 1) {
-            return 1;
-        } else if (pv) {
-            return 1;
-        } else if (brd.min_gain(move) >= 0 || brd.see(move) > 0) {
-            return 1;
-        }
+    if (gives_check <= 0 || depth > 4) {
+        return 0;
+    }
+    if (pv || gives_check > 1 || brd.min_gain(move) >= 0 || brd.see(move) >= 0) {
+        return 1;
     }
     return 0;
 }
@@ -535,20 +532,22 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Node pruning
      */
 
-    //return if static evaluation score is already much better than beta
+    //prepare
     bool in_check = stack->in_check;
     bool pv = alpha + 1 < beta;
     int eval = evaluate(this);
     int delta = FUTILITY_MARGIN * depth;
-    bool do_prune_node = !in_check && eval >= beta && !skip_null && !pv
+    bool do_prune_node = !in_check && !skip_null && !pv
             && !score::is_mate(beta) && brd.has_pieces(brd.stack->wtm);
+
+    //return if static evaluation score is already much better than beta
     if (do_prune_node && eval - delta >= beta && depth <= 4) {
         return eval - delta;
     }
 
     //null move pruning
     move_t * threat_move = NULL;
-    if (do_prune_node && depth > 1) {
+    if (do_prune_node && depth > 1 && eval >= beta) {
         forward();
         int null_score;
         if (depth <= 3) {
@@ -570,7 +569,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             }
         }
     }
-
+    
     /*
      * Internal iterative deepening (IID)
      */
@@ -649,13 +648,13 @@ int search_t::pvs(int alpha, int beta, int depth) {
         /*
          * Move Extensions
          */
-        
+
         int extend = extend_move(move, gives_check, depth, pv);
-        
+
         /*
          * Late Move Reductions (LMR) 
          */
-        
+
         int reduce = 0;
         if (depth >= 3 && searched_moves >= 3 && !is_dangerous
                 && !is_killer(move) && !extend) {

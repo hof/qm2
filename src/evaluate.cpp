@@ -42,11 +42,14 @@ namespace {
     };
 };
 
+namespace eg {
+    int eval(search_t * s, const int score);
+}
+
 pst_t PST;
 
 int eval_material(search_t * sd);
 int eval_unstoppable_pawn(search_t * sd, bool white, int sq);
-int eval_endgame(search_t * sd, short score);
 score_t * eval_pawns_and_kings(search_t * sd);
 score_t * eval_knights(search_t * sd, bool white);
 score_t * eval_bishops(search_t * sd, bool white);
@@ -177,12 +180,20 @@ enum mflag_imbalance_t {
  *            111 - 7) (reserved for black) 
  */
 
-bool has_imbalance(int flags, bool us) {
-    return (flags & MFLAG_IMBALANCE) && bool(flags & 4) == !us;
+bool has_mating_power(search_t * s, bool us) {
+    const int flags = s->stack->material_flags;
+    return us == WHITE ? (flags & MFLAG_MATING_POWER_W) != 0
+            : (flags & MFLAG_MATING_POWER_B) != 0;
 }
 
-bool has_major_imbalance(int flags) {
-    return flags & 2;
+bool has_imbalance(search_t * s, bool us) {
+    const int flags = s->stack->material_flags;
+    return (flags & MFLAG_IMBALANCE) != 0 && bool(flags & 4) == !us;
+}
+
+bool has_major_imbalance(search_t * s) {
+    const int flags = s->stack->material_flags;
+    return (flags & 2) != 0;
 }
 
 const short TRADEDOWN_PAWNS_MUL[9] = {
@@ -371,12 +382,12 @@ const score_t QUEEN_MOBILITY[29] = {
  *******************************************************************************/
 
 int evaluate(search_t * sd) {
-    
+
     if (sd->stack->in_check) {
         sd->stack->eval_result = score::INVALID;
         return score::INVALID;
     }
-    
+
     if (sd->stack->eval_result != score::INVALID) {
         return sd->stack->eval_result;
     }
@@ -405,7 +416,7 @@ int evaluate(search_t * sd) {
     result += score->get(sd->stack->phase);
     sd->stack->eg_score = result;
     if (sd->stack->material_flags & MFLAG_EG) {
-        result = eval_endgame(sd, result);
+        result = eg::eval(sd, result);
     }
     if (!wtm) {
         result = -result;
@@ -1411,8 +1422,8 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
     result->print();
     std::cout << std::endl;
 #endif
-    if (has_imbalance(sd->stack->material_flags, them)) {
-        if (has_major_imbalance(sd->stack->material_flags)) {
+    if (has_imbalance(sd, them)) {
+        if (has_major_imbalance(sd)) {
             result->mul256(128);
         } else {
             result->mul256(196);
@@ -1547,9 +1558,9 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     if ((sd->stack->pawn_flags & PFLAG_CLOSED_CENTER) != 0) {
         result->half(); //reduce shelter score for closed positions
     }
-    
+
     if (max_1(pos->bb[KNIGHT[us]] | pos->bb[BISHOP[us]] | pos->bb[ROOK[us]])) {
-       result->half();
+        result->half();
     }
 
     /*
@@ -1620,92 +1631,184 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     return result;
 }
 
-short DRAW(int score, int div) {
-    if (score == 0 || div == 0) {
-        return 0;
-    }
-    if (score > 0) {
-        return MAX(GRAIN_SIZE, score / div);
-    }
-    return MIN(-GRAIN_SIZE, score / div);
-}
+namespace eg {
 
-/**
- * Routine to drive their king to the right corner and mate it
- * @param s search object
- * @param white white or black king
- * @return score value related to distance to corner and distance between kings
- */
-short eval_corner_king(search_t * s, bool them) {
-    static const uint8_t EDGE[8] = {50, 30, 10, 0, 0, 10, 30, 50};
-    static const uint8_t CORNER[8] = {250, 200, 150, 120, 90, 60, 30, 0};
-    static const uint8_t KING[8] = {0, 100, 80, 60, 45, 30, 15, 0};
-    board_t * pos = &s->brd;
-    int kpos[2] = {pos->get_sq(BKING), pos->get_sq(WKING)};
-    int king_dist = distance(kpos[BLACK], kpos[WHITE]);
-    int result = KING[king_dist];
-    bool us = !them;
-    if (is_1(pos->bb[BISHOP[us]]) && pos->bb[ROOK[us]] == 0 && pos->bb[QUEEN[us]] == 0) {
-        //drive to right corner
-        int corner_dist = 0;
-        if ((pos->bb[BISHOP[us]] & WHITE_SQUARES) != 0) {
-            corner_dist = MIN(distance(kpos[them], a8), distance(kpos[them], h1));
+    const int BONUS[2] = {-10, 10};
+    const int EDGE_DISTANCE[8] = {0, 1, 2, 3, 3, 2, 1, 0};
+
+    int draw(int score, int div = 256) {
+        if (score == 0 || div == 0) {
+            return 0;
+        } else if (score > 0) {
+            return MAX(GRAIN_SIZE, score / div);
+        }
+        return MIN(-GRAIN_SIZE, score / div);
+    }
+
+    int win(bool us, int div = 1) {
+        assert(div > 0);
+        return us == WHITE ? score::WIN / div : -score::WIN / div;
+    }
+
+    bool has_pieces(search_t * s, bool us) {
+        return s->brd.has_pieces(us);
+    }
+
+    bool has_pawns(search_t * s, bool us) {
+        return s->brd.bb[PAWN[us]] != 0;
+    }
+
+    bool has_winning_edge(search_t * s, bool us) {
+        return us == WHITE ? s->stack->material_score >= VROOK :
+                s->stack->material_score <= -VROOK;
+    }
+
+    /**
+     * Routine to drive their king to the right corner for checkmate
+     * @param s search object
+     * @param white white or black king
+     * @return score value related to distance to corner and distance between kings
+     */
+    int corner_king(search_t * s, bool them, int div = 1) {
+        board_t * pos = &s->brd;
+        int kpos[2] = {pos->get_sq(BKING), pos->get_sq(WKING)};
+        int king_dist = distance(kpos[BLACK], kpos[WHITE]);
+        int r_dist = EDGE_DISTANCE[RANK(kpos[them])];
+        int f_dist = EDGE_DISTANCE[FILE(kpos[them])];
+        int edge_dist = MIN(r_dist, f_dist);
+        int result = 10 - 2 * king_dist; //bring the king nearby
+        bool us = !them;
+        if (is_1(pos->bb[BISHOP[us]]) && pos->bb[ROOK[us]] == 0 && pos->bb[QUEEN[us]] == 0) {
+            int corner_dist = 0;
+            if ((pos->bb[BISHOP[us]] & WHITE_SQUARES) != 0) {
+                corner_dist = MIN(distance(kpos[them], a8), distance(kpos[them], h1));
+            } else {
+                corner_dist = MIN(distance(kpos[them], a1), distance(kpos[them], h8));
+            }
+            result += 250 - 50 * corner_dist; //1: to the correct corner
+            result += 20 - 10 * edge_dist; //2: to the edge 
         } else {
-            corner_dist = MIN(distance(kpos[them], a1), distance(kpos[them], h8));
+            result += 200 - 100 * edge_dist; //1: to the edge
+            result += 100 - 20 * (r_dist + f_dist); //2: to any corner
         }
-        result += CORNER[corner_dist];
-    } else {
-        //drive to edge, any corner
-        int r = RANK(kpos[them]);
-        int f = FILE(kpos[them]);
-        result += EDGE[r] + EDGE[f];
+        return us == WHITE ? result / div : -result / div;
     }
-    if (them == WHITE) {
-        result = -result;
-    }
-    return result;
-}
 
-bool blocked_pawns(search_t * s, bool us) {
-    U64 pawns = s->brd.bb[PAWN[us]];
-    int direction = us == WHITE ? 8 : -8;
-    bool them = !us;
-    U64 occ = s->brd.all(them);
-    while (pawns) {
-        bool blocked = false;
-        int sq = pop(pawns);
-        do {
-            sq += direction;
-            if (BIT(sq) & occ) {
-                blocked = true;
-                break;
+    /**
+     * Routine to verify if our pawns are blocked
+     */
+    bool blocked_pawns(search_t * s, bool us) {
+        U64 pawns = s->brd.bb[PAWN[us]];
+        int direction = us == WHITE ? 8 : -8;
+        bool them = !us;
+        U64 occ = s->brd.all(them);
+        while (pawns) {
+            bool blocked = false;
+            int sq = pop(pawns);
+            do {
+                sq += direction;
+                if (BIT(sq) & occ) {
+                    blocked = true;
+                    break;
+                }
+                if (s->brd.is_attacked(sq, them)) {
+                    blocked = true;
+                    break;
+                }
+            } while (sq >= a2 && sq <= h7);
+            if (!blocked) {
+                return false;
             }
-            if (s->brd.is_attacked(sq, them)) {
-                blocked = true;
-                break;
-            }
-        } while (sq >= a2 && sq <= h7);
-        if (!blocked) {
-            return false;
         }
+        return true;
     }
-    return true;
-}
 
-int eval_endgame(search_t * s, short score) {
-    static const int SCORE_SURE_WIN[2] = {-score::WIN, score::WIN};
-    static const int BONUS[2] = {-10, 10};
+    bool has_unstoppable_pawn(search_t * s, const bool us) {
+        return s->stack->passer_score[us].eg > 650;
+    }
 
-    board_t * pos = &s->brd;
-    bool us = (score > 0) || (score == 0 && pos->stack->wtm); //winning side white: 1, black: 0
-    bool them = !us;
-    int pawn_count[2] = {pos->count(BPAWN), pos->count(WPAWN)};
-    bool has_pieces[2] = {pos->has_pieces(BLACK), pos->has_pieces(WHITE)};
+    bool eg_test(search_t * s, bool pawns_us, bool pcs_us, bool pawns_them, bool pcs_them, bool us) {
+        const bool them = !us;
+        return pawns_us == bool(s->brd.bb[PAWN[us]])
+                    && pawns_them == bool(s->brd.bb[PAWN[them]])
+                    && pcs_us == s->brd.has_pieces(us)
+                    && pcs_them == s->brd.has_pieces(them)
+                    && (s->stack->phase == 16) == (!pcs_us && !pcs_them);
+    }
 
-    //endgame with only pawns (KK, KPK, KPPK, KPKP, etc.)
-    if (!has_pieces[us] && !has_pieces[them]) {
-        assert(s->stack->phase == 16);
-        bool utm = pos->stack->wtm == (us == WHITE);
+    int knpk(search_t * s, const int score, const bool us) {
+        const bool them = !us;
+        if (s->brd.bb[PAWN[us]] & EDGE & RANK[us][7]) {
+            U64 queening_square = fill_up(s->brd.bb[PAWN[us]], us) & RANK[us][8];
+            if (distance(bsf(queening_square), s->brd.get_sq(KING[them])) <= 1) {
+                return draw(score, 128);
+            }
+        }
+        return score;
+    }
+
+    int kbpsk(search_t * s, const int score, const bool us) {
+        const U64 queening_squares = fill_up(s->brd.bb[PAWN[us]], us) & RANK[us][8];
+        const bool all_on_edge = (s->brd.bb[PAWN[us]] & ~EDGE) == 0;
+        const bool them = !us;
+        if (all_on_edge && is_1(queening_squares)) { //all pawns on A or all pawns on H
+            bool w1 = s->brd.bb[BISHOP[us]] & WHITE_SQUARES;
+            bool w2 = queening_squares & WHITE_SQUARES;
+            if (w1 != w2) { //wrong colored bishop
+                U64 control_us = KING_MOVES[s->brd.get_sq(KING[us])] | s->brd.bb[KING[us]];
+                if ((control_us & queening_squares) == queening_squares) {
+                    return score + win(us, 8);
+                }
+                U64 control_them = KING_MOVES[s->brd.get_sq(KING[them])] | s->brd.bb[KING[them]];
+                control_them &= ~control_us;
+                if ((control_them & queening_squares) == queening_squares) {
+                    return draw(score, 128);
+                }
+                return draw(score, 4);
+            }
+        }
+        return score;
+    }
+
+    int opp_bishops(search_t * s, const int score, const bool us) {
+        static const int PF[9] = {128, 16, 8, 4, 2, 2, 2, 2, 2};
+        int pawn_count = s->brd.count(PAWN[us]);
+        int pf = PF[pawn_count];
+        if (blocked_pawns(s, us)) {
+            pf *= 2;
+        }
+        return draw(score, pf);
+    }
+
+    /**
+     * Pawns vs lone king (case 1)
+     */
+    int pawns_vs_king(search_t * s, const int score, const bool us) {
+        assert(eg_test(s, 1, 0, 0, 0, us));
+        const bool utm = s->brd.stack->wtm == (us == WHITE);
+        const bool them = !us;
+        if (max_1(s->brd.bb[PAWN[us]])) { //KPK
+            bool won = KPK::probe(utm, s->brd.get_sq(KING[us]), s->brd.get_sq(KING[them]),
+                    s->brd.get_sq(PAWN[us]), us == BLACK);
+            if (won) {
+                return score + win(us, 2);
+            }
+            return draw(score, 64);
+        } else if (has_unstoppable_pawn(s, us)) { //unstoppable pawn
+            return score + win(us, 2);
+        }
+        return score;
+    }
+
+    /**
+     * Evaluate endgames with only kings and pawns (case 3)
+     */
+    int pawns_vs_pawns(search_t * s, int score, const bool us) {
+        assert(eg_test(s, 1, 0, 1, 0, us));
+        board_t * pos = &s->brd;
+        const bool them = !us;
+        const bool utm = pos->stack->wtm == (us == WHITE);
+        int pawn_count[2] = {pos->count(BPAWN), pos->count(WPAWN)};
 
         //opposition
         if (opposition(pos->get_sq(WKING), pos->get_sq(BKING)) && utm) {
@@ -1714,161 +1817,223 @@ int eval_endgame(search_t * s, short score) {
             score += 5 * BONUS[us];
         }
 
-        //KK (no pawns))
-        if (pawn_count[us] == 0 && pawn_count[them] == 0) {
-            return DRAW(score, 128);
-        }
-
-        //KPK
-        if (pawn_count[them] == 0 && pawn_count[us] == 1) {
-            bool won = KPK::probe(utm, pos->get_sq(KING[us]), pos->get_sq(KING[them]),
-                    pos->get_sq(PAWN[us]), us == BLACK);
-            if (won) {
-                return score + SCORE_SURE_WIN[us] / 2;
-            }
-            return DRAW(score, 64);
-        }
-
         //unstoppable pawns
-        if (s->stack->passer_score[them].eg < VPAWN && s->stack->passer_score[us].eg > VROOK) {
-            score += SCORE_SURE_WIN[us] / 8;
+        if (has_unstoppable_pawn(s, us) && !has_unstoppable_pawn(s, them)) {
+            score += win(us, 8);
         }
 
         //extra pawns
         int dpawns = pawn_count[WHITE] - pawn_count[BLACK];
         score += dpawns * 50;
-
         return score;
     }
 
-    bool mating_power[2] = {(s->stack->material_flags & MFLAG_MATING_POWER_B) != 0,
-        (s->stack->material_flags & MFLAG_MATING_POWER_W) != 0};
-
-    //we have nothing left to win the game (KNK, KBK, KNNK)
-    if (!mating_power[us] && pawn_count[us] == 0) {
-        return DRAW(score, 128);
+    /**
+     * Piece(s) vs lone king (case 4)
+     */
+    int pcs_vs_king(search_t * s, const int score, const bool us) {
+        assert(eg_test(s, 0, 1, 0, 0, us));
+        const bool them = !us;
+        if (has_mating_power(s, us)) { //e.g. KBNK and better
+            return score + win(us) + corner_king(s, them);
+        } else { //e.g. KNNK and worse
+            return draw(score, 128);
+        }
     }
 
-    //opponent has nothing, we have mating power (KRK, KBNK and better)
-    if (pawn_count[them] == 0 && !has_pieces[them] && mating_power[us]) {
-        return score + SCORE_SURE_WIN[us] + eval_corner_king(s, them);
-    }
-
-
-    bool winning_edge[2] = {
-        s->stack->material_score <= -VROOK,
-        s->stack->material_score >= VROOK
-    };
-
-    //endgame with only pieces, (e.g. KBNKN, KRBKR, KRRKR, KQBKQ, ...)
-    if (pawn_count[us] == 0 && pawn_count[them] == 0) {
-        if (!mating_power[us]) {
-            return DRAW(score, 16);
-        }
-        if (pos->is_eg(KBBKN, us)) { //an exception
-            return score + SCORE_SURE_WIN[us] / 2 + eval_corner_king(s, them);
-        }
-        if (!winning_edge[us]) {
-            return DRAW(score, 16) + eval_corner_king(s, them) / 2;
-        }
-        if (!mating_power[them]) {
-            return score + SCORE_SURE_WIN[us] / 4 + eval_corner_king(s, them);
-        }
-        return score + SCORE_SURE_WIN[us] / 8 + eval_corner_king(s, them) / 4;
-    }
-
-    assert(pawn_count[them] || pawn_count[us]);
-
-    //cases with a clear, decisive material advantage; opponent has no pawns
-    if (pawn_count[them] == 0 && mating_power[us] && winning_edge[us]) {
-        if (!mating_power[them]) {
-            return score + SCORE_SURE_WIN[us] / 4 + eval_corner_king(s, them) / 4;
-        }
-        return score + SCORE_SURE_WIN[us] / 8 + eval_corner_king(s, them) / 8;
-    }
-
-    //we have no pawns and no winning edge
-    if (pawn_count[us] == 0 && !winning_edge[us]) {
-        if (mating_power[us]) {
-            if (has_imbalance(s->stack->material_flags, us)) {
-                if (has_major_imbalance(s->stack->material_flags)) {
-                    return DRAW(score, 2) + eval_corner_king(s, them) / 4;
-                }
-                return DRAW(score, 4) + eval_corner_king(s, them) / 4;
-            }
-            return DRAW(score, 8) + eval_corner_king(s, them) / 8;
-        }
-        return DRAW(score, 16);
-    }
-
-    //minor piece and pawn(s) vs lone king
-    if (pawn_count[them] == 0 && !has_pieces[them] && !mating_power[us]) {
-        if (s->stack->passer_score[us].eg > VROOK) {
-            return score + SCORE_SURE_WIN[us] / 4;
-        }
-        if (pos->is_eg(KBPsK, us)) { //KBPK, KBPPK, ...
-            U64 queening_squares = fill_up(pos->bb[PAWN[us]], us) & RANK[us][8];
-            bool all_on_edge = (pos->bb[PAWN[us]] & ~EDGE) == 0;
-            if (all_on_edge && is_1(queening_squares)) { //all pawns on A or all pawns on H
-                bool w1 = pos->bb[BISHOP[us]] & WHITE_SQUARES;
-                bool w2 = queening_squares & WHITE_SQUARES;
-                if (w1 != w2) { //wrong colored bishop
-                    U64 control_us = KING_MOVES[pos->get_sq(KING[us])] | pos->bb[KING[us]];
-                    if ((control_us & queening_squares) == queening_squares) {
-                        return score;
-                    }
-                    U64 control_them = KING_MOVES[pos->get_sq(KING[them])] | pos->bb[KING[them]];
-                    control_them &= ~control_us;
-                    if ((control_them & queening_squares) == queening_squares) {
-                        return DRAW(score, 128);
-                    }
-                    return DRAW(score, 4);
-                }
-            }
-        } else if (pos->is_eg(KNPK, us)) {
-            if (pos->bb[PAWN[us]] & EDGE & RANK[us][7]) {
-                U64 queening_square = fill_up(pos->bb[PAWN[us]], us) & RANK[us][8];
-                if (distance(bsf(queening_square), pos->get_sq(KING[them])) <= 1) {
-                    return DRAW(score, 128);
-                }
-            }
+    /**
+     * Piece(s) and pawn(s) vs lone king (case 5)
+     */
+    int pcs_n_pawns_vs_king(search_t * s, const int score, const bool us) {
+        assert(eg_test(s, 1, 1, 0, 0, us));
+        const bool them = !us;
+        if (has_mating_power(s, us)) {
+            return score + win(us) + corner_king(s, them);
+        } else if (has_unstoppable_pawn(s, us)) { //unstoppable passed pawn
+            return score + win(us, 4);
+        } else if (s->brd.is_eg(KNPK, us)) { //KNPK
+            return knpk(s, score, us);
+        } else if (s->brd.is_eg(KBPsK, us)) { //KBPK, KBPPK, ...
+            return kbpsk(s, score, us);
         }
         return score;
     }
 
-    //minor piece(s) and pawn vs piece(s) that can sacrifice to force a draw
-    if (pawn_count[them] == 0 && pawn_count[us] == 1 && !mating_power[us] && has_pieces[them]) {
-        if (blocked_pawns(s, us)) {
-            return DRAW(score, 8);
+    /**
+     * Piece(s) vs pawn(s) (case 6)
+     */
+    int pcs_vs_pawns(search_t * s, const int score, const bool us) {
+        assert(eg_test(s, 0, 1, 1, 0, us));
+        const bool pow_us = has_mating_power(s, us);
+        if (!pow_us) {
+            return draw(score, 128);
         }
-        return DRAW(score, 4);
+        return score;
     }
 
-    //opposite bishops
-    if (pos->is_eg(OPP_BISHOPS, us)) {
-        static const int PF[9] = {128, 16, 8, 4, 2, 2, 2, 2, 2};
-        int pf = PF[pawn_count[us]];
-        if (blocked_pawns(s, us)) {
-            pf *= 2;
-        }
-        return DRAW(score, pf);
+    /**
+     * Piece(s) and pawn(s) vs pawn(s) (case 7)
+     */
+    int pcs_n_pawns_vs_pawns(search_t * s, const int score, const bool us) {
+        assert(eg_test(s, 1, 1, 1, 0, us));
+        return score;
     }
 
-    return score;
+    /**
+     * Pawn(s) vs piece(s) (case 9)
+     */
+    int pawns_vs_pcs(search_t * s, const int score, const bool us) {
+        assert(eg_test(s, 1, 0, 0, 1, us));
+        return score;
+    }
+
+    /**
+     * Pawn(s) vs piece(s) (case 11)
+     */
+    int pawns_vs_pcs_n_pawns(search_t * s, const int score, const bool us) {
+        assert(eg_test(s, 1, 0, 1, 1, us));
+        return score;
+    }
+
+    /**
+     * Evaluate cases where both sides have pieces, but no pawns (case 12)
+     */
+    int pcs_vs_pcs(search_t * s, const int score, const bool us) {
+        assert(eg_test(s, 0, 1, 0, 1, us));
+        const bool them = !us;
+        if (!has_mating_power(s, us)) { //no mating power -> draw 
+            return draw(score, 16);
+        } else if (s->brd.is_eg(KBBKN, us)) { //KBBKN is an exception
+            return score + win(us, 2) + corner_king(s, them, 2);
+        } else if (!has_winning_edge(s, us)) { //no winning edge -> draw
+            return draw(score, 16) + corner_king(s, them, 16);
+        } else if (has_mating_power(s, them)) { //win 
+            return score + win(us, 8) + corner_king(s, them, 8);
+        } else { //win and they can impossibly win
+            return score + win(us, 4) + corner_king(s, them, 4);
+        }
+    }
+
+    /**
+     * Piece(s) and pawn(s) vs piece(s) (case 13)
+     */
+    int pcs_n_pawns_vs_pcs(search_t * s, const int score, const bool us) {
+        assert(eg_test(s, 1, 1, 0, 1, us));
+        const bool them = !us;
+        const bool pow_us = has_mating_power(s, us);
+        const bool pow_them = has_mating_power(s, them);
+        const bool win_us = has_winning_edge(s, us);
+        if (pow_us && win_us) {
+            //winning material edge
+            if (pow_them) {
+                return score + win(us, 8) + corner_king(s, them, 8);
+            } else {
+                return score + win(us, 4) + corner_king(s, them, 4);
+            }
+        } else if (!pow_us && max_1(s->brd.bb[PAWN[us]])) {
+            //they can sacrifice their piece(s) to force a draw
+            if (blocked_pawns(s, us)) {
+                return draw(score, 8);
+            } else {
+                return draw(score, 4);
+            }
+        }
+        return score;
+    }
+
+    /**
+     * Piece(s) vs piece(s) and pawn(s) (case 14)
+     */
+    int pcs_vs_pcs_n_pawns(search_t * s, const int score, const bool us) {
+        assert(eg_test(s, 0, 1, 1, 1, us));
+        const bool pow_us = has_mating_power(s, us);
+        const bool win_us = has_winning_edge(s, us);
+        const bool them = !us;
+        if (!pow_us && !win_us) {
+            return draw(score, 128);
+        } else if (!win_us) {
+            if (!has_imbalance(s, us)) {
+                return draw(score, 64) + corner_king(s, them, 16);
+            } else if (!has_major_imbalance(s)) {
+                return draw(score, 32) + corner_king(s, them, 16);
+            } else {
+                return draw(score, 2) + corner_king(s, them, 8);
+            }
+        } else { //winning edge
+            return score + corner_king(s, them, 4);
+        }
+    }
+
+    /**
+     * Piece(s) and pawn(s) vs piece(s) and pawn(s) (case 15)
+     */
+    int pcs_n_pawns_vs_pcs_n_pawns(search_t * s, const int score, const bool us) {
+        assert(eg_test(s, 1, 1, 1, 1, us));
+        if (s->brd.is_eg(OPP_BISHOPS, us)) {
+            return opp_bishops(s, score, us);
+        }
+        return score;
+    }
+
+    /**
+     * Main endgame evaluation function
+     */
+    int eval(search_t * s, const int score) {
+        const bool us = (score > 0) || (score == 0 && s->brd.stack->wtm); //winning side
+        const bool them = !us;
+        int eg_ix = has_pawns(s, us) + 2 * has_pawns(s, them)
+                + 4 * has_pieces(s, us) + 8 * has_pieces(s, them);
+
+        switch (eg_ix) { //1      4        2      8
+            case 0: //  ----- ------ vs ----- ------ (KK)
+                return draw(score);
+            case 1: //  pawns ------ vs ----- ------
+                return pawns_vs_king(s, score, us);
+            case 2: //  ----- ------ vs pawns ------
+                assert(false);
+                return draw(score);
+            case 3: //  pawns ------ vs pawns ------
+                return pawns_vs_pawns(s, score, us);
+            case 4: //  ----- pieces vs ----- ------
+                return pcs_vs_king(s, score, us);
+            case 5: // pawns pieces vs ----- ------
+                return pcs_n_pawns_vs_king(s, score, us);
+            case 6: //  ----- pieces vs pawns ------
+                return pcs_vs_pawns(s, score, us);
+            case 7: // pawns pieces vs pawns ------
+                return pcs_n_pawns_vs_pawns(s, score, us);
+            case 8: //  ----- ------ vs ----- pieces
+                assert(false);
+                return draw(score);
+            case 9: //  pawns ------ vs ----- pieces
+                return pawns_vs_pcs(s, score, us);
+            case 10: // ----- ------ vs pawns pieces
+                assert(false);
+                return draw(score);
+            case 11: // pawns ------ vs pawns pieces
+                return pawns_vs_pcs_n_pawns(s, score, us);
+            case 12: // ----- pieces vs ----- pieces
+                return pcs_vs_pcs(s, score, us);
+            case 13: // pawns pieces vs ----- pieces
+                return pcs_n_pawns_vs_pcs(s, score, us);
+            case 14: // ----- pieces vs pawns pieces
+                return pcs_vs_pcs_n_pawns(s, score, us);
+            case 15: // pawns pieces vs ----- pieces
+                return pcs_n_pawns_vs_pcs_n_pawns(s, score, us);
+            default:
+                assert(false);
+                return score;
+        }
+        return score;
+    }
 }
 
-/*
-  add<KPK>("KPK"); //done
-  add<KNNK>("KNNK"); //done
-  add<KBNK>("KBNK"); //done
-  add<KRKP>("KRKP"); 
-  add<KRKB>("KRKB");//done
-  add<KRKN>("KRKN"); //done
-  add<KQKP>("KQKP"); 
-  add<KQKR>("KQKR"); //done
-  add<KBBKN>("KBBKN"); //done
 
-  add<KNPK>("KNPK"); //done
+/*
+
+  add<KRKP>("KRKP"); 
+  add<KQKP>("KQKP"); 
+
   add<KNPKB>("KNPKB");
   add<KRPKR>("KRPKR");
   add<KRPKB>("KRPKB");
