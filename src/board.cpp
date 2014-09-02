@@ -884,37 +884,38 @@ bool board_t::is_draw() {
 }
 
 bool board_t::is_eg(endgame_t eg, bool us) {
+    const bool them = !us;
     switch (eg) {
         case OPP_BISHOPS:
-            if (bb[WROOK] || bb[BROOK]
-                    || bb[WKNIGHT] || bb[WKNIGHT]
-                    || bb[WQUEEN] || bb[BQUEEN]
-                    || bb[WBISHOP] == 0 || bb[BBISHOP] == 0
-                    || gt_1(bb[WBISHOP]) || gt_1(bb[BBISHOP])) {
-                return false;
-            }
-            return bool(bb[WBISHOP] & WHITE_SQUARES) == bool(bb[BBISHOP] & BLACK_SQUARES);
+            return bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
+                    && is_1(bb[WBISHOP]) && is_1(bb[BBISHOP])
+                    && bb[WROOK] == 0 && bb[BROOK] == 0
+                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0
+                    && bool(bb[WBISHOP] & WHITE_SQUARES) == bool(bb[BBISHOP] & BLACK_SQUARES);
         case KBBKN:
-            if (bb[WPAWN] || bb[BPAWN]
-                    || bb[WROOK] || bb[BROOK]
-                    || bb[WQUEEN] || bb[BQUEEN]
-                    || bb[KNIGHT[us]] || bb[BISHOP[!us]]
-                    || gt_1(bb[KNIGHT[us]])) {
-                return false;
-            }
-            return has_bishop_pair(us);
-        case KBPsK:
-            return bb[PAWN[!us]] == 0 && bb[PAWN[us]] != 0
+            return bb[WPAWN] == 0 && bb[BPAWN] == 0
+                    && bb[KNIGHT[us]] == 0 && is_1(bb[KNIGHT[them]])
+                    && has_bishop_pair(us) && bb[BISHOP[them]] == 0
                     && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0
+                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
+        case KBPSK:
+            return bb[PAWN[them]] == 0 && bb[PAWN[us]] != 0
                     && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && is_1(bb[BISHOP[us]]) && bb[BISHOP[!us]] == 0;
-        case KNPK:
-            return bb[PAWN[!us]] == 0 && is_1(bb[PAWN[us]])
+                    && is_1(bb[BISHOP[us]]) && bb[BISHOP[them]] == 0
                     && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0
+                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
+        case KNPK:
+            return bb[PAWN[them]] == 0 && is_1(bb[PAWN[us]])
+                    && is_1(bb[KNIGHT[us]]) && bb[KNIGHT[them]] == 0
                     && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && is_1(bb[KNIGHT[us]]) && bb[KNIGHT[!us]] == 0;
+                    && bb[WROOK] == 0 && bb[BROOK] == 0
+                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
+        case KRKP:
+            return bb[PAWN[us]] == 0 && is_1(bb[PAWN[them]]) 
+                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
+                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
+                    && is_1(bb[ROOK[us]]) && bb[ROOK[them]] == 0
+                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
         default: return false;
     }
 }

@@ -612,8 +612,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         //futile captures and promotions (delta pruning)
         int gives_check = brd.gives_check(move);
-        bool do_prune = !in_check && searched_moves && !score::is_mate(best)
-                && (eval + delta < alpha || best >= alpha);
+        bool do_prune = !in_check && searched_moves && !score::is_mate(best);
         if (do_prune && depth <= 3 && !gives_check
                 && (move->capture || move->promotion)
                 && eval + VPAWN + delta + brd.max_gain(move) <= alpha) {
@@ -633,7 +632,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         //move count based / late move pruning
         do_prune &= !pv && !is_killer(move);
-        if (do_prune && depth <= 8 && searched_moves > mc_max && !is_evasive(move, threat_move)) {
+        if (do_prune && depth <= 8 && searched_moves > mc_max && best >= alpha
+                && !is_evasive(move, threat_move)) {
             pruned_nodes++;
             continue;
         }

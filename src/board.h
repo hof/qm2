@@ -62,7 +62,7 @@ enum castle_flag_t {
 };
 
 enum endgame_t {
-    OPP_BISHOPS, KBBKN, KBPsK, KNPK
+    OPP_BISHOPS, KBBKN, KBPSK, KNPK, KRKP
 };
 
 namespace board {

@@ -1779,6 +1779,10 @@ namespace eg {
         }
         return draw(score, pf);
     }
+    
+    int krkp(search_t * s, const int score, const bool us) {
+        return score;
+    }
 
     /**
      * Pawns vs lone king (case 1)
@@ -1853,7 +1857,7 @@ namespace eg {
             return score + win(us, 4);
         } else if (s->brd.is_eg(KNPK, us)) { //KNPK
             return knpk(s, score, us);
-        } else if (s->brd.is_eg(KBPsK, us)) { //KBPK, KBPPK, ...
+        } else if (s->brd.is_eg(KBPSK, us)) { //KBPK, KBPPK, ...
             return kbpsk(s, score, us);
         }
         return score;
@@ -1867,6 +1871,8 @@ namespace eg {
         const bool pow_us = has_mating_power(s, us);
         if (!pow_us) {
             return draw(score, 128);
+        } else if (s->brd.is_eg(KRKP, us)) {
+            return krkp(s, score, us);
         }
         return score;
     }
