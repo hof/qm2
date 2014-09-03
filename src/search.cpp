@@ -569,7 +569,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             }
         }
     }
-    
+
     /*
      * Internal iterative deepening (IID)
      */
@@ -601,7 +601,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int best = -score::INF;
     stack->best_move.clear();
     int searched_moves = 0;
-    int mc_max = 2 + ((depth * depth) / 4);
+    int mc_max = depth * 2;
+    int score_max = score::MATE - brd.ply - 1;
     do {
         assert(brd.valid(move) && brd.legal(move));
         assert(stack->best_move.equals(move) == false);
@@ -609,10 +610,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
         /*
          * Move pruning: skip all futile moves
          */
-
+        
         //futile captures and promotions (delta pruning)
         int gives_check = brd.gives_check(move);
-        bool do_prune = !in_check && searched_moves && !score::is_mate(best);
+        bool do_prune = !in_check && searched_moves && best > -score::DEEPEST_MATE;
         if (do_prune && depth <= 3 && !gives_check
                 && (move->capture || move->promotion)
                 && eval + VPAWN + delta + brd.max_gain(move) <= alpha) {
@@ -631,7 +632,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
 
         //move count based / late move pruning
-        do_prune &= !pv && !is_killer(move);
+        do_prune &= !pv;
         if (do_prune && depth <= 8 && searched_moves > mc_max && best >= alpha
                 && !is_evasive(move, threat_move)) {
             pruned_nodes++;
@@ -639,11 +640,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
 
         //SEE pruning
-        if (do_prune && depth <= 3 && brd.min_gain(move) < 0 && brd.see(move) < 0) {
+        do_prune &= !is_killer(move);
+        if (do_prune && depth <= 2 && brd.min_gain(move) < 0 && brd.see(move) < 0) {
             pruned_nodes++;
             continue;
         }
-
 
         /*
          * Move Extensions
@@ -682,6 +683,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             }
         }
         backward(move);
+        searched_moves++;
 
         /*
          * Handle results: update the best value / do a beta cutoff
@@ -710,8 +712,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 update_pv(move);
                 alpha = best;
             }
+            if (best >= score_max) {
+                break;
+            }
         }
-        searched_moves++;
     } while ((move = move::next(this, depth)));
 
     /*
