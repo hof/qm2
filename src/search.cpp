@@ -420,11 +420,21 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
  * Move extensions
  */
 int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
-    if (gives_check <= 0 || depth > 4) {
+    if (gives_check <= 0) {
         return 0;
     }
-    if (pv || gives_check > 1 || brd.min_gain(move) >= 0 || brd.see(move) >= 0) {
-        return 1;
+    if (gives_check > 1 || brd.min_gain(move) >= 0 || (pv && depth <= 4)) {
+        //double/exposed checks; exchange + check; horizon checks
+        return 1; 
+    }
+    int see = brd.see(move);
+    if (see > 0) {
+        //winning capture or promotion + check
+        return 1; 
+    }
+    if (depth <= 4 && see >= 0) {
+        //low depth (horizon / repetitions) and safe checks
+        return 1; 
     }
     return 0;
 }
