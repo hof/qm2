@@ -68,12 +68,13 @@ void game_t::init_tm(bool us) {
 
 }
 
-void game_t::test_for(move_t * move, int score, int max_t, int max_d) {
+void game_t::test_for(move_t * move, int score, int max_n, int max_t) {
     clear();
     target_move.set(move);
     target_score = score;
-    max_time_per_move = max_t;
-    max_depth = max_d;
+    max_nodes = max_n;
+    max_time_per_move = max_t? max_t : time_man::INFINITE_TIME;
+    max_depth = MAX_PLY;
 }
 
 namespace game {

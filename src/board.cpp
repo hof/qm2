@@ -481,7 +481,7 @@ bool board_t::legal(move_t * move) {
                 }
             }
         }
-        
+
 
         //2. update the occupied bitboard and check for sliding attacks on the king
         //   which can happen when we move a piece which was pinned, or move the king
@@ -774,7 +774,7 @@ int board_t::see(move_t * move) {
     int captured_piece = move->capture;
     int moving_piece = move->piece;
     int captured_val = board::PVAL[captured_piece];
-    
+
     /*
      * 0. If the king captures, it's always a gain
      */
@@ -800,7 +800,7 @@ int board_t::see(move_t * move) {
     int tsq = move->tsq;
     bool wtm = moving_piece > WKING;
     if (captured_val && piece_val > captured_val && is_attacked_by_pawn(tsq, wtm)) {
-        return captured_val - piece_val;   
+        return captured_val - piece_val;
     }
 
     /*
@@ -911,11 +911,17 @@ bool board_t::is_eg(endgame_t eg, bool us) {
                     && bb[WROOK] == 0 && bb[BROOK] == 0
                     && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
         case KRKP:
-            return bb[PAWN[us]] == 0 && is_1(bb[PAWN[them]]) 
+            return bb[PAWN[us]] == 0 && is_1(bb[PAWN[them]])
                     && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
                     && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
                     && is_1(bb[ROOK[us]]) && bb[ROOK[them]] == 0
                     && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
+        case KQKP:
+            return bb[PAWN[us]] == 0 && is_1(bb[PAWN[them]])
+                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
+                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
+                    && bb[WROOK] == 0 && bb[BROOK] == 0
+                    && is_1(bb[QUEEN[us]]) && bb[QUEEN[them]] == 0;
         default: return false;
     }
 }

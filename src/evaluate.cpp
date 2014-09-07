@@ -1730,10 +1730,10 @@ namespace eg {
     bool eg_test(search_t * s, bool pawns_us, bool pcs_us, bool pawns_them, bool pcs_them, bool us) {
         const bool them = !us;
         return pawns_us == bool(s->brd.bb[PAWN[us]])
-                    && pawns_them == bool(s->brd.bb[PAWN[them]])
-                    && pcs_us == s->brd.has_pieces(us)
-                    && pcs_them == s->brd.has_pieces(them)
-                    && (s->stack->phase == 16) == (!pcs_us && !pcs_them);
+                && pawns_them == bool(s->brd.bb[PAWN[them]])
+                && pcs_us == s->brd.has_pieces(us)
+                && pcs_them == s->brd.has_pieces(them)
+                && (s->stack->phase == 16) == (!pcs_us && !pcs_them);
     }
 
     int knpk(search_t * s, const int score, const bool us) {
@@ -1770,7 +1770,11 @@ namespace eg {
         return score;
     }
 
+    /**
+     * Evaluate opposite bishops with pawns endgame
+     */
     int opp_bishops(search_t * s, const int score, const bool us) {
+        assert(s->brd.is_eg("OPP_BISHOPS", us));
         static const int PF[9] = {128, 16, 8, 4, 2, 2, 2, 2, 2};
         int pawn_count = s->brd.count(PAWN[us]);
         int pf = PF[pawn_count];
@@ -1779,8 +1783,90 @@ namespace eg {
         }
         return draw(score, pf);
     }
-    
+
+    /**
+     * Evaluate KRKP endgame
+     */
     int krkp(search_t * s, const int score, const bool us) {
+        assert(s->brd.is_eg(KRKP, us));
+
+        //it's a win if our king blocks the pawn
+        const bool them = !us;
+        const U64 promotion_path = fill_up(s->brd.bb[PAWN[them]], them) & ~s->brd.bb[PAWN[them]];
+        if ((promotion_path & s->brd.bb[KING[us]]) != 0) {
+            return score + win(us, 2);
+        }
+
+        //it's a win if we can block the pawn and the opponent can not stop us
+        const int kpos_us = s->brd.get_sq(KING[us]);
+        const int kpos_them = s->brd.get_sq(KING[them]);
+        const U64 path_attacks = KING_MOVES[kpos_us] & promotion_path;
+        const U64 path_defends = KING_MOVES[kpos_them] & promotion_path;
+        const bool utm = s->brd.stack->wtm == (us == WHITE);
+        if (utm && path_attacks != 0 && path_defends == 0) {
+            return score + win(us, 2);
+        }
+
+        //it's a win if the rook is on the same file as the pawn and...
+        const int pawn_sq = s->brd.get_sq(PAWN[them]);
+        const int rook_sq = s->brd.get_sq(ROOK[us]);
+        const int def_dist = distance(kpos_them, pawn_sq) + utm - 2;
+        const bool same_file = FILE(rook_sq) == FILE(pawn_sq);
+        if (same_file && def_dist > 0) {
+            //...they are too far away to defend
+            return score + win(us, 2);
+        } else if (same_file && path_attacks != 0) {
+            //...the promotion path is attacked by our king too
+            return score + win(us, 2);
+        }
+
+        //it's a win if the rook can capture the pawn before it can promote or be defended
+        const int prom_dist = popcnt(promotion_path) + utm;
+        const int max_rook_dist = 3;
+        if (max_rook_dist <= MIN(prom_dist, def_dist)) {
+            return score + win(us, 4);
+        }
+
+        //other cases are drawish, especially with a far advanced and defended pawn
+        int bonus = def_dist + prom_dist - same_file + bool(path_attacks)
+                - bool(path_defends) - distance(kpos_us, pawn_sq) - 1;
+        if (prom_dist < 3 && path_defends != 0) {
+            return draw(score, 16) + BONUS[us] * bonus / 2;
+        }
+        return draw(score, 8) + BONUS[us] * bonus;
+    }
+
+    /**
+     * Evaluate KQKP endgame
+     */
+    int kqkp(search_t * s, const int score, const bool us) {
+        assert(s->brd.is_eg(KQKP, us));
+
+        //it's a win if the pawn is not near promotion
+        const bool them = !us;
+        const bool utm = s->brd.stack->wtm == (us == WHITE);
+        U64 advanced_ranks = RANK[them][7];
+        if (!utm) {
+            advanced_ranks |= RANK[them][6];
+        }
+        if ((s->brd.bb[PAWN[them]] & advanced_ranks) == 0) {
+            return score + win(us, 4);
+        }
+
+        const bool on_acfh = s->brd.bb[PAWN[them]] & (FILE_A | FILE_C | FILE_F | FILE_H);
+        if (!on_acfh) {
+            return score;
+        }
+        
+        //it's drawish if their king is supporting the pawn on file a, c, f, or h
+        const int kpos_us = s->brd.get_sq(KING[us]);
+        const int kpos_them = s->brd.get_sq(KING[them]);
+        const U64 promotion_path = fill_up(s->brd.bb[PAWN[them]], them) & ~s->brd.bb[PAWN[them]];
+        const U64 path_attacks = KING_MOVES[kpos_us] & promotion_path;
+        const U64 path_defends = (s->brd.bb[KING[them]] | KING_MOVES[kpos_them]) & promotion_path;
+        if (path_defends != 0 && path_attacks == 0) {
+            return draw(score, 32);
+        }
         return score;
     }
 
@@ -1873,6 +1959,8 @@ namespace eg {
             return draw(score, 128);
         } else if (s->brd.is_eg(KRKP, us)) {
             return krkp(s, score, us);
+        } else if (s->brd.is_eg(KQKP, us)) {
+            return kqkp(s, score, us);
         }
         return score;
     }
@@ -2036,10 +2124,8 @@ namespace eg {
 
 
 /*
-
-  add<KRKP>("KRKP"); 
+ 
   add<KQKP>("KQKP"); 
-
   add<KNPKB>("KNPKB");
   add<KRPKR>("KRPKR");
   add<KRPKB>("KRPKB");

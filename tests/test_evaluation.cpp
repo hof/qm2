@@ -60,7 +60,7 @@ void testKingAttackZero(int idx, std::string fen) {
 void testEvaluationSuite() {
 
     const int DRAW_MAX = 100 / 10;
-    const int DRAWISH_MAX = 100 / 5;
+    const int DRAWISH_MAX = 100 / 2;
     const int SCORE_MAX = 2 * score::WIN;
 
     /*
@@ -90,7 +90,11 @@ void testEvaluationSuite() {
     testEval(4007, "K7/2kB4/8/8/8/8/8/5N2 w - - 0 1", score::WIN, SCORE_MAX); //KBNK
 
     // case 5:  pawns pieces vs ----- ------
+    
     // case 6:  ----- pieces vs pawns ------
+    testEval(6001, "8/8/K7/8/8/8/4kpQ1/8 w - - 0 1", 1, DRAWISH_MAX); //KQKP
+    testEval(6002, "R7/4K3/8/8/4kp2/8/8/8 w - - 66 1", 1, DRAWISH_MAX); //KRKP
+    
     // case 7:  pawns pieces vs pawns ------
     // case 8:  ----- ------ vs ----- pieces
     // case 9:  pawns ------ vs ----- pieces

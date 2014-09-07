@@ -45,7 +45,7 @@ public:
 
     void clear();
     void copy(game_t * game);
-    void test_for(move_t * move, int score, int max_time, int max_depth = MAX_PLY);
+    void test_for(move_t * move, int score, int max_nodes, int max_time = 0);
     void init_tm(bool white);
 
     game_t() {
