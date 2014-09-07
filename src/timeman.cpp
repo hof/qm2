@@ -25,7 +25,7 @@
 #include "timeman.h"
 
 void time_manager_t::set(int my_time, int opp_time, int my_inc, int opp_inc, int moves_left) {
-    int M = my_inc > 0 ? 20 : 30; //assume the game is decided after this amount of moves
+    int M = my_inc > 0 ? 20 : 25; //assume the game is decided after this amount of moves
     M = moves_left ? MIN(moves_left + 1, M) : M; //for classic time controls (X moves in Y minutes)
     int limit = my_time - time_man::OVERHEAD_TIME;
 

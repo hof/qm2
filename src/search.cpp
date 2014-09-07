@@ -425,16 +425,16 @@ int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
     }
     if (gives_check > 1 || brd.min_gain(move) >= 0 || (pv && depth <= 4)) {
         //double/exposed checks; exchange + check; horizon checks
-        return 1; 
+        return 1;
     }
     int see = brd.see(move);
     if (see > 0) {
         //winning capture or promotion + check
-        return 1; 
+        return 1;
     }
     if (depth <= 4 && see >= 0) {
         //low depth (horizon / repetitions) and safe checks
-        return 1; 
+        return 1;
     }
     return 0;
 }
@@ -556,7 +556,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     //null move pruning
-    move_t * threat_move = NULL;
     if (do_prune_node && depth > 1 && eval >= beta) {
         forward();
         int null_score;
@@ -571,10 +570,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
         } else if (null_score >= beta) {
             trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
             return null_score;
-        } else {
-            threat_move = &(stack + 1)->best_move;
-            if (null_score < -score::DEEPEST_MATE
-                    && !threat_move->capture && !threat_move->promotion) {
+        } else if (null_score < -score::DEEPEST_MATE) {
+            move_t * threat_move = &(stack + 1)->best_move;
+            if (!threat_move->capture && !threat_move->promotion) {
                 (stack + 1)->killer[0].set(threat_move);
             }
         }
@@ -585,9 +583,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
 
     stack->best_move.clear();
-    if (depth > 4 + pv && tt_move == 0) {
+    if (depth > 4 && tt_move == 0) {
         skip_null = pv;
-        int iid_score = pvs(alpha, beta, depth - 2 - !pv);
+        int iid_score = pvs(alpha, beta, depth - 2);
         if (score::is_mate(iid_score)) {
             return iid_score;
         } else if (stack->best_move.piece) {
@@ -611,7 +609,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int best = -score::INF;
     stack->best_move.clear();
     int searched_moves = 0;
-    int mc_max = 2+depth*depth;
+    int mc_max = 1 + depth*depth;
     int score_max = score::MATE - brd.ply - 1;
     do {
         assert(brd.valid(move) && brd.legal(move));
@@ -620,7 +618,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         /*
          * Move pruning: skip all futile moves
          */
-        
+
         //futile captures and promotions (delta pruning)
         int gives_check = brd.gives_check(move);
         bool do_prune = !in_check && searched_moves && best > -score::DEEPEST_MATE;
@@ -667,7 +665,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         int reduce = 0;
         if (depth >= 3 && searched_moves >= 3 && !is_dangerous
                 && !is_killer(move) && !extend) {
-            reduce = searched_moves < 6? 1 : 1 + depth / 4;
+            reduce = searched_moves < 6 ? 1 : 1 + depth / 4;
         }
         assert(reduce == 0 || extend == 0);
 
