@@ -428,12 +428,8 @@ int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
         return 1;
     }
     int see = brd.see(move);
-    if (see > 0) {
-        //winning capture or promotion + check
-        return 1;
-    }
-    if (depth <= 4 && see >= 0) {
-        //low depth (horizon / repetitions) and safe checks
+    if (see > 0 || (depth <= 4 && see >= 0)) {
+        //winning capture or winning promotion + check; horizon checks
         return 1;
     }
     return 0;
@@ -528,7 +524,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
 
     stack->tt_key = brd.stack->tt_key; //needed for testing repetitions
-    int tt_move = 0, tt_flag, tt_score;
+    int tt_move = 0, tt_flag = 0, tt_score;
     if (trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag)) {
         if ((tt_flag == score::LOWERBOUND && tt_score >= beta)
                 || (tt_flag == score::UPPERBOUND && tt_score <= alpha)
@@ -547,8 +543,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
     bool pv = alpha + 1 < beta;
     int eval = evaluate(this);
     int delta = FUTILITY_MARGIN * depth;
-    bool do_prune_node = !in_check && !skip_null && !pv
-            && !score::is_mate(beta) && brd.has_pieces(brd.stack->wtm);
+    bool do_prune_node = !in_check && !skip_null && !pv && eval >= beta
+            && -score::DEEPEST_MATE
+            && brd.has_pieces(brd.stack->wtm);
 
     //return if static evaluation score is already much better than beta
     if (do_prune_node && eval - delta >= beta && depth <= 4) {
@@ -556,7 +553,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     //null move pruning
-    if (do_prune_node && depth > 1 && eval >= beta) {
+    if (do_prune_node && depth > 1) {
         forward();
         int null_score;
         if (depth <= 3) {
