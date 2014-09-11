@@ -544,7 +544,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int eval = evaluate(this);
     int delta = FUTILITY_MARGIN * depth;
     bool do_prune_node = !in_check && !skip_null && !pv && eval >= beta
-            && -score::DEEPEST_MATE
+            && beta > -score::DEEPEST_MATE
             && brd.has_pieces(brd.stack->wtm);
 
     //return if static evaluation score is already much better than beta
@@ -686,7 +686,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
             }
         }
         backward(move);
-        searched_moves++;
 
         /*
          * Handle results: update the best value / do a beta cutoff
@@ -719,6 +718,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 break;
             }
         }
+        searched_moves++;
     } while ((move = move::next(this, depth)));
 
     /*
