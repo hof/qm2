@@ -149,7 +149,7 @@ void search_t::go() {
  * or not.
  */
 void search_t::iterative_deepening() {
-    bool is_easy = root.move_count <= 1 || (root.moves[0].see > 0 && root.moves[1].see <= 0);
+    bool is_easy = root.moves[0].see > 0 && root.moves[1].see <= 0;
     int last_score = -score::INF;
     move_t easy_move;
     root.sort_moves(&stack->best_move);
@@ -163,7 +163,7 @@ void search_t::iterative_deepening() {
         if (abort(true)) {
             break;
         }
-        is_easy &= stack->best_move.equals(&easy_move) && score + 50 < last_score;
+        is_easy &= stack->best_move.equals(&easy_move) && score + FUTILITY_MARGIN > last_score;
         int elapsed = game->tm.elapsed();
         if (timed_search && !pondering() && root.move_count <= 1 && elapsed > max_time / 8) {
             break;
@@ -439,7 +439,7 @@ int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
  * Verifies is a position is drawn by 
  * a) lack of material
  * b) fifty quiet moves
- * c) repetiton
+ * c) repetition
  * @return true if it's an official draw
  */
 bool search_t::is_draw() {
@@ -543,9 +543,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     bool pv = alpha + 1 < beta;
     int eval = evaluate(this);
     int delta = FUTILITY_MARGIN * depth;
-    bool do_prune_node = !in_check && !skip_null && !pv && eval >= beta
-            && beta > -score::DEEPEST_MATE
-            && brd.has_pieces(brd.stack->wtm);
+    bool do_prune_node = !in_check && !skip_null && !pv
+            && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
 
     //return if static evaluation score is already much better than beta
     if (do_prune_node && eval - delta >= beta && depth <= 4) {
@@ -553,7 +552,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     //null move pruning
-    if (do_prune_node && depth > 1) {
+    if (do_prune_node && eval >= beta) {
         forward();
         int null_score;
         if (depth <= 3) {
@@ -567,7 +566,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         } else if (null_score >= beta) {
             trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
             return null_score;
-        } else if (null_score < -score::DEEPEST_MATE) {
+        } else if (null_score < alpha && null_score < -score::DEEPEST_MATE) {
             move_t * threat_move = &(stack + 1)->best_move;
             if (!threat_move->capture && !threat_move->promotion) {
                 (stack + 1)->killer[0].set(threat_move);
@@ -621,7 +620,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         bool do_prune = !in_check && searched_moves && best > -score::DEEPEST_MATE;
         if (do_prune && depth <= 3 && !gives_check
                 && (move->capture || move->promotion)
-                && eval + VPAWN + delta + brd.max_gain(move) <= alpha) {
+                && eval + delta + VPAWN + brd.max_gain(move) <= alpha) {
             pruned_nodes++;
             continue;
         }

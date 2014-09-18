@@ -31,12 +31,6 @@
 
 namespace {
 
-    void trace(std::string msg) {
-#ifdef TRACE_EVAL
-        std::cout << msg;
-#endif
-    }
-
     enum {
         GRAIN_SIZE = 4
     };
@@ -208,7 +202,7 @@ const short ATTACKED_PIECE = -32; //piece attacked by a pawn
 
 uint8_t PFLAG_CLOSED_CENTER = 1;
 
-const score_t DEFENDED_PAWN[2] = {S(0, 2), S(2, 4)}; //closed, open file
+const score_t DEFENDED_PAWN[2] = {S(0, 0), S(4, 0)}; //closed, open file
 const score_t ISOLATED_PAWN[2] = {S(-10, -20), S(-20, -20)}; //closed, open file
 const score_t WEAK_PAWN[2] = {S(-12, -8), S(-16, -10)}; //closed, open file
 const score_t DOUBLED_PAWN = S(-10, -20);
@@ -726,60 +720,26 @@ score_t * eval_pawns_and_kings(search_t * sd) {
         bool candidate = open && !doubled && !passed && !(up & ~safe[WHITE]);
 
         pawn_score.add(PST[WPAWN][isq]);
-
+        
         if (isolated) {
             pawn_score.add(ISOLATED_PAWN[open]);
-
-
         } else if (weak) {
             pawn_score.add(WEAK_PAWN[open]);
-
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "weak: " << PRINT_SCORE(WEAK_PAWN[open]);
-#endif
+        } else if (defended) {
+            pawn_score.add(DEFENDED_PAWN[open]);
         }
         if (doubled) {
             pawn_score.add(DOUBLED_PAWN);
-
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "doubled: " << PRINT_SCORE(DOUBLED_PAWN);
-#endif
-
-        }
-        if (defended) {
-            pawn_score.add(DEFENDED_PAWN[open]);
-
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "defended: " << PRINT_SCORE(DEFENDED_PAWN[open]);
-#endif
-
         }
         if (candidate) {
             pawn_score.add(CANDIDATE[isq]);
-
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "candidate: " << PRINT_SCORE(CANDIDATE[isq]);
-#endif
-
         } else if (passed) {
-
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "passed ";
-#endif
             passers |= sq_bit;
-
         }
-
         if (blocked && (sq_bit & CENTER)) {
             blocked_center_pawns++;
         }
-
         king_attack[WHITE] += popcnt0(WPAWN_CAPTURES[sq] & kcz[BLACK]);
-
-
-#ifdef PRINT_PAWN_EVAL
-        std::cout << std::endl;
-#endif
     }
 
     U64 bpawns = pos->bb[BPAWN];
@@ -799,97 +759,52 @@ score_t * eval_pawns_and_kings(search_t * sd) {
         bool passed = !doubled && !(down & (attacks[WHITE] | pos->bb[WPAWN]));
         bool candidate = open && !doubled && !passed && !(down & ~safe[BLACK]);
 
-#ifdef PRINT_PAWN_EVAL
-        std::cout << "BP " << PRINT_SQUARE(sq) << ": ";
-#endif
-
         pawn_score.sub(PST[WPAWN][sq]);
-
-#ifdef PRINT_PAWN_EVAL
-        std::cout << "pst: " << PRINT_SCORE(PST[WPAWN][sq]);
-#endif
-
+        
         if (isolated) {
             pawn_score.sub(ISOLATED_PAWN[open]);
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "isolated: " << PRINT_SCORE(ISOLATED_PAWN[open]);
-#endif
         } else if (weak) {
             pawn_score.sub(WEAK_PAWN[open]);
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "weak: " << PRINT_SCORE(WEAK_PAWN[open]);
-#endif
+        } else if (defended) {
+            pawn_score.sub(DEFENDED_PAWN[open]);
         }
         if (doubled) {
             pawn_score.sub(DOUBLED_PAWN);
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "doubled: " << PRINT_SCORE(DOUBLED_PAWN);
-#endif
-        }
-        if (defended) {
-            pawn_score.sub(DEFENDED_PAWN[open]);
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "defended: " << PRINT_SCORE(DEFENDED_PAWN[open]);
-#endif
         }
         if (candidate) {
             pawn_score.sub(CANDIDATE[sq]);
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "candidate: " << PRINT_SCORE(CANDIDATE[sq]);
-#endif
         } else if (passed) {
-
-#ifdef PRINT_PAWN_EVAL
-            std::cout << "passed: ";
-#endif
             passers |= sq_bit;
-
         }
 
         if (blocked && (sq_bit & CENTER)) {
             blocked_center_pawns++;
         }
 
-#ifdef PRINT_PAWN_EVAL
-        std::cout << std::endl;
-#endif
-
         king_attack[BLACK] += popcnt0(BPAWN_CAPTURES[sq] & kcz[WHITE]);
-
     }
 
     if (blocked_center_pawns > 2) {
         flags |= PFLAG_CLOSED_CENTER;
     }
 
-#ifdef PRINT_PAWN_EVAL
-    std::cout << "total: ";
-    pawn_score->print();
-    std::cout << std::endl;
-#endif
-
+    /*
+     * White King
+     */
+    
+    //position
     pawn_score.add(PST[WKING][ISQ(wkpos, WHITE)]);
-    pawn_score.sub(PST[WKING][ISQ(bkpos, BLACK)]);
-
+    
+    //threats
     U64 ka_w = KING_MOVES[wkpos] & sd->stack->mob[WHITE] & sd->stack->attack[WHITE];
-    U64 ka_b = KING_MOVES[bkpos] & sd->stack->mob[BLACK] & sd->stack->attack[BLACK];
     if (ka_w) {
         pawn_score.add(0, 10);
     }
-    if (ka_b) {
-        pawn_score.sub(0, 10);
-    }
-
-
-    /*
-     * 4. Calculate King Shelter Attack units
-     */
+    
+    //attack units - shelter
     king_attack[BLACK] += SHELTER_KPOS[FLIP_SQUARE(wkpos)];
-#ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (pos): " << (int) king_attack[BLACK] << std::endl;
-#endif
-
-    //1. reward having the right to castle
+   
+    //attack units - castling right
     if (pos->stack->castling_flags & CASTLE_K
             && ((pos->matrix[h2] == WPAWN && pos->matrix[g2] == WPAWN)
             || (pos->matrix[f2] == WPAWN && pos->matrix[h2] == WPAWN && pos->matrix[g3] == WPAWN)
@@ -900,31 +815,24 @@ score_t * eval_pawns_and_kings(search_t * sd) {
             || (pos->matrix[a2] == WPAWN && pos->matrix[b3] == WPAWN && pos->matrix[c2] == WPAWN))) {
         king_attack[BLACK] += SHELTER_CASTLING_QUEENSIDE;
     }
-#ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (castling): " << (int) king_attack[BLACK] << std::endl;
-#endif
-
-    //2. rewards for having shelter and storm pawns
+    
+    //attack units - shelter pawns
     U64 king_front = (FORWARD_RANKS[RANK(wkpos)] | KING_MOVES[wkpos]) & PAWN_SCOPE[FILE(wkpos)];
     U64 shelter_pawns = king_front & pos->bb[WPAWN];
     while (shelter_pawns) {
         int sq = pop(shelter_pawns);
         king_attack[BLACK] += SHELTER_PAWN[FLIP_SQUARE(sq)];
     }
-#ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (shelter): " << (int) king_attack[BLACK] << std::endl;
-#endif
-
+    
+    //attack units - storm pawns
     U64 storm_pawns = king_front & pos->bb[BPAWN];
     while (storm_pawns) {
         int sq = pop(storm_pawns);
         king_attack[BLACK] += STORM_PAWN[FLIP_SQUARE(sq)];
     }
-#ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (storm): " << (int) king_attack[BLACK] << std::endl;
-#endif
+    
 
-    //3. penalize (half)open files on the king
+    //attack units - open files
     U64 open = (open_files[WHITE] | open_files[BLACK]) & king_front & RANK_8;
     if (open) {
         king_attack[BLACK] += SHELTER_OPEN_FILES[popcnt0(open)];
@@ -932,18 +840,24 @@ score_t * eval_pawns_and_kings(search_t * sd) {
             king_attack[BLACK] += SHELTER_OPEN_EDGE_FILE;
         }
     }
+     
+     /*
+     * Black King
+     */
+    
+    //position
+    pawn_score.sub(PST[WKING][ISQ(bkpos, BLACK)]);
+    
+    //threats
+    U64 ka_b = KING_MOVES[bkpos] & sd->stack->mob[BLACK] & sd->stack->attack[BLACK];
+    if (ka_b) {
+        pawn_score.sub(0, 10);
+    }
 
-#ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on WK (open files): " << (int) king_attack[BLACK] << std::endl;
-#endif
-
-    //black king shelter
+    //attack units - shelter
     king_attack[WHITE] += SHELTER_KPOS[bkpos];
-
-#ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (pos): " << (int) sd->stack->king_attack[WPAWN] << std::endl;
-#endif
-    //1. reward having the right to castle safely
+    
+    //attack units - castling right
     if (pos->stack->castling_flags & CASTLE_k
             && ((pos->matrix[h7] == BPAWN && pos->matrix[g7] == BPAWN)
             || (pos->matrix[f7] == BPAWN && pos->matrix[h7] == BPAWN && pos->matrix[g6] == BPAWN)
@@ -954,31 +868,23 @@ score_t * eval_pawns_and_kings(search_t * sd) {
             || (pos->matrix[a7] == BPAWN && pos->matrix[b6] == BPAWN && pos->matrix[c7] == BPAWN))) {
         king_attack[WHITE] += SHELTER_CASTLING_QUEENSIDE;
     }
-
-#ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (castling): " << (int) king_attack[WHITE] << std::endl;
-#endif
-    //2. reward having pawns in front of the king
+    
+    //attack units - shelter pawns
     king_front = (BACKWARD_RANKS[RANK(bkpos)] | KING_MOVES[bkpos]) & PAWN_SCOPE[FILE(bkpos)];
     shelter_pawns = king_front & pos->bb[BPAWN];
     while (shelter_pawns) {
         int sq = pop(shelter_pawns);
         king_attack[WHITE] += SHELTER_PAWN[sq];
     }
-
-#ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (shelter): " << (int) king_attack[WHITE] << std::endl;
-#endif
+    
+    //attack units - storm pawns
     storm_pawns = king_front & pos->bb[WPAWN];
     while (storm_pawns) {
         int sq = pop(storm_pawns);
         king_attack[WHITE] += STORM_PAWN[sq];
     }
-
-#ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (storm): " << (int) king_attack[WHITE] << std::endl;
-#endif
-    //3. penalize (half)open files on the king
+    
+    //attack units - open files
     open = (open_files[WHITE] | open_files[BLACK]) & king_front & RANK_1;
     if (open) {
         king_attack[WHITE] += SHELTER_OPEN_FILES[popcnt0(open)];
@@ -986,9 +892,10 @@ score_t * eval_pawns_and_kings(search_t * sd) {
             king_attack[WHITE] += SHELTER_OPEN_EDGE_FILE;
         }
     }
-#ifdef PRINT_PAWN_EVAL
-    std::cout << "attack on BK (open files): " << (int) king_attack[WHITE] << std::endl;
-#endif
+    
+    /*
+     * Persist info on the stack and return the total score
+     */
 
     sd->stack->passers = passers;
     sd->stack->king_attack[WPAWN] = king_attack[WHITE];
@@ -1328,68 +1235,48 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
         return result;
     }
     bool them = !us;
-    int unstoppable = 0;
-    bool p_vs_k = !sd->brd.has_pieces(them);
     U64 exclude = SIDE[us] & ~(RANK_4 | RANK_5);
     int step = PAWNDIRECTION[us];
+    score_t bonus;
     while (passers) {
         int sq = pop(passers);
-#ifdef PRINT_PASSED_PAWN
-        std::cout << "\npassed pawn " << sq << ": ";
-#endif
-        int ix = us == WHITE ? FLIP_SQUARE(sq) : sq;
-        score_t bonus;
-        bonus.set(PASSED_PAWN[ix]);
-        result->add(bonus);
-
-#ifdef PRINT_PASSED_PAWN
-        std::cout << "base ";
-        bonus.print();
-#endif
-        if (p_vs_k) {
-            unstoppable = MAX(unstoppable, eval_unstoppable_pawn(sd, us, sq));
-        }
+        
+        //set base score
+        bonus.set(PASSED_PAWN[ISQ(sq, us)]);
+        result->add(bonus);        
+        
+        //stop if the pawn is on rank 2, 3, or 4
         if (BIT(sq) & exclude) {
             continue;
         }
+        
+        //initialize bonus and rank
         bonus.half();
+        int to = sq + step;
         int r = RANK(sq) - 1;
         if (us == BLACK) {
             r = 5 - r;
         }
-        int to = sq + step;
-
-        //consider distance of king
-        if (unstoppable == 0) {
-            int kdist_us_bonus = distance(sd->brd.get_sq(KING[us]), to) * r * (r - 1);
-            int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * r * (r - 1) * 2;
-
-
-#ifdef PRINT_PASSED_PAWN
-            std::cout << "distance: " << kdist_them_bonus - kdist_us_bonus;
-#endif
-            result->add(0, kdist_them_bonus - kdist_us_bonus);
-        }
-
-        //connected passers
+        
+        //king distance
+        int kdist_us_bonus = distance(sd->brd.get_sq(KING[us]), to) * r * (r - 1);
+        int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * r * (r - 1) * 2;
+        result->add(0, kdist_them_bonus - kdist_us_bonus);
+        
+        //connected and defended passers
         U64 bit_sq = BIT(sq);
         U64 connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
         if (connection_mask & sd->brd.bb[PAWN[us]]) {
             result->add(10, 10 + r * 10);
-#ifdef PRINT_PASSED_PAWN
-            std::cout << " connected: " << 10 + r * 10;
-#endif
         } else {
             bit_sq = BIT(sq + PAWNDIRECTION[them]);
             connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
             if (connection_mask & sd->brd.bb[PAWN[us]]) {
                 result->add(5, 5 + r * 5);
-#ifdef PRINT_PASSED_PAWN
-                std::cout << " defended: " << 5 + r * 5;
-#endif
             }
         }
 
+        //advancing
         do {
             if (BIT(to) & sd->brd.bb[ALLPIECES]) {
                 break; //blocked
@@ -1408,20 +1295,9 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
                 }
             }
             result->add(bonus);
-#ifdef PRINT_PASSED_PAWN
-            std::cout << " can advance to " << to;
-            bonus.print();
-#endif
             to += step;
         } while (to >= a1 && to <= h8);
     }
-    result->add(0, unstoppable); //add the best unstoppable passer score
-#ifdef PRINT_PASSED_PAWN
-    std::cout << " unstoppable " << unstoppable;
-    std::cout << " total: ";
-    result->print();
-    std::cout << std::endl;
-#endif
     if (has_imbalance(sd, them)) {
         if (has_major_imbalance(sd)) {
             result->mul256(128);
@@ -1430,53 +1306,6 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
         }
     }
     return result;
-}
-
-int eval_unstoppable_pawn(search_t * sd, bool us, int sq) {
-
-    //is the pawn unstoppable by the nme king?
-    U64 path = fill_up(BIT(sq), us) ^ BIT(sq);
-    if (path & sd->brd.bb[ALLPIECES]) {
-        return 0; //no, the path is blocked
-    }
-    bool them = !us;
-    int kingThem = sd->brd.get_sq(KING[them]);
-    int queening_square = FILE(sq) + us * 56;
-    if (us == WHITE) {
-        if (sq <= h2) {
-            sq += 8;
-        }
-        if (sd->brd.stack->wtm && sq <= h6) {
-            sq += 8;
-        }
-    } else if (us == BLACK) {
-        if (sq >= a7) {
-            sq -= 8;
-        }
-        if (sd->brd.stack->wtm == false && sq >= a3) {
-            sq -= 8;
-        }
-    }
-    int prank = RANK(sq);
-    int qrank = RANK(queening_square);
-    int qfile = FILE(queening_square);
-    int pdistance = 1 + ABS(qrank - prank);
-    int kingUs = sd->brd.get_sq(KING[us]);
-    if ((path & KING_MOVES[kingUs]) == path) {
-        //yes, the promotion path is fully defended and not blocked by our own King
-        return 700 - pdistance;
-    }
-
-    int krank = RANK(kingThem);
-    int kfile = FILE(kingThem);
-    int kdistance1 = ABS(qrank - krank);
-    int kdistance2 = ABS(qfile - kfile);
-    int kdistance = MAX(kdistance1, kdistance2);
-    if (pdistance < kdistance) {
-        //yes, the nme king is too far away
-        return 700 - pdistance;
-    }
-    return 0;
 }
 
 const int8_t KING_ATTACK_OFFSET = 9; //perfectly castled king -9 units
@@ -1533,22 +1362,10 @@ score_t * eval_king_attack(search_t * sd, bool us) {
 
     U64 kaz = sd->stack->king_attack_zone[us];
 
-#ifdef TRACE_EVAL
-    bb_print("\nKing Attack Zone", kaz);
-    std::cout << "Shelter: " << shelter_ix << " -> " << (int) KING_SHELTER[shelter_ix];
-    std::cout << std::endl;
-#endif
 
     kaz &= ~(RANK[us][7] | RANK[us][8] | KING_MOVES[pos->get_sq(KING[!us])]);
     result->add(12 * popcnt0(kaz), 0);
 
-#ifdef TRACE_EVAL 
-    bb_print("\nKing Attack Zone (filtered)", kaz);
-    std::cout << "Zone: " << 12 * popcnt0(kaz);
-    std::cout << "\nTotal: ";
-    result->print();
-    std::cout << std::endl;
-#endif
 
     /*
      * 2. Reduce the shelter score for closed positions and 
@@ -1593,41 +1410,12 @@ score_t * eval_king_attack(search_t * sd, bool us) {
         return result;
     }
 
-#ifdef TRACE_EVAL
-    std::cout << "Attacking Pieces: " << (attackers + 1) << std::endl;
-    std::cout << "Attack Force: " << ka_units << std::endl;
-    std::cout << "Controlled Squares: " << ka_squares << std::endl;
-#endif
-
     int piece_attack_score = 0;
     int paix = 2 * ka_units + shelter_ix + ka_squares - 5;
     piece_attack_score = KING_ATTACK[range(0, 63, paix)];
-
-#ifdef TRACE_EVAL
-    std::cout << "Total Piece Attack Index: " << paix << std::endl;
-    std::cout << "Piece Attack Score: " << piece_attack_score << std::endl;
-#endif
-
     piece_attack_score = MUL256(piece_attack_score, KING_ATTACKERS_MUL[range(0, 7, attackers)]);
-
-#ifdef TRACE_EVAL
-    std::cout << "Corrected Score (attackers): " << piece_attack_score << std::endl;
-#endif
-
     piece_attack_score = MUL256(piece_attack_score, KING_SHELTER_MUL[range(0, 7, shelter_ix)]);
-
-#ifdef TRACE_EVAL
-    std::cout << "Corrected Score (shelter): " << piece_attack_score << std::endl;
-#endif
-
     result->add(piece_attack_score, 0);
-
-#ifdef TRACE_EVAL
-    std::cout << "Total Piece Attack: " << piece_attack_score << std::endl;
-    result->print();
-    std::cout << std::endl;
-#endif
-
     return result;
 }
 
@@ -1722,6 +1510,14 @@ namespace eg {
         }
         return true;
     }
+    
+    int piece_distance(search_t * s, const bool us) {
+        assert(gt_1(s->brd.all(us)));
+        int fsq = bsf(s->brd.all(us));
+        int rsq = bsr(s->brd.all(us));
+        assert(fsq != rsq);
+        return distance(fsq, rsq);
+    }
 
     bool has_unstoppable_pawn(search_t * s, const bool us) {
         return s->stack->passer_score[us].eg > 650;
@@ -1774,7 +1570,7 @@ namespace eg {
      * Evaluate opposite bishops with pawns endgame
      */
     int opp_bishops(search_t * s, const int score, const bool us) {
-        assert(s->brd.is_eg("OPP_BISHOPS", us));
+        assert(s->brd.is_eg(OPP_BISHOPS, us));
         static const int PF[9] = {128, 16, 8, 4, 2, 2, 2, 2, 2};
         int pawn_count = s->brd.count(PAWN[us]);
         int pf = PF[pawn_count];
@@ -1857,7 +1653,7 @@ namespace eg {
         if (!on_acfh) {
             return score;
         }
-        
+
         //it's drawish if their king is supporting the pawn on file a, c, f, or h
         const int kpos_us = s->brd.get_sq(KING[us]);
         const int kpos_them = s->brd.get_sq(KING[them]);
@@ -1895,26 +1691,6 @@ namespace eg {
      */
     int pawns_vs_pawns(search_t * s, int score, const bool us) {
         assert(eg_test(s, 1, 0, 1, 0, us));
-        board_t * pos = &s->brd;
-        const bool them = !us;
-        const bool utm = pos->stack->wtm == (us == WHITE);
-        int pawn_count[2] = {pos->count(BPAWN), pos->count(WPAWN)};
-
-        //opposition
-        if (opposition(pos->get_sq(WKING), pos->get_sq(BKING)) && utm) {
-            score -= 5 * BONUS[us];
-        } else {
-            score += 5 * BONUS[us];
-        }
-
-        //unstoppable pawns
-        if (has_unstoppable_pawn(s, us) && !has_unstoppable_pawn(s, them)) {
-            score += win(us, 8);
-        }
-
-        //extra pawns
-        int dpawns = pawn_count[WHITE] - pawn_count[BLACK];
-        score += dpawns * 50;
         return score;
     }
 
@@ -1998,7 +1774,7 @@ namespace eg {
         if (!has_mating_power(s, us)) { //no mating power -> draw 
             return draw(score, 16);
         } else if (s->brd.is_eg(KBBKN, us)) { //KBBKN is an exception
-            return score + win(us, 2) + corner_king(s, them, 2);
+            return score + win(us, 2) + corner_king(s, them, 2) + 10 * piece_distance(s, them);
         } else if (!has_winning_edge(s, us)) { //no winning edge -> draw
             return draw(score, 16) + corner_king(s, them, 16);
         } else if (has_mating_power(s, them)) { //win 

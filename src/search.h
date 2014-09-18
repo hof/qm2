@@ -139,7 +139,7 @@ public:
     bool is_dangerous_check(move_t * const move, const int gives_check);
     bool is_killer(move_t * const move);
     void init_history();
-
+    
     int draw_score() {
         return 0;
     }
