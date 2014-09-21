@@ -550,7 +550,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     if (do_prune_node && eval - delta >= beta && depth <= 4) {
         return eval - delta;
     }
-
+    
     //null move pruning
     if (do_prune_node && eval >= beta) {
         forward();
@@ -723,7 +723,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     /*
      * Store the result in the hash table and return
      */
-
+    
     assert(best > -score::INF && best < beta);
     assert(!stop_all);
     assert(brd.valid(&stack->best_move) && brd.legal(&stack->best_move));

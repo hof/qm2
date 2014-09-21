@@ -128,6 +128,10 @@ public:
     int min_gain(move_t * capture);
     int mvvlva(move_t * capture);
     bool equal_cap(move_t * mv);
+    
+    bool us() { return stack->wtm; }
+    
+    bool them() { return !stack->wtm; }
 
     /**
      * Counts amount of piece for a given piece type

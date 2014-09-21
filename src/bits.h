@@ -348,6 +348,14 @@ inline bool opposition(int sq1, int sq2) {
     return (drank % 2) == 0 && (dfile % 2) == 0;
 }
 
+inline int queening_square(int sq, bool w) {
+    return w? FILE(sq) + 56 : FILE(sq);
+}
+
+inline int is_rank_2(int sq, bool w) {
+    return w? RANK(sq) == 1 : RANK(sq) == 6;
+}
+
 /*
  * For debugging
  */

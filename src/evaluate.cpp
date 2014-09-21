@@ -720,7 +720,7 @@ score_t * eval_pawns_and_kings(search_t * sd) {
         bool candidate = open && !doubled && !passed && !(up & ~safe[WHITE]);
 
         pawn_score.add(PST[WPAWN][isq]);
-        
+
         if (isolated) {
             pawn_score.add(ISOLATED_PAWN[open]);
         } else if (weak) {
@@ -760,7 +760,7 @@ score_t * eval_pawns_and_kings(search_t * sd) {
         bool candidate = open && !doubled && !passed && !(down & ~safe[BLACK]);
 
         pawn_score.sub(PST[WPAWN][sq]);
-        
+
         if (isolated) {
             pawn_score.sub(ISOLATED_PAWN[open]);
         } else if (weak) {
@@ -791,19 +791,19 @@ score_t * eval_pawns_and_kings(search_t * sd) {
     /*
      * White King
      */
-    
+
     //position
     pawn_score.add(PST[WKING][ISQ(wkpos, WHITE)]);
-    
+
     //threats
     U64 ka_w = KING_MOVES[wkpos] & sd->stack->mob[WHITE] & sd->stack->attack[WHITE];
     if (ka_w) {
         pawn_score.add(0, 10);
     }
-    
+
     //attack units - shelter
     king_attack[BLACK] += SHELTER_KPOS[FLIP_SQUARE(wkpos)];
-   
+
     //attack units - castling right
     if (pos->stack->castling_flags & CASTLE_K
             && ((pos->matrix[h2] == WPAWN && pos->matrix[g2] == WPAWN)
@@ -815,7 +815,7 @@ score_t * eval_pawns_and_kings(search_t * sd) {
             || (pos->matrix[a2] == WPAWN && pos->matrix[b3] == WPAWN && pos->matrix[c2] == WPAWN))) {
         king_attack[BLACK] += SHELTER_CASTLING_QUEENSIDE;
     }
-    
+
     //attack units - shelter pawns
     U64 king_front = (FORWARD_RANKS[RANK(wkpos)] | KING_MOVES[wkpos]) & PAWN_SCOPE[FILE(wkpos)];
     U64 shelter_pawns = king_front & pos->bb[WPAWN];
@@ -823,14 +823,14 @@ score_t * eval_pawns_and_kings(search_t * sd) {
         int sq = pop(shelter_pawns);
         king_attack[BLACK] += SHELTER_PAWN[FLIP_SQUARE(sq)];
     }
-    
+
     //attack units - storm pawns
     U64 storm_pawns = king_front & pos->bb[BPAWN];
     while (storm_pawns) {
         int sq = pop(storm_pawns);
         king_attack[BLACK] += STORM_PAWN[FLIP_SQUARE(sq)];
     }
-    
+
 
     //attack units - open files
     U64 open = (open_files[WHITE] | open_files[BLACK]) & king_front & RANK_8;
@@ -840,14 +840,14 @@ score_t * eval_pawns_and_kings(search_t * sd) {
             king_attack[BLACK] += SHELTER_OPEN_EDGE_FILE;
         }
     }
-     
-     /*
+
+    /*
      * Black King
      */
-    
+
     //position
     pawn_score.sub(PST[WKING][ISQ(bkpos, BLACK)]);
-    
+
     //threats
     U64 ka_b = KING_MOVES[bkpos] & sd->stack->mob[BLACK] & sd->stack->attack[BLACK];
     if (ka_b) {
@@ -856,7 +856,7 @@ score_t * eval_pawns_and_kings(search_t * sd) {
 
     //attack units - shelter
     king_attack[WHITE] += SHELTER_KPOS[bkpos];
-    
+
     //attack units - castling right
     if (pos->stack->castling_flags & CASTLE_k
             && ((pos->matrix[h7] == BPAWN && pos->matrix[g7] == BPAWN)
@@ -868,7 +868,7 @@ score_t * eval_pawns_and_kings(search_t * sd) {
             || (pos->matrix[a7] == BPAWN && pos->matrix[b6] == BPAWN && pos->matrix[c7] == BPAWN))) {
         king_attack[WHITE] += SHELTER_CASTLING_QUEENSIDE;
     }
-    
+
     //attack units - shelter pawns
     king_front = (BACKWARD_RANKS[RANK(bkpos)] | KING_MOVES[bkpos]) & PAWN_SCOPE[FILE(bkpos)];
     shelter_pawns = king_front & pos->bb[BPAWN];
@@ -876,14 +876,14 @@ score_t * eval_pawns_and_kings(search_t * sd) {
         int sq = pop(shelter_pawns);
         king_attack[WHITE] += SHELTER_PAWN[sq];
     }
-    
+
     //attack units - storm pawns
     storm_pawns = king_front & pos->bb[WPAWN];
     while (storm_pawns) {
         int sq = pop(storm_pawns);
         king_attack[WHITE] += STORM_PAWN[sq];
     }
-    
+
     //attack units - open files
     open = (open_files[WHITE] | open_files[BLACK]) & king_front & RANK_1;
     if (open) {
@@ -892,7 +892,7 @@ score_t * eval_pawns_and_kings(search_t * sd) {
             king_attack[WHITE] += SHELTER_OPEN_EDGE_FILE;
         }
     }
-    
+
     /*
      * Persist info on the stack and return the total score
      */
@@ -1240,16 +1240,16 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
     score_t bonus;
     while (passers) {
         int sq = pop(passers);
-        
+
         //set base score
         bonus.set(PASSED_PAWN[ISQ(sq, us)]);
-        result->add(bonus);        
-        
+        result->add(bonus);
+
         //stop if the pawn is on rank 2, 3, or 4
         if (BIT(sq) & exclude) {
             continue;
         }
-        
+
         //initialize bonus and rank
         bonus.half();
         int to = sq + step;
@@ -1257,12 +1257,12 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
         if (us == BLACK) {
             r = 5 - r;
         }
-        
+
         //king distance
         int kdist_us_bonus = distance(sd->brd.get_sq(KING[us]), to) * r * (r - 1);
         int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * r * (r - 1) * 2;
         result->add(0, kdist_them_bonus - kdist_us_bonus);
-        
+
         //connected and defended passers
         U64 bit_sq = BIT(sq);
         U64 connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
@@ -1486,7 +1486,7 @@ namespace eg {
      * Routine to verify if our pawns are blocked
      */
     bool blocked_pawns(search_t * s, bool us) {
-        U64 pawns = s->brd.bb[PAWN[us]];
+        U64 pawns = s->stack->passers & s->brd.bb[PAWN[us]];
         int direction = us == WHITE ? 8 : -8;
         bool them = !us;
         U64 occ = s->brd.all(them);
@@ -1510,7 +1510,7 @@ namespace eg {
         }
         return true;
     }
-    
+
     int piece_distance(search_t * s, const bool us) {
         assert(gt_1(s->brd.all(us)));
         int fsq = bsf(s->brd.all(us));
@@ -1519,12 +1519,43 @@ namespace eg {
         return distance(fsq, rsq);
     }
 
-    bool has_unstoppable_pawn(search_t * s, const bool us) {
-        return s->stack->passer_score[us].eg > 650;
+    int unstoppable_pawn(search_t * s, const bool us) {
+        U64 passers = s->stack->passers & s->brd.bb[PAWN[us]];
+        if (passers == 0) {
+            return 0;
+        }
+        bool them = !us;
+        assert(s->brd.has_pieces(them) == false);
+        bool utm = s->brd.stack->wtm == (us == WHITE);
+        int kpos_them = s->brd.get_sq(KING[them]);
+        int kpos_us = s->brd.get_sq(KING[us]);
+        int result = 0;
+        int score;
+        do {
+            score = 0;
+            int psq = pop(passers);
+            int qsq = queening_square(psq, us);
+            int steps_pawn = distance_rank(psq, qsq) - utm - is_rank_2(psq, us);
+            int steps_king = distance(kpos_them, qsq) - 1;
+            if (steps_pawn <= 2 && (KING_MOVES[kpos_us] & BIT(qsq))) {
+                score = 60 - 10 * steps_pawn;
+            } else if (steps_king > steps_pawn) {
+                score = 60 - 10 * steps_pawn;
+            }
+            if (score > result) {
+                result = score;
+            }
+        } while (passers && result < 50);
+        if (result && is_1(s->brd.all(them))) {
+            assert(s->brd.all(them) == BIT(kpos_them));
+            result *= 2;
+        }
+        return us == WHITE ? result : - result;
     }
 
     bool eg_test(search_t * s, bool pawns_us, bool pcs_us, bool pawns_them, bool pcs_them, bool us) {
         const bool them = !us;
+
         return pawns_us == bool(s->brd.bb[PAWN[us]])
                 && pawns_them == bool(s->brd.bb[PAWN[them]])
                 && pcs_us == s->brd.has_pieces(us)
@@ -1535,8 +1566,9 @@ namespace eg {
     int knpk(search_t * s, const int score, const bool us) {
         const bool them = !us;
         if (s->brd.bb[PAWN[us]] & EDGE & RANK[us][7]) {
-            U64 queening_square = fill_up(s->brd.bb[PAWN[us]], us) & RANK[us][8];
-            if (distance(bsf(queening_square), s->brd.get_sq(KING[them])) <= 1) {
+            int psq = s->brd.get_sq(PAWN[us]);
+            if (distance(queening_square(psq, us), s->brd.get_sq(KING[them])) <= 1) {
+
                 return draw(score, 128);
             }
         }
@@ -1558,6 +1590,7 @@ namespace eg {
                 U64 control_them = KING_MOVES[s->brd.get_sq(KING[them])] | s->brd.bb[KING[them]];
                 control_them &= ~control_us;
                 if ((control_them & queening_squares) == queening_squares) {
+
                     return draw(score, 128);
                 }
                 return draw(score, 4);
@@ -1627,6 +1660,7 @@ namespace eg {
         int bonus = def_dist + prom_dist - same_file + bool(path_attacks)
                 - bool(path_defends) - distance(kpos_us, pawn_sq) - 1;
         if (prom_dist < 3 && path_defends != 0) {
+
             return draw(score, 16) + BONUS[us] * bonus / 2;
         }
         return draw(score, 8) + BONUS[us] * bonus;
@@ -1680,10 +1714,12 @@ namespace eg {
                 return score + win(us, 2);
             }
             return draw(score, 64);
-        } else if (has_unstoppable_pawn(s, us)) { //unstoppable pawn
-            return score + win(us, 2);
         }
-        return score;
+        int bonus = unstoppable_pawn(s, us);
+        if (bonus == 0) {
+            return score;
+        }
+        return score + win(us, 2) + bonus;
     }
 
     /**
@@ -1691,6 +1727,16 @@ namespace eg {
      */
     int pawns_vs_pawns(search_t * s, int score, const bool us) {
         assert(eg_test(s, 1, 0, 1, 0, us));
+        int bonus_us = unstoppable_pawn(s, us);
+        bool blocked_us = blocked_pawns(s, us);
+        bool them = !us;
+        int bonus_them = unstoppable_pawn(s, them);
+        bool blocked_them = blocked_pawns(s, them);
+        if (blocked_them && bonus_them == 0 && bonus_us != 0) {
+            return score + bonus_us;
+        } else if (blocked_us && bonus_us == 0 && bonus_them != 0) {
+            return draw(score, 2);
+        }
         return score;
     }
 
@@ -1715,11 +1761,14 @@ namespace eg {
         const bool them = !us;
         if (has_mating_power(s, us)) {
             return score + win(us) + corner_king(s, them);
-        } else if (has_unstoppable_pawn(s, us)) { //unstoppable passed pawn
-            return score + win(us, 4);
+        }
+        int bonus = unstoppable_pawn(s, us);
+        if (bonus != 0) { //unstoppable passed pawn
+            return score + win(us, 4) + bonus;
         } else if (s->brd.is_eg(KNPK, us)) { //KNPK
             return knpk(s, score, us);
         } else if (s->brd.is_eg(KBPSK, us)) { //KBPK, KBPPK, ...
+
             return kbpsk(s, score, us);
         }
         return score;
@@ -1736,6 +1785,7 @@ namespace eg {
         } else if (s->brd.is_eg(KRKP, us)) {
             return krkp(s, score, us);
         } else if (s->brd.is_eg(KQKP, us)) {
+
             return kqkp(s, score, us);
         }
         return score;
@@ -1746,6 +1796,7 @@ namespace eg {
      */
     int pcs_n_pawns_vs_pawns(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 1, 1, 0, us));
+
         return score;
     }
 
@@ -1754,6 +1805,7 @@ namespace eg {
      */
     int pawns_vs_pcs(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 0, 0, 1, us));
+
         return score;
     }
 
@@ -1762,6 +1814,7 @@ namespace eg {
      */
     int pawns_vs_pcs_n_pawns(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 0, 1, 1, us));
+
         return score;
     }
 
@@ -1780,6 +1833,7 @@ namespace eg {
         } else if (has_mating_power(s, them)) { //win 
             return score + win(us, 8) + corner_king(s, them, 8);
         } else { //win and they can impossibly win
+
             return score + win(us, 4) + corner_king(s, them, 4);
         }
     }
@@ -1805,6 +1859,7 @@ namespace eg {
             if (blocked_pawns(s, us)) {
                 return draw(score, 8);
             } else {
+
                 return draw(score, 4);
             }
         }
@@ -1830,6 +1885,7 @@ namespace eg {
                 return draw(score, 2) + corner_king(s, them, 8);
             }
         } else { //winning edge
+
             return score + corner_king(s, them, 4);
         }
     }
@@ -1840,6 +1896,7 @@ namespace eg {
     int pcs_n_pawns_vs_pcs_n_pawns(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 1, 1, 1, us));
         if (s->brd.is_eg(OPP_BISHOPS, us)) {
+
             return opp_bishops(s, score, us);
         }
         return score;
