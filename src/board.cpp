@@ -922,6 +922,12 @@ bool board_t::is_eg(endgame_t eg, bool us) {
                     && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
                     && bb[WROOK] == 0 && bb[BROOK] == 0
                     && is_1(bb[QUEEN[us]]) && bb[QUEEN[them]] == 0;
+        case KRPKR:
+            return is_1(bb[PAWN[us]]) && bb[PAWN[them]] == 0
+                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
+                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
+                    && is_1(bb[ROOK[us]]) && is_1(bb[ROOK[them]])
+                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
         default: return false;
     }
 }

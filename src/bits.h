@@ -175,6 +175,7 @@ const U64 EDGE = U64(RANK_8 | RANK_1 | FILE_A | FILE_H);
 const U64 OUTER = U64(RANK_7 | RANK_2 | FILE_B | FILE_G | EDGE);
 const U64 LARGE_CENTER = U64(FULL_BOARD^OUTER);
 const U64 CENTER = U64(LARGE_CENTER & ~(RANK_6 | RANK_3 | FILE_C | FILE_F));
+const int GRAIN_SIZE = 4;
 
 const U64 NEIGHBOUR_FILES[8] = {
     FILE_B,
@@ -354,6 +355,10 @@ inline int queening_square(int sq, bool w) {
 
 inline int is_rank_2(int sq, bool w) {
     return w? RANK(sq) == 1 : RANK(sq) == 6;
+}
+
+inline int rank(int sq, bool w) {
+    return w? RANK(sq) : 7 - RANK(sq);
 }
 
 /*

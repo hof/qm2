@@ -152,7 +152,7 @@ public:
     bool is_passed_pawn(move_t * move) {
         return BIT(move->ssq) & stack->passers;
     }
-
+    
     search_stack_t * get_stack(int ply) {
         assert(ply >= 0 && ply < MAX_PLY);
         return &_stack[ply];

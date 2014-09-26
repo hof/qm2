@@ -8,6 +8,7 @@ add_library(MAX2SRC
 	movegen.cpp
 	movepicker.cpp
 	book.cpp
+        endgame.cpp
 	evaluate.cpp
 	search.cpp
 	opponent.cpp

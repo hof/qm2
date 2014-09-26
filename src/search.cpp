@@ -428,7 +428,7 @@ int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
             return 1;
         }
         int see = brd.see(move);
-        return see > 0 || (see >= 0 && depth <= 4);
+        return (bool) (see > 0) || (see >= 0 && depth <= 4);
     }
     return 0;
 }
@@ -540,8 +540,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     bool in_check = stack->in_check;
     bool pv = alpha + 1 < beta;
     int eval = evaluate(this);
-    int delta = FUTILITY_MARGIN * depth;
-    bool do_prune_node = !in_check && !skip_null && !pv
+    int delta = FUTILITY_MARGIN * (depth + 2 + pv);
+    bool do_prune_node = !in_check && !skip_null 
             && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
 
     //return if static evaluation score is already much better than beta
@@ -809,7 +809,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         alpha = eval;
     }
     stack->tt_key = brd.stack->tt_key;
-    int delta = FUTILITY_MARGIN + (depth == 0) * FUTILITY_MARGIN;
+    bool pv = alpha + 1 < beta;
+    int delta = (1 + (depth >= 0) + pv) * FUTILITY_MARGIN;
 
     //do the loop 
     do {
@@ -819,12 +820,10 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
-
-        bool dangerous = move->capture || move->promotion || move->castle
-                || is_dangerous_check(move, gives_check);
+        bool dangerous = move->capture || in_check || gives_check || move->promotion || move->castle;
 
         //prune all quiet moves
-        if (!dangerous && !in_check) {
+        if (!dangerous) {
             pruned_nodes++;
             continue;
         }
@@ -930,7 +929,7 @@ bool search_t::is_dangerous_check(move_t * const move, const int gives_check) {
         return true;
     } else {
         assert(gives_check == 1);
-        return brd.min_gain(move) >= 0 || brd.see(move) >= 0;
+        return move->capture || move->promotion || brd.min_gain(move) >= 0 || brd.see(move) >= 0;
     }
 }
 
