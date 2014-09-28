@@ -540,7 +540,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     bool in_check = stack->in_check;
     bool pv = alpha + 1 < beta;
     int eval = evaluate(this);
-    int delta = FUTILITY_MARGIN * (depth + 2 + pv);
+    int delta = FUTILITY_MARGIN * (depth + pv);
     bool do_prune_node = !in_check && !skip_null 
             && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
 
@@ -805,13 +805,11 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      */
 
     //prepare
+    stack->tt_key = brd.stack->tt_key;
     if (eval > alpha && !in_check) {
         alpha = eval;
     }
-    stack->tt_key = brd.stack->tt_key;
-    bool pv = alpha + 1 < beta;
-    int delta = (1 + (depth >= 0) + pv) * FUTILITY_MARGIN;
-
+    
     //do the loop 
     do {
 
@@ -820,17 +818,18 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
-        bool dangerous = move->capture || in_check || gives_check || move->promotion || move->castle;
+        bool dangerous = depth < 0 || move->capture || in_check || gives_check || move->promotion || move->castle;
 
         //prune all quiet moves
         if (!dangerous) {
+            assert(depth == 0);
             pruned_nodes++;
             continue;
         }
 
         //delta pruning
         bool do_prune = !in_check && !gives_check;
-        if (do_prune && eval + delta + brd.max_gain(move) <= alpha) {
+        if (do_prune && eval + brd.max_gain(move) <= alpha) {
             pruned_nodes++;
             continue;
         }
@@ -852,11 +851,14 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         /*
          * Handle results: beta cutoff or improved alpha
          */
-        if (score >= beta) {
-            stack->best_move.set(move);
-            return score;
+        
+        if (stop_all) {
+            return alpha;
         } else if (score > alpha) {
             stack->best_move.set(move);
+            if (score >= beta) {
+                return score;
+            }
             alpha = score;
         }
     } while ((move = move::next(this, depth)));
