@@ -255,6 +255,32 @@ public:
                 || (bb[BBISHOP] | bb[BQUEEN]) & magic::bishop_moves(sq, bb[ALLPIECES])
                 || (bb[BROOK] | bb[BQUEEN]) & magic::rook_moves(sq, bb[ALLPIECES]);
     }
+    
+    bool is_attacked_excl_king(int sq, bool white) {
+        return white ?
+                bb[WKNIGHT] & KNIGHT_MOVES[sq]
+                || bb[WPAWN] & BPAWN_CAPTURES[sq]
+                || (bb[WBISHOP] | bb[WQUEEN]) & magic::bishop_moves(sq, bb[ALLPIECES])
+                || (bb[WROOK] | bb[WQUEEN]) & magic::rook_moves(sq, bb[ALLPIECES])
+                :
+                bb[BKNIGHT] & KNIGHT_MOVES[sq]
+                || bb[BPAWN] & WPAWN_CAPTURES[sq]
+                || (bb[BBISHOP] | bb[BQUEEN]) & magic::bishop_moves(sq, bb[ALLPIECES])
+                || (bb[BROOK] | bb[BQUEEN]) & magic::rook_moves(sq, bb[ALLPIECES]);
+    }
+    
+    bool is_attacked_excl_queen(int sq, bool white) {
+        return white ?
+                bb[WKNIGHT] & KNIGHT_MOVES[sq]
+                || bb[WPAWN] & BPAWN_CAPTURES[sq]
+                || bb[WBISHOP] & magic::bishop_moves(sq, bb[ALLPIECES])
+                || bb[WROOK] & magic::rook_moves(sq, bb[ALLPIECES])
+                :
+                bb[BKNIGHT] & KNIGHT_MOVES[sq]
+                || bb[BPAWN] & WPAWN_CAPTURES[sq]
+                || bb[BBISHOP] & magic::bishop_moves(sq, bb[ALLPIECES])
+                || bb[BROOK] & magic::rook_moves(sq, bb[ALLPIECES]);
+    }
 
     /**
      * Return a bitboard with all attacks to a given square

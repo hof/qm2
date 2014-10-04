@@ -211,12 +211,9 @@ namespace eg {
      */
     int opp_bishops(search_t * s, const int score, const bool us) {
         assert(s->brd.is_eg(OPP_BISHOPS, us));
-        static const int PF[9] = {128, 16, 8, 4, 2, 2, 2, 2, 2};
+        static const int PF[9] = {128, 16, 8, 4, 2, 2, 1, 1, 1};
         int pawn_count = s->brd.count(PAWN[us]);
         int pf = PF[pawn_count];
-        if (blocked_pawns(s, us)) {
-            pf *= 2;
-        }
         return draw(score, pf);
     }
 

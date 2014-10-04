@@ -67,6 +67,7 @@ void test_positions() {
     test_fen("1r3r1k/3p4/1p1Nn1R1/4Pp1q/pP3P1p/P7/5Q1P/6RK w - - 0 1", "f2e2", 300);
     test_fen("2rq1bk1/p4p1p/1p4p1/3b4/3B1Q2/8/P4PpP/3RR1K1 w - - 0 1", "e1e8", 300);
     test_fen("5rk1/2p4p/2p4r/3P4/4p1b1/1Q2NqPp/PP3P1K/R4R2 b - - 0 1", "f3g2", score::DEEPEST_MATE);
+    test_fen("5r2/4q1pk/4Q1pp/P1pPp3/2p1P3/2P3B1/4b1PP/R5K1 b - - 0 1", "e7g5", 50);
     test_fen("2rq1rk1/pp3ppp/2n2b2/4NR2/3P4/PB5Q/1P4PP/3R2K1 w - - 0 1", "h3h7", score::DEEPEST_MATE);
     test_fen("r1bq3r/ppppR1p1/5n1k/3P4/6pP/3Q4/PP1N1PP1/5K1R w - - 0 1", "h4h5", score::DEEPEST_MATE);
     test_fen("5r1k/3b2p1/p6p/1pRpR3/1P1P2q1/P4pP1/5QnP/1B4K1 w - - 0 1", "h2h3", 300);
@@ -87,7 +88,7 @@ void test_positions() {
     test_fen("1nbq1r1k/3rbp1p/p1p1pp1Q/1p6/P1pPN3/5NP1/1P2PPBP/R4RK1 w - - 0 1", "f3g5", score::DEEPEST_MATE);
     test_fen("nrq4r/2k1p3/1p1pPnp1/pRpP1p2/P1P2P2/2P1BB2/1R2Q1P1/6K1 w - - 0 1", "e3c5", 200);
     test_fen("r2qr1k1/5pb1/bpnp3p/p1p3pn/P1P1P3/2N1BPP1/1P1NB2P/R2Q1R1K w - - 0 1", "f3f4", 50);
-    test_fen("r2q2k1/5pb1/bpnpr2p/p1p3pn/P1P1P3/2N1BPP1/1P1NB2P/R2Q1R1K b - - 0 1", "g7c3", -20);    
+    test_fen("r2q2k1/5pb1/bpnpr2p/p1p3pn/P1P1P3/2N1BPP1/1P1NB2P/R2Q1R1K b - - 0 1", "g7c3", -20); 
 }
 
 void handle_row(int ix) {

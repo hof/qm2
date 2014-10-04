@@ -33,7 +33,8 @@
 namespace {
 
     enum search_constants_t {
-        FUTILITY_MARGIN = 50
+        FUTILITY_MARGIN = 50,
+        DELTA = 0
     };
 
 };
@@ -135,7 +136,7 @@ bool search_t::book_lookup() {
 void search_t::go() {
     assert(stack->best_move.piece == 0 && ponder_move.piece == 0);
     if (book_lookup()) { //book hit
-        uci::send_pv(1, 1, 1, 1, game->tm.elapsed(),
+        uci::send_pv(0, 1, 1, 1, game->tm.elapsed(),
                 stack->best_move.to_string().c_str(), score::EXACT);
     } else if (init_root_moves() > 0) { //do id search
         iterative_deepening();
@@ -208,6 +209,7 @@ int search_t::aspiration(int depth, int last_score) {
             } else if (score::is_win(score)) {
                 break;
             }
+            last_score = score;
         }
     }
     return pvs_root(-score::INF, score::INF, depth);
@@ -539,9 +541,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
     //prepare
     bool in_check = stack->in_check;
     bool pv = alpha + 1 < beta;
-    int eval = evaluate(this);
-    int delta = FUTILITY_MARGIN * (depth + pv);
-    bool do_prune_node = !in_check && !skip_null 
+    const int eval = evaluate(this);
+    const int delta = DELTA + FUTILITY_MARGIN * (depth + pv);
+    bool do_prune_node = !in_check && !skip_null && !pv
             && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
 
     //return if static evaluation score is already much better than beta
@@ -829,7 +831,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
         //delta pruning
         bool do_prune = !in_check && !gives_check;
-        if (do_prune && eval + brd.max_gain(move) <= alpha) {
+        const int delta = DELTA;
+        if (do_prune && eval + brd.max_gain(move) + delta <= alpha) {
             pruned_nodes++;
             continue;
         }

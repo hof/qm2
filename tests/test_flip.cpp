@@ -7,8 +7,10 @@
 
 engine_t * global_engine;
 bool stop_test;
+int MAX_DIVIDE_STEPS = 5;
+void flip_divide(int test_num, const char * fen, int divide_steps);
 
-bool flipTest(int test_num, const char * fen) {
+bool flipTest(int test_num, const char * fen, int divide_steps = MAX_DIVIDE_STEPS) {
     if (stop_test) {
         return false;
     }
@@ -58,6 +60,15 @@ bool flipTest(int test_num, const char * fen) {
         return false;
     }
 
+    if (divide_steps <= 0) {
+        stop_test = true;
+        return false;
+    }
+    
+    /*
+     * 1 ply search should give equal results
+     */
+    
     global_engine->new_game(brd.to_string());
     global_engine->think();
     global_engine->stop_all();
@@ -77,10 +88,32 @@ bool flipTest(int test_num, const char * fen) {
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=Search (score) does not match" << std::endl;
         std::cout << "original: " << fen1 << " score: " << score1 << " nodes: " << nodes1 << std::endl;
         std::cout << "flipped:  " << fen2 << " score: " << score2 << " nodes: " << nodes2 << std::endl;
+        stop_test = false;
+        flip_divide(test_num, fen, divide_steps);
+        stop_test = true;
         return false;
     }
     stop_test = false;
     return true;
+}
+
+void flip_divide(int test_num, const char * fen, int divide_steps) {
+    std::cout << "*** dividing (" << divide_steps << ") " << fen << std::endl;
+    search_t * s = new search_t(fen);
+    int mc = s->init_root_moves();
+    for (int i = 0; i < mc; i++) {
+        root_move_t * rmove = &s->root.moves[i];
+        s->forward(&rmove->move, rmove->gives_check);
+        if (rmove->gives_check) {
+            s->brd.stack->checker_sq = rmove->checker_sq;
+            s->brd.stack->checkers = rmove->checkers;
+        }
+        std::string fen = s->brd.to_string();
+        flipTest(test_num, fen.c_str(), divide_steps - 1);
+        s->backward(&rmove->move);
+    }
+    std::cout << "*** end of divide" << std::endl;
+    delete s;
 }
 
 void flipTestSuite(engine_t * engine, int depth) {
