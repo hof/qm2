@@ -11,10 +11,11 @@ add_library(MAX2SRC
         endgame.cpp
 	evaluate.cpp
 	search.cpp
-	opponent.cpp
+        opponent.cpp
         game.cpp      
         engine.cpp
         uci_console.cpp
+        w17/w17_search.cpp
 )
 
 include_directories(${MAX2_SOURCE_DIR}/src)

@@ -42,6 +42,7 @@ private:
     bool _ponder;
     move_t _result_move;
     int _result_score;
+    int _wild;
     
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
@@ -106,6 +107,10 @@ public:
     void set_score(int score) {
         _result_score = score;
     }
+    
+    void set_wild(int wild) {
+        _wild = wild;
+    }
 
     int get_score() {
         return _result_score;
@@ -114,7 +119,7 @@ public:
     move_t get_move() {
         return _result_move;
     }
-
+    
     bool target_found() {
         return _target_found;
     }

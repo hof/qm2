@@ -20,6 +20,7 @@
  */
 
 #include "engine.h"
+#include "w17/w17_search.h"
 
 using namespace std;
 
@@ -91,6 +92,7 @@ engine_t::engine_t() : threads_t() {
     _result_move.clear();
     _result_score = 0;
     _game.clear();
+    _wild = 0;
 }
 
 /**
@@ -124,7 +126,12 @@ void * engine_t::_think(void * engine_p) {
     
     //initialize
     engine_t * engine = (engine_t*) engine_p;
-    search_t * s = new search_t(engine->_root_fen.c_str(), engine->settings());
+    search_t * s;
+    if (engine->_wild == 17) {
+        s = new w17_search_t(engine->_root_fen.c_str(), engine->settings());
+    } else {
+        s = new search_t(engine->_root_fen.c_str(), engine->settings());
+    }
     
     //think
     s->go();
