@@ -131,7 +131,7 @@ void * engine_t::_think(void * engine_p) {
     //initialize
     engine_t * engine = (engine_t*) engine_p;
     search_t * s;
-    if (engine->_wild == 17) {
+    if (engine->_wild == 17 || true) {
         s = new w17_search_t(engine->_root_fen.c_str(), engine->settings());
     } else {
         s = new search_t(engine->_root_fen.c_str(), engine->settings());

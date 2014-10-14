@@ -111,7 +111,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 } else {
                     list->minimum_score = -move::INF;
                     result = pop(s, list);
-                    if (result) {
+                    if (result || (s->stack->tt_move.piece && s->stack->tt_move.capture)) {
                         list->stage = STOP;
                         return result;
                     }

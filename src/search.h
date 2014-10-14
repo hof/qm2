@@ -145,7 +145,7 @@ public:
     int draw_score() {
         return 0;
     }
-
+    
     bool is_recapture(move_t * move) {
         move_t * prev_move = &(stack - 1)->current_move;
         return move->capture && prev_move->capture && move->tsq == prev_move->tsq;

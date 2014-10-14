@@ -812,7 +812,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     if (eval > alpha && !in_check) {
         alpha = eval;
     }
-    
+
     //do the loop 
     do {
 
@@ -855,7 +855,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         /*
          * Handle results: beta cutoff or improved alpha
          */
-        
+
         if (stop_all) {
             return alpha;
         } else if (score > alpha) {
