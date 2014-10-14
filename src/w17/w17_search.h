@@ -16,13 +16,9 @@
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  *  
  * File:  search.h
- * Search methods for traditional chess. 
- * Maxima uses a fail-soft principle variation search (PVS) with
- * - null move pruning 
- * - futility pruning
- * - late move reductions (LMR) and late move pruning (LMP)
+ * Search methods for wild 17 (losers) chess. 
  *
- * Created on 13 mei 2011, 14:08
+ * Created on 13 oct 2014, 14:08
  */
 
 #ifndef W17_SEARCH_H
@@ -31,15 +27,14 @@
 #include "search.h"
 
 class w17_search_t : public search_t {
-private:
-    search_stack_t _stack[MAX_PLY];
 
 public:
 
     w17_search_t(const char * fen, game_t * g = NULL) : search_t(fen, g) {
-
+        wild = 17;
+        book_name = "book.w17.bin";
     }
-
+    
 };
 
 #endif	/* W17_SEARCH_H */

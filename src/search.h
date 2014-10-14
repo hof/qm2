@@ -90,10 +90,9 @@ struct search_stack_t {
 };
 
 class search_t {
-private:
-    search_stack_t _stack[MAX_PLY];
-
+    
 public:
+    search_stack_t _stack[MAX_PLY];
     game_t * game;
     board_t brd;
     root_t root;
@@ -109,8 +108,11 @@ public:
     int result_score;
     int history[BKING + 1][64];
     move_t ponder_move;
+    std::string book_name;
+    int wild;
 
     search_t(const char * fen, game_t * g = NULL) {
+        wild = 0;
         init(fen, g);
     }
     void init(const char * fen, game_t * g);

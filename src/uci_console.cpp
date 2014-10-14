@@ -41,7 +41,7 @@ namespace uci {
         stream >> t;
         return t;
     }
-    
+
     void silent(bool on) {
         _silent = on;
     }
@@ -102,6 +102,8 @@ namespace uci {
                 result = handle_eval(parser);
             } else if (token == "learn") {
                 result = handle_learn(parser);
+            } else if (token == "wild") {
+                result = handle_wild(parser);
             }
         }
         return result;
@@ -275,25 +277,35 @@ namespace uci {
         return true;
     }
 
-/*
+        /*
      * XLearn can be used to determine if a new evaluation or search 
      * feature gives better performance, and what is the ideal score
      * 
      */
     bool handle_learn(input_parser_t & parser) {
-        bool result = true;
         engine::settings()->clear();
         engine::set_ponder(false);
         engine::set_position(fen);
         engine::learn();
-        return result;
+        return true;
+    }
+
+    bool handle_wild(input_parser_t & parser) {
+        int wv;
+        parser >> wv;
+        if (wv == 0 || wv == 17) {
+            engine::set_wild(wv);
+            out("wild ok");
+        } else {
+            out("wild not supported");
+        }
+        return true;
     }
 
     /*
      * Eval prints the evaluation result on the current position
      */
     bool handle_eval(input_parser_t & parser) {
-        bool result = true;
         engine::settings()->clear();
         engine::set_ponder(false);
         engine::settings()->max_depth = 1;
@@ -308,7 +320,7 @@ namespace uci {
         }
         engine::new_game(pfen);
         engine::analyse();
-        return result;
+        return true;
     }
 
     void send_id() {

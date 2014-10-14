@@ -62,6 +62,10 @@ namespace engine {
         _ponder = ponder;
         _engine.set_ponder(ponder);
     }
+    
+    void set_wild(int wild) {
+        _engine.set_wild(wild);
+    }
 
     bool is_stopped() {
         return _stopped;

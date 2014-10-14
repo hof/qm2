@@ -91,6 +91,7 @@ void search_t::init(const char * fen, game_t * g) {
     stack->eval_result = score::INVALID; //required
     stack->eval_result = evaluate(this);
     init_history();
+    book_name = "book.bin";
 }
 
 /**
@@ -111,7 +112,7 @@ void search_t::init_history() {
  */
 bool search_t::book_lookup() {
     bool result = false;
-    book::open("book.bin");
+    book::open(book_name);
     move::list_t * bmoves = &stack->move_list;
     int total_score = book::find(&brd, bmoves);
     if (total_score > 0) {

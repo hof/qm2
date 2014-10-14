@@ -34,6 +34,7 @@ namespace uci {
     bool handle_setoption(input_parser_t &parser);
     bool handle_eval(input_parser_t &parser);
     bool handle_learn(input_parser_t &parser);
+    bool handle_wild(input_parser_t &parser);
     
     void send_id();
     void send_options();

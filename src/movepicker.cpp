@@ -61,13 +61,12 @@ move_t * move_picker_t::first(search_t * s, int depth) {
 }
 
 move_t * move_picker_t::next(search_t * s, int depth) {
-    U64 mask;
-    board_t * brd = &s->brd;
-    move::list_t * list = &s->stack->move_list;
+
     /*
      * 1. Pop the best move from the list. If a move is found, a just-in-time 
      * legality check is done and the movepicker returns a valid, legal, move.
      */
+    move::list_t * list = &s->stack->move_list;
     move_t * result = pop(s, list);
     if (result) {
         return result;
@@ -77,21 +76,15 @@ move_t * move_picker_t::next(search_t * s, int depth) {
      * 2. If no move was found, proceed to the next stage and get or generate
      * (some) moves.
      */
+    U64 mask;
+    board_t * brd = &s->brd;
+    bool do_quiets = depth >= 0 || s->stack->in_check;
     switch (list->stage) {
         case HASH:
             result = &s->stack->tt_move;
             if (result->piece) {
                 assert(brd->valid(result));
                 assert(brd->legal(result));
-                list->stage = MATEKILLER;
-                return result;
-            }
-        case MATEKILLER:
-            result = &s->stack->killer[0];
-            if (result->piece
-                    && !s->stack->tt_move.equals(result)
-                    && brd->valid(result)
-                    && brd->legal(result)) {
                 list->stage = CAPTURES;
                 return result;
             }
@@ -109,10 +102,19 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                         move->score = brd->mvvlva(move);
                     }
                 }
-                result = pop(s, list);
-                if (result) {
-                    list->stage = PROMOTIONS;
-                    return result;
+                if (s->wild != 17) {
+                    result = pop(s, list);
+                    if (result) {
+                        list->stage = PROMOTIONS;
+                        return result;
+                    }
+                } else {
+                    list->minimum_score = -move::INF;
+                    result = pop(s, list);
+                    if (result) {
+                        list->stage = STOP;
+                        return result;
+                    }
                 }
             }
         case PROMOTIONS:
@@ -127,12 +129,23 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 }
                 result = pop(s, list);
                 if (result) {
+                    list->stage = MATEKILLER;
+                    return result;
+                }
+            }
+        case MATEKILLER:
+            if (do_quiets) {
+                result = &s->stack->killer[0];
+                if (result->piece
+                        && !s->stack->tt_move.equals(result)
+                        && brd->valid(result)
+                        && brd->legal(result)) {
                     list->stage = KILLER1;
                     return result;
                 }
             }
         case KILLER1:
-            if (depth > 0) {
+            if (do_quiets) {
                 result = &s->stack->killer[1];
                 if (result->piece
                         && !s->stack->tt_move.equals(result)
@@ -145,7 +158,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 }
             }
         case KILLER2:
-            if (depth > 0) {
+            if (do_quiets) {
                 result = &s->stack->killer[2];
                 if (result->piece
                         && !s->stack->tt_move.equals(result)
@@ -179,7 +192,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
 
             }
         case QUIET_MOVES:
-            if (depth >= 0 || s->stack->in_check) {
+            if (do_quiets) {
                 list->minimum_score = -move::INF;
                 move::gen_quiet_moves(brd, list);
                 for (move_t * move = list->current; move != list->last; move++) {
