@@ -28,14 +28,17 @@
 #include "hashcodes.h"
 
 class w17_search_t : public search_t {
-
 public:
+    
+    virtual int pvs(int alpha, int beta, int depth);
+    bool w17_is_draw();
 
     w17_search_t(const char * fen, game_t * g = NULL) : search_t(fen, g) {
         wild = 17;
         book_name = "book.w17.bin";
         brd.stack->tt_key ^= hash::codes[13][17]; //different hash codes for w17
     }
+
     
 };
 
