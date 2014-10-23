@@ -111,51 +111,67 @@ int w17_search_t::w17_pvs(int alpha, int beta, int max_quiets_us, int max_quiets
             return alpha;
         }
     }
-    
+
     /*
-     * Moves loop
+     * Transposition table lookup
      */
 
-    //if no first move, it's checkmate or stalemate so we won
-    stack->tt_move.clear();
+    stack->tt_key = brd.stack->tt_key; //needed for testing repetitions
+    int tt_move = 0, tt_flag = 0, tt_score;
+    if (depth > 0 && trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag)) {
+        if ((tt_flag == score::LOWERBOUND && tt_score >= beta)
+                || (tt_flag == score::UPPERBOUND && tt_score <= alpha)
+                || tt_flag == score::EXACT) {
+            return tt_score;
+        }
+    }
+
+    /*
+     * First move
+     * - if there is no first move, it's checkmate or stalemate and both cases
+     * are a win in losers chess
+     */
+
+    stack->tt_move.set(tt_move);
     move_t * move = move::first(this, 0);
     if (!move) {
         return score::MATE - brd.ply;
     }
-    
-    //quiet position
-    const bool quiet_pos = !stack->in_check && move->capture == 0;
-    
-    if (quiet_pos) {
-        const int eval = w17_evaluate(this);
-        const int delta = depth <= 0? 0 : depth * 50;
-        if (depth < 8 && max_quiets_us <= 0) {
-            //reached quiets limit
-            return eval;
-        } else if (depth < 8 && eval - delta >= beta) {
-            //stand pat
-            return eval;
-        } else if (depth < 4) {
-            //return on a quiet position nearby horizon
-            return eval;
-        } 
-        max_quiets_them = 0;
-    }
-    
-    //horizon in unquiet positions: stop but return "uncertain" score
-    if (depth <= 0) {
-        return us == WHITE? -2000 : 2000;
-    } 
-    
-    //stop mate search returning an "uncertain" score.
-    if (depth < popcnt(brd.bb[ALLPIECES]) && max_quiets_us <= 0 && max_quiets_them <= 0) {
-        //mate search horizon
-        return us == WHITE? -1800 : 1800;
-    }
-    
-    
 
-    //prepare and do the loop
+    /*
+     * Node pruning
+     * - special attention to those rare quiet positions: either stop the search 
+     * altogether (horizon) or at least stop searching for a forced mate sequence by the opponent
+     * - if the position at the horizon is not quiet, return an "uncertain score"
+     */
+    
+    const bool quiet_pos = !stack->in_check && move->capture == 0;
+
+    if (depth <= 0 && quiet_pos) {
+        return 0;
+    }
+
+    if (depth <= 0 && !quiet_pos) {
+        return brd.stack->wtm ? -2000 : 2000;
+    }
+
+    if (max_quiets_us <= 0 && quiet_pos) {
+        return 0;
+    }
+
+    if (quiet_pos) {
+        max_quiets_them = depth / 30;
+    }
+
+    if (max_quiets_us <= 0 && max_quiets_them <= 0) {
+        //mate search horizon
+        return brd.stack->wtm ? -1800 : 1800;
+    }
+
+    /*
+     * Moves loop
+     */
+    
     int best = -score::INF;
     stack->best_move.clear();
     int searched_moves = 0;
@@ -192,6 +208,11 @@ int w17_search_t::w17_pvs(int alpha, int beta, int max_quiets_us, int max_quiets
         } else if (score > best) {
             stack->best_move.set(move);
             if (score >= beta) {
+
+                if (depth > 0) {
+                    trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_int(), score::LOWERBOUND);
+                }
+
                 if (depth > 0 && !move->capture && !move->promotion) {
                     update_killers(move, score);
                     update_history(move, depth);
@@ -223,5 +244,11 @@ int w17_search_t::w17_pvs(int alpha, int beta, int max_quiets_us, int max_quiets
     assert(best > -score::INF && best < beta);
     assert(!stop_all);
     assert(brd.valid(&stack->best_move) && brd.legal(&stack->best_move));
+
+    if (depth > 0) {
+        int flag = score::flags(best, alpha, beta); //obs: not using "old-alpha" to keep long pv
+        trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
+    }
+
     return best;
 }
