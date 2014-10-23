@@ -56,7 +56,7 @@ move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
 move_t * move_picker_t::first(search_t * s, int depth) {
     move::list_t * list = &s->stack->move_list;
     list->clear();
-    list->stage = depth > 0 ? HASH : CAPTURES;
+    list->stage = HASH;
     return next(s, depth);
 }
 

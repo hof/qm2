@@ -90,7 +90,6 @@ struct search_stack_t {
 };
 
 class search_t {
-    
 public:
     search_stack_t _stack[MAX_PLY];
     game_t * game;
@@ -115,8 +114,9 @@ public:
         wild = 0;
         init(fen, g);
     }
-    
-    virtual ~search_t() { };
+
+    virtual ~search_t() {
+    };
     void init(const char * fen, game_t * g);
     void go();
     void iterative_deepening();
@@ -143,11 +143,11 @@ public:
     bool is_dangerous_check(move_t * const move, const int gives_check);
     bool is_killer(move_t * const move);
     void init_history();
-    
+
     int draw_score() {
         return 0;
     }
-    
+
     bool is_recapture(move_t * move) {
         move_t * prev_move = &(stack - 1)->current_move;
         return move->capture && prev_move->capture && move->tsq == prev_move->tsq;
@@ -156,7 +156,7 @@ public:
     bool is_passed_pawn(move_t * move) {
         return BIT(move->ssq) & stack->passers;
     }
-    
+
     search_stack_t * get_stack(int ply) {
         assert(ply >= 0 && ply < MAX_PLY);
         return &_stack[ply];

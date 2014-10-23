@@ -328,8 +328,9 @@ int search_t::init_root_moves() {
     root.moves[0].move.clear();
     root.fifty_count = brd.stack->fifty_count;
     rep_table::store(brd.stack->fifty_count, brd.stack->tt_key);
-    int tt_move, tt_flags, tt_score;
+    int tt_move = 0, tt_flags, tt_score;
     trans_table::retrieve(brd.stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
+    stack->tt_move.set(tt_move);
     for (move_t * move = move::first(this, 1);
             move; move = move::next(this, 1)) {
         root_move_t * rmove = &root.moves[root.move_count++];
@@ -792,6 +793,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     }
 
     //get first move; if there's none it's mate, stalemate, or there are no captures/promotions
+    stack->tt_move.clear();
     move_t * move = move::first(this, depth);
     if (!move) {
         if (in_check) {
@@ -883,7 +885,7 @@ int search_t::qsearch_static(int beta, int gain) {
     }
     int base = best + gain;
     U64 done = 0;
-    stack->tt_move.set(0);
+    stack->tt_move.clear();
     for (move_t * move = move::first(this, -1); move != NULL; move = move::next(this, -1)) {
         U64 bit_tsq = BIT(move->tsq);
         if (done & bit_tsq) {

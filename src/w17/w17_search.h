@@ -29,7 +29,7 @@
 
 class w17_search_t : public search_t {
 public:
-    
+
     virtual int pvs(int alpha, int beta, int depth);
     bool w17_is_draw();
 
@@ -39,7 +39,7 @@ public:
         brd.stack->tt_key ^= hash::codes[13][17]; //different hash codes for w17
     }
 
-    
+    int w17_pvs(int alpha, int beta, int max_quiets, int max_quiets_them, int depth);
 };
 
 #endif	/* W17_SEARCH_H */
