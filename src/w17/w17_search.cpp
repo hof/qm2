@@ -20,10 +20,7 @@
  */
 
 #include "w17_search.h"
-
-int w17_evaluate(w17_search_t * s) {
-    return 0;
-}
+#include "w17_eval.h"
 
 /**
  * Verifies is a position is drawn by 
@@ -141,37 +138,36 @@ int w17_search_t::w17_pvs(int alpha, int beta, int max_quiets_us, int max_quiets
     /*
      * Node pruning
      * - special attention to those rare quiet positions: either stop the search 
-     * altogether (horizon) or at least stop searching for a forced mate sequence by the opponent
-     * - if the position at the horizon is not quiet, return an "uncertain score"
+     *   altogether (horizon) or at least stop searching for a forced mate sequence 
+     *   by the opponent
+     * - if the horizon position is not quiet, return an "uncertain score"
      */
-    
+
     const bool quiet_pos = !stack->in_check && move->capture == 0;
 
-    if (depth <= 0 && quiet_pos) {
-        return 0;
+    //depth horizon 
+    if (depth <= 0) {
+        return w17_evaluate(this, quiet_pos ? 8 : -2000);
     }
 
-    if (depth <= 0 && !quiet_pos) {
-        return brd.stack->wtm ? -2000 : 2000;
+    //mate horizon
+    int max_mate_depth = popcnt(brd.bb[ALLPIECES]);
+    bool in_mate_search = depth < max_mate_depth;
+    if (max_quiets_us <= 0 && quiet_pos && in_mate_search) {
+        return w17_evaluate(this, 4);
+    } else if (in_mate_search && quiet_pos) {
+        max_quiets_them = 0;
     }
-
-    if (max_quiets_us <= 0 && quiet_pos) {
-        return 0;
-    }
-
-    if (quiet_pos) {
-        max_quiets_them = depth / 30;
-    }
-
-    if (max_quiets_us <= 0 && max_quiets_them <= 0) {
-        //mate search horizon
-        return brd.stack->wtm ? -1800 : 1800;
+    if (in_mate_search && max_quiets_us <= 0 && max_quiets_them <= 0) {
+        return w17_evaluate(this, -1800);
+    } else if (!in_mate_search && quiet_pos && max_quiets_them > 0) {
+        max_quiets_them--;
     }
 
     /*
      * Moves loop
      */
-    
+
     int best = -score::INF;
     stack->best_move.clear();
     int searched_moves = 0;
@@ -186,15 +182,16 @@ int w17_search_t::w17_pvs(int alpha, int beta, int max_quiets_us, int max_quiets
          */
 
         int gives_check = brd.gives_check(move);
+        bool extend = pv && (gives_check || move->capture || is_passed_pawn(move));
         forward(move, gives_check);
         int score;
         if (searched_moves == 0) {
-            score = -w17_pvs(-beta, -alpha, max_quiets_them, max_quiets_us - 1, depth - 1);
+            score = -w17_pvs(-beta, -alpha, max_quiets_them, max_quiets_us - 1, depth - 1 + extend);
         } else {
-            score = -w17_pvs(-alpha - 1, -alpha, max_quiets_them, max_quiets_us - 1, depth - 1);
+            score = -w17_pvs(-alpha - 1, -alpha, max_quiets_them, max_quiets_us - 1, depth - 1 + extend);
             if (pv && score > alpha) {
                 //full window research
-                score = -w17_pvs(-beta, -alpha, max_quiets_them, max_quiets_us - 1, depth - 1);
+                score = -w17_pvs(-beta, -alpha, max_quiets_them, max_quiets_us - 1, depth - 1 + extend);
             }
         }
         backward(move);

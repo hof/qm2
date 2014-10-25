@@ -90,7 +90,7 @@ const score_t IMBALANCE[9][9] = {//index: major piece units, minor pieces
     //1 major piece down (-5 pawns))
     { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-150, -75),
         /*0 minor pieces (balance) */ S(-100, -50),
-        /*+1 (the exchange)*/ S(20, 0), /*+2*/ S(50, 0), /*+3*/ S(75, 0), /*+4*/ S(100, 25)},
+        /*+1 (the exchange)*/ S(50, 25), /*+2*/ S(50, 0), /*+3*/ S(75, 0), /*+4*/ S(100, 25)},
 
     //balance of major pieces
     { /*-4*/ S(-120, -60), /*-3*/ S(-100, -50), /*-2*/ S(-80, -40), /*-1*/ S(-60, -40),
@@ -98,7 +98,7 @@ const score_t IMBALANCE[9][9] = {//index: major piece units, minor pieces
         /*+1*/ S(60, 40), /*+2*/ S(80, 40), /*+3*/ S(100, 50), /*+4*/ S(120, 60)},
 
     //1 major piece up (+5 pawns))
-    { /*-4*/ S(-100, -25), /*-3*/ S(-75, 0), /*-2*/ S(-50, 0), /*-1 the exchange */ S(-20, 0),
+    { /*-4*/ S(-100, -25), /*-3*/ S(-75, 0), /*-2*/ S(-50, 0), /*-1 the exchange */ S(-50, -25),
         /*0 minor pieces (balance) */ S(100, 50),
         /*+1*/ S(150, 75), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
 
@@ -340,7 +340,9 @@ const score_t ROOK_OPEN_FILE = S(17, 17);
 const score_t ROOK_GOOD_SIDE = S(8, 16); //Rule of Tarrasch 
 const score_t ROOK_WRONG_SIDE = S(-8, -16);
 const score_t ROOK_CLOSED_FILE = S(-5, -5);
+const score_t CONNECTED_ROOKS(5, 10);
 const short ROOK_ATTACK = 12;
+
 
 U64 ROOK_PATTERNS[2] = {//black, white
     BIT(h8) | BIT(g8) | BIT(h7) | BIT(g7) | BIT(a8) | BIT(b8) | BIT(a7) | BIT(b7),
@@ -1098,7 +1100,21 @@ score_t * eval_rooks(search_t * sd, bool us) {
     while (rooks) {
         int sq = pop(rooks);
         result->add(PST[WROOK][ISQ(sq, us)]);
+        
+        U64 moves = magic::rook_moves(sq, occ) & sd->stack->mob[us];
+        if (moves & sd->stack->attack[us]) {
+            result->add(popcnt(moves & sd->stack->attack[us]) * ROOK_ATTACK);
+        }
+        
+        if (brd->is_attacked_by_pawn(sq, them)) {
+            result->add(ATTACKED_PIECE);
+        }
+
         U64 bitSq = BIT(sq);
+        if ((bitSq & RANK[us][7]) && (BIT(brd->get_sq(KING[them])) & BACKRANKS[us])) {
+            result->add(ROOK_7TH);
+        }
+        
         if (bitSq & fill[us]) {
             result->add(ROOK_CLOSED_FILE);
             //trapped rook pattern
@@ -1122,19 +1138,9 @@ score_t * eval_rooks(search_t * sd, bool us) {
             result->add(ROOK_SEMIOPEN_FILE);
         } else {
             result->add(ROOK_OPEN_FILE);
-        }
-
-        if (brd->is_attacked_by_pawn(sq, them)) {
-            result->add(ATTACKED_PIECE);
-        }
-
-        U64 moves = magic::rook_moves(sq, occ) & sd->stack->mob[us];
-        if (moves & sd->stack->attack[us]) {
-            result->add(popcnt(moves & sd->stack->attack[us]) * ROOK_ATTACK);
-        }
-
-        if ((bitSq & RANK[us][7]) && (BIT(brd->get_sq(KING[them])) & BACKRANKS[us])) {
-            result->add(ROOK_7TH);
+            if ((moves & rooks) && ((fill_south(bitSq) & rooks) || (fill_north(bitSq) & rooks))) {
+                result->add(CONNECTED_ROOKS);
+            }
         }
 
         //Tarrasch Rule: place rook behind passers

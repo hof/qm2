@@ -16,6 +16,7 @@ add_library(MAX2SRC
         engine.cpp
         uci_console.cpp
         w17/w17_search.cpp
+        w17/w17_eval.cpp
 )
 
 include_directories(${MAX2_SOURCE_DIR}/src)
