@@ -28,6 +28,11 @@
  * b) repetition
  * @return true if it's an official draw
  */
+
+namespace {
+    const bool DO_EXTEND = false;
+}
+
 bool w17_search_t::w17_is_draw() {
     if (brd.stack->fifty_count > 3) {
         if (brd.stack->fifty_count >= (100 + stack->in_check)) {
@@ -45,13 +50,6 @@ bool w17_search_t::w17_is_draw() {
     return false;
 }
 
-/**
- * Principle Variation Search (fail-soft)
- * @param alpha lowerbound value
- * @param beta upperbound value
- * @param depth remaining search depth
- * @return score for the current node
- */
 int w17_search_t::pvs(int alpha, int beta, int depth) {
     bool us = brd.stack->wtm;
     return w17_pvs(alpha, beta, popcnt(brd.all(!us)), popcnt(brd.all(us)), depth);
@@ -147,23 +145,24 @@ int w17_search_t::w17_pvs(int alpha, int beta, int max_quiets_us, int max_quiets
 
     //depth horizon 
     if (depth <= 0) {
-        return w17_evaluate(this, quiet_pos ? 8 : -2000);
+        if (quiet_pos) {
+            return w17_evaluate(this);
+        }
+        if (max_quiets_us > 0 && max_quiets_them <= 0) {
+            return brd.stack->wtm? 100 + w17_evaluate(this) : -100 + w17_evaluate(this);
+        }
+        return brd.stack->wtm? -1000 : 1000; //unknown
     }
 
     //mate horizon
-    int max_mate_depth = popcnt(brd.bb[ALLPIECES]);
-    bool in_mate_search = depth < max_mate_depth;
+    int max_mate_depth = popcnt(brd.bb[ALLPIECES])-2;
+    bool in_mate_search = depth <= max_mate_depth;
     if (max_quiets_us <= 0 && quiet_pos && in_mate_search) {
-        return w17_evaluate(this, 4);
+        return w17_evaluate(this);
     } else if (in_mate_search && quiet_pos) {
         max_quiets_them = 0;
-    }
-    if (in_mate_search && max_quiets_us <= 0 && max_quiets_them <= 0) {
-        return w17_evaluate(this, -1800);
-    } else if (!in_mate_search && quiet_pos && max_quiets_them > 0) {
-        max_quiets_them--;
-    }
-
+    } 
+    
     /*
      * Moves loop
      */
@@ -182,7 +181,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int max_quiets_us, int max_quiets
          */
 
         int gives_check = brd.gives_check(move);
-        bool extend = pv && (gives_check || move->capture || is_passed_pawn(move));
+        bool extend = DO_EXTEND && pv && move->capture > 0 && in_mate_search;
         forward(move, gives_check);
         int score;
         if (searched_moves == 0) {

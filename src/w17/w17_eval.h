@@ -25,7 +25,7 @@
 #define	W17_EVAL_H
 
 class w17_search_t;
-int w17_evaluate(w17_search_t * s, int level = 0);
+int w17_evaluate(w17_search_t * s);
 
 #endif	/* W17_EVAL_H */
 
