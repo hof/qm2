@@ -750,6 +750,13 @@ int board_t::mvvlva(move_t * move) {
     return board::PVAL[move->capture] + board::PVAL[move->promotion] - move->piece;
 }
 
+int board_t::w17_sort_cap(move_t * move) {
+    if (is_attacked(move->tsq, !stack->wtm)) {
+        return 1000 + board::PVAL[move->piece] + board::PVAL[move->capture];
+    }
+    return board::PVAL[move->capture] - board::PVAL[move->piece];
+}
+
 int board_t::max_gain(move_t * move) {
     int result = board::PVAL[move->capture];
     if (move->promotion) {

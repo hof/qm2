@@ -43,6 +43,7 @@ namespace uci {
     void send_pv(int cp_score, int depth, int sel_depth, U64 nodes, int time, const char * pv, int flag); 
     void send_bestmove(move_t move, move_t ponder_move);
     void send_unknown_option(std::string option);
+    void send_string(std::string msg);
 }
 
 #endif	/* UCI_CONSOLE_H */

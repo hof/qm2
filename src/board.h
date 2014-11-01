@@ -127,6 +127,7 @@ public:
     int max_gain(move_t * capture);
     int min_gain(move_t * capture);
     int mvvlva(move_t * capture);
+    int w17_sort_cap (move_t * capture);
     bool equal_cap(move_t * mv);
     
     bool us() { return stack->wtm; }
@@ -326,7 +327,15 @@ public:
     bool is_attacked_by_pawn(int sq, bool white) {
         return white ? BPAWN_CAPTURES[sq] & bb[WPAWN] : WPAWN_CAPTURES[sq] & bb[BPAWN];
     }
-
+    
+    /**
+     * Return max mate depth in ply, used for W17
+     * The max mate depth is the amount of pieces for the side with the most 
+     * pieces, multiplied by 2 and added 2 for one (extra) check
+     */
+    int max_mate_depth() {
+        return 2 + 2 * MAX(popcnt(bb[WPIECES]), popcnt(bb[BPIECES]));
+    }
 };
 
 

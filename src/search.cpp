@@ -151,7 +151,7 @@ void search_t::go() {
  * or not.
  */
 void search_t::iterative_deepening() {
-    bool is_easy = root.moves[0].see > 0 && root.moves[1].see <= 0;
+    bool is_easy = root.moves[0].see > 0 && root.moves[1].see <= 0 && (wild != 17);
     int last_score = -score::INF;
     move_t easy_move;
     root.sort_moves(&stack->best_move);
@@ -167,7 +167,7 @@ void search_t::iterative_deepening() {
         }
         is_easy &= stack->best_move.equals(&easy_move) && score + FUTILITY_MARGIN > last_score;
         int elapsed = game->tm.elapsed();
-        if (timed_search && !pondering() && root.move_count <= 1 && elapsed > max_time / 8) {
+        if (timed_search && !pondering() && root.move_count <= 1 && elapsed > max_time / 32) {
             break;
         } else if (timed_search && !pondering() && is_easy && elapsed > max_time / 4) {
             break;

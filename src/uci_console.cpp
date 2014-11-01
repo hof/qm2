@@ -347,6 +347,10 @@ namespace uci {
     void send_unknown_option(std::string option) {
         out("No such option: " + option);
     }
+    
+    void send_string(std::string msg) {
+        out("info string " + msg);
+    }
 
     void send_pv(int cp_score, int depth, int sel_depth, U64 nodes, int time, const char * pv, int flag) {
         std::string msg = "info depth " + itoa(depth) + " seldepth " + itoa(MAX(depth, sel_depth));

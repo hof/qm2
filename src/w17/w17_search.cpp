@@ -21,6 +21,7 @@
 
 #include "w17_search.h"
 #include "w17_eval.h"
+#include "uci_console.h"
 
 /**
  * Verifies is a position is drawn by 
@@ -51,11 +52,10 @@ bool w17_search_t::w17_is_draw() {
 }
 
 int w17_search_t::pvs(int alpha, int beta, int depth) {
-    bool us = brd.stack->wtm;
-    return w17_pvs(alpha, beta, popcnt(brd.all(!us)), popcnt(brd.all(us)), depth);
+    return w17_pvs(alpha, beta, -1, 0, depth);
 }
 
-int w17_search_t::w17_pvs(int alpha, int beta, int max_quiets_us, int max_quiets_them, int depth) {
+int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int mate_depth, int depth) {
     nodes++;
     stack->pv_count = 0;
 
@@ -143,26 +143,29 @@ int w17_search_t::w17_pvs(int alpha, int beta, int max_quiets_us, int max_quiets
 
     const bool quiet_pos = !stack->in_check && move->capture == 0;
 
-    //depth horizon 
     if (depth <= 0) {
         if (quiet_pos) {
             return w17_evaluate(this);
+        } else {
+            return brd.stack->wtm ? -1000 : 1000; //unknown, but we have to stop
         }
-        if (max_quiets_us > 0 && max_quiets_them <= 0) {
-            return brd.stack->wtm? 100 + w17_evaluate(this) : -100 + w17_evaluate(this);
-        }
-        return brd.stack->wtm? -1000 : 1000; //unknown
     }
 
-    //mate horizon
-    int max_mate_depth = popcnt(brd.bb[ALLPIECES])-2;
-    bool in_mate_search = depth <= max_mate_depth;
-    if (max_quiets_us <= 0 && quiet_pos && in_mate_search) {
-        return w17_evaluate(this);
-    } else if (in_mate_search && quiet_pos) {
-        max_quiets_them = 0;
-    } 
-    
+    if (quiet_pos) {
+        if (in_mate_search == them) {
+            return w17_evaluate(this);
+        } else if (in_mate_search == us) {
+            if (mate_depth <= 0) {
+                assert(in_mate_search == us);
+                return w17_evaluate(this);
+            }
+        } else if (in_mate_search == -1 && depth < brd.max_mate_depth()) {
+            //can we start a mate search?
+            in_mate_search = us;
+            mate_depth = 2 * popcnt(brd.all(us));
+        }
+    }
+
     /*
      * Moves loop
      */
@@ -185,12 +188,12 @@ int w17_search_t::w17_pvs(int alpha, int beta, int max_quiets_us, int max_quiets
         forward(move, gives_check);
         int score;
         if (searched_moves == 0) {
-            score = -w17_pvs(-beta, -alpha, max_quiets_them, max_quiets_us - 1, depth - 1 + extend);
+            score = -w17_pvs(-beta, -alpha, in_mate_search, mate_depth - 1, depth - 1 + extend);
         } else {
-            score = -w17_pvs(-alpha - 1, -alpha, max_quiets_them, max_quiets_us - 1, depth - 1 + extend);
+            score = -w17_pvs(-alpha - 1, -alpha, in_mate_search, mate_depth - 1, depth - 1 + extend);
             if (pv && score > alpha) {
                 //full window research
-                score = -w17_pvs(-beta, -alpha, max_quiets_them, max_quiets_us - 1, depth - 1 + extend);
+                score = -w17_pvs(-beta, -alpha, in_mate_search, mate_depth - 1, depth - 1 + extend);
             }
         }
         backward(move);

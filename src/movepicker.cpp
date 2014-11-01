@@ -121,7 +121,9 @@ move_t * move_picker_t::next(search_t * s, int depth) {
             move::gen_promotions(brd, list);
             if (list->current != list->last) {
                 for (move_t * move = list->current; move != list->last; move++) {
-                    if (depth <= 0 || brd->see(move) >= 0) {
+                    if (s->wild == 17) {
+                        move->score = 10 - move->promotion;
+                    } else if (depth <= 0 || brd->see(move) >= 0) {
                         move->score = move->promotion;
                     } else {
                         move->score = -100 + move->promotion;

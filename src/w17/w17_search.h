@@ -27,6 +27,7 @@
 #include "search.h"
 #include "hashcodes.h"
 
+
 class w17_search_t : public search_t {
 public:
 
@@ -42,8 +43,8 @@ public:
         brd.stack->material_hash ^= hash::codes[13][17];
         brd.stack->pawn_hash ^= hash::codes[13][17];
     }
-
-    int w17_pvs(int alpha, int beta, int max_quiets, int max_quiets_them, int depth);
+    
+    int w17_pvs(int alpha, int beta, int in_mate_search, int mate_depth, int depth);
 };
 
 #endif	/* W17_SEARCH_H */
