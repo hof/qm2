@@ -151,6 +151,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int mate_dept
         }
     }
 
+    bool pv = alpha + 1 < beta;
     if (quiet_pos) {
         if (in_mate_search == them) {
             return w17_evaluate(this);
@@ -174,7 +175,6 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int mate_dept
     stack->best_move.clear();
     int searched_moves = 0;
     int score_max = score::MATE - brd.ply - 1;
-    bool pv = alpha + 1 < beta;
     do {
         assert(brd.valid(move) && brd.legal(move));
         assert(stack->best_move.equals(move) == false);

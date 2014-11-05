@@ -324,7 +324,7 @@ namespace uci {
     }
 
     void send_id() {
-        out("id name Maxima 2.0");
+        out("id name Maxima 2.0 " + std::string(MAXIMA_REVISION));
         out("id author Hermen Reitsma and Erik van het Hof");
     }
 
@@ -334,6 +334,8 @@ namespace uci {
         out("option name OwnBook type check default true");
         out("option name UCI_AnalyaseMode type check default false");
         out("option name UCI_Opponent type string");
+        out("option name UCI_Chess960 type check default false");
+        out("option name UCI_LosersChess type check default false");
     }
 
     void send_ok() {

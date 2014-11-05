@@ -1,0 +1,7 @@
+#ifndef VERSION_H_IN
+#define	VERSION_H_IN
+
+#define MAXIMA_VERSION "ad097cd0089139f7f897fd0a3029b7471872166e"
+
+#endif	/* VERSION_H_IN */
+

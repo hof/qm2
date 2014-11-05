@@ -31,6 +31,7 @@
 #include "threadman.h"
 #include "uci_console.h"
 #include "timeman.h"
+#include "version.h"
 
 class engine_t : public threads_t {
 private:
