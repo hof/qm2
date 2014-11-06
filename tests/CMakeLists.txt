@@ -23,6 +23,8 @@ target_link_libraries(testFlip MAX2SRC)
 #performance analyzing tests: 
 add_executable(testDepth test_depth.cpp)
 add_executable(testPerformance test_performance.cpp)
+add_executable(testW17Performance test_w17_performance.cpp)
 
 target_link_libraries(testDepth MAX2SRC)
 target_link_libraries(testPerformance MAX2SRC)
+target_link_libraries(testW17Performance MAX2SRC)
