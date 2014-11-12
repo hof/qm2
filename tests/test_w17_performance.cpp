@@ -68,10 +68,10 @@ void test_positions() {
     test_fen("rnbqkbnr/ppp1pppp/3p4/8/2P5/8/PP1PPPPP/RNBQKBNR w KQkq - 0 2", "c4c5", win_score); //c4 d6
     test_fen("rnbqkbnr/1ppppppp/8/p7/8/3P4/PPP1PPPP/RNBQKBNR w KQkq a6 0 2", "c1h6", win_score); //d3 a5
     test_fen("rnbqkbnr/1ppppppp/8/p7/3P4/8/PPP1PPPP/RNBQKBNR w KQkq a6 0 2", "c1h6", win_score); //d4 a5
-    test_fen("rnbqkbnr/ppp1pppp/3p4/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2", "g2h4", win_score); //d4 d6
+    test_fen("rnbqkbnr/ppp1pppp/3p4/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2", "g2g4", win_score); //d4 d6
     test_fen("rnbqkbnr/ppppp1pp/5p2/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2", "c1g5", win_score); //d4 f6
     test_fen("rnbqkbnr/ppppp1pp/8/5p2/3P4/8/PPP1PPPP/RNBQKBNR w KQkq f6 0 2", "e2e4", win_score); //d4 f5
-    test_fen("rnbqkbnr/ppppp1pp/5p2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", "e4e5", win_score); //e4 f6
+    test_fen("rnbqkbnr/ppppp1pp/5p2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", "e4e5", win_score); //e4 f6, Qh5 also works
     test_fen("rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2", "f2f4", win_score); //e4 Nf6
     test_fen("rnbqkbnr/ppp1pppp/8/3p4/5P2/8/PPPPP1PP/RNBQKBNR w KQkq d6 0 2", "e2e4", win_score); //f4 d5
     test_fen("rnbqkbnr/ppppp1pp/8/5p2/5P2/8/PPPPP1PP/RNBQKBNR w KQkq f6 0 2", "e2e4", win_score); //f4 f5
@@ -85,6 +85,8 @@ void test_positions() {
     test_fen("rnbqkbnr/ppppp1pp/8/5p2/8/7P/PPPPPPP1/RNBQKBNR w KQkq f6 0 2", "e2e4", win_score); //h3 f5
     test_fen("rnbqkbnr/ppppp1pp/8/5p2/7P/8/PPPPPPP1/RNBQKBNR w KQkq f6 0 2", "e2e4", win_score); //h4 f5
     test_fen("rnbqkbnr/ppppppp1/8/7p/7P/8/PPPPPPP1/RNBQKBNR w KQkq h6 0 2", "g2g4", win_score); //h4 h5
+    test_fen("rnq1kb1r/1b1pn3/p4p1p/p5p1/P2Pp3/NP2P3/4NPPP/R1B1Q1RK w kq - 1 14", "e1a5", win_score);
+    test_fen("2r1k2r/4p3/p6n/8/p3p2p/8/P2P3P/RN1K3R b - - 3 1", "c8d8",  win_score);
 }
 
 void handle_row(int ix) {

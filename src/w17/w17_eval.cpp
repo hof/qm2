@@ -22,12 +22,19 @@
  */
 
 #include "w17_search.h"
+#include "score.h"
 
 int w17_eval_material(w17_search_t * s);
+score_t * w17_eval_pawns_and_kings(search_t * s);
 
 int w17_evaluate(w17_search_t * s) {
     const bool us = s->brd.stack->wtm;
     int result = w17_eval_material(s);
+    if (s->stack->material_flags == 15) {
+        score_t * score = &s->stack->eval_score;
+        score->set(w17_eval_pawns_and_kings(s));
+        result += score->get(s->stack->phase);
+    }
     return us ? result : -result;
 }
 
@@ -63,7 +70,7 @@ int w17_eval_material(w17_search_t * s) {
     int bpieces = bknights + bbishops + brooks + bqueens;
     phase = MAX(0, score::MAX_PHASE - wpieces - bpieces - wqueens - bqueens);
     flags = 1 * (wpawns > 0) + 2 * (bpawns > 0) + 4 * (wpieces > 0) + 8 * (bpieces > 0);
-    
+
     /*
      * 3. Calculate material score based on game flags 
      */
@@ -138,9 +145,73 @@ int w17_eval_material(w17_search_t * s) {
     /*
      * 5. Store results in material table and on the stack
      */
-    
+
     s->stack->phase = phase;
     s->stack->material_flags = flags;
     material_table::store(brd->stack->material_hash, result, phase, flags);
     return result;
+}
+
+const score_t PST_KING[64] = {
+    S(-90, 0), S(-90, 5), S(-90, 10), S(-90, 15), S(-90, 15), S(-90, 10), S(-90, 5), S(-90, 0),
+    S(-90, 5), S(-90, 10), S(-90, 15), S(-90, 20), S(-90, 20), S(-90, 15), S(-90, 10), S(-90, 5),
+    S(-80, 10), S(-80, 15), S(-80, 20), S(-80, 25), S(-80, 25), S(-80, 20), S(-80, 15), S(-80, 10),
+    S(-60, 15), S(-60, 20), S(-60, 25), S(-60, 30), S(-60, 30), S(-60, 25), S(-60, 20), S(-60, 15),
+    S(-40, 15), S(-40, 20), S(-40, 25), S(-40, 30), S(-40, 30), S(-40, 25), S(-40, 20), S(-40, 15),
+    S(-20, 10), S(-20, 15), S(-20, 20), S(-20, 25), S(-20, 25), S(-20, 20), S(-20, 15), S(-20, 10),
+    S(0, 5), S(0, 10), S(0, 15), S(0, 20), S(0, 20), S(0, 15), S(0, 10), S(0, 5),
+    S(10, 0), S(10, 5), S(10, 10), S(10, 15), S(10, 15), S(10, 10), S(10, 5), S(10, 0)
+};
+
+const score_t PST_PAWN[64] = {
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+    S(80, 60), S(80, 60), S(60, 60), S(60, 60), S(60, 60), S(60, 60), S(80, 60), S(80, 60),
+    S(40, 30), S(40, 30), S(30, 30), S(30, 30), S(30, 30), S(30, 30), S(40, 30), S(40, 30),
+    S(20, 20), S(20, 20), S(15, 20), S(20, 20), S(20, 20), S(15, 20), S(20, 20), S(20, 20),
+    S(15, 10), S(15, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(15, 10), S(15, 10),
+    S(5, 0), S(5, 0), S(5, 0), S(5, 0), S(5, 0), S(5, 0), S(5, 0), S(5, 0),
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
+    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0)
+};
+
+score_t * w17_eval_pawns_and_kings(search_t * s) {
+
+    /*
+     * 1. Probe the hash table for the pawn score
+     */
+    U64 passers;
+    int king_attack[2];
+    int flags;
+    score_t pawn_score;
+    if (pawn_table::retrieve(s->brd.stack->pawn_hash, passers, pawn_score, king_attack, flags)) {
+        s->stack->pawn_score.set(pawn_score);
+        return &s->stack->pawn_score;
+    }
+
+    score_t pawn_score_us[2];
+    for (int us = BLACK; us <= WHITE; us++) {
+
+        /*
+         * 2. Evaluate King Position
+         */
+
+        int kpos = s->brd.get_sq(KING[us]);
+        pawn_score_us[us].add(PST_KING[ISQ(kpos, us)]);
+
+        /*
+         * 3. Evaluate Pawns
+         */
+        
+        U64 pawns = s->brd.bb[PAWN[us]];
+        while (pawns) {
+            int sq = pop(pawns);
+            pawn_score_us[us].add(PST_PAWN[ISQ(sq, us)]);
+        }
+
+    }
+    
+    s->stack->pawn_score.set(pawn_score_us[WHITE]);
+    s->stack->pawn_score.sub(pawn_score_us[BLACK]);
+    pawn_table::store(s->brd.stack->pawn_hash, passers, s->stack->pawn_score, king_attack, flags);
+    return &s->stack->pawn_score;
 }

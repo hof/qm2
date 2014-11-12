@@ -38,13 +38,13 @@ public:
         wild = 17;
         book_name = "book.w17.bin";
         
-        //different hash codes for w17
+        //use different hash codes for w17
         brd.stack->tt_key ^= hash::codes[13][17]; 
         brd.stack->material_hash ^= hash::codes[13][17];
         brd.stack->pawn_hash ^= hash::codes[13][17];
     }
     
-    int w17_pvs(int alpha, int beta, int in_mate_search, int mate_depth, int depth);
+    int w17_pvs(int alpha, int beta, int in_mate_search, int depth);
 };
 
 #endif	/* W17_SEARCH_H */

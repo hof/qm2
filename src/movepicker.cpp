@@ -96,7 +96,9 @@ move_t * move_picker_t::next(search_t * s, int depth) {
             move::gen_captures(brd, list, mask);
             if (list->current != list->last) {
                 for (move_t * move = list->current; move != list->last; move++) {
-                    if (depth > 0) {
+                    if (s->wild == 17) {
+                        move->score = s->brd.is_attacked(move->tsq, move->capture <= WKING);
+                    } else if (depth > 0) {
                         move->score = brd->see(move);
                     } else {
                         move->score = brd->mvvlva(move);

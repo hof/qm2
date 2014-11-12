@@ -336,6 +336,16 @@ public:
     int max_mate_depth() {
         return 2 + 2 * MAX(popcnt(bb[WPIECES]), popcnt(bb[BPIECES]));
     }
+    
+    /**
+     * Return max mate depth in ply, used for W17
+     * The max mate depth is the amount of pieces for the side with the most 
+     * pieces, multiplied by 2 and added 2 for one (extra) check
+     */
+    int max_mate_depth_us() {
+        bool btm = !stack->wtm;
+        return 2 + 2 * (popcnt(bb[WPIECES + btm]));
+    }
 };
 
 

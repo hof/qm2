@@ -52,10 +52,10 @@ bool w17_search_t::w17_is_draw() {
 }
 
 int w17_search_t::pvs(int alpha, int beta, int depth) {
-    return w17_pvs(alpha, beta, -1, 0, depth);
+    return w17_pvs(alpha, beta, -1, depth);
 }
 
-int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int mate_depth, int depth) {
+int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
     nodes++;
     stack->pv_count = 0;
 
@@ -141,29 +141,18 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int mate_dept
      * - if the horizon position is not quiet, return an "uncertain score"
      */
 
-    const bool quiet_pos = !stack->in_check && move->capture == 0;
-
-    if (depth <= 0) {
-        if (quiet_pos) {
-            return w17_evaluate(this);
-        } else {
-            return brd.stack->wtm ? -1000 : 1000; //unknown, but we have to stop
-        }
-    }
-
-    bool pv = alpha + 1 < beta;
+    const bool quiet_pos = move->capture == 0 && stack->in_check == 0;
     if (quiet_pos) {
-        if (in_mate_search == them) {
-            return w17_evaluate(this);
-        } else if (in_mate_search == us) {
-            if (mate_depth <= 0) {
-                assert(in_mate_search == us);
-                return w17_evaluate(this);
+        if (depth <= 0) {
+            if (in_mate_search == us) {
+                return 1000 + brd.ply; //unknown how it ends
             }
-        } else if (in_mate_search == -1 && depth < brd.max_mate_depth()) {
-            //can we start a mate search?
+            return w17_evaluate(this);
+        } else if (in_mate_search == them) {
+            return w17_evaluate(this);
+        } else if (in_mate_search == -1 && depth < brd.max_mate_depth_us()) {
+            //start a new mate search
             in_mate_search = us;
-            mate_depth = 2 * popcnt(brd.all(us));
         }
     }
 
@@ -171,6 +160,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int mate_dept
      * Moves loop
      */
 
+    bool pv = alpha + 1 < beta;
     int best = -score::INF;
     stack->best_move.clear();
     int searched_moves = 0;
@@ -188,12 +178,12 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int mate_dept
         forward(move, gives_check);
         int score;
         if (searched_moves == 0) {
-            score = -w17_pvs(-beta, -alpha, in_mate_search, mate_depth - 1, depth - 1 + extend);
+            score = -w17_pvs(-beta, -alpha, in_mate_search, depth - 1 + extend);
         } else {
-            score = -w17_pvs(-alpha - 1, -alpha, in_mate_search, mate_depth - 1, depth - 1 + extend);
+            score = -w17_pvs(-alpha - 1, -alpha, in_mate_search, depth - 1 + extend);
             if (pv && score > alpha) {
                 //full window research
-                score = -w17_pvs(-beta, -alpha, in_mate_search, mate_depth - 1, depth - 1 + extend);
+                score = -w17_pvs(-beta, -alpha, in_mate_search, depth - 1 + extend);
             }
         }
         backward(move);
