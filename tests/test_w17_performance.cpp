@@ -87,6 +87,7 @@ void test_positions() {
     test_fen("rnbqkbnr/ppppppp1/8/7p/7P/8/PPPPPPP1/RNBQKBNR w KQkq h6 0 2", "g2g4", win_score); //h4 h5
     test_fen("rnq1kb1r/1b1pn3/p4p1p/p5p1/P2Pp3/NP2P3/4NPPP/R1B1Q1RK w kq - 1 14", "e1a5", win_score);
     test_fen("2r1k2r/4p3/p6n/8/p3p2p/8/P2P3P/RN1K3R b - - 3 1", "c8d8",  win_score);
+    test_fen("8/4k3/1PP4n/7P/8/N1P5/1P1K4/2Q2BN1 w - - 0 23", "c1e1", win_score);
 }
 
 void handle_row(int ix) {

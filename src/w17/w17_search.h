@@ -45,6 +45,7 @@ public:
     }
     
     int w17_pvs(int alpha, int beta, int in_mate_search, int depth);
+    
 };
 
 #endif	/* W17_SEARCH_H */

@@ -56,6 +56,7 @@ int w17_search_t::pvs(int alpha, int beta, int depth) {
 }
 
 int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
+
     nodes++;
     stack->pv_count = 0;
 
@@ -142,17 +143,20 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
      */
 
     const bool quiet_pos = move->capture == 0 && stack->in_check == 0;
+    const bool pv = alpha + 1 < beta;
     if (quiet_pos) {
         if (depth <= 0) {
             if (in_mate_search == us) {
-                return 1000 + brd.ply; //unknown how it ends
+                //unknown if we can finish the forced mating sequence
+                return 1000 + brd.ply;
             }
             return w17_evaluate(this);
         } else if (in_mate_search == them) {
             return w17_evaluate(this);
         } else if (in_mate_search == -1 && depth < brd.max_mate_depth_us()) {
-            //start a new mate search
             in_mate_search = us;
+        } else if (in_mate_search == -1) {
+            depth -= 1;
         }
     }
 
@@ -160,7 +164,6 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
      * Moves loop
      */
 
-    bool pv = alpha + 1 < beta;
     int best = -score::INF;
     stack->best_move.clear();
     int searched_moves = 0;
@@ -174,7 +177,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
-        bool extend = DO_EXTEND && pv && move->capture > 0 && in_mate_search;
+        bool extend = DO_EXTEND && pv && move->capture > 0 && in_mate_search != -1;
         forward(move, gives_check);
         int score;
         if (searched_moves == 0) {
