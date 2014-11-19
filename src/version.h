@@ -23,7 +23,7 @@
 #ifndef VERSION_H_IN
 #define	VERSION_H_IN
 
-#define MAXIMA_REVISION "03a7bc34a4596153da959d000cdcac7e46a342b7"
+#define MAXIMA_REVISION "8f281053445cd240d4ad03ebdb490fb13acde666"
 
 #endif	/* VERSION_H_IN */
 
