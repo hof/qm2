@@ -102,9 +102,7 @@ namespace uci {
                 result = handle_eval(parser);
             } else if (token == "learn") {
                 result = handle_learn(parser);
-            } else if (token == "wild") {
-                result = handle_wild(parser);
-            }
+            } 
         }
         return result;
     }
@@ -236,6 +234,15 @@ namespace uci {
                         if (name == "Hash") {
                             handled = true;
                             trans_table::set_size(atoi<int>(value));
+                        } else if (name == "Wild") {
+                            handled = true;
+                            if (value == "losers" || value == "17") {
+                                engine::set_wild(17);
+                            } else if (value == "chess" || value == "0" || value == "standard" || value == "default") {
+                                engine::set_wild(0);
+                            } else {
+                                send_unknown_option(name + " " + value);
+                            }
                         } else if (name == "UCI_Opponent") {
                             //value GM 2800 human Gary Kasparow"
                             //value none none computer Shredder"
@@ -277,7 +284,7 @@ namespace uci {
         return true;
     }
 
-        /*
+    /*
      * XLearn can be used to determine if a new evaluation or search 
      * feature gives better performance, and what is the ideal score
      * 
@@ -287,18 +294,6 @@ namespace uci {
         engine::set_ponder(false);
         engine::set_position(fen);
         engine::learn();
-        return true;
-    }
-
-    bool handle_wild(input_parser_t & parser) {
-        int wv;
-        parser >> wv;
-        if (wv == 0 || wv == 17) {
-            engine::set_wild(wv);
-            out("wild ok");
-        } else {
-            out("wild not supported");
-        }
         return true;
     }
 
@@ -332,7 +327,7 @@ namespace uci {
         out("option name Hash type spin default 128 min 0 max 1024");
         out("option name Ponder type check default true");
         out("option name OwnBook type check default true");
-        out("option name UCI_AnalyaseMode type check default false");
+        out("option name UCI_AnalyseMode type check default false");
         out("option name UCI_Opponent type string");
         out("option name UCI_Chess960 type check default false");
         out("option name UCI_LosersChess type check default false");
@@ -349,7 +344,7 @@ namespace uci {
     void send_unknown_option(std::string option) {
         out("No such option: " + option);
     }
-    
+
     void send_string(std::string msg) {
         out("info string " + msg);
     }
