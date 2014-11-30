@@ -33,8 +33,7 @@
 namespace {
 
     enum search_constants_t {
-        FUTILITY_MARGIN = 50,
-        DELTA = 0
+        DELTA = 50
     };
 
 };
@@ -165,7 +164,7 @@ void search_t::iterative_deepening() {
         if (abort(true)) {
             break;
         }
-        is_easy &= stack->best_move.equals(&easy_move) && score + FUTILITY_MARGIN > last_score;
+        is_easy &= stack->best_move.equals(&easy_move) && score + DELTA > last_score;
         int elapsed = game->tm.elapsed();
         if (timed_search && !pondering() && root.move_count <= 1 && elapsed > max_time / 32) {
             break;
@@ -544,7 +543,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     bool in_check = stack->in_check;
     bool pv = alpha + 1 < beta;
     const int eval = evaluate(this);
-    const int delta = DELTA + FUTILITY_MARGIN * (depth + pv);
+    const int delta = DELTA * (1 + depth + pv);
     bool do_prune_node = !in_check && !skip_null && !pv
             && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
 

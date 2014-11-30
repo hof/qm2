@@ -196,17 +196,6 @@ const score_t ISOLATED_PAWN[2] = {S(-10, -20), S(-20, -20)}; //closed, open file
 const score_t WEAK_PAWN[2] = {S(-12, -8), S(-16, -10)}; //closed, open file
 const score_t DOUBLED_PAWN = S(-10, -20);
 
-const score_t PASSED_PAWN[64] = {
-    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(150, 170), S(140, 160), S(130, 150), S(120, 140), S(120, 140), S(130, 150), S(140, 160), S(150, 170),
-    S(65, 100), S(50, 80), S(50, 80), S(40, 60), S(40, 60), S(50, 80), S(50, 80), S(65, 100),
-    S(40, 60), S(30, 40), S(30, 40), S(20, 30), S(20, 30), S(30, 40), S(30, 40), S(40, 60),
-    S(20, 30), S(15, 20), S(15, 20), S(10, 15), S(10, 15), S(15, 20), S(15, 20), S(20, 30),
-    S(10, 20), S(8, 10), S(8, 10), S(8, 10), S(8, 10), S(8, 10), S(8, 10), S(10, 20),
-    S(10, 20), S(8, 10), S(8, 10), S(8, 10), S(8, 10), S(8, 10), S(8, 10), S(10, 20),
-    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-};
-
 const score_t CANDIDATE[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
@@ -1260,6 +1249,7 @@ score_t * eval_queens(search_t * sd, bool us) {
 }
 
 score_t * eval_passed_pawns(search_t * sd, bool us) {
+    
     score_t * result = &sd->stack->passer_score[us];
     result->clear();
     U64 passers = sd->stack->passers & sd->brd.bb[PAWN[us]];
@@ -1267,32 +1257,33 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
         return result;
     }
     bool them = !us;
-    U64 exclude = SIDE[us] & ~(RANK_4 | RANK_5);
     int step = PAWNDIRECTION[us];
     score_t bonus;
     while (passers) {
         int sq = pop(passers);
-
-        //set base score
-        bonus.set(PASSED_PAWN[ISQ(sq, us)]);
-        result->add(bonus);
-
-        //stop if the pawn is on rank 2, 3, or 4
-        if (BIT(sq) & exclude) {
-            continue;
-        }
-
-        //initialize bonus and rank
-        bonus.half();
-        int to = sq + step;
         int r = RANK(sq) - 1;
         if (us == BLACK) {
             r = 5 - r;
         }
 
+        //set base score
+        assert(r >= 0 && r <= 5);
+        int rr = r * (r-1);
+        bonus.set(rr * 4);
+        result->add(bonus);
+
+        //stop here (with just the base bonus) if the pawn is on rank 2(r=0), 3(r=1), or 4(r=2))
+        if (r < 3) {
+            continue;
+        }
+
+        //initialize bonus and rank
+        bonus.half();
+        int to = sq + step;        
+
         //king distance
-        int kdist_us_bonus = distance(sd->brd.get_sq(KING[us]), to) * r * (r - 1);
-        int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * r * (r - 1) * 2;
+        int kdist_us_bonus = distance(sd->brd.get_sq(KING[us]), to) * rr;
+        int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * rr * 2;
         result->add(0, kdist_them_bonus - kdist_us_bonus);
 
         //connected and defended passers
