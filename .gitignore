@@ -30,3 +30,4 @@
 /build/
 /tests/genPct.exe
 /sublime-project
+/src/version.h
