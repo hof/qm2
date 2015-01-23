@@ -1,17 +1,6 @@
-Maxima 2, a chess playing program. 
-===========
-Copyright (C) 1996-2014 Erik van het Hof and Hermen Reitsma 
+### Maxima2, a chess playing program. 
 
-LICENSE
--------
-
-This project is GPL'd. For complete details on our licensing please see the 
-included "LICENSE" file.
-
-
-ABOUT
------
-Maxima 2 is the successor of QueenMaxima and BugChess NL. The code has been
+Maxima2 is the successor of [QueenMaxima and BugChess NL](http://www.github.com/hof/queenmaxima). The code has been
 completely rewritten and modernized using new developments in computer chess from
 the last decade.
 
@@ -27,8 +16,14 @@ The most notable changes are:
 Maxima currently only plays traditional chess. Plans are to support wild 
 variants again soon, mainly loser's and suicide chess.
 
+### Online 
 
-ONLINE
-------
 The latest development version of Maxima 2 plays as BugChess(C) on the 
-[http://freechess.org/] (http://freechess.org/) chess server. 
+[http://freechess.org/](http://freechess.org/) chess server. 
+
+### License
+
+Copyright (C) 1996-2015 Erik van het Hof and Hermen Reitsma 
+
+This project is GPL'd. For complete details on our licensing please see the 
+included "LICENSE" file.

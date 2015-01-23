@@ -26,3 +26,5 @@ add_executable(maxima2 main.cpp)
 
 target_link_libraries(MAX2SRC pthread)
 target_link_libraries(maxima2 MAX2SRC)
+
+install (TARGETS maxima2 RUNTIME DESTINATION bin)
