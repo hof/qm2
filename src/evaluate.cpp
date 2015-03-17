@@ -90,7 +90,7 @@ const score_t IMBALANCE[9][9] = {//index: major piece units, minor pieces
     //1 major piece down (-5 pawns))
     { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-150, -75),
         /*0 minor pieces (balance) */ S(-100, -50),
-        /*+1 (the exchange)*/ S(50, 25), /*+2*/ S(50, 0), /*+3*/ S(75, 0), /*+4*/ S(100, 25)},
+        /*+1 (the exchange)*/ S(-50, -25), /*+2*/ S(50, 0), /*+3*/ S(75, 0), /*+4*/ S(100, 25)},
 
     //balance of major pieces
     { /*-4*/ S(-120, -60), /*-3*/ S(-100, -50), /*-2*/ S(-80, -40), /*-1*/ S(-60, -40),
@@ -98,7 +98,7 @@ const score_t IMBALANCE[9][9] = {//index: major piece units, minor pieces
         /*+1*/ S(60, 40), /*+2*/ S(80, 40), /*+3*/ S(100, 50), /*+4*/ S(120, 60)},
 
     //1 major piece up (+5 pawns))
-    { /*-4*/ S(-100, -25), /*-3*/ S(-75, 0), /*-2*/ S(-50, 0), /*-1 the exchange */ S(-50, -25),
+    { /*-4*/ S(-100, -25), /*-3*/ S(-75, 0), /*-2*/ S(-50, 0), /*-1 the exchange */ S(50, 25),
         /*0 minor pieces (balance) */ S(100, 50),
         /*+1*/ S(150, 75), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
 

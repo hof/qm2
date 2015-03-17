@@ -146,12 +146,12 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
     const bool pv = alpha + 1 < beta;
     if (quiet_pos) {
         if (depth <= 0) {
-            if (in_mate_search == us) {
+            if (in_mate_search == (int)us) {
                 //unknown if we can finish the forced mating sequence
                 return 1000 + brd.ply;
             }
             return w17_evaluate(this);
-        } else if (in_mate_search == them) {
+        } else if (in_mate_search == (int)them) {
             return w17_evaluate(this);
         } else if (in_mate_search == -1 && depth < brd.max_mate_depth_us()) {
             in_mate_search = us;

@@ -140,7 +140,6 @@ public:
     void backward(move_t * move);
     void update_history(move_t * move, int depth);
     void reset_stack();
-    bool is_dangerous_check(move_t * const move, const int gives_check);
     bool is_killer(move_t * const move);
     void init_history();
 

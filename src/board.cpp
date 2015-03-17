@@ -1097,7 +1097,6 @@ half_move:
     bool do_half_move = true;
     for (; i <= end; i++) {
         char c = fen[i];
-        c = c;
         switch (c) {
             case '0':
             case '1':
