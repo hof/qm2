@@ -556,11 +556,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     if (do_prune_node && eval >= beta) {
         forward();
         int null_score;
-        if (depth <= 3) {
-            null_score = -qsearch_static(-alpha, 100);
-        } else {
-            null_score = -pvs(-beta, -alpha, depth - 1 - 3 - depth / 4);
-        }
+        null_score = -pvs(-beta, -alpha, depth - 1 - 3 - depth / 4);
         backward();
         if (stop_all) {
             return alpha;
@@ -868,45 +864,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         }
     } while ((move = move::next(this, depth)));
     return alpha;
-}
-
-/**
- * Static (non-recursive) quiescence search - only considering the most 
- * dangerous capture/promotion to get the best "threat" for the null move search
- * @param beta upperbound value
- * @param gain delta value added to the raw capture/promotion value
- * @return score of the best capture/promotion
- */
-int search_t::qsearch_static(int beta, int gain) {
-    int best = evaluate(this);
-    if (best >= beta) { // stand pat
-        return best;
-    }
-    int base = best + gain;
-    U64 done = 0;
-    stack->tt_move.clear();
-    for (move_t * move = move::first(this, -1); move != NULL; move = move::next(this, -1)) {
-        U64 bit_tsq = BIT(move->tsq);
-        if (done & bit_tsq) {
-            pruned_nodes++;
-            continue;
-        }
-        done |= bit_tsq;
-        int see = brd.see(move);
-        if (see <= 0) {
-            pruned_nodes++;
-            continue;
-        }
-        int score = base + see;
-        if (score > best) {
-            best = score;
-            if (score >= beta) {
-                return score;
-            }
-        }
-    }
-    assert(best < beta);
-    return best;
 }
 
 /**

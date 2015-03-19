@@ -39,7 +39,7 @@ enum piece_val_t {
     VKNIGHT = 325,
     VBISHOP = 325,
     VROOK = 500,
-    VQUEEN = 925,
+    VQUEEN = 975,
     VKING = 20000,
 };
 

@@ -67,56 +67,7 @@ void init_pst() {
  * Material Evaluation Values 
  *******************************************************************************/
 
-
 const score_t TEMPO[2] = {S(-10, 0), S(10, 0)};
-
-const score_t IMBALANCE[9][9] = {//index: major piece units, minor pieces
-
-    //4 major pieces down (-20 pawns))
-    { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-200, -100),
-        /*0 minor pieces (balance) */ S(-200, -100),
-        /*+1*/ S(-200, -100), /*+2*/ S(-150, -75), /*+3*/ S(-100, -50), /*+4*/ S(-50, 0)},
-
-    //3 major pieces down
-    { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-200, -100),
-        /*0 minor pieces (balance) */ S(-200, -100),
-        /*+1*/ S(-150, -75), /*+2*/ S(-100, -50), /*+3*/ S(-50, 0), /*+4*/ S(50, 0)},
-
-    //2 major pieces down (-10 pawns))
-    { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-150, -75),
-        /*0 minor pieces (balance) */ S(-200, -100),
-        /*+1*/ S(-100, -50), /*+2*/ S(-50, 0), /*+3*/ S(50, 0), /*+4*/ S(100, 50)},
-
-    //1 major piece down (-5 pawns))
-    { /*-4*/ S(-200, -100), /*-3*/ S(-200, -100), /*-2*/ S(-200, -100), /*-1*/ S(-150, -75),
-        /*0 minor pieces (balance) */ S(-100, -50),
-        /*+1 (the exchange)*/ S(-50, -25), /*+2*/ S(50, 0), /*+3*/ S(75, 0), /*+4*/ S(100, 25)},
-
-    //balance of major pieces
-    { /*-4*/ S(-120, -60), /*-3*/ S(-100, -50), /*-2*/ S(-80, -40), /*-1*/ S(-60, -40),
-        /*0 minor pieces (balance) */ S(0, 0),
-        /*+1*/ S(60, 40), /*+2*/ S(80, 40), /*+3*/ S(100, 50), /*+4*/ S(120, 60)},
-
-    //1 major piece up (+5 pawns))
-    { /*-4*/ S(-100, -25), /*-3*/ S(-75, 0), /*-2*/ S(-50, 0), /*-1 the exchange */ S(50, 25),
-        /*0 minor pieces (balance) */ S(100, 50),
-        /*+1*/ S(150, 75), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
-
-    //2 major pieces up (+10 pawns))
-    { /*-4*/ S(-100, -50), /*-3*/ S(-50, 0), /*-2*/ S(50, 0), /*-1*/ S(100, 50),
-        /*0 minor pieces (balance) */ S(200, 100),
-        /*+1*/ S(150, 75), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
-
-    //3 major pieces up (+15 pawns))
-    { /*-4*/ S(-50, 0), /*-3*/ S(50, 0), /*-2*/ S(100, 50), /*-1*/ S(150, 75),
-        /*0 minor pieces (balance) */ S(200, 100),
-        /*+1*/ S(200, 100), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
-
-    //4 major pieces up (+20 pawns))
-    { /*-4*/ S(50, 0), /*-3*/ S(100, 50), /*-2*/ S(150, 75), /*-1*/ S(200, 100),
-        /*0 minor pieces (balance) */ S(200, 100),
-        /*+1*/ S(200, 100), /*+2*/ S(200, 100), /*+3*/ S(200, 100), /*+4*/ S(200, 100)},
-};
 
 const score_t SVPAWN = S(VPAWN, VPAWN); //middle and endgame values
 const score_t SVKNIGHT = S(VKNIGHT, VKNIGHT);
@@ -220,10 +171,10 @@ const int8_t SHELTER_KPOS[64] = {//attack units regarding king position
 
 const int8_t SHELTER_PAWN[64] = {//attack units for pawns in front of the king
     0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    -1, -1, 0, 0, 0, 0, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1,
     -2, -2, -1, -1, -1, -1, -2, -2,
     -3, -4, -2, -1, -1, -2, -4, -3,
     0, 0, 0, 0, 0, 0, 0, 0
@@ -246,7 +197,7 @@ const int8_t SHELTER_OPEN_FILES[4] = {//attack units for having open files on ou
 
 const int8_t SHELTER_OPEN_EDGE_FILE = 3; //attack units for open file on the edge (e.g. open h-line)
 
-const int8_t SHELTER_CASTLING_KINGSIDE = -3; //attack units for having the option to safely  castle kingside 
+const int8_t SHELTER_CASTLING_KINGSIDE = -3; //attack units for having the option to safely castle kingside 
 
 const int8_t SHELTER_CASTLING_QUEENSIDE = -2; //attack units for having the right to safely castle queenside
 
@@ -290,7 +241,7 @@ const score_t KNIGHT_ATTACK = S(10, 10);
  * Bishop Values 
  *******************************************************************************/
 
-const int8_t VBISHOPPAIR = 40;
+const int8_t VBISHOPPAIR = 50;
 
 const score_t BISHOP_MOBILITY[14] = {
     S(-30, -30), S(-20, -20), S(-12, -12), S(-6, -6),
@@ -521,9 +472,6 @@ int eval_material(search_t * sd) {
         } else if (power < -100) {
             flags = IMB_MINOR_B;
         }
-        int minors_ix = MAX(0, 4 + wminors - bminors);
-        int majors_ix = MAX(0, 4 + wrooks + 2 * wqueens - brooks - 2 * bqueens);
-        result.add(IMBALANCE[MIN(majors_ix, 8)][MIN(minors_ix, 8)]);
     }
 
     if (wpawns != bpawns) {
@@ -798,7 +746,8 @@ score_t * eval_pawns_and_kings(search_t * sd) {
 
     //attack units - shelter pawns
     U64 king_front = (FORWARD_RANKS[RANK(wkpos)] | KING_MOVES[wkpos]) & PAWN_SCOPE[FILE(wkpos)];
-    U64 shelter_pawns = king_front & brd->bb[WPAWN];
+
+    U64 shelter_pawns = king_front & brd->bb[WPAWN] & KING_ZONE[wkpos];
     while (shelter_pawns) {
         int sq = pop(shelter_pawns);
         king_attack[BLACK] += SHELTER_PAWN[FLIP_SQUARE(sq)];
@@ -851,7 +800,7 @@ score_t * eval_pawns_and_kings(search_t * sd) {
 
     //attack units - shelter pawns
     king_front = (BACKWARD_RANKS[RANK(bkpos)] | KING_MOVES[bkpos]) & PAWN_SCOPE[FILE(bkpos)];
-    shelter_pawns = king_front & brd->bb[BPAWN];
+    shelter_pawns = king_front & brd->bb[BPAWN] & KING_ZONE[bkpos];
     while (shelter_pawns) {
         int sq = pop(shelter_pawns);
         king_attack[WHITE] += SHELTER_PAWN[sq];
@@ -1089,12 +1038,12 @@ score_t * eval_rooks(search_t * sd, bool us) {
     while (rooks) {
         int sq = pop(rooks);
         result->add(PST[WROOK][ISQ(sq, us)]);
-        
+
         U64 moves = magic::rook_moves(sq, occ) & sd->stack->mob[us];
         if (moves & sd->stack->attack[us]) {
             result->add(popcnt(moves & sd->stack->attack[us]) * ROOK_ATTACK);
         }
-        
+
         if (brd->is_attacked_by_pawn(sq, them)) {
             result->add(ATTACKED_PIECE);
         }
@@ -1103,7 +1052,7 @@ score_t * eval_rooks(search_t * sd, bool us) {
         if ((bitSq & RANK[us][7]) && (BIT(brd->get_sq(KING[them])) & BACKRANKS[us])) {
             result->add(ROOK_7TH);
         }
-        
+
         if (bitSq & fill[us]) {
             result->add(ROOK_CLOSED_FILE);
             //trapped rook pattern
@@ -1249,7 +1198,7 @@ score_t * eval_queens(search_t * sd, bool us) {
 }
 
 score_t * eval_passed_pawns(search_t * sd, bool us) {
-    
+
     score_t * result = &sd->stack->passer_score[us];
     result->clear();
     U64 passers = sd->stack->passers & sd->brd.bb[PAWN[us]];
@@ -1268,7 +1217,7 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
 
         //set base score
         assert(r >= 0 && r <= 5);
-        int rr = r * (r-1);
+        int rr = r * (r - 1);
         bonus.set(rr * 4);
         result->add(bonus);
 
@@ -1279,7 +1228,7 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
 
         //initialize bonus and rank
         bonus.half();
-        int to = sq + step;        
+        int to = sq + step;
 
         //king distance
         int kdist_us_bonus = distance(sd->brd.get_sq(KING[us]), to) * rr;
@@ -1339,7 +1288,7 @@ const int8_t KING_ATTACK_UNIT[BKING + 1] = {
 };
 
 const int16_t KING_SHELTER[24] = {//structural shelter (pawns & kings)
-    0, 24, 32, 40, 48, 56, 64, 72,
+    0, 16, 32, 40, 48, 56, 64, 72,
     80, 88, 98, 106, 114, 122, 130, 138,
     146, 154, 162, 170, 178, 186, 194, 200
 };
