@@ -29,6 +29,17 @@
 
 //#define TRACE_EVAL
 
+#ifdef TRACE_EVAL
+
+void trace_eval(std::string msg, int sq, const score_t & s) {
+    std::cout << msg << " " << FILE_SYMBOL(sq) << RANK_SYMBOL(sq) << ": ";
+    std::cout << "(" << s.mg << ", " << s.eg << ") " << std::endl;
+}
+#endif
+#ifndef TRACE_EVAL 
+#define trace_eval(a,b,c) /* notn */
+#endif
+
 pst_t PST;
 
 int eval_material(search_t * sd);
@@ -325,19 +336,23 @@ int evaluate(search_t * sd) {
     int result = eval_material(sd); //sets stack->phase (required) 
     score_t * score = &sd->stack->eval_score;
     score->set(eval_pawns_and_kings(sd)); //initializes mobility and attack masks (required)
-    score->add(eval_knights(sd, WHITE));
-    score->sub(eval_knights(sd, BLACK));
-    score->add(eval_bishops(sd, WHITE));
-    score->sub(eval_bishops(sd, BLACK));
-    score->add(eval_rooks(sd, WHITE));
-    score->sub(eval_rooks(sd, BLACK));
-    score->add(eval_queens(sd, WHITE));
-    score->sub(eval_queens(sd, BLACK));
-    score->add(eval_passed_pawns(sd, WHITE));
-    score->sub(eval_passed_pawns(sd, BLACK));
-    score->add(eval_king_attack(sd, WHITE)); //must be after piece evals
-    score->sub(eval_king_attack(sd, BLACK)); //must be after piece evals
+    if (sd->stack->passers) {
+        score->add(eval_passed_pawns(sd, WHITE));
+        score->sub(eval_passed_pawns(sd, BLACK));
+    }
     score->add(TEMPO[wtm]);
+    if (sd->stack->phase < 16) {
+        score->add(eval_knights(sd, WHITE));
+        score->sub(eval_knights(sd, BLACK));
+        score->add(eval_bishops(sd, WHITE));
+        score->sub(eval_bishops(sd, BLACK));
+        score->add(eval_rooks(sd, WHITE));
+        score->sub(eval_rooks(sd, BLACK));
+        score->add(eval_queens(sd, WHITE));
+        score->sub(eval_queens(sd, BLACK));
+        score->add(eval_king_attack(sd, WHITE)); //must be after piece evals
+        score->sub(eval_king_attack(sd, BLACK)); //must be after piece evals
+    }
     result += score->get(sd->stack->phase);
     sd->stack->eg_score = result;
     if (sd->stack->material_flags & MFLAG_EG) {
@@ -523,6 +538,7 @@ score_t * eval_pawns_and_kings(search_t * sd) {
      * 1. Get the score from the last stack record if the latest move did not
      *    involve any pawns. This is easy to check with the pawn hash 
      */
+
     if (sd->stack->equal_pawns) {
         sd->stack->pawn_score.set((sd->stack - 1)->pawn_score);
         sd->stack->passers = (sd->stack - 1)->passers;
@@ -552,6 +568,7 @@ score_t * eval_pawns_and_kings(search_t * sd) {
     /*
      * 2. Probe the hash table for the pawn score
      */
+
     U64 passers;
     int king_attack[2];
     int flags;
@@ -565,7 +582,6 @@ score_t * eval_pawns_and_kings(search_t * sd) {
         sd->stack->pawn_score.set(pawn_score);
         return &sd->stack->pawn_score;
     }
-
 
     /*
      * 3. Calculate pawn evaluation score
@@ -648,19 +664,25 @@ score_t * eval_pawns_and_kings(search_t * sd) {
         bool candidate = open && !doubled && !passed && !(up & ~safe[WHITE]);
 
         pawn_score.add(PST[WPAWN][isq]);
+        trace_eval("WPAWN PST", sq, PST[WPAWN][isq]);
 
         if (isolated) {
             pawn_score.add(ISOLATED_PAWN[open]);
+            trace_eval("WPAWN ISOLATED", sq, ISOLATED_PAWN[open]);
         } else if (weak) {
             pawn_score.add(WEAK_PAWN[open]);
+            trace_eval("WPAWN WEAK", sq, WEAK_PAWN[open]);
         } else if (defended) {
             pawn_score.add(DEFENDED_PAWN[open]);
+            trace_eval("WPAWN DEFENDED", sq, DEFENDED_PAWN[open]);
         }
         if (doubled) {
             pawn_score.add(DOUBLED_PAWN);
+            trace_eval("WPAWN DOUBLED", sq, DOUBLED_PAWN);
         }
         if (candidate) {
             pawn_score.add(CANDIDATE[isq]);
+            trace_eval("WPAWN CANDIDATE", sq, CANDIDATE[isq]);
         } else if (passed) {
             passers |= sq_bit;
         }
@@ -688,19 +710,26 @@ score_t * eval_pawns_and_kings(search_t * sd) {
         bool candidate = open && !doubled && !passed && !(down & ~safe[BLACK]);
 
         pawn_score.sub(PST[WPAWN][sq]);
+        trace_eval("BPAWN PST", sq, PST[WPAWN][sq]);
+
 
         if (isolated) {
             pawn_score.sub(ISOLATED_PAWN[open]);
+            trace_eval("BPAWN ISOLATED", sq, ISOLATED_PAWN[open]);
         } else if (weak) {
             pawn_score.sub(WEAK_PAWN[open]);
+            trace_eval("BPAWN WEAK", sq, WEAK_PAWN[open]);
         } else if (defended) {
             pawn_score.sub(DEFENDED_PAWN[open]);
+            trace_eval("BPAWN DEFENDED", sq, DEFENDED_PAWN[open]);
         }
         if (doubled) {
             pawn_score.sub(DOUBLED_PAWN);
+            trace_eval("BPAWN DOUBLED", sq, DOUBLED_PAWN);
         }
         if (candidate) {
             pawn_score.sub(CANDIDATE[sq]);
+            trace_eval("BPAWN CANDIDATE", sq, CANDIDATE[sq]);
         } else if (passed) {
             passers |= sq_bit;
         }
@@ -722,11 +751,13 @@ score_t * eval_pawns_and_kings(search_t * sd) {
 
     //position
     pawn_score.add(PST[WKING][ISQ(wkpos, WHITE)]);
+    trace_eval("WKING PST", wkpos, PST[WKING][ISQ(wkpos, WHITE)]);
 
     //threats
     U64 ka_w = KING_MOVES[wkpos] & sd->stack->mob[WHITE] & sd->stack->attack[WHITE];
     if (ka_w) {
         pawn_score.add(0, 10);
+        trace_eval("WKING PAWN ATTACK", wkpos, S(0, 10));
     }
 
     //attack units - shelter
@@ -776,11 +807,13 @@ score_t * eval_pawns_and_kings(search_t * sd) {
 
     //position
     pawn_score.sub(PST[WKING][ISQ(bkpos, BLACK)]);
+    trace_eval("BKING PST", bkpos, PST[WKING][ISQ(bkpos, BLACK)]);
 
     //threats
     U64 ka_b = KING_MOVES[bkpos] & sd->stack->mob[BLACK] & sd->stack->attack[BLACK];
     if (ka_b) {
         pawn_score.sub(0, 10);
+        trace_eval("BKING PAWN ATTACK", bkpos, S(0, 10));
     }
 
     //attack units - shelter
@@ -823,7 +856,7 @@ score_t * eval_pawns_and_kings(search_t * sd) {
     }
 
     /*
-     * Persist info on the stack and return the total score
+     * Persist pawn eval on the stack + pawn hash table and return the total score
      */
 
     sd->stack->passers = passers;

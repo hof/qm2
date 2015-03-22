@@ -553,7 +553,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     //null move pruning
-    if (do_prune_node && eval >= beta) {
+    if (do_prune_node && eval >= beta && depth > 1) {
         forward();
         int null_score;
         null_score = -pvs(-beta, -alpha, depth - 1 - 3 - depth / 4);
@@ -607,7 +607,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     do {
         assert(brd.valid(move) && brd.legal(move));
         assert(stack->best_move.equals(move) == false);
-        
+
         int gives_check = brd.gives_check(move);
         assert(gives_check == 0 || gives_check == 1 || gives_check == 2);
 
@@ -618,7 +618,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         //futile captures and promotions (delta pruning)
         bool do_prune = !pv && !in_check && gives_check == 0 && searched_moves
                 && best > -score::DEEPEST_MATE;
-        if (do_prune && depth <= 3 
+        if (do_prune && depth <= 3
                 && (move->capture || move->promotion)
                 && eval + delta + brd.max_gain(move) <= alpha) {
             pruned_nodes++;
@@ -658,7 +658,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         int reduce = 0;
         if (depth >= 3 && searched_moves >= 3 && !is_dangerous && !extend) {
-            reduce = searched_moves < 6 ? 1 : 1 + depth / 4;
+            reduce = searched_moves < 6 ? 1 : 2 + depth / 4;
         }
         assert(reduce == 0 || extend == 0);
 
