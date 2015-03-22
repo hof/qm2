@@ -45,11 +45,11 @@ void testKingAttackZero(int idx, std::string fen) {
     }
     search_t * s = new search_t(fen.c_str());
     evaluate(s);
-    int score = s->stack->king_score[WHITE].mg;
+    int score = s->stack->pc_score[WKING].mg;
     if (score != 0) {
         testFail(idx, "!=", 0, score, fen, global_engine);
     } else {
-        score = s->stack->king_score[BLACK].mg;
+        score = s->stack->pc_score[BKING].mg;
         if (score != 0) {
             testFail(idx, "!=", 0, score, fen, global_engine);
         }

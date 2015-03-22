@@ -566,7 +566,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         } else if (null_score < alpha && null_score < -score::DEEPEST_MATE) {
             move_t * threat_move = &(stack + 1)->best_move;
             if (!threat_move->capture && !threat_move->promotion) {
-                (stack + 1)->killer[0].set(threat_move);
+                (stack + 1)->killer[0].set(threat_move); //sets mate killer
             }
         }
     }

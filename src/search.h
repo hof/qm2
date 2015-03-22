@@ -74,12 +74,7 @@ struct search_stack_t {
     int16_t eg_score;
     int16_t material_score;
     score_t eval_score;
-    score_t pawn_score;
-    score_t knight_score[2];
-    score_t bishop_score[2];
-    score_t rook_score[2];
-    score_t queen_score[2];
-    score_t king_score[2];
+    score_t pc_score[BKING+1];
     score_t passer_score[2];
     U64 tt_key;
     U64 passers;

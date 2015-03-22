@@ -184,8 +184,8 @@ score_t * w17_eval_pawns_and_kings(search_t * s) {
     int flags;
     score_t pawn_score;
     if (pawn_table::retrieve(s->brd.stack->pawn_hash, passers, pawn_score, king_attack, flags)) {
-        s->stack->pawn_score.set(pawn_score);
-        return &s->stack->pawn_score;
+        s->stack->pc_score[WPAWN].set(pawn_score);
+        return &s->stack->pc_score[WPAWN];
     }
 
     score_t pawn_score_us[2];
@@ -210,8 +210,8 @@ score_t * w17_eval_pawns_and_kings(search_t * s) {
 
     }
     
-    s->stack->pawn_score.set(pawn_score_us[WHITE]);
-    s->stack->pawn_score.sub(pawn_score_us[BLACK]);
-    pawn_table::store(s->brd.stack->pawn_hash, passers, s->stack->pawn_score, king_attack, flags);
-    return &s->stack->pawn_score;
+    s->stack->pc_score[WPAWN].set(pawn_score_us[WHITE]);
+    s->stack->pc_score[WPAWN].sub(pawn_score_us[BLACK]);
+    pawn_table::store(s->brd.stack->pawn_hash, passers, s->stack->pc_score[WPAWN], king_attack, flags);
+    return &s->stack->pc_score[WPAWN];
 }

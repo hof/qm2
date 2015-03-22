@@ -221,13 +221,13 @@ void engine_t::analyse() {
     std::cout << "---------------+---------------+---------------+---------------------\n";
     print_row("Tempo", tempo_score.get(phase));
     print_row("Material", s->stack->material_score);
-    print_row("Pawns & Kings", s->stack->pawn_score, phase);
-    print_row("Knights", s->stack->knight_score[WHITE], s->stack->knight_score[BLACK], phase);
-    print_row("Bishops", s->stack->bishop_score[WHITE], s->stack->bishop_score[BLACK], phase);
-    print_row("Rooks", s->stack->rook_score[WHITE], s->stack->rook_score[BLACK], phase);
-    print_row("Queens", s->stack->queen_score[WHITE], s->stack->queen_score[BLACK], phase);
+    print_row("Pawns & Kings", s->stack->pc_score[WPAWN], phase);
+    print_row("Knights", s->stack->pc_score[WKNIGHT], s->stack->pc_score[BKNIGHT], phase);
+    print_row("Bishops", s->stack->pc_score[WBISHOP], s->stack->pc_score[BBISHOP], phase);
+    print_row("Rooks", s->stack->pc_score[WROOK], s->stack->pc_score[BROOK], phase);
+    print_row("Queens", s->stack->pc_score[WQUEEN], s->stack->pc_score[BQUEEN], phase);
     print_row("Passers", s->stack->passer_score[WHITE], s->stack->passer_score[BLACK], phase);
-    print_row("King Attack", s->stack->king_score[WHITE], s->stack->king_score[BLACK], phase);
+    print_row("King Attack", s->stack->pc_score[WKING], s->stack->pc_score[BKING], phase);
     if (s->brd.stack->wtm == false) {
         std::cout << "---------------+---------------+---------------+---------------------\n";
         print_row("Black to move", s->stack->eg_score);
