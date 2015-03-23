@@ -698,7 +698,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
                     update_history(move, depth);
                     for (move_t * cur = stack->move_list.first;
                             searched_moves && cur != stack->move_list.last; cur++) {
-                        if (cur->score == move::EXCLUDED && cur != move) {
+                        if (cur->score == move::EXCLUDED && cur != move
+                                && !cur->capture && !cur->promotion) {
                             update_history(cur, -depth);
                         }
                     }
