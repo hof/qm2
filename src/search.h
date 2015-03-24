@@ -136,6 +136,7 @@ public:
     void reset_stack();
     bool is_killer(move_t * const move);
     void init_history();
+    int eval_risk();
 
     int draw_score() {
         return 0;

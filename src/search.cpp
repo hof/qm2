@@ -198,7 +198,7 @@ void search_t::iterative_deepening() {
  */
 int search_t::aspiration(int depth, int last_score) {
     if (depth >= 6 && !score::is_win(last_score)) {
-        for (int window = 40; window < 900; window *= 2) {
+        for (int window = 20; window < 900; window *= 2) {
             int alpha = last_score - window;
             int beta = last_score + window;
             int score = pvs_root(alpha, beta, depth);
@@ -424,7 +424,8 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
  */
 int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
     if (pv) {
-        return (bool) move->promotion || gives_check || is_passed_pawn(move);
+        return gives_check > 0 || move->promotion == WQUEEN || move->promotion == BQUEEN
+                || is_passed_pawn(move);
     }
     if (gives_check) {
         if (gives_check > 1 || brd.min_gain(move) >= 0) {
@@ -641,7 +642,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
 
         //SEE pruning
-        if (do_prune && depth <= 2 && brd.min_gain(move) < -delta && brd.see(move) < -delta) {
+        if (do_prune && depth <= 2 && eval + delta < beta && brd.min_gain(move) < 0 && brd.see(move) < 0) {
             pruned_nodes++;
             continue;
         }
@@ -658,7 +659,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         int reduce = 0;
         if (depth >= 3 && searched_moves >= 3 && !is_dangerous && !extend) {
-            reduce = searched_moves < 6 ? 1 : 2 + depth / 4;
+            reduce = searched_moves < 6 ? 1 : 2;
         }
         assert(reduce == 0 || extend == 0);
 
@@ -807,7 +808,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
     //prepare
     stack->tt_key = brd.stack->tt_key;
-    if (eval > alpha && !in_check) {
+    bool pv = alpha + 1 < beta;
+    if (eval > alpha && !in_check && pv) {
         alpha = eval;
     }
 
@@ -836,8 +838,14 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             continue;
         }
 
-        //SEE pruning - bad captures
-        if (do_prune && brd.min_gain(move) < 0 && brd.see(move) < 0) {
+        //delta SEE pruning
+        if (do_prune && eval + delta < beta && brd.min_gain(move) <= 0 && brd.see(move) <= 0) {
+            pruned_nodes++;
+            continue;
+        }
+        
+        //negative SEE pruning
+        if (do_prune && !pv && brd.min_gain(move) < 0 && brd.see(move) < 0) {
             pruned_nodes++;
             continue;
         }
