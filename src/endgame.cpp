@@ -518,7 +518,8 @@ namespace eg {
             case 1: //  pawns ------ vs ----- ------
                 return pawns_vs_king(s, score, us);
             case 2: //  ----- ------ vs pawns ------
-                assert(false);
+                std::cout << s->brd.to_string() << std::endl;
+                //assert(false);
                 return draw(score);
             case 3: //  pawns ------ vs pawns ------
                 return pawns_vs_pawns(s, score, us);

@@ -33,7 +33,11 @@
 namespace {
 
     enum search_constants_t {
-        DELTA = 50
+        DELTA = 50,
+        DO_NULLMOVE = 1,
+        DO_LMR = 1,
+        DO_PRUNE_NODE = 0,
+        DO_PRUNE_MOVES = 1
     };
 
 };
@@ -424,7 +428,8 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
  */
 int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
     if (pv) {
-        return gives_check > 0 || move->promotion == WQUEEN || move->promotion == BQUEEN
+        return gives_check > 0
+                || move->promotion == WQUEEN || move->promotion == BQUEEN
                 || is_passed_pawn(move);
     }
     if (gives_check) {
@@ -474,6 +479,7 @@ bool search_t::is_draw() {
 int search_t::pvs(int alpha, int beta, int depth) {
 
     stack->pv_count = 0;
+    sel_depth = MAX(brd.ply, sel_depth);
 
     /*
      * If no more depth remaining, return quiescence value
@@ -494,12 +500,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     //ceiling
-    if (brd.ply > sel_depth) {
-        sel_depth = brd.ply;
-        if (brd.ply >= (MAX_PLY - 1)) {
-            return evaluate(this);
-        }
+    if (brd.ply >= (MAX_PLY - 1)) {
+        return evaluate(this);
     }
+
     assert(depth > 0 && depth <= MAX_PLY);
 
     //mate distance pruning: if mate(d) in n don't search deeper
@@ -544,26 +548,24 @@ int search_t::pvs(int alpha, int beta, int depth) {
     bool in_check = stack->in_check;
     bool pv = alpha + 1 < beta;
     const int eval = evaluate(this);
-    const int eval_risk = get_eval_risk();
-    const int delta = DELTA * (1 + depth + pv + eval_risk);
+    const int delta = DELTA * (2 + depth);
     bool do_prune_node = !in_check && !skip_null && !pv
             && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
 
     //return if static evaluation score is already much better than beta
-    if (do_prune_node && eval - delta >= beta && depth <= 4) {
+    if (DO_PRUNE_NODE && do_prune_node && eval - delta >= beta && depth <= 4) {
         return eval - delta;
     }
 
     //null move pruning
-    if (do_prune_node && eval >= beta && depth > 1) {
+    if (DO_NULLMOVE && do_prune_node && eval >= beta && depth > 1) {
         forward();
-        int null_score;
-        null_score = -pvs(-beta, -alpha, depth - 1 - 3 - depth / (4 + eval_risk));
+        int null_depth = depth - 1 - 3 - bool(stack->phase <= 6) - depth /4;
+        int null_score = -pvs(-beta, -alpha, null_depth);
         backward();
         if (stop_all) {
             return alpha;
         } else if (null_score >= beta) {
-            trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, null_score, 0, score::LOWERBOUND);
             return null_score;
         } else if (null_score < alpha && null_score < -score::DEEPEST_MATE) {
             move_t * threat_move = &(stack + 1)->best_move;
@@ -604,7 +606,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int best = -score::INF;
     stack->best_move.clear();
     int searched_moves = 0;
-    int mc_max = 3 + depth*depth + eval_risk;
+    int mc_max = 3 + depth * depth;
     int score_max = score::MATE - brd.ply - 1;
     do {
         assert(brd.valid(move) && brd.legal(move));
@@ -618,7 +620,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
          */
 
         //futile captures and promotions (delta pruning)
-        bool do_prune = !pv && !in_check && gives_check == 0 && searched_moves
+        bool do_prune = DO_PRUNE_MOVES && !pv && !in_check && gives_check == 0 && searched_moves
                 && best > -score::DEEPEST_MATE;
         if (do_prune && depth <= 3
                 && (move->capture || move->promotion)
@@ -659,8 +661,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
          */
 
         int reduce = 0;
-        if (depth >= 3 && searched_moves >= 3 && !is_dangerous && !extend) {
-            reduce = searched_moves < 6 ? 1 : 2 + (depth-3) / 4;
+        if (DO_LMR && depth >= 3 && searched_moves >= 3 && !is_dangerous && !extend) {
+            reduce = searched_moves < 6 ? 1 : 2 + (depth -3) / 4;
         }
         assert(reduce == 0 || extend == 0);
 
@@ -724,9 +726,12 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Store the result in the hash table and return
      */
 
-    assert(best > -score::INF && best < beta);
     assert(!stop_all);
-    assert(brd.valid(&stack->best_move) && brd.legal(&stack->best_move));
+    assert(best > -score::INF);
+    assert(best < beta);
+    assert(brd.valid(&stack->best_move));
+    assert(brd.legal(&stack->best_move));
+
     int flag = score::flags(best, alpha, beta); //obs: not using "old-alpha" to keep long pv
     trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
     return best;
@@ -756,11 +761,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     }
 
     //ceiling
-    if (brd.ply > sel_depth) {
-        sel_depth = brd.ply;
-        if (brd.ply >= (MAX_PLY - 1)) {
-            return evaluate(this);
-        }
+    if (brd.ply >= (MAX_PLY - 1)) {
+        return evaluate(this);
     }
 
     //mate distance pruning (if mate(d) in n: don't search deeper)
@@ -833,7 +835,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
         //delta pruning
         bool do_prune = !in_check && !gives_check;
-        const int delta = DELTA;
+        const int delta = DELTA * 2;
         if (do_prune && eval + brd.max_gain(move) + delta <= alpha) {
             pruned_nodes++;
             continue;
@@ -844,7 +846,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             pruned_nodes++;
             continue;
         }
-        
+
         //negative SEE pruning
         if (do_prune && !pv && brd.min_gain(move) < 0 && brd.see(move) < 0) {
             pruned_nodes++;
@@ -960,9 +962,9 @@ void search_t::trace_root(int alpha, int beta, int depth) {
  */
 int search_t::get_eval_risk() {
     int phase = stack->phase;
-    int pos_eval = stack->passer_score[WHITE].get(phase) 
-        + stack->passer_score[BLACK].get(phase)
-        + stack->pc_score[WKING].get(phase)
-        + stack->pc_score[BKING].get(phase);
+    int pos_eval = stack->passer_score[WHITE].get(phase)
+            + stack->passer_score[BLACK].get(phase)
+            + stack->pc_score[WKING].get(phase)
+            + stack->pc_score[BKING].get(phase);
     return pos_eval / 100;
 }

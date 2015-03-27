@@ -86,7 +86,7 @@ struct search_stack_t {
 
 class search_t {
 public:
-    search_stack_t _stack[MAX_PLY];
+    search_stack_t _stack[MAX_PLY+1];
     game_t * game;
     board_t brd;
     root_t root;

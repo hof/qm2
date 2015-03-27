@@ -26,7 +26,7 @@ struct test_result_t {
 
 test_result_t test_results[1024];
 engine_t * global_engine;
-int solved = 0;
+int total_solved = 0;
 int tested = 0;
 U64 total_nodes = 0;
 int total_score = 0;
@@ -43,15 +43,17 @@ void test_fen(std::string fen, std::string move, int expected_score) {
     std::cout << tested + 1 << ") " << brd.to_string() << " bm " << bm.to_string();
     engine->think();
     engine->stop_all();
+    bool solved = engine->target_found();
     test_results[tested].fen = fen;
-    test_results[tested].solved = engine->target_found();
+    test_results[tested].solved = solved;
     test_results[tested].nodes = engine->get_total_nodes();
     test_results[tested].move = engine->get_move();
     test_results[tested].score = engine->get_score();
     test_results[tested].expected_move = move;
     test_results[tested].expected_score = expected_score;
     tested++;
-    std::cout << (engine->target_found() ? " ok" : " fail") << std::endl;
+    total_solved += solved;
+    std::cout << (solved ? " ok" : " fail") << std::endl;
 }
 
 void test_positions() {
@@ -122,6 +124,7 @@ void test_report(double elapsed) {
         handle_row(i);
     }
     std::cout << "-----+--------+-------+-------+-------+------+-----------\n\n";
+    std::cout << "solved: " << total_solved << "/" << tested << "\n";
     std::cout << "performance: " << (100 * total_score / max_score) << "\n";
     std::cout << "total nodes: " << total_nodes / 1000 << "K\n";
     std::cout << "total time: " << elapsed << "s\n";

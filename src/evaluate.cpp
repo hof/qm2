@@ -278,7 +278,7 @@ void set_eval_masks(search_t * sd) {
 
 int evaluate(search_t * sd) {
 
-    if (sd->stack->in_check) {
+    if (sd->stack->in_check && sd->brd.ply < (MAX_PLY-1)) {
         sd->stack->eval_result = score::INVALID;
         return score::INVALID;
     }
@@ -851,7 +851,7 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
         int rr = r * (r - 1);
         bonus.set(rr * 4);
         result->add(bonus);
-
+        
         //stop here (with just the base bonus) if the pawn is on rank 2(r=0), 3(r=1), or 4(r=2))
         if (r < 3) {
             continue;
@@ -862,8 +862,8 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
         int to = sq + step;
 
         //king distance
-        int kdist_us_bonus = distance(sd->brd.get_sq(KING[us]), to) * rr;
-        int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * rr * 2;
+        int kdist_us_bonus = (distance(sd->brd.get_sq(KING[us]), to) * rr) / 2;
+        int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * rr;
         result->add(0, kdist_them_bonus - kdist_us_bonus);
 
         //connected and defended passers
