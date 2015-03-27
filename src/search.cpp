@@ -544,7 +544,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     bool in_check = stack->in_check;
     bool pv = alpha + 1 < beta;
     const int eval = evaluate(this);
-    const int delta = DELTA * (1 + depth + pv);
+    const int eval_risk = get_eval_risk();
+    const int delta = DELTA * (1 + depth + pv + eval_risk);
     bool do_prune_node = !in_check && !skip_null && !pv
             && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
 
@@ -557,7 +558,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     if (do_prune_node && eval >= beta && depth > 1) {
         forward();
         int null_score;
-        null_score = -pvs(-beta, -alpha, depth - 1 - 3 - depth / 4);
+        null_score = -pvs(-beta, -alpha, depth - 1 - 3 - depth / (4 + eval_risk));
         backward();
         if (stop_all) {
             return alpha;
@@ -603,7 +604,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int best = -score::INF;
     stack->best_move.clear();
     int searched_moves = 0;
-    int mc_max = 3 + depth*depth;
+    int mc_max = 3 + depth*depth + eval_risk;
     int score_max = score::MATE - brd.ply - 1;
     do {
         assert(brd.valid(move) && brd.legal(move));
@@ -659,7 +660,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         int reduce = 0;
         if (depth >= 3 && searched_moves >= 3 && !is_dangerous && !extend) {
-            reduce = searched_moves < 6 ? 1 : 2;
+            reduce = searched_moves < 6 ? 1 : 2 + (depth-3) / 4;
         }
         assert(reduce == 0 || extend == 0);
 
@@ -950,4 +951,18 @@ void search_t::trace_root(int alpha, int beta, int depth) {
                 << ";  \n";
     }
     std::cout << std::endl;
+}
+
+/**
+ * Calculates evaluation "risk": the absoltue sum of all high positional values
+ * shared by pawn value. E.g. if the passer score for white is 100 and 200 for black, 
+ * the risk is (100+200)/100 = 3
+ */
+int search_t::get_eval_risk() {
+    int phase = stack->phase;
+    int pos_eval = stack->passer_score[WHITE].get(phase) 
+        + stack->passer_score[BLACK].get(phase)
+        + stack->pc_score[WKING].get(phase)
+        + stack->pc_score[BKING].get(phase);
+    return pos_eval / 100;
 }

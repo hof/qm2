@@ -26,25 +26,12 @@
 
 #include "pst.h"
 #include "endgame.h"
-
-//#define TRACE_EVAL
-
-#ifdef TRACE_EVAL
-
-void trace_eval(std::string msg, int sq, const score_t & s) {
-    std::cout << msg << " " << FILE_SYMBOL(sq) << RANK_SYMBOL(sq) << ": ";
-    std::cout << "(" << s.mg << ", " << s.eg << ") " << std::endl;
-}
-#endif
-#ifndef TRACE_EVAL 
-#define trace_eval(a,b,c) /* notn */
-#endif
+#include "pawns.h"
 
 pst_t PST;
 
 void set_eval_masks(search_t * sd);
 int eval_material(search_t * sd);
-score_t * eval_pawns_and_kings(search_t * sd);
 score_t * eval_knights(search_t * sd, bool white);
 score_t * eval_bishops(search_t * sd, bool white);
 score_t * eval_rooks(search_t * sd, bool white);
@@ -111,6 +98,8 @@ enum mflag_imbalance_t {
     IMB_MAJOR_B = 6
 };
 
+uint8_t PFLAG_CLOSED_CENTER = 1;
+
 /* 
  * 0  | 1   | 2   | 3   | 4   | 5 ..   7  | 
  * EG | AFW | AFB | MPW | MPB | IMBALANCE | 
@@ -151,66 +140,10 @@ const short ATTACKED_PIECE = -32; //piece attacked by a pawn
  * Pawn Values 
  *******************************************************************************/
 
-uint8_t PFLAG_CLOSED_CENTER = 1;
 
-const score_t DEFENDED_PAWN[2] = {S(0, 0), S(4, 0)}; //closed, open file
-const score_t ISOLATED_PAWN[2] = {S(-10, -20), S(-20, -20)}; //closed, open file
-const score_t WEAK_PAWN[2] = {S(-12, -8), S(-16, -10)}; //closed, open file
-const score_t DOUBLED_PAWN = S(-10, -20);
 
-const score_t CANDIDATE[64] = {
-    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(35, 70), S(35, 70), S(35, 70), S(35, 70), S(35, 70), S(35, 70), S(35, 70), S(35, 70),
-    S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40), S(20, 40),
-    S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20), S(10, 20),
-    S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10),
-    S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10), S(5, 10),
-    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-};
 
-const int8_t SHELTER_KPOS[64] = {//attack units regarding king position
-    9, 9, 9, 9, 9, 9, 9, 9,
-    9, 9, 9, 9, 9, 9, 9, 9,
-    9, 9, 9, 9, 9, 9, 9, 9,
-    6, 6, 7, 8, 8, 7, 6, 6,
-    3, 3, 4, 5, 5, 4, 3, 3,
-    1, 1, 2, 4, 4, 2, 1, 1,
-    0, 0, 1, 3, 3, 1, 0, 0,
-    0, 0, 1, 3, 3, 1, 0, 0
-};
 
-const int8_t SHELTER_PAWN[64] = {//attack units for pawns in front of the king
-    0, 0, 0, 0, 0, 0, 0, 0,
-    -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1,
-    -2, -2, -1, -1, -1, -1, -2, -2,
-    -3, -4, -2, -1, -1, -2, -4, -3,
-    0, 0, 0, 0, 0, 0, 0, 0
-};
-
-const int8_t STORM_PAWN[64] = {//attack units for pawns attacking the nme king
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1,
-    2, 2, 2, 2, 2, 2, 2, 2,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0
-};
-
-const int8_t SHELTER_OPEN_FILES[4] = {//attack units for having open files on our king
-    -1, 2, 3, 4
-};
-
-const int8_t SHELTER_OPEN_EDGE_FILE = 3; //attack units for open file on the edge (e.g. open h-line)
-
-const int8_t SHELTER_CASTLING_KINGSIDE = -3; //attack units for having the option to safely castle kingside 
-
-const int8_t SHELTER_CASTLING_QUEENSIDE = -2; //attack units for having the right to safely castle queenside
 
 const score_t BLOCKED_CENTER_PAWN = S(-10, -4);
 
@@ -359,7 +292,7 @@ int evaluate(search_t * sd) {
     int result = eval_material(sd); //sets stack->phase and material flags
     set_eval_masks(sd); //sets mobility and attack masks
     score->set(TEMPO[wtm]);
-    score->add(eval_pawns_and_kings(sd)); //sets passers and pawns flags
+    score->add(pawns::eval(sd)); //sets passers and pawns flags
     if (sd->stack->passers) {
         score->add(eval_passed_pawns(sd, WHITE));
         score->sub(eval_passed_pawns(sd, BLACK));
@@ -544,333 +477,6 @@ int eval_material(search_t * sd) {
     sd->stack->phase = phase;
     material_table::store(brd->stack->material_hash, value, phase, flags);
     return value;
-}
-
-/**
- * Evaluate pawn structure score 
- * @param sd search metadata object
- */
-
-score_t * eval_pawns_and_kings(search_t * sd) {
-
-    /*
-     * 1. If no pawn or king moved (the pawn hash is equal), 
-     *    simply get the score and masks from the last stack record.  
-     */
-
-    if (sd->stack->equal_pawns) {
-        sd->stack->pc_score[WPAWN].set((sd->stack - 1)->pc_score[WPAWN]);
-        sd->stack->passers = (sd->stack - 1)->passers;
-        sd->stack->king_attack[WPAWN] = (sd->stack - 1)->king_attack[WPAWN];
-        sd->stack->king_attack[BPAWN] = (sd->stack - 1)->king_attack[BPAWN];
-        sd->stack->pawn_flags = (sd->stack - 1)->pawn_flags;
-        return &sd->stack->pc_score[WPAWN];
-    }
-
-
-    /*
-     * 2. Probe the hash table for the pawn score
-     */
-
-    U64 passers = 0;
-    int flags = 0;
-    int king_attack[2];
-    score_t pawn_score;
-    board_t * brd = &sd->brd;
-
-    if (pawn_table::retrieve(brd->stack->pawn_hash, passers, pawn_score, king_attack, flags)) {
-        sd->stack->passers = passers;
-        sd->stack->king_attack[BPAWN] = king_attack[BLACK];
-        sd->stack->king_attack[WPAWN] = king_attack[WHITE];
-        sd->stack->pawn_flags = flags;
-        sd->stack->pc_score[WPAWN].set(pawn_score);
-        return &sd->stack->pc_score[WPAWN];
-    }
-
-    /*
-     * 3. Calculate pawn evaluation score
-     */
-
-    int wkpos = brd->get_sq(WKING);
-    int bkpos = brd->get_sq(BKING);
-    king_attack[BLACK] = 0;
-    king_attack[WHITE] = 0;
-    pawn_score.clear();
-
-    const U64 open_files[2] = {
-        ~FILEFILL(brd->bb[BPAWN]),
-        ~FILEFILL(brd->bb[WPAWN])
-    };
-    const U64 up_all[2] = {
-        DOWN1(brd->bb[BPAWN]),
-        UP1(brd->bb[WPAWN])
-    };
-    const U64 up_left[2] = {
-        DOWNLEFT1(brd->bb[BPAWN]),
-        UPLEFT1(brd->bb[WPAWN])
-    };
-    const U64 up_right[2] = {
-        DOWNRIGHT1(brd->bb[BPAWN]),
-        UPRIGHT1(brd->bb[WPAWN])
-    };
-    const U64 attacks[2] = {
-        up_left[BLACK] | up_right[BLACK],
-        up_right[WHITE] | up_left[WHITE]
-    };
-    const U64 blocked_pawns[2] = {
-        UP1(up_all[BLACK] & brd->bb[WPAWN]) & ~attacks[WHITE],
-        DOWN1(up_all[WHITE] & brd->bb[BPAWN]) & ~attacks[BLACK]
-    };
-    const U64 safe[2] = {
-        (up_left[BLACK] & up_right[BLACK]) | ~attacks[WHITE] | ((up_left[BLACK] ^ up_right[BLACK]) & ~(up_left[WHITE] & up_right[WHITE])),
-        (up_left[WHITE] & up_right[WHITE]) | ~attacks[BLACK] | ((up_left[WHITE] ^ up_right[WHITE]) & ~(up_left[BLACK] & up_right[BLACK]))
-    };
-    const U64 isolated_pawns[2] = {
-        brd->bb[BPAWN] & ~(FILEFILL(attacks[BLACK])),
-        brd->bb[WPAWN] & ~(FILEFILL(attacks[WHITE]))
-    };
-    const U64 doubled_pawns[2] = {
-        UP1(fill_north(brd->bb[BPAWN])) & brd->bb[BPAWN],
-        DOWN1(fill_south(brd->bb[WPAWN])) & brd->bb[WPAWN]
-    };
-
-    U64 moves[2] = {
-        DOWN1(brd->bb[BPAWN] & ~blocked_pawns[BLACK]) & safe[BLACK],
-        UP1(brd->bb[WPAWN] & ~blocked_pawns[WHITE]) & safe[WHITE]
-    };
-    moves[WHITE] |= UP1(moves[WHITE] & RANK_3 & ~attacks[BLACK] & ~DOWN1((brd->bb[BPAWN] | brd->bb[WPAWN]))) & safe[WHITE];
-    moves[BLACK] |= DOWN1(moves[BLACK] & RANK_6 & ~attacks[WHITE] & ~UP1((brd->bb[WPAWN] | brd->bb[BPAWN]))) & safe[BLACK];
-
-    const U64 attack_range[2] = {
-        attacks[BLACK] | DOWNLEFT1(moves[BLACK]) | DOWNRIGHT1(moves[BLACK]),
-        attacks[WHITE] | UPLEFT1(moves[WHITE]) | UPRIGHT1(moves[WHITE])
-    };
-
-    const U64 kcz[2] = {KING_ZONE[bkpos], KING_ZONE[wkpos]};
-    int blocked_center_pawns = 0;
-
-    U64 wpawns = brd->bb[WPAWN];
-    while (wpawns) {
-        int sq = pop(wpawns);
-        int isq = FLIP_SQUARE(sq);
-        U64 sq_bit = BIT(sq);
-        U64 up = fill_north(sq_bit);
-        bool open = sq_bit & open_files[BLACK];
-        bool doubled = sq_bit & doubled_pawns[WHITE];
-        bool isolated = sq_bit & isolated_pawns[WHITE];
-        bool defended = sq_bit & attacks[WHITE];
-        bool blocked = sq_bit & blocked_pawns[WHITE];
-        bool push_defend = !blocked && (UP1(sq_bit) & attack_range[WHITE]);
-        bool push_double_defend = !blocked && (UP2(sq_bit & RANK_2) & moves[WHITE] & attack_range[WHITE]);
-        bool lost = sq_bit & ~attack_range[WHITE];
-        bool weak = !defended && lost && !push_defend && !push_double_defend;
-        bool passed = !doubled && !(up & (attacks[BLACK] | brd->bb[BPAWN]));
-        bool candidate = open && !doubled && !passed && !(up & ~safe[WHITE]);
-
-        pawn_score.add(PST[WPAWN][isq]);
-        trace_eval("WPAWN PST", sq, PST[WPAWN][isq]);
-
-        if (isolated) {
-            pawn_score.add(ISOLATED_PAWN[open]);
-            trace_eval("WPAWN ISOLATED", sq, ISOLATED_PAWN[open]);
-        } else if (weak) {
-            pawn_score.add(WEAK_PAWN[open]);
-            trace_eval("WPAWN WEAK", sq, WEAK_PAWN[open]);
-        } else if (defended) {
-            pawn_score.add(DEFENDED_PAWN[open]);
-            trace_eval("WPAWN DEFENDED", sq, DEFENDED_PAWN[open]);
-        }
-        if (doubled && !isolated && !weak) {
-            pawn_score.add(DOUBLED_PAWN);
-            trace_eval("WPAWN DOUBLED", sq, DOUBLED_PAWN);
-        }
-        if (candidate) {
-            pawn_score.add(CANDIDATE[isq]);
-            trace_eval("WPAWN CANDIDATE", sq, CANDIDATE[isq]);
-        } else if (passed) {
-            passers |= sq_bit;
-        }
-        if (blocked && (sq_bit & CENTER)) {
-            blocked_center_pawns++;
-        }
-        king_attack[WHITE] += popcnt0(WPAWN_CAPTURES[sq] & kcz[BLACK]);
-    }
-
-    U64 bpawns = brd->bb[BPAWN];
-    while (bpawns) {
-        int sq = pop(bpawns);
-        U64 sq_bit = BIT(sq);
-        U64 down = fill_south(sq_bit);
-        bool open = sq_bit & open_files[WHITE];
-        bool doubled = sq_bit & doubled_pawns[BLACK];
-        bool isolated = sq_bit & isolated_pawns[BLACK];
-        bool blocked = sq_bit & blocked_pawns[BLACK];
-        bool defended = sq_bit & attacks[BLACK];
-        bool push_defend = !blocked && (DOWN1(sq_bit) & attack_range[BLACK]);
-        bool push_double_defend = !blocked && (DOWN2(sq_bit & RANK_7) & moves[BLACK] & attack_range[BLACK]);
-        bool lost = sq_bit & ~attack_range[BLACK];
-        bool weak = !defended && lost && !push_defend && !push_double_defend;
-        bool passed = !doubled && !(down & (attacks[WHITE] | brd->bb[WPAWN]));
-        bool candidate = open && !doubled && !passed && !(down & ~safe[BLACK]);
-
-        pawn_score.sub(PST[WPAWN][sq]);
-        trace_eval("BPAWN PST", sq, PST[WPAWN][sq]);
-
-
-        if (isolated) {
-            pawn_score.sub(ISOLATED_PAWN[open]);
-            trace_eval("BPAWN ISOLATED", sq, ISOLATED_PAWN[open]);
-        } else if (weak) {
-            pawn_score.sub(WEAK_PAWN[open]);
-            trace_eval("BPAWN WEAK", sq, WEAK_PAWN[open]);
-        } else if (defended) {
-            pawn_score.sub(DEFENDED_PAWN[open]);
-            trace_eval("BPAWN DEFENDED", sq, DEFENDED_PAWN[open]);
-        }
-        if (doubled && !isolated && !weak) {
-            pawn_score.sub(DOUBLED_PAWN);
-            trace_eval("BPAWN DOUBLED", sq, DOUBLED_PAWN);
-        }
-        if (candidate) {
-            pawn_score.sub(CANDIDATE[sq]);
-            trace_eval("BPAWN CANDIDATE", sq, CANDIDATE[sq]);
-        } else if (passed) {
-            passers |= sq_bit;
-        }
-
-        if (blocked && (sq_bit & CENTER)) {
-            blocked_center_pawns++;
-        }
-
-        king_attack[BLACK] += popcnt0(BPAWN_CAPTURES[sq] & kcz[WHITE]);
-    }
-
-    if (blocked_center_pawns > 2) {
-        flags |= PFLAG_CLOSED_CENTER;
-    }
-
-    /*
-     * White King
-     */
-
-    //position
-    pawn_score.add(PST[WKING][ISQ(wkpos, WHITE)]);
-    trace_eval("WKING PST", wkpos, PST[WKING][ISQ(wkpos, WHITE)]);
-
-    //threats
-    U64 ka_w = KING_MOVES[wkpos] & sd->stack->mob[WHITE] & sd->stack->attack[WHITE];
-    if (ka_w) {
-        pawn_score.add(0, 10);
-        trace_eval("WKING PAWN ATTACK", wkpos, S(0, 10));
-    }
-
-    //attack units - shelter
-    king_attack[BLACK] += SHELTER_KPOS[FLIP_SQUARE(wkpos)];
-
-    //attack units - castling right
-    if (brd->stack->castling_flags & CASTLE_K
-            && ((brd->matrix[h2] == WPAWN && brd->matrix[g2] == WPAWN)
-            || (brd->matrix[f2] == WPAWN && brd->matrix[h2] == WPAWN && brd->matrix[g3] == WPAWN)
-            || (brd->matrix[h3] == WPAWN && brd->matrix[g2] == WPAWN && brd->matrix[f2] == WPAWN))) {
-        king_attack[BLACK] += SHELTER_CASTLING_KINGSIDE;
-    } else if (brd->stack->castling_flags & CASTLE_Q
-            && ((brd->matrix[a2] == WPAWN && brd->matrix[b2] == WPAWN && brd->matrix[c2] == WPAWN)
-            || (brd->matrix[a2] == WPAWN && brd->matrix[b3] == WPAWN && brd->matrix[c2] == WPAWN))) {
-        king_attack[BLACK] += SHELTER_CASTLING_QUEENSIDE;
-    }
-
-    //attack units - shelter pawns
-    U64 king_front = (FORWARD_RANKS[RANK(wkpos)] | KING_MOVES[wkpos]) & PAWN_SCOPE[FILE(wkpos)];
-
-    U64 shelter_pawns = king_front & brd->bb[WPAWN] & KING_ZONE[wkpos];
-    while (shelter_pawns) {
-        int sq = pop(shelter_pawns);
-        king_attack[BLACK] += SHELTER_PAWN[FLIP_SQUARE(sq)];
-    }
-
-    //attack units - storm pawns
-    U64 storm_pawns = king_front & brd->bb[BPAWN];
-    while (storm_pawns) {
-        int sq = pop(storm_pawns);
-        king_attack[BLACK] += STORM_PAWN[FLIP_SQUARE(sq)];
-    }
-
-
-    //attack units - open files
-    U64 open = (open_files[WHITE] | open_files[BLACK]) & king_front & RANK_8;
-    if (open) {
-        king_attack[BLACK] += SHELTER_OPEN_FILES[popcnt0(open)];
-        if (open & (FILE_A | FILE_H)) {
-            king_attack[BLACK] += SHELTER_OPEN_EDGE_FILE;
-        }
-    }
-
-    /*
-     * Black King
-     */
-
-    //position
-    pawn_score.sub(PST[WKING][ISQ(bkpos, BLACK)]);
-    trace_eval("BKING PST", bkpos, PST[WKING][ISQ(bkpos, BLACK)]);
-
-    //threats
-    U64 ka_b = KING_MOVES[bkpos] & sd->stack->mob[BLACK] & sd->stack->attack[BLACK];
-    if (ka_b) {
-        pawn_score.sub(0, 10);
-        trace_eval("BKING PAWN ATTACK", bkpos, S(0, 10));
-    }
-
-    //attack units - shelter
-    king_attack[WHITE] += SHELTER_KPOS[bkpos];
-
-    //attack units - castling right
-    if (brd->stack->castling_flags & CASTLE_k
-            && ((brd->matrix[h7] == BPAWN && brd->matrix[g7] == BPAWN)
-            || (brd->matrix[f7] == BPAWN && brd->matrix[h7] == BPAWN && brd->matrix[g6] == BPAWN)
-            || (brd->matrix[h6] == BPAWN && brd->matrix[g7] == BPAWN && brd->matrix[f7] == BPAWN))) {
-        king_attack[WHITE] += SHELTER_CASTLING_KINGSIDE;
-    } else if (brd->stack->castling_flags & CASTLE_q
-            && ((brd->matrix[a7] == BPAWN && brd->matrix[b7] == BPAWN && brd->matrix[c7] == BPAWN)
-            || (brd->matrix[a7] == BPAWN && brd->matrix[b6] == BPAWN && brd->matrix[c7] == BPAWN))) {
-        king_attack[WHITE] += SHELTER_CASTLING_QUEENSIDE;
-    }
-
-    //attack units - shelter pawns
-    king_front = (BACKWARD_RANKS[RANK(bkpos)] | KING_MOVES[bkpos]) & PAWN_SCOPE[FILE(bkpos)];
-    shelter_pawns = king_front & brd->bb[BPAWN] & KING_ZONE[bkpos];
-    while (shelter_pawns) {
-        int sq = pop(shelter_pawns);
-        king_attack[WHITE] += SHELTER_PAWN[sq];
-    }
-
-    //attack units - storm pawns
-    storm_pawns = king_front & brd->bb[WPAWN];
-    while (storm_pawns) {
-        int sq = pop(storm_pawns);
-        king_attack[WHITE] += STORM_PAWN[sq];
-    }
-
-    //attack units - open files
-    open = (open_files[WHITE] | open_files[BLACK]) & king_front & RANK_1;
-    if (open) {
-        king_attack[WHITE] += SHELTER_OPEN_FILES[popcnt0(open)];
-        if (open & (FILE_A | FILE_H)) {
-            king_attack[WHITE] += SHELTER_OPEN_EDGE_FILE;
-        }
-    }
-
-    /*
-     * Persist pawn eval on the stack + pawn hash table and return the total score
-     */
-
-    sd->stack->passers = passers;
-    sd->stack->king_attack[WPAWN] = king_attack[WHITE];
-    sd->stack->king_attack[BPAWN] = king_attack[BLACK];
-    sd->stack->pawn_flags = flags;
-    sd->stack->pc_score[WPAWN].set(pawn_score);
-
-    pawn_table::store(brd->stack->pawn_hash, passers, pawn_score, king_attack, flags);
-    return &sd->stack->pc_score[WPAWN];
 }
 
 score_t * eval_knights(search_t * sd, bool us) {
@@ -1065,13 +671,14 @@ score_t * eval_rooks(search_t * sd, bool us) {
     bool them = !us;
     U64 fill[2] = {FILEFILL(brd->bb[BPAWN]), FILEFILL(brd->bb[WPAWN])};
     U64 occ = brd->pawns_kings();
-    if ((brd->bb[ROOK[us]] & RANK[us][1]) && (BIT(brd->get_sq(KING[us])) & (RANK[us][1] | RANK[us][2]))) {
-        result->add(ROOK_1ST); //at least one rook is protecting the back rank
-    }
-    int kpos = brd->get_sq(KING[them]);
-    U64 kaz = (sd->stack->king_attack_zone[us] & ROOK_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone
     int ka_units = 0;
     int ka_squares = 0;
+    if ((brd->bb[ROOK[us]] & RANK[us][1]) && (BIT(brd->get_sq(KING[us])) & (RANK[us][1] | RANK[us][2]))) {
+        result->add(ROOK_1ST); //at least one rook is protecting the back rank
+    } 
+    int kpos = brd->get_sq(KING[them]);
+    U64 kaz = (sd->stack->king_attack_zone[us] & ROOK_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone
+    
 
     while (rooks) {
         int sq = pop(rooks);
@@ -1230,7 +837,7 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
         return result;
     }
     bool them = !us;
-    int step = PAWNDIRECTION[us];
+    int step = PAWN_DIRECTION[us];
     score_t bonus;
     while (passers) {
         int sq = pop(passers);
@@ -1265,7 +872,7 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
         if (connection_mask & sd->brd.bb[PAWN[us]]) {
             result->add(10, 10 + r * 10);
         } else {
-            bit_sq = BIT(sq + PAWNDIRECTION[them]);
+            bit_sq = BIT(sq + PAWN_DIRECTION[them]);
             connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
             if (connection_mask & sd->brd.bb[PAWN[us]]) {
                 result->add(5, 5 + r * 5);
@@ -1355,13 +962,18 @@ score_t * eval_king_attack(search_t * sd, bool us) {
      * 1. Shelter score
      */
     int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + sd->stack->king_attack[PAWN[us]]);
+    
+    if ((RANK[us][8] & brd->bb[ROOK[!us]]) == 0) { //no rook protecting their back rank
+        shelter_ix += 2;
+    }
+    
     result->set(KING_SHELTER[shelter_ix], 0);
 
     U64 kaz = sd->stack->king_attack_zone[us];
 
     kaz &= ~(RANK[us][7] | RANK[us][8] | KING_MOVES[brd->get_sq(KING[!us])]);
     result->add(12 * popcnt0(kaz), 0);
-
+    
 
     /*
      * 2. Reduce the shelter score for closed positions and 
@@ -1375,7 +987,7 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     if (max_1(brd->bb[KNIGHT[us]] | brd->bb[BISHOP[us]] | brd->bb[ROOK[us]])) {
         result->half();
     }
-
+    
     /*
      * 3. Piece Attack Score.
      * Stop if the queen is not involved in the attack

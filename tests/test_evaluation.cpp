@@ -59,9 +59,12 @@ void testKingAttackZero(int idx, std::string fen) {
 
 void testEvaluationSuite() {
 
-    const int DRAW_MAX = 100 / 10;
-    const int DRAWISH_MAX = 100 / 2;
+    const int DRAW_MAX = VPAWN / 10;
+    const int DRAWISH_MAX = VPAWN / 2;
     const int SCORE_MAX = 2 * score::WIN;
+    const int BONUS = VPAWN / 10;
+    const int HALF_PAWN = VPAWN / 2;
+    const int QUARTER_PAWN = VPAWN / 4;
 
     /*
      * Endgames
@@ -77,8 +80,18 @@ void testEvaluationSuite() {
     testEval(1004, "2k5/8/8/8/8/8/2P5/2K5 w - - 0 1", score::WIN / 2, score::WIN); //KPK
     testEval(1005, "2k5/8/8/8/8/2P5/8/2K5 w - - 0 1", 1, DRAW_MAX); //KPK
 
-    // case 3: pawns ------ vs pawns ------
-    //testEval(3001, "7K/8/k1P5/7p/8/8/8/8 w - - 0 1", SCORE_DRAW_MIN, SCORE_DRAW_MAX); //famous study by Réti
+    // case 2: this is an impossible case
+    testEval(2001, "8/8/8/3k4/8/P7/8/7K b - - 0 1", -HALF_PAWN, 0);
+
+    // case 3: pawns ------ vs pawns ------ (pawn endings))
+    testEval(3001, "7K/8/k1P5/7p/8/8/8/8 w - - 0 1", 0, VPAWN); //famous study by Réti
+    testEval(3002, "6k1/p4ppp/8/8/8/8/PP3PPP/6K1 w - - 0 1", VPAWN + BONUS, VPAWN + 4 * BONUS); //isolated pawn
+    testEval(3003, "2k5/1pp5/8/8/3PP3/4K3/8/8 w - - 0 1", 3 * BONUS, 7 * BONUS); //piece square tables
+    testEval(3004, "8/5pk1/8/4K3/8/8/5P2/8 w - - 0 1", BONUS, HALF_PAWN); //piece square tables
+    testEval(3005, "4k3/4pp2/4p3/8/8/8/3PPP2/4K3 w - - 0 1", BONUS, QUARTER_PAWN); //doubled pawn
+    testEval(3006, "k7/3p4/4p3/4P3/8/3p4/3P1P2/7K w - - 0 1", -BONUS, BONUS); //backward pawns
+    testEval(3007, "8/p2p1k2/4p3/4P3/PP6/4K3/8/8 w - - 0 1", 3 * BONUS, 8 * BONUS); //candidate
+    testEval(3008, "8/p1pp1k2/8/2P5/PP6/4K3/8/8 w - - 0 1", 4 * BONUS, 6 * VPAWN); //better candidate
 
     // case 4:  ----- pieces vs ----- ------
     testEval(4001, "7k/8/6K1/3N4/8/8/8/8 w - - 0 1", 1, DRAW_MAX); //KNK
@@ -90,11 +103,11 @@ void testEvaluationSuite() {
     testEval(4007, "K7/2kB4/8/8/8/8/8/5N2 w - - 0 1", score::WIN, SCORE_MAX); //KBNK
 
     // case 5:  pawns pieces vs ----- ------
-    
+
     // case 6:  ----- pieces vs pawns ------
     testEval(6001, "8/8/K7/8/8/8/4kpQ1/8 w - - 0 1", 1, DRAWISH_MAX); //KQKP
     testEval(6002, "R7/4K3/8/8/4kp2/8/8/8 w - - 66 1", 1, DRAWISH_MAX); //KRKP
-    
+
     // case 7:  pawns pieces vs pawns ------
     // case 8:  ----- ------ vs ----- pieces
     // case 9:  pawns ------ vs ----- pieces
@@ -119,12 +132,13 @@ void testEvaluationSuite() {
     testEval(13006, "8/8/4k3/3N1b2/3K1P2/8/8/8 w - - 7 1", 1, DRAWISH_MAX); //KNPKB
 
     // case 14: ----- pieces vs pawns pieces
-    testEval(14001, "K2k4/PR6/8/8/2q5/8/8/8 w - - 0 169", -250, -150); 
-    testEval(14002, "7r/8/8/5k2/4p3/2KNR3/8/8 w - - 12 1", 0, 100);
-    testEval(14003, "8/8/k5r1/2P5/PQ6/KP6/4q3/8 w - - 0 1", -250, -150);
+    testEval(14001, "K2k4/PR6/8/8/2q5/8/8/8 w - - 0 169", -250, -150);
+    testEval(14002, "7r/8/8/5k2/4p3/2KNR3/8/8 w - - 12 1", 0, VPAWN);
+    testEval(14003, "8/8/k5r1/2P5/PQ6/KP6/4q3/8 w - - 0 1", -250, -VPAWN);
 
     // case 15: pawns pieces vs pawns pieces
     testEval(15001, "8/1K6/3k4/P2p4/8/4b3/4B3/8 w - - 27 1", -DRAW_MAX, DRAW_MAX); //opp. bishops
+
 
     /*
      * Opening
@@ -137,9 +151,9 @@ void testEvaluationSuite() {
     //testKingAttackZero(2, "r1bq1rk1/ppppbppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQ1RK1 w - - 3 6");
 
 
-    
 
-    
+
+
 
     /*    
         

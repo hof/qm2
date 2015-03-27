@@ -209,6 +209,56 @@ public:
     bool has_castle_right(int flag) {
         return stack->castling_flags & flag;
     }
+    
+    /**
+     * Test if white or black side can castle short (King Side)
+     * @param white side to move (1: white, 0: black)
+     * @return true if short castle right applies
+     */
+    bool can_castle_ks(bool white) {
+        return white? (stack->castling_flags & CASTLE_K) : (stack->castling_flags & CASTLE_k);
+    }
+    
+    /**
+     * Test if white or black side can castle short (King Side)
+     * @param white side to move (1: white, 0: black)
+     * @return true if short castle right applies
+     */
+    bool can_castle_qs(bool white) {
+        return white? (stack->castling_flags & CASTLE_Q) : (stack->castling_flags & CASTLE_q);
+    }
+    
+    /**
+     * Determines if shelter on the kingside is intact for castling
+     * @param white side to move
+     * @return true if pawn shelter is ok-ish
+     */
+    bool good_shelter_ks(bool white) {
+        if (white) {
+            return (matrix[h2] == WPAWN && matrix[g2] == WPAWN)
+                || (matrix[f2] == WPAWN && matrix[h2] == WPAWN && matrix[g3] == WPAWN)
+                || (matrix[h3] == WPAWN && matrix[g2] == WPAWN && matrix[f2] == WPAWN);
+        } else {
+            return (matrix[h7] == BPAWN && matrix[g7] == BPAWN)
+                || (matrix[f7] == BPAWN && matrix[h7] == BPAWN && matrix[g6] == BPAWN)
+                || (matrix[h6] == BPAWN && matrix[g7] == BPAWN && matrix[f7] == BPAWN);
+        }
+    }
+    
+    /**
+     * Determines if shelter on the queenside is intact for castling
+     * @param white side to move
+     * @return true if pawn shelter is ok-ish
+     */
+    bool good_shelter_qs(bool white) {
+        if (white) {
+            return (matrix[a2] == WPAWN && matrix[b2] == WPAWN && matrix[c2] == WPAWN)
+                || (matrix[a2] == WPAWN && matrix[b3] == WPAWN && matrix[c2] == WPAWN);
+        } else {
+            return (matrix[a7] == BPAWN && matrix[b7] == BPAWN && matrix[c7] == BPAWN)
+                || (matrix[a7] == BPAWN && matrix[b6] == BPAWN && matrix[c7] == BPAWN);
+        }
+    }
 
     /**
      * Test if a side has the bishop pair
@@ -317,7 +367,7 @@ public:
     U64 pawn_attacks(int sq, bool white) {
         return white ? WPAWN_CAPTURES[sq] : BPAWN_CAPTURES[sq];
     }
-
+    
     /**
      * Tests if a square is attacked by a pawn
      * @param sq the square to test
@@ -326,6 +376,18 @@ public:
      */
     bool is_attacked_by_pawn(int sq, bool white) {
         return white ? BPAWN_CAPTURES[sq] & bb[WPAWN] : WPAWN_CAPTURES[sq] & bb[BPAWN];
+    }
+    
+    /**
+     * Tests if a square is safe for placing pawn
+     * @param sq the square to test
+     * @param us side to move: white or black
+     * @return true if the square can safely be occupied by a pawn
+     */
+    bool pawn_is_safe(int sq, bool us) {
+        U64 atck[2] = { WPAWN_CAPTURES[sq] & bb[BPAWN], BPAWN_CAPTURES[sq] & bb[WPAWN] };
+        bool them = !us;
+        return atck[them] == 0 || (is_1(atck[them]) && atck[us] != 0) || gt_1(atck[us]); 
     }
     
     /**

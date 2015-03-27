@@ -142,7 +142,7 @@ namespace move {
         bool us = board->stack->wtm;
         U64 pieces = board->bb[PAWN[us]] & RANK[us][7];
         if (pieces) {
-            int pawn_up = PAWNDIRECTION[us];
+            int pawn_up = PAWN_DIRECTION[us];
             int pc = PAWN[us];
             do {
                 int ssq = pop(pieces);
@@ -213,7 +213,7 @@ namespace move {
         list->current = current;
         bool us = board->stack->wtm;
         int pc = PAWN[us];
-        int pawn_up = PAWNDIRECTION[us];
+        int pawn_up = PAWN_DIRECTION[us];
 
         //pawn moves:
         U64 pieces = board->bb[pc];

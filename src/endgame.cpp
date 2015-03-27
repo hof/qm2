@@ -89,35 +89,6 @@ namespace eg {
         return us == WHITE ? result / div : -result / div;
     }
 
-    /**
-     * Routine to verify if our pawns are blocked
-     */
-    bool blocked_pawns(search_t * s, bool us) {
-        U64 pawns = s->stack->passers & s->brd.bb[PAWN[us]];
-        int direction = us == WHITE ? 8 : -8;
-        bool them = !us;
-        U64 occ = s->brd.all(them);
-        while (pawns) {
-            bool blocked = false;
-            int sq = pop(pawns);
-            do {
-                sq += direction;
-                if (BIT(sq) & occ) {
-                    blocked = true;
-                    break;
-                }
-                if (s->brd.is_attacked(sq, them)) {
-                    blocked = true;
-                    break;
-                }
-            } while (sq >= a2 && sq <= h7);
-            if (!blocked) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     int piece_distance(search_t * s, const bool us) {
         assert(gt_1(s->brd.all(us)));
         int fsq = bsf(s->brd.all(us));
@@ -375,16 +346,8 @@ namespace eg {
     int pawns_vs_pawns(search_t * s, int score, const bool us) {
         assert(eg_test(s, 1, 0, 1, 0, us));
         int bonus_us = unstoppable_pawn(s, us);
-        bool blocked_us = blocked_pawns(s, us);
-        bool them = !us;
-        int bonus_them = unstoppable_pawn(s, them);
-        bool blocked_them = blocked_pawns(s, them);
-        if (blocked_them && bonus_them == 0 && bonus_us != 0) {
-            return score + bonus_us;
-        } else if (blocked_us && bonus_us == 0 && bonus_them != 0) {
-            return draw(score, 2);
-        }
-        return score;
+        int bonus_them = unstoppable_pawn(s, !us);
+        return score + bonus_us - bonus_them;
     }
 
     /**
@@ -499,11 +462,7 @@ namespace eg {
             }
         } else if (!pow_us && max_1(s->brd.bb[PAWN[us]])) {
             //they can sacrifice their piece(s) to force a draw
-            if (blocked_pawns(s, us)) {
-                return draw(score, 8);
-            } else {
-                return draw(score, 4);
-            }
+            return draw(score, 4);
         } else if (s->brd.is_eg(KRPKR, us)) {
             return krpkr(s, score, us);
         }
@@ -529,7 +488,6 @@ namespace eg {
                 return draw(score, 2) + corner_king(s, them, 8);
             }
         } else { //winning edge
-
             return score + corner_king(s, them, 4);
         }
     }

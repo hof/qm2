@@ -178,7 +178,7 @@ const U64 LARGE_CENTER = U64(FULL_BOARD^OUTER);
 const U64 CENTER = U64(LARGE_CENTER & ~(RANK_6 | RANK_3 | FILE_C | FILE_F));
 const int GRAIN_SIZE = 4;
 
-const U64 NEIGHBOUR_FILES[8] = {
+const U64 ADJACENT_FILES[8] = {
     FILE_B,
     FILE_A | FILE_C,
     FILE_B | FILE_D,
@@ -221,6 +221,32 @@ const U64 BACKWARD_RANKS[8] = {
     RANK_1 | RANK_2 | RANK_3 | RANK_4 | RANK_5 | RANK_6,
     RANK_1 | RANK_2 | RANK_3 | RANK_4 | RANK_5 | RANK_6 | RANK_7
 };
+
+const U64 LEFT_FILES[8] = {
+    0,
+    FILE_A,
+    FILE_A | FILE_B,
+    FILE_A | FILE_B | FILE_C,
+    FILE_A | FILE_B | FILE_C | FILE_D,
+    FILE_A | FILE_B | FILE_C | FILE_D | FILE_E,
+    FILE_A | FILE_B | FILE_C | FILE_D | FILE_E | FILE_F,
+    FILE_A | FILE_B | FILE_C | FILE_D | FILE_E | FILE_F | FILE_G
+};
+
+const U64 RIGHT_FILES[8] = {
+    FILE_B | FILE_C | FILE_D | FILE_E | FILE_F | FILE_G | FILE_H,
+    FILE_C | FILE_D | FILE_E | FILE_F | FILE_G | FILE_H,
+    FILE_D | FILE_E | FILE_F | FILE_G | FILE_H,
+    FILE_E | FILE_F | FILE_G | FILE_H,
+    FILE_F | FILE_G | FILE_H,
+    FILE_G | FILE_H,
+    FILE_H,
+    0,
+};
+
+inline U64 upward_ranks(int r, bool us) {
+    return us? FORWARD_RANKS[r] : BACKWARD_RANKS[r];
+}
 
 inline U64 fill_north(U64 x) {
     x |= (x << 8);
@@ -269,7 +295,7 @@ inline bool gt_1(U64 x) {
 #define DOWNRIGHT1(x) (((x) >> 7) & NOT_FILE_A)
 #define DOWNLEFT1(x) (((x) >> 9) & NOT_FILE_H)
 
-const int PAWNDIRECTION[2] = {-8, 8};
+const int PAWN_DIRECTION[2] = {-8, 8};
 
 #define FILE(sq)            ((sq)&7)
 #define RANK(sq)            ((sq)>>3)
