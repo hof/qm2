@@ -33,12 +33,12 @@
 namespace {
 
     enum search_constants_t {
-        DELTA = 50,
         DO_NULLMOVE = 1,
         DO_LMR = 1,
-        DO_PRUNE_NODE = 0,
         DO_PRUNE_MOVES = 1
     };
+    
+    int FFP_MARGIN[8] = {0, 120, 120, 320, 320, 400, 400, 500};
 
 };
 
@@ -168,7 +168,7 @@ void search_t::iterative_deepening() {
         if (abort(true)) {
             break;
         }
-        is_easy &= stack->best_move.equals(&easy_move) && score + DELTA > last_score;
+        is_easy &= stack->best_move.equals(&easy_move) && score + 20 > last_score;
         int elapsed = game->tm.elapsed();
         if (timed_search && !pondering() && root.move_count <= 1 && elapsed > max_time / 32) {
             break;
@@ -539,28 +539,28 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
     }
     stack->tt_move.set(tt_move);
+    
+    
+    /*
+     * Node depth reductions
+     */
+    
+    bool in_check = stack->in_check;
+    bool pv = alpha + 1 < beta;
+    const int eval = evaluate(this);
+    
 
     /*
      * Node pruning
      */
 
-    //prepare
-    bool in_check = stack->in_check;
-    bool pv = alpha + 1 < beta;
-    const int eval = evaluate(this);
-    const int delta = DELTA * (2 + depth);
     bool do_prune_node = !in_check && !skip_null && !pv
             && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
-
-    //return if static evaluation score is already much better than beta
-    if (DO_PRUNE_NODE && do_prune_node && eval - delta >= beta && depth <= 4) {
-        return eval - delta;
-    }
 
     //null move pruning
     if (DO_NULLMOVE && do_prune_node && eval >= beta && depth > 1) {
         forward();
-        int null_depth = depth - 1 - 3 - bool(stack->phase <= 6) - depth /4;
+        int null_depth = depth - 1 - 3;
         int null_score = -pvs(-beta, -alpha, null_depth);
         backward();
         if (stop_all) {
@@ -580,7 +580,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
 
     stack->best_move.clear();
-    if (depth > 4 && tt_move == 0) {
+    if (pv && depth >= 6 && tt_move == 0) {
         skip_null = pv;
         int iid_score = pvs(alpha, beta, depth - 2);
         if (score::is_mate(iid_score)) {
@@ -606,7 +606,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int best = -score::INF;
     stack->best_move.clear();
     int searched_moves = 0;
-    int mc_max = 3 + depth * depth;
     int score_max = score::MATE - brd.ply - 1;
     do {
         assert(brd.valid(move) && brd.legal(move));
@@ -619,33 +618,14 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Move pruning: skip all futile moves
          */
 
-        //futile captures and promotions (delta pruning)
-        bool do_prune = DO_PRUNE_MOVES && !pv && !in_check && gives_check == 0 && searched_moves
+        bool do_prune = DO_PRUNE_MOVES && !pv && !in_check && gives_check == 0 && searched_moves > 1
                 && best > -score::DEEPEST_MATE;
-        if (do_prune && depth <= 3
-                && (move->capture || move->promotion)
-                && eval + delta + brd.max_gain(move) <= alpha) {
-            pruned_nodes++;
-            continue;
-        }
-
+        
         //futile quiet moves (futility pruning)
         bool is_dangerous = in_check || move->capture || move->promotion || move->castle
                 || gives_check || is_passed_pawn(move) || is_killer(move);
         do_prune &= !is_dangerous;
-        if (do_prune && depth <= 8 && eval + delta <= alpha) {
-            pruned_nodes++;
-            continue;
-        }
-
-        //move count based / late move pruning
-        if (do_prune && depth <= 8 && searched_moves > mc_max && best >= alpha) {
-            pruned_nodes++;
-            continue;
-        }
-
-        //SEE pruning
-        if (do_prune && depth <= 2 && eval + delta < beta && brd.min_gain(move) < 0 && brd.see(move) < 0) {
+        if (do_prune && depth < 5 && eval + FFP_MARGIN[depth] <= alpha) {
             pruned_nodes++;
             continue;
         }
@@ -661,8 +641,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
          */
 
         int reduce = 0;
-        if (DO_LMR && depth >= 3 && searched_moves >= 3 && !is_dangerous && !extend) {
-            reduce = searched_moves < 6 ? 1 : 2 + (depth -3) / 4;
+        if (DO_LMR && depth > 1 && searched_moves > 1 && !is_dangerous && !extend) {
+            reduce = 1 + bool(depth > 2 && searched_moves > 3);
+            assert((depth - reduce) >= 1);
         }
         assert(reduce == 0 || extend == 0);
 
@@ -811,8 +792,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
     //prepare
     stack->tt_key = brd.stack->tt_key;
-    bool pv = alpha + 1 < beta;
-    if (eval > alpha && !in_check && pv) {
+    if (eval > alpha && !in_check) {
         alpha = eval;
     }
 
@@ -824,31 +804,20 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
-        bool dangerous = depth < 0 || move->capture || in_check || gives_check || move->promotion || move->castle;
+        bool dangerous = depth < 0 || in_check || gives_check 
+            || move->capture || move->promotion || move->castle;
 
-        //prune all quiet moves
+        //prune all quiet moves 
         if (!dangerous) {
             assert(depth == 0);
             pruned_nodes++;
             continue;
         }
-
-        //delta pruning
-        bool do_prune = !in_check && !gives_check;
-        const int delta = DELTA * 2;
-        if (do_prune && eval + brd.max_gain(move) + delta <= alpha) {
-            pruned_nodes++;
-            continue;
-        }
-
-        //delta SEE pruning
-        if (do_prune && eval + delta < beta && brd.min_gain(move) <= 0 && brd.see(move) <= 0) {
-            pruned_nodes++;
-            continue;
-        }
-
-        //negative SEE pruning
-        if (do_prune && !pv && brd.min_gain(move) < 0 && brd.see(move) < 0) {
+        
+        //prune moves with negative SEE
+        bool do_prune = !in_check && !gives_check && brd.min_gain(move) < 0 
+            && (stack->phase < 10 || !brd.captures_last_piece(move));
+        if (do_prune && brd.see(move) < 0) {
             pruned_nodes++;
             continue;
         }

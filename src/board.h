@@ -179,6 +179,26 @@ public:
     U64 pawns_kings() {
         return bb[WKING] | bb[BKING] | bb[WPAWN] | bb[BPAWN];
     }
+    
+    /**
+     * Returns a bitboard populated with pieces, not being pawns or kings for one side
+     * @param us white: 1, black: 0
+     * @return bitboard
+     */
+    U64 all_pieces(bool us) {
+        return all(us) ^ (bb[PAWN[us]] |  bb[KING[us]]);
+    }
+    
+    /**
+     * Tests if a move captures the last piece (not pawn) of our opponent
+     * @param move the move
+     * @return boolean true if move captures the last piece left
+     */
+    bool captures_last_piece(move_t * move) {
+        bool us = move->piece <= WKING;
+        return move->capture != EMPTY && move->capture != WPAWN 
+                && move->capture != BPAWN && is_1(all_pieces(!us));
+    }
 
     /**
      * Test for pieces (excluding pawns and kings) for a given side 

@@ -286,7 +286,7 @@ int evaluate(search_t * sd) {
     if (sd->stack->eval_result != score::INVALID) {
         return sd->stack->eval_result;
     }
-
+    
     bool wtm = sd->brd.stack->wtm;
     score_t * score = &sd->stack->eval_score;
     int result = eval_material(sd); //sets stack->phase and material flags
