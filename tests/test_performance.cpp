@@ -99,8 +99,8 @@ void handle_row(int ix) {
     test_result_t * result = &test_results[ix];
     int performance = 2 * (result->move.to_string() == result->expected_move);
     performance += performance && result->score >= result->expected_score;
-    performance += performance && result->nodes < 10000000;
-    performance += performance && result->nodes < 5000000;
+    performance += performance && result->nodes < NODES_PER_TEST/2;
+    performance += performance && result->nodes < NODES_PER_TEST/4;
     std::cout << std::setw(4) << (ix + 1) << " | ";
     std::cout << std::setw(6) << (result->solved ? "ok" : "fail") << " | ";
     std::cout << std::setw(5) << result->nodes / 1000 << " | ";

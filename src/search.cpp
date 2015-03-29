@@ -427,17 +427,8 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
  * Move extensions
  */
 int search_t::extend_move(move_t * move, int gives_check, int depth, bool pv) {
-    if (pv) {
-        return gives_check > 0
-                || move->promotion == WQUEEN || move->promotion == BQUEEN
-                || is_passed_pawn(move);
-    }
-    if (gives_check) {
-        if (gives_check > 1 || brd.min_gain(move) >= 0) {
-            return 1;
-        }
-        int see = brd.see(move);
-        return (bool) (see > 0) || (see >= 0 && depth <= 4);
+    if (gives_check > 0) {
+        return (bool) gives_check > 1 || pv || brd.min_gain(move) >= 0 || brd.see(move) >= 0;
     }
     return 0;
 }

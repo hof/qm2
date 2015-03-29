@@ -140,11 +140,6 @@ const short ATTACKED_PIECE = -32; //piece attacked by a pawn
  * Pawn Values 
  *******************************************************************************/
 
-
-
-
-
-
 const score_t BLOCKED_CENTER_PAWN = S(-10, -4);
 
 #define KA_ENCODE(p,s) (MIN(p,3)|(MIN(s,15)<<2))
