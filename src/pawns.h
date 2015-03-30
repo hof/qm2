@@ -30,6 +30,7 @@
 namespace pawns {
     
     score_t * eval(search_t * s);
+    void print_stats();
     
 }
 

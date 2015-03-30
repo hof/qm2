@@ -77,7 +77,7 @@ namespace pawns {
         0, 0, 1, 2, 2, 1, 0, 0 //a1..h1
     };
 
-    // attack units for pawns in front of the king
+    // attack units for pawns in front of our king
     const int8_t SHELTER_PAWN[64] = {
         0, 0, 0, 0, 0, 0, 0, 0,
         -1, -1, -1, -1, -1, -1, -1, -1,
@@ -85,7 +85,19 @@ namespace pawns {
         -1, -1, -1, -1, -1, -1, -1, -1,
         -1, -1, -1, -1, -1, -1, -1, -1,
         -2, -2, -1, -1, -1, -1, -2, -2,
-        -3, -4, -2, -1, -1, -2, -4, -3,
+        -3, -4, -2, -1, -1, -2, -4, -3, //a1..h1
+        0, 0, 0, 0, 0, 0, 0, 0
+    };
+
+    // attack units for pawns in front of their king
+    const int8_t STORM_PAWN[64] = {
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1,
+        -2, -2, -2, -2, -2, -2, -2, -2,
+        0, 0, 0, 0, 0, 0, 0, 0, //a1..h1
         0, 0, 0, 0, 0, 0, 0, 0
     };
 
@@ -102,13 +114,26 @@ namespace pawns {
 
     //attack units for having the right to safely castle queenside
     const int8_t SHELTER_CASTLING_QUEENSIDE = -2;
-    
-    const uint8_t castle_flags[2] = {0,0};
-    
-    
+
+    const uint8_t castle_flags[2] = {0, 0};
+
+
     /**
      * Main pawns and kings evaluation function
      */
+
+    U64 evals_done = 0;
+    U64 stack_hits = 0;
+    U64 table_hits = 0;
+
+    void print_stats() {
+        double pct_1 = stack_hits / (1 + evals_done / 100);
+        double pct_2 = table_hits / (1 + evals_done / 100);
+        double pct_3 = (evals_done - stack_hits - table_hits) / (1 + evals_done / 100);
+        std::cout << "info string stack: " << int(pct_1) << "%, " << "table: " << int(pct_2)
+                << "%, " << "calc: " << int(pct_3) << "%\n";
+
+    }
 
     score_t * eval(search_t * s) {
 
@@ -117,12 +142,14 @@ namespace pawns {
          *    simply get the score and masks from the last stack record.  
          */
 
+        evals_done++;
         if (s->stack->equal_pawns) {
             s->stack->pc_score[WPAWN].set((s->stack - 1)->pc_score[WPAWN]);
             s->stack->passers = (s->stack - 1)->passers;
             s->stack->king_attack[WPAWN] = (s->stack - 1)->king_attack[WPAWN];
             s->stack->king_attack[BPAWN] = (s->stack - 1)->king_attack[BPAWN];
             s->stack->pawn_flags = (s->stack - 1)->pawn_flags;
+            stack_hits++;
             return &s->stack->pc_score[WPAWN];
         }
 
@@ -142,8 +169,10 @@ namespace pawns {
             s->stack->king_attack[WPAWN] = king_attack[WHITE];
             s->stack->pawn_flags = flags;
             s->stack->pc_score[WPAWN].set(pawn_score[WHITE]);
+            table_hits++;
             return &s->stack->pc_score[WPAWN];
         }
+
 
         /*
          * 3. Loop through sides, calculating pawn and king score
@@ -155,8 +184,8 @@ namespace pawns {
         king_attack[WHITE] = 0;
         king_attack[BLACK] = 0;
         const U64 pawns_all = brd->bb[WPAWN] | brd->bb[BPAWN];
-        const int kpos[2] = { brd->get_sq(BKING), brd->get_sq(WKING) };
-        const U64 kzone[2] = { KING_ZONE[kpos[0]], KING_ZONE[kpos[1]] };
+        const int kpos[2] = {brd->get_sq(BKING), brd->get_sq(WKING)};
+        const U64 kzone[2] = {KING_ZONE[kpos[0]], KING_ZONE[kpos[1]]};
 
         for (int us = BLACK; us <= WHITE; us++) {
             pawn_score[us].clear();
@@ -165,7 +194,7 @@ namespace pawns {
             int step = PAWN_DIRECTION[us];
             U64 bb = pawns_us;
             bool them = !us;
-            
+
             while (bb) {
                 int sq = pop(bb);
                 U64 bsq = BIT(sq);
@@ -260,7 +289,7 @@ namespace pawns {
                 }
                 if (passed) {
                     passers |= bsq;
-                    trace_eval("PASSED", sq, S(0,0));
+                    trace_eval("PASSED", sq, S(0, 0));
                 } else if (candidate) {
                     pawn_score[us].add(CANDIDATE[r_us]);
                     trace_eval("CANDIDATE", sq, CANDIDATE[r_us]);
@@ -270,10 +299,13 @@ namespace pawns {
                 }
 
                 //update attack units (storm and shelter pawns)
-                king_attack[us] += popcnt0(brd->pawn_attacks(sq, us) & kzone[them]);
-                if (BIT(sq) & kzone[us]) { 
+                if (BIT(sq) & kzone[them]) {
+                    king_attack[us] += STORM_PAWN[ISQ(sq, us)];
+                    trace_eval("STORM UNITS (us)", sq, S(STORM_PAWN[ISQ(sq, us)], 0));
+                }
+                if (BIT(sq) & kzone[us]) {
                     king_attack[them] += SHELTER_PAWN[ISQ(sq, us)];
-                    trace_eval("SHELTER", sq, S(SHELTER_PAWN[ISQ(sq, us)],0));
+                    trace_eval("SHELTER UNITS", sq, S(SHELTER_PAWN[ISQ(sq, us)], 0));
                 }
             }
 
@@ -291,23 +323,28 @@ namespace pawns {
                 pawn_score[us].add(KING_THREAT);
                 trace_eval("KING ATTACK", kpos[us], KING_THREAT);
             }
-            
+
             //attack units - king position
             king_attack[them] += SHELTER_KPOS[ISQ(kpos[us], us)];
-            
+            trace_eval("KING ATTACK UNITS (POS)", kpos[us], SHELTER_KPOS[ISQ(kpos[us], us)]);
+
             //attack units - castling options
             if (brd->can_castle_ks(us) && brd->good_shelter_ks(us)) {
                 king_attack[them] += SHELTER_CASTLING_KINGSIDE;
+                trace_eval("KING ATTACK UNITS (CASTLE KS)", kpos[us], SHELTER_CASTLING_KINGSIDE);
             } else if (brd->can_castle_qs(us) && brd->good_shelter_qs(us)) {
                 king_attack[them] += SHELTER_CASTLING_QUEENSIDE;
+                trace_eval("KING ATTACK UNITS (CASTLE QS)", kpos[us], SHELTER_CASTLING_QUEENSIDE);
             }
 
             //attack units - (half)open files
-            U64 open_lines = fill_south(kzone[us]) & fill_south(~pawns_us) & RANK_1;
+            U64 open_lines = fill_south(kzone[us]) & ~fill_south(pawns_us) & RANK_1;
             king_attack[them] += SHELTER_OPEN_FILES[popcnt0(open_lines)];
+            trace_eval("KING ATTACK UNITS (OPEN FILES)", kpos[us], SHELTER_OPEN_FILES[popcnt0(open_lines)]);
             if (open_lines & (FILE_A | FILE_H)) {
                 king_attack[them] += SHELTER_OPEN_EDGE_FILE;
-            }   
+                trace_eval("KING ATTACK UNITS (OPEN A/H FILE)", kpos[us], SHELTER_OPEN_EDGE_FILE);
+            }
         }
 
         if (blocked_center_pawns >= 3) {
@@ -315,8 +352,8 @@ namespace pawns {
             trace_eval("CLOSED CENTER FLAG", flags, flags);
         }
 
-        trace_eval("WHITE ATTACKS UNITS", kpos[BLACK], king_attack[WHITE]);
-        trace_eval("BLACK ATTACKS UNITS", kpos[WHITE], king_attack[BLACK]);
+        trace_eval("WHITE ATTACKS UNITS (TOTAL", kpos[BLACK], king_attack[WHITE]);
+        trace_eval("BLACK ATTACKS UNITS (TOTAL)", kpos[WHITE], king_attack[BLACK]);
 
         /*
          * 4. Persist pawn and king evaluation information on the stack and 

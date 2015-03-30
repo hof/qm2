@@ -65,7 +65,7 @@ public:
 };
 
 namespace material_table {
-    const int TABLE_SIZE = 1; //MB
+    const int TABLE_SIZE = 8; //MB
     void store(U64 key, int value, int phase, int flags);
     bool retrieve(U64 key, int & value, int & phase, int & flags);
     void clear();
@@ -112,7 +112,7 @@ public:
 };
 
 namespace pawn_table {
-    const int TABLE_SIZE = 4;
+    const int TABLE_SIZE = 16;
     void store(U64 key, U64 passers, score_t score, int king_attack[2], int flags);
     bool retrieve(U64 key, U64 & passers, score_t & score, int (& king_attack)[2], int & flags);
     void clear();

@@ -844,7 +844,7 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
         //set base score
         assert(r >= 0 && r <= 5);
         int rr = r * (r - 1);
-        bonus.set(rr * 4);
+        bonus.set(rr * 7, rr * 5);
         result->add(bonus);
         
         //stop here (with just the base bonus) if the pawn is on rank 2(r=0), 3(r=1), or 4(r=2))
@@ -906,11 +906,11 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
     return result;
 }
 
-const int8_t KING_ATTACK_OFFSET = 9; //perfectly castled king -9 units
+const int8_t KING_ATTACK_OFFSET = 10; //perfectly castled king -10 units
 
 const int8_t KING_ATTACK_UNIT[BKING + 1] = {
     //  x, p, n, b, r, q, k, p, n, b, r, q, k
-    /**/0, 1, 1, 1, 2, 4, 0, 1, 1, 1, 2, 4, 0
+    /**/0, 0, 1, 1, 2, 4, 0, 0, 1, 1, 2, 4, 0
 };
 
 const int16_t KING_SHELTER[24] = {//structural shelter (pawns & kings)
