@@ -534,7 +534,7 @@ score_t * eval_knights(search_t * sd, bool us) {
         }
         if (moves & kaz) {
             ka_units++;
-            ka_squares += popcnt(moves & kaz);
+            ka_squares += popcnt0(moves & kaz & KING_ZONE[kpos]);
         }
     }
     sd->stack->king_attack[pc] = KA_ENCODE(ka_units, ka_squares);
@@ -623,7 +623,7 @@ score_t * eval_bishops(search_t * sd, bool us) {
         }
         if (moves & kaz) {
             ka_units++;
-            ka_squares += popcnt(moves & kaz);
+            ka_squares += popcnt0(moves & kaz & KING_ZONE[kpos]);
         }
     }
     sd->stack->king_attack[pc] = KA_ENCODE(ka_units, ka_squares);
@@ -739,7 +739,7 @@ score_t * eval_rooks(search_t * sd, bool us) {
         }
         if (moves & kaz) {
             ka_units++;
-            ka_squares += popcnt(moves & kaz);
+            ka_squares += popcnt0(moves & kaz & KING_ZONE[kpos]);
         }
     }
     sd->stack->king_attack[pc] = KA_ENCODE(ka_units, ka_squares);
@@ -815,7 +815,7 @@ score_t * eval_queens(search_t * sd, bool us) {
         result->add(10 - distance_rank(sq, kpos) - distance_file(sq, kpos));
         if (moves & kaz) {
             ka_units++;
-            ka_squares += popcnt(moves & kaz);
+            ka_squares += popcnt0(moves & kaz & KING_ZONE[kpos]);
             result->add(eval_mate_threat(sd, moves, kpos, us));
         }
     }
@@ -824,8 +824,8 @@ score_t * eval_queens(search_t * sd, bool us) {
 }
 
 
-const uint8_t PP_MG[6] = { 0, 0, 15, 40, 80, 140 };
-const uint8_t PP_EG[6] = { 5, 5, 10, 20, 40, 60 };
+const uint8_t PP_MG[6] = { 5, 5, 15, 40, 80, 140 };
+const uint8_t PP_EG[6] = { 10, 10, 15, 25, 45, 65 };
 const uint8_t PP_DIST_US[8] = { 0, 0, 0, 2, 5, 10, 20, 20 };
 const uint8_t PP_DIST_THEM[8] = { 0, 0, 0, 5, 10, 20, 40, 40 };
 
