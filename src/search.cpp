@@ -37,7 +37,7 @@ namespace {
         DO_LMR = 1,
         DO_PRUNE_MOVES = 1
     };
-    
+
     int FFP_MARGIN[8] = {0, 120, 120, 320, 320, 400, 400, 500};
 
 };
@@ -496,6 +496,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     assert(depth > 0 && depth <= MAX_PLY);
+    int alpha1 = alpha;
 
     //mate distance pruning: if mate(d) in n don't search deeper
     if ((score::MATE - brd.ply) < beta) {
@@ -530,22 +531,21 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
     }
     stack->tt_move.set(tt_move);
-    
-    
+
+
     /*
      * Node depth reductions
      */
-    
-    bool in_check = stack->in_check;
-    bool pv = alpha + 1 < beta;
+
+    const bool in_check = stack->in_check;
+    const bool pv = alpha + 1 < beta;
     const int eval = evaluate(this);
     
-
     /*
      * Node pruning
      */
 
-    bool do_prune_node = !in_check && !skip_null && !pv
+    const bool do_prune_node = !in_check && !skip_null && !pv
             && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
 
     //null move pruning
@@ -611,7 +611,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         bool do_prune = DO_PRUNE_MOVES && !pv && !in_check && gives_check == 0 && searched_moves > 1
                 && best > -score::DEEPEST_MATE;
-        
+
         //futile quiet moves (futility pruning)
         bool is_dangerous = in_check || move->capture || move->promotion || move->castle
                 || gives_check || is_passed_pawn(move) || is_killer(move);
@@ -704,7 +704,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     assert(brd.valid(&stack->best_move));
     assert(brd.legal(&stack->best_move));
 
-    int flag = score::flags(best, alpha, beta); //obs: not using "old-alpha" to keep long pv
+    int flag = score::flags(best, alpha1, beta);
     trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
     return best;
 }
@@ -795,8 +795,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
-        bool dangerous = depth < 0 || in_check || gives_check 
-            || move->capture || move->promotion || move->castle;
+        bool dangerous = depth < 0 || in_check || gives_check
+                || move->capture || move->promotion || move->castle;
 
         //prune all quiet moves 
         if (!dangerous) {
@@ -804,10 +804,10 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             pruned_nodes++;
             continue;
         }
-        
+
         //prune moves with negative SEE
-        bool do_prune = !in_check && !gives_check && brd.min_gain(move) < 0 
-            && (stack->phase < 10 || !brd.captures_last_piece(move));
+        bool do_prune = !in_check && !gives_check && brd.min_gain(move) < 0
+                && (stack->phase < 10 || !brd.captures_last_piece(move));
         if (do_prune && brd.see(move) < 0) {
             pruned_nodes++;
             continue;

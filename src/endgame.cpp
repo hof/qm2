@@ -116,9 +116,9 @@ namespace eg {
             int steps_pawn = distance_rank(psq, qsq) - utm - is_rank_2(psq, us);
             int steps_king = distance(kpos_them, qsq) - 1;
             if (steps_pawn <= 2 && (KING_MOVES[kpos_us] & BIT(qsq))) {
-                score = 60 - 10 * steps_pawn;
+                score = 120 - 20 * steps_pawn;
             } else if (steps_king > steps_pawn) {
-                score = 60 - 10 * steps_pawn;
+                score = 120 - 20 * steps_pawn;
             }
             if (score > result) {
                 result = score;

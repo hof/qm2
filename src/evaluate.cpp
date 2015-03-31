@@ -823,7 +823,14 @@ score_t * eval_queens(search_t * sd, bool us) {
     return result;
 }
 
+
+const uint8_t PP_MG[6] = { 0, 0, 15, 40, 80, 140 };
+const uint8_t PP_EG[6] = { 5, 5, 10, 20, 40, 60 };
+const uint8_t PP_DIST_US[8] = { 0, 0, 0, 2, 5, 10, 20, 20 };
+const uint8_t PP_DIST_THEM[8] = { 0, 0, 0, 5, 10, 20, 40, 40 };
+
 score_t * eval_passed_pawns(search_t * sd, bool us) {
+    
 
     score_t * result = &sd->stack->passer_score[us];
     result->clear();
@@ -836,15 +843,10 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
     score_t bonus;
     while (passers) {
         int sq = pop(passers);
-        int r = RANK(sq) - 1;
-        if (us == BLACK) {
-            r = 5 - r;
-        }
-
-        //set base score
+        int r = us == WHITE? RANK(sq) - 1 : 6 - RANK(sq);
         assert(r >= 0 && r <= 5);
-        int rr = r * (r - 1);
-        bonus.set(rr * 7, rr * 5);
+        
+        bonus.set(PP_MG[r], PP_EG[r]);
         result->add(bonus);
         
         //stop here (with just the base bonus) if the pawn is on rank 2(r=0), 3(r=1), or 4(r=2))
@@ -857,8 +859,8 @@ score_t * eval_passed_pawns(search_t * sd, bool us) {
         int to = sq + step;
 
         //king distance
-        int kdist_us_bonus = (distance(sd->brd.get_sq(KING[us]), to) * rr) / 2;
-        int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * rr;
+        int kdist_us_bonus = distance(sd->brd.get_sq(KING[us]), to) * PP_DIST_US[r];
+        int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * PP_DIST_THEM[r];
         result->add(0, kdist_them_bonus - kdist_us_bonus);
 
         //connected and defended passers
