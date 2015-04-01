@@ -21,7 +21,8 @@
  * - aspiration windows
  * - null move pruning 
  * - futility pruning
- * - late move reductions (LMR) and late move pruning (LMP)
+ * - late move reductions (LMR)
+ * - check extensions
  * 
  */
 
@@ -168,6 +169,7 @@ void search_t::iterative_deepening() {
         if (abort(true)) {
             break;
         }
+        store_pv();
         is_easy &= stack->best_move.equals(&easy_move) && score + 20 > last_score;
         int elapsed = game->tm.elapsed();
         if (timed_search && !pondering() && root.move_count <= 1 && elapsed > max_time / 32) {
@@ -298,11 +300,52 @@ bool search_t::pondering() {
  */
 std::string search_t::pv_to_string() {
     std::string result = "";
+    board_t * b = &brd2;
+    b->init(brd.to_string().c_str());
+    
+    //retrieve what's available from stack
     for (int i = 0; i < stack->pv_count; i++) {
         result += stack->pv_moves[i].to_string() + " ";
+        b->forward(&stack->pv_moves[i]);
     }
+    
+    //retrieve extra moves from hash
+    int tt_move = 0, tt_flags, tt_score;
+    move_t m;
+    for (int i = 0; i < 10; i++) {
+        trans_table::retrieve(b->stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
+        if (tt_move == 0) {
+            break;
+        }
+        m.set(tt_move);
+        result += m.to_string() + " ";
+        b->forward(&m);
+    }
+    
     return result;
 }
+
+/**
+ * Writes principle variation in the hash table. Called after every iteration
+ * to make sure pv moves are searched again first
+ */
+void search_t::store_pv() {
+    board_t * b = &brd2;
+    b->init(brd.to_string().c_str());
+    int tt_move = 0, tt_flags, tt_score;
+    move_t m;
+    for (int i = 0; i < stack->pv_count; i++) {
+        if (i > 0) {
+            trans_table::retrieve(b->stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
+            m.set(tt_move);
+            if (m.equals(&stack->pv_moves[i]) == false) {
+                trans_table::store(b->stack->tt_key, 0, 0, 0, 0, m.to_int(), 0);
+            }
+        }
+        b->forward(&stack->pv_moves[i]);
+    }   
+}
+
 
 /**
  * Update history sort scores for quiet moves

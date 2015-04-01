@@ -89,6 +89,7 @@ public:
     search_stack_t _stack[MAX_PLY+1];
     game_t * game;
     board_t brd;
+    board_t brd2;
     root_t root;
     search_stack_t * stack;
     search_stack_t * root_stack;
@@ -126,6 +127,7 @@ public:
     bool abort(bool force_poll);
     bool pondering();
     int init_root_moves();
+    void store_pv();
     void debug_print_search(int alpha, int beta, int depth);
     void trace_root(int alpha, int beta, int depth);
     void forward();
