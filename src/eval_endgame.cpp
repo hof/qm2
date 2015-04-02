@@ -1,6 +1,6 @@
 /**
  * Maxima, a chess playing program. 
- * Copyright (C) 1996-2014 Erik van het Hof and Hermen Reitsma 
+ * Copyright (C) 1996-2015 Erik van het Hof and Hermen Reitsma 
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -19,12 +19,12 @@
  * Endgame evaluation functions for normal chess
  */
 
-#include "endgame.h"
-#include "evaluate.h"
+#include "eval_endgame.h"
+#include "eval.h"
 #include "search.h"
 #include "bits.h"
 #include "score.h"
-#include "kpk_bb.h"
+#include "eval_kpk_bb.h"
 
 namespace eg {
 

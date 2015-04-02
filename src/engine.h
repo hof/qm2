@@ -1,6 +1,6 @@
 /**
  * Maxima, a chess playing program. 
- * Copyright (C) 1996-2014 Erik van het Hof and Hermen Reitsma 
+ * Copyright (C) 1996-2015 Erik van het Hof and Hermen Reitsma 
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -24,7 +24,7 @@
 #ifndef ENGINE_H
 #define	ENGINE_H
 
-#include "evaluate.h"
+#include "eval.h"
 #include "search.h"
 #include "movepicker.h"
 #include "book.h"
