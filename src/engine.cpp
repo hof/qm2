@@ -221,7 +221,7 @@ void engine_t::analyse() {
     std::cout << "---------------+---------------+---------------+---------------------\n";
     print_row("Tempo", tempo_score.get(phase));
     print_row("Material", s->stack->material_score);
-    print_row("Pawns & Kings", s->stack->pc_score[WPAWN], phase);
+    print_row("Pawns & Kings", s->stack->pawn_info->score, phase);
     print_row("Knights", s->stack->pc_score[WKNIGHT], s->stack->pc_score[BKNIGHT], phase);
     print_row("Bishops", s->stack->pc_score[WBISHOP], s->stack->pc_score[BBISHOP], phase);
     print_row("Rooks", s->stack->pc_score[WROOK], s->stack->pc_score[BROOK], phase);

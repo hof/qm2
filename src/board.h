@@ -202,14 +202,11 @@ public:
 
     /**
      * Test for pieces (excluding pawns and kings) for a given side 
-     * @param white white or black
-     * @return true if side has pieces, false otherwise
+     * @param us side to move, white(1) or black(0)
+     * @return true if side "us" has pieces, false otherwise
      */
-    bool has_pieces(bool white) {
-        return white ?
-                bb[WROOK] || bb[WKNIGHT] || bb[WBISHOP] || bb[WQUEEN]
-                :
-                bb[BROOK] || bb[BKNIGHT] || bb[BBISHOP] || bb[BQUEEN];
+    bool has_pieces(bool us) {
+        return bb[ROOK[us]] || bb[QUEEN[us]] || bb[KNIGHT[us]] || bb[BISHOP[us]];
     }
 
     /**
@@ -219,6 +216,15 @@ public:
     bool has_pieces() {
         return bb[WROOK] || bb[BROOK] || bb[WKNIGHT] || bb[BKNIGHT]
                 || bb[WBISHOP] || bb[BBISHOP] || bb[WQUEEN] || bb[BQUEEN];
+    }
+    
+    /**
+     * Test if site to move has only one piece left (beside the king)
+     * @param us side to move, white(1) or black(0)
+     * @return true if side to move has only one piece left
+     */
+    bool has_one_piece(bool us) {
+        return is_1(bb[ROOK[us]] | bb[QUEEN[us]] | bb[KNIGHT[us]] | bb[BISHOP[us]]);
     }
 
     /**

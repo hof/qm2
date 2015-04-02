@@ -98,7 +98,7 @@ namespace eg {
     }
 
     int unstoppable_pawn(search_t * s, const bool us) {
-        U64 passers = s->stack->passers & s->brd.bb[PAWN[us]];
+        U64 passers = s->stack->pawn_info->passers & s->brd.bb[PAWN[us]];
         if (passers == 0) {
             return 0;
         }

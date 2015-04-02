@@ -30,6 +30,7 @@
 namespace pawns {
     
     score_t * eval(search_t * s);
+    score_t * eval_passed_pawns(search_t * s, bool us);
     void print_stats();
     
 }

@@ -35,6 +35,7 @@ namespace {
 
     enum search_constants_t {
         DO_NULLMOVE = 1,
+        DO_VERIFY_NULL = 1,
         DO_LMR = 1,
         DO_PRUNE_MOVES = 1
     };
@@ -302,13 +303,13 @@ std::string search_t::pv_to_string() {
     std::string result = "";
     board_t * b = &brd2;
     b->init(brd.to_string().c_str());
-    
+
     //retrieve what's available from stack
     for (int i = 0; i < stack->pv_count; i++) {
         result += stack->pv_moves[i].to_string() + " ";
         b->forward(&stack->pv_moves[i]);
     }
-    
+
     //retrieve extra moves from hash
     int tt_move = 0, tt_flags, tt_score;
     move_t m;
@@ -321,7 +322,6 @@ std::string search_t::pv_to_string() {
         result += m.to_string() + " ";
         b->forward(&m);
     }
-    
     return result;
 }
 
@@ -339,13 +339,12 @@ void search_t::store_pv() {
             trans_table::retrieve(b->stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
             m.set(tt_move);
             if (m.equals(&stack->pv_moves[i]) == false) {
-                trans_table::store(b->stack->tt_key, 0, 0, 0, 0, m.to_int(), 0);
+                trans_table::store(b->stack->tt_key, 0, 0, 1, 0, m.to_int(), 0);
             }
         }
         b->forward(&stack->pv_moves[i]);
-    }   
+    }
 }
-
 
 /**
  * Update history sort scores for quiet moves
@@ -564,12 +563,15 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Transposition table lookup
      */
 
+    const bool pv = alpha + 1 < beta;
     stack->tt_key = brd.stack->tt_key; //needed for testing repetitions
     int tt_move = 0, tt_flag = 0, tt_score;
     if (trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag)) {
-        if ((tt_flag == score::LOWERBOUND && tt_score >= beta)
-                || (tt_flag == score::UPPERBOUND && tt_score <= alpha)
-                || tt_flag == score::EXACT) {
+        if (pv && tt_flag == score::EXACT) {
+            return tt_score;
+        } else if (!pv && tt_score >= beta && tt_flag == score::LOWERBOUND) {
+            return tt_score;
+        } else if (!pv && tt_score <= alpha && tt_flag == score::UPPERBOUND) {
             return tt_score;
         }
     }
@@ -581,9 +583,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
 
     const bool in_check = stack->in_check;
-    const bool pv = alpha + 1 < beta;
     const int eval = evaluate(this);
-    
+
     /*
      * Node pruning
      */
@@ -594,13 +595,25 @@ int search_t::pvs(int alpha, int beta, int depth) {
     //null move pruning
     if (DO_NULLMOVE && do_prune_node && eval >= beta && depth > 1) {
         forward();
-        int null_depth = depth - 1 - 3;
-        int null_score = -pvs(-beta, -alpha, null_depth);
+        const int R = 3;
+        int null_score = -pvs(-beta, -alpha, depth - 1 - R);
         backward();
         if (stop_all) {
             return alpha;
         } else if (null_score >= beta) {
-            return null_score;
+            const int RV = 5;
+            if (DO_VERIFY_NULL && depth > RV && brd.has_one_piece(brd.stack->wtm)) {
+                //verification
+                skip_null = true;
+                int verified_score = pvs(alpha, beta, depth - 1 - RV);
+                skip_null = false;
+                if (verified_score >= beta) {
+                    return verified_score;
+                }
+            } else {
+                //no verification
+                return null_score;
+            }
         } else if (null_score < alpha && null_score < -score::DEEPEST_MATE) {
             move_t * threat_move = &(stack + 1)->best_move;
             if (!threat_move->capture && !threat_move->promotion) {

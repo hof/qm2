@@ -20,27 +20,20 @@ void test_tt() {
     /*
      * Test pawn table store and retrieve
      */
-    pawn_table::set_size(16);
-    U64 key = hash::codes[WPAWN][e4];
-    U64 passers1, passers2;
-    score_t score1, score2;
-    int king_attack1[2], king_attack2[2], flags1, flags2;
-    passers1 = BIT(a2) | BIT(h2) | BIT(a7) | BIT(b7);
-    score1.set(-12, 34);
-    king_attack1[WHITE] = -56;
-    king_attack1[BLACK] = 78;
-    flags1 = 15;
-    pawn_table::store(key, passers1, score1, king_attack1, flags1);
-    bool result = pawn_table::retrieve(key, passers2, score2, king_attack2, flags2);
-    if (result == false
-            || passers1 != passers2
-            || score1.mg != score2.mg
-            || score1.eg != score2.eg
-            || king_attack1[WHITE] != king_attack2[WHITE]
-            || king_attack1[BLACK] != king_attack2[BLACK]
-            || flags1 != flags2
+    
+    pawn_table::set_size(4);
+    search_t * sd = new search_t("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    pawn_table::entry_t * pe = pawn_table::retrieve(sd->brd.stack->pawn_hash);
+   
+    //pawn entry should contain valid information for the starting position
+    if (pe->key != sd->brd.stack->pawn_hash
+            || pe->passers != 0
+            || pe->score.mg != 0
+            || pe->score.eg != 0
+            || pe->king_attack[WHITE] != pe->king_attack[BLACK]
+            || pe->flags != 0
             ) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=pawn table store/retrieve error" << std::endl;
+        std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=pawn table store/retrieve error 2" << std::endl;
         return;
     }
 
@@ -48,11 +41,13 @@ void test_tt() {
      * Test material table store and retrieve
      */
     material_table::set_size(4);
-    int value1, value2, phase1, phase2;
+    int value1, value2, phase1, phase2, flags2;
+    int flags1 = 4;
     value1 = 910;
     phase1 = 14;
+    U64 key = sd->brd.stack->material_hash;
     material_table::store(key, value1, phase1, flags1);
-    result = material_table::retrieve(key, value2, phase2, flags2);
+    bool result = material_table::retrieve(key, value2, phase2, flags2);
     if (result == false
             || value1 != value2
             || phase1 != phase2
@@ -83,7 +78,6 @@ void test_tt() {
         }
     }
 
-    search_t * sd = new search_t("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     move_t * tmove = move::first(sd, 0);
     trans_table::store(sd->brd.stack->tt_key, sd->brd.root_ply, sd->brd.ply, 123, -12345, tmove->to_int(), 3);
 

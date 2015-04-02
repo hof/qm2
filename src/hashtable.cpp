@@ -92,61 +92,34 @@ namespace material_table {
 
 };
 
-pawn_table_t::pawn_table_t(int size_in_MB) {
-    table = NULL;
-    enabled = true;
-    size_in_mb = -1;
-    set_size(size_in_MB);
-}
-
-void pawn_table_t::set_size(int size_in_MB) {
-    if (size_in_mb == size_in_MB) {
-        return;
-    }
-    if (table) {
-        delete[] table;
-    }
-    int entry_size = sizeof (entry_t);
-    int max_entries = (size_in_MB * 1024 * 1024) / entry_size;
-    size = 1 << (max_entries ? bsr(max_entries) : 0);
-    table = new entry_t[size];
-    max_hash_key = size - 1;
-    size_in_mb = size_in_MB;
-}
-
-void pawn_table_t::store(U64 key, U64 passers, score_t score, int king_attack[2], int flags) {
-    entry_t & entry = table[index(key)];
-    entry.key = key ^ score.eg;
-    entry.passers = passers;
-    entry.score.set(score);
-    entry.king_attack[BLACK] = king_attack[BLACK];
-    entry.king_attack[WHITE] = king_attack[WHITE];
-    entry.flags = flags;
-}
-
-bool pawn_table_t::retrieve(U64 key, U64 & passers, score_t & score, int (& king_attack)[2], int & flags) {
-    entry_t & entry = table[index(key)];
-    if ((entry.key ^ entry.score.eg) != key || !enabled) {
-        return false;
-    }
-    passers = entry.passers;
-    score.set(entry.score);
-    king_attack[BLACK] = entry.king_attack[BLACK];
-    king_attack[WHITE] = entry.king_attack[WHITE];
-    flags = entry.flags;
-    return true;
-}
-
 namespace pawn_table {
 
-    pawn_table_t _global_table(TABLE_SIZE);
-
-    void store(U64 key, U64 passers, score_t score, int king_attack[2], int flags) {
-        _global_table.store(key, passers, score, king_attack, flags);
+    table_t::table_t(int size_in_MB) {
+        table = NULL;
+        size_in_mb = -1;
+        set_size(size_in_MB);
     }
 
-    bool retrieve(U64 key, U64 & passers, score_t & score, int (& king_attack)[2], int & flags) {
-        return _global_table.retrieve(key, passers, score, king_attack, flags);
+    void table_t::set_size(int size_in_MB) {
+        if (size_in_mb == size_in_MB) {
+            return;
+        }
+        if (table) {
+            delete[] table;
+        }
+        int entry_size = sizeof (entry_t);
+        int max_entries = (size_in_MB * 1024 * 1024) / entry_size;
+        size = 1 << (max_entries ? bsr(max_entries) : 0);
+        table = new entry_t[size];
+        max_hash_key = size - 1;
+        size_in_mb = size_in_MB;
+    }
+    
+    
+    table_t _global_table(TABLE_SIZE);
+
+    entry_t * retrieve(U64 key) {
+        return _global_table.retrieve(key);
     }
 
     void clear() {
@@ -155,14 +128,6 @@ namespace pawn_table {
 
     void set_size(int size_in_mb) {
         _global_table.set_size(size_in_mb);
-    }
-
-    void enable() {
-        _global_table.enabled = true;
-    }
-
-    void disable() {
-        _global_table.enabled = false;
     }
 };
 

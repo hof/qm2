@@ -179,15 +179,12 @@ score_t * w17_eval_pawns_and_kings(search_t * s) {
     /*
      * 1. Probe the hash table for the pawn score
      */
-    U64 passers;
-    int king_attack[2];
-    int flags;
-    score_t pawn_score;
-    if (pawn_table::retrieve(s->brd.stack->pawn_hash, passers, pawn_score, king_attack, flags)) {
-        s->stack->pc_score[WPAWN].set(pawn_score);
-        return &s->stack->pc_score[WPAWN];
+    
+    s->stack->pawn_info = pawn_table::retrieve(s->brd.stack->pawn_hash);
+    if (s->stack->pawn_info->key == s->brd.stack->pawn_hash) {
+        return &s->stack->pawn_info->score;
     }
-
+    
     score_t pawn_score_us[2];
     for (int us = BLACK; us <= WHITE; us++) {
 
@@ -210,8 +207,7 @@ score_t * w17_eval_pawns_and_kings(search_t * s) {
 
     }
     
-    s->stack->pc_score[WPAWN].set(pawn_score_us[WHITE]);
-    s->stack->pc_score[WPAWN].sub(pawn_score_us[BLACK]);
-    pawn_table::store(s->brd.stack->pawn_hash, passers, s->stack->pc_score[WPAWN], king_attack, flags);
-    return &s->stack->pc_score[WPAWN];
+    s->stack->pawn_info->score.set(pawn_score_us[WHITE]);
+    s->stack->pawn_info->score.sub(pawn_score_us[BLACK]);
+    return &s->stack->pawn_info->score;
 }

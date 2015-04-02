@@ -36,7 +36,6 @@ score_t * eval_knights(search_t * sd, bool white);
 score_t * eval_bishops(search_t * sd, bool white);
 score_t * eval_rooks(search_t * sd, bool white);
 score_t * eval_queens(search_t * sd, bool white);
-score_t * eval_passed_pawns(search_t * sd, bool white);
 score_t * eval_king_attack(search_t * sd, bool white);
 
 /**
@@ -288,9 +287,9 @@ int evaluate(search_t * sd) {
     set_eval_masks(sd); //sets mobility and attack masks
     score->set(TEMPO[wtm]);
     score->add(pawns::eval(sd)); //sets passers and pawns flags
-    if (sd->stack->passers) {
-        score->add(eval_passed_pawns(sd, WHITE));
-        score->sub(eval_passed_pawns(sd, BLACK));
+    if (sd->stack->pawn_info->passers) {
+        score->add(pawns::eval_passed_pawns(sd, WHITE));
+        score->sub(pawns::eval_passed_pawns(sd, BLACK));
     }
     score->add(eval_knights(sd, WHITE)); //updates king attack
     score->sub(eval_knights(sd, BLACK)); //updates king attack
@@ -571,7 +570,7 @@ score_t * eval_bishops(search_t * sd, bool us) {
      * 3. Calculate the score and store on the stack
      */
     //bishop pair
-    if (brd->has_bishop_pair(us) && (sd->stack->pawn_flags & PFLAG_CLOSED_CENTER) == 0) {
+    if (brd->has_bishop_pair(us) && (sd->stack->pawn_info->flags & PFLAG_CLOSED_CENTER) == 0) {
         result->add(VBISHOPPAIR);
     }
 
@@ -722,7 +721,7 @@ score_t * eval_rooks(search_t * sd, bool us) {
         }
 
         //Tarrasch Rule: place rook behind passers
-        U64 tpass = moves & sd->stack->passers; //touched passers
+        U64 tpass = moves & sd->stack->pawn_info->passers; //touched passers
         if (tpass) {
             U64 front[2];
             front[BLACK] = fill_south(bitSq) & tpass;
@@ -823,91 +822,6 @@ score_t * eval_queens(search_t * sd, bool us) {
     return result;
 }
 
-
-const uint8_t PP_MG[6] = { 5, 5, 15, 40, 80, 140 };
-const uint8_t PP_EG[6] = { 10, 10, 15, 25, 45, 65 };
-const uint8_t PP_DIST_US[8] = { 0, 0, 0, 2, 5, 10, 20, 20 };
-const uint8_t PP_DIST_THEM[8] = { 0, 0, 0, 5, 10, 20, 40, 40 };
-
-score_t * eval_passed_pawns(search_t * sd, bool us) {
-    
-
-    score_t * result = &sd->stack->passer_score[us];
-    result->clear();
-    U64 passers = sd->stack->passers & sd->brd.bb[PAWN[us]];
-    if (passers == 0) {
-        return result;
-    }
-    bool them = !us;
-    int step = PAWN_DIRECTION[us];
-    score_t bonus;
-    while (passers) {
-        int sq = pop(passers);
-        int r = us == WHITE? RANK(sq) - 1 : 6 - RANK(sq);
-        assert(r >= 0 && r <= 5);
-        
-        bonus.set(PP_MG[r], PP_EG[r]);
-        result->add(bonus);
-        
-        //stop here (with just the base bonus) if the pawn is on rank 2(r=0), 3(r=1), or 4(r=2))
-        if (r < 3) {
-            continue;
-        }
-
-        //initialize bonus and rank
-        bonus.half();
-        int to = sq + step;
-
-        //king distance
-        int kdist_us_bonus = distance(sd->brd.get_sq(KING[us]), to) * PP_DIST_US[r];
-        int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * PP_DIST_THEM[r];
-        result->add(0, kdist_them_bonus - kdist_us_bonus);
-
-        //connected and defended passers
-        U64 bit_sq = BIT(sq);
-        U64 connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
-        if (connection_mask & sd->brd.bb[PAWN[us]]) {
-            result->add(10, 10 + r * 10);
-        } else {
-            bit_sq = BIT(sq + PAWN_DIRECTION[them]);
-            connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
-            if (connection_mask & sd->brd.bb[PAWN[us]]) {
-                result->add(5, 5 + r * 5);
-            }
-        }
-
-        //advancing
-        do {
-            if (BIT(to) & sd->brd.bb[ALLPIECES]) {
-                break; //blocked
-            }
-            sd->brd.bb[ALLPIECES] ^= BIT(sq); //to include rook/queen xray attacks from behind
-            U64 attacks = sd->brd.attacks_to(to);
-            sd->brd.bb[ALLPIECES] ^= BIT(sq);
-            U64 defend = attacks & sd->brd.all(them);
-            U64 support = attacks & sd->brd.all(us);
-            if (defend) {
-                if (support == 0) {
-                    break;
-                }
-                if (is_1(support) && gt_1(defend)) {
-                    break;
-                }
-            }
-            result->add(bonus);
-            to += step;
-        } while (to >= a1 && to <= h8);
-    }
-    if (has_imbalance(sd, them)) {
-        if (has_major_imbalance(sd)) {
-            result->mul256(128);
-        } else {
-            result->mul256(196);
-        }
-    }
-    return result;
-}
-
 const int8_t KING_ATTACK_OFFSET = 10; //perfectly castled king -10 units
 
 const int8_t KING_ATTACK_UNIT[BKING + 1] = {
@@ -977,7 +891,7 @@ score_t * eval_king_attack(search_t * sd, bool us) {
      * if little material is left
      */
 
-    if ((sd->stack->pawn_flags & PFLAG_CLOSED_CENTER) != 0) {
+    if ((sd->stack->pawn_info->flags & PFLAG_CLOSED_CENTER) != 0) {
         result->half(); //reduce shelter score for closed positions
     }
 

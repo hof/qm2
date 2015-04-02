@@ -24,20 +24,20 @@
 #include "search.h"
 #include "bits.h"
 
-//#define TRACE_EVAL
+//#define ENABLE_PAWN_EVAL_TRACE
 
 namespace pawns {
 
-#ifdef TRACE_EVAL
+#ifdef ENABLE_PAWN_EVAL_TRACE
 
-    void trace_eval(std::string msg, int sq, const score_t & s) {
+    void trace(std::string msg, int sq, const score_t & s) {
         std::cout << msg << " " << FILE_SYMBOL(sq) << RANK_SYMBOL(sq) << ": ";
         std::cout << "(" << s.mg << ", " << s.eg << ") " << std::endl;
     }
 #endif
 
-#ifndef TRACE_EVAL 
-#define trace_eval(a,b,c) /* notn */
+#ifndef ENABLE_PAWN_EVAL_TRACE 
+#define trace(a,b,c) /* notn */
 #endif
 
     uint8_t PFLAG_CLOSED_CENTER = 1;
@@ -123,66 +123,41 @@ namespace pawns {
      */
 
     U64 evals_done = 0;
-    U64 stack_hits = 0;
     U64 table_hits = 0;
 
     void print_stats() {
-        double pct_1 = stack_hits / (1 + evals_done / 100);
-        double pct_2 = table_hits / (1 + evals_done / 100);
-        double pct_3 = (evals_done - stack_hits - table_hits) / (1 + evals_done / 100);
-        std::cout << "info string stack: " << int(pct_1) << "%, " << "table: " << int(pct_2)
-                << "%, " << "calc: " << int(pct_3) << "%\n";
+        double pct_1 = table_hits / (1 + evals_done / 100);
+        std::cout << "info string pawn table hits: " << int(pct_1) << "%\n";
 
     }
 
     score_t * eval(search_t * s) {
 
         /*
-         * 1. If no pawn or king moved (the pawn hash is equal), 
-         *    simply get the score and masks from the last stack record.  
+         * 1. Probe the pawn hash table for the pawns and kings score
          */
 
         evals_done++;
-        if (s->stack->equal_pawns) {
-            s->stack->pc_score[WPAWN].set((s->stack - 1)->pc_score[WPAWN]);
-            s->stack->passers = (s->stack - 1)->passers;
-            s->stack->king_attack[WPAWN] = (s->stack - 1)->king_attack[WPAWN];
-            s->stack->king_attack[BPAWN] = (s->stack - 1)->king_attack[BPAWN];
-            s->stack->pawn_flags = (s->stack - 1)->pawn_flags;
-            stack_hits++;
-            return &s->stack->pc_score[WPAWN];
-        }
-
-        /*
-         * 2. Probe the hash table for the pawns and kings score
-         */
-
-        U64 passers;
-        int flags;
-        int king_attack[2];
-        score_t pawn_score[2];
         board_t * brd = &s->brd;
-
-        if (pawn_table::retrieve(brd->stack->pawn_hash, passers, pawn_score[WHITE], king_attack, flags)) {
-            s->stack->passers = passers;
-            s->stack->king_attack[BPAWN] = king_attack[BLACK];
-            s->stack->king_attack[WPAWN] = king_attack[WHITE];
-            s->stack->pawn_flags = flags;
-            s->stack->pc_score[WPAWN].set(pawn_score[WHITE]);
-            table_hits++;
-            return &s->stack->pc_score[WPAWN];
+        s->stack->pawn_info = pawn_table::retrieve(brd->stack->pawn_hash);
+        pawn_table::entry_t * e = s->stack->pawn_info;
+        if (e->key == brd->stack->pawn_hash) {
+            return &e->score;
         }
 
-
         /*
-         * 3. Loop through sides, calculating pawn and king score
+         * 2. Calculate the pawns and kings structural score
          */
 
-        passers = 0;
-        flags = 0;
+        
+        score_t pawn_score[2];
+
+        e->passers = 0;
+        e->flags = 0;
+        e->king_attack[WHITE] = 0;
+        e->king_attack[BLACK] = 0;
+
         int blocked_center_pawns = 0;
-        king_attack[WHITE] = 0;
-        king_attack[BLACK] = 0;
         const U64 pawns_all = brd->bb[WPAWN] | brd->bb[BPAWN];
         const int kpos[2] = {brd->get_sq(BKING), brd->get_sq(WKING)};
         const U64 kzone[2] = {KING_ZONE[kpos[0]], KING_ZONE[kpos[1]]};
@@ -274,25 +249,25 @@ namespace pawns {
 
                 //update the score
                 pawn_score[us].add(PST[WPAWN][ISQ(sq, us)]);
-                trace_eval("PST", sq, PST[WPAWN][ISQ(sq, us)]);
+                trace("PST", sq, PST[WPAWN][ISQ(sq, us)]);
 
                 if (isolated) {
                     pawn_score[us].add(ISOLATED_PAWN[opposed]);
-                    trace_eval("ISOLATED", sq, ISOLATED_PAWN[opposed]);
+                    trace("ISOLATED", sq, ISOLATED_PAWN[opposed]);
                 } else if (weak) {
                     pawn_score[us].add(ISOLATED_PAWN[opposed]);
-                    trace_eval("WEAK", sq, ISOLATED_PAWN[opposed]);
+                    trace("WEAK", sq, ISOLATED_PAWN[opposed]);
                 }
                 if (doubled) {
                     pawn_score[us].add(DOUBLED_PAWN);
-                    trace_eval("DOUBLED", sq, DOUBLED_PAWN);
+                    trace("DOUBLED", sq, DOUBLED_PAWN);
                 }
                 if (passed) {
-                    passers |= bsq;
-                    trace_eval("PASSED", sq, S(0, 0));
+                    e->passers |= bsq;
+                    trace("PASSED", sq, S(0, 0));
                 } else if (candidate) {
                     pawn_score[us].add(CANDIDATE[r_us]);
-                    trace_eval("CANDIDATE", sq, CANDIDATE[r_us]);
+                    trace("CANDIDATE", sq, CANDIDATE[r_us]);
                 }
                 if (blocked && (bsq & CENTER)) {
                     blocked_center_pawns++;
@@ -300,12 +275,12 @@ namespace pawns {
 
                 //update attack units (storm and shelter pawns)
                 if (BIT(sq) & kzone[them]) {
-                    king_attack[us] += STORM_PAWN[ISQ(sq, us)];
-                    trace_eval("STORM UNITS (us)", sq, S(STORM_PAWN[ISQ(sq, us)], 0));
+                    e->king_attack[us] += STORM_PAWN[ISQ(sq, us)];
+                    trace("STORM UNITS (us)", sq, S(STORM_PAWN[ISQ(sq, us)], 0));
                 }
                 if (BIT(sq) & kzone[us]) {
-                    king_attack[them] += SHELTER_PAWN[ISQ(sq, us)];
-                    trace_eval("SHELTER UNITS", sq, S(SHELTER_PAWN[ISQ(sq, us)], 0));
+                    e->king_attack[them] += SHELTER_PAWN[ISQ(sq, us)];
+                    trace("SHELTER UNITS", sq, S(SHELTER_PAWN[ISQ(sq, us)], 0));
                 }
             }
 
@@ -315,59 +290,156 @@ namespace pawns {
 
             //piece square table
             pawn_score[us].add(PST[WKING][ISQ(kpos[us], us)]);
-            trace_eval("PST KING", kpos[us], PST[WKING][ISQ(kpos[us], us)]);
+            trace("PST KING", kpos[us], PST[WKING][ISQ(kpos[us], us)]);
 
             //threats: king attacking enemy pawns
             U64 king_atcks = KING_MOVES[kpos[us]] & s->stack->mob[us] & s->stack->attack[us];
             if (king_atcks) {
                 pawn_score[us].add(KING_THREAT);
-                trace_eval("KING ATTACK", kpos[us], KING_THREAT);
+                trace("KING ATTACK", kpos[us], KING_THREAT);
             }
 
             //attack units - king position
-            king_attack[them] += SHELTER_KPOS[ISQ(kpos[us], us)];
-            trace_eval("KING ATTACK UNITS (POS)", kpos[us], SHELTER_KPOS[ISQ(kpos[us], us)]);
+            e->king_attack[them] += SHELTER_KPOS[ISQ(kpos[us], us)];
+            trace("KING ATTACK UNITS (POS)", kpos[us], SHELTER_KPOS[ISQ(kpos[us], us)]);
 
             //attack units - castling options
             if (brd->can_castle_ks(us) && brd->good_shelter_ks(us)) {
-                king_attack[them] += SHELTER_CASTLING_KINGSIDE;
-                trace_eval("KING ATTACK UNITS (CASTLE KS)", kpos[us], SHELTER_CASTLING_KINGSIDE);
+                e->king_attack[them] += SHELTER_CASTLING_KINGSIDE;
+                trace("KING ATTACK UNITS (CASTLE KS)", kpos[us], SHELTER_CASTLING_KINGSIDE);
             } else if (brd->can_castle_qs(us) && brd->good_shelter_qs(us)) {
-                king_attack[them] += SHELTER_CASTLING_QUEENSIDE;
-                trace_eval("KING ATTACK UNITS (CASTLE QS)", kpos[us], SHELTER_CASTLING_QUEENSIDE);
+                e->king_attack[them] += SHELTER_CASTLING_QUEENSIDE;
+                trace("KING ATTACK UNITS (CASTLE QS)", kpos[us], SHELTER_CASTLING_QUEENSIDE);
             }
 
             //attack units - (half)open files
             U64 open_lines = fill_south(kzone[us]) & ~fill_south(pawns_us) & RANK_1;
-            king_attack[them] += SHELTER_OPEN_FILES[popcnt0(open_lines)];
-            trace_eval("KING ATTACK UNITS (OPEN FILES)", kpos[us], SHELTER_OPEN_FILES[popcnt0(open_lines)]);
+            e->king_attack[them] += SHELTER_OPEN_FILES[popcnt0(open_lines)];
+            trace("KING ATTACK UNITS (OPEN FILES)", kpos[us], SHELTER_OPEN_FILES[popcnt0(open_lines)]);
             if (open_lines & (FILE_A | FILE_H)) {
-                king_attack[them] += SHELTER_OPEN_EDGE_FILE;
-                trace_eval("KING ATTACK UNITS (OPEN A/H FILE)", kpos[us], SHELTER_OPEN_EDGE_FILE);
+                e->king_attack[them] += SHELTER_OPEN_EDGE_FILE;
+                trace("KING ATTACK UNITS (OPEN A/H FILE)", kpos[us], SHELTER_OPEN_EDGE_FILE);
             }
         }
 
         if (blocked_center_pawns >= 3) {
-            flags |= PFLAG_CLOSED_CENTER;
-            trace_eval("CLOSED CENTER FLAG", flags, flags);
+            e->flags |= PFLAG_CLOSED_CENTER;
+            trace("CLOSED CENTER FLAG", e->flags, e->flags);
         }
 
-        trace_eval("WHITE ATTACKS UNITS (TOTAL", kpos[BLACK], king_attack[WHITE]);
-        trace_eval("BLACK ATTACKS UNITS (TOTAL)", kpos[WHITE], king_attack[BLACK]);
+        //pawn span bonus for the endgame
+        //bb_width();
+
+        trace("WHITE ATTACKS UNITS (TOTAL", kpos[BLACK], e->king_attack[WHITE]);
+        trace("BLACK ATTACKS UNITS (TOTAL)", kpos[WHITE], e->king_attack[BLACK]);
 
         /*
          * 4. Persist pawn and king evaluation information on the stack and 
          * pawn hash table. Finally, return the total score from white's point of view
          */
 
-        s->stack->king_attack[WPAWN] = king_attack[WHITE];
-        s->stack->king_attack[BPAWN] = king_attack[BLACK];
-        s->stack->pc_score[WPAWN].set(pawn_score[WHITE]);
-        s->stack->pc_score[WPAWN].sub(pawn_score[BLACK]);
-        s->stack->passers = passers;
-        s->stack->pawn_flags = flags;
-        pawn_table::store(brd->stack->pawn_hash, passers, s->stack->pc_score[WPAWN], king_attack, flags);
-        return &s->stack->pc_score[WPAWN];
+        e->score.set(pawn_score[WHITE]);
+        e->score.sub(pawn_score[BLACK]);
+        e->key = brd->stack->pawn_hash;
+        return &e->score;
+    }
+
+    /**
+     * Evaluate passed pawns
+     * @param s search object with search stack
+     * @param us side to move: white(1) or black(0)
+     * @return score
+     */
+
+    const uint8_t PP_MG[6] = {5, 5, 15, 40, 80, 140};
+    const uint8_t PP_EG[6] = {10, 10, 15, 25, 45, 65};
+    const uint8_t PP_DIST_US[6] = {0, 0, 2, 6, 12, 20};
+    const uint8_t PP_DIST_THEM[6] = {0, 0, 5, 15, 20, 40};
+
+    score_t * eval_passed_pawns(search_t * sd, bool us) {
+
+
+        score_t * result = &sd->stack->passer_score[us];
+        result->clear();
+        U64 passers = sd->stack->pawn_info->passers & sd->brd.bb[PAWN[us]];
+        if (passers == 0) {
+            return result;
+        }
+        bool them = !us;
+        int step = PAWN_DIRECTION[us];
+        score_t bonus;
+        while (passers) {
+            int sq = pop(passers);
+            int r = us == WHITE ? RANK(sq) - 1 : 6 - RANK(sq);
+            assert(r >= 0 && r <= 5);
+
+            bonus.set(PP_MG[r], PP_EG[r]);
+            trace("PP Bonus", sq, bonus);
+            result->add(bonus);
+
+            //stop here (with just the base bonus) if the pawn is on rank 2(r=0), 3(r=1), or 4(r=2))
+            if (r < 3) {
+                continue;
+            }
+
+            //initialize bonus and rank
+            bonus.half();
+            int to = sq + step;
+
+            //king distance
+            int kdist_us_bonus = distance(sd->brd.get_sq(KING[us]), to) * PP_DIST_US[r];
+            int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * PP_DIST_THEM[r];
+            trace("PP King Distance (us)", sq, S(distance(sd->brd.get_sq(KING[us]), to), -kdist_us_bonus));
+            trace("PP King Distance (them)", sq, S(distance(sd->brd.get_sq(KING[them]), to), kdist_them_bonus));
+            trace("PP King Distance", sq, S(0, kdist_them_bonus - kdist_us_bonus));
+            result->add(0, kdist_them_bonus - kdist_us_bonus);
+
+            //connected and defended passers
+            U64 bit_sq = BIT(sq);
+            U64 connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
+            if (connection_mask & sd->brd.bb[PAWN[us]]) {
+                result->add(10, 10 + r * 10);
+                trace("PP Connected", sq, S(10, 10 + r * 10));
+            } else {
+                bit_sq = BIT(sq + PAWN_DIRECTION[them]);
+                connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
+                if (connection_mask & sd->brd.bb[PAWN[us]]) {
+                    result->add(5, 5 + r * 5);
+                    trace("PP Connected", sq, S(5, 5 + r * 5));
+                }
+            }
+
+            //advancing
+            do {
+                if (BIT(to) & sd->brd.bb[ALLPIECES]) {
+                    break; //blocked
+                }
+                sd->brd.bb[ALLPIECES] ^= BIT(sq); //to include rook/queen xray attacks from behind
+                U64 attacks = sd->brd.attacks_to(to);
+                sd->brd.bb[ALLPIECES] ^= BIT(sq);
+                U64 defend = attacks & sd->brd.all(them);
+                U64 support = attacks & sd->brd.all(us);
+                if (defend) {
+                    if (support == 0) {
+                        break;
+                    }
+                    if (is_1(support) && gt_1(defend)) {
+                        break;
+                    }
+                }
+                result->add(bonus);
+                trace("PP Advance", sq, bonus);
+                to += step;
+            } while (to >= a1 && to <= h8);
+        }
+        if (has_imbalance(sd, them)) {
+            if (has_major_imbalance(sd)) {
+                result->mul256(128);
+            } else {
+                result->mul256(196);
+            }
+        }
+        return result;
     }
 
 }

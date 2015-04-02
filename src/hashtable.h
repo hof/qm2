@@ -74,53 +74,55 @@ namespace material_table {
     void disable();
 };
 
-class pawn_table_t {
-private:
-
-    struct entry_t {
-        U64 key;
-        U64 passers;
-        score_t score;
-        int8_t king_attack[2];
-        uint8_t flags;
-    };
-
-    int size_in_mb;
-    int size;
-    int max_hash_key;
-    entry_t * table;
-
-    int index(U64 hash_code) {
-        return hash_code & max_hash_key;
-    }
-
-public:
-    bool enabled;
-
-    pawn_table_t(int size_in_MB);
-    void set_size(int size_in_MB);
-    void store(U64 key, U64 passers, score_t score, int king_attack[2], int flags);
-    bool retrieve(U64 key, U64 & passers, score_t & score, int (& king_attack)[2], int & flags);
-
-    ~pawn_table_t() {
-        delete [] table;
-    }
-
-    void clear() {
-        memset(table, 0, sizeof (entry_t) * size);
-    }
-};
 
 namespace pawn_table {
-    const int TABLE_SIZE = 16;
-    void store(U64 key, U64 passers, score_t score, int king_attack[2], int flags);
-    bool retrieve(U64 key, U64 & passers, score_t & score, int (& king_attack)[2], int & flags);
-    void clear();
-    void set_size(int size_in_MB);
-    void enable();
-    void disable();
-};
 
+    struct entry_t {
+        U64 key; //64
+        U64 passers; //64
+        score_t score; //32
+        int8_t king_attack[2]; //16
+        uint8_t flags; //8
+    };
+
+    const int TABLE_SIZE = 16;
+    
+    class table_t {
+    private:
+        int size_in_mb;
+        int size;
+        int max_hash_key;
+        entry_t * table;
+
+        int index(U64 hash_code) {
+            return hash_code & max_hash_key;
+        }
+
+    public:
+        table_t(int size_in_MB);
+        void set_size(int size_in_MB);
+        void store(U64 key, U64 passers, score_t score, int king_attack[2], int flags);
+
+        entry_t * retrieve(U64 key) {
+            return &table[index(key)];
+        }
+
+        ~table_t() {
+            delete [] table;
+        }
+
+        void clear() {
+            memset(table, 0, sizeof (entry_t) * size);
+        }
+     
+    };
+    
+    //global access
+    entry_t * retrieve(U64 key);
+    void clear();
+    void set_size(int size_in_mb);
+    
+};
 
 namespace rep_table {
     void store(int fifty_count, U64 hash_code);
@@ -131,7 +133,7 @@ class trans_table_t {
 private:
 
     static const int BUCKETS = 4;
-    
+
     struct entry_t {
         U64 key;
         U64 value;
@@ -141,7 +143,7 @@ private:
     int size;
     int max_hash_key;
     entry_t * table;
-    
+
     int index(U64 hash_code) {
         return hash_code & max_hash_key;
     }
@@ -160,29 +162,29 @@ private:
         U64 result = move | (U64(flag) << 32) | (U64((unsigned short) score) << 34) | (U64(depth) << 50) | (U64(age) << 58);
         return result;
     }
-    
+
     uint32_t decode_move(U64 x) {
         return x & 0x0FFFFFFFF;
     }
-    
+
     uint8_t decode_flag(U64 x) {
         return (x >> 32) & 3;
     }
-    
+
     int16_t decode_score(U64 x) {
         return (x >> 34) & 0x0FFFF;
     }
-    
+
     uint8_t decode_depth(U64 x) {
         return (x >> 50) & 255;
     }
-    
+
     uint8_t decode_age(U64 x) {
         return (x >> 58) & 63;
     }
-    
+
     int make_score(int score, int ply);
-    
+
     int unmake_score(int score, int ply);
 
 public:
@@ -190,14 +192,14 @@ public:
 
     trans_table_t(int size_in_MB);
     void set_size(int size_in_MB);
-    
+
     void store(U64 key, int age, int ply, int depth, int score, int move, int flag);
     bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags);
 
     ~trans_table_t() {
         delete [] table;
     }
-    
+
     void clear() {
         memset(table, 0, sizeof (entry_t) * size);
     }
