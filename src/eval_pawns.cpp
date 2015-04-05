@@ -47,7 +47,7 @@ namespace pawns {
      */
 
     const score_t ISOLATED[2] = {S(-25, -20), S(-10, -20)}; //open, closed file
-    
+
     const score_t WEAK[2] = {S(-15, -10), S(-10, -10)}; //open, closed file
 
     const score_t DOUBLED = S(-10, -20);
@@ -56,9 +56,9 @@ namespace pawns {
         S(0, 0), S(5, 10), S(5, 10), S(10, 20),
         S(15, 40), S(30, 65), S(0, 0), S(0, 0)
     };
-    
-    const int DUO[8] = { //or defended, indexed by rank 
-        0, 0, 0, 5, 10, 30, 50, 0 
+
+    const int DUO[8] = {//or defended, indexed by rank 
+        0, 0, 0, 5, 10, 30, 50, 0
     };
 
     const int PAWN_WIDTH_EG = 5;
@@ -102,10 +102,10 @@ namespace pawns {
         0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 
-        0, 0, 0, 0, 0, 0, 0, 0, 
         0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0 //a1..h1
     };
 
@@ -151,8 +151,6 @@ namespace pawns {
         e->flags = 0;
         e->king_attack[WHITE] = 0;
         e->king_attack[BLACK] = 0;
-        e->open_files[WHITE] = 0xFF;
-        e->open_files[BLACK] = 0xFF;
         int blocked_center_pawns = 0;
         const U64 pawns_all = brd->bb[WPAWN] | brd->bb[BPAWN];
         const int kpos[2] = {brd->get_sq(BKING), brd->get_sq(WKING)};
@@ -160,12 +158,13 @@ namespace pawns {
 
         for (int us = BLACK; us <= WHITE; us++) {
             pawn_score[us].clear();
+            e->open_files[us] = 0xFF;
             U64 pawns_us = brd->bb[PAWN[us]];
             U64 pawns_them = brd->bb[PAWN[!us]];
             int step = PAWN_DIRECTION[us];
             U64 bb = pawns_us;
             bool them = !us;
-
+       
             while (bb) {
                 int sq = pop(bb);
                 U64 bsq = BIT(sq);
@@ -251,33 +250,33 @@ namespace pawns {
                 if (isolated) {
                     pawn_score[us].add(ISOLATED[opposed]);
                     trace("ISOLATED", sq, ISOLATED[opposed]);
-                } 
-                
+                }
+
                 if (weak && !isolated) {
                     pawn_score[us].add(WEAK[opposed]);
                     trace("WEAK", sq, WEAK[opposed]);
                 }
-                
+
                 if (duo) {
                     pawn_score[us].add(DUO[r_us]);
                     trace("DUO", sq, DUO[r_us]);
                 }
-                
+
                 if (doubled) {
                     pawn_score[us].add(DOUBLED);
                     trace("DOUBLED", sq, DOUBLED);
                 }
-                
+
                 if (passed) {
                     e->passers |= bsq;
                     trace("PASSED", sq, S(0, 0));
-                } 
-                
+                }
+
                 if (candidate) {
                     pawn_score[us].add(CANDIDATE[r_us]);
                     trace("CANDIDATE", sq, CANDIDATE[r_us]);
                 }
-                
+
                 if (blocked && (bsq & CENTER)) {
                     blocked_center_pawns++;
                 }
@@ -300,7 +299,16 @@ namespace pawns {
             pawn_score[us].add(0, PAWN_WIDTH_EG * byte_width(e->open_files[us] ^ 0xFF));
 
             /*
-             * b) King score
+             * b) mobility and attack masks
+             */
+
+            e->mob[us] = ~(pawns_us | brd->pawn_attacks(them) | brd->bb[KING[us]]);
+            e->attack[us] = pawns_them | brd->bb[KING[them]];
+            e->king_attack_mask[us] = magic::queen_moves(kpos[them], pawns_all | brd->bb[KING[us]]) & e->mob[us];
+
+
+            /*
+             * c) King score
              */
 
             //piece square table
@@ -308,7 +316,7 @@ namespace pawns {
             trace("PST KING", kpos[us], PST[WKING][ISQ(kpos[us], us)]);
 
             //threats: king attacking enemy pawns
-            U64 king_atcks = KING_MOVES[kpos[us]] & s->stack->mob[us] & s->stack->attack[us];
+            U64 king_atcks = KING_MOVES[kpos[us]] & e->mob[us] & e->attack[us];
             if (king_atcks) {
                 pawn_score[us].add(KING_THREAT);
                 trace("KING ATTACK", kpos[us], KING_THREAT);
@@ -335,6 +343,7 @@ namespace pawns {
                 e->king_attack[them] += SHELTER_OPEN_EDGE_FILE;
                 trace("KING ATTACK UNITS (OPEN A/H FILE)", kpos[us], SHELTER_OPEN_EDGE_FILE);
             }
+
         }
 
         if (blocked_center_pawns >= 3) {
@@ -346,8 +355,7 @@ namespace pawns {
         trace("BLACK ATTACKS UNITS (TOTAL)", kpos[WHITE], e->king_attack[BLACK]);
 
         /*
-         * 4. Persist pawn and king evaluation information on the stack and 
-         * pawn hash table. Finally, return the total score from white's point of view
+         * 3. Return the total score from white's point of view
          */
 
         e->score.set(pawn_score[WHITE]);

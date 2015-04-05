@@ -80,6 +80,9 @@ namespace pawn_table {
     struct entry_t {
         U64 key; //64
         U64 passers; //64
+        U64 mob[2]; //128
+        U64 attack[2]; //128;
+        U64 king_attack_mask[2]; //128;
         score_t score; //32
         int8_t king_attack[2]; //16
         uint8_t open_files[2]; //16
@@ -90,7 +93,7 @@ namespace pawn_table {
         }
     };
 
-    const int TABLE_SIZE = 16;
+    const int TABLE_SIZE = 64;
 
     class table_t {
     private:

@@ -77,9 +77,6 @@ struct search_stack_t {
     score_t passer_score[2];
     pawn_table::entry_t * pawn_info; 
     U64 tt_key;
-    U64 mob[2];
-    U64 attack[2];
-    U64 king_attack_zone[2];
     int8_t king_attack[BKING + 1];
 };
 

@@ -30,7 +30,6 @@
 
 pst_t PST;
 
-void set_eval_masks(search_t * sd);
 int eval_material(search_t * sd);
 score_t * eval_knights(search_t * sd, bool white);
 score_t * eval_bishops(search_t * sd, bool white);
@@ -240,32 +239,6 @@ const score_t QUEEN_MOBILITY[29] = {
     S(13, 23), S(13, 24), S(13, 24), S(14, 25), S(14, 25)
 };
 
-/**
- * Sets mobility, attack and king safety masks
- */
-void set_eval_masks(search_t * sd) {
-    const search_stack_t * p = (sd->stack - 1);
-    sd->stack->equal_pawns = sd->brd.ply > 0
-            && sd->brd.stack->pawn_hash == (sd->brd.stack - 1)->pawn_hash
-            && p->eval_result != score::INVALID;
-    if (sd->stack->equal_pawns) {
-        sd->stack->mob[WHITE] = p->mob[WHITE];
-        sd->stack->mob[BLACK] = p->mob[BLACK];
-        sd->stack->attack[WHITE] = p->attack[WHITE];
-        sd->stack->attack[BLACK] = p->attack[BLACK];
-        sd->stack->king_attack_zone[WHITE] = p->king_attack_zone[WHITE];
-        sd->stack->king_attack_zone[BLACK] = p->king_attack_zone[BLACK];
-    } else {
-        board_t * brd = &sd->brd;
-        sd->stack->mob[WHITE] = ~(brd->bb[WPAWN] | brd->pawn_attacks(BLACK) | brd->bb[WKING]);
-        sd->stack->mob[BLACK] = ~(brd->bb[BPAWN] | brd->pawn_attacks(WHITE) | brd->bb[BKING]);
-        sd->stack->attack[WHITE] = brd->bb[BPAWN] | brd->bb[BKING];
-        sd->stack->attack[BLACK] = brd->bb[WPAWN] | brd->bb[WKING];
-        sd->stack->king_attack_zone[WHITE] = magic::queen_moves(brd->get_sq(BKING), brd->pawns_kings()) & sd->stack->mob[WHITE];
-        sd->stack->king_attack_zone[BLACK] = magic::queen_moves(brd->get_sq(WKING), brd->pawns_kings()) & sd->stack->mob[BLACK];
-    }
-}
-
 /*******************************************************************************
  * Main evaluation function
  *******************************************************************************/
@@ -284,7 +257,6 @@ int evaluate(search_t * sd) {
     bool wtm = sd->brd.stack->wtm;
     score_t * score = &sd->stack->eval_score;
     int result = eval_material(sd); //sets stack->phase and material flags
-    set_eval_masks(sd); //sets mobility and attack masks
     score->set(TEMPO[wtm]);
     score->add(pawns::eval(sd)); //sets passers and pawns flags
     if (sd->stack->pawn_info->passers) {
@@ -515,13 +487,13 @@ score_t * eval_knights(search_t * sd, bool us) {
     while (knights) {
         int sq = pop(knights);
         result->add(PST[WKNIGHT][ISQ(sq, us)]);
-        U64 moves = KNIGHT_MOVES[sq] & sd->stack->mob[us];
+        U64 moves = KNIGHT_MOVES[sq] & sd->stack->pawn_info->mob[us];
         int mob_count = popcnt0(moves);
         result->add(KNIGHT_MOBILITY[mob_count]);
         result->add(KNIGHT_PAWN_WIDTH[pawn_width]);
         result->add(KNIGHT_PAWN_COUNT[pawn_count]);
 
-        if (moves & sd->stack->attack[us]) {
+        if (moves & sd->stack->pawn_info->attack[us]) {
             result->add(KNIGHT_ATTACK);
         }
 
@@ -577,16 +549,16 @@ score_t * eval_bishops(search_t * sd, bool us) {
     U64 occ = brd->pawns_kings();
     bool them = !us;
     int kpos = brd->get_sq(KING[them]);
-    U64 kaz = (sd->stack->king_attack_zone[us] & BISHOP_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone; 
+    U64 kaz = (sd->stack->pawn_info->king_attack_mask[us] & BISHOP_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone; 
     int ka_units = 0;
     int ka_squares = 0;
     while (bishops) {
         int sq = pop(bishops);
         result->add(PST[WBISHOP][ISQ(sq, us)]);
-        U64 moves = magic::bishop_moves(sq, occ) & sd->stack->mob[us];
+        U64 moves = magic::bishop_moves(sq, occ) & sd->stack->pawn_info->mob[us];
         int count = popcnt0(moves);
         result->add(BISHOP_MOBILITY[count]);
-        if (moves & sd->stack->attack[us]) {
+        if (moves & sd->stack->pawn_info->attack[us]) {
             result->add(BISHOP_ATTACK);
         } else {
             result->sub(BISHOP_ATTACK);
@@ -670,16 +642,16 @@ score_t * eval_rooks(search_t * sd, bool us) {
         result->add(ROOK_1ST); //at least one rook is protecting the back rank
     }
     int kpos = brd->get_sq(KING[them]);
-    U64 kaz = (sd->stack->king_attack_zone[us] & ROOK_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone
+    U64 kaz = (sd->stack->pawn_info->king_attack_mask[us] & ROOK_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone
 
 
     while (rooks) {
         int sq = pop(rooks);
         result->add(PST[WROOK][ISQ(sq, us)]);
 
-        U64 moves = magic::rook_moves(sq, occ) & sd->stack->mob[us];
-        if (moves & sd->stack->attack[us]) {
-            result->add(popcnt(moves & sd->stack->attack[us]) * ROOK_ATTACK);
+        U64 moves = magic::rook_moves(sq, occ) & sd->stack->pawn_info->mob[us];
+        if (moves & sd->stack->pawn_info->attack[us]) {
+            result->add(popcnt(moves & sd->stack->pawn_info->attack[us]) * ROOK_ATTACK);
         }
 
         if (brd->is_attacked_by_pawn(sq, them)) {
@@ -799,13 +771,13 @@ score_t * eval_queens(search_t * sd, bool us) {
     bool them = !us;
     U64 occ = brd->pawns_kings();
     int kpos = brd->get_sq(KING[them]);
-    U64 kaz = sd->stack->king_attack_zone[us] | KING_ZONE[kpos]; //king attack zone
+    U64 kaz = sd->stack->pawn_info->king_attack_mask[us] | KING_ZONE[kpos]; //king attack zone
     int ka_units = 0;
     int ka_squares = 0;
     while (queens) {
         int sq = pop(queens);
         result->add(PST[WQUEEN][ISQ(sq, us)]);
-        U64 moves = magic::queen_moves(sq, occ) & sd->stack->mob[us];
+        U64 moves = magic::queen_moves(sq, occ) & sd->stack->pawn_info->mob[us];
         int count = popcnt0(moves);
         result->add(QUEEN_MOBILITY[count]);
         if (brd->is_attacked_by_pawn(sq, them)) {
@@ -880,7 +852,7 @@ score_t * eval_king_attack(search_t * sd, bool us) {
 
     result->set(KING_SHELTER[shelter_ix], 0);
 
-    U64 kaz = sd->stack->king_attack_zone[us];
+    U64 kaz = sd->stack->pawn_info->king_attack_mask[us];
 
     kaz &= ~(RANK[us][7] | RANK[us][8] | KING_MOVES[brd->get_sq(KING[!us])]);
     result->add(12 * popcnt0(kaz), 0);
