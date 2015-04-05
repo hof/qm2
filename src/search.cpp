@@ -428,17 +428,19 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     for (int i = 0; i < root.move_count; i++) {
         root_move_t * rmove = &root.moves[i];
         int nodes_before = nodes;
+        int extend = extend_move(&rmove->move, rmove->gives_check, depth, true);
         forward(&rmove->move, rmove->gives_check);
         if (rmove->gives_check) {
             brd.stack->checker_sq = rmove->checker_sq;
             brd.stack->checkers = rmove->checkers;
         }
         int score = 0;
+        
         if (i > 0) {
-            score = -pvs(-alpha - 1, -alpha, depth - 1);
+            score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
         }
         if (i == 0 || score > alpha) {
-            score = -pvs(-beta, -alpha, depth - 1);
+            score = -pvs(-beta, -alpha, depth - 1 + extend);
         }
         backward(&rmove->move);
         rmove->nodes += nodes - nodes_before;
@@ -578,17 +580,13 @@ int search_t::pvs(int alpha, int beta, int depth) {
     stack->tt_move.set(tt_move);
 
 
-    /*
-     * Node depth reductions
-     */
-
-    const bool in_check = stack->in_check;
-    const int eval = evaluate(this);
-
+    
     /*
      * Node pruning
      */
 
+    const bool in_check = stack->in_check;
+    const int eval = evaluate(this);
     const bool do_prune_node = !in_check && !skip_null && !pv
             && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
 
@@ -690,10 +688,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
         int reduce = 0;
         if (DO_LMR && depth > 1 && searched_moves > 1 && !is_dangerous && !extend) {
             reduce = 1 + bool(depth > 2 && searched_moves > 3);
-            assert((depth - reduce) >= 1);
         }
         assert(reduce == 0 || extend == 0);
-
+        assert((depth - reduce) >= 1);
+        
         /*
          * Go forward and search next node
          */

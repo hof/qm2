@@ -82,11 +82,16 @@ namespace pawn_table {
         U64 passers; //64
         score_t score; //32
         int8_t king_attack[2]; //16
+        uint8_t open_files[2]; //16
         uint8_t flags; //8
+
+        bool is_open_file(bool us, int sq) {
+            return open_files[us] & (1 << FILE(sq));
+        }
     };
 
     const int TABLE_SIZE = 16;
-    
+
     class table_t {
     private:
         int size_in_mb;
@@ -114,14 +119,14 @@ namespace pawn_table {
         void clear() {
             memset(table, 0, sizeof (entry_t) * size);
         }
-     
+
     };
-    
+
     //global access
     entry_t * retrieve(U64 key);
     void clear();
     void set_size(int size_in_mb);
-    
+
 };
 
 namespace rep_table {
@@ -214,8 +219,6 @@ namespace trans_table {
     void enable();
     void disable();
 };
-
-
 
 #endif	/* HASHTABLE_H */
 

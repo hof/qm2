@@ -218,7 +218,7 @@ const score_t ROOK_OPEN_FILE = S(17, 17);
 const score_t ROOK_GOOD_SIDE = S(8, 16); //Rule of Tarrasch 
 const score_t ROOK_WRONG_SIDE = S(-8, -16);
 const score_t ROOK_CLOSED_FILE = S(-5, -5);
-const score_t CONNECTED_ROOKS(5, 10);
+const score_t CONNECTED_ROOKS(10, 20);
 const short ROOK_ATTACK = 12;
 
 
@@ -272,7 +272,7 @@ void set_eval_masks(search_t * sd) {
 
 int evaluate(search_t * sd) {
 
-    if (sd->stack->in_check && sd->brd.ply < (MAX_PLY-1)) {
+    if (sd->stack->in_check && sd->brd.ply < (MAX_PLY - 1)) {
         sd->stack->eval_result = score::INVALID;
         return score::INVALID;
     }
@@ -280,7 +280,7 @@ int evaluate(search_t * sd) {
     if (sd->stack->eval_result != score::INVALID) {
         return sd->stack->eval_result;
     }
-    
+
     bool wtm = sd->brd.stack->wtm;
     score_t * score = &sd->stack->eval_score;
     int result = eval_material(sd); //sets stack->phase and material flags
@@ -636,7 +636,7 @@ score_t * eval_rooks(search_t * sd, bool us) {
     int pc = ROOK[us];
     score_t * result = &sd->stack->pc_score[pc];
     board_t * brd = &sd->brd;
-    
+
     result->clear();
     sd->stack->king_attack[pc] = 0;
     U64 rooks = brd->bb[pc];
@@ -663,16 +663,15 @@ score_t * eval_rooks(search_t * sd, bool us) {
      * 3. Calculate the score and store on the stack
      */
     bool them = !us;
-    U64 fill[2] = {FILEFILL(brd->bb[BPAWN]), FILEFILL(brd->bb[WPAWN])};
     U64 occ = brd->pawns_kings();
     int ka_units = 0;
     int ka_squares = 0;
     if ((brd->bb[ROOK[us]] & RANK[us][1]) && (BIT(brd->get_sq(KING[us])) & (RANK[us][1] | RANK[us][2]))) {
         result->add(ROOK_1ST); //at least one rook is protecting the back rank
-    } 
+    }
     int kpos = brd->get_sq(KING[them]);
     U64 kaz = (sd->stack->king_attack_zone[us] & ROOK_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone
-    
+
 
     while (rooks) {
         int sq = pop(rooks);
@@ -692,7 +691,16 @@ score_t * eval_rooks(search_t * sd, bool us) {
             result->add(ROOK_7TH);
         }
 
-        if (bitSq & fill[us]) {
+        if (sd->stack->pawn_info->is_open_file(us, sq)) {
+            if (sd->stack->pawn_info->is_open_file(them, sq)) {
+                result->add(ROOK_OPEN_FILE);
+                if ((moves & rooks) && (fill_south(bitSq) & rooks)) {
+                    result->add(CONNECTED_ROOKS);
+                }
+            } else {
+                result->add(ROOK_SEMIOPEN_FILE);
+            }
+        } else {
             result->add(ROOK_CLOSED_FILE);
             //trapped rook pattern
             if (bitSq & ROOK_PATTERNS[us]) {
@@ -711,15 +719,7 @@ score_t * eval_rooks(search_t * sd, bool us) {
                     result->add(TRAPPED_ROOK);
                 }
             }
-        } else if (bitSq & fill[them]) {
-            result->add(ROOK_SEMIOPEN_FILE);
-        } else {
-            result->add(ROOK_OPEN_FILE);
-            if ((moves & rooks) && ((fill_south(bitSq) & rooks) || (fill_north(bitSq) & rooks))) {
-                result->add(CONNECTED_ROOKS);
-            }
         }
-
         //Tarrasch Rule: place rook behind passers
         U64 tpass = moves & sd->stack->pawn_info->passers; //touched passers
         if (tpass) {
@@ -873,18 +873,18 @@ score_t * eval_king_attack(search_t * sd, bool us) {
      * 1. Shelter score
      */
     int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + sd->stack->king_attack[PAWN[us]]);
-    
+
     if ((RANK[us][8] & brd->bb[ROOK[!us]]) == 0) { //no rook protecting their back rank
         shelter_ix += 2;
     }
-    
+
     result->set(KING_SHELTER[shelter_ix], 0);
 
     U64 kaz = sd->stack->king_attack_zone[us];
 
     kaz &= ~(RANK[us][7] | RANK[us][8] | KING_MOVES[brd->get_sq(KING[!us])]);
     result->add(12 * popcnt0(kaz), 0);
-    
+
 
     /*
      * 2. Reduce the shelter score for closed positions and 
@@ -898,7 +898,7 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     if (max_1(brd->bb[KNIGHT[us]] | brd->bb[BISHOP[us]] | brd->bb[ROOK[us]])) {
         result->half();
     }
-    
+
     /*
      * 3. Piece Attack Score.
      * Stop if the queen is not involved in the attack

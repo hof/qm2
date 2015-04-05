@@ -314,22 +314,21 @@ const int PAWN_DIRECTION[2] = {-8, 8};
 #define PRINT_SQUARE(sq)    FILE_SYMBOL(sq) << RANK_SYMBOL(sq)
 
 inline int range(const int min, const int max, const int x) {
-    if (x <= min) {
-        return min;
-    }
-    if (x >= max) {
-        return max;
-    }
-    return x;
+    return x <= min? min : x >= max? max : x;
+}
+
+inline int byte_width(int byte) {
+    return bsr(byte) - bsf(byte);
+}
+
+inline int byte_width0(int byte) {
+    return max_1(byte)? 0 : byte_width(byte);
 }
 
 inline int bb_width(const U64 occ) {
-    if (max_1(occ)) {
-        return 0;
-    }
-    U64 x = fill_south(occ) & RANK_1;
-    return bsr(x) - bsf(x);
+    return max_1(occ)? 0 : byte_width(fill_south(occ) & RANK_1);
 }
+
 
 /**
  * Flip a bitboard vertically about the centre ranks.

@@ -97,7 +97,7 @@ void testEvaluationSuite() {
 
     // case 2: ----- ------ vs pawns ------
     // this should be an impossible case, with the better side only having a king
-    testEval(2001, "k7/P6p/8/8/8/8/7P/7K w - - 0 2", VPAWN/2, VPAWN);
+    testEval(2001, "k7/P6p/8/8/8/8/7P/7K w - - 0 2", BONUS, VPAWN);
     testEval(2002, "k7/P5pp/1P6/8/8/8/7P/7K w - - 0 1", VPAWN, score::WIN);
 
     // case 3: pawns ------ vs pawns ------ (pawn endings))

@@ -46,14 +46,22 @@ namespace pawns {
      * Pawn structure bonuses
      */
 
-    const score_t ISOLATED_PAWN[2] = {S(-20, -20), S(-10, -20)}; //opposed, open file
+    const score_t ISOLATED[2] = {S(-25, -20), S(-10, -20)}; //open, closed file
+    
+    const score_t WEAK[2] = {S(-15, -10), S(-10, -10)}; //open, closed file
 
-    const score_t DOUBLED_PAWN = S(-10, -20);
+    const score_t DOUBLED = S(-10, -20);
 
     const score_t CANDIDATE[8] = {//rank
         S(0, 0), S(5, 10), S(5, 10), S(10, 20),
         S(15, 40), S(30, 65), S(0, 0), S(0, 0)
     };
+    
+    const int DUO[8] = { //or defended, indexed by rank 
+        0, 0, 0, 5, 10, 30, 50, 0 
+    };
+
+    const int PAWN_WIDTH_EG = 5;
 
     /*
      * King x pawns bonus
@@ -94,11 +102,11 @@ namespace pawns {
         0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0,
-        -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1,
-        -2, -2, -2, -2, -2, -2, -2, -2,
-        0, 0, 0, 0, 0, 0, 0, 0, //a1..h1
-        0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0 //a1..h1
     };
 
     // attack units for having open files on our king
@@ -117,19 +125,9 @@ namespace pawns {
 
     const uint8_t castle_flags[2] = {0, 0};
 
-
     /**
      * Main pawns and kings evaluation function
      */
-
-    U64 evals_done = 0;
-    U64 table_hits = 0;
-
-    void print_stats() {
-        double pct_1 = table_hits / (1 + evals_done / 100);
-        std::cout << "info string pawn table hits: " << int(pct_1) << "%\n";
-
-    }
 
     score_t * eval(search_t * s) {
 
@@ -137,7 +135,6 @@ namespace pawns {
          * 1. Probe the pawn hash table for the pawns and kings score
          */
 
-        evals_done++;
         board_t * brd = &s->brd;
         s->stack->pawn_info = pawn_table::retrieve(brd->stack->pawn_hash);
         pawn_table::entry_t * e = s->stack->pawn_info;
@@ -149,14 +146,13 @@ namespace pawns {
          * 2. Calculate the pawns and kings structural score
          */
 
-        
         score_t pawn_score[2];
-
         e->passers = 0;
         e->flags = 0;
         e->king_attack[WHITE] = 0;
         e->king_attack[BLACK] = 0;
-
+        e->open_files[WHITE] = 0xFF;
+        e->open_files[BLACK] = 0xFF;
         int blocked_center_pawns = 0;
         const U64 pawns_all = brd->bb[WPAWN] | brd->bb[BPAWN];
         const int kpos[2] = {brd->get_sq(BKING), brd->get_sq(WKING)};
@@ -186,8 +182,9 @@ namespace pawns {
                 bool blocked = (BIT(sq + step) & pawns_all) != 0;
                 bool passed = !doubled && !opposed && 0 == (pawns_them & af & upward_ranks(r, us));
                 bool defended = !isolated && (brd->pawn_attacks(sq, them) & pawns_us);
+                bool duo = defended || (af & RANKS[r] & pawns_us);
                 bool attacking = !isolated && (brd->pawn_attacks(sq, us) & pawns_them);
-                bool weak = !isolated && !defended && !attacking && !doubled && (r_us + !blocked) < 6;
+                bool weak = !isolated && !passed && !defended && !attacking && !doubled && (r_us + !blocked) < 6;
 
                 //weak pawns: not weak if it can quickly move to a safe square
                 if (weak && !blocked) {
@@ -252,23 +249,35 @@ namespace pawns {
                 trace("PST", sq, PST[WPAWN][ISQ(sq, us)]);
 
                 if (isolated) {
-                    pawn_score[us].add(ISOLATED_PAWN[opposed]);
-                    trace("ISOLATED", sq, ISOLATED_PAWN[opposed]);
-                } else if (weak) {
-                    pawn_score[us].add(ISOLATED_PAWN[opposed]);
-                    trace("WEAK", sq, ISOLATED_PAWN[opposed]);
+                    pawn_score[us].add(ISOLATED[opposed]);
+                    trace("ISOLATED", sq, ISOLATED[opposed]);
+                } 
+                
+                if (weak && !isolated) {
+                    pawn_score[us].add(WEAK[opposed]);
+                    trace("WEAK", sq, WEAK[opposed]);
                 }
+                
+                if (duo) {
+                    pawn_score[us].add(DUO[r_us]);
+                    trace("DUO", sq, DUO[r_us]);
+                }
+                
                 if (doubled) {
-                    pawn_score[us].add(DOUBLED_PAWN);
-                    trace("DOUBLED", sq, DOUBLED_PAWN);
+                    pawn_score[us].add(DOUBLED);
+                    trace("DOUBLED", sq, DOUBLED);
                 }
+                
                 if (passed) {
                     e->passers |= bsq;
                     trace("PASSED", sq, S(0, 0));
-                } else if (candidate) {
+                } 
+                
+                if (candidate) {
                     pawn_score[us].add(CANDIDATE[r_us]);
                     trace("CANDIDATE", sq, CANDIDATE[r_us]);
                 }
+                
                 if (blocked && (bsq & CENTER)) {
                     blocked_center_pawns++;
                 }
@@ -282,7 +291,13 @@ namespace pawns {
                     e->king_attack[them] += SHELTER_PAWN[ISQ(sq, us)];
                     trace("SHELTER UNITS", sq, S(SHELTER_PAWN[ISQ(sq, us)], 0));
                 }
+
+                //update open lines mask
+                e->open_files[us] &= ~(1 << f);
             }
+
+            //pawn width: pawns far apart helps in the endgame
+            pawn_score[us].add(0, PAWN_WIDTH_EG * byte_width(e->open_files[us] ^ 0xFF));
 
             /*
              * b) King score
@@ -327,9 +342,6 @@ namespace pawns {
             trace("CLOSED CENTER FLAG", e->flags, e->flags);
         }
 
-        //pawn span bonus for the endgame
-        //bb_width();
-
         trace("WHITE ATTACKS UNITS (TOTAL", kpos[BLACK], e->king_attack[WHITE]);
         trace("BLACK ATTACKS UNITS (TOTAL)", kpos[WHITE], e->king_attack[BLACK]);
 
@@ -357,7 +369,6 @@ namespace pawns {
     const uint8_t PP_DIST_THEM[6] = {0, 0, 5, 15, 20, 40};
 
     score_t * eval_passed_pawns(search_t * sd, bool us) {
-
 
         score_t * result = &sd->stack->passer_score[us];
         result->clear();
