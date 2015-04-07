@@ -94,12 +94,11 @@ void testEvaluationSuite() {
     testEval(1003, "8/2k5/8/8/8/7K/7P/8 w - - 0 1", 1, DRAW_MAX); //KPK
     testEval(1004, "2k5/8/8/8/8/8/2P5/2K5 w - - 0 1", score::WIN / 2, score::WIN); //KPK
     testEval(1005, "2k5/8/8/8/8/2P5/8/2K5 w - - 0 1", 1, DRAW_MAX); //KPK
+    testEval(1006, "7k/7P/6P1/8/8/8/8/5K2 w - - 1 13", score::WIN / 8, score::WIN/4); //KPPK
 
     // case 2: ----- ------ vs pawns ------
-    // this should be an impossible case, with the better side only having a king
-    testEval(2001, "k7/P6p/8/8/8/8/7P/7K w - - 0 2", BONUS, VPAWN);
-    testEval(2002, "k7/P5pp/1P6/8/8/8/7P/7K w - - 0 1", VPAWN, score::WIN);
-
+    // impossible case, with the winning side only having a king
+    
     // case 3: pawns ------ vs pawns ------ (pawn endings))
     testEval(3001, "8/5p2/PK1kp1p1/8/8/8/1P3P2/8 w - - 1 2", score::WIN/4, score::WIN/2); //unstoppable pawn
     testEval(3002, "8/P3K1kp/8/8/8/8/8/8 w - - 1 1", score::WIN/4, score::WIN/2); //unstoppable pawn
@@ -111,6 +110,9 @@ void testEvaluationSuite() {
     testEval(3008, "k7/3p4/4p3/4P3/8/3p4/3P1P2/7K w - - 0 1", -BONUS, BONUS); //backward pawns
     testEval(3009, "8/p2p1k2/4p3/4P3/PP6/4K3/8/8 w - - 0 1", 3 * BONUS, 8 * BONUS); //candidate
     testEval(3010, "8/p1pp1k2/8/2P5/PP6/4K3/8/8 w - - 0 1", 4 * BONUS, 6 * VPAWN); //better candidate
+    testEval(3011, "8/6kP/4K1P1/5p2/8/4P3/1p6/8 w - - 0 9", -score::WIN, -VPAWN); //unstoppable passer
+    testEval(3012, "k7/P6p/8/8/8/8/7P/7K w - - 0 2", BONUS, VPAWN);
+    testEval(3013, "k7/P5pp/1P6/8/8/8/7P/7K w - - 0 1", VPAWN, score::WIN);
     
 
     // case 4:  ----- pieces vs ----- ------

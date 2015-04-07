@@ -97,7 +97,15 @@ namespace eg {
         return distance(fsq, rsq);
     }
 
-    int unstoppable_pawn(search_t * s, const bool us) {
+    int most_advanced_pawn_steps(search_t * s, const bool us) {
+        bool utm = s->brd.stack->wtm == (us == WHITE);
+        int psq = us == WHITE? bsr(s->brd.bb[WPAWN]) : bsf(s->brd.bb[BPAWN]);
+        int qsq = queening_square(psq, us);
+        return distance_rank(psq, qsq) - is_rank_2(psq, us) + !utm 
+                + (bool)(fill_up(BIT(psq), us) & s->brd.bb[KING[us]]);
+    }
+
+    int unstoppable_pawn_steps(search_t * s, const bool us) {
         U64 passers = s->stack->pawn_info->passers & s->brd.bb[PAWN[us]];
         if (passers == 0) {
             return 0;
@@ -108,27 +116,21 @@ namespace eg {
         int kpos_them = s->brd.get_sq(KING[them]);
         int kpos_us = s->brd.get_sq(KING[us]);
         int result = 0;
-        int score;
+        int best = 10;
         do {
-            score = 0;
             int psq = pop(passers);
             int qsq = queening_square(psq, us);
-            int steps_pawn = distance_rank(psq, qsq) - utm - is_rank_2(psq, us);
+            int steps_pawn = distance_rank(psq, qsq) - is_rank_2(psq, us) + !utm;
+            steps_pawn += (bool)(fill_up(BIT(psq), us) & BIT(kpos_us)); 
             int steps_king = distance(kpos_them, qsq) - 1;
-            if (steps_pawn <= 2 && (KING_MOVES[kpos_us] & BIT(qsq))) {
-                score = 120 - 20 * steps_pawn;
-            } else if (steps_king > steps_pawn) {
-                score = 120 - 20 * steps_pawn;
+            bool unstoppable = (steps_king > steps_pawn)
+                    || (steps_pawn <= 2 && (KING_MOVES[kpos_us] & BIT(qsq)));
+            if (unstoppable && steps_pawn < best) {
+                best = steps_pawn;
+                result = steps_pawn;
             }
-            if (score > result) {
-                result = score;
-            }
-        } while (passers && result < 50);
-        if (result && is_1(s->brd.all(them))) {
-            assert(s->brd.all(them) == BIT(kpos_them));
-            result *= 2;
-        }
-        return us == WHITE ? result : - result;
+        } while (passers && best > 1);
+        return result;
     }
 
     bool eg_test(search_t * s, bool pawns_us, bool pcs_us, bool pawns_them, bool pcs_them, bool us) {
@@ -323,9 +325,11 @@ namespace eg {
      */
     int pawns_vs_king(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 0, 0, 0, us));
-        const bool utm = s->brd.stack->wtm == (us == WHITE);
         const bool them = !us;
-        if (max_1(s->brd.bb[PAWN[us]])) { //KPK
+
+        //KPK -> bitbase lookup
+        if (max_1(s->brd.bb[PAWN[us]])) {
+            const bool utm = s->brd.stack->wtm == (us == WHITE);
             bool won = KPK::probe(utm, s->brd.get_sq(KING[us]), s->brd.get_sq(KING[them]),
                     s->brd.get_sq(PAWN[us]), us == BLACK);
             if (won) {
@@ -333,21 +337,48 @@ namespace eg {
             }
             return draw(score, 64);
         }
-        int bonus = unstoppable_pawn(s, us);
-        if (bonus == 0) {
-            return score;
+
+        //KPP+K
+        int steps = unstoppable_pawn_steps(s, us);
+        if (steps > 0) { //unstoppable pawn: win
+            return score + win(us, (1 + steps));
         }
-        return score + win(us, 2) + bonus;
+        return score;
     }
 
     /**
      * Evaluate endgames with only kings and pawns (case 3)
      */
+    const uint8_t UNSTOPPABLE_PAWN[8] = { 0, 200, 150, 100, 50, 25, 25, 25 };
     int pawns_vs_pawns(search_t * s, int score, const bool us) {
         assert(eg_test(s, 1, 0, 1, 0, us));
-        int bonus_us = unstoppable_pawn(s, us);
-        int bonus_them = unstoppable_pawn(s, !us);
-        return score + bonus_us - bonus_them;
+        bool them = !us;
+        int steps_us = unstoppable_pawn_steps(s, us);
+        int steps_tm = unstoppable_pawn_steps(s, them);
+        
+        int bonus = UNSTOPPABLE_PAWN[steps_us] - UNSTOPPABLE_PAWN[steps_tm];
+        score += us == WHITE? bonus : -bonus;
+        
+        /*
+        int pion_us = most_advanced_pawn_steps(s, us);
+        int pion_tm = most_advanced_pawn_steps(s, them);
+        
+        //calculate their best case defense. if they don't have a passer,
+        //it takes them at least one extra step before they can promote
+        int best_case_defense_tm = pion_tm + (steps_tm == 0);
+        int best_case_defense_us = pion_us + (steps_us == 0);
+        
+        //case: we have unstoppable passer
+        if (steps_us > 0 && steps_us > best_case_defense_tm) {
+            
+        }
+        */
+        //std::cout << "steps us " << steps_us << std::endl;
+        //std::cout << "pion us " << pion_us << std::endl;
+        //std::cout << "steps them " << steps_tm << std::endl;
+        //std::cout << "pion them " << pion_tm << std::endl;
+        
+        return score;
     }
 
     /**
@@ -372,13 +403,12 @@ namespace eg {
         if (has_mating_power(s, us)) {
             return score + win(us) + corner_king(s, them);
         }
-        int bonus = unstoppable_pawn(s, us);
-        if (bonus != 0) { //unstoppable passed pawn
-            return score + win(us, 4) + bonus;
+        int steps = unstoppable_pawn_steps(s, us);
+        if (steps >= 0) { //unstoppable passed pawn
+            return score + win(us, (3 + steps));
         } else if (s->brd.is_eg(KNPK, us)) { //KNPK
             return knpk(s, score, us);
         } else if (s->brd.is_eg(KBPSK, us)) { //KBPK, KBPPK, ...
-
             return kbpsk(s, score, us);
         }
         return score;

@@ -412,6 +412,7 @@ void root_t::sort_moves(move_t * best_move) {
  * - Sending new PVs asap to the interface
  * - Sort order based on pv and amount of nodes of the subtrees
  * - No pruning, reductions, extensions and hash table lookup/store
+ * - Compatible with all supported wild variants
  */
 int search_t::pvs_root(int alpha, int beta, int depth) {
 
@@ -427,22 +428,35 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
 
     for (int i = 0; i < root.move_count; i++) {
         root_move_t * rmove = &root.moves[i];
+        move_t * move = &rmove->move;
         int nodes_before = nodes;
-        int extend = extend_move(&rmove->move, rmove->gives_check, depth, true);
-        forward(&rmove->move, rmove->gives_check);
+        int extend = extend_move(move, rmove->gives_check, depth, true);
+        bool is_dangerous = stack->in_check || extend || move->capture || move->promotion || move->castle;
+        int reduce = 0;
+        if (DO_LMR && depth > 1 && i > 1 && wild != 17 && !is_dangerous) {
+            reduce = 1 + bool(depth > 2 && i > 3);
+        }
+        int score = 0; 
+        forward(move, rmove->gives_check);
         if (rmove->gives_check) {
             brd.stack->checker_sq = rmove->checker_sq;
             brd.stack->checkers = rmove->checkers;
         }
-        int score = 0;
-        
-        if (i > 0) {
-            score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
-        }
-        if (i == 0 || score > alpha) {
+        if (i == 0) {
             score = -pvs(-beta, -alpha, depth - 1 + extend);
+        } else {
+            score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
+            if (score > alpha && reduce > 0) {
+                //research without reductions
+                score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
+            }
+            if (score > alpha) {
+                //full window research
+                score = -pvs(-beta, -alpha, depth - 1 + extend);
+            }
         }
-        backward(&rmove->move);
+        
+        backward(move);
         rmove->nodes += nodes - nodes_before;
         if (stop_all) {
             return alpha;
@@ -686,7 +700,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
          */
 
         int reduce = 0;
-        if (DO_LMR && depth > 1 && searched_moves > 1 && !is_dangerous && !extend) {
+        if (DO_LMR && depth > 1 && searched_moves > 1 && !is_dangerous) {
             reduce = 1 + bool(depth > 2 && searched_moves > 3);
         }
         assert(reduce == 0 || extend == 0);

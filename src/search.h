@@ -149,7 +149,7 @@ public:
         assert(stack->eval_result != score::INVALID);
         return BIT(move->ssq) & stack->pawn_info->passers;
     }
-
+    
     search_stack_t * get_stack(int ply) {
         assert(ply >= 0 && ply < MAX_PLY);
         return &_stack[ply];

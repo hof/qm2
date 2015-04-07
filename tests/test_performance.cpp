@@ -106,7 +106,7 @@ void test_positions() {
     test_fen("1nbq1r1k/3rbp1p/p1p1pp1Q/1p6/P1pPN3/5NP1/1P2PPBP/R4RK1 w - - 0 1", "f3g5", score::DEEPEST_MATE);
     test_fen("nrq4r/2k1p3/1p1pPnp1/pRpP1p2/P1P2P2/2P1BB2/1R2Q1P1/6K1 w - - 0 1", "e3c5", 200);
     test_fen("r2qr1k1/5pb1/bpnp3p/p1p3pn/P1P1P3/2N1BPP1/1P1NB2P/R2Q1R1K w - - 0 1", "f3f4", 50);
-    test_fen("r2q2k1/5pb1/bpnpr2p/p1p3pn/P1P1P3/2N1BPP1/1P1NB2P/R2Q1R1K b - - 0 1", "g7c3", -20); 
+    test_fen("8/1p4kP/5pP1/3p4/8/4P3/7K/8 w - - 0 1", "e3e4", 300); 
     
 }
 

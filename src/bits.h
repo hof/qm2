@@ -318,6 +318,7 @@ inline int range(const int min, const int max, const int x) {
 }
 
 inline int byte_width(int byte) {
+    assert(byte);
     return bsr(byte) - bsf(byte);
 }
 

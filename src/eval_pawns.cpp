@@ -63,11 +63,12 @@ namespace pawns {
 
     const int PAWN_WIDTH_EG = 5;
 
+
     /*
      * King x pawns bonus
      */
 
-    const score_t KING_THREAT = S(0, 10); //king attacking pawns
+    const int KING_ACTIVITY = 3; //endgame score for king attacking or defending pawns
 
     /*
      * King shelter, storm and attack units for later use in king attack eval.
@@ -164,7 +165,7 @@ namespace pawns {
             int step = PAWN_DIRECTION[us];
             U64 bb = pawns_us;
             bool them = !us;
-       
+
             while (bb) {
                 int sq = pop(bb);
                 U64 bsq = BIT(sq);
@@ -296,16 +297,15 @@ namespace pawns {
             }
 
             //pawn width: pawns far apart helps in the endgame
-            pawn_score[us].add(0, PAWN_WIDTH_EG * byte_width(e->open_files[us] ^ 0xFF));
+            pawn_score[us].add(0, PAWN_WIDTH_EG * byte_width0(e->open_files[us] ^ 0xFF));
 
             /*
              * b) mobility and attack masks
              */
 
             e->mob[us] = ~(pawns_us | brd->pawn_attacks(them) | brd->bb[KING[us]]);
-            e->attack[us] = pawns_them | brd->bb[KING[them]];
-            e->king_attack_mask[us] = magic::queen_moves(kpos[them], pawns_all | brd->bb[KING[us]]) & e->mob[us];
-
+            e->attack[us] = e->mob[us] & (pawns_them | brd->bb[KING[them]]);
+            e->king_attack_mask[us] = e->mob[us] & magic::queen_moves(kpos[them], pawns_all | brd->bb[KING[us]]);
 
             /*
              * c) King score
@@ -315,12 +315,10 @@ namespace pawns {
             pawn_score[us].add(PST[WKING][ISQ(kpos[us], us)]);
             trace("PST KING", kpos[us], PST[WKING][ISQ(kpos[us], us)]);
 
-            //threats: king attacking enemy pawns
-            U64 king_atcks = KING_MOVES[kpos[us]] & e->mob[us] & e->attack[us];
-            if (king_atcks) {
-                pawn_score[us].add(KING_THREAT);
-                trace("KING ATTACK", kpos[us], KING_THREAT);
-            }
+            //dynamic king placement: support / attack pawns
+            U64 king_atcks = KING_MOVES[kpos[us]] & pawns_all;
+            pawn_score[us].add(0, popcnt0(king_atcks) * KING_ACTIVITY);
+            trace("KING ATTACK", kpos[us], S(0, popcnt0(king_atcks) * KING_ACTIVITY));
 
             //attack units - king position
             e->king_attack[them] += SHELTER_KPOS[ISQ(kpos[us], us)];
@@ -336,10 +334,9 @@ namespace pawns {
             }
 
             //attack units - (half)open files
-            U64 open_lines = fill_south(kzone[us]) & ~fill_south(pawns_us) & RANK_1;
-            e->king_attack[them] += SHELTER_OPEN_FILES[popcnt0(open_lines)];
-            trace("KING ATTACK UNITS (OPEN FILES)", kpos[us], SHELTER_OPEN_FILES[popcnt0(open_lines)]);
-            if (open_lines & (FILE_A | FILE_H)) {
+            e->king_attack[them] += SHELTER_OPEN_FILES[popcnt0(e->open_files[us])];
+            trace("KING ATTACK UNITS (OPEN FILES)", kpos[us], SHELTER_OPEN_FILES[popcnt0(e->open_files[us])]);
+            if (e->open_files[us] & (FILE_A | FILE_H)) {
                 e->king_attack[them] += SHELTER_OPEN_EDGE_FILE;
                 trace("KING ATTACK UNITS (OPEN A/H FILE)", kpos[us], SHELTER_OPEN_EDGE_FILE);
             }
@@ -371,10 +368,11 @@ namespace pawns {
      * @return score
      */
 
-    const uint8_t PP_MG[6] = {5, 5, 15, 40, 80, 140};
-    const uint8_t PP_EG[6] = {10, 10, 15, 25, 45, 65};
-    const uint8_t PP_DIST_US[6] = {0, 0, 2, 6, 12, 20};
-    const uint8_t PP_DIST_THEM[6] = {0, 0, 5, 15, 20, 40};
+    const uint8_t PP_MG[6] = {5, 5, 15, 35, 70, 130};
+    const uint8_t PP_EG[6] = { 10, 10, 15, 25, 50, 80 };
+    const uint8_t PP_DIST_US[6] = {0, 0, 2, 5, 10, 15 };
+    const uint8_t PP_DIST_THEM[6] = {0, 0, 5, 15, 20, 40 };
+    const uint8_t PP_ADVANCE[6] = { 0, 0, 0, 10, 20, 40 };
 
     score_t * eval_passed_pawns(search_t * sd, bool us) {
 
@@ -391,21 +389,17 @@ namespace pawns {
             int sq = pop(passers);
             int r = us == WHITE ? RANK(sq) - 1 : 6 - RANK(sq);
             assert(r >= 0 && r <= 5);
-
             bonus.set(PP_MG[r], PP_EG[r]);
             trace("PP Bonus", sq, bonus);
             result->add(bonus);
 
-            //stop here (with just the base bonus) if the pawn is on rank 2(r=0), 3(r=1), or 4(r=2))
-            if (r < 3) {
+            //stop here (with just the base bonus) if the pawn is on rank 2(r=0) or 3(r=1)
+            if (r < 2) {
                 continue;
             }
 
-            //initialize bonus and rank
-            bonus.half();
+            //king distance in the endgame
             int to = sq + step;
-
-            //king distance
             int kdist_us_bonus = distance(sd->brd.get_sq(KING[us]), to) * PP_DIST_US[r];
             int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * PP_DIST_THEM[r];
             trace("PP King Distance (us)", sq, S(distance(sd->brd.get_sq(KING[us]), to), -kdist_us_bonus));
@@ -413,43 +407,29 @@ namespace pawns {
             trace("PP King Distance", sq, S(0, kdist_them_bonus - kdist_us_bonus));
             result->add(0, kdist_them_bonus - kdist_us_bonus);
 
-            //connected and defended passers
-            U64 bit_sq = BIT(sq);
-            U64 connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
-            if (connection_mask & sd->brd.bb[PAWN[us]]) {
-                result->add(10, 10 + r * 10);
-                trace("PP Connected", sq, S(10, 10 + r * 10));
-            } else {
-                bit_sq = BIT(sq + PAWN_DIRECTION[them]);
-                connection_mask = RIGHT1(bit_sq) | LEFT1(bit_sq);
-                if (connection_mask & sd->brd.bb[PAWN[us]]) {
-                    result->add(5, 5 + r * 5);
-                    trace("PP Connected", sq, S(5, 5 + r * 5));
-                }
-            }
-
-            //advancing
-            do {
+            //advancing bonus
+            for (int r_to = r + 1; r_to <= 6; r_to++) {
                 if (BIT(to) & sd->brd.bb[ALLPIECES]) {
-                    break; //blocked
+                    break; //the path to promotion is blocked by something
                 }
-                sd->brd.bb[ALLPIECES] ^= BIT(sq); //to include rook/queen xray attacks from behind
+                
+                //calculate attack mask, temporarily unset the sq bit to include x-ray attacks
+                sd->brd.bb[ALLPIECES] ^= BIT(sq); //
                 U64 attacks = sd->brd.attacks_to(to);
                 sd->brd.bb[ALLPIECES] ^= BIT(sq);
+                
+                //get defenders (them) and supporters (us)
                 U64 defend = attacks & sd->brd.all(them);
-                U64 support = attacks & sd->brd.all(us);
                 if (defend) {
-                    if (support == 0) {
-                        break;
-                    }
-                    if (is_1(support) && gt_1(defend)) {
-                        break;
+                    U64 support = attacks & sd->brd.all(us);
+                    if (support == 0 || (is_1(support) && gt_1(defend))) {
+                        break; //passed pawn can't safely advance
                     }
                 }
-                result->add(bonus);
-                trace("PP Advance", sq, bonus);
+                result->add(PP_ADVANCE[r] * (1 + (r_to == r + 1) + (r_to == 6)));
+                trace("PP Advance", sq, PP_ADVANCE[r] * (1 + (r_to == r + 1) + (r_to == 6)));
                 to += step;
-            } while (to >= a1 && to <= h8);
+            }
         }
         if (has_imbalance(sd, them)) {
             if (has_major_imbalance(sd)) {
