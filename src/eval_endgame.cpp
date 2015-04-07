@@ -319,6 +319,22 @@ namespace eg {
         }
         return score;
     }
+    
+    /**
+     * Evaluate KQPSKQ endgame
+     */
+    int kqpskq(search_t * s, const int score, const bool us) {
+        //this endgame is a bit drawish because of endless checks
+        return draw(score, 2);
+    }
+    
+    /**
+     * Evaluate KQPSKQPS endgame
+     */
+    int kqpskqps(search_t * s, const int score, const bool us) {
+        //this endgame is a bit drawish because of endless checks
+        return draw(score, 2);
+    }
 
     /**
      * Pawns vs lone king (case 1)
@@ -495,6 +511,8 @@ namespace eg {
             return draw(score, 4);
         } else if (s->brd.is_eg(KRPKR, us)) {
             return krpkr(s, score, us);
+        } else if (s->brd.is_eg(KQPSKQ, us)) { 
+            return kqpskq(s, score, us);
         }
         return score;
     }
@@ -529,6 +547,8 @@ namespace eg {
         assert(eg_test(s, 1, 1, 1, 1, us));
         if (s->brd.is_eg(OPP_BISHOPS, us)) {
             return opp_bishops(s, score, us);
+        } else if (s->brd.is_eg(KQPSKQPS, us)) {
+            return kqpskqps(s, score, us);
         }
         return score;
     }
@@ -541,7 +561,7 @@ namespace eg {
         const bool them = !us;
         int eg_ix = has_pawns(s, us) + 2 * has_pawns(s, them)
                 + 4 * has_pieces(s, us) + 8 * has_pieces(s, them);
-
+        
         switch (eg_ix) { //1      4        2      8
             case 0: //  ----- ------ vs ----- ------ (KK)
                 return draw(score);

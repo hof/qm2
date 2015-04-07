@@ -24,7 +24,7 @@
 #include "search.h"
 #include "bits.h"
 
-//#define ENABLE_PAWN_EVAL_TRACE
+#define DISABLE_PAWN_EVAL_TRACE
 
 namespace pawns {
 
