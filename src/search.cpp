@@ -431,10 +431,11 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         move_t * move = &rmove->move;
         int nodes_before = nodes;
         int extend = extend_move(move, rmove->gives_check, depth, true);
-        bool is_dangerous = stack->in_check || extend || move->capture || move->promotion || move->castle;
+        bool is_dangerous = stack->phase == 16 || stack->in_check || extend || move->capture 
+            || move->promotion || move->castle || is_passed_pawn(move);
         int reduce = 0;
         if (DO_LMR && depth > 1 && i > 1 && wild != 17 && !is_dangerous) {
-            reduce = 1 + bool(depth > 2 && i > 3);
+            //reduce = 1 + bool(depth > 2 && i > 3);
         }
         int score = 0; 
         forward(move, rmove->gives_check);
@@ -681,7 +682,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 && best > -score::DEEPEST_MATE;
 
         //futile quiet moves (futility pruning)
-        bool is_dangerous = in_check || move->capture || move->promotion || move->castle
+        bool is_dangerous = in_check || stack->phase == 16 || move->capture || move->promotion || move->castle
                 || gives_check || is_passed_pawn(move) || is_killer(move);
         do_prune &= !is_dangerous;
         if (do_prune && depth < 5 && eval + FFP_MARGIN[depth] <= alpha) {

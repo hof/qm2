@@ -39,6 +39,10 @@ namespace eg {
         }
         return MIN(-GRAIN_SIZE, score / div);
     }
+    
+    int mul256(int score, int mul) {
+        return (score * mul) / 256;
+    }
 
     int win(bool us, int div = 1) {
         assert(div > 0);
@@ -325,15 +329,16 @@ namespace eg {
      */
     int kqpskq(search_t * s, const int score, const bool us) {
         //this endgame is a bit drawish because of endless checks
-        return draw(score, 2);
+        int PFM[9] = { 256, 128, 144, 160, 176, 192, 208, 224, 240 };
+        return mul256(score, PFM[s->brd.count(PAWN[us])]);
     }
     
     /**
      * Evaluate KQPSKQPS endgame
      */
     int kqpskqps(search_t * s, const int score, const bool us) {
-        //this endgame is a bit drawish because of endless checks
-        return draw(score, 2);
+        int PFM[9] = { 256, 144, 160, 176, 192, 208, 224, 240, 256 };
+        return mul256(score, PFM[s->brd.count(PAWN[us])]);
     }
 
     /**
