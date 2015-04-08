@@ -815,9 +815,6 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     score_t * result = &sd->stack->pc_score[pc];
     result->clear();
     board_t * brd = &sd->brd;
-    if (brd->bb[QUEEN[us]] == 0) {
-        return result;
-    }
     if (us == WHITE && (sd->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_W) == 0) {
         return result;
     }
@@ -828,7 +825,7 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     /*
      * 1. Shelter score
      */
-    int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + sd->stack->king_attack[PAWN[us]]);
+    int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + sd->stack->pt->king_attack[us]);
 
     if ((RANK[us][8] & brd->bb[ROOK[!us]]) == 0) { //no rook protecting their back rank
         shelter_ix += 2;
