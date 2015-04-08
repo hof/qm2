@@ -431,7 +431,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         move_t * move = &rmove->move;
         int nodes_before = nodes;
         int extend = rmove->gives_check > 0;
-        int score = 0; 
+        int score = 0;
         forward(move, rmove->gives_check);
         if (rmove->gives_check) {
             brd.stack->checker_sq = rmove->checker_sq;
@@ -580,19 +580,19 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
     stack->tt_move.set(tt_move);
 
-
-    
     /*
      * Node pruning
      */
 
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
-    const bool do_prune_node = !in_check && !skip_null && !pv
-            && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
-
+    const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE;
+    if (do_prune_node && depth > 1 && depth < 8 && eval + 2 * VQUEEN < alpha) {
+        depth --;
+    }
+    
     //null move pruning
-    if (DO_NULLMOVE && do_prune_node && eval >= beta && depth > 1) {
+    if (DO_NULLMOVE && do_prune_node && eval >= beta && depth > 1 && brd.has_pieces(brd.stack->wtm)) {
         forward();
         const int R = 3;
         int null_score = -pvs(-beta, -alpha, depth - 1 - R);
@@ -692,7 +692,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
         assert(reduce == 0 || extend == 0);
         assert((depth - reduce) >= 1);
-        
+
         /*
          * Go forward and search next node
          */

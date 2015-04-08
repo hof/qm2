@@ -78,7 +78,6 @@ void test_positions() {
     test_fen("8/7p/5k2/5p2/p1p2P2/Pr1pPK2/1P1R3P/8 b - - 0 1", "b3b2", 300);
     test_fen("8/3P1k2/p4b2/1p3R2/3r3p/P4P1B/1KP5/8 b - - 0 1", "d4d5", -50);
     test_fen("8/p3k1p1/4r3/2ppNpp1/PP1P4/2P3KP/5P2/8 b - - 0 1", "e6e5", 300);
-    test_fen("3r1k2/2R2p2/p7/1p1bPBp1/1P1p2P1/5P2/1P1K4/8 w - - 0 1", "c7a7", 0);
     test_fen("5bk1/1rQ4p/5pp1/2pP4/3n1PP1/7P/1q3BB1/4R1K1 w - - 0 1", "d5d6", 300);
     test_fen("3rk2r/2R2ppp/p3p3/1b2P2q/4QP2/4N3/1B4PP/6K1 w k - 0 1", "b2a3", 200);
     test_fen("5bk1/4pp1p/Q2p2p1/3P4/4PP2/2rBq1PP/P5K1/3R4 b - - 0 1", "h7h5", 200);   

@@ -101,6 +101,13 @@ namespace eg {
         return distance(fsq, rsq);
     }
 
+    /**
+     * Returns the amount of steps to promotion of our most advanced pawn (not
+     * necessarily a passed pawn). 
+     * @param s search object
+     * @param us side to investigate: white (1) or black (0)
+     * @return 0 (false) or the amount of steps
+     */
     int most_advanced_pawn_steps(search_t * s, const bool us) {
         int psq = us == WHITE ? bsr(s->brd.bb[WPAWN]) : bsf(s->brd.bb[BPAWN]);
         int steps = us == WHITE? 7 - RANK(psq) : RANK(psq);
@@ -110,10 +117,16 @@ namespace eg {
         return steps;
     }
     
+    /**
+     * Returns the amount of steps to promotion of our most advanced passed pawn
+     * @param s search object
+     * @param us side to investigate: white (1) or black (0)
+     * @return 0 (false) or the amount of steps
+     */
     int most_advanced_passer_steps(search_t * s, const bool us) {
         U64 passers = s->stack->pt->passers & s->brd.bb[PAWN[us]];
         if (passers == 0) {
-            return 8;
+            return 0;
         }
         int psq = us == WHITE ? bsr(passers) : bsf(passers);
         int steps = us == WHITE? 7 - RANK(psq) : RANK(psq);
@@ -122,6 +135,13 @@ namespace eg {
         return steps;
     }
 
+    /**
+     * Detects "unstoppable" passers. A passer is unstoppable
+     * if it's not blocked and the promotion can't be prevented
+     * @param s search object
+     * @param us side to investigate: white (1) or black (0)
+     * @return 0 (false) or the amount of steps to promotion of our best unstoppable passer
+     */
     int unstoppable_pawn_steps(search_t * s, const bool us) {
         U64 passers = s->stack->pt->passers & s->brd.bb[PAWN[us]];
         if (passers == 0) {
