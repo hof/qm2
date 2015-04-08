@@ -65,9 +65,9 @@ namespace pawns {
     };
 
     const int DUO[8] = {//or defended, indexed by rank 
-        0, 0, 0, 5, 10, 30, 50, 0
+        0, 0, 0, 0, 5, 25, 45, 0
     };
-
+    
     const int PAWN_WIDTH_EG = 5;
 
 
@@ -268,7 +268,7 @@ namespace pawns {
                 if (duo) {
                     pawn_score[us].add(DUO[r_us]);
                     trace("DUO", sq, DUO[r_us]);
-                }
+                } 
 
                 if (doubled) {
                     pawn_score[us].add(DOUBLED);

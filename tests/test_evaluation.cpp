@@ -94,7 +94,10 @@ void testEvaluationSuite() {
     testEval(1003, "8/2k5/8/8/8/7K/7P/8 w - - 0 1", 1, DRAW_MAX); //KPK
     testEval(1004, "2k5/8/8/8/8/8/2P5/2K5 w - - 0 1", score::WIN / 2, score::WIN); //KPK
     testEval(1005, "2k5/8/8/8/8/2P5/8/2K5 w - - 0 1", 1, DRAW_MAX); //KPK
-    testEval(1006, "7k/7P/6P1/8/8/8/8/5K2 w - - 1 13", score::WIN / 8, score::WIN/4); //KPPK
+    testEval(1006, "8/8/8/1P6/1k6/3P4/8/7K w - - 1 1", score::WIN / 8, score::WIN/4); //KPPK, unstoppable
+    testEval(1007, "7k/7P/6P1/8/8/8/8/5K2 w - - 1 13", score::WIN / 8, score::WIN/4); //KPPK, defended
+    testEval(1008, "8/8/8/1P3k2/8/3P4/8/7K b - - 1 1", -score::WIN/4, -VPAWN); //good, but stoppable
+    testEval(1009, "2K1k3/8/8/2P5/2P5/2P5/2PP4/8 w - - 0 2", score::WIN/8, score::WIN/4); //KPSK, unstoppable
 
     // case 2: ----- ------ vs pawns ------
     // impossible case, with the winning side only having a king

@@ -37,7 +37,6 @@ namespace {
         DO_NULLMOVE = 1,
         DO_VERIFY_NULL = 1,
         DO_LMR = 1,
-        DO_LMR_ROOT = 0,
         DO_PRUNE_MOVES = 1
     };
 

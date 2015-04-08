@@ -39,7 +39,7 @@ namespace eg {
         }
         return MIN(-GRAIN_SIZE, score / div);
     }
-    
+
     int mul256(int score, int mul) {
         return (score * mul) / 256;
     }
@@ -103,9 +103,9 @@ namespace eg {
 
     int most_advanced_pawn_steps(search_t * s, const bool us) {
         bool utm = s->brd.stack->wtm == (us == WHITE);
-        int psq = us == WHITE? bsr(s->brd.bb[WPAWN]) : bsf(s->brd.bb[BPAWN]);
+        int psq = us == WHITE ? bsr(s->brd.bb[WPAWN]) : bsf(s->brd.bb[BPAWN]);
         int qsq = queening_square(psq, us);
-        return distance_rank(psq, qsq) - is_rank_2(psq, us) + !utm 
+        return distance_rank(psq, qsq) - is_rank_2(psq, us) + !utm
                 + (bool)(fill_up(BIT(psq), us) & s->brd.bb[KING[us]]);
     }
 
@@ -121,19 +121,32 @@ namespace eg {
         int kpos_us = s->brd.get_sq(KING[us]);
         int result = 0;
         int best = 10;
-        do {
+        U64 attacks_us = s->brd.pawn_attacks(us) | KING_MOVES[kpos_us];
+        while (passers && best > 1) {
             int psq = pop(passers);
-            int qsq = queening_square(psq, us);
-            int steps_pawn = distance_rank(psq, qsq) - is_rank_2(psq, us) + !utm;
-            steps_pawn += (bool)(fill_up(BIT(psq), us) & BIT(kpos_us)); 
-            int steps_king = distance(kpos_them, qsq) - 1;
-            bool unstoppable = (steps_king > steps_pawn)
-                    || (steps_pawn <= 2 && (KING_MOVES[kpos_us] & BIT(qsq)));
-            if (unstoppable && steps_pawn < best) {
-                best = steps_pawn;
-                result = steps_pawn;
+            int steps_pawn = us == WHITE ? 7 - RANK(psq) : RANK(psq);
+            
+            //continue if this passed pawn can't beat the best score
+            if (steps_pawn >= best) {
+                continue;
             }
-        } while (passers && best > 1);
+
+            //case 1: path is fully defended
+            U64 path = fill_up(BIT(psq), us) ^ BIT(psq);
+            bool unstoppable = (path & attacks_us) == path;
+
+            //case 2: path is free and their king is too far away to stop us
+            if (!unstoppable && (path & s->brd.bb[ALLPIECES]) == 0) {
+                int steps_them = distance(kpos_them, queening_square(psq, us)) - !utm;
+                unstoppable = steps_them > steps_pawn; 
+            }
+            
+            //update best and result score
+            if (unstoppable) {
+                best = steps_pawn;
+                result = best;
+            }
+        };
         return result;
     }
 
@@ -188,7 +201,7 @@ namespace eg {
      */
     int opp_bishops(search_t * s, const int score, const bool us) {
         assert(s->brd.is_eg(OPP_BISHOPS, us));
-        static const int PFMUL[9] = { 1, 16, 32, 64, 128, 160, 192, 224, 240 };
+        static const int PFMUL[9] = {1, 16, 32, 64, 128, 160, 192, 224, 240};
         return mul256(score, PFMUL[s->brd.count(PAWN[us])]);
     }
 
@@ -321,21 +334,21 @@ namespace eg {
         }
         return score;
     }
-    
+
     /**
      * Evaluate KQPSKQ endgame
      */
     int kqpskq(search_t * s, const int score, const bool us) {
         //this endgame is a bit drawish because of endless checks
-        int PFM[9] = { 256, 128, 144, 160, 176, 192, 208, 224, 240 };
+        int PFM[9] = {256, 128, 144, 160, 176, 192, 208, 224, 240};
         return mul256(score, PFM[s->brd.count(PAWN[us])]);
     }
-    
+
     /**
      * Evaluate KQPSKQPS endgame
      */
     int kqpskqps(search_t * s, const int score, const bool us) {
-        int PFM[9] = { 256, 144, 160, 176, 192, 208, 224, 240, 256 };
+        int PFM[9] = {256, 144, 160, 176, 192, 208, 224, 240, 256};
         return mul256(score, PFM[s->brd.count(PAWN[us])]);
     }
 
@@ -344,7 +357,7 @@ namespace eg {
      */
     int pawns_vs_king(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 0, 0, 0, us));
-        
+
         const bool them = !us;
 
         //KPK -> bitbase lookup
@@ -358,9 +371,9 @@ namespace eg {
             return draw(score, 64);
         }
 
-        //KPP+K
+        //KPSK -> unstoppable pawn wins the game
         int steps = unstoppable_pawn_steps(s, us);
-        if (steps > 0) { //unstoppable pawn: win
+        if (steps > 0) { 
             return score + win(us, (1 + steps));
         }
         return score;
@@ -369,16 +382,17 @@ namespace eg {
     /**
      * Evaluate endgames with only kings and pawns (case 3)
      */
-    const uint8_t UNSTOPPABLE_PAWN[8] = { 0, 200, 150, 100, 50, 25, 25, 25 };
+    const uint8_t UNSTOPPABLE_PAWN[8] = {0, 200, 150, 100, 50, 25, 25, 25};
+
     int pawns_vs_pawns(search_t * s, int score, const bool us) {
         assert(eg_test(s, 1, 0, 1, 0, us));
         bool them = !us;
         int steps_us = unstoppable_pawn_steps(s, us);
         int steps_tm = unstoppable_pawn_steps(s, them);
-        
+
         int bonus = UNSTOPPABLE_PAWN[steps_us] - UNSTOPPABLE_PAWN[steps_tm];
-        score += us == WHITE? bonus : -bonus;
-        
+        score += us == WHITE ? bonus : -bonus;
+
         /*
         int pion_us = most_advanced_pawn_steps(s, us);
         int pion_tm = most_advanced_pawn_steps(s, them);
@@ -392,12 +406,12 @@ namespace eg {
         if (steps_us > 0 && steps_us > best_case_defense_tm) {
             
         }
-        */
+         */
         //std::cout << "steps us " << steps_us << std::endl;
         //std::cout << "pion us " << pion_us << std::endl;
         //std::cout << "steps them " << steps_tm << std::endl;
         //std::cout << "pion them " << pion_tm << std::endl;
-        
+
         return score;
     }
 
@@ -515,7 +529,7 @@ namespace eg {
             return draw(score, 4);
         } else if (s->brd.is_eg(KRPKR, us)) {
             return krpkr(s, score, us);
-        } else if (s->brd.is_eg(KQPSKQ, us)) { 
+        } else if (s->brd.is_eg(KQPSKQ, us)) {
             return kqpskq(s, score, us);
         }
         return score;
@@ -565,7 +579,7 @@ namespace eg {
         const bool them = !us;
         int eg_ix = has_pawns(s, us) + 2 * has_pawns(s, them)
                 + 4 * has_pieces(s, us) + 8 * has_pieces(s, them);
-        
+
         switch (eg_ix) { //1      4        2      8
             case 0: //  ----- ------ vs ----- ------ (KK)
                 return draw(score);
