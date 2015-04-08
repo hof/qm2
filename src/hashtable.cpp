@@ -21,57 +21,34 @@
 
 #include "hashtable.h"
 
-material_table_t::material_table_t(int size_in_MB) {
-    table = NULL;
-    enabled = true;
-    size_in_mb = -1;
-    set_size(size_in_MB);
-}
-
-void material_table_t::set_size(int size_in_MB) {
-    if (size_in_mb == size_in_MB) {
-        return;
-    }
-    if (table) {
-        delete[] table;
-    }
-    int entry_size = sizeof (entry_t);
-    int max_entries = (size_in_MB * 1024 * 1024) / entry_size;
-    size = 1 << (max_entries ? bsr(max_entries) : 0);
-    table = new entry_t[size];
-    max_hash_key = size - 1;
-    size_in_mb = size_in_MB;
-}
-
-bool material_table_t::retrieve(U64 key, int & value, int & phase, int & flags) {
-    entry_t & entry = table[index(key)];
-    if ((entry.key ^ entry.value) != key || !enabled) {
-        return false;
-    }
-    value = entry.value;
-    phase = entry.phase;
-    flags = entry.flags;
-    return true;
-}
-
-void material_table_t::store(U64 key, int value, int phase, int flags) {
-    entry_t & entry = table[index(key)];
-    entry.value = value;
-    entry.phase = phase;
-    entry.flags = flags;
-    entry.key = key ^ value;
-}
 
 namespace material_table {
 
-    material_table_t _global_table(TABLE_SIZE);
-
-    void store(U64 key, int value, int phase, int flags) {
-        _global_table.store(key, value, phase, flags);
+    table_t::table_t(int size_in_MB) {
+        table = NULL;
+        size_in_mb = -1;
+        set_size(size_in_MB);
     }
 
-    bool retrieve(U64 key, int & value, int & phase, int & flags) {
-        return _global_table.retrieve(key, value, phase, flags);
+    void table_t::set_size(int size_in_MB) {
+        if (size_in_mb == size_in_MB) {
+            return;
+        }
+        if (table) {
+            delete[] table;
+        }
+        int entry_size = sizeof (entry_t);
+        int max_entries = (size_in_MB * 1024 * 1024) / entry_size;
+        size = 1 << (max_entries ? bsr(max_entries) : 0);
+        table = new entry_t[size];
+        max_hash_key = size - 1;
+        size_in_mb = size_in_MB;
+    }
+
+    table_t _global_table(TABLE_SIZE);
+
+    entry_t * retrieve(U64 key) {
+        return _global_table.retrieve(key);
     }
 
     void clear() {
@@ -81,15 +58,6 @@ namespace material_table {
     void set_size(int size_in_mb) {
         _global_table.set_size(size_in_mb);
     }
-
-    void enable() {
-        _global_table.enabled = true;
-    }
-
-    void disable() {
-        _global_table.enabled = false;
-    }
-
 };
 
 namespace pawn_table {
@@ -114,8 +82,8 @@ namespace pawn_table {
         max_hash_key = size - 1;
         size_in_mb = size_in_MB;
     }
-    
-    
+
+
     table_t _global_table(TABLE_SIZE);
 
     entry_t * retrieve(U64 key) {

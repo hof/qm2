@@ -58,8 +58,8 @@ namespace eg {
     }
 
     bool has_winning_edge(search_t * s, bool us) {
-        return us == WHITE ? s->stack->material_score >= VROOK :
-                s->stack->material_score <= -VROOK;
+        return us == WHITE ? s->stack->mt->score >= VROOK :
+                s->stack->mt->score <= -VROOK;
     }
 
     /**
@@ -110,7 +110,7 @@ namespace eg {
     }
 
     int unstoppable_pawn_steps(search_t * s, const bool us) {
-        U64 passers = s->stack->pawn_info->passers & s->brd.bb[PAWN[us]];
+        U64 passers = s->stack->pt->passers & s->brd.bb[PAWN[us]];
         if (passers == 0) {
             return 0;
         }
@@ -144,7 +144,7 @@ namespace eg {
                 && pawns_them == bool(s->brd.bb[PAWN[them]])
                 && pcs_us == s->brd.has_pieces(us)
                 && pcs_them == s->brd.has_pieces(them)
-                && (s->stack->phase == 16) == (!pcs_us && !pcs_them);
+                && (s->stack->mt->phase == 16) == (!pcs_us && !pcs_them);
     }
 
     int knpk(search_t * s, const int score, const bool us) {
@@ -188,10 +188,8 @@ namespace eg {
      */
     int opp_bishops(search_t * s, const int score, const bool us) {
         assert(s->brd.is_eg(OPP_BISHOPS, us));
-        static const int PF[9] = {128, 16, 8, 4, 2, 2, 1, 1, 1};
-        int pawn_count = s->brd.count(PAWN[us]);
-        int pf = PF[pawn_count];
-        return draw(score, pf);
+        static const int PFMUL[9] = { 1, 16, 32, 64, 128, 160, 192, 224, 240 };
+        return mul256(score, PFMUL[s->brd.count(PAWN[us])]);
     }
 
     /**
@@ -346,6 +344,7 @@ namespace eg {
      */
     int pawns_vs_king(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 0, 0, 0, us));
+        
         const bool them = !us;
 
         //KPK -> bitbase lookup
@@ -425,7 +424,7 @@ namespace eg {
             return score + win(us) + corner_king(s, them);
         }
         int steps = unstoppable_pawn_steps(s, us);
-        if (steps >= 0) { //unstoppable passed pawn
+        if (steps > 0) { //unstoppable passed pawn
             return score + win(us, (3 + steps));
         } else if (s->brd.is_eg(KNPK, us)) { //KNPK
             return knpk(s, score, us);
@@ -442,7 +441,7 @@ namespace eg {
         assert(eg_test(s, 0, 1, 1, 0, us));
         const bool pow_us = has_mating_power(s, us);
         if (!pow_us) {
-            return draw(score, 128);
+            return draw(score, 0);
         } else if (s->brd.is_eg(KRKP, us)) {
             return krkp(s, score, us);
         } else if (s->brd.is_eg(KQKP, us)) {

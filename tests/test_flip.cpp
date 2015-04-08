@@ -62,9 +62,9 @@ bool flipTest(int test_num, const char * fen, int divide_steps = MAX_DIVIDE_STEP
     search_t * s1 = new search_t(fen1.c_str());
     search_t * s2 = new search_t(fen2.c_str());
     int score1 = evaluate(s1);
-    int phase1 = s1->stack->phase;
+    int phase1 = s1->stack->mt->phase;
     int score2 = evaluate(s2);
-    int phase2 = s1->stack->phase;
+    int phase2 = s1->stack->mt->phase;
     delete s1;
     delete s2;
     if (score1 != score2 || phase1 != phase2) {

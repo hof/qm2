@@ -113,18 +113,18 @@ uint8_t PFLAG_CLOSED_CENTER = 1;
  */
 
 bool has_mating_power(search_t * s, bool us) {
-    const int flags = s->stack->material_flags;
+    const int flags = s->stack->mt->flags;
     return us == WHITE ? (flags & MFLAG_MATING_POWER_W) != 0
             : (flags & MFLAG_MATING_POWER_B) != 0;
 }
 
 bool has_imbalance(search_t * s, bool us) {
-    const int flags = s->stack->material_flags;
+    const int flags = s->stack->mt->flags;
     return (flags & MFLAG_IMBALANCE) != 0 && bool(flags & 4) == !us;
 }
 
 bool has_major_imbalance(search_t * s) {
-    const int flags = s->stack->material_flags;
+    const int flags = s->stack->mt->flags;
     return (flags & 2) != 0;
 }
 
@@ -256,10 +256,11 @@ int evaluate(search_t * sd) {
 
     bool wtm = sd->brd.stack->wtm;
     score_t * score = &sd->stack->eval_score;
-    int result = eval_material(sd); //sets stack->phase and material flags
+    int result = eval_material(sd); //sets stack->mt->phase and material flags
     score->set(TEMPO[wtm]);
     score->add(pawns::eval(sd)); //sets passers and pawns flags
-    if (sd->stack->pawn_info->passers) {
+
+    if (sd->stack->pt->passers) {
         score->add(pawns::eval_passed_pawns(sd, WHITE));
         score->sub(pawns::eval_passed_pawns(sd, BLACK));
     }
@@ -273,9 +274,9 @@ int evaluate(search_t * sd) {
     score->sub(eval_queens(sd, BLACK)); //updates king attack
     score->add(eval_king_attack(sd, WHITE));
     score->sub(eval_king_attack(sd, BLACK));
-    result += score->get(sd->stack->phase);
+    result += score->get(sd->stack->mt->phase);
     sd->stack->eg_score = result;
-    if (sd->stack->material_flags & MFLAG_EG) {
+    if (sd->stack->mt->flags & MFLAG_EG) {
         result = eg::eval(sd, result);
     }
     if (!wtm) {
@@ -292,36 +293,20 @@ int evaluate(search_t * sd) {
  * Evaluate material score and set the current game phase
  * @param sd search meta-data object
  */
-int eval_material(search_t * sd) {
+int eval_material(search_t * s) {
 
     /*
-     * 1. Get the score from the last stack record if the previous move was quiet, 
-     *    so the material balance did not change. This is easy to verify with 
-     *    the material hash
+     * 1. Probe the material table
      */
-    board_t * brd = &sd->brd;
-    if (brd->ply > 0 &&
-            (brd->stack - 1)->material_hash == brd->stack->material_hash
-            && (sd->stack - 1)->eval_result != score::INVALID) {
-        sd->stack->material_score = (sd->stack - 1)->material_score;
-        sd->stack->phase = (sd->stack - 1)->phase;
-        sd->stack->material_flags = (sd->stack - 1)->material_flags;
-        return sd->stack->material_score;
+    board_t * brd = &s->brd;
+    s->stack->mt = material_table::retrieve(brd->stack->material_hash);
+    material_table::entry_t * e = s->stack->mt;
+    if (e->key == brd->stack->material_hash) {
+        return e->score;
     }
 
     /*
-     * 2. Probe the material table
-     */
-    int value, phase, flags;
-    if (material_table::retrieve(brd->stack->material_hash, value, phase, flags)) {
-        sd->stack->material_score = value;
-        sd->stack->phase = phase;
-        sd->stack->material_flags = flags;
-        return value;
-    }
-
-    /*
-     * 3. Calculate material value and store in material hash table
+     * 2. Calculate material value and store in material hash table
      */
     score_t result;
     result.clear();
@@ -344,7 +329,7 @@ int eval_material(search_t * sd) {
     /*
      * Game phase
      */
-    phase = score::MAX_PHASE /* 16 */
+    int phase = score::MAX_PHASE /* 16 */
             - wminors - bminors /* max: 8 */
             - wrooks - brooks /* max:4 */
             - 2 * (wqueens + bqueens) /* max: 4 */;
@@ -392,7 +377,7 @@ int eval_material(search_t * sd) {
     /*
      * Material Balance
      */
-    flags = 0;
+    int flags = 0;
     bool balance = (wminors == bminors) && (wrooks + 2 * wqueens) == (brooks + 2 * bqueens);
     if (!balance) { //material imbalance
         int power = result.get(phase);
@@ -437,12 +422,11 @@ int eval_material(search_t * sd) {
     /*
      * Store result in material table and return
      */
-    value = result.get(phase);
-    sd->stack->material_score = value;
-    sd->stack->material_flags = flags;
-    sd->stack->phase = phase;
-    material_table::store(brd->stack->material_hash, value, phase, flags);
-    return value;
+    e->key = brd->stack->material_hash;
+    e->score = result.get(phase);;
+    e->flags = flags;
+    e->phase = phase;
+    return e->score;
 }
 
 score_t * eval_knights(search_t * sd, bool us) {
@@ -487,13 +471,13 @@ score_t * eval_knights(search_t * sd, bool us) {
     while (knights) {
         int sq = pop(knights);
         result->add(PST[WKNIGHT][ISQ(sq, us)]);
-        U64 moves = KNIGHT_MOVES[sq] & sd->stack->pawn_info->mob[us];
+        U64 moves = KNIGHT_MOVES[sq] & sd->stack->pt->mob[us];
         int mob_count = popcnt0(moves);
         result->add(KNIGHT_MOBILITY[mob_count]);
         result->add(KNIGHT_PAWN_WIDTH[pawn_width]);
         result->add(KNIGHT_PAWN_COUNT[pawn_count]);
 
-        if (moves & sd->stack->pawn_info->attack[us]) {
+        if (moves & sd->stack->pt->attack[us]) {
             result->add(KNIGHT_ATTACK);
         }
 
@@ -542,23 +526,23 @@ score_t * eval_bishops(search_t * sd, bool us) {
      * 3. Calculate the score and store on the stack
      */
     //bishop pair
-    if (brd->has_bishop_pair(us) && (sd->stack->pawn_info->flags & PFLAG_CLOSED_CENTER) == 0) {
+    if (brd->has_bishop_pair(us) && (sd->stack->pt->flags & PFLAG_CLOSED_CENTER) == 0) {
         result->add(VBISHOPPAIR);
     }
 
     U64 occ = brd->pawns_kings();
     bool them = !us;
     int kpos = brd->get_sq(KING[them]);
-    U64 kaz = (sd->stack->pawn_info->king_attack_mask[us] & BISHOP_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone; 
+    U64 kaz = (sd->stack->pt->king_attack_mask[us] & BISHOP_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone; 
     int ka_units = 0;
     int ka_squares = 0;
     while (bishops) {
         int sq = pop(bishops);
         result->add(PST[WBISHOP][ISQ(sq, us)]);
-        U64 moves = magic::bishop_moves(sq, occ) & sd->stack->pawn_info->mob[us];
+        U64 moves = magic::bishop_moves(sq, occ) & sd->stack->pt->mob[us];
         int count = popcnt0(moves);
         result->add(BISHOP_MOBILITY[count]);
-        if (moves & sd->stack->pawn_info->attack[us]) {
+        if (moves & sd->stack->pt->attack[us]) {
             result->add(BISHOP_ATTACK);
         } else {
             result->sub(BISHOP_ATTACK);
@@ -642,16 +626,16 @@ score_t * eval_rooks(search_t * sd, bool us) {
         result->add(ROOK_1ST); //at least one rook is protecting the back rank
     }
     int kpos = brd->get_sq(KING[them]);
-    U64 kaz = (sd->stack->pawn_info->king_attack_mask[us] & ROOK_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone
+    U64 kaz = (sd->stack->pt->king_attack_mask[us] & ROOK_MOVES[kpos]) | KING_ZONE[kpos]; //king attack zone
 
 
     while (rooks) {
         int sq = pop(rooks);
         result->add(PST[WROOK][ISQ(sq, us)]);
 
-        U64 moves = magic::rook_moves(sq, occ) & sd->stack->pawn_info->mob[us];
-        if (moves & sd->stack->pawn_info->attack[us]) {
-            result->add(popcnt(moves & sd->stack->pawn_info->attack[us]) * ROOK_ATTACK);
+        U64 moves = magic::rook_moves(sq, occ) & sd->stack->pt->mob[us];
+        if (moves & sd->stack->pt->attack[us]) {
+            result->add(popcnt(moves & sd->stack->pt->attack[us]) * ROOK_ATTACK);
         }
 
         if (brd->is_attacked_by_pawn(sq, them)) {
@@ -663,8 +647,8 @@ score_t * eval_rooks(search_t * sd, bool us) {
             result->add(ROOK_7TH);
         }
 
-        if (sd->stack->pawn_info->is_open_file(us, sq)) {
-            if (sd->stack->pawn_info->is_open_file(them, sq)) {
+        if (sd->stack->pt->is_open_file(us, sq)) {
+            if (sd->stack->pt->is_open_file(them, sq)) {
                 result->add(ROOK_OPEN_FILE);
                 if ((moves & rooks) && (fill_south(bitSq) & rooks)) {
                     result->add(CONNECTED_ROOKS);
@@ -693,7 +677,7 @@ score_t * eval_rooks(search_t * sd, bool us) {
             }
         }
         //Tarrasch Rule: place rook behind passers
-        U64 tpass = moves & sd->stack->pawn_info->passers; //touched passers
+        U64 tpass = moves & sd->stack->pt->passers; //touched passers
         if (tpass) {
             U64 front[2];
             front[BLACK] = fill_south(bitSq) & tpass;
@@ -771,13 +755,13 @@ score_t * eval_queens(search_t * sd, bool us) {
     bool them = !us;
     U64 occ = brd->pawns_kings();
     int kpos = brd->get_sq(KING[them]);
-    U64 kaz = sd->stack->pawn_info->king_attack_mask[us] | KING_ZONE[kpos]; //king attack zone
+    U64 kaz = sd->stack->pt->king_attack_mask[us] | KING_ZONE[kpos]; //king attack zone
     int ka_units = 0;
     int ka_squares = 0;
     while (queens) {
         int sq = pop(queens);
         result->add(PST[WQUEEN][ISQ(sq, us)]);
-        U64 moves = magic::queen_moves(sq, occ) & sd->stack->pawn_info->mob[us];
+        U64 moves = magic::queen_moves(sq, occ) & sd->stack->pt->mob[us];
         int count = popcnt0(moves);
         result->add(QUEEN_MOBILITY[count]);
         if (brd->is_attacked_by_pawn(sq, them)) {
@@ -834,10 +818,10 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     if (brd->bb[QUEEN[us]] == 0) {
         return result;
     }
-    if (us == WHITE && (sd->stack->material_flags & MFLAG_KING_ATTACK_FORCE_W) == 0) {
+    if (us == WHITE && (sd->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_W) == 0) {
         return result;
     }
-    if (us == BLACK && (sd->stack->material_flags & MFLAG_KING_ATTACK_FORCE_B) == 0) {
+    if (us == BLACK && (sd->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_B) == 0) {
         return result;
     }
 
@@ -852,7 +836,7 @@ score_t * eval_king_attack(search_t * sd, bool us) {
 
     result->set(KING_SHELTER[shelter_ix], 0);
 
-    U64 kaz = sd->stack->pawn_info->king_attack_mask[us];
+    U64 kaz = sd->stack->pt->king_attack_mask[us];
 
     kaz &= ~(RANK[us][7] | RANK[us][8] | KING_MOVES[brd->get_sq(KING[!us])]);
     result->add(12 * popcnt0(kaz), 0);
@@ -863,7 +847,7 @@ score_t * eval_king_attack(search_t * sd, bool us) {
      * if little material is left
      */
 
-    if ((sd->stack->pawn_info->flags & PFLAG_CLOSED_CENTER) != 0) {
+    if ((sd->stack->pt->flags & PFLAG_CLOSED_CENTER) != 0) {
         result->half(); //reduce shelter score for closed positions
     }
 

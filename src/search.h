@@ -67,15 +67,13 @@ struct search_stack_t {
     bool in_check;
     bool equal_pawns;
     uint8_t pv_count;
-    uint8_t phase;
-    uint8_t material_flags;
     int16_t eval_result;
     int16_t eg_score;
-    int16_t material_score;
     score_t eval_score;
     score_t pc_score[BKING+1];
     score_t passer_score[2];
-    pawn_table::entry_t * pawn_info; 
+    pawn_table::entry_t * pt; 
+    material_table::entry_t * mt;
     U64 tt_key;
     int8_t king_attack[BKING + 1];
 };
@@ -147,7 +145,7 @@ public:
 
     bool is_passed_pawn(move_t * move) {
         assert(stack->eval_result != score::INVALID);
-        return BIT(move->ssq) & stack->pawn_info->passers;
+        return BIT(move->ssq) & stack->pt->passers;
     }
     
     search_stack_t * get_stack(int ply) {

@@ -37,6 +37,7 @@ namespace {
         DO_NULLMOVE = 1,
         DO_VERIFY_NULL = 1,
         DO_LMR = 1,
+        DO_LMR_ROOT = 0,
         DO_PRUNE_MOVES = 1
     };
 
@@ -106,8 +107,8 @@ void search_t::init_history() {
     for (int sq = a1; sq <= h8; sq++) {
         history[0][sq] = 0;
         for (int pc = WPAWN; pc <= WKING; pc++) {
-            history[pc][sq] = PST[pc][ISQ(sq, true)].get(stack->phase);
-            history[pc + WKING][sq] = PST[pc][sq].get(stack->phase);
+            history[pc][sq] = PST[pc][ISQ(sq, true)].get(stack->mt->phase);
+            history[pc + WKING][sq] = PST[pc][sq].get(stack->mt->phase);
         }
     }
 }
@@ -430,33 +431,19 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         root_move_t * rmove = &root.moves[i];
         move_t * move = &rmove->move;
         int nodes_before = nodes;
-        int extend = extend_move(move, rmove->gives_check, depth, true);
-        bool is_dangerous = stack->phase == 16 || stack->in_check || extend || move->capture 
-            || move->promotion || move->castle || is_passed_pawn(move);
-        int reduce = 0;
-        if (DO_LMR && depth > 1 && i > 1 && wild != 17 && !is_dangerous) {
-            //reduce = 1 + bool(depth > 2 && i > 3);
-        }
+        int extend = rmove->gives_check > 0;
         int score = 0; 
         forward(move, rmove->gives_check);
         if (rmove->gives_check) {
             brd.stack->checker_sq = rmove->checker_sq;
             brd.stack->checkers = rmove->checkers;
         }
-        if (i == 0) {
-            score = -pvs(-beta, -alpha, depth - 1 + extend);
-        } else {
-            score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
-            if (score > alpha && reduce > 0) {
-                //research without reductions
-                score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
-            }
-            if (score > alpha) {
-                //full window research
-                score = -pvs(-beta, -alpha, depth - 1 + extend);
-            }
+        if (i > 0) {
+            score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
         }
-        
+        if (i == 0 || score > alpha) {
+            score = -pvs(-beta, -alpha, depth - 1 + extend);
+        }
         backward(move);
         rmove->nodes += nodes - nodes_before;
         if (stop_all) {
@@ -465,9 +452,9 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             best = score;
             result_score = score;
             rmove->nodes += i;
-            stack->best_move.set(&rmove->move);
+            stack->best_move.set(move);
             bool exact = score::flags(score, alpha, beta) == score::EXACT;
-            if (exact || false == rmove->move.equals(&stack->pv_moves[0])) {
+            if (exact || false == move->equals(&stack->pv_moves[0])) {
                 update_pv(&rmove->move);
             }
             uci::send_pv(best, depth, sel_depth, nodes + pruned_nodes, game->tm.elapsed(),
@@ -682,7 +669,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 && best > -score::DEEPEST_MATE;
 
         //futile quiet moves (futility pruning)
-        bool is_dangerous = in_check || stack->phase == 16 || move->capture || move->promotion || move->castle
+        bool is_dangerous = in_check || move->capture || move->promotion || move->castle
                 || gives_check || is_passed_pawn(move) || is_killer(move);
         do_prune &= !is_dangerous;
         if (do_prune && depth < 5 && eval + FFP_MARGIN[depth] <= alpha) {
@@ -876,7 +863,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
         //prune moves with negative SEE
         bool do_prune = !in_check && !gives_check && brd.min_gain(move) < 0
-                && (stack->phase < 10 || !brd.captures_last_piece(move));
+                && (stack->mt->phase < 10 || !brd.captures_last_piece(move));
         if (do_prune && brd.see(move) < 0) {
             pruned_nodes++;
             continue;
@@ -990,7 +977,7 @@ void search_t::trace_root(int alpha, int beta, int depth) {
  * the risk is (100+200)/100 = 3
  */
 int search_t::get_eval_risk() {
-    int phase = stack->phase;
+    int phase = stack->mt->phase;
     int pos_eval = stack->passer_score[WHITE].get(phase)
             + stack->passer_score[BLACK].get(phase)
             + stack->pc_score[WKING].get(phase)

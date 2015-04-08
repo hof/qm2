@@ -31,7 +31,14 @@ namespace pawns {
 #ifdef ENABLE_PAWN_EVAL_TRACE
 
     void trace(std::string msg, int sq, const score_t & s) {
-        std::cout << msg << " " << FILE_SYMBOL(sq) << RANK_SYMBOL(sq) << ": ";
+        if (s.mg == 0 && s.eg == 0) {
+            return;
+        }
+        if (sq >= 0) {
+            std::cout << msg << " " << FILE_SYMBOL(sq) << RANK_SYMBOL(sq) << ": ";
+        } else {
+            std::cout << msg << ": ";
+        }
         std::cout << "(" << s.mg << ", " << s.eg << ") " << std::endl;
     }
 #endif
@@ -46,9 +53,9 @@ namespace pawns {
      * Pawn structure bonuses
      */
 
-    const score_t ISOLATED[2] = {S(-25, -20), S(-10, -20)}; //open, closed file
+    const score_t ISOLATED[2] = {S(-25, -20), S(-15, -15)}; //open, closed file
 
-    const score_t WEAK[2] = {S(-15, -10), S(-10, -10)}; //open, closed file
+    const score_t WEAK[2] = {S(-15, -15), S(-10, -10)}; //open, closed file
 
     const score_t DOUBLED = S(-10, -20);
 
@@ -68,7 +75,7 @@ namespace pawns {
      * King x pawns bonus
      */
 
-    const int KING_ACTIVITY = 3; //endgame score for king attacking or defending pawns
+    const int KING_ACTIVITY = 5; //endgame score for king attacking or defending pawns
 
     /*
      * King shelter, storm and attack units for later use in king attack eval.
@@ -137,8 +144,8 @@ namespace pawns {
          */
 
         board_t * brd = &s->brd;
-        s->stack->pawn_info = pawn_table::retrieve(brd->stack->pawn_hash);
-        pawn_table::entry_t * e = s->stack->pawn_info;
+        s->stack->pt = pawn_table::retrieve(brd->stack->pawn_hash);
+        pawn_table::entry_t * e = s->stack->pt;
         if (e->key == brd->stack->pawn_hash) {
             return &e->score;
         }
@@ -298,6 +305,7 @@ namespace pawns {
 
             //pawn width: pawns far apart helps in the endgame
             pawn_score[us].add(0, PAWN_WIDTH_EG * byte_width0(e->open_files[us] ^ 0xFF));
+            trace("PAWN WIDTH", -1, S(0, PAWN_WIDTH_EG * byte_width0(e->open_files[us] ^ 0xFF)));
 
             /*
              * b) mobility and attack masks
@@ -316,7 +324,7 @@ namespace pawns {
             trace("PST KING", kpos[us], PST[WKING][ISQ(kpos[us], us)]);
 
             //dynamic king placement: support / attack pawns
-            U64 king_atcks = KING_MOVES[kpos[us]] & pawns_all;
+            U64 king_atcks = KING_MOVES[kpos[us]] & e->attack[us];
             pawn_score[us].add(0, popcnt0(king_atcks) * KING_ACTIVITY);
             trace("KING ATTACK", kpos[us], S(0, popcnt0(king_atcks) * KING_ACTIVITY));
 
@@ -348,8 +356,11 @@ namespace pawns {
             trace("CLOSED CENTER FLAG", e->flags, e->flags);
         }
 
-        trace("WHITE ATTACKS UNITS (TOTAL", kpos[BLACK], e->king_attack[WHITE]);
+        trace("WHITE ATTACKS UNITS (TOTAL)", kpos[BLACK], e->king_attack[WHITE]);
         trace("BLACK ATTACKS UNITS (TOTAL)", kpos[WHITE], e->king_attack[BLACK]);
+
+        trace("WHITE PAWN SCORE (TOTAL)", -1, pawn_score[WHITE]);
+        trace("BLACK PAWN SCORE (TOTAL)", -1, pawn_score[BLACK]);
 
         /*
          * 3. Return the total score from white's point of view
@@ -369,16 +380,16 @@ namespace pawns {
      */
 
     const uint8_t PP_MG[6] = {5, 5, 15, 35, 70, 130};
-    const uint8_t PP_EG[6] = { 10, 10, 15, 25, 50, 80 };
-    const uint8_t PP_DIST_US[6] = {0, 0, 2, 5, 10, 15 };
-    const uint8_t PP_DIST_THEM[6] = {0, 0, 5, 15, 20, 40 };
-    const uint8_t PP_ADVANCE[6] = { 0, 0, 0, 10, 20, 40 };
+    const uint8_t PP_EG[6] = {10, 10, 15, 25, 50, 80};
+    const uint8_t PP_DIST_US[6] = {0, 0, 2, 5, 10, 15};
+    const uint8_t PP_DIST_THEM[6] = {0, 0, 5, 15, 20, 40};
+    const uint8_t PP_ADVANCE[6] = {0, 0, 0, 10, 20, 40};
 
     score_t * eval_passed_pawns(search_t * sd, bool us) {
 
         score_t * result = &sd->stack->passer_score[us];
         result->clear();
-        U64 passers = sd->stack->pawn_info->passers & sd->brd.bb[PAWN[us]];
+        U64 passers = sd->stack->pt->passers & sd->brd.bb[PAWN[us]];
         if (passers == 0) {
             return result;
         }
@@ -412,12 +423,12 @@ namespace pawns {
                 if (BIT(to) & sd->brd.bb[ALLPIECES]) {
                     break; //the path to promotion is blocked by something
                 }
-                
+
                 //calculate attack mask, temporarily unset the sq bit to include x-ray attacks
                 sd->brd.bb[ALLPIECES] ^= BIT(sq); //
                 U64 attacks = sd->brd.attacks_to(to);
                 sd->brd.bb[ALLPIECES] ^= BIT(sq);
-                
+
                 //get defenders (them) and supporters (us)
                 U64 defend = attacks & sd->brd.all(them);
                 if (defend) {

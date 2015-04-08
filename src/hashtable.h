@@ -27,73 +27,16 @@
 #include "board.h"
 #include "score.h"
 
-class material_table_t {
-private:
+namespace material_table {
+
+    const int TABLE_SIZE = 8; //MB
 
     struct entry_t {
         U64 key;
-        int16_t value;
+        int16_t score;
         uint8_t phase;
         uint8_t flags;
     };
-
-    int size_in_mb;
-    int size;
-    int max_hash_key;
-    entry_t * table;
-
-    int index(U64 hash_code) {
-        return hash_code & max_hash_key;
-    }
-
-public:
-    bool enabled;
-
-    material_table_t(int size_in_MB);
-    void set_size(int size_in_MB);
-    void store(U64 key, int value, int phase, int flags);
-    bool retrieve(U64 key, int & value, int & phase, int & flags);
-
-    ~material_table_t() {
-        delete [] table;
-    }
-
-    void clear() {
-        memset(table, 0, sizeof (entry_t) * size);
-    }
-
-};
-
-namespace material_table {
-    const int TABLE_SIZE = 8; //MB
-    void store(U64 key, int value, int phase, int flags);
-    bool retrieve(U64 key, int & value, int & phase, int & flags);
-    void clear();
-    void set_size(int size_in_MB);
-    void enable();
-    void disable();
-};
-
-
-namespace pawn_table {
-
-    struct entry_t {
-        U64 key; //64
-        U64 passers; //64
-        U64 mob[2]; //128
-        U64 attack[2]; //128;
-        U64 king_attack_mask[2]; //128;
-        score_t score; //32
-        int8_t king_attack[2]; //16
-        uint8_t open_files[2]; //16
-        uint8_t flags; //8
-
-        bool is_open_file(bool us, int sq) {
-            return open_files[us] & (1 << FILE(sq));
-        }
-    };
-
-    const int TABLE_SIZE = 64;
 
     class table_t {
     private:
@@ -109,11 +52,6 @@ namespace pawn_table {
     public:
         table_t(int size_in_MB);
         void set_size(int size_in_MB);
-        void store(U64 key, U64 passers, score_t score, int king_attack[2], int flags);
-
-        entry_t * retrieve(U64 key) {
-            return &table[index(key)];
-        }
 
         ~table_t() {
             delete [] table;
@@ -121,6 +59,65 @@ namespace pawn_table {
 
         void clear() {
             memset(table, 0, sizeof (entry_t) * size);
+        }
+
+        entry_t * retrieve(U64 key) {
+            return &table[index(key)];
+        }
+
+    };
+
+    entry_t * retrieve(U64 key);
+    void clear();
+    void set_size(int size_in_MB);
+};
+
+
+namespace pawn_table {
+    
+    const int TABLE_SIZE = 64;
+
+    struct entry_t {
+        U64 key;
+        U64 passers;
+        U64 mob[2];
+        U64 attack[2];
+        U64 king_attack_mask[2];
+        score_t score;
+        int8_t king_attack[2];
+        uint8_t open_files[2];
+        uint8_t flags;
+
+        bool is_open_file(bool us, int sq) {
+            return open_files[us] & (1 << FILE(sq));
+        }
+    };
+
+    class table_t {
+    private:
+        int size_in_mb;
+        int size;
+        int max_hash_key;
+        entry_t * table;
+
+        int index(U64 hash_code) {
+            return hash_code & max_hash_key;
+        }
+
+    public:
+        table_t(int size_in_MB);
+        void set_size(int size_in_MB);
+
+        ~table_t() {
+            delete [] table;
+        }
+
+        void clear() {
+            memset(table, 0, sizeof (entry_t) * size);
+        }
+
+        entry_t * retrieve(U64 key) {
+            return &table[index(key)];
         }
 
     };

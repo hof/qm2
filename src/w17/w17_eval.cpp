@@ -30,10 +30,10 @@ score_t * w17_eval_pawns_and_kings(search_t * s);
 int w17_evaluate(w17_search_t * s) {
     const bool us = s->brd.stack->wtm;
     int result = w17_eval_material(s);
-    if (s->stack->material_flags == 15) {
+    if (s->stack->mt->flags == 16) {
         score_t * score = &s->stack->eval_score;
         score->set(w17_eval_pawns_and_kings(s));
-        result += score->get(s->stack->phase);
+        result += score->get(s->stack->mt->phase);
     }
     return us ? result : -result;
 }
@@ -45,17 +45,16 @@ int w17_eval_material(w17_search_t * s) {
      */
 
     board_t * brd = &s->brd;
-    int result, phase, flags;
-    if (material_table::retrieve(brd->stack->material_hash, result, phase, flags)) {
-        s->stack->phase = phase;
-        s->stack->material_flags = flags;
-        return result;
+    s->stack->mt = material_table::retrieve(brd->stack->material_hash);
+    if (s->stack->mt->key == brd->stack->material_hash) {
+        return s->stack->mt->score;
     }
 
     /*
      * 2. Calculate game phase and flags
      */
 
+    int result = 0;
     int wpawns = brd->count(WPAWN);
     int bpawns = brd->count(BPAWN);
     int wknights = brd->count(WKNIGHT);
@@ -68,8 +67,8 @@ int w17_eval_material(w17_search_t * s) {
     int bqueens = brd->count(BQUEEN);
     int wpieces = wknights + wbishops + wrooks + wqueens;
     int bpieces = bknights + bbishops + brooks + bqueens;
-    phase = MAX(0, score::MAX_PHASE - wpieces - bpieces - wqueens - bqueens);
-    flags = 1 * (wpawns > 0) + 2 * (bpawns > 0) + 4 * (wpieces > 0) + 8 * (bpieces > 0);
+    int phase = MAX(0, score::MAX_PHASE - wpieces - bpieces - wqueens - bqueens);
+    int flags = 1 * (wpawns > 0) + 2 * (bpawns > 0) + 4 * (wpieces > 0) + 8 * (bpieces > 0);
 
     /*
      * 3. Calculate material score based on game flags 
@@ -146,9 +145,10 @@ int w17_eval_material(w17_search_t * s) {
      * 5. Store results in material table and on the stack
      */
 
-    s->stack->phase = phase;
-    s->stack->material_flags = flags;
-    material_table::store(brd->stack->material_hash, result, phase, flags);
+    s->stack->mt->key = brd->stack->material_hash;
+    s->stack->mt->phase = phase;
+    s->stack->mt->flags = flags;
+    s->stack->mt->score = result;
     return result;
 }
 
@@ -180,9 +180,9 @@ score_t * w17_eval_pawns_and_kings(search_t * s) {
      * 1. Probe the hash table for the pawn score
      */
     
-    s->stack->pawn_info = pawn_table::retrieve(s->brd.stack->pawn_hash);
-    if (s->stack->pawn_info->key == s->brd.stack->pawn_hash) {
-        return &s->stack->pawn_info->score;
+    s->stack->pt = pawn_table::retrieve(s->brd.stack->pawn_hash);
+    if (s->stack->pt->key == s->brd.stack->pawn_hash) {
+        return &s->stack->pt->score;
     }
     
     score_t pawn_score_us[2];
@@ -207,7 +207,8 @@ score_t * w17_eval_pawns_and_kings(search_t * s) {
 
     }
     
-    s->stack->pawn_info->score.set(pawn_score_us[WHITE]);
-    s->stack->pawn_info->score.sub(pawn_score_us[BLACK]);
-    return &s->stack->pawn_info->score;
+    s->stack->pt->key = s->brd.stack->pawn_hash;
+    s->stack->pt->score.set(pawn_score_us[WHITE]);
+    s->stack->pt->score.sub(pawn_score_us[BLACK]);
+    return &s->stack->pt->score;
 }

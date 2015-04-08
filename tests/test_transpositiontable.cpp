@@ -31,15 +31,16 @@
 void test_tt() {
     std::cout << "test_transpositiontable test tt" << std::endl;
 
+    pawn_table::set_size(4);
+    material_table::set_size(4);
 
     /*
      * Test pawn table store and retrieve
      */
-    
-    pawn_table::set_size(4);
+
     search_t * sd = new search_t("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     pawn_table::entry_t * pe = pawn_table::retrieve(sd->brd.stack->pawn_hash);
-   
+
     //pawn entry should contain valid information for the starting position
     if (pe->key != sd->brd.stack->pawn_hash
             || pe->passers != 0
@@ -55,18 +56,15 @@ void test_tt() {
     /*
      * Test material table store and retrieve
      */
-    material_table::set_size(4);
-    int value1, value2, phase1, phase2, flags2;
-    int flags1 = 4;
-    value1 = 910;
-    phase1 = 14;
+
     U64 key = sd->brd.stack->material_hash;
-    material_table::store(key, value1, phase1, flags1);
-    bool result = material_table::retrieve(key, value2, phase2, flags2);
-    if (result == false
-            || value1 != value2
-            || phase1 != phase2
-            || flags1 != flags2
+    material_table::entry_t * me = material_table::retrieve(key);   
+
+    //check for valid entry
+    if (me->key != key
+            || me->score != 0
+            || me->phase != 0
+            || me->flags != 120
             ) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=material table store/retrieve error" << std::endl;
         return;
@@ -83,7 +81,7 @@ void test_tt() {
         trans_table::store(keys[i], age, ply, depth, i + 10, i + 100, 3);
     }
     for (int i = 0; i < 4; i++) {
-        result = trans_table::retrieve(keys[i], ply, depth, score, move, flag);
+        bool result = trans_table::retrieve(keys[i], ply, depth, score, move, flag);
         if (result == false
                 || score != i + 10
                 || move != i + 100
@@ -96,7 +94,7 @@ void test_tt() {
     move_t * tmove = move::first(sd, 0);
     trans_table::store(sd->brd.stack->tt_key, sd->brd.root_ply, sd->brd.ply, 123, -12345, tmove->to_int(), 3);
 
-    result = trans_table::retrieve(sd->brd.stack->tt_key, sd->brd.ply, 123, score, move, flag);
+    bool result = trans_table::retrieve(sd->brd.stack->tt_key, sd->brd.ply, 123, score, move, flag);
 
 
     if (result == false

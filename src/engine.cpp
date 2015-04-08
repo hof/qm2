@@ -208,7 +208,7 @@ void print_row(std::string cap, score_t & w, score_t & b, int phase) {
 void engine_t::analyse() {
 
     search_t * s = new search_t(_root_fen.c_str());
-    int phase = s->stack->phase;
+    int phase = s->stack->mt->phase;
     bool wtm = s->brd.stack->wtm;
     score_t tempo_score;
     tempo_score.set(TEMPO[wtm]);
@@ -220,8 +220,8 @@ void engine_t::analyse() {
     std::cout << "Eval Component | White MG   EG | Black MG   EG |  Total MG   EG   Tot  \n";
     std::cout << "---------------+---------------+---------------+---------------------\n";
     print_row("Tempo", tempo_score.get(phase));
-    print_row("Material", s->stack->material_score);
-    print_row("Pawns & Kings", s->stack->pawn_info->score, phase);
+    print_row("Material", s->stack->mt->score);
+    print_row("Pawns & Kings", s->stack->pt->score, phase);
     print_row("Knights", s->stack->pc_score[WKNIGHT], s->stack->pc_score[BKNIGHT], phase);
     print_row("Bishops", s->stack->pc_score[WBISHOP], s->stack->pc_score[BBISHOP], phase);
     print_row("Rooks", s->stack->pc_score[WROOK], s->stack->pc_score[BROOK], phase);
@@ -232,7 +232,7 @@ void engine_t::analyse() {
         std::cout << "---------------+---------------+---------------+---------------------\n";
         print_row("Black to move", s->stack->eg_score);
     }
-    if ((s->stack->material_flags & 128) != 0) {
+    if ((s->stack->mt->flags & 128) != 0) {
         print_row("EG Adjustment", s->stack->eval_result - s->stack->eg_score);
     }
 
