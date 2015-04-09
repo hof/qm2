@@ -369,23 +369,6 @@ namespace eg {
     }
 
     /**
-     * Evaluate KQPSKQ endgame
-     */
-    int kqpskq(search_t * s, const int score, const bool us) {
-        //this endgame is a bit drawish because of endless checks
-        int PFM[9] = {256, 128, 144, 160, 176, 192, 208, 224, 240};
-        return mul256(score, PFM[s->brd.count(PAWN[us])]);
-    }
-
-    /**
-     * Evaluate KQPSKQPS endgame
-     */
-    int kqpskqps(search_t * s, const int score, const bool us) {
-        int PFM[9] = {256, 144, 160, 176, 192, 208, 224, 240, 256};
-        return mul256(score, PFM[s->brd.count(PAWN[us])]);
-    }
-
-    /**
      * Pawns vs lone king (case 1)
      */
     int pawns_vs_king(search_t * s, const int score, const bool us) {
@@ -568,7 +551,7 @@ namespace eg {
         } else if (s->brd.is_eg(KRPKR, us)) {
             return krpkr(s, score, us);
         } else if (s->brd.is_eg(KQPSKQ, us)) {
-            return kqpskq(s, score, us);
+            return mul256(score, 112 + 16 * s->brd.count(PAWN[us]));
         }
         return score;
     }
@@ -604,7 +587,7 @@ namespace eg {
         if (s->brd.is_eg(OPP_BISHOPS, us)) {
             return opp_bishops(s, score, us);
         } else if (s->brd.is_eg(KQPSKQPS, us)) {
-            return kqpskqps(s, score, us);
+            return mul256(score, 128 + 16 * s->brd.count(PAWN[us]));;
         }
         return score;
     }
