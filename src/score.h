@@ -28,6 +28,10 @@
 #ifndef SCORE_H
 #define	SCORE_H
 
+#define KA_ENCODE(p,s) (MIN(p,3)|(MIN(s,15)<<2))
+#define KA_UNITS(k) ((k) & 3)
+#define KA_SQUARES(k) ((k) >> 2)
+
 namespace score {
 
     enum constants {
@@ -188,10 +192,20 @@ struct score_t {
         mg -= s->mg;
         eg -= s->eg;
     }
-
+    
     void sub(const short x, const short y) {
         mg -= x;
         eg -= y;
+    }
+    
+    void add_us(const score_t & s, bool us) {
+        mg += us? s.mg : -s.mg;
+        eg += us? s.eg : -s.eg;
+    }
+    
+    void add_us(const score_t * s, bool us) {
+        mg += us? s->mg : -s->mg;
+        eg += us? s->eg : -s->eg;
     }
 
     void mul(const double x) {
@@ -238,10 +252,14 @@ struct score_t {
         mg = mg / 2;
         eg = eg / 2;
     }
+    
+    bool equals(const score_t & s) {
+        return mg == s.mg && eg == s.eg;
+    }
 
 };
 
-typedef score_t pst_t[7][64];
+typedef score_t pst_t[BKING+1][64];
 
 #define S(x,y) score_t(x,y)
 

@@ -190,9 +190,7 @@ namespace move {
                         && board->matrix[d8] == EMPTY
                         && board->matrix[c8] == EMPTY
                         && board->matrix[b8] == EMPTY) {
-                    (
-
-                            current++)->set(BKING, e8, c8);
+                    (current++)->set(BKING, e8, c8);
                 }
             }
         }

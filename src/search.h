@@ -65,7 +65,6 @@ struct search_stack_t {
     move_t killer[3];
     move_t pv_moves[MAX_PLY + 1];
     bool in_check;
-    bool equal_pawns;
     uint8_t pv_count;
     int16_t eval_result;
     int16_t eg_score;

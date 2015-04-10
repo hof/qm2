@@ -167,6 +167,7 @@ namespace pawns {
         for (int us = BLACK; us <= WHITE; us++) {
             pawn_score[us].clear();
             e->open_files[us] = 0xFF;
+            e->count[us] = 0;
             U64 pawns_us = brd->bb[PAWN[us]];
             U64 pawns_them = brd->bb[PAWN[!us]];
             int step = PAWN_DIRECTION[us];
@@ -252,8 +253,8 @@ namespace pawns {
                 }
 
                 //update the score
-                pawn_score[us].add(PST[WPAWN][ISQ(sq, us)]);
-                trace("PST", sq, PST[WPAWN][ISQ(sq, us)]);
+                pawn_score[us].add(PST[PAWN[us]][sq]);
+                trace("PST", sq, PST[PAWN[us]][sq]);
 
                 if (isolated) {
                     pawn_score[us].add(ISOLATED[opposed]);
@@ -301,11 +302,13 @@ namespace pawns {
 
                 //update open lines mask
                 e->open_files[us] &= ~(1 << f);
+                e->count[us]++;
             }
 
             //pawn width: pawns far apart helps in the endgame
-            pawn_score[us].add(0, PAWN_WIDTH_EG * byte_width0(e->open_files[us] ^ 0xFF));
-            trace("PAWN WIDTH", -1, S(0, PAWN_WIDTH_EG * byte_width0(e->open_files[us] ^ 0xFF)));
+            e->width[us] = byte_width0(e->open_files[us] ^ 0xFF);
+            pawn_score[us].add(0, PAWN_WIDTH_EG * e->width[us]);
+            trace("PAWN WIDTH", -1, S(0, PAWN_WIDTH_EG * e->width[us]));
 
             /*
              * b) mobility and attack masks
@@ -313,15 +316,14 @@ namespace pawns {
 
             e->mob[us] = ~(pawns_us | brd->pawn_attacks(them) | brd->bb[KING[us]]);
             e->attack[us] = e->mob[us] & (pawns_them | brd->bb[KING[them]]);
-            e->king_attack_mask[us] = e->mob[us] & magic::queen_moves(kpos[them], pawns_all | brd->bb[KING[us]]);
-
+            
             /*
              * c) King score
              */
 
             //piece square table
-            pawn_score[us].add(PST[WKING][ISQ(kpos[us], us)]);
-            trace("PST KING", kpos[us], PST[WKING][ISQ(kpos[us], us)]);
+            pawn_score[us].add(PST[KING[us]][kpos[us]]);
+            trace("PST KING", kpos[us], PST[KING[us]][kpos[us]]);
 
             //dynamic king placement: support / attack pawns
             U64 king_atcks = KING_MOVES[kpos[us]] & e->attack[us];

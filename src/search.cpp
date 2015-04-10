@@ -106,8 +106,8 @@ void search_t::init_history() {
     for (int sq = a1; sq <= h8; sq++) {
         history[0][sq] = 0;
         for (int pc = WPAWN; pc <= WKING; pc++) {
-            history[pc][sq] = PST[pc][ISQ(sq, true)].get(stack->mt->phase);
-            history[pc + WKING][sq] = PST[pc][sq].get(stack->mt->phase);
+            history[pc][sq] = PST[pc][sq].get(stack->mt->phase);
+            history[pc + WKING][sq] = PST[pc + WKING][sq].get(stack->mt->phase);
         }
     }
 }

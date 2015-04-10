@@ -76,17 +76,20 @@ namespace material_table {
 namespace pawn_table {
     
     const int TABLE_SIZE = 64;
+    
+    const uint8_t FLAG_CLOSED_CENTER = 1;
 
     struct entry_t {
         U64 key;
         U64 passers;
         U64 mob[2];
         U64 attack[2];
-        U64 king_attack_mask[2];
-        score_t score;
-        int8_t king_attack[2];
-        uint8_t open_files[2];
-        uint8_t flags;
+        score_t score; //32
+        int8_t king_attack[2]; //16 (48)
+        uint8_t open_files[2]; //16 (64)
+        uint8_t flags; //8 
+        uint8_t width[2]; //16 (24)
+        uint8_t count[2]; //16 (40)
 
         bool is_open_file(bool us, int sq) {
             return open_files[us] & (1 << FILE(sq));

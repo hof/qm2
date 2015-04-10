@@ -8,6 +8,7 @@ add_library(MAX2SRC
 	movegen.cpp
 	movepicker.cpp
 	book.cpp
+        eval_pieces.cpp
         eval_endgame.cpp
         eval_pawns.cpp
 	eval.cpp
