@@ -58,8 +58,8 @@ namespace eg {
     }
 
     bool has_winning_edge(search_t * s, bool us) {
-        return us == WHITE ? s->stack->mt->score >= VROOK :
-                s->stack->mt->score <= -VROOK;
+        return us == WHITE ? s->stack->mt->score >= 450 :
+                s->stack->mt->score <= -450;
     }
 
     /**
@@ -524,7 +524,6 @@ namespace eg {
         } else if (has_mating_power(s, them)) { //win 
             return score + win(us, 8) + corner_king(s, them, 8);
         } else { //win and they can impossibly win
-
             return score + win(us, 4) + corner_king(s, them, 4);
         }
     }

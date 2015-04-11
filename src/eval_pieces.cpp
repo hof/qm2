@@ -27,23 +27,49 @@
 extern pst_t PST;
 
 const int8_t MOBILITY[32] = {
-    -30, -10, 0, 5, 10, 15, 20, 20,
+    -40, -20, -10, 0, 5, 10, 15, 20,
     20, 20, 20, 20, 20, 20, 20, 20,
     20, 20, 20, 20, 20, 20, 20, 20,
     20, 20, 20, 20, 20, 20, 20, 20
 };
 
 const int8_t ATTACKS[8] = {
-    -10, 10, 15, 20, 25, 25, 25, 25
+    -5, 5, 10, 15, 20, 20, 20, 20
+};
+
+const int8_t ATTACKED[BKING + 1] = {
+    0, 0, -30, -30, -40, -50, 0, 0, -30, -30, -40, -50, 0
+};
+
+const uint8_t KNIGHT_OUTPOST[64] = {
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 5, 5, 0, 0, 0,
+    0, 0, 10, 20, 20, 10, 0, 0,
+    0, 0, 5, 10, 10, 5, 0, 0,
+    0, 0, 0, 5, 5, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0 //a1..h1
+};
+
+const uint8_t BISHOP_OUTPOST[64] = {
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 5, 5, 5, 5, 5, 5, 0,
+    0, 5, 5, 10, 10, 5, 5, 0,
+    0, 0, 5, 5, 5, 5, 0, 0,
+    0, 0, 0, 5, 5, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0 //a1..h1
 };
 
 const score_t BLOCKED_CENTER_PAWN = -10; //piece blocking a center pawn on rank 2 or 3
 
-const short ATTACKED_PIECE = -30; //piece attacked by a pawn
-
 const int8_t VBISHOPPAIR = 50;
 
 const score_t TRAPPED_BISHOP = S(-60, -80);
+
+const score_t DEFENDED = S(5, 0);
 
 U64 BISHOP_PATTERNS[2] = {//black, white
     BIT(d6) | BIT(d7) | BIT(e6) | BIT(d7) | BIT(a2) | BIT(h2),
@@ -51,14 +77,10 @@ U64 BISHOP_PATTERNS[2] = {//black, white
 };
 
 const score_t ROOK_7TH = S(10, 10);
-const score_t ROOK_1ST = S(10, 0); //back rank protection
 const score_t ROOK_SEMIOPEN_FILE = S(10, 10);
 const score_t ROOK_OPEN_FILE = S(17, 17);
-const score_t ROOK_GOOD_SIDE = S(8, 16); //Rule of Tarrasch 
-const score_t ROOK_WRONG_SIDE = S(-8, -16);
 const score_t ROOK_CLOSED_FILE = S(-5, -5);
 const score_t CONNECTED_ROOKS(10, 20);
-const short ROOK_ATTACK = 12;
 
 
 U64 ROOK_PATTERNS[2] = {//black, white
@@ -79,7 +101,7 @@ namespace pieces {
                 && score::is_valid((s->stack - 1)->eval_result);
         const int prev_pc = equal_pawns ? (s->stack - 1)->current_move.capture : EMPTY;
         const int prev_cap = equal_pawns ? (s->stack - 1)->current_move.piece : EMPTY;
-        const pawn_table::entry_t * pi = s->stack->pt;
+        pawn_table::entry_t * pi = s->stack->pt;
         const int kpos[2] = {brd->get_sq(BKING), brd->get_sq(WKING)};
         const U64 occ = brd->pawns_kings();
 
@@ -102,9 +124,8 @@ namespace pieces {
             if (brd->bb[pc] == 0) {
                 continue;
             }
-
+            
             bool us = pc <= WKING;
-
             score_t * sc = &s->stack->pc_score[pc];
             U64 bb_pc = brd->bb[pc];
             U64 moves;
@@ -112,22 +133,45 @@ namespace pieces {
             int ka_squares = 0;
             do {
                 int sq = pop(bb_pc);
-                sc->add(PST[pc][sq]);
+                bool defended = brd->is_attacked_by_pawn(sq, us);
                 if (pc == WKNIGHT || pc == BKNIGHT) {
                     moves = KNIGHT_MOVES[sq];
+                    if (defended) {
+                        sc->add(DEFENDED);
+                        if (brd->is_outpost(sq, us)) {
+                            sc->add(KNIGHT_OUTPOST[ISQ(sq, us)]);
+                        }
+                    }
                 } else if (pc == WBISHOP || pc == BBISHOP) {
                     moves = magic::bishop_moves(sq, occ);
+                    if (defended) {
+                        sc->add(DEFENDED);
+                        if (brd->is_outpost(sq, us)) {
+                            sc->add(BISHOP_OUTPOST[ISQ(sq, us)]);
+                            }
+                    }
                 } else if (pc == WROOK || pc == BROOK) {
                     moves = magic::rook_moves(sq, occ);
+                    if (!pi->is_open_file(sq, us)) {
+                        sc->add(ROOK_CLOSED_FILE);
+                    } else if (pi->is_open_file(sq, !us)) {
+                        sc->add(ROOK_OPEN_FILE);
+                        if (moves & bb_pc & FILES[FILE(sq)]) {
+                            sc->add(CONNECTED_ROOKS);
+                        }
+                    } else {
+                        sc->add(ROOK_SEMIOPEN_FILE);
+                    }
                 } else {
                     assert(pc == WQUEEN || pc == BQUEEN);
                     moves = magic::queen_moves(sq, occ);
                 }
                 U64 safe_moves = moves & pi->mob[us];
+                sc->add(PST[pc][sq]);
                 sc->add(MOBILITY[popcnt0(safe_moves)]);
                 sc->add(ATTACKS[popcnt0(safe_moves & pi->attack[us])]);
                 if (brd->is_attacked_by_pawn(sq, !us)) {
-                    sc->add(ATTACKED_PIECE);
+                    sc->add(ATTACKED[pc]);
                 }
                 int king_attacks = popcnt0(moves & KING_ZONE[kpos[!us]]);
                 ka_units += (king_attacks > 0);
@@ -145,21 +189,6 @@ namespace pieces {
     }
 }
 /*
-score_t * eval_knights(search_t * sd, bool us) {
-
-    if (brd->is_attacked_by_pawn(sq, us)) {
-        result->add(KNIGHT_OUTPOST[ISQ(sq, us)]);
-    }
-
-}
-
-score_t * eval_bishops(search_t * sd, bool us) {
-
-   
-while (bishops) {
-    if (brd->is_attacked_by_pawn(sq, us)) {
-        result->add(BISHOP_OUTPOST[ISQ(sq, us)]);
-    }
 
     //patterns
     if (BIT(sq) & BISHOP_PATTERNS[us]) {
@@ -206,17 +235,7 @@ while (rooks) {
         result->add(ROOK_7TH);
     }
 
-    if (sd->stack->pt->is_open_file(us, sq)) {
-        if (sd->stack->pt->is_open_file(them, sq)) {
-            result->add(ROOK_OPEN_FILE);
-            if ((moves & rooks) && (fill_south(bitSq) & rooks)) {
-                result->add(CONNECTED_ROOKS);
-            }
-        } else {
-            result->add(ROOK_SEMIOPEN_FILE);
-        }
-    } else {
-        result->add(ROOK_CLOSED_FILE);
+    
         //trapped rook pattern
         if (bitSq & ROOK_PATTERNS[us]) {
             int kpos_us = brd->get_sq(KING[us]);

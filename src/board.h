@@ -255,6 +255,15 @@ public:
     }
     
     /**
+     * Test if white or black side can castle (any side)
+     * @param white side to move (1: white, 0: black)
+     * @return true if any castle right applies
+     */
+    bool can_castle(bool white) {    
+         return white? (stack->castling_flags & CASTLE_WHITE) : (stack->castling_flags & CASTLE_BLACK);
+    }
+    
+    /**
      * Determines if shelter on the kingside is intact for castling
      * @param white side to move
      * @return true if pawn shelter is ok-ish
@@ -414,6 +423,17 @@ public:
         U64 atck[2] = { WPAWN_CAPTURES[sq] & bb[BPAWN], BPAWN_CAPTURES[sq] & bb[WPAWN] };
         bool them = !us;
         return atck[them] == 0 || (is_1(atck[them]) && atck[us] != 0) || gt_1(atck[us]); 
+    }
+    
+    /**
+     * A square is considered an outpost if it can't be attacked by their pawns
+     * @param sq square
+     * @param us side to move (white or black)
+     * @return true if outpost, false otherwise
+     */
+    bool is_outpost(int sq, bool us) {
+        U64 span_up = ADJACENT_FILES[FILE(sq)] & upward_ranks(RANK(sq), us);
+        return (span_up & bb[PAWN[!us]]) == 0;
     }
     
     /**

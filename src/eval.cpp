@@ -65,13 +65,6 @@ void init_pst() {
 
 const score_t TEMPO[2] = {S(-10, 0), S(10, 0)};
 
-const score_t SVPAWN = S(VPAWN, VPAWN); //middle and endgame values
-const score_t SVKNIGHT = S(VKNIGHT, VKNIGHT);
-const score_t SVBISHOP = S(VBISHOP, VBISHOP);
-const score_t SVROOK = S(VROOK, VROOK + 50);
-const score_t SVQUEEN = S(VQUEEN, VQUEEN + 100);
-const score_t SVKING = S(VKING, VKING);
-
 const short VMATING_POWER = 20;
 const short VMATING_MATERIAL = 50;
 
@@ -222,8 +215,7 @@ int eval_material(search_t * s) {
      * Material count evaluation
      */
     if (wknights != bknights) {
-        result.mg += (wknights - bknights) * SVKNIGHT.mg;
-        result.eg += (wknights - bknights) * SVKNIGHT.eg;
+        result.add((wknights - bknights) * VKNIGHT);
         if (wknights > 1) {
             result.add(REDUNDANT_KNIGHT);
         }
@@ -232,12 +224,10 @@ int eval_material(search_t * s) {
         }
     }
     if (wbishops != bbishops) {
-        result.mg += (wbishops - bbishops) * SVBISHOP.mg;
-        result.eg += (wbishops - bbishops) * SVBISHOP.eg;
+        result.add((wbishops - bbishops) * VBISHOP);
     }
     if (wrooks != brooks) {
-        result.mg += (wrooks - brooks) * SVROOK.mg;
-        result.eg += (wrooks - brooks) * SVROOK.eg;
+        result.add((wrooks - brooks) * VROOK);
         if (wrooks > 1) {
             result.add(REDUNDANT_ROOK);
         }
@@ -246,8 +236,7 @@ int eval_material(search_t * s) {
         }
     }
     if (wqueens != bqueens) {
-        result.mg += (wqueens - bqueens) * SVQUEEN.mg;
-        result.eg += (wqueens - bqueens) * SVQUEEN.eg;
+        result.add((wqueens - bqueens) * VQUEEN);
         if (wqueens > 1) {
             result.add(REDUNDANT_QUEEN);
         }
@@ -276,8 +265,7 @@ int eval_material(search_t * s) {
     }
 
     if (wpawns != bpawns) {
-        result.mg += (wpawns - bpawns) * SVPAWN.mg;
-        result.eg += (wpawns - bpawns) * SVPAWN.eg;
+        result.add((wpawns - bpawns) * VPAWN);
     }
 
     /*
@@ -312,7 +300,7 @@ int eval_material(search_t * s) {
     return e->score;
 }
 
-const int8_t KING_ATTACK_OFFSET = 10; //perfectly castled king -10 units
+const int8_t KING_ATTACK_OFFSET = 8; //perfectly castled king -9 units
 
 const int8_t KING_ATTACK_UNIT[BKING + 1] = {
     //  x, p, n, b, r, q, k, p, n, b, r, q, k
@@ -320,34 +308,16 @@ const int8_t KING_ATTACK_UNIT[BKING + 1] = {
 };
 
 const int16_t KING_SHELTER[24] = {//structural shelter (pawns & kings)
-    0, 16, 32, 40, 48, 56, 64, 72,
-    80, 88, 98, 106, 114, 122, 130, 138,
-    146, 154, 162, 170, 178, 186, 194, 200
-};
-
-const int16_t KING_ATTACK[64] = {//indexed by attack units
-    0, 0, 0, 0, 0, 0, 0, 0,
-    2, 4, 6, 8, 10, 12, 16, 20,
-    24, 28, 32, 36, 42, 48, 54, 60,
-    66, 72, 78, 84, 92, 100, 108, 116,
-    124, 131, 138, 144, 150, 155, 160, 164,
-    168, 172, 176, 180, 182, 188, 190, 192,
-    194, 196, 198, 200, 202, 204, 206, 208,
-    210, 212, 214, 216, 218, 220, 222, 224
-};
-
-const int16_t KING_ATTACKERS_MUL[8] = {
-    128, 192, 256, 288, 312, 328, 344, 360
-};
-
-const int16_t KING_SHELTER_MUL[8] = {
-    128, 160, 192, 224, 256, 272, 288, 304
+    0, 15, 30, 40, 50, 60, 65, 70,
+    75, 80, 85, 90, 95, 100, 105, 110,
+    115, 120, 125, 130, 135, 140, 145, 150
 };
 
 score_t * eval_king_attack(search_t * sd, bool us) {
     int pc = KING[us];
     score_t * result = &sd->stack->pc_score[pc];
     result->clear();
+    
     board_t * brd = &sd->brd;
     if (us == WHITE && (sd->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_W) == 0) {
         return result;
@@ -359,18 +329,14 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     /*
      * 1. Shelter score
      */
+    
+    int attack_score = 0;
     int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + sd->stack->pt->king_attack[us]);
-
+    attack_score = KING_SHELTER[shelter_ix];
+    
     if ((RANK[us][8] & brd->bb[ROOK[!us]]) == 0) { //no rook protecting their back rank
-        shelter_ix += 2;
+        attack_score += 20;
     }
-
-    result->set(KING_SHELTER[shelter_ix], 0);
-
-    //U64 kaz = sd->stack->pt->king_attack_mask[us];
-
-    //kaz &= ~(RANK[us][7] | RANK[us][8] | KING_MOVES[brd->get_sq(KING[!us])]);
-    //result->add(12 * popcnt0(kaz), 0);
 
 
     /*
@@ -379,48 +345,34 @@ score_t * eval_king_attack(search_t * sd, bool us) {
      */
 
     if ((sd->stack->pt->flags & pawn_table::FLAG_CLOSED_CENTER) != 0) {
-        result->half(); //reduce shelter score for closed positions
+        attack_score = attack_score / 2;
     }
 
     if (max_1(brd->bb[KNIGHT[us]] | brd->bb[BISHOP[us]] | brd->bb[ROOK[us]])) {
-        result->half();
+        attack_score = attack_score / 2;
     }
 
     /*
      * 3. Piece Attack Score.
-     * Stop if the queen is not involved in the attack
      */
 
-    int queen_attack = sd->stack->king_attack[QUEEN[us]];
-    if (queen_attack == 0) {
-        return result;
-    }
-    int attackers = 0;
-    int ka_units = KA_UNITS(queen_attack) * KING_ATTACK_UNIT[QUEEN[us]];
-    int ka_squares = KA_SQUARES(queen_attack);
+    int attack_strength = 0;
 
-    /*
-     * 4. Get the totals of the Rooks, Bishops and Knights attacks
-     */
-    for (int pc = KNIGHT[us]; pc < QUEEN[us]; pc++) {
+    for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
         int attack = sd->stack->king_attack[pc];
         if (attack == 0) {
             continue;
         }
         int n = KA_UNITS(attack);
-        attackers += n;
-        ka_units += n * KING_ATTACK_UNIT[pc];
-        ka_squares += KA_SQUARES(attack);
+        int s = KA_SQUARES(attack) - n;
+        attack_strength += 1 + ((n+s) * KING_ATTACK_UNIT[pc]) / 2;
     }
-    if (attackers == 0) {
-        return result;
-    }
-
-    int piece_attack_score = 0;
-    int paix = 2 * ka_units + shelter_ix + ka_squares - 5;
-    piece_attack_score = KING_ATTACK[range(0, 63, paix)];
-    piece_attack_score = MUL256(piece_attack_score, KING_ATTACKERS_MUL[range(0, 7, attackers)]);
-    piece_attack_score = MUL256(piece_attack_score, KING_SHELTER_MUL[range(0, 7, shelter_ix)]);
-    result->add(piece_attack_score, 0);
+    
+    
+    
+    int attack_mul = 192 + attack_strength * 16;
+    
+    attack_score = (attack_mul * attack_score) / 256;
+    result->set(attack_score, 0);
     return result;
 }

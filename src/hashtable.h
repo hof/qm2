@@ -91,7 +91,7 @@ namespace pawn_table {
         uint8_t width[2]; //16 (24)
         uint8_t count[2]; //16 (40)
 
-        bool is_open_file(bool us, int sq) {
+        bool is_open_file(int sq, bool us) {
             return open_files[us] & (1 << FILE(sq));
         }
     };
