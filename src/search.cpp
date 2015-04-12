@@ -587,9 +587,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
     const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE;
-    if (do_prune_node && depth > 1 && depth < 8 && eval + 2 * VQUEEN < alpha) {
-        depth --;
-    }
     
     //null move pruning
     if (DO_NULLMOVE && do_prune_node && eval >= beta && depth > 1 && brd.has_pieces(brd.stack->wtm)) {
@@ -626,9 +623,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
 
     stack->best_move.clear();
-    if (pv && depth >= 6 && tt_move == 0) {
+    if (depth >= 6 && tt_move == 0) {
         skip_null = pv;
-        int iid_score = pvs(alpha, beta, depth - 2);
+        int R = pv? 2 : 4;
+        int iid_score = pvs(alpha, beta, depth - R);
         if (score::is_mate(iid_score)) {
             return iid_score;
         } else if (stack->best_move.piece) {
