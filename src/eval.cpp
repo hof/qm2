@@ -69,7 +69,7 @@ const short VMATING_POWER = 20;
 const short VMATING_MATERIAL = 50;
 
 const short REDUNDANT_ROOK = -10;
-const short REDUNDANT_KNIGHT = -8;
+const short REDUNDANT_KNIGHT = -5;
 const short REDUNDANT_QUEEN = -20;
 
 enum mflag_t {
@@ -118,10 +118,6 @@ bool has_major_imbalance(search_t * s) {
     const int flags = s->stack->mt->flags;
     return (flags & 2) != 0;
 }
-
-const short TRADEDOWN_PAWNS_MUL[9] = {
-    210, 226, 238, 248, 256, 256, 256, 256, 256
-};
 
 /*******************************************************************************
  * Main evaluation function

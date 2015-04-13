@@ -673,7 +673,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             pruned_nodes++;
             continue;
         }
-
+        
         /*
          * Move Extensions
          */
