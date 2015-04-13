@@ -28,7 +28,7 @@ extern pst_t PST;
 
 namespace pieces {
 
-#define _ENABLE_PIECE_EVAL_TRACE
+#define ENABLE_PIECE_EVAL_TRACE_
 
 #ifdef ENABLE_PIECE_EVAL_TRACE
 
@@ -84,10 +84,22 @@ namespace pieces {
         }
     };
 
-    const score_t BLOCKED_CENTER_PAWN[2] = {S(10, 0), S(-10, 0)};
+    const int8_t TRAPPED[6] = {//piece type
+        0, 0, -50, -50, -80, -100
+    };
+
+    const int8_t STUCK[2][2] = {//rook, queen; rank 1 or 2
+        { -20, -40},
+        { -10, -20}
+    };
+
+    const score_t BLOCKED_CENTER_PAWN[2] = {//them, us
+        S(10, 0), S(-10, 0)
+    };
+
     const int8_t VBISHOPPAIR = 50;
-    const score_t TRAPPED_BISHOP = S(-60, -80);
     const score_t DEFENDED = S(5, 0);
+
     const score_t MAJOR_7TH[2] = {//rook, queen
         S(10, 20), S(5, 10)
     };
@@ -103,8 +115,8 @@ namespace pieces {
     const score_t CLOSED_FILE[2] = {//rook, queen
         S(-5, -5), S(0, 0)
     };
-    
-    const score_t SUPPORTED_PASSER[2] = { //rook, queen
+
+    const score_t SUPPORTED_PASSER[2] = {//rook, queen
         S(10, 20), S(5, 10)
     };
 
@@ -218,13 +230,14 @@ namespace pieces {
                     assert(pc == WQUEEN || pc == BQUEEN);
                     moves = magic::queen_moves(sq, occ);
                 }
-                
+
                 /*
                  * Mobility and activity
                  */
 
                 U64 safe_moves = moves & pi->mob[us];
-                sc->add(MOBILITY[popcnt0(safe_moves)]);
+                int mob_count = popcnt0(safe_moves);
+                sc->add(MOBILITY[mob_count]);
                 trace("MOBILITY", sq, sc);
                 sc->add(ATTACKS[popcnt0(safe_moves & pi->attack[us])]);
                 trace("ATTACKS", sq, sc);
@@ -237,9 +250,26 @@ namespace pieces {
                     sc->add(ATTACKED[pc]);
                     trace("ATTACKED", sq, sc);
                 }
-                
+
                 /*
-                 * Minor pieces on outpost
+                 * Trapped piece
+                 */
+
+                if (mob_count < 2) {
+                    int r_us = us == WHITE ? RANK(sq) : 7 - RANK(sq);
+                    if (r_us >= 4) {
+                        //trapped piece on their territory
+                        sc->add(mul256(TRAPPED[pc % 6], (r_us - 3) * 64));
+                        trace("TRAPPED", sq, sc);
+                    } else if (!is_minor && r_us <= 1) {
+                        //stuck major piece on 1st / 2nd rank, e.g. a rook in the corner
+                        sc->add(STUCK[pc == QUEEN[us]][r_us]);
+                        trace("STUCK", sq, sc);
+                    }
+                }
+
+                /*
+                 * Minor piece on outpost
                  */
 
                 if (defended && is_minor) {
@@ -252,7 +282,7 @@ namespace pieces {
                 }
 
                 if (!is_minor) {
-                    
+
                     bool ix = pc == QUEEN[us];
 
                     /*
@@ -262,13 +292,13 @@ namespace pieces {
                     if (!pi->is_open_file(sq, us)) {
                         sc->add(CLOSED_FILE[ix]);
                         trace("CLOSED FILE", sq, sc);
-                        
+
                         //Rule of Tarrasch, support passed pawns
                         if (moves & pi->passers & fill_up(bsq, us)) {
                             sc->add(SUPPORTED_PASSER[ix]);
-                            trace("SUPPOERTED PASSER", sq, sc);
+                            trace("SUPPORTED PASSER", sq, sc);
                         }
-                        
+
                     } else if (pi->is_open_file(sq, !us)) {
                         sc->add(OPEN_FILE[ix]);
                         trace("OPEN FILE", sq, sc);
@@ -282,7 +312,8 @@ namespace pieces {
                     }
 
                     /*
-                     * Major pieces on 7th rank
+                     * Major pieces on 7th rank, only if their king is on rank
+                     * 7 or 8
                      */
 
                     if ((bsq & RANK[us][7]) && (brd->bb[KING[!us]] & PAT_BACKRANKS[us])) {
@@ -319,76 +350,4 @@ namespace pieces {
         }
         return result;
     }
-
-    /*int eval_mate_threat_q(search_t * s, const U64 attacks_us, const int kpos_them, const bool us) {
-        U64 kpos_bit = BIT(kpos_them);
-        if ((kpos_bit & EDGE) == 0) {
-            return 0;
-        }
-        U64 mate_squares = 0;
-        if (kpos_bit & CORNER) {
-            mate_squares = KING_MOVES[kpos_them];
-        } else if (kpos_bit & RANK_1) {
-            mate_squares = UP1(kpos_bit);
-        } else if (kpos_bit & RANK_8) {
-            mate_squares = DOWN1(kpos_bit);
-        } else if (kpos_bit & FILE_A) {
-            mate_squares = RIGHT1(kpos_bit);
-        } else if (kpos_bit & FILE_H) {
-            mate_squares = LEFT1(kpos_bit);
-        }
-        U64 target = mate_squares & attacks_us;
-        if (target == 0) {
-            return 0;
-        }
-        board_t * brd = &s->brd;
-        bool them = !us;
-        int result = 10;
-        do {
-            int sq = pop(target);
-            if (brd->is_attacked_excl_queen(sq, us)) {
-                result += 10;
-                if (!brd->is_attacked_excl_king(sq, them)) {
-                    return 200;
-                }
-            }
-        } while (target);
-        return result;
-    }*/
 }
-/*
-
-    //patterns
-    if (BIT(sq) & BISHOP_PATTERNS[us]) {
-        if (us == WHITE) {
-           if ((sq == h7 && brd->matrix[g6] == BPAWN && brd->matrix[f7] == BPAWN)
-                    || (sq == a7 && brd->matrix[b6] == BPAWN && brd->matrix[c7] == BPAWN)) {
-                result->add(TRAPPED_BISHOP);
-            }
-        } 
-        
-    }
-    
-        //trapped rook pattern
-        if (bitSq & ROOK_PATTERNS[us]) {
-            int kpos_us = brd->get_sq(KING[us]);
-            if (us == WHITE && (kpos_us == g1 || kpos_us == h1 || kpos_us == f1)
-                    && (sq == h1 || sq == g1 || sq == h2 || sq == g2)) {
-                result->add(TRAPPED_ROOK);
-            } else if (us == WHITE && (kpos_us == a1 || kpos_us == b1 || kpos_us == c1)
-                    && (sq == a1 || sq == b1 || sq == a2 || sq == b2)) {
-                result->add(TRAPPED_ROOK);
-            } else if (us == BLACK && (kpos_us == g8 || kpos_us == h8 || kpos_us == f8)
-                    && (sq == h8 || sq == g8 || sq == h7 || sq == g7)) {
-                result->add(TRAPPED_ROOK);
-            } else if (us == BLACK && (kpos_us == a8 || kpos_us == b8 || kpos_us == c8)
-                    && (sq == a8 || sq == b8 || sq == a7 || sq == b7)) {
-                result->add(TRAPPED_ROOK);
-            }
-        }
-    }
-}
-
-
-}
- */ 

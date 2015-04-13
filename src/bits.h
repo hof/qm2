@@ -245,7 +245,7 @@ const U64 RIGHT_FILES[8] = {
 };
 
 inline U64 upward_ranks(int r, bool us) {
-    return us? FORWARD_RANKS[r] : BACKWARD_RANKS[r];
+    return us ? FORWARD_RANKS[r] : BACKWARD_RANKS[r];
 }
 
 inline U64 fill_north(U64 x) {
@@ -263,7 +263,7 @@ inline U64 fill_south(U64 x) {
 }
 
 inline U64 fill_up(U64 x, bool us) {
-    return us? fill_north(x) : fill_south(x);
+    return us ? fill_north(x) : fill_south(x);
 }
 
 inline bool max_1(U64 x) {
@@ -314,7 +314,7 @@ const int PAWN_DIRECTION[2] = {-8, 8};
 #define PRINT_SQUARE(sq)    FILE_SYMBOL(sq) << RANK_SYMBOL(sq)
 
 inline int range(const int min, const int max, const int x) {
-    return x <= min? min : x >= max? max : x;
+    return x <= min ? min : x >= max ? max : x;
 }
 
 inline int byte_width(int byte) {
@@ -323,13 +323,16 @@ inline int byte_width(int byte) {
 }
 
 inline int byte_width0(int byte) {
-    return max_1(byte)? 0 : byte_width(byte);
+    return max_1(byte) ? 0 : byte_width(byte);
 }
 
 inline int bb_width(const U64 occ) {
-    return max_1(occ)? 0 : byte_width(fill_south(occ) & RANK_1);
+    return max_1(occ) ? 0 : byte_width(fill_south(occ) & RANK_1);
 }
 
+inline int mul256(int score, int mul) {
+    return (score * mul) / 256;
+}
 
 /**
  * Flip a bitboard vertically about the centre ranks.
@@ -377,15 +380,15 @@ inline bool opposition(int sq1, int sq2) {
 }
 
 inline int queening_square(int sq, bool w) {
-    return w? FILE(sq) + 56 : FILE(sq);
+    return w ? FILE(sq) + 56 : FILE(sq);
 }
 
 inline int is_rank_2(int sq, bool w) {
-    return w? RANK(sq) == 1 : RANK(sq) == 6;
+    return w ? RANK(sq) == 1 : RANK(sq) == 6;
 }
 
 inline int rank(int sq, bool w) {
-    return w? RANK(sq) : 7 - RANK(sq);
+    return w ? RANK(sq) : 7 - RANK(sq);
 }
 
 /*

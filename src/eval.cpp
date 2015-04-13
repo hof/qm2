@@ -336,24 +336,18 @@ score_t * eval_king_attack(search_t * sd, bool us) {
 
 
     /*
-     * 2. Reduce the shelter score for closed positions and 
-     * if little material is left
+     * 2. Reduce the shelter score for closed positions
      */
 
     if ((sd->stack->pt->flags & pawn_table::FLAG_CLOSED_CENTER) != 0) {
         attack_score = attack_score / 2;
     }
 
-    if (max_1(brd->bb[KNIGHT[us]] | brd->bb[BISHOP[us]] | brd->bb[ROOK[us]])) {
-        attack_score = attack_score / 2;
-    }
-
     /*
-     * 3. Piece Attack Score.
+     * 3. Calculate the total piece attack score
      */
 
     int attack_strength = 0;
-
     for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
         int attack = sd->stack->king_attack[pc];
         if (attack == 0) {
@@ -364,11 +358,46 @@ score_t * eval_king_attack(search_t * sd, bool us) {
         attack_strength += 1 + ((n+s) * KING_ATTACK_UNIT[pc]) / 2;
     }
     
-    
-    
     int attack_mul = 192 + attack_strength * 16;
-    
     attack_score = (attack_mul * attack_score) / 256;
     result->set(attack_score, 0);
     return result;
 }
+
+/* todo: include this in king attack evaluation
+    int eval_mate_threat_q(search_t * s, const U64 attacks_us, const int kpos_them, const bool us) {
+        U64 kpos_bit = BIT(kpos_them);
+        if ((kpos_bit & EDGE) == 0) {
+            return 0;
+        }
+        U64 mate_squares = 0;
+        if (kpos_bit & CORNER) {
+            mate_squares = KING_MOVES[kpos_them];
+        } else if (kpos_bit & RANK_1) {
+            mate_squares = UP1(kpos_bit);
+        } else if (kpos_bit & RANK_8) {
+            mate_squares = DOWN1(kpos_bit);
+        } else if (kpos_bit & FILE_A) {
+            mate_squares = RIGHT1(kpos_bit);
+        } else if (kpos_bit & FILE_H) {
+            mate_squares = LEFT1(kpos_bit);
+        }
+        U64 target = mate_squares & attacks_us;
+        if (target == 0) {
+            return 0;
+        }
+        board_t * brd = &s->brd;
+        bool them = !us;
+        int result = 10;
+        do {
+            int sq = pop(target);
+            if (brd->is_attacked_excl_queen(sq, us)) {
+                result += 10;
+                if (!brd->is_attacked_excl_king(sq, them)) {
+                    return 200;
+                }
+            }
+        } while (target);
+        return result;
+    }
+     * */

@@ -40,10 +40,6 @@ namespace eg {
         return MIN(-GRAIN_SIZE, score / div);
     }
 
-    int mul256(int score, int mul) {
-        return (score * mul) / 256;
-    }
-
     int win(bool us, int div = 1) {
         assert(div > 0);
         return us == WHITE ? score::WIN / div : -score::WIN / div;
