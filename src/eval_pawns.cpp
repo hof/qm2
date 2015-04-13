@@ -58,6 +58,8 @@ namespace pawns {
     const score_t WEAK[2] = {S(-15, -15), S(-10, -10)}; //open, closed file
 
     const score_t DOUBLED = S(-10, -20);
+    
+    const score_t BLOCKED_CENTER_PAWN = S(-15, 0);
 
     const score_t CANDIDATE[8] = {//rank
         S(0, 0), S(5, 10), S(5, 10), S(10, 20),
@@ -110,6 +112,8 @@ namespace pawns {
     const int8_t CASTLED_KINGSIDE = -4;
     
     const int8_t CASTLED_QUEENSIDE = -3;
+    
+    
 
     /**
      * Main pawns and kings evaluation function
@@ -164,11 +168,11 @@ namespace pawns {
                 bool isolated = (af & pawns_us) == 0;
                 bool doubled = up & pawns_us;
                 bool opposed = up & pawns_them;
-                bool blocked = (BIT(sq + step) & pawns_all) != 0;
+                bool attacking = !isolated && (brd->pawn_attacks(sq, us) & pawns_them);
+                bool blocked = !attacking && (BIT(sq + step) & pawns_all) != 0;
                 bool passed = !doubled && !opposed && 0 == (pawns_them & af & upward_ranks(r, us));
                 bool defended = !isolated && (brd->pawn_attacks(sq, them) & pawns_us);
                 bool duo = defended || (af & RANKS[r] & pawns_us);
-                bool attacking = !isolated && (brd->pawn_attacks(sq, us) & pawns_them);
                 bool weak = !isolated && !passed && !defended && !attacking && !doubled && (r_us + !blocked) < 6;
 
                 //weak pawns: not weak if it can quickly move to a safe square
@@ -263,8 +267,12 @@ namespace pawns {
                     trace("CANDIDATE", sq, CANDIDATE[r_us]);
                 }
 
-                if (blocked && (bsq & CENTER)) {
-                    blocked_center_pawns++;
+                if (blocked) {
+                    blocked_center_pawns += bool(bsq & CENTER);
+                    if (sq == d2 || sq == e2 || sq == d7 || sq == e7) {
+                        pawn_score[us].add(BLOCKED_CENTER_PAWN);
+                        trace("BLOCKED CENTER PAWN", sq, BLOCKED_CENTER_PAWN);
+                    }
                 }
 
                 //update open lines mask

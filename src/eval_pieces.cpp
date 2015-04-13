@@ -28,8 +28,8 @@ extern pst_t PST;
 
 namespace pieces {
 
-#define DISABLE_PIECE_EVAL_TRACE
-    
+    //#define ENABLE_PIECE_EVAL_TRACE
+
 #ifdef ENABLE_PIECE_EVAL_TRACE
 
     void trace(std::string msg, int sq, const score_t * s) {
@@ -87,13 +87,15 @@ namespace pieces {
     const int8_t VBISHOPPAIR = 50;
     const score_t TRAPPED_BISHOP = S(-60, -80);
     const score_t DEFENDED = S(5, 0);
-    const score_t ROOK_7TH = S(10, 10);
+    const score_t ROOK_7TH = S(10, 20);
+    const score_t QUEEN_7TH = S(5, 10);
     const score_t ROOK_SEMIOPEN_FILE = S(10, 10);
     const score_t ROOK_OPEN_FILE = S(17, 17);
     const score_t ROOK_CLOSED_FILE = S(-5, -5);
     const score_t CONNECTED_ROOKS(10, 20);
     const U64 PAT_BLOCKED_CENTER = BIT(d3) | BIT(e3) | BIT(d6) | BIT(e6);
-
+    const U64 PAT_BACKRANKS[2] = {RANK_1 | RANK_2, RANK_7 | RANK_8};
+    
     score_t * eval(search_t * s) {
         score_t * result = &s->stack->pc_score[0];
         result->clear();
@@ -116,6 +118,8 @@ namespace pieces {
             if (equal_pawns && pc != prev_pc && pc != prev_cap) {
                 s->stack->pc_score[pc] = (s->stack - 1)->pc_score[pc];
                 s->stack->king_attack[pc] = (s->stack - 1)->king_attack[pc];
+                assert(score::is_valid(s->stack->pc_score[pc]));
+                assert(s->stack->king_attack[pc] >= 0 && s->stack->king_attack[pc] <= 127);
                 result->add_us(s->stack->pc_score[pc], pc <= WKING);
                 continue;
             }
@@ -187,9 +191,15 @@ namespace pieces {
                         sc->add(ROOK_SEMIOPEN_FILE);
                         trace("SEMIOPEN FILE", sq, sc);
                     }
+                    if ((bsq & RANK[us][7]) && (brd->bb[KING[!us]] & PAT_BACKRANKS[us])) {
+                        sc->add(ROOK_7TH);
+                    }
                 } else {
                     assert(pc == WQUEEN || pc == BQUEEN);
                     moves = magic::queen_moves(sq, occ);
+                    if ((bsq & RANK[us][7]) && (brd->bb[KING[!us]] & PAT_BACKRANKS[us])) {
+                        sc->add(QUEEN_7TH);
+                    }
                 }
                 U64 safe_moves = moves & pi->mob[us];
                 sc->add(PST[pc][sq]);
@@ -205,6 +215,7 @@ namespace pieces {
                 int king_attacks = popcnt0(moves & KING_ZONE[kpos[!us]]);
                 ka_units += (king_attacks > 0);
                 ka_squares += king_attacks;
+                sc->half();
             } while (bb_pc);
 
             if ((pc == WBISHOP || pc == BBISHOP) && brd->has_bishop_pair(us)
@@ -217,54 +228,55 @@ namespace pieces {
         }
         return result;
     }
+
+    /*int eval_mate_threat_q(search_t * s, const U64 attacks_us, const int kpos_them, const bool us) {
+        U64 kpos_bit = BIT(kpos_them);
+        if ((kpos_bit & EDGE) == 0) {
+            return 0;
+        }
+        U64 mate_squares = 0;
+        if (kpos_bit & CORNER) {
+            mate_squares = KING_MOVES[kpos_them];
+        } else if (kpos_bit & RANK_1) {
+            mate_squares = UP1(kpos_bit);
+        } else if (kpos_bit & RANK_8) {
+            mate_squares = DOWN1(kpos_bit);
+        } else if (kpos_bit & FILE_A) {
+            mate_squares = RIGHT1(kpos_bit);
+        } else if (kpos_bit & FILE_H) {
+            mate_squares = LEFT1(kpos_bit);
+        }
+        U64 target = mate_squares & attacks_us;
+        if (target == 0) {
+            return 0;
+        }
+        board_t * brd = &s->brd;
+        bool them = !us;
+        int result = 10;
+        do {
+            int sq = pop(target);
+            if (brd->is_attacked_excl_queen(sq, us)) {
+                result += 10;
+                if (!brd->is_attacked_excl_king(sq, them)) {
+                    return 200;
+                }
+            }
+        } while (target);
+        return result;
+    }*/
 }
 /*
 
     //patterns
     if (BIT(sq) & BISHOP_PATTERNS[us]) {
         if (us == WHITE) {
-            if (((sq == d3 || sq == d4) && (brd->matrix[d2] == WPAWN || brd->matrix[d3] == WPAWN))) {
-                result->add(BLOCKED_CENTER_PAWN);
-            } else if (((sq == e3 || sq == e4) && (brd->matrix[e2] == WPAWN || brd->matrix[e3] == WPAWN))) {
-                result->add(BLOCKED_CENTER_PAWN);
-            } else if ((sq == h7 && brd->matrix[g6] == BPAWN && brd->matrix[f7] == BPAWN)
+           if ((sq == h7 && brd->matrix[g6] == BPAWN && brd->matrix[f7] == BPAWN)
                     || (sq == a7 && brd->matrix[b6] == BPAWN && brd->matrix[c7] == BPAWN)) {
                 result->add(TRAPPED_BISHOP);
             }
-        } else if (us == BLACK) {
-            if (((sq == d6 || sq == d5) && (brd->matrix[d7] == BPAWN || brd->matrix[d6] == BPAWN))) {
-                result->add(BLOCKED_CENTER_PAWN);
-            } else if (((sq == e6 || sq == e5) && (brd->matrix[e7] == BPAWN || brd->matrix[e6] == BPAWN))) {
-                result->add(BLOCKED_CENTER_PAWN);
-            } else if ((sq == h2 && brd->matrix[g3] == WPAWN && brd->matrix[f3] == WPAWN)
-                    || (sq == a2 && brd->matrix[b3] == WPAWN && brd->matrix[c2] == WPAWN)) {
-                result->add(TRAPPED_BISHOP);
-            }
-        }
+        } 
+        
     }
-    
-
-}
-
-
-score_t * eval_rooks(search_t * sd, bool us) {
-
-static const U64 BACKRANKS[2] = {RANK_1 | RANK_2, RANK_7 | RANK_8};
-
-if ((brd->bb[ROOK[us]] & RANK[us][1]) && (BIT(brd->get_sq(KING[us])) & (RANK[us][1] | RANK[us][2]))) {
-    result->add(ROOK_1ST); //at least one rook is protecting the back rank
-}
-
-while (rooks) {
-    int sq = pop(rooks);
-    
-
-    
-    U64 bitSq = BIT(sq);
-    if ((bitSq & RANK[us][7]) && (BIT(brd->get_sq(KING[them])) & BACKRANKS[us])) {
-        result->add(ROOK_7TH);
-    }
-
     
         //trapped rook pattern
         if (bitSq & ROOK_PATTERNS[us]) {
@@ -303,51 +315,6 @@ while (rooks) {
 
 }
 
-int eval_mate_threat(search_t * s, const U64 attacks_us, const int kpos_them, const bool us) {
-U64 kpos_bit = BIT(kpos_them);
-if ((kpos_bit & EDGE) == 0) {
-    return 0;
-}
-U64 mate_squares = 0;
-if (kpos_bit & CORNER) {
-    mate_squares = KING_MOVES[kpos_them];
-} else if (kpos_bit & RANK_1) {
-    mate_squares = UP1(kpos_bit);
-} else if (kpos_bit & RANK_8) {
-    mate_squares = DOWN1(kpos_bit);
-} else if (kpos_bit & FILE_A) {
-    mate_squares = RIGHT1(kpos_bit);
-} else if (kpos_bit & FILE_H) {
-    mate_squares = LEFT1(kpos_bit);
-}
-U64 target = mate_squares & attacks_us;
-if (target == 0) {
-    return 0;
-}
-board_t * brd = &s->brd;
-bool them = !us;
-int result = 10;
-do {
-    int sq = pop(target);
-    if (brd->is_attacked_excl_queen(sq, us)) {
-        result += 10;
-        if (!brd->is_attacked_excl_king(sq, them)) {
-            return 200;
-        }
-    }
-} while (target);
-return result;
-}
-
-
-
-    
-
-while (queens) {
-    int sq = pop(queens);  
-    result->add(10 - distance_rank(sq, kpos) - distance_file(sq, kpos));
-    
-}
 
 }
  */ 
