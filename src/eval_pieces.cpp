@@ -84,15 +84,6 @@ namespace pieces {
         }
     };
 
-    const int8_t TRAPPED[6] = {//piece type
-        0, 0, -50, -50, -80, -100
-    };
-
-    const int8_t STUCK[2][2] = {//rook, queen; rank 1 or 2
-        { -20, -40},
-        { -10, -20}
-    };
-
     const score_t BLOCKED_CENTER_PAWN[2] = {//them, us
         S(10, 0), S(-10, 0)
     };
@@ -249,23 +240,6 @@ namespace pieces {
                 if (brd->is_attacked_by_pawn(sq, !us)) {
                     sc->add(ATTACKED[pc]);
                     trace("ATTACKED", sq, sc);
-                }
-
-                /*
-                 * Trapped piece
-                 */
-
-                if (mob_count < 2) {
-                    int r_us = us == WHITE ? RANK(sq) : 7 - RANK(sq);
-                    if (r_us >= 4) {
-                        //trapped piece on their territory
-                        sc->add(mul256(TRAPPED[pc % 6], (r_us - 3) * 64));
-                        trace("TRAPPED", sq, sc);
-                    } else if (!is_minor && r_us <= 1) {
-                        //stuck major piece on 1st / 2nd rank, e.g. a rook in the corner
-                        sc->add(STUCK[pc == QUEEN[us]][r_us]);
-                        trace("STUCK", sq, sc);
-                    }
                 }
 
                 /*
