@@ -90,27 +90,11 @@ namespace pieces {
 
     const int8_t VBISHOPPAIR = 50;
     const score_t DEFENDED = S(5, 0);
-
-    const score_t MAJOR_7TH[2] = {//rook, queen
-        S(10, 20), S(5, 10)
-    };
-
-    const score_t SEMIOPEN_FILE[2] = {//rook, queen
-        S(10, 10), S(0, 0)
-    };
-
-    const score_t OPEN_FILE[2] = {//rook, queen
-        S(17, 17), S(5, 5)
-    };
-
-    const score_t CLOSED_FILE[2] = {//rook, queen
-        S(-5, -5), S(0, 0)
-    };
-
-    const score_t SUPPORTED_PASSER[2] = {//rook, queen
-        S(10, 20), S(5, 10)
-    };
-
+    const score_t ROOK_7TH = S(10, 20);
+    const score_t SEMIOPEN_FILE = S(10, 10);
+    const score_t OPEN_FILE = S(20, 15);
+    const score_t CLOSED_FILE = S(-5, -5);
+    const score_t SUPPORTED_PASSER = S(10, 20);
     const score_t CONNECTED_ROOKS(10, 20);
     const U64 PAT_BLOCKED_CENTER = BIT(d3) | BIT(e3) | BIT(d6) | BIT(e6);
     const U64 PAT_BACKRANKS[2] = {RANK_1 | RANK_2, RANK_7 | RANK_8};
@@ -137,17 +121,18 @@ namespace pieces {
 
             /*
              * Iterate through all pieces, skipping kings and pawns
-             * 
-             * If the evaluation was calculated on the previous ply and the board
-             * "skeleton" of pawns and kings placement did not change, 
-             * the score of the previous ply for this piece type can be re-used 
-             * unless the piece moved or was captured. 
-             * 
              */
 
             if (pc == WKING || pc == BPAWN) {
                 continue;
             }
+
+            /* 
+             * If the evaluation was calculated on the previous ply and the board
+             * "skeleton" of pawns and kings placement did not change, 
+             * the score of the previous ply for this piece type can be re-used 
+             * unless the piece moved or was captured. 
+             */
 
             if (equal_pawns && pc != prev_pc && pc != prev_cap) {
                 s->stack->pc_score[pc] = (s->stack - 1)->pc_score[pc];
@@ -157,6 +142,10 @@ namespace pieces {
                 result->add_us(s->stack->pc_score[pc], pc <= WKING);
                 continue;
             }
+
+            /*
+             * Calculate evaluation for this piece type
+             */
 
             s->stack->king_attack[pc] = 0;
             s->stack->pc_score[pc].clear();
@@ -171,6 +160,7 @@ namespace pieces {
             U64 moves;
             int ka_units = 0;
             int ka_squares = 0;
+            
             do {
                 int sq = pop(bb_pc);
                 bool defended = brd->is_attacked_by_pawn(sq, us);
@@ -188,7 +178,7 @@ namespace pieces {
                  * Discourage blocking center pawns on e2, d2, e7 or d7
                  */
 
-                if (bsq & PAT_BLOCKED_CENTER) {
+                if (bsq & PAT_BLOCKED_CENTER) {            
                     if (sq == e3 && brd->matrix[e2] == WPAWN) {
                         sc->add(BLOCKED_CENTER_PAWN[us]);
                         trace("BLOCKED CENTER PAWN", sq, sc);
@@ -201,7 +191,7 @@ namespace pieces {
                     } else if (sq == d6 && brd->matrix[d7] == BPAWN) {
                         sc->add(BLOCKED_CENTER_PAWN[!us]);
                         trace("BLOCKED CENTER PAWN", sq, sc);
-                    }
+                    }  
                 }
 
                 /*
@@ -227,8 +217,7 @@ namespace pieces {
                  */
 
                 U64 safe_moves = moves & pi->mob[us];
-                int mob_count = popcnt0(safe_moves);
-                sc->add(MOBILITY[mob_count]);
+                sc->add(MOBILITY[popcnt0(safe_moves)]);
                 trace("MOBILITY", sq, sc);
                 sc->add(ATTACKS[popcnt0(safe_moves & pi->attack[us])]);
                 trace("ATTACKS", sq, sc);
@@ -249,67 +238,62 @@ namespace pieces {
                 if (defended && is_minor) {
                     sc->add(DEFENDED);
                     trace("DEFENDED", sq, sc);
+                    
                     if (brd->is_outpost(sq, us)) {
                         sc->add(OUTPOST[pc == KNIGHT[us]][ISQ(sq, us)]);
                         trace("OUTPOST", sq, sc);
                     }
                 }
 
-                if (!is_minor) {
+                /*
+                 * Rooks on open files
+                 */
 
-                    bool ix = pc == QUEEN[us];
-
-                    /*
-                     * Major pieces on open files
-                     */
-
+                if (pc == ROOK[us]) {
                     if (!pi->is_open_file(sq, us)) {
-                        sc->add(CLOSED_FILE[ix]);
+                        sc->add(CLOSED_FILE);
                         trace("CLOSED FILE", sq, sc);
 
                         //Rule of Tarrasch, support passed pawns
                         if (moves & pi->passers & fill_up(bsq, us)) {
-                            sc->add(SUPPORTED_PASSER[ix]);
+                            sc->add(SUPPORTED_PASSER);
                             trace("SUPPORTED PASSER", sq, sc);
                         }
-
                     } else if (pi->is_open_file(sq, !us)) {
-                        sc->add(OPEN_FILE[ix]);
+                        sc->add(OPEN_FILE);
                         trace("OPEN FILE", sq, sc);
-                        if (pc == ROOK[us] && moves & bb_pc & FILES[FILE(sq)]) {
+                        if (moves & bb_pc & FILES[FILE(sq)]) {
                             sc->add(CONNECTED_ROOKS);
                             trace("CONNECTED ROOKS", sq, sc);
                         }
                     } else {
-                        sc->add(SEMIOPEN_FILE[ix]);
+                        sc->add(SEMIOPEN_FILE);
                         trace("SEMIOPEN FILE", sq, sc);
                     }
 
                     /*
-                     * Major pieces on 7th rank, only if their king is on rank
-                     * 7 or 8
+                     * 7th rank, only if their king is on rank 7 or 8
                      */
 
                     if ((bsq & RANK[us][7]) && (brd->bb[KING[!us]] & PAT_BACKRANKS[us])) {
-                        sc->add(MAJOR_7TH[ix]);
+                        sc->add(ROOK_7TH);
                     }
                 }
 
                 /*
-                 * King attacks info
+                 * King attacks info for later use in eval_king_attack
                  */
 
                 int king_attacks = popcnt0(moves & KING_ZONE[kpos[!us]]);
                 ka_units += (king_attacks > 0);
                 ka_squares += king_attacks;
-
             } while (bb_pc);
 
             /*
              * Bishop pair (skipped in closed positions)
              */
 
-            if ((pc == WBISHOP || pc == BBISHOP) && brd->has_bishop_pair(us)
+            if (pc == BISHOP[us] && brd->has_bishop_pair(us)
                     && (pi->flags & pawn_table::FLAG_CLOSED_CENTER) == 0) {
                 sc->add(VBISHOPPAIR);
                 trace("BISHOP PAIR", -1, sc);

@@ -48,18 +48,12 @@ namespace pawns {
 #endif
 
     uint8_t PFLAG_CLOSED_CENTER = 1;
-
-    /*
-     * Pawn structure bonuses
-     */
-
     const score_t ISOLATED[2] = {S(-25, -20), S(-15, -15)}; //open, closed file
-
     const score_t WEAK[2] = {S(-15, -15), S(-10, -10)}; //open, closed file
-
     const score_t DOUBLED = S(-10, -20);
-    
     const score_t BLOCKED_CENTER_PAWN = S(-15, 0);
+    const int PAWN_WIDTH_EG = 5;
+    const int KING_ACTIVITY = 5; //endgame score for king attacking or defending pawns
 
     const score_t CANDIDATE[8] = {//rank
         S(0, 0), S(5, 10), S(5, 10), S(10, 20),
@@ -69,19 +63,6 @@ namespace pawns {
     const int DUO[8] = {//or defended, indexed by rank 
         0, 0, 0, 0, 5, 25, 45, 0
     };
-
-    const int PAWN_WIDTH_EG = 5;
-
-
-    /*
-     * King x pawns bonus
-     */
-
-    const int KING_ACTIVITY = 5; //endgame score for king attacking or defending pawns
-
-    /*
-     * King shelter, storm and attack units for later use in king attack eval.
-     */
 
     // attack units regarding king position
     const int8_t SHELTER_KPOS[64] = {
@@ -95,25 +76,12 @@ namespace pawns {
         0, 0, 1, 2, 2, 1, 0, 0 //a1..h1
     };
 
-    // attack units for having open files on our king
-    const int8_t SHELTER_OPEN_FILES[4] = {//amount of open files
-        -1, 1, 2, 3
-    };
-
-    //attack units for open file on the edge (e.g. open h-line)
+    const int8_t SHELTER_OPEN_FILES[4] = { -1, 1, 2, 3 };
     const int8_t SHELTER_OPEN_EDGE_FILE = 1;
-
-    //attack units for having the option to safely castle kingside
     const int8_t SHELTER_CASTLING_KINGSIDE = -3;
-
-    //attack units for having the right to safely castle queenside
     const int8_t SHELTER_CASTLING_QUEENSIDE = -2;
-    
     const int8_t CASTLED_KINGSIDE = -4;
-    
     const int8_t CASTLED_QUEENSIDE = -3;
-    
-    
 
     /**
      * Main pawns and kings evaluation function
@@ -367,7 +335,6 @@ namespace pawns {
         e->score.set(pawn_score[WHITE]);
         e->score.sub(pawn_score[BLACK]);
         e->key = brd->stack->pawn_hash;
-
         return &e->score;
     }
 
@@ -430,6 +397,7 @@ namespace pawns {
 
                 //get defenders (them) and supporters (us)
                 U64 defend = attacks & sd->brd.all(them);
+                
                 if (defend) {
                     U64 support = attacks & sd->brd.all(us);
                     if (support == 0 || (is_1(support) && gt_1(defend))) {
@@ -441,6 +409,7 @@ namespace pawns {
                 to += step;
             }
         }
+        
         if (has_imbalance(sd, them)) {
             if (has_major_imbalance(sd)) {
                 result->mul256(128);
@@ -450,5 +419,4 @@ namespace pawns {
         }
         return result;
     }
-
 }
