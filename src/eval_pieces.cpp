@@ -108,6 +108,9 @@ namespace pieces {
         score_t * result = &s->stack->pc_score[0];
         result->clear();
         board_t * brd = &s->brd;
+        if (s->stack->mt->phase == 16) {
+            return result;
+        }
         const bool equal_pawns = brd->ply > 0
                 && brd->stack->pawn_hash == (brd->stack - 1)->pawn_hash
                 && score::is_valid((s->stack - 1)->eval_result);
@@ -160,7 +163,7 @@ namespace pieces {
             U64 moves;
             int ka_units = 0;
             int ka_squares = 0;
-            
+
             do {
                 int sq = pop(bb_pc);
                 bool defended = brd->is_attacked_by_pawn(sq, us);
@@ -178,7 +181,7 @@ namespace pieces {
                  * Discourage blocking center pawns on e2, d2, e7 or d7
                  */
 
-                if (bsq & PAT_BLOCKED_CENTER) {            
+                if (bsq & PAT_BLOCKED_CENTER) {
                     if (sq == e3 && brd->matrix[e2] == WPAWN) {
                         sc->add(BLOCKED_CENTER_PAWN[us]);
                         trace("BLOCKED CENTER PAWN", sq, sc);
@@ -191,7 +194,7 @@ namespace pieces {
                     } else if (sq == d6 && brd->matrix[d7] == BPAWN) {
                         sc->add(BLOCKED_CENTER_PAWN[!us]);
                         trace("BLOCKED CENTER PAWN", sq, sc);
-                    }  
+                    }
                 }
 
                 /*
@@ -238,7 +241,7 @@ namespace pieces {
                 if (defended && is_minor) {
                     sc->add(DEFENDED);
                     trace("DEFENDED", sq, sc);
-                    
+
                     if (brd->is_outpost(sq, us)) {
                         sc->add(OUTPOST[pc == KNIGHT[us]][ISQ(sq, us)]);
                         trace("OUTPOST", sq, sc);

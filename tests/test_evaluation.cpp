@@ -107,7 +107,7 @@ void testEvaluationSuite() {
     testEval(3002, "8/P3K1kp/8/8/8/8/8/8 w - - 1 1", VROOK, score::WIN / 4); //unstoppable pawn
     testEval(3003, "7K/8/k1P5/7p/8/8/8/8 w - - 0 1", 0, VPAWN); //famous study by Réti
     testEval(3004, "6k1/p4ppp/8/8/8/8/PP3PPP/6K1 w - - 0 1", VPAWN + BONUS, VPAWN + 4 * BONUS); //isolated pawn
-    testEval(3005, "2k5/1pp5/8/8/3PP3/4K3/8/8 w - - 0 1", 3 * BONUS, 7 * BONUS); //piece square tables
+    testEval(3005, "2k5/1pp5/8/8/3PP3/4K3/8/8 w - - 0 1", 3 * BONUS, 9 * BONUS); //piece square tables
     testEval(3006, "8/5pk1/8/4K3/8/8/5P2/8 w - - 0 1", BONUS, HALF_PAWN); //piece square tables
     testEval(3007, "4k3/4pp2/4p3/8/8/8/3PPP2/4K3 w - - 0 1", BONUS, QUARTER_PAWN); //doubled pawn
     testEval(3008, "k7/3p4/4p3/4P3/8/3p4/3P1P2/7K w - - 0 1", -BONUS, BONUS); //backward pawns
