@@ -143,7 +143,7 @@ int main(int argc, char** argv) {
     clock_t begin;
     magic::init();
     global_engine = engine::instance();
-    global_engine->set_wild(17);
+    global_engine->set_option("wild", 17);
     uci::silent(true);
     begin = clock();
     test_positions();

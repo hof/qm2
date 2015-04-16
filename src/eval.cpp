@@ -379,7 +379,7 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     if ((sd->stack->pt->flags & pawn_table::FLAG_CLOSED_CENTER) != 0) {
         attack_score = attack_score / 2;
     }
-
+    
     /*
      * 3. Calculate the total piece attack score
      */

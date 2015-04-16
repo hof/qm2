@@ -43,7 +43,8 @@ private:
     bool _ponder;
     move_t _result_move;
     int _result_score;
-    int _wild;
+    int _opt_wild;
+    int _opt_king_attack_base;
     
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
@@ -109,8 +110,12 @@ public:
         _result_score = score;
     }
     
-    void set_wild(int wild) {
-        _wild = wild;
+    void set_option(std::string name, int value) {
+        if (name == "wild") {
+            _opt_wild = value;
+        } else if (name == "king_attack_base") {
+            _opt_king_attack_base = value;
+        }
     }
 
     int get_score() {
@@ -134,7 +139,7 @@ namespace engine {
     void new_game(std::string fen);
     void set_position(std::string fen);
     void set_ponder(bool ponder);
-    void set_wild(int wild);
+    void set_option(std::string name, int value);
     bool is_stopped();
     bool is_ponder();
     game_t * settings();

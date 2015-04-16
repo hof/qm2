@@ -251,10 +251,12 @@ namespace pieces {
                 }
 
                 /*
-                 * Rooks on open files
+                 * Rooks
                  */
 
                 if (pc == ROOK[us]) {
+                    
+                    //Open / closed files
                     if (!pi->is_open_file(sq, us)) {
                         sc->add(CLOSED_FILE);
                         trace("CLOSED FILE", sq, sc);
@@ -276,10 +278,7 @@ namespace pieces {
                         trace("SEMIOPEN FILE", sq, sc);
                     }
 
-                    /*
-                     * 7th rank, only if their king is on rank 7 or 8
-                     */
-
+                    //7th rank (if their king is on 7 or 8th rank)
                     if ((bsq & RANK[us][7]) && (brd->bb[KING[!us]] & PAT_BACKRANKS[us])) {
                         sc->add(ROOK_7TH);
                     }

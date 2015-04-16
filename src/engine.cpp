@@ -63,8 +63,8 @@ namespace engine {
         _engine.set_ponder(ponder);
     }
     
-    void set_wild(int wild) {
-        _engine.set_wild(wild);
+    void set_option(std::string name, int value) {
+        _engine.set_option(name, value);
     }
 
     bool is_stopped() {
@@ -96,7 +96,8 @@ engine_t::engine_t() : threads_t() {
     _result_move.clear();
     _result_score = 0;
     _game.clear();
-    _wild = 0;
+    _opt_wild = 0;
+    _opt_king_attack_base = 196;
 }
 
 /**
@@ -131,7 +132,7 @@ void * engine_t::_think(void * engine_p) {
     //initialize
     engine_t * engine = (engine_t*) engine_p;
     search_t * s;
-    if (engine->_wild == 17) {
+    if (engine->_opt_wild == 17) {
         s = new w17_search_t(engine->_root_fen.c_str(), engine->settings());
     } else {
         s = new search_t(engine->_root_fen.c_str(), engine->settings());

@@ -237,12 +237,14 @@ namespace uci {
                         } else if (name == "Wild") {
                             handled = true;
                             if (value == "losers" || value == "17") {
-                                engine::set_wild(17);
+                                engine::set_option("wild", 17);
                             } else if (value == "chess" || value == "0" || value == "standard" || value == "default") {
-                                engine::set_wild(0);
+                                engine::set_option("wild", 0);
                             } else {
                                 send_unknown_option(name + " " + value);
                             }
+                        } else if (name == "King_Attack_Base") {
+                            engine::set_option("king_attack_base", atoi<int>(value));
                         } else if (name == "UCI_Opponent") {
                             //value GM 2800 human Gary Kasparow"
                             //value none none computer Shredder"
@@ -331,6 +333,7 @@ namespace uci {
         out("option name UCI_Opponent type string");
         out("option name UCI_Chess960 type check default false");
         out("option name UCI_LosersChess type check default false");
+        out("option name King_Attack_Base type spin default 192 min 0 max 512");
     }
 
     void send_ok() {
