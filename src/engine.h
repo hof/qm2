@@ -45,6 +45,7 @@ private:
     int _result_score;
     int _opt_wild;
     int _opt_king_attack_base;
+    int _opt_king_attack_pieces;
     
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
@@ -115,6 +116,8 @@ public:
             _opt_wild = value;
         } else if (name == "king_attack_base") {
             _opt_king_attack_base = value;
+        } else if (name == "king_attack_pieces") {
+            _opt_king_attack_pieces = value;
         }
     }
 

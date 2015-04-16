@@ -99,6 +99,7 @@ public:
     std::string book_name;
     int wild;
     int king_attack_base;
+    int king_attack_pieces;
 
     search_t(const char * fen, game_t * g = NULL) {
         wild = 0;

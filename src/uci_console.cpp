@@ -253,6 +253,9 @@ namespace uci {
                         } else if (name == "KingAttackBase") {
                             handled = true;
                             engine::set_option("king_attack_base", atoi<int>(value));
+                        } else if (name == "KingAttackPieces") {
+                            handled = true;
+                            engine::set_option("king_attack_pieces", atoi<int>(value));
                         } else if (name == "UCI_Opponent") {
                             //value GM 2800 human Gary Kasparow"
                             //value none none computer Shredder"
@@ -331,6 +334,7 @@ namespace uci {
         out("option name UCI_Chess960 type check default false");
         out("option name Wild type combo default 0 var standard var losers");
         out("option name KingAttackBase type spin default 192 min 0 max 512");
+        out("option name KingAttackPieces type spin default 16 min 0 max 512");
     }
 
     void send_ok() {
