@@ -98,8 +98,6 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 for (move_t * move = list->current; move != list->last; move++) {
                     if (s->wild == 17) {
                         move->score = s->brd.is_attacked(move->tsq, move->capture <= WKING);
-                    } else if (depth > 0) {
-                        move->score = brd->see(move);
                     } else {
                         move->score = brd->mvvlva(move);
                     }
@@ -193,7 +191,6 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                     list->stage = QUIET_MOVES;
                     return result;
                 }
-
             }
         case QUIET_MOVES:
             if (do_quiets) {

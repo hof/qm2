@@ -516,6 +516,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     stack->pv_count = 0;
     sel_depth = MAX(brd.ply, sel_depth);
+    stack->best_move.clear();
 
     /*
      * If no more depth remaining, return quiescence value
@@ -587,7 +588,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
     const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE;
-    
+
     //null move pruning
     if (DO_NULLMOVE && do_prune_node && eval >= beta && depth > 1 && brd.has_pieces(brd.stack->wtm)) {
         forward();
@@ -621,11 +622,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
     /*
      * Internal iterative deepening (IID)
      */
-
-    stack->best_move.clear();
     if (depth >= 6 && tt_move == 0) {
         skip_null = pv;
-        int R = pv? 2 : 4;
+        int R = pv ? 2 : 4;
         int iid_score = pvs(alpha, beta, depth - R);
         if (score::is_mate(iid_score)) {
             return iid_score;
@@ -648,7 +647,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
     //prepare and do the loop
     skip_null = false;
     int best = -score::INF;
-    stack->best_move.clear();
     int searched_moves = 0;
     int score_max = score::MATE - brd.ply - 1;
     do {
@@ -673,12 +671,12 @@ int search_t::pvs(int alpha, int beta, int depth) {
             pruned_nodes++;
             continue;
         }
-        
+
         /*
          * Move Extensions
          */
 
-        int extend = extend_move(move, gives_check, depth, searched_moves==0);
+        int extend = extend_move(move, gives_check, depth, searched_moves == 0);
 
         /*
          * Late Move Reductions (LMR) 
@@ -823,24 +821,17 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     if (!move) {
         if (in_check) {
             return -score::MATE + brd.ply;
-        } else if (depth == 0) {
-            return draw_score();
-        } else {
-            return eval;
         }
+        return depth == 0 ? draw_score() : eval;
+    }
+    if (eval > alpha && !in_check) {
+        alpha = eval;
     }
 
     /*
      * Moves loop
      */
 
-    //prepare
-    stack->tt_key = brd.stack->tt_key;
-    if (eval > alpha && !in_check) {
-        alpha = eval;
-    }
-
-    //do the loop 
     do {
 
         /*
@@ -848,8 +839,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
-        bool dangerous = depth < 0 || in_check || gives_check
-                || move->capture || move->promotion || move->castle;
+        bool dangerous = depth < 0 || move->capture || in_check || gives_check
+                || move->promotion || move->castle;
 
         //prune all quiet moves 
         if (!dangerous) {
@@ -858,9 +849,10 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             continue;
         }
 
-        //prune moves with negative SEE
         bool do_prune = !in_check && !gives_check && brd.min_gain(move) < 0
-                && (stack->mt->phase < 10 || !brd.captures_last_piece(move));
+                && !brd.captures_last_piece(move);
+
+        //prune moves with negative SEE
         if (do_prune && brd.see(move) < 0) {
             pruned_nodes++;
             continue;

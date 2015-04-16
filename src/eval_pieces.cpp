@@ -140,8 +140,10 @@ namespace pieces {
             if (equal_pawns && pc != prev_pc && pc != prev_cap) {
                 s->stack->pc_score[pc] = (s->stack - 1)->pc_score[pc];
                 s->stack->king_attack[pc] = (s->stack - 1)->king_attack[pc];
-                assert(score::is_valid(s->stack->pc_score[pc]));
-                assert(s->stack->king_attack[pc] >= 0 && s->stack->king_attack[pc] <= 127);
+                assert(score::is_valid(s->stack->pc_score[pc].mg));
+                assert(score::is_valid(s->stack->pc_score[pc].eg));
+                assert(s->stack->king_attack[pc] >= 0);
+                assert(s->stack->king_attack[pc] <= 127);
                 result->add_us(s->stack->pc_score[pc], pc <= WKING);
                 continue;
             }

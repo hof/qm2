@@ -195,9 +195,8 @@ public:
      * @return boolean true if move captures the last piece left
      */
     bool captures_last_piece(move_t * move) {
-        bool us = move->piece <= WKING;
-        return move->capture != EMPTY && move->capture != WPAWN 
-                && move->capture != BPAWN && is_1(all_pieces(!us));
+        bool them = move->piece > WKING;
+        return move->capture > PAWN[them] && has_one_piece(them);
     }
 
     /**
@@ -224,7 +223,7 @@ public:
      * @return true if side to move has only one piece left
      */
     bool has_one_piece(bool us) {
-        return is_1(bb[ROOK[us]] | bb[QUEEN[us]] | bb[KNIGHT[us]] | bb[BISHOP[us]]);
+        return is_1(all_pieces(us));
     }
 
     /**

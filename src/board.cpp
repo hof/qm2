@@ -766,7 +766,8 @@ int board_t::max_gain(move_t * move) {
 }
 
 int board_t::min_gain(move_t * move) {
-    if (move->piece == WKING || move->piece == BKING) {
+    if (move->piece == WKING || move->piece == BKING 
+            || move->piece == WPAWN || move->piece == BPAWN) {
         return board::PVAL[move->capture];
     }
     return board::PVAL[move->capture] - board::PVAL[move->piece];
