@@ -22,6 +22,8 @@
 
 #include "uci_console.h"
 
+#define DO_LOG
+
 namespace uci {
 
     const std::string start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -243,31 +245,25 @@ namespace uci {
                             } else {
                                 send_unknown_option(name + " " + value);
                             }
-                        } else if (name == "King_Attack_Base") {
+                        } else if (name == "UCI_Chess960") {
+                            handled = true;
+                            if (value == "true" || value == "1") {
+                                engine::set_option("wild", 22);
+                            }
+                        } else if (name == "KingAttackBase") {
+                            handled = true;
                             engine::set_option("king_attack_base", atoi<int>(value));
                         } else if (name == "UCI_Opponent") {
                             //value GM 2800 human Gary Kasparow"
                             //value none none computer Shredder"
-                            /*
-                            _opponentString = value;
-                            TInputParser optionParser(_opponentString);
-                            std::string optionToken;
-
-                            if (optionParser >> optionToken) { // title
-                                _opponent.Title = optionToken;
-                            }
-                            if (optionParser >> optionToken) { //rating
-                                _opponent.Rating = optionToken == "none" ? 0 : fromString<int>(optionToken);
-                            }
-                            if (optionParser >> optionToken) { //computer or human
-                                _opponent.Computer = optionToken == "computer";
-                            }
-                            if (optionParser >> optionToken) { //name
-                                _opponent.Name = optionToken;
-                            }
-                            engine()->setOpponent(&_opponent);
                             handled = true;
-                             */
+                            //todo: handle e.g. opponent rating to set draw contempt
+                        } else if (name == "Ponder") {
+                            handled = true;
+                        } else if (name == "UCI_AnalyseMode") {
+                            handled = true;
+                        } else if (name == "OwnBook") {
+                            handled = true;
                         }
                     }
                 } else {
@@ -321,19 +317,20 @@ namespace uci {
     }
 
     void send_id() {
-        out("id name Maxima 2.0 " + std::string(MAXIMA_REVISION));
+        out("id name Maxima 2.0");
         out("id author Hermen Reitsma and Erik van het Hof");
     }
 
     void send_options() {
+        out("option name Revision type string default " + std::string(MAXIMA_REVISION));
         out("option name Hash type spin default 128 min 0 max 1024");
         out("option name Ponder type check default true");
         out("option name OwnBook type check default true");
         out("option name UCI_AnalyseMode type check default false");
         out("option name UCI_Opponent type string");
         out("option name UCI_Chess960 type check default false");
-        out("option name UCI_LosersChess type check default false");
-        out("option name King_Attack_Base type spin default 192 min 0 max 512");
+        out("option name Wild type combo default 0 var standard var losers");
+        out("option name KingAttackBase type spin default 192 min 0 max 512");
     }
 
     void send_ok() {

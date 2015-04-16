@@ -138,6 +138,9 @@ void * engine_t::_think(void * engine_p) {
         s = new search_t(engine->_root_fen.c_str(), engine->settings());
     }
     
+    //copy parameters
+    s->king_attack_base = engine->_opt_king_attack_base;
+    
     //think
     s->go();
     

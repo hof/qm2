@@ -395,7 +395,7 @@ score_t * eval_king_attack(search_t * sd, bool us) {
         attack_strength += 1 + ((n + s) * KING_ATTACK_UNIT[pc]) / 2;
     }
 
-    int attack_mul = 192 + attack_strength * 16;
+    int attack_mul = sd->king_attack_base + attack_strength * 16;
     attack_score = (attack_mul * attack_score) / 256;
     result->set(attack_score, 0);
     return result;
