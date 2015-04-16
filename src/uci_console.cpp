@@ -22,7 +22,7 @@
 
 #include "uci_console.h"
 
-#define DO_LOG
+//#define DO_LOG
 
 namespace uci {
 
