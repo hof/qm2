@@ -45,10 +45,10 @@ void init_pst() {
         PST[BBISHOP][sq].set(PST_BISHOP_MG[sq], PST_BISHOP_EG[sq]);
         PST[BROOK][sq].set(PST_ROOK_MG[sq], PST_ROOK_EG[sq]);
         PST[BQUEEN][sq].set(PST_QUEEN_MG[sq], PST_QUEEN_EG[sq]);
-        PST[BKING][sq].set(PST_KING_MG[sq], PST_KING_EG[sq]);       
+        PST[BKING][sq].set(PST_KING_MG[sq], PST_KING_EG[sq]);
         int fsq = FLIP_SQUARE(sq);
         for (int pc = WPAWN; pc <= WKING; pc++) {
-            PST[pc][fsq].set(PST[pc+6][sq]);
+            PST[pc][fsq].set(PST[pc + 6][sq]);
         }
     }
     assert(PST[WPAWN][e5].equals(PST[BPAWN][e4]));
@@ -290,7 +290,8 @@ int eval_material(search_t * s) {
      * Store result in material table and return
      */
     e->key = brd->stack->material_hash;
-    e->score = result.get(phase);;
+    e->score = result.get(phase);
+    ;
     e->flags = flags;
     e->phase = phase;
     return e->score;
@@ -309,31 +310,67 @@ const int16_t KING_SHELTER[24] = {//structural shelter (pawns & kings)
     115, 120, 125, 130, 135, 140, 145, 150
 };
 
+int eval_mate_threat_q(search_t * s, const U64 attacks_us, const int kpos_them, const bool us) {
+    U64 kpos_bit = BIT(kpos_them);
+    if ((kpos_bit & EDGE) == 0) {
+        return 0;
+    }
+    U64 mate_squares = 0;
+    if (kpos_bit & CORNER) {
+        mate_squares = KING_MOVES[kpos_them];
+    } else if (kpos_bit & RANK_1) {
+        mate_squares = UP1(kpos_bit);
+    } else if (kpos_bit & RANK_8) {
+        mate_squares = DOWN1(kpos_bit);
+    } else if (kpos_bit & FILE_A) {
+        mate_squares = RIGHT1(kpos_bit);
+    } else if (kpos_bit & FILE_H) {
+        mate_squares = LEFT1(kpos_bit);
+    }
+    U64 target = mate_squares & attacks_us;
+    if (target == 0) {
+        return 0;
+    }
+    board_t * brd = &s->brd;
+    bool them = !us;
+    int result = 10;
+    do {
+        int sq = pop(target);
+        if (brd->is_attacked_excl_queen(sq, us)) {
+            result += 10;
+            if (!brd->is_attacked_excl_king(sq, them)) {
+                return 200;
+            }
+        }
+    } while (target);
+    return result;
+}
+
 score_t * eval_king_attack(search_t * sd, bool us) {
     int pc = KING[us];
     score_t * result = &sd->stack->pc_score[pc];
     result->clear();
-    
     board_t * brd = &sd->brd;
+    
     if (us == WHITE && (sd->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_W) == 0) {
         return result;
-    }
+    } 
+    
     if (us == BLACK && (sd->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_B) == 0) {
         return result;
     }
-
+    
     /*
      * 1. Shelter score
      */
-    
+
     int attack_score = 0;
     int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + sd->stack->pt->king_attack[us]);
     attack_score = KING_SHELTER[shelter_ix];
-    
+
     if ((RANK[us][8] & brd->bb[ROOK[!us]]) == 0) { //no rook protecting their back rank
         attack_score += 20;
     }
-
 
     /*
      * 2. Reduce the shelter score for closed positions
@@ -355,49 +392,12 @@ score_t * eval_king_attack(search_t * sd, bool us) {
         }
         int n = KA_UNITS(attack);
         int s = KA_SQUARES(attack) - n;
-        attack_strength += 1 + ((n+s) * KING_ATTACK_UNIT[pc]) / 2;
+        attack_strength += 1 + ((n + s) * KING_ATTACK_UNIT[pc]) / 2;
     }
-    
+
     int attack_mul = 192 + attack_strength * 16;
     attack_score = (attack_mul * attack_score) / 256;
     result->set(attack_score, 0);
     return result;
 }
 
-/* todo: include this in king attack evaluation
-    int eval_mate_threat_q(search_t * s, const U64 attacks_us, const int kpos_them, const bool us) {
-        U64 kpos_bit = BIT(kpos_them);
-        if ((kpos_bit & EDGE) == 0) {
-            return 0;
-        }
-        U64 mate_squares = 0;
-        if (kpos_bit & CORNER) {
-            mate_squares = KING_MOVES[kpos_them];
-        } else if (kpos_bit & RANK_1) {
-            mate_squares = UP1(kpos_bit);
-        } else if (kpos_bit & RANK_8) {
-            mate_squares = DOWN1(kpos_bit);
-        } else if (kpos_bit & FILE_A) {
-            mate_squares = RIGHT1(kpos_bit);
-        } else if (kpos_bit & FILE_H) {
-            mate_squares = LEFT1(kpos_bit);
-        }
-        U64 target = mate_squares & attacks_us;
-        if (target == 0) {
-            return 0;
-        }
-        board_t * brd = &s->brd;
-        bool them = !us;
-        int result = 10;
-        do {
-            int sq = pop(target);
-            if (brd->is_attacked_excl_queen(sq, us)) {
-                result += 10;
-                if (!brd->is_attacked_excl_king(sq, them)) {
-                    return 200;
-                }
-            }
-        } while (target);
-        return result;
-    }
-     * */

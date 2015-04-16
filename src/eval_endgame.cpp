@@ -106,13 +106,13 @@ namespace eg {
      */
     int most_advanced_pawn_steps(search_t * s, const bool us) {
         int psq = us == WHITE ? bsr(s->brd.bb[WPAWN]) : bsf(s->brd.bb[BPAWN]);
-        int steps = us == WHITE? 7 - RANK(psq) : RANK(psq);
+        int steps = us == WHITE ? 7 - RANK(psq) : RANK(psq);
         bool is_passed = s->stack->pt->passers & BIT(psq);
         bool utm = s->brd.stack->wtm == (us == WHITE);
-        steps += !is_passed + !utm; 
+        steps += !is_passed + !utm;
         return steps;
     }
-    
+
     /**
      * Returns the amount of steps to promotion of our most advanced passed pawn
      * @param s search object
@@ -125,9 +125,9 @@ namespace eg {
             return 0;
         }
         int psq = us == WHITE ? bsr(passers) : bsf(passers);
-        int steps = us == WHITE? 7 - RANK(psq) : RANK(psq);
+        int steps = us == WHITE ? 7 - RANK(psq) : RANK(psq);
         bool utm = s->brd.stack->wtm == (us == WHITE);
-        steps += !utm; 
+        steps += !utm;
         return steps;
     }
 
@@ -388,7 +388,7 @@ namespace eg {
         if (steps > 0) {
             return score + win(us, (1 + steps));
         }
-        
+
         //KPSK -> case 2: any pawn defending another pawn wins the game
         if (s->brd.pawn_attacks(us) & s->brd.bb[PAWN[us]]) {
             return score + win(us, 8);
@@ -401,7 +401,7 @@ namespace eg {
      */
     const uint8_t UNSTOPPABLE_PAWN[8] = {0, 200, 150, 100, 50, 25, 25, 25};
     const uint8_t BEST_PASSER[8] = {0, 80, 60, 40, 20, 0, 0, 0};
-    const int16_t UNSTOPPABLE_BONUS[2] = { -500, 500 };
+    const int16_t UNSTOPPABLE_BONUS[2] = {-500, 500};
 
     int pawns_vs_pawns(search_t * s, int score, const bool us) {
         assert(eg_test(s, 1, 0, 1, 0, us));
@@ -411,18 +411,18 @@ namespace eg {
         int forw_us = most_advanced_pawn_steps(s, us);
         int forw_tm = most_advanced_pawn_steps(s, them);
         assert(up_us < 8 && up_us < 8 && up_us >= 0 && up_tm >= 0);
-        
+
         //case 1: unstoppable and at least two tempos sooner to promote
         if (up_us && !up_tm && up_us < forw_tm + 2) {
             return score + UNSTOPPABLE_BONUS[us];
-        } 
-        
+        }
+
         //case 2: reversed case 1 (they promote much sooner)
         if (up_tm && !up_us && up_tm < forw_us + 2) {
             return score - UNSTOPPABLE_BONUS[us];
-        } 
-        
-        //case 3: all other cases are fuzzy - just reward unstoppable and most advanced passers
+        }
+
+        //case 3: all other cases are fuzzy (?) - just reward unstoppable and most advanced passers
         int pass_us = most_advanced_passer_steps(s, us);
         int pass_tm = most_advanced_passer_steps(s, them);
         assert(pass_us < 8 && pass_tm < 8 && pass_us >= 0 && pass_tm >= 0);
@@ -582,7 +582,8 @@ namespace eg {
         if (s->brd.is_eg(OPP_BISHOPS, us)) {
             return opp_bishops(s, score, us);
         } else if (s->brd.is_eg(KQPSKQPS, us)) {
-            return mul256(score, 128 + 16 * s->brd.count(PAWN[us]));;
+            return mul256(score, 128 + 16 * s->brd.count(PAWN[us]));
+            ;
         }
         return score;
     }

@@ -74,6 +74,7 @@ void test_fen(std::string fen, std::string move, int expected_score) {
 void test_positions() {
     test_fen("r7/3PK3/8/3k1p2/8/8/8/2R5 w - - 0 1", "d7d8q", 300);
     test_fen("8/1p4kP/5pP1/3p4/8/4P3/7K/8 w - - 0 1", "e3e4", 300); 
+    test_fen("8/6pp/pnp1p3/5k2/PP3P2/2NK2PP/8/8 w - - 1 3", "d3d4", 50);
     test_fen("8/k1b5/P4p2/1Pp2p1p/K1P2P1P/8/3B4/8 w - - 0 1", "b5b6", 300);
     test_fen("8/7p/5k2/5p2/p1p2P2/Pr1pPK2/1P1R3P/8 b - - 0 1", "b3b2", 300);
     test_fen("8/3P1k2/p4b2/1p3R2/3r3p/P4P1B/1KP5/8 b - - 0 1", "d4d5", -50);
