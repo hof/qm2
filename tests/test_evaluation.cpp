@@ -115,7 +115,7 @@ void testEvaluationSuite() {
     testEval(3010, "8/p1pp1k2/8/2P5/PP6/4K3/8/8 w - - 0 1", 2 * BONUS, VPAWN); //better candidate
     testEval(3011, "8/6kP/4K1P1/5p2/8/4P3/1p6/8 w - - 0 9", -VQUEEN, -VKNIGHT); //unstoppable passer
     testEval(3012, "k7/P5pp/1P6/8/8/8/7P/7K w - - 0 1", VPAWN + 5 * BONUS, VKNIGHT); //defended passer on 7th
-    testEval(3013, "8/6kP/6P1/8/5p2/1K6/8/8 w - - 0 9", VPAWN + 5 * BONUS, VKNIGHT); //defended passer on 7th
+    testEval(3013, "8/6kP/6P1/8/5p2/1K6/8/8 w - - 0 9", VPAWN + 3 * BONUS, VKNIGHT); //defended passer on 7th
 
 
     // case 4:  ----- pieces vs ----- ------

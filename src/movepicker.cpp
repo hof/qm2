@@ -29,19 +29,40 @@
 #include "movepicker.h"
 #include "search.h"
 
+/**
+ * Pops the move with highest score above a minimum from the move list
+ * @param s search object
+ * @param list move list
+ * @return best move on the list or null
+ */
 move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
     while (list->first != list->last) {
-        int best_score = list->minimum_score - 1;
+        
+        int best_score = list->minimum_score - 1;    
         move_t * best = NULL;
+        
+        //pick move with the highest score
         for (move_t * move = list->first; move != list->last; move++) {
             if (move->score > best_score) {
                 best_score = move->score;
                 best = move;
             }
         }
+        
         if (!best) {
             return NULL;
         }
+        
+        //filter negative see if still in "good captures" phase
+        if (list->minimum_score == 0 && best->capture && s->brd.min_gain(best) < 0) {
+            int see = s->brd.see(best);
+            if (see < 0) {
+                best->score = see;
+                continue;
+            }
+        }
+        
+        //legality check just before returning the move
         list->best->set(best);
         best->set(--list->last);
         if (!s->stack->tt_move.equals(list->best)
@@ -49,10 +70,18 @@ move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
                 && s->brd.legal(list->best)) {
             return list->best;
         }
+        
     };
     return NULL;
 }
 
+/**
+ * Gets the first move from the list, by clearing the search list and calling
+ * "next"
+ * @param s search object
+ * @param depth remaining search depth
+ * @return first move or null
+ */
 move_t * move_picker_t::first(search_t * s, int depth) {
     move::list_t * list = &s->stack->move_list;
     list->clear();
@@ -60,6 +89,13 @@ move_t * move_picker_t::first(search_t * s, int depth) {
     return next(s, depth);
 }
 
+/**
+ * Gets the next available move. Generates moves "on the fly" depending on 
+ * the current stage
+ * @param s search object
+ * @param depth remaining search depth
+ * @return 
+ */
 move_t * move_picker_t::next(search_t * s, int depth) {
 
     /*
