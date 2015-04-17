@@ -30,7 +30,7 @@
 
 #define KA_ENCODE(p,s) (MIN(p,3)|(MIN(s,15)<<2))
 #define KA_UNITS(k) ((k) & 3)
-#define KA_SQUARES(k) ((k) >> 2)
+#define KD_UNITS(k) ((k) >> 2)
 
 namespace score {
 

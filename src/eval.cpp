@@ -297,19 +297,6 @@ int eval_material(search_t * s) {
     return e->score;
 }
 
-const int8_t KING_ATTACK_OFFSET = 8; //perfectly castled king -9 units
-
-const int8_t KING_ATTACK_UNIT[BKING + 1] = {
-    //  x, p, n, b, r, q, k, p, n, b, r, q, k
-    /**/0, 0, 1, 1, 2, 4, 0, 0, 1, 1, 2, 4, 0
-};
-
-const int16_t KING_SHELTER[24] = {//structural shelter (pawns & kings)
-    0, 15, 30, 40, 50, 60, 65, 70,
-    75, 80, 85, 90, 95, 100, 105, 110,
-    115, 120, 125, 130, 135, 140, 145, 150
-};
-
 int eval_mate_threat_q(search_t * s, const U64 attacks_us, const int kpos_them, const bool us) {
     U64 kpos_bit = BIT(kpos_them);
     if ((kpos_bit & EDGE) == 0) {
@@ -346,20 +333,45 @@ int eval_mate_threat_q(search_t * s, const U64 attacks_us, const int kpos_them, 
     return result;
 }
 
+int max_attack = 0;
+
+const int8_t KING_ATTACK_OFFSET = 8; //perfectly castled king -9 units
+
+const int8_t KING_ATTACK_UNIT[BKING + 1] = {
+    //  x, p, n, b, r, q, k, p, n, b, r, q, k
+    /**/0, 0, 1, 1, 2, 4, 0, 0, 1, 1, 2, 4, 0
+};
+
+const int8_t KING_DEFEND_UNIT[BKING + 1] = {
+    //  x, p, n, b, r, q, k, p, n, b, r, q, k
+    /**/0, 0, 3, 2, 1, 0, 0, 0, 3, 2, 1, 0, 0
+};
+
+const int16_t KING_SHELTER[24] = {//structural shelter (pawns & kings)
+    0, 15, 25, 30, 40, 50, 60, 75,
+    90, 105, 125, 145, 160, 175, 190, 200,
+    210, 220, 225, 235, 235, 240, 245, 250
+};
+
+const int16_t KING_ATTACK_PCS[16] = {
+    0, 48, 128, 256, 384, 464, 496, 512, 
+    512, 512, 512, 512, 512, 512, 512, 512
+};
+
 score_t * eval_king_attack(search_t * sd, bool us) {
     int pc = KING[us];
     score_t * result = &sd->stack->pc_score[pc];
     result->clear();
     board_t * brd = &sd->brd;
-    
+
     if (us == WHITE && (sd->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_W) == 0) {
         return result;
-    } 
-    
+    }
+
     if (us == BLACK && (sd->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_B) == 0) {
         return result;
     }
-    
+
     /*
      * 1. Shelter score
      */
@@ -379,24 +391,42 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     if ((sd->stack->pt->flags & pawn_table::FLAG_CLOSED_CENTER) != 0) {
         attack_score = attack_score / 2;
     }
-    
+
     /*
      * 3. Calculate the total piece attack score
      */
 
-    int attack_strength = 0;
+    int attack_units = 0;
+    int defend_units = 0;
+    int attack_pcs = 0;
+    int defend_pcs = 0;
+    int offs[2] = { -6, 6 };
     for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
-        int attack = sd->stack->king_attack[pc];
-        if (attack == 0) {
-            continue;
-        }
-        int n = KA_UNITS(attack);
-        int s = KA_SQUARES(attack) - n;
-        attack_strength += 1 + ((n + s) * KING_ATTACK_UNIT[pc]) / 2;
+        int a = KA_UNITS(sd->stack->king_attack[pc]);
+        int d = KD_UNITS(sd->stack->king_attack[pc + offs[us]]);
+        attack_pcs += a;
+        defend_pcs += d;
+        attack_units += a * KING_ATTACK_UNIT[pc];
+        defend_units += d * KING_DEFEND_UNIT[pc];
     }
+       
+    //std::cout << "attacking pieces: " << attack_pcs << std::endl;
+    //std::cout << "defending pieces: " << defend_pcs << std::endl;
+    //std::cout << "attacking units: " << attack_units << std::endl;
+    //std::cout << "defending units: " << defend_units << std::endl;
+    
+    int pc_attack_base = 20 + attack_score / 2;
+    if (defend_pcs == 0) {
+        pc_attack_base += 10;
+    }
+    int pc_attack_mul = KING_ATTACK_PCS[attack_pcs] - 128  + (48 * attack_units) - 16 * defend_units;
+    
+    //std::cout << "piece attack base: " << pc_attack_base << std::endl;
+    //std::cout << "piece attack mul: " << pc_attack_mul << std::endl;
+    //std::cout << "piece attack score:" << (pc_attack_mul * pc_attack_base) / 256 << std::endl;
 
-    int attack_mul = sd->king_attack_base + attack_strength * sd->king_attack_pieces;
-    attack_score = (attack_mul * attack_score) / 256;
+    attack_score += (pc_attack_mul * pc_attack_base) / 256;
+    attack_score = (sd->king_attack_base * attack_score) / 256;
     result->set(attack_score, 0);
     return result;
 }

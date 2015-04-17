@@ -103,7 +103,7 @@ public:
 
     search_t(const char * fen, game_t * g = NULL) {
         wild = 0;
-        king_attack_base = 192;
+        king_attack_base = 256;
         init(fen, g);
     }
 

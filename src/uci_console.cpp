@@ -333,7 +333,7 @@ namespace uci {
         out("option name UCI_Opponent type string");
         out("option name UCI_Chess960 type check default false");
         out("option name Wild type combo default 0 var standard var losers");
-        out("option name KingAttackBase type spin default 192 min 0 max 512");
+        out("option name KingAttackBase type spin default 256 min 0 max 512");
         out("option name KingAttackPieces type spin default 16 min 0 max 512");
     }
 

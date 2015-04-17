@@ -163,8 +163,8 @@ namespace pieces {
             score_t * sc = &s->stack->pc_score[pc];
             U64 bb_pc = brd->bb[pc];
             U64 moves;
-            int ka_units = 0;
-            int ka_squares = 0;
+            int king_attack_units = 0;
+            int king_defend_units = 0;
 
             do {
                 int sq = pop(bb_pc);
@@ -207,6 +207,7 @@ namespace pieces {
                 if (pc == WKNIGHT || pc == BKNIGHT) {
                     moves = KNIGHT_MOVES[sq];
                     is_minor = true;
+                    king_attack_units += (bool)(moves & KNIGHT_MOVES[kpos[!us]]);
                 } else if (pc == WBISHOP || pc == BBISHOP) {
                     moves = magic::bishop_moves(sq, occ);
                     is_minor = true;
@@ -287,10 +288,8 @@ namespace pieces {
                 /*
                  * King attacks info for later use in eval_king_attack
                  */
-
-                int king_attacks = popcnt0(moves & KING_ZONE[kpos[!us]]);
-                ka_units += (king_attacks > 0);
-                ka_squares += king_attacks;
+                king_attack_units += bool(safe_moves & KING_MOVES[kpos[!us]]);
+                king_defend_units += bool(moves & KING_MOVES[kpos[us]]);
             } while (bb_pc);
 
             /*
@@ -307,7 +306,7 @@ namespace pieces {
              * Add score and attack info to the totals
              */
 
-            s->stack->king_attack[pc] = KA_ENCODE(ka_units, ka_squares);
+            s->stack->king_attack[pc] = KA_ENCODE(king_attack_units, king_defend_units);
             result->add_us(sc, us);
         }
         return result;
