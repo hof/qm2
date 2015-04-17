@@ -358,17 +358,22 @@ const int16_t KING_ATTACK_PCS[16] = {
     512, 512, 512, 512, 512, 512, 512, 512
 };
 
-score_t * eval_king_attack(search_t * sd, bool us) {
-    int pc = KING[us];
-    score_t * result = &sd->stack->pc_score[pc];
-    result->clear();
-    board_t * brd = &sd->brd;
+const int16_t KING_ATTACK_UNITS[16] = {
+    0, 0, 0, 16, 48, 128, 256, 384, 
+    464, 496, 512, 512, 512, 512, 512, 512
+};
 
-    if (us == WHITE && (sd->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_W) == 0) {
+score_t * eval_king_attack(search_t * s, bool us) {
+    
+    int pc = KING[us];
+    score_t * result = &s->stack->pc_score[pc];
+    result->clear();
+    
+    if (us == WHITE && (s->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_W) == 0) {
         return result;
     }
 
-    if (us == BLACK && (sd->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_B) == 0) {
+    if (us == BLACK && (s->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_B) == 0) {
         return result;
     }
 
@@ -376,8 +381,9 @@ score_t * eval_king_attack(search_t * sd, bool us) {
      * 1. Shelter score
      */
 
+    board_t * brd = &s->brd;
     int attack_score = 0;
-    int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + sd->stack->pt->king_attack[us]);
+    int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + s->stack->pt->king_attack[us]);
     attack_score = KING_SHELTER[shelter_ix];
 
     if ((RANK[us][8] & brd->bb[ROOK[!us]]) == 0) { //no rook protecting their back rank
@@ -388,9 +394,11 @@ score_t * eval_king_attack(search_t * sd, bool us) {
      * 2. Reduce the shelter score for closed positions
      */
 
-    if ((sd->stack->pt->flags & pawn_table::FLAG_CLOSED_CENTER) != 0) {
+    if ((s->stack->pt->flags & pawn_table::FLAG_CLOSED_CENTER) != 0) {
         attack_score = attack_score / 2;
     }
+    
+    attack_score = (s->king_attack_shelter * attack_score) / 256;
 
     /*
      * 3. Calculate the total piece attack score
@@ -401,32 +409,20 @@ score_t * eval_king_attack(search_t * sd, bool us) {
     int attack_pcs = 0;
     int defend_pcs = 0;
     int offs[2] = { -6, 6 };
+    
     for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
-        int a = KA_UNITS(sd->stack->king_attack[pc]);
-        int d = KD_UNITS(sd->stack->king_attack[pc + offs[us]]);
+        int a = KA_UNITS(s->stack->king_attack[pc]);
+        int d = KD_UNITS(s->stack->king_attack[pc + offs[us]]);
         attack_pcs += a;
         defend_pcs += d;
         attack_units += a * KING_ATTACK_UNIT[pc];
         defend_units += d * KING_DEFEND_UNIT[pc];
     }
        
-    //std::cout << "attacking pieces: " << attack_pcs << std::endl;
-    //std::cout << "defending pieces: " << defend_pcs << std::endl;
-    //std::cout << "attacking units: " << attack_units << std::endl;
-    //std::cout << "defending units: " << defend_units << std::endl;
-    
-    int pc_attack_base = 20 + attack_score / 2;
-    if (defend_pcs == 0) {
-        pc_attack_base += 10;
-    }
-    int pc_attack_mul = KING_ATTACK_PCS[attack_pcs] - 128  + (48 * attack_units) - 16 * defend_units;
-    
-    //std::cout << "piece attack base: " << pc_attack_base << std::endl;
-    //std::cout << "piece attack mul: " << pc_attack_mul << std::endl;
-    //std::cout << "piece attack score:" << (pc_attack_mul * pc_attack_base) / 256 << std::endl;
-
-    attack_score += (pc_attack_mul * pc_attack_base) / 256;
-    attack_score = (sd->king_attack_base * attack_score) / 256;
+    int pc_attack_score = attack_units * 20 - defend_units * 5;
+    pc_attack_score = (s->king_attack_pieces * pc_attack_score) / 256;
+    const int pc_ix = attack_pcs + (attack_pcs==0 && defend_pcs);
+    attack_score += (KING_ATTACK_PCS[pc_ix] * pc_attack_score) / 256;
     result->set(attack_score, 0);
     return result;
 }

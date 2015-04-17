@@ -98,12 +98,13 @@ public:
     move_t ponder_move;
     std::string book_name;
     int wild;
-    int king_attack_base;
+    int king_attack_shelter;
     int king_attack_pieces;
 
     search_t(const char * fen, game_t * g = NULL) {
         wild = 0;
-        king_attack_base = 256;
+        king_attack_shelter = 256;
+        king_attack_pieces = 256;
         init(fen, g);
     }
 

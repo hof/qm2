@@ -97,8 +97,8 @@ engine_t::engine_t() : threads_t() {
     _result_score = 0;
     _game.clear();
     _opt_wild = 0;
-    _opt_king_attack_base = 196;
-    _opt_king_attack_pieces = 16;
+    _opt_king_attack_shelter = 256;
+    _opt_king_attack_pieces = 256;
 }
 
 /**
@@ -140,7 +140,7 @@ void * engine_t::_think(void * engine_p) {
     }
     
     //copy parameters
-    s->king_attack_base = engine->_opt_king_attack_base;
+    s->king_attack_shelter = engine->_opt_king_attack_shelter;
     s->king_attack_pieces = engine->_opt_king_attack_pieces;
     
     //think

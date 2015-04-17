@@ -28,7 +28,7 @@ extern pst_t PST;
 
 namespace pieces {
 
-#define ENABLE_PIECE_EVAL_TRACE_
+#define __ENABLE_PIECE_EVAL_TRACE
 
 #ifdef ENABLE_PIECE_EVAL_TRACE
 
@@ -85,7 +85,7 @@ namespace pieces {
     };
 
     const score_t BLOCKED_CENTER_PAWN[2] = {//them, us
-        S(10, 0), S(-10, 0)
+        S(20, 0), S(-20, 0)
     };
 
     const int8_t VBISHOPPAIR = 50;

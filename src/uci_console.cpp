@@ -250,9 +250,9 @@ namespace uci {
                             if (value == "true" || value == "1") {
                                 engine::set_option("wild", 22);
                             }
-                        } else if (name == "KingAttackBase") {
+                        } else if (name == "KingAttackShelter") {
                             handled = true;
-                            engine::set_option("king_attack_base", atoi<int>(value));
+                            engine::set_option("king_attack_shelter", atoi<int>(value));
                         } else if (name == "KingAttackPieces") {
                             handled = true;
                             engine::set_option("king_attack_pieces", atoi<int>(value));
@@ -333,8 +333,8 @@ namespace uci {
         out("option name UCI_Opponent type string");
         out("option name UCI_Chess960 type check default false");
         out("option name Wild type combo default 0 var standard var losers");
-        out("option name KingAttackBase type spin default 256 min 0 max 512");
-        out("option name KingAttackPieces type spin default 16 min 0 max 512");
+        out("option name KingAttackShelter type spin default 256 min 0 max 512");
+        out("option name KingAttackPieces type spin default 256 min 0 max 512");
     }
 
     void send_ok() {
