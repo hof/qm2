@@ -85,8 +85,18 @@ public:
     void clear() {
         piece = 0;
     }
-    
+
 };
+
+/**
+ * Operator for comparing two moves by score
+ * @param a move_t a 
+ * @param b move_t b
+ * @return boolean a > b
+ */
+inline bool operator>(const move_t & a, const move_t & b) {
+  return a.score > b.score;
+}
 
 #endif	/* MOVE_H */
 

@@ -28,6 +28,7 @@
 
 #include "movepicker.h"
 #include "search.h"
+#include <algorithm> 
 
 /**
  * Pops the move with highest score above a minimum from the move list
@@ -38,39 +39,40 @@
 move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
     while (list->first != list->last) {
         
-        int best_score = list->minimum_score - 1;    
-        move_t * best = NULL;
-        
         //pick move with the highest score
-        for (move_t * move = list->first; move != list->last; move++) {
-            if (move->score > best_score) {
-                best_score = move->score;
+        
+        move_t * best = list->first;
+        for (move_t * move = list->first+1; move != list->last; move++) {
+            if (*move > *best) {
                 best = move;
             }
         }
         
-        if (!best) {
+        //return if move score is too low
+        if (best->score < list->minimum_score) {
             return NULL;
         }
-        
+
         //filter negative see if still in "good captures" phase
         if (list->minimum_score == 0 && best->capture && s->brd.min_gain(best) < 0) {
+            assert(s->wild != 17);
             int see = s->brd.see(best);
             if (see < 0) {
                 best->score = see;
                 continue;
             }
         }
-        
+
         //legality check just before returning the move
-        list->best->set(best);
+        move_t * result = list->best;
+        result->set(best);
         best->set(--list->last);
-        if (!s->stack->tt_move.equals(list->best)
-                && !s->is_killer(list->best)
-                && s->brd.legal(list->best)) {
-            return list->best;
+        if (!s->stack->tt_move.equals(result)
+                && !s->is_killer(result)
+                && s->brd.legal(result)) {
+            return result;
         }
-        
+
     };
     return NULL;
 }

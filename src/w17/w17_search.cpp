@@ -89,9 +89,9 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
     //ceiling
     if (brd.ply >= sel_depth) {
         sel_depth = brd.ply;
-        if (brd.ply >= MAX_PLY) {
-            return w17_evaluate(this);
-        }
+    }
+    if (brd.ply >= MAX_PLY) {
+        return w17_evaluate(this);
     }
 
     //mate distance pruning: if mate(d) in n don't search deeper
@@ -101,6 +101,8 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
             return beta;
         }
     }
+    
+    int alpha1 = alpha;
     if ((-score::MATE + brd.ply) > alpha) {
         alpha = -score::MATE + brd.ply;
         if (beta <= alpha) {
@@ -146,12 +148,12 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
     const bool pv = alpha + 1 < beta;
     if (quiet_pos) {
         if (depth <= 0) {
-            if (in_mate_search == (int)us) {
+            if (in_mate_search == (int) us) {
                 //unknown if we can finish the forced mating sequence
                 return 1000 + brd.ply;
             }
             return w17_evaluate(this);
-        } else if (in_mate_search == (int)them) {
+        } else if (in_mate_search == (int) them) {
             return w17_evaluate(this);
         } else if (in_mate_search == -1 && depth < brd.max_mate_depth_us()) {
             in_mate_search = us;
@@ -207,11 +209,11 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
 
                 if (depth > 0 && !move->capture && !move->promotion) {
                     update_killers(move, score);
-                    update_history(move, depth);
-                    for (move_t * cur = stack->move_list.first;
-                            searched_moves && cur != stack->move_list.last; cur++) {
-                        if (cur->score == move::EXCLUDED && cur != move) {
-                            update_history(cur, -depth);
+                    update_history(move);
+                    for (int i = 0; i < searched_moves; i++) {
+                        move_t * m = &stack->searched[i];
+                        if (!m->capture && !m->promotion) {
+                            history[m->piece][m->tsq] >>= searched_moves;
                         }
                     }
                 }
@@ -226,7 +228,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
                 break;
             }
         }
-        searched_moves++;
+        stack->searched[searched_moves++].set(move);
     } while ((move = move::next(this, 0)));
 
     /*
@@ -238,7 +240,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
     assert(brd.valid(&stack->best_move) && brd.legal(&stack->best_move));
 
     if (depth > 0) {
-        int flag = score::flags(best, alpha, beta); //obs: not using "old-alpha" to keep long pv
+        int flag = score::flags(best, alpha1, beta); 
         trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
     }
 

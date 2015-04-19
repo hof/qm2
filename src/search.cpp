@@ -351,17 +351,14 @@ void search_t::store_pv() {
  * @param move a quiet move
  * @param depth current search depth
  */
-void search_t::update_history(move_t * move, int depth) {
-    const int HISTORY_MAX = 10000;
+void search_t::update_history(move_t * move) {
+    assert(move->capture == EMPTY);
+    assert(move->promotion == EMPTY);
+    const int HISTORY_MAX = 2000;
+    const int HISTORY_DIV = 64;
     int * record = &history[move->piece][move->tsq];
-    *record += depth * ABS(depth);
-    if (ABS(*record) > HISTORY_MAX) {
-        for (int pc = WPAWN; pc <= BKING; pc++) {
-            for (int sq = a1; sq <= h8; sq++) {
-                history[pc][sq] >>= 1;
-            }
-        }
-    }
+    *record += (HISTORY_MAX - *record) / HISTORY_DIV;
+    assert(*record > 0 && *record < 2 * HISTORY_MAX);
 }
 
 /**
@@ -630,7 +627,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
             return iid_score;
         } else if (stack->best_move.piece) {
             stack->tt_move.set(&stack->best_move);
-            stack->best_move.clear();
         }
     }
 
@@ -649,7 +645,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int best = -score::INF;
     int searched_moves = 0;
     int score_max = score::MATE - brd.ply - 1;
+    stack->best_move.clear();
     do {
+
         assert(brd.valid(move) && brd.legal(move));
         assert(stack->best_move.equals(move) == false);
 
@@ -722,12 +720,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_int(), score::LOWERBOUND);
                 if (!move->capture && !move->promotion) {
                     update_killers(move, score);
-                    update_history(move, depth);
-                    for (move_t * cur = stack->move_list.first;
-                            searched_moves && cur != stack->move_list.last; cur++) {
-                        if (cur->score == move::EXCLUDED && cur != move
-                                && !cur->capture && !cur->promotion) {
-                            update_history(cur, -depth);
+                    update_history(move);
+                    for (int i = 0; i < searched_moves; i++) {
+                        move_t * m = &stack->searched[i];
+                        if (!m->capture && !m->promotion) {
+                            history[m->piece][m->tsq] >>= searched_moves;
                         }
                     }
                 }
@@ -742,7 +739,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 break;
             }
         }
-        searched_moves++;
+        stack->searched[searched_moves++].set(move);
     } while ((move = move::next(this, depth)));
 
     /*

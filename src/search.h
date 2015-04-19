@@ -59,6 +59,7 @@ public:
 
 struct search_stack_t {
     move::list_t move_list;
+    move_t searched[256];
     move_t current_move;
     move_t best_move;
     move_t tt_move;
@@ -131,7 +132,7 @@ public:
     void backward();
     void forward(move_t * move, bool givesCheck);
     void backward(move_t * move);
-    void update_history(move_t * move, int depth);
+    void update_history(move_t * move);
     void reset_stack();
     bool is_killer(move_t * const move);
     void init_history();

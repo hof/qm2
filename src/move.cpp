@@ -28,14 +28,7 @@
  * @param move move object
  */
 void move_t::set(move_t * move) {
-    piece = move->piece;
-    ssq = move->ssq;
-    tsq = move->tsq;
-    capture = move->capture;
-    promotion = move->promotion;
-    en_passant = move->en_passant;
-    castle = move->castle;
-    score = move->score;
+    memcpy(this, move, sizeof(move_t));
 }
 
 /**
