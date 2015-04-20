@@ -103,11 +103,9 @@ void search_t::init(const char * fen, game_t * g) {
  * Initialize history sort order with piece-square table values
  */
 void search_t::init_history() {
-    for (int sq = a1; sq <= h8; sq++) {
-        history[0][sq] = 0;
-        for (int pc = WPAWN; pc <= WKING; pc++) {
-            history[pc][sq] = PST[pc][sq].get(stack->mt->phase);
-            history[pc + WKING][sq] = PST[pc + WKING][sq].get(stack->mt->phase);
+    for (int pc = 0; pc <= BKING; pc++) {
+        for (int sq = a1; sq <= h8; sq++) {
+            history[pc][sq] = 0;
         }
     }
 }
@@ -358,7 +356,8 @@ void search_t::update_history(move_t * move) {
     const int HISTORY_DIV = 64;
     int * record = &history[move->piece][move->tsq];
     *record += (HISTORY_MAX - *record) / HISTORY_DIV;
-    assert(*record > 0 && *record < 2 * HISTORY_MAX);
+    assert(*record > 0);
+    assert(*record < 2 * HISTORY_MAX);
 }
 
 /**
