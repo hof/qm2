@@ -26,14 +26,6 @@
 #include "hashcodes.h"
 
 /**
- * Clears board stack
- */
-void board_stack_t::clear() {
-    memset(this, 0, sizeof(board_stack_t));
-    wtm = true;
-}
-
-/**
  * Flips board stack (e.g. the castling rights and side to move)
  */
 void board_stack_t::flip() {
@@ -56,14 +48,6 @@ void board_stack_t::flip() {
     if (flags & CASTLE_q) {
         castling_flags |= CASTLE_Q;
     }
-}
-
-/**
- * Copies a board stack
- * @param b_stack the board stack to copy
- */
-void board_stack_t::copy(board_stack_t * b_stack) {
-    memcpy(this, b_stack, sizeof(board_stack_t));     
 }
 
 /**

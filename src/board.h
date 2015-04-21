@@ -45,13 +45,6 @@ enum piece_t {
     WPIECES, BPIECES, ALLPIECES = 0
 };
 
-const piece_t PAWN[2] = {BPAWN, WPAWN};
-const piece_t QUEEN[2] = {BQUEEN, WQUEEN};
-const piece_t ROOK[2] = {BROOK, WROOK};
-const piece_t BISHOP[2] = {BBISHOP, WBISHOP};
-const piece_t KNIGHT[2] = {BKNIGHT, WKNIGHT};
-const piece_t KING[2] = {BKING, WKING};
-
 enum color_t {
     BLACK, WHITE
 };
@@ -65,6 +58,13 @@ enum endgame_t {
     OPP_BISHOPS, KBBKN, KBPSK, KNPK, KRKP, KQKP, KRPKR, KQPSKQ, KQPSKQPS
 };
 
+const piece_t PAWN[2] = {BPAWN, WPAWN};
+const piece_t QUEEN[2] = {BQUEEN, WQUEEN};
+const piece_t ROOK[2] = {BROOK, WROOK};
+const piece_t BISHOP[2] = {BBISHOP, WBISHOP};
+const piece_t KNIGHT[2] = {BKNIGHT, WKNIGHT};
+const piece_t KING[2] = {BKING, WKING};
+
 namespace board {
     const int PVAL[BKING + 1] = {
         0, 100, 325, 325, 500, 925, 10000, 100, 325, 325, 500, 925, 10000
@@ -77,13 +77,26 @@ public:
     int castling_flags;
     int fifty_count;
     bool wtm; //white to move
-    U64 tt_key;
+    U64 tt_key; //transposition table (hash) key
     U64 material_hash;
     U64 pawn_hash;
-    
-    void clear();
+
     void flip();
-    void copy(board_stack_t * b_stack);
+
+    /**
+     * Clears a board stack
+     */
+    void clear() {
+        memset(this, 0, sizeof (board_stack_t));
+    }
+
+    /**
+     * Copies a board stack
+     * @param b_stack the board stack to copy
+     */
+    void copy(board_stack_t * b_stack) {
+        memcpy(this, b_stack, sizeof (board_stack_t));
+    }
 };
 
 
@@ -125,12 +138,16 @@ public:
     int max_gain(move_t * capture);
     int min_gain(move_t * capture);
     int mvvlva(move_t * capture);
-    int w17_sort_cap (move_t * capture);
+    int w17_sort_cap(move_t * capture);
     bool equal_cap(move_t * mv);
-    
-    bool us() { return stack->wtm; }
-    
-    bool them() { return !stack->wtm; }
+
+    bool us() {
+        return stack->wtm;
+    }
+
+    bool them() {
+        return !stack->wtm;
+    }
 
     /**
      * Counts amount of piece for a given piece type
@@ -177,16 +194,16 @@ public:
     U64 pawns_kings() {
         return bb[WKING] | bb[BKING] | bb[WPAWN] | bb[BPAWN];
     }
-    
+
     /**
      * Returns a bitboard populated with pieces, not being pawns or kings for one side
      * @param us white: 1, black: 0
      * @return bitboard
      */
     U64 all_pieces(bool us) {
-        return all(us) ^ (bb[PAWN[us]] |  bb[KING[us]]);
+        return all(us) ^ (bb[PAWN[us]] | bb[KING[us]]);
     }
-    
+
     /**
      * Tests if a move captures the last piece (not pawn) of our opponent
      * @param move the move
@@ -214,7 +231,7 @@ public:
         return bb[WROOK] || bb[BROOK] || bb[WKNIGHT] || bb[BKNIGHT]
                 || bb[WBISHOP] || bb[BBISHOP] || bb[WQUEEN] || bb[BQUEEN];
     }
-    
+
     /**
      * Test if site to move has only one piece left (beside the king)
      * @param us side to move, white(1) or black(0)
@@ -232,34 +249,34 @@ public:
     bool has_castle_right(int flag) {
         return stack->castling_flags & flag;
     }
-    
+
     /**
      * Test if white or black side can castle short (King Side)
      * @param white side to move (1: white, 0: black)
      * @return true if short castle right applies
      */
     bool can_castle_ks(bool white) {
-        return white? (stack->castling_flags & CASTLE_K) : (stack->castling_flags & CASTLE_k);
+        return white ? (stack->castling_flags & CASTLE_K) : (stack->castling_flags & CASTLE_k);
     }
-    
+
     /**
      * Test if white or black side can castle short (King Side)
      * @param white side to move (1: white, 0: black)
      * @return true if short castle right applies
      */
     bool can_castle_qs(bool white) {
-        return white? (stack->castling_flags & CASTLE_Q) : (stack->castling_flags & CASTLE_q);
+        return white ? (stack->castling_flags & CASTLE_Q) : (stack->castling_flags & CASTLE_q);
     }
-    
+
     /**
      * Test if white or black side can castle (any side)
      * @param white side to move (1: white, 0: black)
      * @return true if any castle right applies
      */
-    bool can_castle(bool white) {    
-         return white? (stack->castling_flags & CASTLE_WHITE) : (stack->castling_flags & CASTLE_BLACK);
+    bool can_castle(bool white) {
+        return white ? (stack->castling_flags & CASTLE_WHITE) : (stack->castling_flags & CASTLE_BLACK);
     }
-    
+
     /**
      * Determines if shelter on the kingside is intact for castling
      * @param white side to move
@@ -268,15 +285,15 @@ public:
     bool good_shelter_ks(bool white) {
         if (white) {
             return (matrix[h2] == WPAWN && matrix[g2] == WPAWN)
-                || (matrix[f2] == WPAWN && matrix[h2] == WPAWN && matrix[g3] == WPAWN)
-                || (matrix[h3] == WPAWN && matrix[g2] == WPAWN && matrix[f2] == WPAWN);
+                    || (matrix[f2] == WPAWN && matrix[h2] == WPAWN && matrix[g3] == WPAWN)
+                    || (matrix[h3] == WPAWN && matrix[g2] == WPAWN && matrix[f2] == WPAWN);
         } else {
             return (matrix[h7] == BPAWN && matrix[g7] == BPAWN)
-                || (matrix[f7] == BPAWN && matrix[h7] == BPAWN && matrix[g6] == BPAWN)
-                || (matrix[h6] == BPAWN && matrix[g7] == BPAWN && matrix[f7] == BPAWN);
+                    || (matrix[f7] == BPAWN && matrix[h7] == BPAWN && matrix[g6] == BPAWN)
+                    || (matrix[h6] == BPAWN && matrix[g7] == BPAWN && matrix[f7] == BPAWN);
         }
     }
-    
+
     /**
      * Determines if shelter on the queenside is intact for castling
      * @param white side to move
@@ -285,10 +302,10 @@ public:
     bool good_shelter_qs(bool white) {
         if (white) {
             return (matrix[a2] == WPAWN && matrix[b2] == WPAWN && matrix[c2] == WPAWN)
-                || (matrix[a2] == WPAWN && matrix[b3] == WPAWN && matrix[c2] == WPAWN);
+                    || (matrix[a2] == WPAWN && matrix[b3] == WPAWN && matrix[c2] == WPAWN);
         } else {
             return (matrix[a7] == BPAWN && matrix[b7] == BPAWN && matrix[c7] == BPAWN)
-                || (matrix[a7] == BPAWN && matrix[b6] == BPAWN && matrix[c7] == BPAWN);
+                    || (matrix[a7] == BPAWN && matrix[b6] == BPAWN && matrix[c7] == BPAWN);
         }
     }
 
@@ -338,7 +355,7 @@ public:
                 || (bb[BBISHOP] | bb[BQUEEN]) & magic::bishop_moves(sq, bb[ALLPIECES])
                 || (bb[BROOK] | bb[BQUEEN]) & magic::rook_moves(sq, bb[ALLPIECES]);
     }
-    
+
     bool is_attacked_excl_king(int sq, bool white) {
         return white ?
                 bb[WKNIGHT] & KNIGHT_MOVES[sq]
@@ -351,7 +368,7 @@ public:
                 || (bb[BBISHOP] | bb[BQUEEN]) & magic::bishop_moves(sq, bb[ALLPIECES])
                 || (bb[BROOK] | bb[BQUEEN]) & magic::rook_moves(sq, bb[ALLPIECES]);
     }
-    
+
     bool is_attacked_excl_queen(int sq, bool white) {
         return white ?
                 bb[WKNIGHT] & KNIGHT_MOVES[sq]
@@ -399,7 +416,7 @@ public:
     U64 pawn_attacks(int sq, bool white) {
         return white ? WPAWN_CAPTURES[sq] : BPAWN_CAPTURES[sq];
     }
-    
+
     /**
      * Tests if a square is attacked by a pawn
      * @param sq the square to test
@@ -409,7 +426,7 @@ public:
     bool is_attacked_by_pawn(int sq, bool white) {
         return white ? BPAWN_CAPTURES[sq] & bb[WPAWN] : WPAWN_CAPTURES[sq] & bb[BPAWN];
     }
-    
+
     /**
      * Tests if a square is safe for placing pawn
      * @param sq the square to test
@@ -417,11 +434,11 @@ public:
      * @return true if the square can safely be occupied by a pawn
      */
     bool pawn_is_safe(int sq, bool us) {
-        U64 atck[2] = { WPAWN_CAPTURES[sq] & bb[BPAWN], BPAWN_CAPTURES[sq] & bb[WPAWN] };
+        U64 atck[2] = {WPAWN_CAPTURES[sq] & bb[BPAWN], BPAWN_CAPTURES[sq] & bb[WPAWN]};
         bool them = !us;
-        return atck[them] == 0 || (is_1(atck[them]) && atck[us] != 0) || gt_1(atck[us]); 
+        return atck[them] == 0 || (is_1(atck[them]) && atck[us] != 0) || gt_1(atck[us]);
     }
-    
+
     /**
      * A square is considered an outpost if it can't be attacked by their pawns
      * @param sq square
@@ -432,7 +449,7 @@ public:
         U64 span_up = ADJACENT_FILES[FILE(sq)] & upward_ranks(RANK(sq), us);
         return (span_up & bb[PAWN[!us]]) == 0;
     }
-    
+
     /**
      * Return max mate depth in ply, used for W17
      * The max mate depth is the amount of pieces for the side with the most 
@@ -441,7 +458,7 @@ public:
     int max_mate_depth() {
         return 2 + 2 * MAX(popcnt(bb[WPIECES]), popcnt(bb[BPIECES]));
     }
-    
+
     /**
      * Return max mate depth in ply, used for W17
      * The max mate depth is the amount of pieces for the side with the most 
