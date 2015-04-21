@@ -270,5 +270,4 @@ namespace move {
         }
         list->last = current;
     }
-
 }

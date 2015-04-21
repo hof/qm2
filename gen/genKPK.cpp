@@ -73,7 +73,7 @@ namespace kpk_bitbase {
         if (distance(wk, bk) == 1) {
             return INVALID; //king captures king
         }
-        if (wtm && (WPAWN_CAPTURES[wp] & BIT(bk)) != 0) {
+        if (wtm && (PAWN_CAPTURES[WHITE][wp] & BIT(bk)) != 0) {
             return INVALID; //wp captures bk
         }
 
@@ -101,7 +101,7 @@ namespace kpk_bitbase {
         /*
          * 3. Black: if it's a stalemate or the pawn can be captured it's a draw
          */
-        U64 attacks_w = KING_MOVES[wk] | WPAWN_CAPTURES[wp];
+        U64 attacks_w = KING_MOVES[wk] | PAWN_CAPTURES[WHITE][wp];
         U64 king_moves_bk = KING_MOVES[bk] & ~attacks_w;
         if (king_moves_bk == 0) {
             return DRAW; //stalemate
@@ -149,7 +149,7 @@ namespace kpk_bitbase {
         assert(wk != wp && distance(wk, bk) > 1);
         bool win = true;
         int idx = index(wk, wp);
-        U64 attacks_w = KING_MOVES[wk] | WPAWN_CAPTURES[wp];
+        U64 attacks_w = KING_MOVES[wk] | PAWN_CAPTURES[WHITE][wp];
         U64 king_moves_b = KING_MOVES[bk] & ~attacks_w;
         assert(king_moves_b != 0);
         while (king_moves_b) {

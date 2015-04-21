@@ -432,7 +432,7 @@ bool board_t::legal(move_t * move) {
         int kpos = kpos_list[piece == WKING];
 
         if ((bb[BKNIGHT] & occ & KNIGHT_MOVES[kpos])
-                || (bb[BPAWN] & occ & WPAWN_CAPTURES[kpos])
+                || (bb[BPAWN] & occ & PAWN_CAPTURES[WHITE][kpos])
                 || (piece == WKING && KING_MOVES[kpos] & bb[BKING])) {
             return false;
         }
@@ -478,7 +478,7 @@ bool board_t::legal(move_t * move) {
         int kpos = kpos_list[piece == BKING];
 
         if ((bb[WKNIGHT] & occ & KNIGHT_MOVES[kpos])
-                || (bb[WPAWN] & occ & BPAWN_CAPTURES[kpos])
+                || (bb[WPAWN] & occ & PAWN_CAPTURES[BLACK][kpos])
                 || (piece == BKING && KING_MOVES[kpos] & bb[WKING])) {
             return false;
         }
@@ -543,7 +543,7 @@ int board_t::gives_check(const move_t * move) {
             case EMPTY:
                 assert(false);
             case WPAWN:
-                checkers = BPAWN_CAPTURES[kpos] & tsq_bit;
+                checkers = PAWN_CAPTURES[BLACK][kpos] & tsq_bit;
                 break;
             case WKNIGHT:
                 checkers = KNIGHT_MOVES[kpos] & tsq_bit;
@@ -572,7 +572,7 @@ int board_t::gives_check(const move_t * move) {
                 }
                 break;
             case BPAWN:
-                checkers = WPAWN_CAPTURES[kpos] & tsq_bit;
+                checkers = PAWN_CAPTURES[WHITE][kpos] & tsq_bit;
                 break;
             case BKNIGHT:
                 checkers = KNIGHT_MOVES[kpos] & tsq_bit;

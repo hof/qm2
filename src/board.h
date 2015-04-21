@@ -315,48 +315,15 @@ public:
     /**
      * Test if a square is attacked
      * @param sq the square to investigate
-     * @param white white or black
+     * @param us white(1) or black(0)
      * @return true if the square is attacked, false otherwise
      */
-    bool is_attacked(const int sq, const bool white) {
-        return white ?
-                bb[WKNIGHT] & KNIGHT_MOVES[sq]
-                || bb[WPAWN] & BPAWN_CAPTURES[sq]
-                || bb[WKING] & KING_MOVES[sq]
-                || (bb[WBISHOP] | bb[WQUEEN]) & magic::bishop_moves(sq, bb[ALLPIECES])
-                || (bb[WROOK] | bb[WQUEEN]) & magic::rook_moves(sq, bb[ALLPIECES])
-                :
-                bb[BKNIGHT] & KNIGHT_MOVES[sq]
-                || bb[BPAWN] & WPAWN_CAPTURES[sq]
-                || bb[BKING] & KING_MOVES[sq]
-                || (bb[BBISHOP] | bb[BQUEEN]) & magic::bishop_moves(sq, bb[ALLPIECES])
-                || (bb[BROOK] | bb[BQUEEN]) & magic::rook_moves(sq, bb[ALLPIECES]);
-    }
-
-    bool is_attacked_excl_king(const int sq, const bool white) {
-        return white ?
-                bb[WKNIGHT] & KNIGHT_MOVES[sq]
-                || bb[WPAWN] & BPAWN_CAPTURES[sq]
-                || (bb[WBISHOP] | bb[WQUEEN]) & magic::bishop_moves(sq, bb[ALLPIECES])
-                || (bb[WROOK] | bb[WQUEEN]) & magic::rook_moves(sq, bb[ALLPIECES])
-                :
-                bb[BKNIGHT] & KNIGHT_MOVES[sq]
-                || bb[BPAWN] & WPAWN_CAPTURES[sq]
-                || (bb[BBISHOP] | bb[BQUEEN]) & magic::bishop_moves(sq, bb[ALLPIECES])
-                || (bb[BROOK] | bb[BQUEEN]) & magic::rook_moves(sq, bb[ALLPIECES]);
-    }
-
-    bool is_attacked_excl_queen(const int sq, const bool white) {
-        return white ?
-                bb[WKNIGHT] & KNIGHT_MOVES[sq]
-                || bb[WPAWN] & BPAWN_CAPTURES[sq]
-                || bb[WBISHOP] & magic::bishop_moves(sq, bb[ALLPIECES])
-                || bb[WROOK] & magic::rook_moves(sq, bb[ALLPIECES])
-                :
-                bb[BKNIGHT] & KNIGHT_MOVES[sq]
-                || bb[BPAWN] & WPAWN_CAPTURES[sq]
-                || bb[BBISHOP] & magic::bishop_moves(sq, bb[ALLPIECES])
-                || bb[BROOK] & magic::rook_moves(sq, bb[ALLPIECES]);
+    bool is_attacked(const int sq, const bool us) {
+        return bb[KNIGHT[us]] & KNIGHT_MOVES[sq]
+                || bb[PAWN[us]] & PAWN_CAPTURES[!us][sq]
+                || bb[KING[us]] & KING_MOVES[sq]
+                || (bb[ROOK[us]] | bb[QUEEN[us]]) & magic::rook_moves(sq, bb[ALLPIECES])
+                || (bb[BISHOP[us]] | bb[QUEEN[us]]) & magic::bishop_moves(sq, bb[ALLPIECES]);
     }
 
     /**
@@ -366,8 +333,8 @@ public:
      */
     U64 attacks_to(const int sq) {
         return (KNIGHT_MOVES[sq] & (bb[WKNIGHT] | bb[BKNIGHT]))
-                | (BPAWN_CAPTURES[sq] & bb[WPAWN])
-                | (WPAWN_CAPTURES[sq] & bb[BPAWN])
+                | (PAWN_CAPTURES[BLACK][sq] & bb[WPAWN])
+                | (PAWN_CAPTURES[WHITE][sq] & bb[BPAWN])
                 | (KING_MOVES[sq] & (bb[WKING] | bb[BKING]))
                 | (magic::bishop_moves(sq, bb[ALLPIECES]) & (bb[WBISHOP] | bb[WQUEEN] | bb[BBISHOP] | bb[BQUEEN]))
                 | (magic::rook_moves(sq, bb[ALLPIECES]) & (bb[WROOK] | bb[WQUEEN] | bb[BROOK] | bb[BQUEEN]));
@@ -391,7 +358,7 @@ public:
      * @return bitboard populated with one or two pawn attacks
      */
     U64 pawn_attacks(const int sq, const bool white) {
-        return white ? WPAWN_CAPTURES[sq] : BPAWN_CAPTURES[sq];
+        return white ? PAWN_CAPTURES[WHITE][sq] : PAWN_CAPTURES[BLACK][sq];
     }
 
     /**
@@ -401,7 +368,7 @@ public:
      * @return true if the square is attacked by a pawn
      */
     bool is_attacked_by_pawn(const int sq, const bool white) {
-        return white ? BPAWN_CAPTURES[sq] & bb[WPAWN] : WPAWN_CAPTURES[sq] & bb[BPAWN];
+        return white ? PAWN_CAPTURES[BLACK][sq] & bb[WPAWN] : PAWN_CAPTURES[WHITE][sq] & bb[BPAWN];
     }
 
     /**
@@ -411,7 +378,7 @@ public:
      * @return true if the square can safely be occupied by a pawn
      */
     bool pawn_is_safe(const int sq, const bool us) {
-        U64 atck[2] = {WPAWN_CAPTURES[sq] & bb[BPAWN], BPAWN_CAPTURES[sq] & bb[WPAWN]};
+        U64 atck[2] = {PAWN_CAPTURES[WHITE][sq] & bb[BPAWN], PAWN_CAPTURES[BLACK][sq] & bb[WPAWN]};
         bool them = !us;
         return atck[them] == 0 || (is_1(atck[them]) && atck[us] != 0) || gt_1(atck[us]);
     }

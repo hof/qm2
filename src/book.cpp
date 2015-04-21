@@ -464,8 +464,8 @@ U64 book_t::polyglot_key(board_t* pos) {
     }
 
     if (pos->stack->enpassant_sq >= a3 //polyglot only considers en passant if ep captures are possible
-            && ((pos->stack->wtm && (BPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->bb[WPAWN]))
-            || (pos->stack->wtm == false && (WPAWN_CAPTURES[pos->stack->enpassant_sq] & pos->bb[BPAWN])))) {
+            && ((pos->stack->wtm && (PAWN_CAPTURES[BLACK][pos->stack->enpassant_sq] & pos->bb[WPAWN]))
+            || (pos->stack->wtm == false && (PAWN_CAPTURES[WHITE][pos->stack->enpassant_sq] & pos->bb[BPAWN])))) {
         result ^= RANDOM64[EP_OFFSET + FILE(pos->stack->enpassant_sq)];
 
     }
