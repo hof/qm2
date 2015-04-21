@@ -94,7 +94,7 @@ public:
      * Copies a board stack
      * @param b_stack the board stack to copy
      */
-    void copy(board_stack_t * b_stack) {
+    void copy(const board_stack_t * b_stack) {
         memcpy(this, b_stack, sizeof (board_stack_t));
     }
 };
@@ -118,43 +118,30 @@ public:
     bool is_draw();
     void init(const char* fen);
     std::string to_string();
-
-    void forward(move_t * move);
-    void backward(move_t * move);
+    void forward(const move_t * move);
+    void backward(const move_t * move);
     void forward();
     void backward();
     bool legal(move_t * move);
-    bool valid(move_t * move);
-    int gives_check(move_t * move);
-
-    void add_piece(int piece, int sq, bool hash);
-    void remove_piece(int piece, int sq, bool hash);
-    void move_piece(int piece, int ssq, int tsq, bool hash);
-
+    bool valid(const move_t * move);
+    int gives_check(const move_t * move);
+    void add_piece(const int piece, const int sq, const bool hash);
+    void remove_piece(const int piece, const int sq, const bool hash);
+    void move_piece(const int piece, const int ssq, const int tsq, const bool hash);
     bool is_eg(endgame_t eg, bool us);
-
-    U64 smallest_attacker(U64 attacks, bool wtm, int &piece);
-    int see(move_t * capture);
-    int max_gain(move_t * capture);
-    int min_gain(move_t * capture);
-    int mvvlva(move_t * capture);
-    int w17_sort_cap(move_t * capture);
-    bool equal_cap(move_t * mv);
-
-    bool us() {
-        return stack->wtm;
-    }
-
-    bool them() {
-        return !stack->wtm;
-    }
+    U64 smallest_attacker(const U64 attacks, const bool wtm, int &piece);
+    int see(const move_t * capture);
+    int max_gain(const move_t * capture);
+    int min_gain(const move_t * capture);
+    int mvvlva(const move_t * capture);
+    int w17_sort_cap(const move_t * capture);
 
     /**
      * Counts amount of piece for a given piece type
      * @param piece the piece type (WPAWN .. BKING)
      * @return amount of pieces
      */
-    int count(int piece) {
+    int count(const int piece) {
         return popcnt0(bb[piece]);
     }
 
@@ -163,7 +150,7 @@ public:
      * @param pc piece type (WPAWN..BKING)
      * @return square_t a1..h8
      */
-    int get_sq(int pc) {
+    int get_sq(const int pc) {
         return bsf(bb[pc]);
     }
 
@@ -172,7 +159,7 @@ public:
      * @param us white or black
      * @return bitboard
      */
-    U64 all(bool us) {
+    U64 all(const bool us) {
         assert(BPIECES == WPIECES + 1);
         return bb[WPIECES + (!us)];
     }
@@ -190,7 +177,7 @@ public:
      * @param us white: 1, black: 0
      * @return bitboard
      */
-    U64 all_pieces(bool us) {
+    U64 all_pieces(const bool us) {
         return all(us) ^ (bb[PAWN[us]] | bb[KING[us]]);
     }
 
@@ -199,7 +186,7 @@ public:
      * @param move the move
      * @return boolean true if move captures the last piece left
      */
-    bool captures_last_piece(move_t * move) {
+    bool captures_last_piece(const move_t * move) {
         bool them = move->piece > WKING;
         return move->capture > PAWN[them] && has_one_piece(them);
     }
@@ -209,7 +196,7 @@ public:
      * @param us side to move, white(1) or black(0)
      * @return true if side "us" has pieces, false otherwise
      */
-    bool has_pieces(bool us) {
+    bool has_pieces(const bool us) {
         return bb[ROOK[us]] || bb[QUEEN[us]] || bb[KNIGHT[us]] || bb[BISHOP[us]];
     }
 
@@ -227,7 +214,7 @@ public:
      * @param us side to move, white(1) or black(0)
      * @return true if side to move has only one piece left
      */
-    bool has_one_piece(bool us) {
+    bool has_one_piece(const bool us) {
         return is_1(all_pieces(us));
     }
 
@@ -236,7 +223,7 @@ public:
      * @param flag the flag (castle right) to test for
      * @return true if the flag is set, false otherwise
      */
-    bool has_castle_right(int flag) {
+    bool has_castle_right(const int flag) {
         return stack->castling_flags & flag;
     }
 
@@ -245,7 +232,7 @@ public:
      * @param white side to move (1: white, 0: black)
      * @return true if short castle right applies
      */
-    bool can_castle_ks(bool white) {
+    bool can_castle_ks(const bool white) {
         return white ? (stack->castling_flags & CASTLE_K) : (stack->castling_flags & CASTLE_k);
     }
 
@@ -254,7 +241,7 @@ public:
      * @param white side to move (1: white, 0: black)
      * @return true if short castle right applies
      */
-    bool can_castle_qs(bool white) {
+    bool can_castle_qs(const bool white) {
         return white ? (stack->castling_flags & CASTLE_Q) : (stack->castling_flags & CASTLE_q);
     }
 
@@ -263,7 +250,7 @@ public:
      * @param white side to move (1: white, 0: black)
      * @return true if any castle right applies
      */
-    bool can_castle(bool white) {
+    bool can_castle(const bool white) {
         return white ? (stack->castling_flags & CASTLE_WHITE) : (stack->castling_flags & CASTLE_BLACK);
     }
 
@@ -272,7 +259,7 @@ public:
      * @param white side to move
      * @return true if pawn shelter is ok-ish
      */
-    bool good_shelter_ks(bool white) {
+    bool good_shelter_ks(const bool white) {
         if (white) {
             return (matrix[h2] == WPAWN && matrix[g2] == WPAWN)
                     || (matrix[f2] == WPAWN && matrix[h2] == WPAWN && matrix[g3] == WPAWN)
@@ -289,7 +276,7 @@ public:
      * @param white side to move
      * @return true if pawn shelter is ok-ish
      */
-    bool good_shelter_qs(bool white) {
+    bool good_shelter_qs(const bool white) {
         if (white) {
             return (matrix[a2] == WPAWN && matrix[b2] == WPAWN && matrix[c2] == WPAWN)
                     || (matrix[a2] == WPAWN && matrix[b3] == WPAWN && matrix[c2] == WPAWN);
@@ -304,7 +291,7 @@ public:
      * @param us side to test
      * @return true: side has bishop pair, false: side does not have the bishop pair
      */
-    bool has_bishop_pair(bool us) {
+    bool has_bishop_pair(const bool us) {
         int pc = BISHOP[us];
         return (bb[pc] & WHITE_SQUARES) && (bb[pc] & BLACK_SQUARES);
     }
@@ -331,7 +318,7 @@ public:
      * @param white white or black
      * @return true if the square is attacked, false otherwise
      */
-    bool is_attacked(int sq, bool white) {
+    bool is_attacked(const int sq, const bool white) {
         return white ?
                 bb[WKNIGHT] & KNIGHT_MOVES[sq]
                 || bb[WPAWN] & BPAWN_CAPTURES[sq]
@@ -346,7 +333,7 @@ public:
                 || (bb[BROOK] | bb[BQUEEN]) & magic::rook_moves(sq, bb[ALLPIECES]);
     }
 
-    bool is_attacked_excl_king(int sq, bool white) {
+    bool is_attacked_excl_king(const int sq, const bool white) {
         return white ?
                 bb[WKNIGHT] & KNIGHT_MOVES[sq]
                 || bb[WPAWN] & BPAWN_CAPTURES[sq]
@@ -359,7 +346,7 @@ public:
                 || (bb[BROOK] | bb[BQUEEN]) & magic::rook_moves(sq, bb[ALLPIECES]);
     }
 
-    bool is_attacked_excl_queen(int sq, bool white) {
+    bool is_attacked_excl_queen(const int sq, const bool white) {
         return white ?
                 bb[WKNIGHT] & KNIGHT_MOVES[sq]
                 || bb[WPAWN] & BPAWN_CAPTURES[sq]
@@ -377,7 +364,7 @@ public:
      * @param sq the square to investigate
      * @return bitboard populated with all pieces attacking the square
      */
-    U64 attacks_to(int sq) {
+    U64 attacks_to(const int sq) {
         return (KNIGHT_MOVES[sq] & (bb[WKNIGHT] | bb[BKNIGHT]))
                 | (BPAWN_CAPTURES[sq] & bb[WPAWN])
                 | (WPAWN_CAPTURES[sq] & bb[BPAWN])
@@ -391,7 +378,7 @@ public:
      * @param white white (true) or black (false)
      * @return bitboard populated with pawn attacks
      */
-    U64 pawn_attacks(bool white) {
+    U64 pawn_attacks(const bool white) {
         return white ? UPLEFT1(bb[WPAWN]) | UPRIGHT1(bb[WPAWN])
                 :
                 DOWNLEFT1(bb[BPAWN]) | DOWNRIGHT1(bb[BPAWN]);
@@ -403,7 +390,7 @@ public:
      * @param white white or black
      * @return bitboard populated with one or two pawn attacks
      */
-    U64 pawn_attacks(int sq, bool white) {
+    U64 pawn_attacks(const int sq, const bool white) {
         return white ? WPAWN_CAPTURES[sq] : BPAWN_CAPTURES[sq];
     }
 
@@ -413,7 +400,7 @@ public:
      * @param white attacked by white pawn (true) or black pawn
      * @return true if the square is attacked by a pawn
      */
-    bool is_attacked_by_pawn(int sq, bool white) {
+    bool is_attacked_by_pawn(const int sq, const bool white) {
         return white ? BPAWN_CAPTURES[sq] & bb[WPAWN] : WPAWN_CAPTURES[sq] & bb[BPAWN];
     }
 
@@ -423,7 +410,7 @@ public:
      * @param us side to move: white or black
      * @return true if the square can safely be occupied by a pawn
      */
-    bool pawn_is_safe(int sq, bool us) {
+    bool pawn_is_safe(const int sq, const bool us) {
         U64 atck[2] = {WPAWN_CAPTURES[sq] & bb[BPAWN], BPAWN_CAPTURES[sq] & bb[WPAWN]};
         bool them = !us;
         return atck[them] == 0 || (is_1(atck[them]) && atck[us] != 0) || gt_1(atck[us]);
@@ -435,7 +422,7 @@ public:
      * @param us side to move (white or black)
      * @return true if outpost, false otherwise
      */
-    bool is_outpost(int sq, bool us) {
+    bool is_outpost(const int sq, const bool us) {
         U64 span_up = ADJACENT_FILES[FILE(sq)] & upward_ranks(RANK(sq), us);
         return (span_up & bb[PAWN[!us]]) == 0;
     }
@@ -455,8 +442,7 @@ public:
      * pieces, multiplied by 2 and added 2 for one (extra) check
      */
     int max_mate_depth_us() {
-        bool btm = !stack->wtm;
-        return 2 + 2 * (popcnt(bb[WPIECES + btm]));
+        return 2 + 2 * (popcnt(bb[WPIECES + !stack->wtm]));
     }
 };
 

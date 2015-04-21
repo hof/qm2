@@ -68,7 +68,7 @@ void board_t::clear() {
  * @param sq the location square of the piece (a1..h8)
  * @param hash update the hash codes or not
  */
-void board_t::add_piece(int piece, int sq, bool hash = false) {
+void board_t::add_piece(const int piece, const int sq, const bool hash = false) {
     if (hash) {
         HASH_ADD_PIECE(stack->material_hash, piece, count(piece));
         HASH_ADD_PIECE(stack->tt_key, piece, sq);
@@ -89,7 +89,7 @@ void board_t::add_piece(int piece, int sq, bool hash = false) {
  * @param sq the square location of the piece (a1..h8)
  * @param hash update the hash codes or not
  */
-void board_t::remove_piece(int piece, int sq, bool hash = false) {
+void board_t::remove_piece(const int piece, const int sq, const bool hash = false) {
     U64 bit = BIT(sq);
     bb[piece] ^= bit;
     bb[WPIECES + (piece > WKING)] ^= bit;
@@ -130,7 +130,7 @@ void board_t::move_piece(int piece, int ssq, int tsq, bool hash = false) {
  * Do the move in the current position and update the board structure 
  * @param move move object, the move to make
  */
-void board_t::forward(move_t * move) {
+void board_t::forward(const move_t * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
     int piece = move->piece;
@@ -252,7 +252,7 @@ void board_t::forward(move_t * move) {
  * Undo the move, updating the board structure
  * @param move the move to unmake
  */
-void board_t::backward(move_t * move) {
+void board_t::backward(const move_t * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
     int promotion = move->promotion;
@@ -327,7 +327,7 @@ void board_t::backward() {
  * @param move the move to test for validity, not yet performed in the position
  * @return true if the move is valid in the current position, false otherwise 
  */
-bool board_t::valid(move_t * move) {
+bool board_t::valid(const move_t * move) {
     int piece = move->piece;
     if (stack->wtm != (piece <= WKING)) {
         return false;
@@ -523,7 +523,7 @@ bool board_t::legal(move_t * move) {
  * @param move the move to verify
  * @return 0: no check, 1: simple, direct check, 2: exposed check 
  */
-int board_t::gives_check(move_t * move) {
+int board_t::gives_check(const move_t * move) {
     int ssq = move->ssq;
     int tsq = move->tsq;
     int piece = move->piece;
@@ -694,7 +694,7 @@ int board_t::gives_check(move_t * move) {
  * @param piece this will be set to the piece type 
  * @return bitboard with the location of the smallest attacker
  */
-U64 board_t::smallest_attacker(U64 attacks, bool wtm, int & piece) {
+U64 board_t::smallest_attacker(const U64 attacks, const bool wtm, int & piece) {
     for (piece = PAWN[wtm]; piece <= KING[wtm]; piece++) {
         U64 subset = attacks & bb[piece];
         if (subset) {
@@ -708,18 +708,18 @@ U64 board_t::smallest_attacker(U64 attacks, bool wtm, int & piece) {
  * Returns MVVLVA score 
  * @return 
  */
-int board_t::mvvlva(move_t * move) {
+int board_t::mvvlva(const move_t * move) {
     return board::PVAL[move->capture] + board::PVAL[move->promotion] - move->piece;
 }
 
-int board_t::w17_sort_cap(move_t * move) {
+int board_t::w17_sort_cap(const move_t * move) {
     if (is_attacked(move->tsq, !stack->wtm)) {
         return 1000 + board::PVAL[move->piece] + board::PVAL[move->capture];
     }
     return board::PVAL[move->capture] - board::PVAL[move->piece];
 }
 
-int board_t::max_gain(move_t * move) {
+int board_t::max_gain(const move_t * move) {
     int result = board::PVAL[move->capture];
     if (move->promotion) {
         result += board::PVAL[move->promotion] - board::PVAL[WPAWN];
@@ -727,7 +727,7 @@ int board_t::max_gain(move_t * move) {
     return result;
 }
 
-int board_t::min_gain(move_t * move) {
+int board_t::min_gain(const move_t * move) {
     if (move->piece == WKING || move->piece == BKING 
             || move->piece == WPAWN || move->piece == BPAWN) {
         return board::PVAL[move->capture];
@@ -740,7 +740,7 @@ int board_t::min_gain(move_t * move) {
  * @param move the move to verify
  * @return expected gain or loss by playing this move as a number in centipawns (e.g +300 when winning a knight)
  */
-int board_t::see(move_t * move) {
+int board_t::see(const move_t * move) {
     int captured_piece = move->capture;
     int moving_piece = move->piece;
     int captured_val = board::PVAL[captured_piece];

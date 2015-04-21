@@ -672,7 +672,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
          */
 
         int reduce = 0;
-        if (DO_LMR && depth > 1 && searched_moves > 1 && !is_dangerous) {
+        if (DO_LMR && stack->move_list.stage > QUIET_MOVES && depth > 1
+                && searched_moves > 1 && !is_dangerous) {
             reduce = 1 + bool(depth > 2 && searched_moves > 3);
         }
         assert(reduce == 0 || extend == 0);
