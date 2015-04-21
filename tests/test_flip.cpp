@@ -124,10 +124,6 @@ void flip_divide(int test_num, const char * fen, int divide_steps) {
     for (int i = 0; i < mc; i++) {
         root_move_t * rmove = &s->root.moves[i];
         s->forward(&rmove->move, rmove->gives_check);
-        if (rmove->gives_check) {
-            s->brd.stack->checker_sq = rmove->checker_sq;
-            s->brd.stack->checkers = rmove->checkers;
-        }
         std::string fen = s->brd.to_string();
         flipTest(test_num, fen.c_str(), divide_steps - 1);
         s->backward(&rmove->move);

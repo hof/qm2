@@ -128,9 +128,6 @@ move_t * move_picker_t::next(search_t * s, int depth) {
             }
         case CAPTURES:
             mask = brd->bb[ALLPIECES];
-            if (s->stack->in_check) {
-                mask &= brd->stack->checkers;
-            }
             move::gen_captures(brd, list, mask);
             if (list->current != list->last) {
                 for (move_t * move = list->current; move != list->last; move++) {

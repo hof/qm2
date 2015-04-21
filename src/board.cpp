@@ -18,9 +18,8 @@
  * 
  * File: board.cpp
  * Board representation:
- * - Bitbb for each piece and all (white/black) occupied squares
+ * - Bitboard for each piece and all (white/black) occupied squares
  * - Matrix[64]
- * - Piece placement arrays for each piece
  */
 
 #include "board.h"
@@ -30,14 +29,8 @@
  * Clears board stack
  */
 void board_stack_t::clear() {
-    enpassant_sq = 0;
-    castling_flags = 0;
-    fifty_count = 0;
+    memset(this, 0, sizeof(board_stack_t));
     wtm = true;
-    tt_key = 0;
-    material_hash = 0;
-    pawn_hash = 0;
-    checkers = 0;
 }
 
 /**
@@ -49,7 +42,6 @@ void board_stack_t::flip() {
     if (enpassant_sq) {
         enpassant_sq = FLIP_SQUARE(enpassant_sq);
     }
-    checkers = bb_flip(checkers);
     uint8_t flags = castling_flags;
     castling_flags = 0;
     if (flags & CASTLE_K) {
@@ -71,13 +63,7 @@ void board_stack_t::flip() {
  * @param b_stack the board stack to copy
  */
 void board_stack_t::copy(board_stack_t * b_stack) {
-    enpassant_sq = b_stack->enpassant_sq;
-    castling_flags = b_stack->castling_flags;
-    fifty_count = b_stack->fifty_count;
-    wtm = b_stack->wtm;
-    tt_key = b_stack->tt_key;
-    material_hash = b_stack->material_hash;
-    pawn_hash = b_stack->pawn_hash;
+    memcpy(this, b_stack, sizeof(board_stack_t));     
 }
 
 /**
@@ -634,8 +620,6 @@ int board_t::gives_check(move_t * move) {
         }
     }
     if (checkers) {
-        (stack + 1)->checkers = checkers;
-        (stack + 1)->checker_sq = tsq;
         return 1;
     }
 
@@ -658,16 +642,12 @@ int board_t::gives_check(move_t * move) {
             U64 sliders_diag = sliders & ~(bb[WROOK] | bb[BROOK]);
             checkers = diag & sliders_diag;
             if (checkers) {
-                (stack + 1)->checkers = checkers;
-                (stack + 1)->checker_sq = bsf(checkers);
                 return 2;
             }
             U64 hor_ver = magic::rook_moves(kpos, occ);
             sliders &= ~(bb[WBISHOP] | bb[BBISHOP]);
             checkers = hor_ver & sliders;
             if (checkers) {
-                (stack + 1)->checkers = checkers;
-                (stack + 1)->checker_sq = bsf(checkers);
                 return 2;
             }
         }
@@ -718,8 +698,6 @@ int board_t::gives_check(move_t * move) {
         }
     }
     if (checkers) {
-        (stack + 1)->checkers = checkers;
-        (stack + 1)->checker_sq = tsq;
         return 1;
     }
     return 0;

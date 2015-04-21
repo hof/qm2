@@ -376,10 +376,6 @@ int search_t::init_root_moves() {
             move; move = move::next(this, 1)) {
         root_move_t * rmove = &root.moves[root.move_count++];
         rmove->init(move, brd.gives_check(move), brd.see(move));
-        if (rmove->gives_check) {
-            rmove->checker_sq = (brd.stack + 1)->checker_sq;
-            rmove->checkers = (brd.stack + 1)->checkers;
-        }
     }
     root.in_check = brd.in_check();
     stack->tt_key = brd.stack->tt_key;
@@ -429,10 +425,6 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         int extend = rmove->gives_check > 0;
         int score = 0;
         forward(move, rmove->gives_check);
-        if (rmove->gives_check) {
-            brd.stack->checker_sq = rmove->checker_sq;
-            brd.stack->checkers = rmove->checkers;
-        }
         if (i > 0) {
             score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
         }

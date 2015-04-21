@@ -76,13 +76,11 @@ public:
     int enpassant_sq;
     int castling_flags;
     int fifty_count;
-    int checker_sq;
     bool wtm; //white to move
     U64 tt_key;
     U64 material_hash;
     U64 pawn_hash;
-    U64 checkers;
-
+    
     void clear();
     void flip();
     void copy(board_stack_t * b_stack);
