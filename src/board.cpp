@@ -70,7 +70,7 @@ void board_t::clear() {
  */
 void board_t::add_piece(int piece, int sq, bool hash = false) {
     if (hash) {
-        HASH_ADD_PIECE(stack->material_hash, piece, count(piece) + _bishop_ix(piece, sq));
+        HASH_ADD_PIECE(stack->material_hash, piece, count(piece));
         HASH_ADD_PIECE(stack->tt_key, piece, sq);
         if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
             HASH_ADD_PIECE(stack->pawn_hash, piece, sq);
@@ -96,7 +96,7 @@ void board_t::remove_piece(int piece, int sq, bool hash = false) {
     bb[ALLPIECES] ^= bit;
     matrix[sq] = EMPTY;
     if (hash) {
-        HASH_REMOVE_PIECE(stack->material_hash, piece, count(piece) + _bishop_ix(piece, sq));
+        HASH_REMOVE_PIECE(stack->material_hash, piece, count(piece));
         HASH_REMOVE_PIECE(stack->tt_key, piece, sq);
         if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
             HASH_REMOVE_PIECE(stack->pawn_hash, piece, sq);

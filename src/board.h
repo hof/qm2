@@ -168,16 +168,6 @@ public:
     }
 
     /**
-     * Returns different index in case of a bishop on black squares to calculate material hash key
-     * @param piece piece to verify
-     * @param sq location of the piece
-     * @return 0 or 32
-     */
-    int _bishop_ix(int piece, int sq) {
-        return ((piece == WBISHOP || piece == BBISHOP) && is_black_sq(sq)) << 5;
-    }
-
-    /**
      * Returns bitboard populated with all pieces
      * @param us white or black
      * @return bitboard
