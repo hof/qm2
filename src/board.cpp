@@ -111,7 +111,7 @@ void board_t::remove_piece(const int piece, const int sq, const bool hash = fals
  * @param tsq target square, where the piece is moving to
  * @param hash update the hash codes or not
  */
-void board_t::move_piece(int piece, int ssq, int tsq, bool hash = false) {
+void board_t::move_piece(const int piece, const int ssq, int tsq, const bool hash = false) {
     U64 update_mask = BIT(ssq) | BIT(tsq);
     bb[piece] ^= update_mask;
     bb[WPIECES + (piece > WKING)] ^= update_mask;

@@ -160,7 +160,6 @@ public:
      * @return bitboard
      */
     U64 all(const bool us) {
-        assert(BPIECES == WPIECES + 1);
         return bb[WPIECES + (!us)];
     }
 
@@ -187,7 +186,7 @@ public:
      * @return boolean true if move captures the last piece left
      */
     bool captures_last_piece(const move_t * move) {
-        bool them = move->piece > WKING;
+        const bool them = move->piece > WKING;
         return move->capture > PAWN[them] && has_one_piece(them);
     }
 
@@ -229,29 +228,32 @@ public:
 
     /**
      * Test if white or black side can castle short (King Side)
-     * @param white side to move (1: white, 0: black)
+     * @param us side to move (1: white, 0: black)
      * @return true if short castle right applies
      */
-    bool can_castle_ks(const bool white) {
-        return white ? (stack->castling_flags & CASTLE_K) : (stack->castling_flags & CASTLE_k);
+    bool can_castle_ks(const bool us) {
+        static const int KS_FLAG[2] = { CASTLE_k, CASTLE_K };
+        return stack->castling_flags & KS_FLAG[us];
     }
 
     /**
      * Test if white or black side can castle short (King Side)
-     * @param white side to move (1: white, 0: black)
+     * @param us side to move (1: white, 0: black)
      * @return true if short castle right applies
      */
-    bool can_castle_qs(const bool white) {
-        return white ? (stack->castling_flags & CASTLE_Q) : (stack->castling_flags & CASTLE_q);
+    bool can_castle_qs(const bool us) {
+        static const int QS_FLAG[2] = { CASTLE_q, CASTLE_Q };
+        return stack->castling_flags & QS_FLAG[us];
     }
 
     /**
      * Test if white or black side can castle (any side)
-     * @param white side to move (1: white, 0: black)
+     * @param us side to move (1: white, 0: black)
      * @return true if any castle right applies
      */
-    bool can_castle(const bool white) {
-        return white ? (stack->castling_flags & CASTLE_WHITE) : (stack->castling_flags & CASTLE_BLACK);
+    bool can_castle(const bool us) {
+        static const int CC_FLAG[2] = { CASTLE_BLACK, CASTLE_WHITE };
+        return stack->castling_flags & CC_FLAG[us];
     }
 
     /**
@@ -292,7 +294,7 @@ public:
      * @return true: side has bishop pair, false: side does not have the bishop pair
      */
     bool has_bishop_pair(const bool us) {
-        int pc = BISHOP[us];
+        const int pc = BISHOP[us];
         return (bb[pc] & WHITE_SQUARES) && (bb[pc] & BLACK_SQUARES);
     }
 
@@ -349,16 +351,6 @@ public:
         return white ? UPLEFT1(bb[WPAWN]) | UPRIGHT1(bb[WPAWN])
                 :
                 DOWNLEFT1(bb[BPAWN]) | DOWNRIGHT1(bb[BPAWN]);
-    }
-
-    /**
-     * Get all pawn attacks from a square
-     * @param sq square from which to attack
-     * @param white white or black
-     * @return bitboard populated with one or two pawn attacks
-     */
-    U64 pawn_attacks(const int sq, const bool white) {
-        return white ? PAWN_CAPTURES[WHITE][sq] : PAWN_CAPTURES[BLACK][sq];
     }
 
     /**

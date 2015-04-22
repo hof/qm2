@@ -65,7 +65,7 @@ namespace move {
         pawn_caps &= board->pawn_attacks(us);
         while (pawn_caps) {
             int tsq = pop(pawn_caps);
-            moves = board->pawn_attacks(tsq, them) & board->bb[PAWN[us]];
+            moves = PAWN_CAPTURES[them][tsq] & board->bb[PAWN[us]];
             while (moves) {
                 int ssq = pop(moves);
                 if (tsq == board->stack->enpassant_sq && tsq > 0) {

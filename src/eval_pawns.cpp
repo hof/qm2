@@ -136,10 +136,10 @@ namespace pawns {
                 bool isolated = (af & pawns_us) == 0;
                 bool doubled = up & pawns_us;
                 bool opposed = up & pawns_them;
-                bool attacking = !isolated && (brd->pawn_attacks(sq, us) & pawns_them);
+                bool attacking = !isolated && (PAWN_CAPTURES[us][sq] & pawns_them);
                 bool blocked = !attacking && (BIT(sq + step) & pawns_all) != 0;
                 bool passed = !doubled && !opposed && 0 == (pawns_them & af & upward_ranks(r, us));
-                bool defended = !isolated && (brd->pawn_attacks(sq, them) & pawns_us);
+                bool defended = !isolated && (PAWN_CAPTURES[them][sq] & pawns_us);
                 bool duo = defended || (af & RANKS[r] & pawns_us);
                 bool weak = !isolated && !passed && !defended && !attacking && !doubled && (r_us + !blocked) < 6;
 
@@ -150,8 +150,8 @@ namespace pawns {
                     for (int stp = 0; stp < 2 + (r_us == 1); stp++) {
 
                         //get pawn attacks and defenders of the next square
-                        U64 defs = brd->pawn_attacks(next_sq, them) & pawns_us;
-                        U64 atck = brd->pawn_attacks(next_sq, us) & pawns_them;
+                        U64 defs = PAWN_CAPTURES[them][next_sq] & pawns_us;
+                        U64 atck = PAWN_CAPTURES[us][next_sq] & pawns_them;
                         next_sq += step;
 
                         //no attackers or defenders, not blocked: try another step
