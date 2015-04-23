@@ -29,7 +29,6 @@
 namespace pawns {
 
 #ifdef ENABLE_PAWN_EVAL_TRACE
-
     void trace(std::string msg, int sq, const score_t & s) {
         if (s.mg == 0 && s.eg == 0) {
             return;
@@ -73,10 +72,10 @@ namespace pawns {
         3, 3, 4, 5, 5, 4, 3, 3,
         1, 1, 3, 4, 4, 3, 1, 1,
         0, 0, 1, 3, 3, 1, 0, 0,
-       -1, 0, 1, 2, 2, 1, 0,-1 //a1..h1
+        -1, 0, 1, 2, 2, 1, 0, -1 //a1..h1
     };
 
-    const int8_t SHELTER_OPEN_FILES[4] = { -1, 1, 2, 3 };
+    const int8_t SHELTER_OPEN_FILES[4] = {-1, 1, 2, 3};
     const int8_t SHELTER_OPEN_EDGE_FILE = 1;
     const int8_t SHELTER_CASTLING_KINGSIDE = -3;
     const int8_t SHELTER_CASTLING_QUEENSIDE = -2;
@@ -293,10 +292,10 @@ namespace pawns {
                         && brd->good_shelter_ks(them)) {
                     e->king_attack[us] += CASTLED_KINGSIDE;
                     trace("KING ATTACK UNITS (CASTLED KS)", kpos[them], CASTLED_KINGSIDE);
+                } else {
+                    e->king_attack[us] -= popcnt0(KING_MOVES[kpos[them]] & pawns_them);
+                    trace("KING ATTACK UNITS (SHELTER PAWNS)", kpos[them], -popcnt0(KING_MOVES[kpos[them]] & pawns_them));
                 }
-                U64 king_def = KING_MOVES[kpos[them]] & pawns_them;
-                e->king_attack[us] -= popcnt0(king_def);
-                trace("KING ATTACK UNITS (SHELTER PAWNS)", kpos[them], -popcnt0(king_def));
             }
 
             //attack units - (half)open files
@@ -397,7 +396,7 @@ namespace pawns {
 
                 //get defenders (them) and supporters (us)
                 U64 defend = attacks & sd->brd.all(them);
-                
+
                 if (defend) {
                     U64 support = attacks & sd->brd.all(us);
                     if (support == 0 || (is_1(support) && gt_1(defend))) {
@@ -409,7 +408,7 @@ namespace pawns {
                 to += step;
             }
         }
-        
+
         if (has_imbalance(sd, them)) {
             if (has_major_imbalance(sd)) {
                 result->mul256(128);

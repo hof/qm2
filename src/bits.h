@@ -297,6 +297,10 @@ inline bool gt_1(U64 x) {
 
 const int PAWN_DIRECTION[2] = {-8, 8};
 
+inline U64 up1(const U64 x, const bool us) {
+    return us? UP1(x) : DOWN1(x);
+}
+
 #define FILE(sq)            ((sq)&7)
 #define RANK(sq)            ((sq)>>3)
 

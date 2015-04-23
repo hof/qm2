@@ -28,6 +28,7 @@
 #include "eval_pieces.h"
 #include "eval_endgame.h"
 #include "eval_pawns.h"
+#include "eval_king_attack.h"
 
 pst_t PST;
 
@@ -144,8 +145,8 @@ int evaluate(search_t * sd) {
         score->add(pawns::eval_passed_pawns(sd, WHITE));
         score->sub(pawns::eval_passed_pawns(sd, BLACK));
     }
-    score->add(eval_king_attack(sd, WHITE));
-    score->sub(eval_king_attack(sd, BLACK));
+    score->add(king_attack::eval(sd, WHITE));
+    score->sub(king_attack::eval(sd, BLACK));
     result += score->get(sd->stack->mt->phase);
     sd->stack->eg_score = result;
     if (sd->stack->mt->flags & MFLAG_EG) {
@@ -296,96 +297,3 @@ int eval_material(search_t * s) {
     e->phase = phase;
     return e->score;
 }
-
-const int8_t KING_ATTACK_OFFSET = 8; //perfectly castled king -9 units
-
-const int8_t KING_ATTACK_UNIT[BKING + 1] = {
-    //  x, p, n, b, r, q, k, p, n, b, r, q, k
-    /**/0, 0, 1, 1, 2, 4, 0, 0, 1, 1, 2, 4, 0
-};
-
-const int8_t KING_DEFEND_UNIT[BKING + 1] = {
-    //  x, p, n, b, r, q, k, p, n, b, r, q, k
-    /**/0, 0, 3, 2, 1, 0, 0, 0, 3, 2, 1, 0, 0
-};
-
-const int16_t KING_SHELTER[24] = {//structural shelter (pawns & kings)
-    0, 15, 25, 30, 40, 50, 60, 75,
-    90, 105, 125, 145, 160, 175, 190, 200,
-    210, 220, 225, 235, 235, 240, 245, 250
-};
-
-const int16_t KING_ATTACK_PCS[16] = {
-    0, 48, 128, 256, 384, 464, 496, 512, 
-    512, 512, 512, 512, 512, 512, 512, 512
-};
-
-const int16_t KING_ATTACK_UNITS[16] = {
-    0, 0, 0, 16, 48, 128, 256, 384, 
-    464, 496, 512, 512, 512, 512, 512, 512
-};
-
-score_t * eval_king_attack(search_t * s, bool us) {
-    
-    int pc = KING[us];
-    score_t * result = &s->stack->pc_score[pc];
-    result->clear();
-    
-    if (us == WHITE && (s->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_W) == 0) {
-        return result;
-    }
-
-    if (us == BLACK && (s->stack->mt->flags & MFLAG_KING_ATTACK_FORCE_B) == 0) {
-        return result;
-    }
-
-    /*
-     * 1. Shelter score
-     */
-
-    board_t * brd = &s->brd;
-    int attack_score = 0;
-    int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + s->stack->pt->king_attack[us]);
-    attack_score = KING_SHELTER[shelter_ix];
-
-    if ((RANK[us][8] & brd->bb[ROOK[!us]]) == 0) { //no rook protecting their back rank
-        attack_score += 20;
-    }
-
-    /*
-     * 2. Reduce the shelter score for closed positions
-     */
-
-    if ((s->stack->pt->flags & pawn_table::FLAG_CLOSED_CENTER) != 0) {
-        attack_score = attack_score / 2;
-    }
-    
-    attack_score = (s->king_attack_shelter * attack_score) / 256;
-
-    /*
-     * 3. Calculate the total piece attack score
-     */
-
-    int attack_units = 0;
-    int defend_units = 0;
-    int attack_pcs = 0;
-    int defend_pcs = 0;
-    int offs[2] = { -6, 6 };
-    
-    for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
-        int a = KA_UNITS(s->stack->king_attack[pc]);
-        int d = KD_UNITS(s->stack->king_attack[pc + offs[us]]);
-        attack_pcs += a;
-        defend_pcs += d;
-        attack_units += a * KING_ATTACK_UNIT[pc];
-        defend_units += d * KING_DEFEND_UNIT[pc];
-    }
-       
-    int pc_attack_score = attack_units * 20 - defend_units * 5;
-    pc_attack_score = (s->king_attack_pieces * pc_attack_score) / 256;
-    const int pc_ix = attack_pcs + (attack_pcs==0 && defend_pcs);
-    attack_score += (KING_ATTACK_PCS[pc_ix] * pc_attack_score) / 256;
-    result->set(attack_score, 0);
-    return result;
-}
-

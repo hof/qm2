@@ -11,6 +11,7 @@ add_library(MAX2SRC
         eval_pieces.cpp
         eval_endgame.cpp
         eval_pawns.cpp
+        eval_king_attack.cpp
 	eval.cpp
 	search.cpp
         opponent.cpp
