@@ -34,25 +34,6 @@ extern const score_t TEMPO[2];
 int evaluate(search_t * s);
 void init_pst();
 
-enum piece_val_t {
-    VPAWN = 100,
-    VKNIGHT = 325,
-    VBISHOP = 325,
-    VROOK = 500,
-    VQUEEN = 975,
-    VKING = 20000,
-};
-
-const uint16_t PIECE_VALUE[13] = {
-    0, VPAWN, VKNIGHT, VBISHOP, VROOK, VQUEEN, VKING,
-    VPAWN, VKNIGHT, VBISHOP, VROOK, VQUEEN, VKING
-};
-
-class search_t;
-
-bool has_mating_power(search_t * s, bool us);
-bool has_imbalance(search_t * s, bool us);
-bool has_major_imbalance(search_t * s);
 
 #endif	/* EVALUATE_H */
 

@@ -15,20 +15,24 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  *  
- * File: eval_pieces.h
- * Piece (kight, bishop, rook, queen) evaluation functions for normal chess
+ * File: eval_material.h
+ * Evaluation function for material balance
  */
 
-#ifndef EVAL_PIECES_H
-#define	EVAL_PIECES_H
+#ifndef EVAL_MATERIAL_H
+#define	EVAL_MATERIAL_H
 
 class search_t;
-class score_t;
 
-namespace pieces {
-    score_t * eval(search_t * s);
+namespace material {
+
+    int eval(search_t * s);
+    bool has_mating_power(search_t * s, bool us);
+    bool has_imbalance(search_t * s, bool us);
+    bool has_king_attack_force(search_t * s, bool us);
+    bool has_major_imbalance(search_t * s);
+    bool is_eg(search_t * s);
 }
 
-
-#endif	/* EVAL_PIECES_H */
+#endif	/* EVAL_MATERIAL_H */
 

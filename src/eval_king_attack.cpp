@@ -22,6 +22,7 @@
  * 3) Pieces defending the opponent's king  
  */
 
+#include "eval_material.h"
 #include "eval_pieces.h"
 #include "search.h"
 #include "bits.h"
@@ -30,9 +31,10 @@
 #define __ENABLE_KING_ATTACK_TRACE
 
 #ifdef ENABLE_KING_ATTACK_TRACE
-    void trace(std::string msg, bool us, int score) {
-       std::cout << msg << (us? " WHITE: " : " BLACK: ") << score << std::endl;
-    }
+
+void trace(std::string msg, bool us, int score) {
+    std::cout << msg << (us ? " WHITE: " : " BLACK: ") << score << std::endl;
+}
 #endif
 
 #ifndef ENABLE_KING_ATTACK_TRACE 
@@ -40,8 +42,6 @@
 #endif
 
 namespace king_attack {
-    
-    const int8_t KING_ATTACK_OFFSET = 8; //perfectly castled king -9 units
 
     const int8_t KING_ATTACK_UNIT[BKING + 1] = {
         //  x, p, n, b, r, q, k, p, n, b, r, q, k
@@ -52,34 +52,34 @@ namespace king_attack {
         //  x, p, n, b, r, q, k, p, n, b, r, q, k
         /**/0, 0, 3, 2, 1, 0, 0, 0, 3, 2, 1, 0, 0
     };
-
-    const int16_t KING_SHELTER[24] = {//structural shelter (pawns & kings)
+    
+    const int16_t KING_SHELTER[24] = {//structural shelter value (pawns & kings)
         0, 15, 25, 30, 40, 50, 60, 75,
         90, 105, 125, 145, 160, 175, 190, 200,
         210, 220, 225, 235, 235, 240, 245, 250
     };
 
-    const int16_t KING_ATTACK_PCS[16] = {
+    const int16_t KING_ATTACK_PCS[16] = {//multipliers
         0, 48, 128, 256, 384, 464, 496, 512,
         512, 512, 512, 512, 512, 512, 512, 512
     };
 
-    const int16_t KING_ATTACK_UNITS[16] = {
+    const int16_t KING_ATTACK_UNITS[16] = {//multipliers
         0, 0, 0, 16, 48, 128, 256, 384,
         464, 496, 512, 512, 512, 512, 512, 512
     };
+    
+    const int8_t KING_ATTACK_OFFSET = 8; //perfectly castled king -9 units
+    const int8_t KING_DEFEND_FIANCHETTO[2] = { -1, 1 };
+    const int8_t KING_DEFEND_BACKRANK[2] = { -1, 1 };
 
     score_t * eval(search_t * s, bool us) {
 
         int pc = KING[us];
         score_t * result = &s->stack->pc_score[pc];
         result->clear();
-
-        if (us == WHITE && (s->stack->mt->flags & 16) == 0) {
-            return result;
-        }
-
-        if (us == BLACK && (s->stack->mt->flags & 8) == 0) {
+        
+        if (!material::has_king_attack_force(s, us)) {
             return result;
         }
 
@@ -92,19 +92,6 @@ namespace king_attack {
         int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + s->stack->pt->king_attack[us]);
         attack_score = KING_SHELTER[shelter_ix];
         trace("SHELTER ATTACK", us, KING_SHELTER[shelter_ix]);
-
-        //rook protecting back rank
-        bool them = !us;
-        if ((RANK[us][8] & brd->bb[ROOK[them]]) == 0) { 
-            attack_score += 20;
-            trace("WEAK BACK RANK", us, 20);
-        }
-        
-        //fianchetto bishop or pawn protecting holes?
-        if ((up1(brd->bb[KING[them]], them) & (brd->bb[PAWN[them]] | brd->bb[BISHOP[them]]))== 0) {
-            attack_score += 10;
-            trace("WEAK FIANCHETTO", us, 10);
-        }
 
         /*
          * 2. Reduce the shelter score for closed positions
@@ -127,6 +114,13 @@ namespace king_attack {
         int attack_pcs = 0;
         int defend_pcs = 0;
         int offs[2] = {-6, 6};
+
+        //back rank protection and fianchetto
+        const bool them = !us;
+        const bool backrank_ok = RANK[us][8] & brd->bb[ROOK[them]];
+        const bool fianchetto_ok = up1(brd->bb[KING[them]], them) & (brd->bb[PAWN[them]] | brd->bb[BISHOP[them]]);
+        defend_units += KING_DEFEND_BACKRANK[backrank_ok];
+        defend_units += KING_DEFEND_FIANCHETTO[fianchetto_ok];
 
         for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
             int a = KA_UNITS(s->stack->king_attack[pc]);

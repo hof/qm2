@@ -20,6 +20,7 @@
  */
 
 #include "eval_endgame.h"
+#include "eval_material.h"
 #include "eval.h"
 #include "search.h"
 #include "bits.h"
@@ -438,7 +439,7 @@ namespace eg {
     int pcs_vs_king(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 0, 1, 0, 0, us));
         const bool them = !us;
-        if (has_mating_power(s, us)) { //e.g. KBNK and better
+        if (material::has_mating_power(s, us)) { //e.g. KBNK and better
             return score + win(us) + corner_king(s, them);
         } else { //e.g. KNNK and worse
             return draw(score, 128);
@@ -451,7 +452,7 @@ namespace eg {
     int pcs_n_pawns_vs_king(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 1, 0, 0, us));
         const bool them = !us;
-        if (has_mating_power(s, us)) {
+        if (material::has_mating_power(s, us)) {
             return score + win(us) + corner_king(s, them);
         }
         int steps = unstoppable_pawn_steps(s, us);
@@ -470,7 +471,7 @@ namespace eg {
      */
     int pcs_vs_pawns(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 0, 1, 1, 0, us));
-        const bool pow_us = has_mating_power(s, us);
+        const bool pow_us = material::has_mating_power(s, us);
         if (!pow_us) {
             return draw(score, 0);
         } else if (s->brd.is_eg(KRKP, us)) {
@@ -511,13 +512,13 @@ namespace eg {
     int pcs_vs_pcs(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 0, 1, 0, 1, us));
         const bool them = !us;
-        if (!has_mating_power(s, us)) { //no mating power -> draw 
+        if (!material::has_mating_power(s, us)) { //no mating power -> draw 
             return draw(score, 16);
         } else if (s->brd.is_eg(KBBKN, us)) { //KBBKN is an exception
             return score + win(us, 2) + corner_king(s, them, 2) + 10 * piece_distance(s, them);
         } else if (!has_winning_edge(s, us)) { //no winning edge -> draw
             return draw(score, 16) + corner_king(s, them, 16);
-        } else if (has_mating_power(s, them)) { //win 
+        } else if (material::has_mating_power(s, them)) { //win 
             return score + win(us, 8) + corner_king(s, them, 8);
         } else { //win and they can impossibly win
             return score + win(us, 4) + corner_king(s, them, 4);
@@ -530,8 +531,8 @@ namespace eg {
     int pcs_n_pawns_vs_pcs(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 1, 0, 1, us));
         const bool them = !us;
-        const bool pow_us = has_mating_power(s, us);
-        const bool pow_them = has_mating_power(s, them);
+        const bool pow_us = material::has_mating_power(s, us);
+        const bool pow_them = material::has_mating_power(s, them);
         const bool win_us = has_winning_edge(s, us);
         if (pow_us && win_us) {
             //winning material edge
@@ -556,15 +557,15 @@ namespace eg {
      */
     int pcs_vs_pcs_n_pawns(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 0, 1, 1, 1, us));
-        const bool pow_us = has_mating_power(s, us);
+        const bool pow_us = material::has_mating_power(s, us);
         const bool win_us = has_winning_edge(s, us);
         const bool them = !us;
         if (!pow_us && !win_us) {
             return draw(score, 128);
         } else if (!win_us) {
-            if (!has_imbalance(s, us)) {
+            if (!material::has_imbalance(s, us)) {
                 return draw(score, 64) + corner_king(s, them, 16);
-            } else if (!has_major_imbalance(s)) {
+            } else if (!material::has_major_imbalance(s)) {
                 return draw(score, 32) + corner_king(s, them, 16);
             } else {
                 return draw(score, 2) + corner_king(s, them, 8);

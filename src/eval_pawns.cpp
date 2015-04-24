@@ -20,6 +20,7 @@
  */
 
 #include "eval_pawns.h"
+#include "eval_material.h"
 #include "eval.h"
 #include "search.h"
 #include "bits.h"
@@ -409,8 +410,8 @@ namespace pawns {
             }
         }
 
-        if (has_imbalance(sd, them)) {
-            if (has_major_imbalance(sd)) {
+        if (material::has_imbalance(sd, them)) {
+            if (material::has_major_imbalance(sd)) {
                 result->mul256(128);
             } else {
                 result->mul256(196);

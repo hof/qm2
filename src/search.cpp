@@ -93,8 +93,8 @@ void search_t::init(const char * fen, game_t * g) {
     stack->best_move.clear();
     result_score = 0;
     init_pst();
-    stack->eval_result = score::INVALID; //required
-    stack->eval_result = evaluate(this);
+    stack->eval_result = score::INVALID;
+    evaluate(this);
     init_history();
     book_name = "book.bin";
 }
