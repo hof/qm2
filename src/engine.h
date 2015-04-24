@@ -14,7 +14,7 @@
  *  
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
- *  
+ * 
  * File: engine.h
  * Implements the chess engine
  *
@@ -46,6 +46,10 @@ private:
     int _opt_wild;
     int _opt_king_attack_shelter;
     int _opt_king_attack_pieces;
+    int _opt_null_adaptive_depth;
+    int _opt_null_adaptive_value;
+    bool _opt_null_verify;
+    bool _opt_null_enabled;
     
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
@@ -118,6 +122,14 @@ public:
             _opt_king_attack_shelter = value;
         } else if (name == "king_attack_pieces") {
             _opt_king_attack_pieces = value;
+        } else if (name == "null_verify") {
+            _opt_null_verify = value;
+        } else if (name == "null_adaptive_depth") {
+            _opt_null_adaptive_depth = value;
+        } else if (name == "null_adaptive_value") {
+            _opt_null_adaptive_value = value;
+        } else if (name == "null_enabled") {
+            _opt_null_enabled = value;
         }
     }
 

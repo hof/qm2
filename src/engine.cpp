@@ -99,6 +99,10 @@ engine_t::engine_t() : threads_t() {
     _opt_wild = 0;
     _opt_king_attack_shelter = 256;
     _opt_king_attack_pieces = 256;
+    _opt_null_verify = true;
+    _opt_null_enabled = true;
+    _opt_null_adaptive_depth = 8;
+    _opt_null_adaptive_value = 200;
 }
 
 /**
@@ -142,6 +146,10 @@ void * engine_t::_think(void * engine_p) {
     //copy parameters
     s->king_attack_shelter = engine->_opt_king_attack_shelter;
     s->king_attack_pieces = engine->_opt_king_attack_pieces;
+    s->null_enabled = engine->_opt_null_enabled;
+    s->null_verify = engine->_opt_null_verify;
+    s->null_adaptive_depth = engine->_opt_null_adaptive_depth;
+    s->null_adaptive_value = engine->_opt_null_adaptive_value;
     
     //think
     s->go();

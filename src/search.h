@@ -101,11 +101,19 @@ public:
     int wild;
     int king_attack_shelter;
     int king_attack_pieces;
+    int null_adaptive_depth;
+    int null_adaptive_value;
+    bool null_verify;
+    bool null_enabled;
 
     search_t(const char * fen, game_t * g = NULL) {
         wild = 0;
         king_attack_shelter = 256;
         king_attack_pieces = 256;
+        null_adaptive_depth = 8;
+        null_adaptive_value = 200;
+        null_verify = true;
+        null_enabled = true;
         init(fen, g);
     }
 

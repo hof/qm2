@@ -578,16 +578,22 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE;
 
     //null move pruning
-    if (DO_NULLMOVE && do_prune_node && eval >= beta && depth > 1 && brd.has_pieces(brd.stack->wtm)) {
+    if (null_enabled && do_prune_node && eval >= beta && depth > 1 && brd.has_pieces(brd.stack->wtm)) {
         forward();
-        const int R = 3;
+        int R = 3;
+        if (depth > R && null_adaptive_depth > 0) {
+            R += depth / null_adaptive_depth;
+        }
+        if (depth > R && null_adaptive_value > 0) {
+            R += (eval - beta) / null_adaptive_value;
+        }
         int null_score = -pvs(-beta, -alpha, depth - 1 - R);
         backward();
         if (stop_all) {
             return alpha;
         } else if (null_score >= beta) {
-            const int RV = 5;
-            if (DO_VERIFY_NULL && depth > RV && brd.has_one_piece(brd.stack->wtm)) {
+            int RV = 5;
+            if (null_verify && depth > RV && brd.has_one_piece(brd.stack->wtm)) {
                 //verification
                 skip_null = true;
                 int verified_score = pvs(alpha, beta, depth - 1 - RV);

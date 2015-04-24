@@ -22,7 +22,7 @@
 
 #include "uci_console.h"
 
-//#define DO_LOG
+#define __DO_LOG
 
 namespace uci {
 
@@ -104,7 +104,7 @@ namespace uci {
                 result = handle_eval(parser);
             } else if (token == "learn") {
                 result = handle_learn(parser);
-            } 
+            }
         }
         return result;
     }
@@ -250,6 +250,18 @@ namespace uci {
                             if (value == "true" || value == "1") {
                                 engine::set_option("wild", 22);
                             }
+                        } else if (name == "NullEnabled") {
+                            handled = true;
+                            engine::set_option("null_enabled", value == "true" || value == "1");
+                        } else if (name == "NullVerify") {
+                            handled = true;
+                            engine::set_option("null_verify", value == "true" || value == "1");
+                        } else if (name == "NullAdaptiveDepth") {
+                            handled = true;
+                            engine::set_option("null_adaptive_depth", atoi<int>(value));
+                        } else if (name == "NullAdaptiveValue") {
+                            handled = true;
+                            engine::set_option("null_adaptive_value", atoi<int>(value));
                         } else if (name == "KingAttackShelter") {
                             handled = true;
                             engine::set_option("king_attack_shelter", atoi<int>(value));
@@ -332,7 +344,11 @@ namespace uci {
         out("option name UCI_AnalyseMode type check default false");
         out("option name UCI_Opponent type string");
         out("option name UCI_Chess960 type check default false");
-        out("option name Wild type combo default 0 var standard var losers");
+        out("option name NullEnabled type check default true");
+        out("option name NullVerify type check default true");
+        out("option name NullAdaptiveValue type spin default 200 min 0 max 1000");
+        out("option name NullAdaptiveDepth type spin default 8 min 0 max 64");
+        out("option name Wild type combo default standard var standard var losers");
         out("option name KingAttackShelter type spin default 256 min 0 max 512");
         out("option name KingAttackPieces type spin default 256 min 0 max 512");
     }
