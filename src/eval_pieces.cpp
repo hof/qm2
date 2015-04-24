@@ -98,6 +98,8 @@ namespace pieces {
     const score_t CONNECTED_ROOKS(10, 20);
     const U64 PAT_BLOCKED_CENTER = BIT(d3) | BIT(e3) | BIT(d6) | BIT(e6);
     const U64 PAT_BACKRANKS[2] = {RANK_1 | RANK_2, RANK_7 | RANK_8};
+    const U64 PAT_TRAPPED[2] = {(RANK_1 | RANK_2 | RANK_3) & EDGE, (RANK_6 | RANK_7 | RANK_8) & EDGE};
+    const int8_t TRAPPED_PC = -35;
 
     /**
      * Piece evaluation routine
@@ -222,8 +224,9 @@ namespace pieces {
                  * Mobility and activity
                  */
 
-                U64 safe_moves = moves & pi->mob[us];
-                sc->add(MOBILITY[popcnt0(safe_moves)]);
+                const U64 safe_moves = moves & pi->mob[us];
+                const int mob_cnt = popcnt0(safe_moves);
+                sc->add(MOBILITY[mob_cnt]);
                 trace("MOBILITY", sq, sc);
                 sc->add(ATTACKS[popcnt0(safe_moves & pi->attack[us])]);
                 trace("ATTACKS", sq, sc);
@@ -236,6 +239,16 @@ namespace pieces {
                     sc->add(ATTACKED[pc]);
                     trace("ATTACKED", sq, sc);
                 }
+
+                /*
+                 * Trapped piece
+                 */
+
+                if (mob_cnt < 2 && !defended && (bsq & PAT_TRAPPED[us]) && max_1(moves & ~occ)) {
+                    sc->add(TRAPPED_PC * (rank(sq, us)-3));
+                    trace("TRAPPED", sq, sc); 
+                }
+
 
                 /*
                  * Minor piece on outpost
@@ -256,7 +269,7 @@ namespace pieces {
                  */
 
                 if (pc == ROOK[us]) {
-                    
+
                     //Open / closed files
                     if (!pi->is_open_file(sq, us)) {
                         sc->add(CLOSED_FILE);
@@ -286,10 +299,12 @@ namespace pieces {
                 }
 
                 /*
-                 * King attacks info for later use in eval_king_attack
+                 * King attacks info for later use in king attack evaluation
                  */
+
                 king_attack_units += bool(safe_moves & KING_MOVES[kpos[!us]]);
                 king_defend_units += bool(moves & KING_MOVES[kpos[us]]);
+
             } while (bb_pc);
 
             /*
