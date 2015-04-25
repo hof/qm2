@@ -15,7 +15,6 @@ add_library(MAX2SRC
         eval_king_attack.cpp
 	eval.cpp
 	search.cpp
-        opponent.cpp
         game.cpp      
         engine.cpp
         uci_console.cpp

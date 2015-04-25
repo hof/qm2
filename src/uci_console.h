@@ -35,8 +35,6 @@
 
 #include "engine.h"
 
-#include "version.h"
-
 namespace uci {
     typedef std::istringstream input_parser_t;
     

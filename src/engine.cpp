@@ -62,10 +62,6 @@ namespace engine {
         _ponder = ponder;
         _engine.set_ponder(ponder);
     }
-    
-    void set_option(std::string name, int value) {
-        _engine.set_option(name, value);
-    }
 
     bool is_stopped() {
         return _stopped;
@@ -96,13 +92,6 @@ engine_t::engine_t() : threads_t() {
     _result_move.clear();
     _result_score = 0;
     _game.clear();
-    _opt_wild = 0;
-    _opt_king_attack_shelter = 256;
-    _opt_king_attack_pieces = 256;
-    _opt_null_verify = true;
-    _opt_null_enabled = true;
-    _opt_null_adaptive_depth = 8;
-    _opt_null_adaptive_value = 200;
 }
 
 /**
@@ -132,32 +121,24 @@ void engine_t::copy_results(search_t * s) {
  * @param engineObjPtr pointer to the (parent) engine object
  * @return NULL
  */
-void * engine_t::_think(void * engine_p) { 
-    
+void * engine_t::_think(void * engine_p) {
+
     //initialize
     engine_t * engine = (engine_t*) engine_p;
     search_t * s;
-    if (engine->_opt_wild == 17) {
+    if (options::get_value("Wild") == 17) {
         s = new w17_search_t(engine->_root_fen.c_str(), engine->settings());
     } else {
         s = new search_t(engine->_root_fen.c_str(), engine->settings());
     }
-    
-    //copy parameters
-    s->king_attack_shelter = engine->_opt_king_attack_shelter;
-    s->king_attack_pieces = engine->_opt_king_attack_pieces;
-    s->null_enabled = engine->_opt_null_enabled;
-    s->null_verify = engine->_opt_null_verify;
-    s->null_adaptive_depth = engine->_opt_null_adaptive_depth;
-    s->null_adaptive_value = engine->_opt_null_adaptive_value;
-    
+
     //think
     s->go();
-    
+
     //copy search results and clean up
     engine->copy_results(s);
     delete s;
-    pthread_exit(NULL); 
+    pthread_exit(NULL);
     return NULL;
 }
 
@@ -434,7 +415,7 @@ void * engine_t::_learn(void * engineObjPtr) {
     clock_t begin;
     begin = clock();
     std::string fen = "";
-    
+
     double strongest = +bestFactor;
     double opponent = -bestFactor;
 

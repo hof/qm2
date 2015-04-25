@@ -43,13 +43,6 @@ private:
     bool _ponder;
     move_t _result_move;
     int _result_score;
-    int _opt_wild;
-    int _opt_king_attack_shelter;
-    int _opt_king_attack_pieces;
-    int _opt_null_adaptive_depth;
-    int _opt_null_adaptive_value;
-    bool _opt_null_verify;
-    bool _opt_null_enabled;
     
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
@@ -115,24 +108,6 @@ public:
         _result_score = score;
     }
     
-    void set_option(std::string name, int value) {
-        if (name == "wild") {
-            _opt_wild = value;
-        } else if (name == "king_attack_shelter") {
-            _opt_king_attack_shelter = value;
-        } else if (name == "king_attack_pieces") {
-            _opt_king_attack_pieces = value;
-        } else if (name == "null_verify") {
-            _opt_null_verify = value;
-        } else if (name == "null_adaptive_depth") {
-            _opt_null_adaptive_depth = value;
-        } else if (name == "null_adaptive_value") {
-            _opt_null_adaptive_value = value;
-        } else if (name == "null_enabled") {
-            _opt_null_enabled = value;
-        }
-    }
-
     int get_score() {
         return _result_score;
     }

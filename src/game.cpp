@@ -21,8 +21,45 @@
 
 #include "game.h"
 
+namespace options {
+    
+    option_t PARAM[length+1] = {
+        { "", INT, 0, ""}, //dummy value
+        { "Revision", STRING, 1, (std::string("option name Revision type string default ") + std::string(MAXIMA_REVISION)).c_str() },
+        { "Hash", INT, 256, "option name Hash type spin default 256 min 0 max 1024"},
+        { "Ponder", BOOL, 1, "option name Ponder type check default true"},
+        { "OwnBook", BOOL, 1, "option name OwnBook type check default true" },
+        { "UCI_AnalyseMode", BOOL, 0, "option name UCI_AnalyseMode type check default false" },
+        { "UCI_Opponent", STRING, 0, "option name UCI_Opponent type string" },
+        { "UCI_Chess960", BOOL, 0, "option name UCI_Chess960 type check default false" },
+        { "NullEnabled", BOOL, 1, "option name NullEnabled type check default true" },
+        { "NullVerify", BOOL, 1, "option name NullVerify type check default true" },
+        { "NullAdaptiveValue", INT, 0, "option name NullAdaptiveValue type spin default 0 min 0 max 1000" },
+        { "NullAdaptiveDepth", INT, 0, "option name NullAdaptiveDepth type spin default 0 min 0 max 64" },
+        { "Wild", STRING, 0, "option name Wild type combo default standard var standard var losers" },
+        { "KingAttackShelter", INT, 256, "option name KingAttackShelter type spin default 256 min 0 max 512" },
+        { "KingAttackPieces", INT, 256, "option name KingAttackPieces type spin default 256 min 0 max 512" }
+    };
+    
+    option_t * get_option(const char * key) {
+        for (int i = 1; i <= length; i++) {
+            if (strcmp(key, PARAM[i].key) == 0) {
+                return &PARAM[i];
+            }
+        }
+        return &PARAM[0];
+    }
+    
+    int get_value(const char * key) {
+        return get_option(key)->value;
+    }
+
+    const char * get_uci_option(const char * key) {
+        return get_option(key)->uci_option;
+    }
+}
+
 void game_t::clear() {
-    opponent.clear();
     tm.clear();
     target_move.clear();
     max_depth = MAX_PLY;
@@ -40,7 +77,6 @@ void game_t::clear() {
 }
 
 void game_t::copy(game_t* game) {
-    opponent.copy(&game->opponent);
     max_depth = game->max_depth;
     max_time_per_move = game->max_time_per_move;
     target_score = game->target_score;

@@ -108,12 +108,12 @@ public:
 
     search_t(const char * fen, game_t * g = NULL) {
         wild = 0;
-        king_attack_shelter = 256;
-        king_attack_pieces = 256;
-        null_adaptive_depth = 8;
-        null_adaptive_value = 200;
-        null_verify = true;
-        null_enabled = true;
+        king_attack_shelter = options::get_value("KingAttackShelter");
+        king_attack_pieces = options::get_value("KingAttackPieces");
+        null_adaptive_depth = options::get_value("NullAdaptiveDepth");
+        null_adaptive_value = options::get_value("NullAdaptiveValue");
+        null_verify = options::get_value("NullVerify");
+        null_enabled = options::get_value("NullEnabled");
         init(fen, g);
     }
 

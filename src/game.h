@@ -22,18 +22,38 @@
 #ifndef GAME_H
 #define	GAME_H
 
-#include "opponent.h"
 #include "move.h"
 #include "timeman.h"
+#include "version.h"
+
+namespace options {
+
+    enum option_t_type {
+        BOOL, INT, STRING
+    };
+    
+    struct option_t {
+        const char * key;
+        int type;
+        int value;
+        const char * uci_option; 
+    };
+
+    const int length = 14;
+    extern option_t PARAM[length+1];
+    
+    option_t * get_option(const char * key);
+    int get_value(const char * key);
+    const char * get_uci_option(const char * key);
+};
 
 class game_t {
 public:
     time_manager_t tm;
-    opponent_t opponent;
+    move_t target_move;
     U64 max_nodes;
     U64 max_time_per_move;
     int max_depth;
-    move_t target_move;
     int target_score;
     int white_time;
     int black_time;
@@ -52,16 +72,12 @@ public:
         clear();
     }
 
-    void set_opponent(opponent_t * opp) {
-        opponent.copy(opp);
-    }
-    
     int time(bool white) {
-        return white? white_time : black_time;
+        return white ? white_time : black_time;
     }
-    
+
     int increment(bool white) {
-        return white? white_increment : black_increment;
+        return white ? white_increment : black_increment;
     }
 };
 

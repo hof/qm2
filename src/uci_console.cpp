@@ -233,56 +233,26 @@ namespace uci {
                         while (parser >> token) {
                             value += (" " + token);
                         }
-                        if (name == "Hash") {
-                            handled = true;
-                            trans_table::set_size(atoi<int>(value));
+                        
+                        //parse option value
+                        options::option_t * opt = options::get_option(name.c_str());
+                        handled = std::string(opt->key) == name;
+                        opt->value = 0;
+                        if (opt->type == options::BOOL) {
+                            opt->value = value == "true" || value == "1";
+                        } else if (opt->type == options::INT) {
+                            opt->value = atoi<int>(value);
                         } else if (name == "Wild") {
-                            handled = true;
                             if (value == "losers" || value == "17") {
-                                engine::set_option("wild", 17);
-                            } else if (value == "chess" || value == "0" || value == "standard" || value == "default") {
-                                engine::set_option("wild", 0);
-                            } else {
-                                send_unknown_option(name + " " + value);
-                            }
-                        } else if (name == "UCI_Chess960") {
-                            handled = true;
-                            if (value == "true" || value == "1") {
-                                engine::set_option("wild", 22);
-                            }
-                        } else if (name == "NullEnabled") {
-                            handled = true;
-                            engine::set_option("null_enabled", value == "true" || value == "1");
-                        } else if (name == "NullVerify") {
-                            handled = true;
-                            engine::set_option("null_verify", value == "true" || value == "1");
-                        } else if (name == "NullAdaptiveDepth") {
-                            handled = true;
-                            engine::set_option("null_adaptive_depth", atoi<int>(value));
-                        } else if (name == "NullAdaptiveValue") {
-                            handled = true;
-                            engine::set_option("null_adaptive_value", atoi<int>(value));
-                        } else if (name == "KingAttackShelter") {
-                            handled = true;
-                            engine::set_option("king_attack_shelter", atoi<int>(value));
-                        } else if (name == "KingAttackPieces") {
-                            handled = true;
-                            engine::set_option("king_attack_pieces", atoi<int>(value));
-                        } else if (name == "UCI_Opponent") {
-                            //value GM 2800 human Gary Kasparow"
-                            //value none none computer Shredder"
-                            handled = true;
-                            //todo: handle e.g. opponent rating to set draw contempt
-                        } else if (name == "Ponder") {
-                            handled = true;
-                        } else if (name == "UCI_AnalyseMode") {
-                            handled = true;
-                        } else if (name == "OwnBook") {
-                            handled = true;
+                                opt->value = 17;
+                            } 
+                        } 
+                        
+                        //handle option
+                        if (name == "Hash") {
+                            trans_table::set_size(opt->value);
                         }
                     }
-                } else {
-                    //toggle option
                 }
             }
         }
@@ -337,20 +307,9 @@ namespace uci {
     }
 
     void send_options() {
-        out("option name Revision type string default " + std::string(MAXIMA_REVISION));
-        out("option name Hash type spin default 128 min 0 max 1024");
-        out("option name Ponder type check default true");
-        out("option name OwnBook type check default true");
-        out("option name UCI_AnalyseMode type check default false");
-        out("option name UCI_Opponent type string");
-        out("option name UCI_Chess960 type check default false");
-        out("option name NullEnabled type check default true");
-        out("option name NullVerify type check default true");
-        out("option name NullAdaptiveValue type spin default 200 min 0 max 1000");
-        out("option name NullAdaptiveDepth type spin default 8 min 0 max 64");
-        out("option name Wild type combo default standard var standard var losers");
-        out("option name KingAttackShelter type spin default 256 min 0 max 512");
-        out("option name KingAttackPieces type spin default 256 min 0 max 512");
+        for (int i = 1; i < options::length; i++) {
+            out(options::PARAM[i].uci_option);
+        }
     }
 
     void send_ok() {
