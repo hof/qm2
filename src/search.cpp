@@ -653,18 +653,16 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Move pruning: skip all futile moves
          */
 
-        bool do_prune = DO_PRUNE_MOVES && !pv && !in_check && gives_check == 0 && searched_moves > 1
-                && best > -score::DEEPEST_MATE;
-
+        bool is_quiet_stage = stack->move_list.stage > QUIET_MOVES && searched_moves > 0;
+        bool is_dangerous = !is_quiet_stage || in_check || gives_check || is_passed_pawn(move);
+        bool do_prune = !is_dangerous && searched_moves > 1 && !pv && best > -score::DEEPEST_MATE;
+        
         //futile quiet moves (futility pruning)
-        bool is_dangerous = in_check || move->capture || move->promotion || move->castle
-                || gives_check || is_passed_pawn(move) || is_killer(move);
-        do_prune &= !is_dangerous;
         if (do_prune && depth < 5 && eval + FFP_MARGIN[depth] <= alpha) {
             pruned_nodes++;
             continue;
         }
-
+        
         /*
          * Move Extensions
          */
@@ -676,7 +674,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
          */
 
         int reduce = 0;
-        if (lmr_enabled && searched_moves > 0 && max_reduce > 0 && stack->move_list.stage > QUIET_MOVES) {
+        if (is_quiet_stage && max_reduce > 0 && lmr_enabled) {
             reduce = tt_move != 0;
             reduce += (bool) !is_dangerous && searched_moves >= 3 && reduce < max_reduce;
             reduce += (bool) !is_dangerous && searched_moves >= 6 && reduce < max_reduce;
