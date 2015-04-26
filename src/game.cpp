@@ -25,20 +25,21 @@ namespace options {
     
     option_t PARAM[length+1] = {
         { "", INT, 0, ""}, //dummy value
-        { "Revision", STRING, 1, (std::string("option name Revision type string default ") + std::string(MAXIMA_REVISION)).c_str() },
-        { "Hash", INT, 256, "option name Hash type spin default 256 min 0 max 1024"},
-        { "Ponder", BOOL, 1, "option name Ponder type check default true"},
-        { "OwnBook", BOOL, 1, "option name OwnBook type check default true" },
-        { "UCI_AnalyseMode", BOOL, 0, "option name UCI_AnalyseMode type check default false" },
-        { "UCI_Opponent", STRING, 0, "option name UCI_Opponent type string" },
-        { "UCI_Chess960", BOOL, 0, "option name UCI_Chess960 type check default false" },
-        { "NullEnabled", BOOL, 1, "option name NullEnabled type check default true" },
-        { "NullVerify", BOOL, 1, "option name NullVerify type check default true" },
-        { "NullAdaptiveValue", INT, 0, "option name NullAdaptiveValue type spin default 0 min 0 max 1000" },
-        { "NullAdaptiveDepth", INT, 0, "option name NullAdaptiveDepth type spin default 0 min 0 max 64" },
-        { "Wild", STRING, 0, "option name Wild type combo default standard var standard var losers" },
-        { "KingAttackShelter", INT, 256, "option name KingAttackShelter type spin default 256 min 0 max 512" },
-        { "KingAttackPieces", INT, 256, "option name KingAttackPieces type spin default 256 min 0 max 512" }
+        { "Revision", STRING, 1, "type string default " MAXIMA_REVISION },
+        { "Hash", INT, 256, "type spin default 256 min 0 max 1024"},
+        { "Ponder", BOOL, 1, "type check default true"},
+        { "OwnBook", BOOL, 1, "type check default true" },
+        { "UCI_AnalyseMode", BOOL, 0, "type check default false" },
+        { "UCI_Opponent", STRING, 0, "type string" },
+        { "UCI_Chess960", BOOL, 0, "type check default false" },
+        { "NullMove", BOOL, 1, "type check default true" },
+        { "LMR", BOOL, 1, "type check default true" },
+        { "NullVerify", BOOL, 1, "type check default true" },
+        { "NullAdaptiveValue", INT, 0, "type spin default 0 min 0 max 1000" },
+        { "NullAdaptiveDepth", INT, 0, "type spin default 0 min 0 max 64" },
+        { "Wild", STRING, 0, "type combo default standard var standard var losers" },
+        { "KingAttackShelter", INT, 256, "type spin default 256 min 0 max 512" },
+        { "KingAttackPieces", INT, 256, "type spin default 256 min 0 max 512" }
     };
     
     option_t * get_option(const char * key) {
@@ -73,7 +74,6 @@ void game_t::clear() {
     max_nodes = 0;
     ponder = false;
     learn_factor = 1.0;
-
 }
 
 void game_t::copy(game_t* game) {

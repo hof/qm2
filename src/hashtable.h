@@ -26,6 +26,7 @@
 
 #include "board.h"
 #include "score.h"
+#include "game.h"
 
 namespace material_table {
 
@@ -214,7 +215,7 @@ public:
 };
 
 namespace trans_table {
-    const int TABLE_SIZE = 128;
+    const int TABLE_SIZE = options::get_value("Hash");
     void store(U64 key, int age, int ply, int depth, int score, int move, int flag);
     bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags);
     void clear();

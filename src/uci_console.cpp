@@ -308,7 +308,8 @@ namespace uci {
 
     void send_options() {
         for (int i = 1; i < options::length; i++) {
-            out(options::PARAM[i].uci_option);
+            const options::option_t * opt = &options::PARAM[i];
+            out(std::string("option name ") + std::string(opt->key) + std::string(" ") + std::string(opt->uci_option));
         }
     }
 

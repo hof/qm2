@@ -34,9 +34,6 @@
 namespace {
 
     enum search_constants_t {
-        DO_NULLMOVE = 1,
-        DO_VERIFY_NULL = 1,
-        DO_LMR = 1,
         DO_PRUNE_MOVES = 1
     };
 
@@ -641,7 +638,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     skip_null = false;
     int best = -score::INF;
     int searched_moves = 0;
-    int score_max = score::MATE - brd.ply - 1;
+    const int score_max = score::MATE - brd.ply - 1;
+    const int max_reduce = depth - 1;
     stack->best_move.clear();
     do {
 
@@ -678,11 +676,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
          */
 
         int reduce = 0;
-        if (DO_LMR && stack->move_list.stage > QUIET_MOVES && depth > 1
-                && searched_moves > 1 && !is_dangerous) {
-            reduce = 1 + bool(depth > 2 && searched_moves > 3);
+        if (lmr_enabled && searched_moves > 0 && max_reduce > 0 && stack->move_list.stage > QUIET_MOVES) {
+            reduce = tt_move != 0;
+            reduce += (bool) !is_dangerous && searched_moves >= 3 && reduce < max_reduce;
+            reduce += (bool) !is_dangerous && searched_moves >= 6 && reduce < max_reduce;
         }
-        assert(reduce == 0 || extend == 0);
         assert((depth - reduce) >= 1);
 
         /*

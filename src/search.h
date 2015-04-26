@@ -105,6 +105,7 @@ public:
     int null_adaptive_value;
     bool null_verify;
     bool null_enabled;
+    bool lmr_enabled;
 
     search_t(const char * fen, game_t * g = NULL) {
         wild = 0;
@@ -113,7 +114,8 @@ public:
         null_adaptive_depth = options::get_value("NullAdaptiveDepth");
         null_adaptive_value = options::get_value("NullAdaptiveValue");
         null_verify = options::get_value("NullVerify");
-        null_enabled = options::get_value("NullEnabled");
+        null_enabled = options::get_value("NullMove");
+        lmr_enabled = options::get_value("LMR");
         init(fen, g);
     }
 
