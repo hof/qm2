@@ -646,7 +646,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         bool is_quiet_stage = stack->move_list.stage > QUIET_MOVES && searched_moves > 0;
         bool is_dangerous = !is_quiet_stage || in_check || gives_check || is_passed_pawn(move);
-        bool do_prune = !is_dangerous && searched_moves > depth && !pv && best > -score::DEEPEST_MATE;
+        bool do_prune = !is_dangerous && searched_moves > 1 && !pv && best > -score::DEEPEST_MATE;
 
         //futile quiet moves (futility pruning)
         if (do_prune && depth < 8 && fbase <= alpha && ffp_enabled) {
