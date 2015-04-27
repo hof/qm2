@@ -31,16 +31,6 @@
 #include "eval.h"
 #include "timeman.h"
 
-namespace {
-
-    enum search_constants_t {
-        DO_PRUNE_MOVES = 1
-    };
-
-    int FFP_MARGIN[8] = {0, 120, 120, 320, 320, 400, 400, 500};
-
-};
-
 /**
  * Initialize sort values for root move
  * @param m move
@@ -640,6 +630,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int searched_moves = 0;
     const int score_max = score::MATE - brd.ply - 1;
     const int max_reduce = depth - 1;
+    const int fbase = eval + 50 + 40 * depth;
     stack->best_move.clear();
     do {
 
@@ -655,14 +646,14 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         bool is_quiet_stage = stack->move_list.stage > QUIET_MOVES && searched_moves > 0;
         bool is_dangerous = !is_quiet_stage || in_check || gives_check || is_passed_pawn(move);
-        bool do_prune = !is_dangerous && searched_moves > 1 && !pv && best > -score::DEEPEST_MATE;
-        
+        bool do_prune = !is_dangerous && searched_moves > depth && !pv && best > -score::DEEPEST_MATE;
+
         //futile quiet moves (futility pruning)
-        if (do_prune && depth < 5 && eval + FFP_MARGIN[depth] <= alpha) {
+        if (do_prune && depth < 8 && fbase <= alpha && ffp_enabled) {
             pruned_nodes++;
             continue;
         }
-        
+
         /*
          * Move Extensions
          */
@@ -823,6 +814,9 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      * Moves loop
      */
 
+    const int fbase = eval + 50;
+    const bool them = move->piece > WKING;
+    const bool last_piece = max_1(brd.all_pieces(them));
     do {
 
         /*
@@ -841,10 +835,15 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         }
 
         bool do_prune = !in_check && !gives_check && brd.min_gain(move) < 0
-                && !brd.captures_last_piece(move);
+                && !last_piece;
 
-        //prune moves with negative SEE
-        if (do_prune && brd.see(move) < 0) {
+        //prune if the capture or promotion can't raise alpha
+        if (do_prune && fbase + brd.max_gain(move) <= alpha) {
+            pruned_nodes++;
+            continue;
+        }
+        
+        if (do_prune && fbase + brd.see(move) <= alpha) {
             pruned_nodes++;
             continue;
         }

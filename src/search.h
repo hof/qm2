@@ -106,6 +106,7 @@ public:
     bool null_verify;
     bool null_enabled;
     bool lmr_enabled;
+    bool ffp_enabled;
 
     search_t(const char * fen, game_t * g = NULL) {
         wild = 0;
@@ -116,6 +117,7 @@ public:
         null_verify = options::get_value("NullVerify");
         null_enabled = options::get_value("NullMove");
         lmr_enabled = options::get_value("LMR");
+        ffp_enabled = options::get_value("FutilityPruning");
         init(fen, g);
     }
 
