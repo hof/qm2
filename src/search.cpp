@@ -488,6 +488,10 @@ bool search_t::is_draw() {
  * @return score for the current node
  */
 int search_t::pvs(int alpha, int beta, int depth) {
+    
+    assert(alpha < beta);
+    assert(alpha >= -score::INF);
+    assert(beta <= score::INF);
 
     stack->pv_count = 0;
     sel_depth = MAX(brd.ply, sel_depth);
@@ -754,6 +758,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
 int search_t::qsearch(int alpha, int beta, int depth) {
 
     assert(depth <= 0);
+    assert(alpha < beta);
+    assert(alpha >= -score::INF);
+    assert(beta <= score::INF);
 
     /*
      * Stop conditions
