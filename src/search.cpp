@@ -222,7 +222,7 @@ bool search_t::abort(bool force_poll = false) {
         result = true;
     } else if (force_poll || --next_poll <= 0) {
         next_poll = NODES_BETWEEN_POLLS;
-        result = !pondering() && game->tm.time_is_up();
+        result = !pondering() && game->tm.time_is_up() && root_stack->best_move.piece > 0;
     }
     stop_all = result;
     return result;
@@ -491,7 +491,7 @@ int search_t::extend_move(move_t * move, int gives_check, int depth, bool first)
  * @return true if it's an official draw
  */
 bool search_t::is_draw() {
-    if (brd.stack->fifty_count == 0 && brd.is_draw()) { //draw by no mating material
+    if (brd.is_draw()) { //draw by no mating material
         return true;
     } else if (brd.stack->fifty_count > 3) {
         if (brd.stack->fifty_count >= (100 + stack->in_check)) {
@@ -506,7 +506,6 @@ bool search_t::is_draw() {
             }
         }
     }
-    assert(brd.stack->fifty_count > 0 || brd.is_draw() == false);
     return false;
 }
 

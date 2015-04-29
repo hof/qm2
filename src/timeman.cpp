@@ -36,6 +36,8 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
 
     const int M_MIN = M * 2;
     const int M_MAX = 1 + M / 4;
+    
+    assert(M_MIN > 0 && M_MAX > 0);
 
     tot_min = my_time / M_MIN;
     tot_max = my_time / M_MAX;
@@ -56,7 +58,7 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         tot_min += min_opp_bonus / 4;
         tot_max += max_opp_bonus / 2;
     } else if (delta < 0 && my_inc <= opp_inc) {
-        double speed_up_factor = MAX(0.25, (1.0 * my_time) / opp_time);
+        double speed_up_factor = MAX(0.25, (1.0 * my_time) / (opp_time+1));
         tot_min = speed_up_factor * tot_min;
     }
 
@@ -65,7 +67,7 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
 
     set_max(tot_max);
     set_min(tot_min);
-
+    
 }
 
 time_manager_t::time_manager_t() {
