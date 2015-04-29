@@ -24,38 +24,48 @@
 
 #include "timeman.h"
 
-void time_manager_t::set(int my_time, int opp_time, int my_inc, int opp_inc, int moves_left) {
-    int M = my_inc > 0 ? 15 : 20; //assume the game is decided after this amount of moves
-    M = moves_left ? MIN(moves_left + 1, M) : M; //for classic time controls (X moves in Y minutes)
-    int limit = my_time - time_man::OVERHEAD_TIME;
+void time_manager_t::set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left) {
 
-    /*
-     * Base time is our time left shared by the amount of moves left
-     */
-    int result = limit / M;
+    int M = time_man::M;
 
-    /*
-     * Bonus/Penalty time when we have more/less time left than the opponent
-     */
-    if (my_time > opp_time && opp_time > 0 && my_inc >= opp_inc && M > 2) {
-        double factor = MIN(10.0, (1.0 * my_time) / (1.0 * opp_time));
-        result = factor * result;
-    } else if (my_time < opp_time && opp_time > 0 && my_inc <= opp_inc && M > 2) {
-        double factor = MAX(0.25, (1.0 * my_time) / (1.0 * opp_time) - 0.1);
-        result = factor*result;
+    if (my_inc > my_time) {
+        M = 1;
+    } else if (moves_left > 0) {
+        M = MIN(moves_left, time_man::M);
     }
 
-    /*
-     * Bonus time when we have an increment available
-     */
-    result += my_inc;
+    const int M_MIN = M * 2;
+    const int M_MAX = 1 + M / 4;
 
-    /*
-     * Make sure the time never exceeds the limit
-     */
-    result = MIN(result, limit);
-    tot = result;
-    this->set_max(result);
+    tot_min = my_time / M_MIN;
+    tot_max = my_time / M_MAX;
+        
+    //increment bonus
+    if (my_inc > 0) {
+        int min_inc_bonus = MIN(my_inc, my_time - tot_min);
+        int max_inc_bonus = MIN(my_inc, my_time - tot_max);
+        tot_min += (196 * min_inc_bonus) / 256;
+        tot_max += max_inc_bonus;
+    }
+
+    //adjustment based on opponent's time
+    const int delta = my_time - opp_time;
+    if (delta > 0 && my_inc >= opp_inc) {
+        int min_opp_bonus = MIN(delta, my_time - tot_min);
+        int max_opp_bonus = MIN(delta, my_time - tot_max);
+        tot_min += min_opp_bonus / 4;
+        tot_max += max_opp_bonus / 2;
+    } else if (delta < 0 && my_inc <= opp_inc) {
+        double speed_up_factor = MAX(0.25, (1.0 * my_time) / opp_time);
+        tot_min = speed_up_factor * tot_min;
+    }
+
+    tot_min = MAX(0, tot_min - time_man::LAG_TIME);
+    tot_max = MAX(0, tot_max - time_man::LAG_TIME);
+
+    set_max(tot_max);
+    set_min(tot_min);
+
 }
 
 time_manager_t::time_manager_t() {
@@ -64,6 +74,8 @@ time_manager_t::time_manager_t() {
 
 void time_manager_t::clear() {
     start = 0;
+    min = 0;
     max = 0;
-    tot = 0;
+    tot_min = 0;
+    tot_max = 0;
 }

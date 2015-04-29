@@ -141,13 +141,9 @@ void search_t::go() {
  * or not.
  */
 void search_t::iterative_deepening() {
-    bool is_easy = root.moves[0].see > 0 && root.moves[1].see <= 0 && (wild != 17);
     int last_score = -score::INF;
-    move_t easy_move;
-    root.sort_moves(&stack->best_move);
-    stack->best_move.set(&root.moves[0].move);
-    easy_move.set(&root.moves[0].move);
-    int max_time = game->tm.reserved();
+    const int max_time = game->tm.reserved_max();
+    const int min_time = game->tm.reserved_min();
     bool timed_search = game->white_time || game->black_time;
     int depth;
     for (depth = 1; depth <= game->max_depth; depth++) {
@@ -156,16 +152,23 @@ void search_t::iterative_deepening() {
             break;
         }
         store_pv();
-        is_easy &= stack->best_move.equals(&easy_move) && score + 20 > last_score;
-        int elapsed = game->tm.elapsed();
-        if (timed_search && !pondering() && root.move_count <= 1 && elapsed > max_time / 32) {
-            break;
-        } else if (timed_search && !pondering() && is_easy && elapsed > max_time / 4) {
-            break;
-        } else if (timed_search && !pondering() && elapsed > max_time / 2) {
-            break;
-        } else if (timed_search && score::mate_in_ply(score) && depth > score::mate_in_ply(score)) {
-            break;
+        bool score_drop = score + 20 < last_score;
+        if (timed_search && !pondering()) {
+            int elapsed = game->tm.elapsed();
+            if (root.move_count <= 1 && depth >= 6) {
+                break;
+            } else if (elapsed > max_time / 2) {
+                //complex position, maximum (emergency) time control
+                break;
+            } else if (elapsed > min_time / 2 && !score_drop && root.is_easy()) {
+                //easy position, half time control
+                break;
+            } else if (elapsed > min_time && !score_drop && (score > 100 || !root.is_complex())) {
+                //neutral position, normal time control
+                break;
+            } else if (score::mate_in_ply(score) && depth > score::mate_in_ply(score)) {
+                break;
+            }
         } else if (depth >= 15 && game->target_score && score >= game->target_score &&
                 game->target_move.piece && game->target_move.equals(&stack->best_move)) {
             break;
@@ -371,6 +374,34 @@ int search_t::init_root_moves() {
 }
 
 /**
+ * Algorithm to guess the complexity of the position based on amount
+ * of nodes searched
+ */
+bool root_t::is_complex() {
+    const int n0 = moves[0].nodes;
+    for (int i = 1; i < move_count; i++) {
+        if (moves[i].nodes >= n0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Algorithm to guess the complexity of the position based on amount
+ * of nodes searched
+ */
+bool root_t::is_easy() {
+    const int n0 = moves[0].nodes / 8;
+    for (int i = 1; i < move_count; i++) {
+        if (moves[i].nodes >= n0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
  * Sort algorithm for root moves (simple insertion sort)
  */
 void root_t::sort_moves(move_t * best_move) {
@@ -398,7 +429,6 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     assert(root.move_count > 0);
     int best = -score::INF;
     root.sort_moves(&stack->best_move);
-
     //trace_root(alpha, beta, depth);
 
     /*
@@ -488,7 +518,7 @@ bool search_t::is_draw() {
  * @return score for the current node
  */
 int search_t::pvs(int alpha, int beta, int depth) {
-    
+
     assert(alpha < beta);
     assert(alpha >= -score::INF);
     assert(beta <= score::INF);
@@ -849,7 +879,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             pruned_nodes++;
             continue;
         }
-        
+
         if (do_prune && fbase + brd.see(move) <= alpha) {
             pruned_nodes++;
             continue;

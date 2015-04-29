@@ -33,22 +33,25 @@ class time_manager_t;
 
 namespace time_man {
     const double ONE_MS = CLOCKS_PER_SEC / 1000;
-    const int OVERHEAD_TIME = 500;
     const int INFINITE_TIME = 24 * 60 * 60 * 1000;
+    const int M = 24; //assume game is decided after M moves from now
+    const int LAG_TIME = 50; //interface + initialization lag time in ms per move
 };
 
 class time_manager_t {
 private:
     clock_t start; //in ticks
-    clock_t max; //in ticks
-    int tot; 
+    clock_t min; //minimum time to use, in ticks
+    clock_t max; //maximum time to use, in ticks 
+    int tot_min;
+    int tot_max;
 
 public:
     time_manager_t();
     void clear();
-    void set(int my_time, int opp_time, int my_inc, int opp_inc, int moves_left);
+    void set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left);
     
-    clock_t ticks(int time_in_ms) {
+    clock_t ticks(const int time_in_ms) {
         return time_in_ms * time_man::ONE_MS;
     }
 
@@ -56,7 +59,11 @@ public:
         start = clock();
     }
 
-    void set_max(int ms) {
+    void set_min(const int ms) {
+        min = start + ticks(ms);
+    }
+    
+    void set_max(const int ms) {
         max = start + ticks(ms);
     }
 
@@ -69,11 +76,18 @@ public:
         return ticks / time_man::ONE_MS;
     }
     
-    int reserved() {
-        if (tot <= 0) {
-            tot = (max - start) / time_man::ONE_MS;
+    int reserved_min() {
+        if (tot_min <= 0) {
+            tot_min = (min - start) / time_man::ONE_MS;
         }
-        return tot;
+        return tot_min;
+    }
+    
+    int reserved_max() {
+        if (tot_max <= 0) {
+            tot_max = (max - start) / time_man::ONE_MS;
+        }
+        return tot_max;
     }
 };
 

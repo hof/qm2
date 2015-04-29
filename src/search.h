@@ -52,7 +52,9 @@ public:
     int move_count;
     int fifty_count;
     bool in_check;
-
+    
+    bool is_complex();
+    bool is_easy();
     void sort_moves(move_t * best_move);
     void match_moves(move::list_t * list);
 };
