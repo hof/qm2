@@ -61,7 +61,7 @@ namespace king_attack {
     };
 
     const int16_t KING_SHELTER_MUL[8] = {
-        128, 128, 128, 128, 128, 128, 196, 256
+        128, 128, 128, 128, 128, 128, 196, 230
     };
 
     const int16_t KING_ATTACK_PCS[16] = {//multipliers
@@ -107,6 +107,11 @@ namespace king_attack {
         if ((s->stack->pt->flags & pawn_table::FLAG_CLOSED_CENTER) != 0) {
             attack_score = attack_score / 2;
             trace("CLOSED CENTER MUL", us, attack_score);
+        }
+        
+        if (my_attack_force < 8) {
+            attack_score = (KING_SHELTER_MUL[my_attack_force] * attack_score) / 256;
+            trace("PIECE FORCE MUL", us, attack_score);
         }
 
         //interface parameter adjustment
