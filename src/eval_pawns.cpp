@@ -25,9 +25,9 @@
 #include "search.h"
 #include "bits.h"
 
-#define __ENABLE_PAWN_EVAL_TRACE
-
 namespace pawns {
+    
+#define __ENABLE_PAWN_EVAL_TRACE
 
 #ifdef ENABLE_PAWN_EVAL_TRACE
     void trace(std::string msg, int sq, const score_t & s) {
@@ -313,7 +313,6 @@ namespace pawns {
             king_attack_mask &= e->mob[us] & (RANK_3 | RANK_4 | RANK_5 | RANK_6);
             e->king_attack[us] += popcnt0(king_attack_mask);
             trace("KING ATTACK UNITS (mask)", kpos[them], popcnt0(king_attack_mask));
-
 
         }
 

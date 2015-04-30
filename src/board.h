@@ -144,7 +144,7 @@ public:
     int count(const int piece) {
         return popcnt0(bb[piece]);
     }
-
+    
     /**
      * Returns square location (a1..h8) given a piece 
      * @param pc piece type (WPAWN..BKING)

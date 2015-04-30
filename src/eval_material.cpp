@@ -36,43 +36,19 @@ namespace material {
         VKING = 20000,
     };
 
-    const short VMATING_POWER = 20;
-    const short VMATING_MATERIAL = 50;
-
-    const short REDUNDANT_ROOK = -10;
-    const short REDUNDANT_KNIGHT = -5;
-    const short REDUNDANT_QUEEN = -20;
+    const short REDUNDANT_ROOK[2] = {0, -10};
+    const short REDUNDANT_KNIGHT[2] = {0, -5};
+    const short REDUNDANT_QUEEN[2] = {0, -20};
 
     enum mflag_t {
         MFLAG_EG = 128,
         MFLAG_MATING_POWER_W = 64,
         MFLAG_MATING_POWER_B = 32,
-        MFLAG_KING_ATTACK_FORCE_W = 16,
-        MFLAG_KING_ATTACK_FORCE_B = 8,
-        MFLAG_IMBALANCE = 7
+        MFLAG_MAJOR_IMBALANCE_W = 16,
+        MFLAG_MINOR_IMBALANCE_W = 8,
+        MFLAG_MAJOR_IMBALANCE_B = 4,
+        MFLAG_MINOR_IMBALANCE_B = 2
     };
-
-    enum mflag_imbalance_t {
-        IMB_NONE = 0,
-        IMB_MINOR_W = 1,
-        IMB_MAJOR_W = 2,
-        IMB_MINOR_B = 5,
-        IMB_MAJOR_B = 6
-    };
-
-    /* 
-     * 0  | 1   | 2   | 3   | 4   | 5 ..   7  | 
-     * EG | AFW | AFB | MPW | MPB | IMBALANCE | 
-     * 
-     * Imbalance: 000 - 0) no imbalance
-     *            001 - 1) minor imbalance favoring white
-     *            010 - 2) major imbalance favoring white
-     *            011 - 3) (reserved for white)
-     *            100 - 4) (reserved for black)
-     *            101 - 5) minor imbalance favoring black
-     *            110 - 6) major imbalance favoring black
-     *            111 - 7) (reserved for black) 
-     */
 
     bool has_mating_power(search_t * s, bool us) {
         const int flags = s->stack->mt->flags;
@@ -81,24 +57,20 @@ namespace material {
     }
 
     bool has_imbalance(search_t * s, bool us) {
-        const int flags = s->stack->mt->flags;
-        return (flags & MFLAG_IMBALANCE) != 0 && bool(flags & 4) == !us;
+        static const int IMB_FLAGS[2] = {
+            MFLAG_MINOR_IMBALANCE_B | MFLAG_MAJOR_IMBALANCE_B,
+            MFLAG_MINOR_IMBALANCE_W | MFLAG_MAJOR_IMBALANCE_W
+        };
+        return (s->stack->mt->flags & IMB_FLAGS[us]) != 0;
     }
 
     bool has_major_imbalance(search_t * s) {
-        const int flags = s->stack->mt->flags;
-        return (flags & 2) != 0;
+        static const int IMB_MAJOR = MFLAG_MAJOR_IMBALANCE_W | MFLAG_MAJOR_IMBALANCE_B;
+        return (s->stack->mt->flags & IMB_MAJOR) != 0;
     }
 
     bool is_eg(search_t * s) {
-        const int flags = s->stack->mt->flags;
-        return (flags & MFLAG_EG) != 0;
-    }
-
-    bool has_king_attack_force(search_t * s, bool us) {
-        const int flags = s->stack->mt->flags;
-        return us == WHITE ? (flags & MFLAG_KING_ATTACK_FORCE_W) != 0
-                : (flags & MFLAG_KING_ATTACK_FORCE_B) != 0;
+        return (s->stack->mt->flags & MFLAG_EG) != 0;
     }
 
     /**
@@ -110,18 +82,18 @@ namespace material {
         /*
          * 1. Probe the material table
          */
+
         board_t * brd = &s->brd;
         s->stack->mt = material_table::retrieve(brd->stack->material_hash);
         material_table::entry_t * e = s->stack->mt;
         if (e->key == brd->stack->material_hash) {
             return e->score;
         }
+        e->key = brd->stack->material_hash;
 
         /*
          * 2. Calculate material value and store in material hash table
          */
-        score_t result;
-        result.clear();
 
         int wpawns = brd->count(WPAWN);
         int bpawns = brd->count(BPAWN);
@@ -135,105 +107,92 @@ namespace material {
         int bqueens = brd->count(BQUEEN);
         int wminors = wknights + wbishops;
         int bminors = bknights + bbishops;
-        int wpieces = wminors + wrooks + wqueens;
-        int bpieces = bminors + brooks + bqueens;
 
         /*
          * Game phase
          */
-        int phase = score::MAX_PHASE /* 16 */
+
+        e->phase = MAX(0, score::MAX_PHASE /* 16 */
                 - wminors - bminors /* max: 8 */
                 - wrooks - brooks /* max:4 */
-                - 2 * (wqueens + bqueens) /* max: 4 */;
-        phase = MAX(0, phase);
+                - 2 * (wqueens + bqueens)) /* max: 4 */;
 
         /*
          * Material count evaluation
          */
+
+        int result = 0;
         if (wknights != bknights) {
-            result.add((wknights - bknights) * VKNIGHT);
-            if (wknights > 1) {
-                result.add(REDUNDANT_KNIGHT);
-            }
-            if (bknights > 1) {
-                result.sub(REDUNDANT_KNIGHT);
-            }
+            result += (wknights - bknights) * VKNIGHT;
+            result += REDUNDANT_KNIGHT[wknights > 1];
+            result -= REDUNDANT_KNIGHT[bknights > 1];
         }
         if (wbishops != bbishops) {
-            result.add((wbishops - bbishops) * VBISHOP);
+            result += (wbishops - bbishops) * VBISHOP;
         }
         if (wrooks != brooks) {
-            result.add((wrooks - brooks) * VROOK);
-            if (wrooks > 1) {
-                result.add(REDUNDANT_ROOK);
-            }
-            if (brooks > 1) {
-                result.sub(REDUNDANT_ROOK);
-            }
+            result += (wrooks - brooks) * VROOK;
+            result += REDUNDANT_ROOK[wrooks > 1];
+            result -= REDUNDANT_ROOK[brooks > 1];
         }
         if (wqueens != bqueens) {
-            result.add((wqueens - bqueens) * VQUEEN);
-            if (wqueens > 1) {
-                result.add(REDUNDANT_QUEEN);
-            }
-            if (bqueens > 1) {
-                result.sub(REDUNDANT_QUEEN);
-            }
+            result += (wqueens - bqueens) * VQUEEN;
+            result += REDUNDANT_QUEEN[wqueens > 1];
+            result -= REDUNDANT_QUEEN[bqueens > 1];
         }
 
-
         /*
-         * Material Balance
+         * Material balance flags 
          */
-        int flags = 0;
+
+        e->flags = 0;
         bool balance = (wminors == bminors) && (wrooks + 2 * wqueens) == (brooks + 2 * bqueens);
         if (!balance) { //material imbalance
-            int power = result.get(phase);
-            if (power > 450) {
-                flags = IMB_MAJOR_W;
-            } else if (power > 100) {
-                flags = IMB_MINOR_W;
-            } else if (power < -450) {
-                flags = IMB_MAJOR_B;
-            } else if (power < -100) {
-                flags = IMB_MINOR_B;
+            if (result > 400) {
+                e->flags |= MFLAG_MAJOR_IMBALANCE_W;
+            } else if (result > 100) {
+                e->flags |= MFLAG_MINOR_IMBALANCE_W;
+            } else if (result < -400) {
+                e->flags |= MFLAG_MAJOR_IMBALANCE_B;
+            } else if (result < -100) {
+                e->flags |= MFLAG_MINOR_IMBALANCE_B;
             }
-        }
-
-        if (wpawns != bpawns) {
-            result.add((wpawns - bpawns) * VPAWN);
         }
 
         /*
-         * Set Flags
+         * Pawns
          */
-        bool mating_power_w = wrooks || wqueens || wminors > 2 || (wminors == 2 && wbishops > 0);
-        bool mating_power_b = brooks || bqueens || bminors > 2 || (bminors == 2 && bbishops > 0);
 
+        result += (wpawns - bpawns) * VPAWN;
+
+        /*
+         * Attack power 
+         */
+
+        e->attack_force[WHITE] = 4 * wqueens + 2 * wrooks + wminors;
+        e->attack_force[BLACK] = 4 * bqueens + 2 * brooks + bminors;
+
+        assert(e->attack_force[WHITE] <= 36);
+        assert(e->attack_force[BLACK] <= 36);
+
+        /*
+         * Mating power flags, endgame flags
+         */
+
+        const bool mating_power_w = wrooks || wqueens || wminors > 2 || (wminors == 2 && wbishops > 0);
+        const bool mating_power_b = brooks || bqueens || bminors > 2 || (bminors == 2 && bbishops > 0);
+        
         if (mating_power_w) {
-            flags |= MFLAG_MATING_POWER_W;
-            if (wqueens > 0 && (wpieces > 2 || wrooks > 0 || wqueens > 1)) {
-                flags |= MFLAG_KING_ATTACK_FORCE_W;
-            }
+            e->flags |= MFLAG_MATING_POWER_W;
         }
         if (mating_power_b) {
-            flags |= MFLAG_MATING_POWER_B;
-            if (bqueens > 0 && (bpieces > 2 || brooks > 0 || bqueens > 1)) {
-                flags |= MFLAG_KING_ATTACK_FORCE_B;
-            }
+            e->flags |= MFLAG_MATING_POWER_B;
         }
         if (wpawns <= 1 || bpawns <= 1 || !mating_power_w || !mating_power_b) {
-            flags |= MFLAG_EG;
+            e->flags |= MFLAG_EG;
         }
 
-        /*
-         * Store result in material table and return
-         */
-        e->key = brd->stack->material_hash;
-        e->score = result.get(phase);
-        ;
-        e->flags = flags;
-        e->phase = phase;
+        e->score = result;
         return e->score;
     }
 

@@ -28,20 +28,21 @@
 #include "bits.h"
 #include "score.h"
 
+namespace king_attack {
+
 #define __ENABLE_KING_ATTACK_TRACE
 
 #ifdef ENABLE_KING_ATTACK_TRACE
 
-void trace(std::string msg, bool us, int score) {
-    std::cout << msg << (us ? " WHITE: " : " BLACK: ") << score << std::endl;
-}
+    void trace(std::string msg, bool us, int score) {
+        std::cout << msg << (us ? " WHITE: " : " BLACK: ") << score << std::endl;
+    }
 #endif
 
 #ifndef ENABLE_KING_ATTACK_TRACE 
 #define trace(a,b,c) /* notn */
 #endif
 
-namespace king_attack {
 
     const int8_t KING_ATTACK_UNIT[BKING + 1] = {
         //  x, p, n, b, r, q, k, p, n, b, r, q, k
@@ -52,11 +53,15 @@ namespace king_attack {
         //  x, p, n, b, r, q, k, p, n, b, r, q, k
         /**/0, 0, 3, 2, 1, 0, 0, 0, 3, 2, 1, 0, 0
     };
-    
+
     const int16_t KING_SHELTER[24] = {//structural shelter value (pawns & kings)
         0, 15, 25, 30, 40, 50, 60, 75,
         90, 105, 125, 145, 160, 175, 190, 200,
         210, 220, 225, 235, 235, 240, 245, 250
+    };
+
+    const int16_t KING_SHELTER_MUL[8] = {
+        128, 128, 128, 128, 128, 128, 196, 256
     };
 
     const int16_t KING_ATTACK_PCS[16] = {//multipliers
@@ -68,18 +73,19 @@ namespace king_attack {
         0, 0, 0, 16, 48, 128, 256, 384,
         464, 496, 512, 512, 512, 512, 512, 512
     };
-    
+
     const int8_t KING_ATTACK_OFFSET = 8; //perfectly castled king -9 units
-    const int8_t KING_DEFEND_FIANCHETTO[2] = { -1, 1 };
-    const int8_t KING_DEFEND_BACKRANK[2] = { -1, 1 };
+    const int8_t KING_DEFEND_FIANCHETTO[2] = {-1, 1};
+    const int8_t KING_DEFEND_BACKRANK[2] = {-1, 1};
 
     score_t * eval(search_t * s, bool us) {
 
         int pc = KING[us];
         score_t * result = &s->stack->pc_score[pc];
         result->clear();
-        
-        if (!material::has_king_attack_force(s, us)) {
+
+        const int my_attack_force = s->stack->mt->attack_force[us];
+        if (my_attack_force < 6) { //less than QR
             return result;
         }
 
@@ -94,16 +100,18 @@ namespace king_attack {
         trace("SHELTER ATTACK", us, KING_SHELTER[shelter_ix]);
 
         /*
-         * 2. Reduce the shelter score for closed positions
+         * 2. Reduce the shelter score for some cases:
          */
 
+        //closed center
         if ((s->stack->pt->flags & pawn_table::FLAG_CLOSED_CENTER) != 0) {
             attack_score = attack_score / 2;
-            trace("CLOSED CENTER MUL", us, -attack_score / 2);
+            trace("CLOSED CENTER MUL", us, attack_score);
         }
 
+        //interface parameter adjustment
         attack_score = (s->king_attack_shelter * attack_score) / 256;
-        trace("SHELTER TOTAL (MUL)", us, attack_score);
+        trace("SHELTER TOTAL (UI MUL)", us, attack_score);
 
         /*
          * 3. Calculate the total piece attack score
@@ -125,18 +133,24 @@ namespace king_attack {
         for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
             int a = KA_UNITS(s->stack->king_attack[pc]);
             int d = KD_UNITS(s->stack->king_attack[pc + offs[us]]);
-            attack_pcs += a;
-            defend_pcs += d;
-            attack_units += a * KING_ATTACK_UNIT[pc];
-            defend_units += d * KING_DEFEND_UNIT[pc];
+            if (a) {
+                attack_pcs += a;
+                attack_units += a * KING_ATTACK_UNIT[pc];
+            }
+            if (d) {
+                defend_pcs += d;
+                defend_units += d * KING_DEFEND_UNIT[pc];
+            }
         }
 
         int pc_attack_score = attack_units * 20 - defend_units * 5;
         pc_attack_score = (s->king_attack_pieces * pc_attack_score) / 256;
         const int pc_ix = attack_pcs + (attack_pcs == 0 && defend_pcs);
+        trace("PIECE ATTACK (base) ", us, pc_attack_score);
+        trace("PIECE ATTACK (mul) ", us, (KING_ATTACK_PCS[pc_ix] * pc_attack_score) / 256);
         attack_score += (KING_ATTACK_PCS[pc_ix] * pc_attack_score) / 256;
-        trace("PIECE ATTACK ", us, (KING_ATTACK_PCS[pc_ix] * pc_attack_score) / 256);
         result->set(attack_score, 0);
+        trace("PIECE ATTACK (total) ", us, attack_score);
         return result;
     }
 

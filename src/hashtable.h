@@ -35,7 +35,8 @@ namespace material_table {
     struct entry_t {
         U64 key;
         int16_t score;
-        uint8_t phase;
+        uint8_t phase; 
+        uint8_t attack_force[2];
         uint8_t flags;
     };
 

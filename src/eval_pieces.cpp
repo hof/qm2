@@ -172,6 +172,7 @@ namespace pieces {
                 int sq = pop(bb_pc);
                 bool defended = brd->is_attacked_by_pawn(sq, us);
                 bool is_minor = false;
+                bool king_attack = false;
                 U64 bsq = BIT(sq);
 
                 /*
@@ -209,7 +210,7 @@ namespace pieces {
                 if (pc == WKNIGHT || pc == BKNIGHT) {
                     moves = KNIGHT_MOVES[sq];
                     is_minor = true;
-                    king_attack_units += (bool)(moves & KNIGHT_MOVES[kpos[!us]]);
+                    king_attack = moves & KNIGHT_MOVES[kpos[!us]];
                 } else if (pc == WBISHOP || pc == BBISHOP) {
                     moves = magic::bishop_moves(sq, occ);
                     is_minor = true;
@@ -302,7 +303,7 @@ namespace pieces {
                  * King attacks info for later use in king attack evaluation
                  */
 
-                king_attack_units += bool(safe_moves & KING_MOVES[kpos[!us]]);
+                king_attack_units += king_attack || bool(safe_moves & KING_MOVES[kpos[!us]]);
                 king_defend_units += bool(moves & KING_MOVES[kpos[us]]);
 
             } while (bb_pc);

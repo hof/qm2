@@ -64,7 +64,9 @@ void test_tt() {
     if (me->key != key
             || me->score != 0
             || me->phase != 0
-            || me->flags != 120
+            || me->flags != 96
+            || me->attack_force[WHITE] != 12
+            || me->attack_force[BLACK] != 12
             ) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=material table store/retrieve error" << std::endl;
         return;

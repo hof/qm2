@@ -152,21 +152,23 @@ void search_t::iterative_deepening() {
             break;
         }
         store_pv();
-        bool score_drop = score + 20 < last_score;
         if (timed_search && !pondering()) {
+            bool score_jump = depth >= 6 && ABS(score - last_score) > 20;
             int elapsed = game->tm.elapsed();
-            if (root.move_count <= 1 && depth >= 6) {
+            if (root.move_count <= 1 && (depth >= 8 || elapsed > min_time / 8)) {
+                //one legal move, still search a bit to get a ponder move
                 break;
             } else if (elapsed > max_time / 2) {
-                //complex position, maximum (emergency) time control
+                //complex position, used maximum (emergency) time control
                 break;
-            } else if (elapsed > min_time / 2 && !score_drop && root.is_easy()) {
-                //easy position, half time control
+            } else if (elapsed > min_time / 2 && !score_jump && root.is_easy()) {
+                //easy position, used half time control
                 break;
-            } else if (elapsed > min_time && !score_drop && (score > 100 || !root.is_complex())) {
-                //neutral position, normal time control
+            } else if (elapsed > min_time && !score_jump && !root.is_complex()) {
+                //neutral position, used normal time control
                 break;
             } else if (score::mate_in_ply(score) && depth > score::mate_in_ply(score)) {
+                //mate in N and search depth > N
                 break;
             }
         } else if (depth >= 15 && game->target_score && score >= game->target_score &&
