@@ -599,16 +599,17 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const int eval = evaluate(this);
     const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE;
 
+    //fail high pruning
+    if (do_prune_node && eval > beta + 300 && depth < 4 && beta_pruning) {
+        return eval - 300;   
+    }
+    
     //null move pruning
-    if (null_enabled && do_prune_node && eval >= beta && depth > 1 && brd.has_pieces(brd.stack->wtm)) {
-        forward();
+    if (do_prune_node && eval >= beta && depth > 1 && null_enabled && brd.has_pieces(brd.stack->wtm)) {
         int R = 3;
-        if (depth > R && null_adaptive_depth > 0) {
-            R += depth / null_adaptive_depth;
-        }
-        if (depth > R && null_adaptive_value > 0) {
-            R += (eval - beta) / null_adaptive_value;
-        }
+        R += depth > R && depth >= 5 && null_adaptive_depth;
+        R += depth > R && (eval - beta) > 200 && null_adaptive_value;
+        forward();
         int null_score = -pvs(-beta, -alpha, depth - 1 - R);
         backward();
         if (stop_all) {
@@ -627,12 +628,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 //no verification
                 return null_score;
             }
-        } else if (null_score < alpha && null_score < -score::DEEPEST_MATE) {
-            move_t * threat_move = &(stack + 1)->best_move;
-            if (!threat_move->capture && !threat_move->promotion) {
-                (stack + 1)->killer[0].set(threat_move); //sets mate killer
-            }
-        }
+        } 
     }
 
     /*

@@ -103,10 +103,11 @@ public:
     int wild;
     int king_attack_shelter;
     int king_attack_pieces;
-    int null_adaptive_depth;
-    int null_adaptive_value;
+    bool null_adaptive_depth;
+    bool null_adaptive_value;
     bool null_verify;
     bool null_enabled;
+    bool beta_pruning;
     bool lmr_enabled;
     bool ffp_enabled;
 
@@ -116,6 +117,7 @@ public:
         king_attack_pieces = options::get_value("KingAttackPieces");
         null_adaptive_depth = options::get_value("NullAdaptiveDepth");
         null_adaptive_value = options::get_value("NullAdaptiveValue");
+        beta_pruning = options::get_value("BetaPruning");
         null_verify = options::get_value("NullVerify");
         null_enabled = options::get_value("NullMove");
         lmr_enabled = options::get_value("LMR");
