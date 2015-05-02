@@ -159,13 +159,13 @@ void search_t::iterative_deepening() {
                 //one legal move, still search a bit to get a ponder move
                 break;
             } else if (elapsed > max_time / 2) {
-                //complex position, used maximum (emergency) time control
+                //complex position, maximum (emergency) time control
                 break;
             } else if (elapsed > min_time / 2 && !score_jump && root.is_easy()) {
-                //easy position, used half time control
+                //easy position, half time control
                 break;
             } else if (elapsed > min_time && !score_jump && !root.is_complex()) {
-                //neutral position, used normal time control
+                //neutral position, normal time control
                 break;
             } else if (score::mate_in_ply(score) && depth > score::mate_in_ply(score)) {
                 //mate in N and search depth > N
@@ -597,15 +597,15 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
-    const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE;
+    const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
 
-    //fail high pruning
-    if (do_prune_node && eval > beta + 300 && depth < 4 && beta_pruning) {
+    //fail high (beta) pruning
+    if (do_prune_node && eval - 300 > beta && depth < 4 && beta_pruning) {
         return eval - 300;   
     }
     
     //null move pruning
-    if (do_prune_node && eval >= beta && depth > 1 && null_enabled && brd.has_pieces(brd.stack->wtm)) {
+    if (do_prune_node && eval >= beta && depth > 1 && null_enabled) {
         int R = 3;
         R += depth > R && depth >= 5 && null_adaptive_depth;
         R += depth > R && (eval - beta) > 200 && null_adaptive_value;
@@ -634,6 +634,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     /*
      * Internal iterative deepening (IID)
      */
+    
     if (depth >= 6 && tt_move == 0) {
         skip_null = pv;
         int R = pv ? 2 : 4;
@@ -649,7 +650,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Moves loop
      */
 
-    //if no first move, it's checkmate or stalemate
+    //if there is no first move, it's checkmate or stalemate
     move_t * move = move::first(this, depth);
     if (!move) {
         return in_check ? -score::MATE + brd.ply : draw_score();
@@ -668,16 +669,16 @@ int search_t::pvs(int alpha, int beta, int depth) {
         assert(brd.valid(move) && brd.legal(move));
         assert(stack->best_move.equals(move) == false);
 
-        int gives_check = brd.gives_check(move);
+        const int gives_check = brd.gives_check(move);
         assert(gives_check == 0 || gives_check == 1 || gives_check == 2);
 
         /*
          * Move pruning: skip all futile moves
          */
 
-        bool is_quiet_stage = stack->move_list.stage > QUIET_MOVES && searched_moves > 0;
-        bool is_dangerous = !is_quiet_stage || in_check || gives_check || is_passed_pawn(move);
-        bool do_prune = !is_dangerous && searched_moves > 1 && !pv && best > -score::DEEPEST_MATE;
+        const bool is_quiet_stage = stack->move_list.stage > QUIET_MOVES && searched_moves > 0;
+        const bool is_dangerous = !is_quiet_stage || in_check || gives_check || is_passed_pawn(move);
+        const bool do_prune = !is_dangerous && searched_moves > 1 && !pv && best > -score::DEEPEST_MATE;
 
         //futile quiet moves (futility pruning)
         if (do_prune && depth < 8 && fbase <= alpha && ffp_enabled) {
@@ -689,7 +690,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Move Extensions
          */
 
-        int extend = extend_move(move, gives_check, depth, searched_moves == 0);
+        const int extend = extend_move(move, gives_check, depth, searched_moves == 0);
 
         /*
          * Late Move Reductions (LMR) 
@@ -700,8 +701,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
             reduce = tt_move != 0;
             reduce += (bool) !is_dangerous && searched_moves >= 3 && reduce < max_reduce;
             reduce += (bool) !is_dangerous && searched_moves >= 6 && reduce < max_reduce;
+            assert((depth - reduce) >= 1);
         }
-        assert((depth - reduce) >= 1);
 
         /*
          * Go forward and search next node

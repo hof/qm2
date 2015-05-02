@@ -35,6 +35,11 @@ namespace time_man {
     const double ONE_MS = CLOCKS_PER_SEC / 1000;
     const int INFINITE_TIME = 24 * 60 * 60 * 1000;
     const int M = 24; //assume game is decided after M moves from now
+    const int M_MIN = M*2;
+    const int M_MAX = M/4;
+    const int M_MIN_LOW_TIME = M*4;
+    const int M_MAX_LOW_TIME = M;
+    const int LOW_TIME = 60000; //one minute
     const int LAG_TIME = 50; //interface + initialization lag time in ms per move
 };
 
