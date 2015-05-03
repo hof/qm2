@@ -645,7 +645,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             stack->tt_move.set(&stack->best_move);
         }
     }
-
+    
     /*
      * Moves loop
      */
@@ -655,7 +655,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     if (!move) {
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
-
+    
     //prepare and do the loop
     skip_null = false;
     int best = -score::INF;

@@ -90,7 +90,7 @@ namespace pieces {
 
     const int8_t VBISHOPPAIR = 50;
     const score_t DEFENDED = S(5, 0);
-    const score_t ROOK_7TH = S(10, 20);
+    const score_t ROOK_7TH = S(20, 30);
     const score_t SEMIOPEN_FILE = S(10, 10);
     const score_t OPEN_FILE = S(20, 15);
     const score_t CLOSED_FILE = S(-5, -5);
