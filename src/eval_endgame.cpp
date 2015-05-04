@@ -432,6 +432,16 @@ namespace eg {
         score += us == WHITE ? bonus : -bonus;
         return score;
     }
+    
+    /**
+     * Evaluate KQPSKQ endgame
+     */
+
+    int kqpskq(search_t * s, const int score, const bool us) {
+        int bonus = s->stack->passer_score[us].eg / 2;
+        bonus = us == WHITE? bonus : -bonus;
+        return mul256(score, 112 + 16 * s->brd.count(PAWN[us])) + bonus;
+    }
 
     /**
      * Piece(s) vs lone king (case 4)
@@ -547,7 +557,7 @@ namespace eg {
         } else if (s->brd.is_eg(KRPKR, us)) {
             return krpkr(s, score, us);
         } else if (s->brd.is_eg(KQPSKQ, us)) {
-            return mul256(score, 112 + 16 * s->brd.count(PAWN[us]));
+            return kqpskq(s, score, us);
         }
         return score;
     }
