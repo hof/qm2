@@ -114,9 +114,8 @@ move_t * move_picker_t::next(search_t * s, int depth) {
      * 2. If no move was found, proceed to the next stage and get or generate
      * (some) moves.
      */
-    U64 mask;
     board_t * brd = &s->brd;
-    bool do_quiets = depth >= 0 || s->stack->in_check;
+    const bool do_quiets = depth >= 0 || s->stack->in_check;
     switch (list->stage) {
         case HASH:
             result = &s->stack->tt_move;
@@ -127,8 +126,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 return result;
             }
         case CAPTURES:
-            mask = brd->bb[ALLPIECES];
-            move::gen_captures(brd, list, mask);
+            move::gen_captures(brd, list);
             if (list->current != list->last) {
                 for (move_t * move = list->current; move != list->last; move++) {
                     if (s->wild == 17) {
@@ -190,8 +188,8 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                         && brd->valid(result)
                         && brd->legal(result)) {
                     assert(s->stack->killer[0].equals(result) == false);
-                    list->stage = MINORPROMOTIONS;
                     assert(result->capture == EMPTY && result->promotion == EMPTY);
+                    list->stage = MINORPROMOTIONS;
                     return result;
                 }
             }

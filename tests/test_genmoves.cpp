@@ -42,7 +42,7 @@ U64 moveGenerationPerft(search_t *s, int depth) {
     board_t * pos = &s->brd;
     move::list_t * move_list = &s->stack->move_list;
     move_list->clear();
-    move::gen_captures(pos, move_list, FULL_BOARD);
+    move::gen_captures(pos, move_list);
     move::gen_promotions(pos, move_list);
     move::gen_castles(pos, move_list);
     move::gen_quiet_moves(pos, move_list);
@@ -68,7 +68,7 @@ void movePerftDivide(search_t * s, int depth) {
     board_t * pos = &s->brd;
     std::cout << pos->to_string() << std::endl;
     move_list->clear();
-    move::gen_captures(pos, move_list, FULL_BOARD);
+    move::gen_captures(pos, move_list);
     move::gen_promotions(pos, move_list);
     move::gen_castles(pos, move_list);
     move::gen_quiet_moves(pos, move_list);

@@ -47,16 +47,17 @@ namespace move {
      * @param list movelist object
      * @param targets the pieces to capture
      */
-    void gen_captures(board_t * board, move::list_t * list, U64 targets) {
+    void gen_captures(board_t * board, move::list_t * list) {
         move_t * current = list->last;
         list->current = current;
+        const bool us = board->stack->wtm;
+        const bool them = !us;
+        const U64 occ = board->bb[ALLPIECES];
+        const U64 targets = board->all(them);
         U64 moves;
-        U64 occ = board->bb[ALLPIECES];
-        bool us = board->stack->wtm;
-        bool them = !us;
+        int ssq, tsq;
         int pc = PAWN[us];
-        targets &= board->all(them);
-
+        
         //pawn captures (including en-passant and promotion captures):
         U64 pawn_caps = targets;
         if (board->stack->enpassant_sq) {
@@ -64,10 +65,10 @@ namespace move {
         }
         pawn_caps &= board->pawn_attacks(us);
         while (pawn_caps) {
-            int tsq = pop(pawn_caps);
-            moves = PAWN_CAPTURES[them][tsq] & board->bb[PAWN[us]];
+            tsq = pop(pawn_caps);
+            moves = PAWN_CAPTURES[them][tsq] & board->bb[pc];
             while (moves) {
-                int ssq = pop(moves);
+                ssq = pop(moves);
                 if (tsq == board->stack->enpassant_sq && tsq > 0) {
                     (current++)->set(pc, ssq, tsq, PAWN[them]);
                 } else if ((BIT(tsq) & RANK[us][8]) == 0) {
@@ -80,51 +81,56 @@ namespace move {
                 }
             }
         }
+        
         //knight captures:
         U64 pieces = board->bb[++pc];
         while (pieces) {
-            int ssq = pop(pieces);
+            ssq = pop(pieces);
             moves = KNIGHT_MOVES[ssq] & targets;
             while (moves) {
-                int tsq = pop(moves);
+                tsq = pop(moves);
                 (current++)->set(pc, ssq, tsq, board->matrix[tsq]);
             }
         }
+        
         //bishop captures:
         pieces = board->bb[++pc];
         while (pieces) {
-            int ssq = pop(pieces); //pp->squares[i];
+            ssq = pop(pieces); //pp->squares[i];
             moves = magic::bishop_moves(ssq, occ) & targets;
             while (moves) {
-                int tsq = pop(moves);
+                tsq = pop(moves);
                 (current++)->set(pc, ssq, tsq, board->matrix[tsq]);
             }
         }
+        
         //rook captures:
         pieces = board->bb[++pc];
         while (pieces) {
-            int ssq = pop(pieces); //pp->squares[i];
+            ssq = pop(pieces); //pp->squares[i];
             moves = magic::rook_moves(ssq, occ) & targets;
             while (moves) {
-                int tsq = pop(moves);
+                tsq = pop(moves);
                 (current++)->set(pc, ssq, tsq, board->matrix[tsq]);
             }
         }
+        
         //queen captures:
         pieces = board->bb[++pc];
         while (pieces) {
-            int ssq = pop(pieces); //pp->squares[i];
+            ssq = pop(pieces); //pp->squares[i];
             moves = magic::queen_moves(ssq, occ) & targets;
             while (moves) {
-                int tsq = pop(moves);
+                tsq = pop(moves);
                 (current++)->set(pc, ssq, tsq, board->matrix[tsq]);
             }
         }
+        
         //king captures:
         int kpos = board->get_sq(++pc);
-        moves = KING_MOVES[kpos] & board->all(them);
+        moves = KING_MOVES[kpos] & targets;
         while (moves) {
-            int tsq = pop(moves);
+            tsq = pop(moves);
             (current++)->set(pc, kpos, tsq, board->matrix[tsq]);
         }
 

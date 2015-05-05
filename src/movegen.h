@@ -52,7 +52,7 @@ namespace move {
     void gen_quiet_moves(board_t * board, list_t * list);
     void gen_promotions(board_t * board, list_t * list);
     void gen_castles(board_t * board, list_t * list);
-    void gen_captures(board_t * board, list_t * list, U64 targets);
+    void gen_captures(board_t * board, list_t * list);
 }
 
 #endif	/* MOVEGEN_H */
