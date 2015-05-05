@@ -203,6 +203,7 @@ void print_row(std::string cap, score_t & w, score_t & b, int phase) {
 void engine_t::analyse() {
 
     search_t * s = new search_t(_root_fen.c_str());
+    evaluate(s);
     int phase = s->stack->mt->phase;
     bool wtm = s->brd.stack->wtm;
     score_t tempo_score;

@@ -38,11 +38,12 @@ void test_tt() {
      * Test pawn table store and retrieve
      */
 
-    search_t * sd = new search_t("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    pawn_table::entry_t * pe = pawn_table::retrieve(sd->brd.stack->pawn_hash);
+    search_t * s = new search_t("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    evaluate(s);
+    pawn_table::entry_t * pe = pawn_table::retrieve(s->brd.stack->pawn_hash);
 
     //pawn entry should contain valid information for the starting position
-    if (pe->key != sd->brd.stack->pawn_hash
+    if (pe->key != s->brd.stack->pawn_hash
             || pe->passers != 0
             || pe->score.mg != 0
             || pe->score.eg != 0
@@ -57,7 +58,7 @@ void test_tt() {
      * Test material table store and retrieve
      */
 
-    U64 key = sd->brd.stack->material_hash;
+    U64 key = s->brd.stack->material_hash;
     material_table::entry_t * me = material_table::retrieve(key);   
 
     //check for valid entry
@@ -93,10 +94,10 @@ void test_tt() {
         }
     }
 
-    move_t * tmove = move::first(sd, 0);
-    trans_table::store(sd->brd.stack->tt_key, sd->brd.root_ply, sd->brd.ply, 123, -12345, tmove->to_int(), 3);
+    move_t * tmove = move::first(s, 0);
+    trans_table::store(s->brd.stack->tt_key, s->brd.root_ply, s->brd.ply, 123, -12345, tmove->to_int(), 3);
 
-    bool result = trans_table::retrieve(sd->brd.stack->tt_key, sd->brd.ply, 123, score, move, flag);
+    bool result = trans_table::retrieve(s->brd.stack->tt_key, s->brd.ply, 123, score, move, flag);
 
 
     if (result == false
@@ -104,7 +105,7 @@ void test_tt() {
             || flag != 3
             || move != tmove->to_int()) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=store/retrieve error" << std::endl;
-        delete sd;
+        delete s;
         return;
     }
 
@@ -123,7 +124,7 @@ void test_tt() {
     if (engine->get_total_nodes() > 50000) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=hashtable not effective" << std::endl;
     }
-    delete sd;
+    delete s;
 }
 
 int main(int argc, char** argv) {

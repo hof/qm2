@@ -70,6 +70,7 @@ void search_t::init(const char * fen, game_t * g) {
     game = g ? g : game::instance();
     game->init_tm(brd.stack->wtm);
     wild = 0;
+    book_name = "book.bin";
     king_attack_shelter = options::get_value("KingAttackShelter");
     king_attack_pieces = options::get_value("KingAttackPieces");
     null_adaptive_depth = options::get_value("NullAdaptiveDepth");
@@ -89,11 +90,9 @@ void search_t::init(const char * fen, game_t * g) {
     root_stack = stack = &_stack[0];
     stack->best_move.clear();
     result_score = 0;
-    init_pst();
     stack->eval_result = score::INVALID;
-    evaluate(this);
     memset(history, 0, sizeof (history));
-    book_name = "book.bin";
+    init_pst();
 }
 
 /**

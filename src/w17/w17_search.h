@@ -27,7 +27,6 @@
 #include "search.h"
 #include "hashcodes.h"
 
-
 class w17_search_t : public search_t {
 public:
 
