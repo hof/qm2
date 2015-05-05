@@ -112,16 +112,6 @@ public:
     bool ffp_enabled;
 
     search_t(const char * fen, game_t * g = NULL) {
-        wild = 0;
-        king_attack_shelter = options::get_value("KingAttackShelter");
-        king_attack_pieces = options::get_value("KingAttackPieces");
-        null_adaptive_depth = options::get_value("NullAdaptiveDepth");
-        null_adaptive_value = options::get_value("NullAdaptiveValue");
-        beta_pruning = options::get_value("BetaPruning");
-        null_verify = options::get_value("NullVerify");
-        null_enabled = options::get_value("NullMove");
-        lmr_enabled = options::get_value("LMR");
-        ffp_enabled = options::get_value("FutilityPruning");
         init(fen, g);
     }
 
@@ -151,7 +141,6 @@ public:
     void update_history(move_t * move);
     void update_killers(move_t * move);
     bool is_killer(move_t * const move);
-    void init_history();
     void reset_stack();
 
     int draw_score() {

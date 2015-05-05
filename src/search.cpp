@@ -69,6 +69,16 @@ void search_t::init(const char * fen, game_t * g) {
     brd.init(fen);
     game = g ? g : game::instance();
     game->init_tm(brd.stack->wtm);
+    wild = 0;
+    king_attack_shelter = options::get_value("KingAttackShelter");
+    king_attack_pieces = options::get_value("KingAttackPieces");
+    null_adaptive_depth = options::get_value("NullAdaptiveDepth");
+    null_adaptive_value = options::get_value("NullAdaptiveValue");
+    beta_pruning = options::get_value("BetaPruning");
+    null_verify = options::get_value("NullVerify");
+    null_enabled = options::get_value("NullMove");
+    lmr_enabled = options::get_value("LMR");
+    ffp_enabled = options::get_value("FutilityPruning");
     ponder_move.clear();
     nodes = 0;
     pruned_nodes = 0;
@@ -82,19 +92,8 @@ void search_t::init(const char * fen, game_t * g) {
     init_pst();
     stack->eval_result = score::INVALID;
     evaluate(this);
-    init_history();
+    memset(history, 0, sizeof (history));
     book_name = "book.bin";
-}
-
-/**
- * Initialize history sort order with piece-square table values
- */
-void search_t::init_history() {
-    for (int pc = 0; pc <= BKING; pc++) {
-        for (int sq = a1; sq <= h8; sq++) {
-            history[pc][sq] = 0;
-        }
-    }
 }
 
 /**
@@ -357,16 +356,16 @@ void search_t::update_history(move_t * move) {
  * @param move a quiet move that caused a beta cutoff
  */
 void search_t::update_killers(move_t * move) {
-        if (stack->killer[0].equals(move)) {
-            return;
-        }
-        //note: address(&stack->killer[1]) can be equal to address(move)
-        move_t t;
-        t.set(move);
-        stack->killer[1].set(&stack->killer[0]);
-        stack->killer[0].set(&t);
-        assert(stack->killer[0].equals(&stack->killer[1]) == false);
+    if (stack->killer[0].equals(move)) {
+        return;
     }
+    //note: address(&stack->killer[1]) can be equal to address(move)
+    move_t t;
+    t.set(move);
+    stack->killer[1].set(&stack->killer[0]);
+    stack->killer[0].set(&t);
+    assert(stack->killer[0].equals(&stack->killer[1]) == false);
+}
 
 /**
  * Initialize moves for the root position
@@ -617,9 +616,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     //fail high (beta) pruning
     if (do_prune_node && eval - 300 > beta && depth < 4 && beta_pruning) {
-        return eval - 300;   
+        return eval - 300;
     }
-    
+
     //null move pruning
     if (do_prune_node && eval >= beta && depth > 1 && null_enabled) {
         int R = 3;
@@ -644,13 +643,13 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 //no verification
                 return null_score;
             }
-        } 
+        }
     }
 
     /*
      * Internal iterative deepening (IID)
      */
-    
+
     if (depth >= 6 && tt_move == 0) {
         skip_null = pv;
         int R = pv ? 2 : 4;
@@ -661,7 +660,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             stack->tt_move.set(&stack->best_move);
         }
     }
-    
+
     /*
      * Moves loop
      */
@@ -671,7 +670,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     if (!move) {
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
-    
+
     //prepare and do the loop
     skip_null = false;
     int best = -score::INF;
