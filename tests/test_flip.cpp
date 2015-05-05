@@ -132,7 +132,7 @@ void flip_divide(int test_num, const char * fen, int divide_steps) {
     delete s;
 }
 
-void flipTestSuite(engine_t * engine, int depth) {
+void flipTestSuite(int depth) {
     engine::settings()->max_depth = depth;
     flipTest(1, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     flipTest(2, "8/7p/5k2/5p2/p1p2P2/Pr1pPK2/1P1R3P/8 b - - 0 1");
@@ -211,7 +211,7 @@ void flipTestSuite(engine_t * engine, int depth) {
     flipTest(3005, "4k3/4pp2/4p3/8/8/8/3PPP2/4K3 w - - 0 1");
 }
 
-int main(int argc, char** argv) {
+int main() {
     magic::init();
     global_engine = engine::instance();
     trans_table::disable();
@@ -227,7 +227,7 @@ int main(int argc, char** argv) {
     std::cout << "%TEST_STARTED% flip (flip_test)\n" << std::endl;
     std::cout << "flip_test flip" << std::endl;
     begin = clock();
-    flipTestSuite(global_engine, MAX_TEST_DEPTH);
+    flipTestSuite(MAX_TEST_DEPTH);
     now = clock();
     double elapsed = (now - begin) / CLOCKS_PER_SEC;
     std::cout << "%TEST_FINISHED% time=" << elapsed << " flip (flip_test)" << std::endl;

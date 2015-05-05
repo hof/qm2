@@ -258,7 +258,7 @@ int book_t::find(board_t * brd, move::list_t * list) {
         if (entry.key != key) {
             break;
         }
-        if (entry.weight <= 0) {
+        if (entry.weight == 0) {
             continue;
         }
         move_t * move = list->last++;
@@ -332,8 +332,8 @@ void book_t::close() {
  * @param fname the filename 
  */
 void book_t::open(const string &fname) {
-    
-    srand(time(NULL)); 
+
+    srand(time(NULL));
 
     // Close old file before opening the new
     close();
@@ -371,35 +371,24 @@ const string book_t::get_file_name() {
  * found in the book file, book_size is returned.
  */
 int book_t::find_key(U64 key) {
-
-    int left, right, mid;
+    assert(book_size > 0);
     book_entry_t entry;
-
-    // Binary search (finds the leftmost entry)
-    left = 0;
-    right = book_size - 1;
-
-    assert(left <= right);
-
+    int left = 0;
+    int right = book_size - 1;
     while (left < right) {
-        mid = (left + right) / 2;
-
+        int mid = (left + right) / 2;
         assert(mid >= left && mid < right);
-
         read_entry(entry, mid);
-
-        if (key <= entry.key)
+        if (key <= entry.key) {
             right = mid;
-        else
+        } else {
             left = mid + 1;
+        }
     }
-
     assert(left == right);
-
     read_entry(entry, left);
     return entry.key == key ? left : book_size;
 }
-
 
 /**
  * Book::read_entry() takes a BookEntry reference and an integer index as
@@ -407,14 +396,10 @@ int book_t::find_key(U64 key) {
  * file. The book entry is copied to the first input parameter.
  */
 void book_t::read_entry(book_entry_t& entry, int idx) {
-
     assert(idx >= 0 && idx < book_size);
     assert(is_open());
-
     seekg(idx * ENTRY_SIZE, ios_base::beg);
-
     *this >> entry;
-
     if (!good()) {
         exit(EXIT_FAILURE);
     }
@@ -425,17 +410,14 @@ void book_t::read_entry(book_entry_t& entry, int idx) {
 /// and converts them in an integer number.
 
 U64 book_t::read_integer(int size) {
-
     char buf[8];
     U64 n = 0;
-
     read(buf, size);
 
     // Numbers are stored on disk as a binary byte stream
     for (int i = 0; i < size; i++) {
         n = (n << 8) + (unsigned char) buf[i];
     }
-
     return n;
 }
 
@@ -475,15 +457,15 @@ U64 book_t::polyglot_key(board_t* pos) {
 
 namespace book {
     book_t _book;
-    
+
     void open(const std::string& file_name) {
         _book.open(file_name);
     }
-    
+
     void close() {
         _book.close();
     }
-    
+
     int find(board_t * pos, move::list_t * list) {
         return _book.find(pos, list);
     }

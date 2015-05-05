@@ -116,8 +116,8 @@ namespace pieces {
         const bool equal_pawns = brd->ply > 0
                 && brd->stack->pawn_hash == (brd->stack - 1)->pawn_hash
                 && score::is_valid((s->stack - 1)->eval_result);
-        const int prev_pc = equal_pawns ? (s->stack - 1)->current_move.capture : EMPTY;
-        const int prev_cap = equal_pawns ? (s->stack - 1)->current_move.piece : EMPTY;
+        const int prev_pc = equal_pawns ? (s->stack - 1)->current_move.capture : 0;
+        const int prev_cap = equal_pawns ? (s->stack - 1)->current_move.piece : 0;
         pawn_table::entry_t * pi = s->stack->pt;
         const int kpos[2] = {brd->get_sq(BKING), brd->get_sq(WKING)};
         const U64 occ = brd->pawns_kings();

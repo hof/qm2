@@ -103,7 +103,7 @@ namespace uci {
             } else if (token == "eval") {
                 result = handle_eval(parser);
             } else if (token == "learn") {
-                result = handle_learn(parser);
+                result = handle_learn();
             }
         }
         return result;
@@ -272,7 +272,7 @@ namespace uci {
      * feature gives better performance, and what is the ideal score
      * 
      */
-    bool handle_learn(input_parser_t & parser) {
+    bool handle_learn() {
         engine::settings()->clear();
         engine::set_ponder(false);
         engine::set_position(fen);

@@ -225,7 +225,7 @@ namespace kpk_bitbase {
     }
 }
 
-int main(int argc, char** argv) {
+int main() {
     magic::init();
     kpk_bitbase::init();
     

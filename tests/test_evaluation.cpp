@@ -189,7 +189,7 @@ void testEvaluationSuite() {
      */
 }
 
-int main(int argc, char** argv) {
+int main() {
     std::cout << "%SUITE_STARTING% evaluation_test" << std::endl;
     std::cout << "%SUITE_STARTED%" << std::endl;
     std::cout << "%TEST_STARTED% test1 (evaluation_test)" << std::endl;

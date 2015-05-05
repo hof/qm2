@@ -42,6 +42,12 @@ struct book_entry_t {
 class book_t : private std::ifstream {
     
 public:
+    
+    book_t() {
+        book_size = 0;
+        file_name = "";
+    }
+    
     ~book_t() {
         close();
     }

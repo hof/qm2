@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 2.8.4) 
 project (MAX2)
-add_definitions("-Wall")
+add_definitions("-Wall -Wextra")
 add_subdirectory(src)
 add_subdirectory(gen)
 add_subdirectory(tests)

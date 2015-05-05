@@ -89,7 +89,6 @@ public:
     root_t root;
     search_stack_t * stack;
     search_stack_t * root_stack;
-    uint8_t LMR[32][64]; //depth,  move number
     U64 nodes;
     U64 pruned_nodes;
     bool stop_all;

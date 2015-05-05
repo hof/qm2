@@ -39,7 +39,7 @@ bool assert_see(board_t * brd, move_t * mv, int expected) {
     return ok;
 }
 
-int main(int argc, char** argv) {
+int main() {
     
     time_t begin;
     time_t now;

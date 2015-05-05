@@ -382,7 +382,6 @@ void * engine_t::_learn(void * engineObjPtr) {
     engine->settings()->max_depth = MAXDEPTH;
     engine->settings()->init_tm(true);
 
-    int x = 0;
     double bestFactor = 1.0;
     double upperBound = score::INF;
     double lowerBound = -score::INF;
@@ -411,7 +410,6 @@ void * engine_t::_learn(void * engineObjPtr) {
      */
     move_t actualmove;
     U64 gamesPlayed = 0;
-    U64 batch = 0;
     U64 totalNodes[2] = {0, 0};
     clock_t begin;
     begin = clock();
@@ -426,8 +424,8 @@ void * engine_t::_learn(void * engineObjPtr) {
         int stats[3] = {0, 0, 0}; //draws, wins for learning side, losses for learning side
         U64 nodes[2] = {0, 0}; //total node counts for both sides
         std::cout << "\nEngine(" << strongest << ") vs Engine(" << opponent << ")" << std::endl;
-        batch = 0;
-        x = 0;
+        U64 batch = 0;
+        int x = 0;
         for (int game = 0; game < maxgames; game++) {
             //go par
             if (x <= game) {

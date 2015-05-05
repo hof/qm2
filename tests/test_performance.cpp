@@ -144,7 +144,7 @@ void test_report(double elapsed) {
     std::cout << "total time: " << elapsed << "s\n";
 }
 
-int main(int argc, char** argv) {
+int main() {
     clock_t begin;
     magic::init();
     global_engine = engine::instance();

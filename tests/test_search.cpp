@@ -122,7 +122,7 @@ int arraySum(int anArray[], int arraySize) {
     return result;
 }
 
-int main(int argc, char** argv) {
+int main() {
 
     clock_t begin;
     clock_t now;

@@ -455,7 +455,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         root_move_t * rmove = &root.moves[i];
         move_t * move = &rmove->move;
         int nodes_before = nodes;
-        int extend = rmove->gives_check > 0;
+        int extend = rmove->gives_check;
         int score = 0;
         forward(move, rmove->gives_check);
         if (i > 0) {

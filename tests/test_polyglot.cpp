@@ -159,7 +159,7 @@ void testPolyglotKeys() {
 
 }
 
-int main(int argc, char** argv) {
+int main() {
     
     time_t begin;
     time_t beginTest;

@@ -127,7 +127,7 @@ void test_tt() {
     delete s;
 }
 
-int main(int argc, char** argv) {
+int main() {
     std::cout << "%SUITE_STARTING% test_transpositiontable" << std::endl;
     std::cout << "%SUITE_STARTED%" << std::endl;
 

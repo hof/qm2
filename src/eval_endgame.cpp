@@ -411,7 +411,7 @@ namespace eg {
         int up_tm = unstoppable_pawn_steps(s, them);
         int forw_us = most_advanced_pawn_steps(s, us);
         int forw_tm = most_advanced_pawn_steps(s, them);
-        assert(up_us < 8 && up_us < 8 && up_us >= 0 && up_tm >= 0);
+        assert(up_us < 8 && up_tm < 8 && up_us >= 0 && up_tm >= 0);
 
         //case 1: unstoppable and at least two tempos sooner to promote
         if (up_us && !up_tm && up_us < forw_tm + 2) {
@@ -497,7 +497,17 @@ namespace eg {
      */
     int pcs_n_pawns_vs_pawns(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 1, 1, 0, us));
-        return score;
+        
+        //this endgame seems very favorable: so give some extra bonus
+        int bonus = 20;
+        if (material::has_mating_power(s, us)) {
+            bonus += 20;
+        }
+        if (us != WHITE) {
+            bonus = -bonus;
+        }
+        
+        return score + bonus;
     }
 
     /**

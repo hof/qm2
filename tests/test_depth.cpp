@@ -121,7 +121,7 @@ void depth_test(engine_t * engine, TStats * stats, int depth) {
     }
 }
 
-int main(int argc, char** argv) {
+int main() {
     magic::init();
     uci::silent(true);
     
