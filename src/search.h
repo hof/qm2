@@ -52,7 +52,7 @@ public:
     int move_count;
     int fifty_count;
     bool in_check;
-    
+
     bool is_complex();
     bool is_easy();
     void sort_moves(move_t * best_move);
@@ -65,16 +65,16 @@ struct search_stack_t {
     move_t current_move;
     move_t best_move;
     move_t tt_move;
-    move_t killer[3];
+    move_t killer[2];
     move_t pv_moves[MAX_PLY + 1];
     bool in_check;
     uint8_t pv_count;
     int16_t eval_result;
     int16_t eg_score;
     score_t eval_score;
-    score_t pc_score[BKING+1];
+    score_t pc_score[BKING + 1];
     score_t passer_score[2];
-    pawn_table::entry_t * pt; 
+    pawn_table::entry_t * pt;
     material_table::entry_t * mt;
     U64 tt_key;
     int8_t king_attack[BKING + 1];
@@ -82,7 +82,7 @@ struct search_stack_t {
 
 class search_t {
 public:
-    search_stack_t _stack[MAX_PLY+1];
+    search_stack_t _stack[MAX_PLY + 1];
     game_t * game;
     board_t brd;
     board_t brd2;
@@ -149,10 +149,10 @@ public:
     void forward(move_t * move, bool givesCheck);
     void backward(move_t * move);
     void update_history(move_t * move);
-    void reset_stack();
+    void update_killers(move_t * move);
     bool is_killer(move_t * const move);
     void init_history();
-    int get_eval_risk();
+    void reset_stack();
 
     int draw_score() {
         return 0;
@@ -167,19 +167,10 @@ public:
         assert(stack->eval_result != score::INVALID);
         return BIT(move->ssq) & stack->pt->passers;
     }
-    
+
     search_stack_t * get_stack(int ply) {
         assert(ply >= 0 && ply < MAX_PLY);
         return &_stack[ply];
-    }
-
-    void update_killers(move_t * move, int score) {
-        if (score > score::DEEPEST_MATE) {
-            stack->killer[0].set(move);
-        } else if (!stack->killer[1].equals(move)) {
-            stack->killer[2].set(&stack->killer[1]);
-            stack->killer[1].set(move);
-        }
     }
 
     void update_pv(move_t * move) {

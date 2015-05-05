@@ -34,7 +34,6 @@ class search_t;
 
 enum move_stage_t {
     HASH,
-    MATEKILLER,
     CAPTURES,
     PROMOTIONS,
     KILLER1,

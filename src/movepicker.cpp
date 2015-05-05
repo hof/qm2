@@ -166,27 +166,15 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 }
                 result = pop(s, list);
                 if (result) {
-                    list->stage = MATEKILLER;
-                    return result;
-                }
-            }
-        case MATEKILLER:
-            if (do_quiets) {
-                result = &s->stack->killer[0];
-                if (result->piece
-                        && !s->stack->tt_move.equals(result)
-                        && brd->valid(result)
-                        && brd->legal(result)) {
                     list->stage = KILLER1;
                     return result;
                 }
             }
         case KILLER1:
             if (do_quiets) {
-                result = &s->stack->killer[1];
+                result = &s->stack->killer[0];
                 if (result->piece
                         && !s->stack->tt_move.equals(result)
-                        && !s->stack->killer[0].equals(result)
                         && brd->valid(result)
                         && brd->legal(result)) {
                     list->stage = KILLER2;
@@ -196,13 +184,12 @@ move_t * move_picker_t::next(search_t * s, int depth) {
             }
         case KILLER2:
             if (do_quiets) {
-                result = &s->stack->killer[2];
+                result = &s->stack->killer[1];
                 if (result->piece
                         && !s->stack->tt_move.equals(result)
-                        && !s->stack->killer[0].equals(result)
-                        && !s->stack->killer[1].equals(result)
                         && brd->valid(result)
                         && brd->legal(result)) {
+                    assert(s->stack->killer[0].equals(result) == false);
                     list->stage = MINORPROMOTIONS;
                     assert(result->capture == EMPTY && result->promotion == EMPTY);
                     return result;

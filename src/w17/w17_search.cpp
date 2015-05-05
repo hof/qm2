@@ -208,7 +208,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
                 }
 
                 if (depth > 0 && !move->capture && !move->promotion) {
-                    update_killers(move, score);
+                    update_killers(move);
                     update_history(move);
                     for (int i = 0; i < searched_moves; i++) {
                         move_t * m = &stack->searched[i];

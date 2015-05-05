@@ -338,7 +338,7 @@ void search_t::store_pv() {
 
 /**
  * Update history sort scores for quiet moves
- * @param move a quiet move
+ * @param move a quiet move that caused a beta cutoff
  * @param depth current search depth
  */
 void search_t::update_history(move_t * move) {
@@ -351,6 +351,22 @@ void search_t::update_history(move_t * move) {
     assert(*record > 0);
     assert(*record < 2 * HISTORY_MAX);
 }
+
+/**
+ * Updates killer moves, making sure they're not equal
+ * @param move a quiet move that caused a beta cutoff
+ */
+void search_t::update_killers(move_t * move) {
+        if (stack->killer[0].equals(move)) {
+            return;
+        }
+        //note: address(&stack->killer[1]) can be equal to address(move)
+        move_t t;
+        t.set(move);
+        stack->killer[1].set(&stack->killer[0]);
+        stack->killer[0].set(&t);
+        assert(stack->killer[0].equals(&stack->killer[1]) == false);
+    }
 
 /**
  * Initialize moves for the root position
@@ -736,7 +752,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             if (score >= beta) {
                 trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_int(), score::LOWERBOUND);
                 if (!move->capture && !move->promotion) {
-                    update_killers(move, score);
+                    update_killers(move);
                     update_history(move);
                     for (int i = 0; i < searched_moves; i++) {
                         move_t * m = &stack->searched[i];
@@ -912,14 +928,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
  * Tests if a move equals one of the killer moves
  */
 bool search_t::is_killer(move_t * const move) {
-    if (move->capture == EMPTY && move->promotion == EMPTY) {
-        for (int i = 0; i < 3; i++) {
-            if (stack->killer[i].equals(move)) {
-                return true;
-            }
-        }
-    }
-    return false;
+    return !move->capture && (stack->killer[0].equals(move) || stack->killer[1].equals(move));
 }
 
 /*
@@ -983,18 +992,4 @@ void search_t::trace_root(int alpha, int beta, int depth) {
                 << ";  \n";
     }
     std::cout << std::endl;
-}
-
-/**
- * Calculates evaluation "risk": the absoltue sum of all high positional values
- * shared by pawn value. E.g. if the passer score for white is 100 and 200 for black, 
- * the risk is (100+200)/100 = 3
- */
-int search_t::get_eval_risk() {
-    int phase = stack->mt->phase;
-    int pos_eval = stack->passer_score[WHITE].get(phase)
-            + stack->passer_score[BLACK].get(phase)
-            + stack->pc_score[WKING].get(phase)
-            + stack->pc_score[BKING].get(phase);
-    return pos_eval / 100;
 }
