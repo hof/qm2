@@ -57,7 +57,7 @@ namespace move {
         U64 moves;
         int ssq, tsq;
         int pc = PAWN[us];
-        
+
         //pawn captures (including en-passant and promotion captures):
         U64 pawn_caps = targets;
         if (board->stack->enpassant_sq) {
@@ -81,7 +81,7 @@ namespace move {
                 }
             }
         }
-        
+
         //knight captures:
         U64 pieces = board->bb[++pc];
         while (pieces) {
@@ -92,7 +92,7 @@ namespace move {
                 (current++)->set(pc, ssq, tsq, board->matrix[tsq]);
             }
         }
-        
+
         //bishop captures:
         pieces = board->bb[++pc];
         while (pieces) {
@@ -103,7 +103,7 @@ namespace move {
                 (current++)->set(pc, ssq, tsq, board->matrix[tsq]);
             }
         }
-        
+
         //rook captures:
         pieces = board->bb[++pc];
         while (pieces) {
@@ -114,7 +114,7 @@ namespace move {
                 (current++)->set(pc, ssq, tsq, board->matrix[tsq]);
             }
         }
-        
+
         //queen captures:
         pieces = board->bb[++pc];
         while (pieces) {
@@ -125,7 +125,7 @@ namespace move {
                 (current++)->set(pc, ssq, tsq, board->matrix[tsq]);
             }
         }
-        
+
         //king captures:
         int kpos = board->get_sq(++pc);
         moves = KING_MOVES[kpos] & targets;
@@ -145,21 +145,18 @@ namespace move {
     void gen_promotions(board_t * board, move::list_t * list) {
         move_t * current = list->last;
         list->current = current;
-        bool us = board->stack->wtm;
-        U64 pieces = board->bb[PAWN[us]] & RANK[us][7];
-        if (pieces) {
-            int pawn_up = PAWN_DIRECTION[us];
-            int pc = PAWN[us];
-            do {
-                int ssq = pop(pieces);
-                int tsq = ssq + pawn_up;
-                if (board->matrix[tsq] == EMPTY) {
-                    (current++)->set(pc, ssq, tsq, 0, QUEEN[us]);
-                    (current++)->set(pc, ssq, tsq, 0, KNIGHT[us]);
-                    (current++)->set(pc, ssq, tsq, 0, ROOK[us]);
-                    (current++)->set(pc, ssq, tsq, 0, BISHOP[us]);
-                }
-            } while (pieces);
+        const bool us = board->stack->wtm;
+        const int pc = PAWN[us];
+        U64 pieces = board->bb[pc] & RANK[us][7];
+        while (pieces) {
+            int ssq = pop(pieces);
+            int tsq = ssq + PAWN_DIRECTION[us];
+            if (board->matrix[tsq] == EMPTY) {
+                (current++)->set(pc, ssq, tsq, 0, QUEEN[us]);
+                (current++)->set(pc, ssq, tsq, 0, KNIGHT[us]);
+                (current++)->set(pc, ssq, tsq, 0, ROOK[us]);
+                (current++)->set(pc, ssq, tsq, 0, BISHOP[us]);
+            }
         }
         list->last = current;
     }
@@ -210,70 +207,80 @@ namespace move {
      * @param list movelist object
      */
     void gen_quiet_moves(board_t * board, move::list_t * list) {
-        U64 occ = board->bb[ALLPIECES];
-        U64 targets = ~occ;
-        U64 moves;
         move_t * current = list->last;
         list->current = current;
-        bool us = board->stack->wtm;
+        U64 moves;
+        const U64 occ = board->bb[ALLPIECES];
+        const U64 targets = ~occ;
+        const bool us = board->stack->wtm;
+        const int pawn_up = PAWN_DIRECTION[us];
         int pc = PAWN[us];
-        int pawn_up = PAWN_DIRECTION[us];
-
+        int ssq;
+        
         //pawn moves:
-        U64 pieces = board->bb[pc];
+        U64 pieces = board->bb[pc] & ~RANK[us][7];
         while (pieces) {
-            int ssq = pop(pieces);
+            ssq = pop(pieces);
             int tsq = ssq + pawn_up;
-            if (board->matrix[tsq] != EMPTY || (BIT(ssq) & RANK[us][7])) {
+            if (board->matrix[tsq] != EMPTY) {
                 continue;
             }
             (current++)->set(pc, ssq, tsq);
             if (BIT(ssq) & RANK[us][2]) {
                 tsq += pawn_up;
-                if (board->matrix[tsq]) {
-                    continue;
+                if (board->matrix[tsq] == EMPTY) {
+                    (current++)->set(pc, ssq, tsq);
                 }
-                (current++)->set(pc, ssq, tsq);
             }
         }
+        
+        //knight moves:
         pieces = board->bb[++pc];
         while (pieces) {
-            int ssq = pop(pieces); //pp->squares[i];
+            ssq = pop(pieces); 
             moves = KNIGHT_MOVES[ssq] & targets;
             while (moves) {
                 (current++)->set(pc, ssq, pop(moves));
             }
         }
+        
+        //bishop moves:
         pieces = board->bb[++pc];
         while (pieces) {
-            int ssq = pop(pieces); //pp->squares[i];
+            ssq = pop(pieces); 
             moves = magic::bishop_moves(ssq, occ) & targets;
             while (moves) {
                 (current++)->set(pc, ssq, pop(moves));
             }
         }
+        
+        //rook moves:
         pieces = board->bb[++pc];
         while (pieces) {
-            int ssq = pop(pieces); //pp->squares[i];
+            ssq = pop(pieces);
             moves = magic::rook_moves(ssq, occ) & targets;
             while (moves) {
                 (current++)->set(pc, ssq, pop(moves));
             }
         }
+        
+        //queen moves:
         pieces = board->bb[++pc];
         while (pieces) {
-            int ssq = pop(pieces); //pp->squares[i];
+            ssq = pop(pieces); 
             moves = magic::queen_moves(ssq, occ) & targets;
             while (moves) {
                 (current++)->set(pc, ssq, pop(moves));
             }
         }
+        
         //king moves:
         int kpos = board->get_sq(++pc);
         moves = KING_MOVES[kpos] & targets;
         while (moves) {
             (current++)->set(pc, kpos, pop(moves));
         }
+        
         list->last = current;
     }
 }

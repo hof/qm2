@@ -97,10 +97,12 @@ void game_t::copy(game_t* game) {
 void game_t::init_tm(bool us) {
     tm.set_start();
     if (max_time_per_move) {
+        tm.set_min(max_time_per_move);
         tm.set_max(max_time_per_move);
     } else if (white_time || black_time) {
         tm.set(time(us), time(!us), increment(us), increment(!us), moves_left);
     } else {
+        tm.set_min(time_man::INFINITE_TIME);
         tm.set_max(time_man::INFINITE_TIME);
     }
 

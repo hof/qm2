@@ -28,91 +28,12 @@
  * Simple C++ Test Suite
  */
 
-
-int see(board_t * brd, move_t * move) {
-    int captured_piece = move->capture;
-    int moving_piece = move->piece;
-    int captured_val = board::PVAL[captured_piece];
-    
-    /*
-     * 0. If the king captures, it's always a gain
-     */
-    if (moving_piece == WKING || moving_piece == BKING) {
-        //std::cout << "Early cut (King)" << std::endl;
-        return captured_val;
-    }
-
-    /*
-     * 1. if a piece captures a higher valued piece 
-     * return quickly as we are (almost) sure this capture gains material.
-     * (e.g. pawn x knight)
-     */
-    int piece_val = board::PVAL[moving_piece];
-    if (piece_val < captured_val) {
-        //std::cout << "Early cut (cap > val)" << std::endl;
-        return captured_val - piece_val;
-    }
-
-    /*
-     * 2. if a piece captures a lower value piece that is defended by
-     * a pawn, return a negative score quickly
-     * (e.g. rook captures knight that is defended by a pawn)
-     */
-    int tsq = move->tsq;
-    if (captured_val && piece_val > captured_val && brd->is_attacked_by_pawn(tsq, moving_piece > WKING)) {
-        //std::cout << "Early cut (val > cap && defended)" << std::endl;
-        return captured_val - piece_val;   
-    }
-
-    /*
-     * 3. full static exchange evaluation using the swap algoritm
-     */
-    bool wtm = moving_piece > WKING;
-    U64 attacks = brd->attacks_to(tsq);
-    int gain[32];
-    int depth = 0;
-    U64 from_bit = BIT(move->ssq);
-    U64 occ = brd->bb[ALLPIECES];
-    const U64 diag_sliders = brd->bb[WBISHOP] | brd->bb[WQUEEN] | brd->bb[BBISHOP] | brd->bb[BQUEEN];
-    const U64 hor_ver_sliders = brd->bb[WROOK] | brd->bb[WQUEEN] | brd->bb[BROOK] | brd->bb[BQUEEN];
-    const U64 xrays = diag_sliders | hor_ver_sliders | brd->bb[WPAWN] | brd->bb[BPAWN];
-    
-    if (!captured_piece && (moving_piece == WPAWN || moving_piece == BPAWN)) {
-        //set the non-capturing pawn move ssq bit in the attacks bitboard, 
-        //so it will be removed again in the swap loop
-        attacks ^= from_bit;
-    }
-
-    gain[0] = captured_val;
-    do {
-        depth++;
-        gain[depth] = board::PVAL[moving_piece] - gain[depth - 1];
-        
-        //std::cout << "Depth: " << depth << " Gain: " << gain[depth];
-        //bb_print("\nAttacks", attacks);
-        
-        attacks ^= from_bit;
-        occ ^= from_bit;
-        if (from_bit & xrays) {
-            attacks |= magic::bishop_moves(tsq, occ) & occ & diag_sliders;
-            attacks |= magic::rook_moves(tsq, occ) & occ & hor_ver_sliders;
-        }
-        from_bit = brd->smallest_attacker(attacks, wtm, moving_piece);
-        wtm = !wtm;
-    } while (from_bit);
-    while (--depth) {
-        gain[depth - 1] = -MAX(-gain[depth - 1], gain[depth]);
-    }
-    return gain[0];
-}
-
 bool assert_see(board_t * brd, move_t * mv, int expected) {
-    int val_1 = brd->see(mv);
-    int val_2 = see(brd, mv);
-    bool ok = val_1 == expected && val_1 == val_2;
+    int see_val = brd->see(mv);
+    bool ok = see_val == expected ;
     if (!ok) {
         std::cout << brd->to_string() << " " << mv->to_string();
-        std::cout << " FAIL " << expected << " != " << val_1 << " != " << val_2;
+        std::cout << " FAIL " << expected << " != " << see_val;
         std::cout << std::endl;
     }
     return ok;
@@ -129,7 +50,6 @@ int main(int argc, char** argv) {
     
     std::cout << "%SUITE_STARTING% test_polyglot" << std::endl;
     std::cout << "%SUITE_STARTED%" << std::endl;
-
     std::cout << "%TEST_STARTED% test1 (test_see)" << std::endl;
     
     board_t brd;
@@ -157,6 +77,12 @@ int main(int argc, char** argv) {
     assert_see(&brd, &mv, vqueen - vpawn);  
     mv.set(BQUEEN, h4, g4, WBISHOP);
     assert_see(&brd, &mv, -vrook - vpawn);
+    
+    brd.init("8/8/5p2/8/k7/p1B5/Kb6/8 w - - 0 1");
+    mv.set(WBISHOP, c3, f6, BPAWN);
+    assert_see(&brd, &mv, -vminor + vpawn);
+    mv.set(WBISHOP, c3, b2, BBISHOP);
+    assert_see(&brd, &mv, vpawn);
     
     brd.init("1r6/1r1q4/1p6/8/8/1R6/KR6/1Q6 w - - 0 1");
     mv.set(WROOK, b3, b6, BPAWN);

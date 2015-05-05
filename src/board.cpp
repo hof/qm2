@@ -524,20 +524,19 @@ bool board_t::legal(move_t * move) {
  * @return 0: no check, 1: simple, direct check, 2: exposed check 
  */
 int board_t::gives_check(const move_t * move) {
-    int ssq = move->ssq;
-    int tsq = move->tsq;
     int piece = move->piece;
-    U64 ssq_bit = BIT(ssq);
-    U64 tsq_bit = BIT(tsq);
-    U64 checkers = 0;
-    int kpos_list[2] = {get_sq(WKING), get_sq(BKING)};
-    int kpos = kpos_list[piece <= WKING];
-    U64 check_mask = QUEEN_MOVES[kpos] | KNIGHT_MOVES[kpos];
+    const int ssq = move->ssq;
+    const int tsq = move->tsq;
+    const U64 ssq_bit = BIT(ssq);
+    const U64 tsq_bit = BIT(tsq);
+    const int kpos = get_sq(KING[piece > WKING]);
+    const U64 check_mask = CHECK_MASK[kpos]; 
     if ((check_mask & (ssq_bit | tsq_bit)) == 0 && !move->castle && !move->en_passant) {
         return 0;
     }
-
+    
     //is it a direct check?
+    U64 checkers = 0;
     if ((check_mask & tsq_bit) || move->castle) {
         switch (piece) {
             case EMPTY:
@@ -695,10 +694,12 @@ int board_t::gives_check(const move_t * move) {
  * @return bitboard with the location of the smallest attacker
  */
 U64 board_t::smallest_attacker(const U64 attacks, const bool wtm, int & piece) {
-    for (piece = PAWN[wtm]; piece <= KING[wtm]; piece++) {
-        U64 subset = attacks & bb[piece];
-        if (subset) {
-            return subset & -subset;
+    if (attacks & all(wtm)) {
+        for (piece = PAWN[wtm]; piece <= KING[wtm]; piece++) {
+            U64 subset = attacks & bb[piece];
+            if (subset) {
+                return subset & -subset;
+            }
         }
     }
     return 0;
@@ -728,7 +729,7 @@ int board_t::max_gain(const move_t * move) {
 }
 
 int board_t::min_gain(const move_t * move) {
-    if (move->piece == WKING || move->piece == BKING 
+    if (move->piece == WKING || move->piece == BKING
             || move->piece == WPAWN || move->piece == BPAWN) {
         return board::PVAL[move->capture];
     }
@@ -746,27 +747,29 @@ int board_t::see(const move_t * move) {
     int captured_val = board::PVAL[captured_piece];
 
     /*
-     * 0. If the king captures, it's always a gain
+     * 1. A capture by a king is always a gain
      */
+
     if (moving_piece == WKING || moving_piece == BKING) {
         return captured_val;
     }
 
     /*
-     * 1. if a piece captures a higher valued piece 
-     * return quickly as we are (almost) sure this capture gains material.
+     * 2. If a lower value piece captures a higher value piece, it's a gain
      * (e.g. pawn x knight)
      */
+
     int piece_val = board::PVAL[moving_piece];
     if (piece_val < captured_val) {
         return captured_val - piece_val;
     }
 
     /*
-     * 2. if a piece captures a lower value piece that is defended by
-     * a pawn, return a negative score quickly
+     * 3. If a piece captures a lower value piece that is defended by
+     * a pawn, it's a loss
      * (e.g. rook captures knight that is defended by a pawn)
      */
+
     int tsq = move->tsq;
     bool wtm = moving_piece > WKING;
     if (captured_val && piece_val > captured_val && is_attacked_by_pawn(tsq, wtm)) {
@@ -774,24 +777,27 @@ int board_t::see(const move_t * move) {
     }
 
     /*
-     * 3. full static exchange evaluation using the swap algoritm
+     * 4. full static exchange evaluation using the swap algorithm
      */
+
+    U64 attacks = attacks_to(tsq);
     int gain[32];
     int depth = 0;
-    U64 attacks = attacks_to(tsq);
     U64 from_bit = BIT(move->ssq);
     U64 occ = bb[ALLPIECES];
-    const U64 diag_sliders = bb[WBISHOP] | bb[WQUEEN] | bb[BBISHOP] | bb[BQUEEN];
-    const U64 hor_ver_sliders = bb[WROOK] | bb[WQUEEN] | bb[BROOK] | bb[BQUEEN];
+    const U64 queens = bb[WQUEEN] | bb[BQUEEN];
+    const U64 diag_sliders = bb[WBISHOP] | bb[BBISHOP] | queens;
+    const U64 hor_ver_sliders = bb[WROOK] | bb[BROOK] | queens;
     const U64 xrays = diag_sliders | hor_ver_sliders | bb[WPAWN] | bb[BPAWN];
+    gain[0] = captured_val;
 
+    //set the non-capturing pawn move ssq bit in the attacks bitboard, so it
+    //will be removed again in the swap loop
     if (!captured_piece && (moving_piece == WPAWN || moving_piece == BPAWN)) {
-        //set the non-capturing pawn move ssq bit in the attacks bitboard, 
-        //so it will be removed again in the swap loop
         attacks ^= from_bit;
     }
 
-    gain[0] = captured_val;
+    //swap loop
     do {
         depth++;
         gain[depth] = board::PVAL[moving_piece] - gain[depth - 1];
@@ -804,6 +810,8 @@ int board_t::see(const move_t * move) {
         from_bit = smallest_attacker(attacks, wtm, moving_piece);
         wtm = !wtm;
     } while (from_bit);
+
+    //calculate and return final material gain
     while (--depth) {
         gain[depth - 1] = -MAX(-gain[depth - 1], gain[depth]);
     }
