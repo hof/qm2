@@ -432,14 +432,14 @@ namespace eg {
         score += us == WHITE ? bonus : -bonus;
         return score;
     }
-    
+
     /**
      * Evaluate KQPSKQ endgame
      */
 
     int kqpskq(search_t * s, const int score, const bool us) {
         int bonus = s->stack->passer_score[us].eg / 2;
-        bonus = us == WHITE? bonus : -bonus;
+        bonus = us == WHITE ? bonus : -bonus;
         return mul256(score, 112 + 16 * s->brd.count(PAWN[us])) + bonus;
     }
 
@@ -497,8 +497,8 @@ namespace eg {
      */
     int pcs_n_pawns_vs_pawns(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 1, 1, 0, us));
-        
-        //this endgame seems very favorable: so give some extra bonus
+
+        //this endgame seems very favorable: give some extra bonus
         int bonus = 20;
         if (material::has_mating_power(s, us)) {
             bonus += 20;
@@ -506,16 +506,21 @@ namespace eg {
         if (us != WHITE) {
             bonus = -bonus;
         }
-        
+
         return score + bonus;
     }
 
     /**
-     * Pawn(s) vs piece(s) (case 9)
+     * Pawn(s) vs piece(s) (case 9) 
      */
     int pawns_vs_pcs(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 0, 0, 1, us));
-        return score;
+
+        if (material::has_mating_power(s, !us)) {
+            return us == WHITE ? score - 20 : score + 20;
+        }
+        
+        return us == WHITE? score + 10 : score - 10;
     }
 
     /**
@@ -523,6 +528,11 @@ namespace eg {
      */
     int pawns_vs_pcs_n_pawns(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 0, 1, 1, us));
+     
+        if (material::has_mating_power(s, !us)) {
+            return us == WHITE ? score - 20 : score + 20;
+        }
+        
         return score;
     }
 
