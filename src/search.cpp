@@ -151,7 +151,7 @@ void search_t::iterative_deepening() {
         }
         store_pv();
         if (timed_search && !pondering()) {
-            bool score_jump = depth >= 6 && ABS(score - last_score) > 20;
+            bool score_jump = depth >= 6 && ((ABS(score - last_score) > 20) || score > score::WIN);
             int elapsed = game->tm.elapsed();
             if (root.move_count <= 1 && (depth >= 8 || elapsed > min_time / 8)) {
                 //one legal move, still search a bit to get a ponder move

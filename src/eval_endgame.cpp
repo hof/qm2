@@ -30,7 +30,7 @@
 namespace eg {
 
     const int BONUS[2] = {-10, 10};
-    const int EDGE_DISTANCE[8] = {0, 1, 2, 3, 3, 2, 1, 0};
+    const int EDGE_DISTANCE[8] = {0, 2, 3, 4, 4, 3, 2, 0};
 
     int draw(int score, int div = 256) {
         if (score == 0 || div == 0) {
@@ -72,7 +72,7 @@ namespace eg {
         int r_dist = EDGE_DISTANCE[RANK(kpos[them])];
         int f_dist = EDGE_DISTANCE[FILE(kpos[them])];
         int edge_dist = MIN(r_dist, f_dist);
-        int result = 10 - 2 * king_dist; //bring the king nearby
+        int result = 100 - 20 * king_dist; //bring the king nearby
         bool us = !them;
         if (is_1(pos->bb[BISHOP[us]]) && pos->bb[ROOK[us]] == 0 && pos->bb[QUEEN[us]] == 0) {
             int corner_dist = 0;
@@ -82,9 +82,9 @@ namespace eg {
                 corner_dist = MIN(distance(kpos[them], a1), distance(kpos[them], h8));
             }
             result += 250 - 50 * corner_dist; //1: to the correct corner
-            result += 20 - 10 * edge_dist; //2: to the edge 
+            result += 100 - 20 * edge_dist; //2: to the edge 
         } else {
-            result += 200 - 100 * edge_dist; //1: to the edge
+            result += 250 - 50 * edge_dist; //1: to the edge
             result += 100 - 20 * (r_dist + f_dist); //2: to any corner
         }
         return us == WHITE ? result / div : -result / div;
@@ -545,7 +545,7 @@ namespace eg {
         if (!material::has_mating_power(s, us)) { //no mating power -> draw 
             return draw(score, 16);
         } else if (s->brd.is_eg(KBBKN, us)) { //KBBKN is an exception
-            return score + win(us, 2) + corner_king(s, them, 2) + 10 * piece_distance(s, them);
+            return score + win(us, 2) + corner_king(s, them, 2) + 20 * piece_distance(s, them);
         } else if (!has_winning_edge(s, us)) { //no winning edge -> draw
             return draw(score, 16) + corner_king(s, them, 16);
         } else if (material::has_mating_power(s, them)) { //win 

@@ -110,7 +110,6 @@ void testEvaluationSuite() {
     testEval(3012, "k7/P5pp/1P6/8/8/8/7P/7K w - - 0 1", 150, 300); //defended passer on 7th
     testEval(3013, "8/6kP/6P1/8/5p2/1K6/8/8 w - - 0 9", 130, 300); //defended passer on 7th
 
-
     // case 4:  ----- pieces vs ----- ------
     testEval(4001, "7k/8/6K1/3N4/8/8/8/8 w - - 0 1", 1, 10); //KNK
     testEval(4002, "7k/8/6K1/8/5B2/8/8/8 w - - 0 1", 1, 10); //KBK
