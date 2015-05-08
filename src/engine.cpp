@@ -205,7 +205,7 @@ void engine_t::analyse() {
     search_t * s = new search_t(_root_fen.c_str());
     evaluate(s);
     int phase = s->stack->mt->phase;
-    bool wtm = s->brd.stack->wtm;
+    bool wtm = s->brd.us();
     score_t tempo_score;
     tempo_score.set(TEMPO[wtm]);
     score_t w, b;
@@ -224,7 +224,7 @@ void engine_t::analyse() {
     print_row("Queens", s->stack->pc_score[WQUEEN], s->stack->pc_score[BQUEEN], phase);
     print_row("Passers", s->stack->passer_score[WHITE], s->stack->passer_score[BLACK], phase);
     print_row("King Attack", s->stack->pc_score[WKING], s->stack->pc_score[BKING], phase);
-    if (s->brd.stack->wtm == false) {
+    if (s->brd.us() == false) {
         std::cout << "---------------+---------------+---------------+---------------------\n";
         print_row("Black to move", s->stack->eg_score);
     }

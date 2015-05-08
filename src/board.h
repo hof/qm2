@@ -135,6 +135,14 @@ public:
     int min_gain(const move_t * capture);
     int mvvlva(const move_t * capture);
     int w17_sort_cap(const move_t * capture);
+    
+    /**
+     * Gets side to move
+     * @return boolean 1: white to move, 0: black to move
+     */
+    bool us() {
+        return stack->wtm;
+    }
 
     /**
      * Counts amount of piece for a given piece type

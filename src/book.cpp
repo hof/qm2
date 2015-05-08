@@ -294,7 +294,7 @@ void book_t::read_polyglot_move(board_t * brd, move_t * move, int polyglot_move)
     }
     int promotion = (polyglot_move >> 12) & 7; //none 0, knight 1, bishop 2, rook 3, queen 4
     if (promotion) {
-        promotion += brd->stack->wtm ? 1 : 7; //WKNIGHT == 2; BKNIGHT == 8;
+        promotion += brd->us() ? 1 : 7; //WKNIGHT == 2; BKNIGHT == 8;
         move->promotion = promotion;
     } else if (piece == BKING && ssq == e8) {
         if (tsq == h8) {
@@ -446,12 +446,12 @@ U64 book_t::polyglot_key(board_t* pos) {
     }
 
     if (pos->stack->enpassant_sq >= a3 //polyglot only considers en passant if ep captures are possible
-            && ((pos->stack->wtm && (PAWN_CAPTURES[BLACK][pos->stack->enpassant_sq] & pos->bb[WPAWN]))
-            || (pos->stack->wtm == false && (PAWN_CAPTURES[WHITE][pos->stack->enpassant_sq] & pos->bb[BPAWN])))) {
+            && ((pos->us() && (PAWN_CAPTURES[BLACK][pos->stack->enpassant_sq] & pos->bb[WPAWN]))
+            || (pos->us() == false && (PAWN_CAPTURES[WHITE][pos->stack->enpassant_sq] & pos->bb[BPAWN])))) {
         result ^= RANDOM64[EP_OFFSET + FILE(pos->stack->enpassant_sq)];
 
     }
-    result ^= pos->stack->wtm ? RANDOM64[STM_OFFSET] : 0;
+    result ^= pos->us() ? RANDOM64[STM_OFFSET] : 0;
     return result;
 }
 

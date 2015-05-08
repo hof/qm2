@@ -61,7 +61,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
     stack->pv_count = 0;
 
     //win by having no more pieces
-    bool us = brd.stack->wtm;
+    const bool us = brd.us();
     if (max_1(brd.all(us))) {
         return score::MATE - brd.ply;
     }

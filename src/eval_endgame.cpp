@@ -109,7 +109,7 @@ namespace eg {
         int psq = us == WHITE ? bsr(s->brd.bb[WPAWN]) : bsf(s->brd.bb[BPAWN]);
         int steps = us == WHITE ? 7 - RANK(psq) : RANK(psq);
         bool is_passed = s->stack->pt->passers & BIT(psq);
-        bool utm = s->brd.stack->wtm == (us == WHITE);
+        bool utm = s->brd.us() == us;
         steps += !is_passed + !utm;
         return steps;
     }
@@ -127,7 +127,7 @@ namespace eg {
         }
         int psq = us == WHITE ? bsr(passers) : bsf(passers);
         int steps = us == WHITE ? 7 - RANK(psq) : RANK(psq);
-        bool utm = s->brd.stack->wtm == (us == WHITE);
+        bool utm = s->brd.us() == us;
         steps += !utm;
         return steps;
     }
@@ -146,7 +146,7 @@ namespace eg {
         }
         bool them = !us;
         assert(s->brd.has_pieces(them) == false);
-        bool utm = s->brd.stack->wtm == (us == WHITE);
+        bool utm = s->brd.us() == us;
         int kpos_them = s->brd.get_sq(KING[them]);
         int kpos_us = s->brd.get_sq(KING[us]);
         int result = 0;
@@ -253,7 +253,7 @@ namespace eg {
         const int kpos_them = s->brd.get_sq(KING[them]);
         const U64 path_attacks = KING_MOVES[kpos_us] & promotion_path;
         const U64 path_defends = KING_MOVES[kpos_them] & promotion_path;
-        const bool utm = s->brd.stack->wtm == (us == WHITE);
+        const bool utm = s->brd.us() == us;
         if (utm && path_attacks != 0 && path_defends == 0) {
             return score + win(us, 2);
         }
@@ -293,7 +293,7 @@ namespace eg {
     int krpkr(search_t * s, int score, bool us) {
         assert(s->brd.is_eg(KRPKR, us));
         const bool them = !us;
-        const bool utm = s->brd.stack->wtm == (us == WHITE);
+        const bool utm = s->brd.us() == us;
         const int psq = s->brd.get_sq(PAWN[us]);
         const int ksq_us = s->brd.get_sq(KING[us]);
         const int rsq_tm = s->brd.get_sq(ROOK[them]);
@@ -339,7 +339,7 @@ namespace eg {
 
         //it's a win if the pawn is not near promotion
         const bool them = !us;
-        const bool utm = s->brd.stack->wtm == (us == WHITE);
+        const bool utm = s->brd.us() == us;
         U64 advanced_ranks = RANK[them][7];
         if (!utm) {
             advanced_ranks |= RANK[them][6];
@@ -375,7 +375,7 @@ namespace eg {
 
         //KPK -> bitbase lookup
         if (max_1(s->brd.bb[PAWN[us]])) {
-            const bool utm = s->brd.stack->wtm == (us == WHITE);
+            const bool utm = s->brd.us() == us;
             bool won = KPK::probe(utm, s->brd.get_sq(KING[us]), s->brd.get_sq(KING[them]),
                     s->brd.get_sq(PAWN[us]), us == BLACK);
             if (won) {
@@ -623,7 +623,7 @@ namespace eg {
      * Main endgame evaluation function
      */
     int eval(search_t * s, const int score) {
-        const bool us = (score > 0) || (score == 0 && s->brd.stack->wtm); //winning side
+        const bool us = (score > 0) || (score == 0 && s->brd.us()); //winning side
         const bool them = !us;
         int eg_ix = has_pawns(s, us) + 2 * has_pawns(s, them)
                 + 4 * has_pieces(s, us) + 8 * has_pieces(s, them);

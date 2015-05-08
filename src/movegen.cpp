@@ -50,7 +50,7 @@ namespace move {
     void gen_captures(board_t * board, move::list_t * list) {
         move_t * current = list->last;
         list->current = current;
-        const bool us = board->stack->wtm;
+        const bool us = board->us();
         const bool them = !us;
         const U64 occ = board->bb[ALLPIECES];
         const U64 targets = board->all(them);
@@ -145,7 +145,7 @@ namespace move {
     void gen_promotions(board_t * board, move::list_t * list) {
         move_t * current = list->last;
         list->current = current;
-        const bool us = board->stack->wtm;
+        const bool us = board->us();
         const int pc = PAWN[us];
         U64 pieces = board->bb[pc] & RANK[us][7];
         while (pieces) {
@@ -171,7 +171,7 @@ namespace move {
         move_t * current = list->last;
         list->current = current;
         if (board->has_castle_right(CASTLE_ANY)) {
-            if (board->stack->wtm) {
+            if (board->us()) {
                 if (board->has_castle_right(CASTLE_K)
                         && board->matrix[f1] == EMPTY
                         && board->matrix[g1] == EMPTY) {
@@ -212,7 +212,7 @@ namespace move {
         U64 moves;
         const U64 occ = board->bb[ALLPIECES];
         const U64 targets = ~occ;
-        const bool us = board->stack->wtm;
+        const bool us = board->us();
         const int pawn_up = PAWN_DIRECTION[us];
         int pc = PAWN[us];
         int ssq;

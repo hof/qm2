@@ -145,7 +145,7 @@ namespace pieces {
                 assert(score::is_valid(s->stack->pc_score[pc].mg));
                 assert(score::is_valid(s->stack->pc_score[pc].eg));
                 assert(s->stack->king_attack[pc] >= 0);
-                assert(s->stack->king_attack[pc] <= 127);
+                assert(s->stack->king_attack[pc] <= KA_ENCODE(3, 3));
                 result->add_us(s->stack->pc_score[pc], pc <= WKING);
                 continue;
             }

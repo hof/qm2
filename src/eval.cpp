@@ -85,7 +85,7 @@ int evaluate(search_t * s) {
      * The score is interpolated between midgame and endgame value.
      */
 
-    const bool wtm = s->brd.stack->wtm;
+    const bool wtm = s->brd.us();
     int result = material::eval(s); //sets stack->mt->phase and material flags
     score_t * score = &s->stack->eval_score;
     score->set(TEMPO[wtm]);

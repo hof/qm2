@@ -114,7 +114,7 @@ void move_t::set(board_t * board, const char * move_str) {
                 promotion = WQUEEN;
                 break;
         }
-        if (board->stack->wtm == false) {
+        if (board->us() == BLACK) {
             promotion += WKING;
         }
     }

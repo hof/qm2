@@ -28,7 +28,7 @@ int w17_eval_material(w17_search_t * s);
 score_t * w17_eval_pawns_and_kings(search_t * s);
 
 int w17_evaluate(w17_search_t * s) {
-    const bool us = s->brd.stack->wtm;
+    const bool us = s->brd.us();
     int result = w17_eval_material(s);
     if (s->stack->mt->flags == 16) {
         score_t * score = &s->stack->eval_score;

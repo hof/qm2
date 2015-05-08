@@ -68,7 +68,7 @@ int root_move_t::compare(root_move_t * m, move_t * best_move) {
 void search_t::init(const char * fen, game_t * g) {
     brd.init(fen);
     game = g ? g : game::instance();
-    game->init_tm(brd.stack->wtm);
+    game->init_tm(brd.us());
     wild = 0;
     book_name = "book.bin";
     king_attack_shelter = options::get_value("KingAttackShelter");
@@ -611,7 +611,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
-    const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.stack->wtm);
+    const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.us());
 
     //fail high (beta) pruning
     if (do_prune_node && eval - 300 > beta && depth < 4 && beta_pruning) {
@@ -630,7 +630,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             return alpha;
         } else if (null_score >= beta) {
             int RV = 5;
-            if (null_verify && depth > RV && brd.has_one_piece(brd.stack->wtm)) {
+            if (null_verify && depth > RV && brd.has_one_piece(brd.us())) {
                 //verification
                 skip_null = true;
                 int verified_score = pvs(alpha, beta, depth - 1 - RV);
