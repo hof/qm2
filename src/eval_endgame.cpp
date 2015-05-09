@@ -498,12 +498,18 @@ namespace eg {
     int pcs_n_pawns_vs_pawns(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 1, 1, 0, us));
 
-        //this endgame seems very favorable: give some extra bonus
+        //wrong colored bishop ending?
+        if (is_1(s->brd.bb[BISHOP[us]] && s->brd.has_one_piece(us))) {
+            return kbpsk(s, score, us);
+        }
+        
+        //endgame seems very favorable: give some extra bonus
         int bonus = 20;
         if (material::has_mating_power(s, us)) {
             bonus += 20;
         }
         if (us != WHITE) {
+
             bonus = -bonus;
         }
 
@@ -517,10 +523,11 @@ namespace eg {
         assert(eg_test(s, 1, 0, 0, 1, us));
 
         if (material::has_mating_power(s, !us)) {
+
             return us == WHITE ? score - 20 : score + 20;
         }
-        
-        return us == WHITE? score + 10 : score - 10;
+
+        return us == WHITE ? score + 10 : score - 10;
     }
 
     /**
@@ -528,11 +535,12 @@ namespace eg {
      */
     int pawns_vs_pcs_n_pawns(search_t * s, const int score, const bool us) {
         assert(eg_test(s, 1, 0, 1, 1, us));
-     
+
         if (material::has_mating_power(s, !us)) {
+
             return us == WHITE ? score - 20 : score + 20;
         }
-        
+
         return score;
     }
 
@@ -551,6 +559,7 @@ namespace eg {
         } else if (material::has_mating_power(s, them)) { //win 
             return score + win(us, 8) + corner_king(s, them, 8);
         } else { //win and they can impossibly win
+
             return score + win(us, 4) + corner_king(s, them, 4);
         }
     }
@@ -577,6 +586,7 @@ namespace eg {
         } else if (s->brd.is_eg(KRPKR, us)) {
             return krpkr(s, score, us);
         } else if (s->brd.is_eg(KQPSKQ, us)) {
+
             return kqpskq(s, score, us);
         }
         return score;
@@ -601,6 +611,7 @@ namespace eg {
                 return draw(score, 2) + corner_king(s, them, 8);
             }
         } else { //winning edge
+
             return score + corner_king(s, them, 4);
         }
     }
@@ -613,6 +624,7 @@ namespace eg {
         if (s->brd.is_eg(OPP_BISHOPS, us)) {
             return opp_bishops(s, score, us);
         } else if (s->brd.is_eg(KQPSKQPS, us)) {
+
             return mul256(score, 128 + 16 * s->brd.count(PAWN[us]));
             ;
         }

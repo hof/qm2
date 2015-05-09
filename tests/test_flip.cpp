@@ -204,6 +204,7 @@ void flipTestSuite(int depth) {
     flipTest(1801, "8/Pk6/8/1N6/8/8/5K2/8 w - - 0 1");
     flipTest(6001, "8/8/K7/8/8/8/4kpQ1/8 w - - 0 1");
     flipTest(6002, "R7/4K3/8/8/4kp2/8/8/8 w - - 66 1");
+    flipTest(7001, "8/7k/7P/6K1/8/8/5p2/5B2 w - - 1 101");
     flipTest(3001, "7K/8/k1P5/7p/8/8/8/8 w - - 0 1"); 
     flipTest(3002, "6k1/p4ppp/8/8/8/8/PP3PPP/6K1 w - - 0 1");
     flipTest(3003, "2k5/1pp5/8/8/3PP3/4K3/8/8 w - - 0 1");

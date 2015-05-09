@@ -126,6 +126,8 @@ void testEvaluationSuite() {
     testEval(6002, "R7/4K3/8/8/4kp2/8/8/8 w - - 66 1", 1, 50); //KRKP
 
     // case 7:  pawns pieces vs pawns ------
+    testEval(7001, "8/7k/7P/6K1/8/8/5p2/5B2 w - - 1 101", 1, 10); //wrong bishop ending
+    
     // case 8:  ----- ------ vs ----- pieces
     // case 9:  pawns ------ vs ----- pieces
     // case 10: ----- ------ vs pawns pieces
