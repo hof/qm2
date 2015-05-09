@@ -135,7 +135,6 @@ public:
     int max_gain(const move_t * capture);
     int min_gain(const move_t * capture);
     int mvvlva(const move_t * capture);
-    int w17_sort_cap(const move_t * capture);
     
     /**
      * Gets side to move
