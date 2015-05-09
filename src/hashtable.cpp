@@ -43,6 +43,7 @@ namespace material_table {
         table = new entry_t[size];
         max_hash_key = size - 1;
         size_in_mb = size_in_MB;
+        clear();
     }
 
     table_t _global_table(TABLE_SIZE);
@@ -81,6 +82,7 @@ namespace pawn_table {
         table = new entry_t[size];
         max_hash_key = size - 1;
         size_in_mb = size_in_MB;
+        clear();
     }
 
 
@@ -134,6 +136,7 @@ void trans_table_t::set_size(int size_in_MB) {
     table = new entry_t[size];
     max_hash_key = size - 1;
     size_in_mb = size_in_MB;
+    clear();
 }
 
 int trans_table_t::make_score(int score, int ply) {
