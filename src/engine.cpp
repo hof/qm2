@@ -603,11 +603,7 @@ void * engine_t::_learn(void * engineObjPtr) {
                 std::cout << "Engine(" << strongest << ") is a bit stronger than engine(" << opponent << ")" << std::endl;
             } else if (los < 0.5 && elo < 0) {
                 std::cout << "Engine(" << strongest << ") is a bit weaker than engine(" << opponent << ")" << std::endl;
-                if (opponent < bestFactor) {
-                    bestFactor = opponent; //prefer the lowest factor
-                } else {
-                    bestFactor = opponent;
-                }
+                bestFactor = opponent; //prefer the lowest factor
                 opponent = strongest;
                 strongest = bestFactor;
             } else {
