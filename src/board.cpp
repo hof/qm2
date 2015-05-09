@@ -28,7 +28,7 @@
 /**
  * Flips board stack (e.g. the castling rights and side to move)
  */
-void board_stack_t::flip() {
+void board_stack_t::do_flip() {
     wtm = !wtm;
     HASH_STM(tt_key);
     if (enpassant_sq) {
@@ -1185,7 +1185,7 @@ std::string board_t::to_string() {
  * Flip the board, useful for testing on white/black bugs. A flipped
  * board should give exactly the same search and evaluation results.
  */
-void board_t::flip() {
+void board_t::do_flip() {
     bb[ALLPIECES] = bb_flip(bb[ALLPIECES]);
     U64 tmp = bb[WPIECES];
     bb[WPIECES] = bb_flip(bb[BPIECES]);
@@ -1208,5 +1208,5 @@ void board_t::flip() {
             matrix[fsq] = pc1 > WKING ? pc1 - WKING : pc1 + WKING;
         }
     }
-    stack->flip();
+    stack->do_flip();
 }

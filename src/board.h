@@ -81,7 +81,7 @@ public:
     U64 material_hash;
     U64 pawn_hash;
 
-    void flip();
+    void do_flip();
 
     /**
      * Clears a board stack
@@ -95,6 +95,7 @@ public:
      * @param b_stack the board stack to copy
      */
     void copy(const board_stack_t * b_stack) {
+        assert(this != b_stack);
         memcpy(this, b_stack, sizeof (board_stack_t));
     }
 };
@@ -114,7 +115,7 @@ public:
     board_stack_t * stack;
 
     void clear();
-    void flip();
+    void do_flip();
     bool is_draw();
     void init(const char* fen);
     std::string to_string();

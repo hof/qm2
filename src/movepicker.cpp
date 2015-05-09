@@ -38,16 +38,16 @@
  */
 move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
     while (list->first != list->last) {
-        
+
         //pick move with the highest score
-        
+
         move_t * best = list->first;
-        for (move_t * move = list->first+1; move != list->last; move++) {
+        for (move_t * move = list->first + 1; move != list->last; move++) {
             if (*move > *best) {
                 best = move;
             }
         }
-        
+
         //return if move score is too low
         if (best->score < list->minimum_score) {
             return NULL;
@@ -65,8 +65,12 @@ move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
 
         //legality check just before returning the move
         move_t * result = list->best;
-        result->set(best);
-        best->set(--list->last);
+        if (result != best) {
+            result->set(best);
+        }
+        if (best != --list->last) {
+            best->set(list->last);
+        }
         if (!s->stack->tt_move.equals(result)
                 && !s->is_killer(result)
                 && s->brd.legal(result)) {

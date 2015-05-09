@@ -41,11 +41,11 @@ bool flipTest(int test_num, const char * fen, int divide_steps = MAX_DIVIDE_STEP
     std::string fen1 = brd.to_string();
 
     //flip
-    brd.flip();
+    brd.do_flip();
     std::string fen2 = brd.to_string();
 
     //flip back
-    brd.flip();
+    brd.do_flip();
     std::string fen3 = brd.to_string();
 
     //test 1: fen notations should be equal
@@ -74,7 +74,7 @@ bool flipTest(int test_num, const char * fen, int divide_steps = MAX_DIVIDE_STEP
         std::cout << "flipped:  " << fen2 << " score: " << score2 << " phase: " << phase2 << std::endl;
         global_engine->new_game(brd.to_string());
         global_engine->analyse();
-        brd.flip();
+        brd.do_flip();
         global_engine->new_game(brd.to_string());
         global_engine->analyse();
         return false;
@@ -95,7 +95,7 @@ bool flipTest(int test_num, const char * fen, int divide_steps = MAX_DIVIDE_STEP
     int nodes1 = global_engine->get_total_nodes();
     score1 = global_engine->get_score();
 
-    brd.flip();
+    brd.do_flip();
     
     global_engine->new_game(brd.to_string());
     global_engine->think();

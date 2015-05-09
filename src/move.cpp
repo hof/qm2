@@ -28,6 +28,7 @@
  * @param move move object
  */
 void move_t::set(move_t * move) {
+    assert(this != move);
     memcpy(this, move, sizeof(move_t));
 }
 
