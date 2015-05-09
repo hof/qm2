@@ -88,11 +88,11 @@ void search_t::init(const char * fen, game_t * g) {
     next_poll = 0;
     sel_depth = 0;
     root_stack = stack = &_stack[0];
-    stack->best_move.clear();
     result_score = 0;
-    stack->eval_result = score::INVALID;
+    memset(_stack, 0, sizeof(_stack));
     memset(history, 0, sizeof (history));
     init_pst();
+    stack->eval_result = score::INVALID;
 }
 
 /**
