@@ -355,6 +355,8 @@ void search_t::update_history(move_t * move) {
  * @param move a quiet move that caused a beta cutoff
  */
 void search_t::update_killers(move_t * move) {
+    assert(move->capture == EMPTY);
+    assert(move->promotion == EMPTY);
     if (stack->killer[0].equals(move)) {
         return;
     }
