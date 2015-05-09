@@ -47,6 +47,8 @@ typedef uint64_t U64;
 
 #ifdef HARDWARE_64BITS
 
+/* 64 bits bitscan */
+
 inline int bsf(U64 x) {
     assert(x);
     asm ("bsfq %0, %0" : "=r" (x) : "0" (x));
@@ -58,9 +60,11 @@ inline int bsr(U64 x) {
     asm ("bsrq %0, %0" : "=r" (x) : "0" (x));
     return x;
 }
-#endif /* 64 bits bitscan */
+#endif 
 
 #ifndef HARDWARE_64BITS
+
+/* 32 bits bitscan */
 
 const U64 BIT32 = (C64(1) << 32);
 
@@ -87,7 +91,9 @@ inline int bsr(U64 x) {
 }
 #endif /* 32 bits bitscan */
 
-#ifdef HARDWARE_POPCOUNT /* hardware popcount */
+#ifdef HARDWARE_POPCOUNT 
+
+/* hardware popcount */
 
 inline int popcnt(U64 b) {
     __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
@@ -98,9 +104,11 @@ inline unsigned popcnt0(U64 b) {
     __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
     return b;
 }
-#endif /* end: hardware popcount */
+#endif 
 
-#ifndef HARDWARE_POPCOUNT /* software popcount */
+#ifndef HARDWARE_POPCOUNT 
+
+/* software popcount */
 
 inline unsigned popcnt(U64 x) {
     x = (x & C64(0x5555555555555555)) + ((x >> 1) & C64(0x5555555555555555));
@@ -112,7 +120,7 @@ inline unsigned popcnt(U64 x) {
 inline unsigned popcnt0(U64 x) {
     return (x == 0) ? 0 : popCount(x);
 }
-#endif /* end: software popcount */
+#endif 
 
 #define BIT(sq) (C64(1) << (sq))
 
