@@ -20,3 +20,18 @@ configure_file (
 	"${PROJECT_SOURCE_DIR}/src/version.h.in" 
 	"${PROJECT_SOURCE_DIR}/src/version.h" 
 )
+
+# tests 
+enable_testing()
+
+add_test(testBits tests/testBits)
+add_test(testSEE tests/testSEE)
+add_test(testGenmoves tests/testGenmoves)
+add_test(testSearch tests/testSearch)
+add_test(testPolyglot tests/testPolyglot)
+add_test(testTT tests/testTT)
+add_test(testEvaluation tests/testEvaluation)
+add_test(testFlip tests/testFlip)
+add_test(testDepth tests/testDepth)
+add_test(testPerformance tests/testPerformance)
+add_test(testW17Performance tests/testW17Performance)
