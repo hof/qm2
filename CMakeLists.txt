@@ -16,10 +16,18 @@ else()
     set(REVISION "none")
 endif()
 
+SET(CMAKE_BUILD_TYPE Coverage)
+SET(CMAKE_CXX_FLAGS_COVERAGE
+    "-g -O0 --coverage -fprofile-arcs -ftest-coverage"
+    CACHE STRING "Flags used by the C++ compiler during coverage builds."
+    FORCE )
+
 configure_file ( 
 	"${PROJECT_SOURCE_DIR}/src/version.h.in" 
 	"${PROJECT_SOURCE_DIR}/src/version.h" 
 )
+
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 # tests 
 enable_testing()
