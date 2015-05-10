@@ -47,7 +47,6 @@ namespace pawns {
 #define trace(a,b,c) /* notn */
 #endif
 
-    uint8_t PFLAG_CLOSED_CENTER = 1;
     const score_t ISOLATED[2] = {S(-25, -20), S(-15, -15)}; //open, closed file
     const score_t WEAK[2] = {S(-15, -15), S(-10, -10)}; //open, closed file
     const score_t DOUBLED = S(-10, -20);
@@ -317,7 +316,7 @@ namespace pawns {
         }
 
         if (blocked_center_pawns >= 3) {
-            e->flags |= PFLAG_CLOSED_CENTER;
+            e->flags |= pawn_table::FLAG_CLOSED_CENTER;
             trace("CLOSED CENTER FLAG", e->flags, e->flags);
         }
 
