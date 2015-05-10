@@ -109,6 +109,7 @@ public:
     bool beta_pruning;
     bool lmr_enabled;
     bool ffp_enabled;
+    bool lmp_enabled;
 
     search_t(const char * fen, game_t * g = NULL) {
         init(fen, g);

@@ -80,6 +80,7 @@ void search_t::init(const char * fen, game_t * g) {
     null_enabled = options::get_value("NullMove");
     lmr_enabled = options::get_value("LMR");
     ffp_enabled = options::get_value("FutilityPruning");
+    lmp_enabled = options::get_value("LateMovePruning");
     ponder_move.clear();
     nodes = 0;
     pruned_nodes = 0;
@@ -89,7 +90,7 @@ void search_t::init(const char * fen, game_t * g) {
     sel_depth = 0;
     root_stack = stack = &_stack[0];
     result_score = 0;
-    memset(_stack, 0, sizeof(_stack));
+    memset(_stack, 0, sizeof (_stack));
     memset(history, 0, sizeof (history));
     init_pst();
     stack->eval_result = score::INVALID;
@@ -623,19 +624,22 @@ int search_t::pvs(int alpha, int beta, int depth) {
     //null move pruning
     if (do_prune_node && eval >= beta && depth > 1 && null_enabled) {
         int R = 3;
-        R += depth > R && depth >= 5 && null_adaptive_depth;
-        R += depth > R && (eval - beta) > 200 && null_adaptive_value;
+        if (depth >= 7 && null_adaptive_depth) {
+            R += depth / 7;
+        }
+        if (depth > R && (eval - beta) >= 100 && null_adaptive_value) {
+            R += MIN((eval - beta) / 100, 3);
+        }
         forward();
         int null_score = -pvs(-beta, -alpha, depth - 1 - R);
         backward();
         if (stop_all) {
             return alpha;
         } else if (null_score >= beta) {
-            int RV = 5;
-            if (null_verify && depth > RV && brd.has_one_piece(brd.us())) {
+            if (null_verify && (null_score > score::WIN || depth >= 12 || brd.has_one_piece(brd.us()))) {
                 //verification
                 skip_null = true;
-                int verified_score = pvs(alpha, beta, depth - 1 - RV);
+                int verified_score = pvs(alpha, beta, depth - 1 - R);
                 skip_null = false;
                 if (verified_score >= beta) {
                     return verified_score;
@@ -698,6 +702,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         //futile quiet moves (futility pruning)
         if (do_prune && depth < 8 && fbase <= alpha && ffp_enabled) {
+            pruned_nodes++;
+            continue;
+        }
+        
+        if (do_prune && depth < 4 && searched_moves >= depth * 4 && lmp_enabled) {
             pruned_nodes++;
             continue;
         }

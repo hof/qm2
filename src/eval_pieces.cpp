@@ -87,10 +87,6 @@ namespace pieces {
     const score_t BLOCKED_CENTER_PAWN[2] = {//them, us
         S(20, 0), S(-20, 0)
     };
-    
-    const int8_t ROOK_OPEN_FILES[8] = {
-        -20, -10, 0, 0, 0, 0, 0, 0
-    };
 
     const int8_t VBISHOPPAIR = 50;
     const score_t DEFENDED = S(5, 0);
@@ -250,8 +246,8 @@ namespace pieces {
                  */
 
                 if (mob_cnt < 2 && !defended && (bsq & PAT_TRAPPED[us]) && max_1(moves & ~occ)) {
-                    sc->add(TRAPPED_PC * (rank(sq, us)-3));
-                    trace("TRAPPED", sq, sc); 
+                    sc->add(TRAPPED_PC * (rank(sq, us) - 3));
+                    trace("TRAPPED", sq, sc);
                 }
 
 
@@ -275,8 +271,6 @@ namespace pieces {
 
                 if (pc == ROOK[us]) {
 
-                    sc->add(ROOK_OPEN_FILES[popcnt0(pi->open_files[us])]);
-                    
                     //Open / closed files
                     if (!pi->is_open_file(sq, us)) {
                         sc->add(CLOSED_FILE);
