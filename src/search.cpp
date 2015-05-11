@@ -682,7 +682,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int searched_moves = 0;
     const int score_max = score::MATE - brd.ply - 1;
     const int max_reduce = depth - 1;
-    const int fbase = eval + 50 + 40 * depth;
+    const bool do_ffp = !pv && depth < 8 && eval + 50 + 40 * depth <= alpha && ffp_enabled;
+    const bool do_lmp = !pv && depth < 4 && lmp_enabled;
     stack->best_move.clear();
     do {
 
@@ -698,15 +699,15 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         const bool is_quiet_stage = stack->move_list.stage > QUIET_MOVES && searched_moves > 0;
         const bool is_dangerous = !is_quiet_stage || in_check || gives_check || is_passed_pawn(move);
-        const bool do_prune = !is_dangerous && searched_moves > 1 && !pv && best > -score::DEEPEST_MATE;
+        const bool do_prune = !is_dangerous && searched_moves > 1 && best > -score::DEEPEST_MATE;
 
         //futile quiet moves (futility pruning)
-        if (do_prune && depth < 8 && fbase <= alpha && ffp_enabled) {
+        if (do_prune && do_ffp) {
             pruned_nodes++;
             continue;
         }
         
-        if (do_prune && depth < 4 && searched_moves >= depth * 4 && lmp_enabled) {
+        if (do_prune && do_lmp && searched_moves >= depth * 4) {
             pruned_nodes++;
             continue;
         }
