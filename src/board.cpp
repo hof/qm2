@@ -721,11 +721,14 @@ int board_t::max_gain(const move_t * move) {
     return result;
 }
 
-int board_t::min_gain(const move_t * move) {
-    if (move->piece == WKING || move->piece == BKING) {
-        return board::PVAL[move->capture];
+bool board_t::is_gain(const move_t * move) {
+    if (move->capture) {
+        return see(move) > 0;
     }
-    return board::PVAL[move->capture] - board::PVAL[move->piece];
+    if (move->promotion == WQUEEN || move->promotion == BQUEEN) {
+        return see(move) >= 0;
+    }
+    return false;
 }
 
 /**

@@ -54,9 +54,8 @@ move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
         }
 
         //filter negative see if still in "good captures" phase
-        if (list->minimum_score == 0 && best->capture && s->brd.min_gain(best) < 0) {
-            assert(s->wild != 17);
-            int see = s->brd.see(best);
+        if (list->minimum_score == 0 && best->capture) {
+            const int see = s->brd.see(best);
             if (see < 0) {
                 best->score = see;
                 continue;

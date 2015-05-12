@@ -132,8 +132,8 @@ public:
     bool is_eg(endgame_t eg, bool us);
     U64 smallest_attacker(const U64 attacks, const bool wtm, int &piece);
     int see(const move_t * capture);
+    bool is_gain(const move_t * move);
     int max_gain(const move_t * capture);
-    int min_gain(const move_t * capture);
     int mvvlva(const move_t * capture);
     
     /**

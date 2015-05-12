@@ -497,7 +497,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
  */
 int search_t::extend_move(move_t * move, int gives_check, int depth, bool first) {
     if (gives_check > 0) {
-        return (bool) depth < 4 || first || gives_check > 1 || brd.min_gain(move) >= 0 || brd.see(move) >= 0;
+        return (bool) depth < 4 || first || gives_check > 1 || brd.see(move) >= 0;
     }
     return 0;
 }
@@ -617,8 +617,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.us());
 
     //fail high (beta) pruning
-    if (do_prune_node && eval - 300 > beta && depth < 4 && beta_pruning) {
-        return eval - 300;
+    if (do_prune_node && eval - 230 > beta && depth < 4 && beta_pruning) {
+        return eval - 230;
     }
 
     //null move pruning
@@ -636,10 +636,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
         if (stop_all) {
             return alpha;
         } else if (null_score >= beta) {
-            if (null_verify && (null_score > score::WIN || depth >= 12 || brd.has_one_piece(brd.us()))) {
+            const int RV = 5;
+            if (null_verify && depth > RV && brd.has_one_piece(brd.us())) {
                 //verification
                 skip_null = true;
-                int verified_score = pvs(alpha, beta, depth - 1 - R);
+                int verified_score = pvs(alpha, beta, depth - 1 - RV);
                 skip_null = false;
                 if (verified_score >= beta) {
                     return verified_score;
@@ -682,7 +683,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int searched_moves = 0;
     const int score_max = score::MATE - brd.ply - 1;
     const int max_reduce = depth - 1;
-    const bool do_ffp = !pv && depth < 8 && eval + 50 + 40 * depth <= alpha && ffp_enabled;
+    const bool do_ffp = !pv && depth < 8 && eval + 40 * (depth + 1) <= alpha && ffp_enabled;
     const bool do_lmp = !pv && depth < 4 && lmp_enabled;
     stack->best_move.clear();
     do {
@@ -706,7 +707,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             pruned_nodes++;
             continue;
         }
-        
+
         if (do_prune && do_lmp && searched_moves >= depth * 4) {
             pruned_nodes++;
             continue;
@@ -716,7 +717,16 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Move Extensions
          */
 
-        const int extend = extend_move(move, gives_check, depth, searched_moves == 0);
+        //const int extend = extend_move(move, gives_check, depth, searched_moves == 0);
+        int extend = 0;
+        if (gives_check > 1) {
+            extend = 1;
+        } else if (gives_check > 0 && (pv || brd.see(move) >= 0)) {
+            extend = 1;
+        }
+        //} else if (brd.is_gain(move)) {
+        //    extend = 1;
+        //}
 
         /*
          * Late Move Reductions (LMR) 
@@ -895,8 +905,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             continue;
         }
 
-        bool do_prune = !in_check && !gives_check && brd.min_gain(move) < 0
-                && !last_piece;
+        bool do_prune = !in_check && !gives_check && !last_piece;
 
         //prune if the capture or promotion can't raise alpha
         if (do_prune && fbase + brd.max_gain(move) <= alpha) {
