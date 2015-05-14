@@ -106,6 +106,7 @@ public:
     bool null_adaptive_value;
     bool null_verify;
     bool null_enabled;
+    bool alpha_pruning;
     bool beta_pruning;
     bool lmr_enabled;
     bool ffp_enabled;
@@ -125,7 +126,6 @@ public:
     int pvs_root(int alpha, int beta, int depth);
     virtual int pvs(int alpha, int beta, int depth);
     int qsearch(int alpha, int beta, int depth);
-    int extend_move(move_t * move, int gives_check, int depth, bool first);
     std::string pv_to_string();
     bool is_draw();
     bool abort(bool force_poll);

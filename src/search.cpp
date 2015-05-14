@@ -26,10 +26,43 @@
  * 
  */
 
+
 #include "search.h"
 #include "engine.h"
 #include "eval.h"
 #include "timeman.h"
+
+namespace LMR {
+
+    const double cutoff_pct[16] = {
+        0.8835, 0.0618, 0.0221, 0.0101, 0.0051, 0.0028, 0.0018, 0.0011,
+        0.0008, 0.0007, 0.0007, 0.0007, 0.0007, 0.0007, 0.0007, 0.0006
+    };
+
+    uint8_t reduction[32][16];
+
+    void init_reduction() {
+        const double f = 0.01;
+        const double df = 0.25;
+        for (int d = 0; d < 32; d++) {
+            double base_red = MIN(1.0, d * df / 2.0);
+            double extra_red = d * df;
+            //std::cout << "d" << d << " ";
+            for (int m = 0; m < 16; m++) {
+                double pct = 1.0 - cutoff_pct[m];
+                double mul = MAX(0.0, pct - (1.0 - f)) / f;
+                reduction[d][m] = (int) (pct * base_red + mul * extra_red + 0.25);
+                //std::cout << (int) reduction[d][m] << " ";
+            }
+            //std::cout << std::endl << std::endl;
+        }
+    }
+
+    int reduce(int d, int m, bool pv) {
+        int result = reduction[MIN(d-pv, 31)][MIN(m, 15)];
+        return result;
+    }
+}
 
 /**
  * Initialize sort values for root move
@@ -66,6 +99,7 @@ int root_move_t::compare(root_move_t * m, move_t * best_move) {
  * @param fen string representing the board position
  */
 void search_t::init(const char * fen, game_t * g) {
+    LMR::init_reduction();
     brd.init(fen);
     game = g ? g : game::instance();
     game->init_tm(brd.us());
@@ -75,6 +109,7 @@ void search_t::init(const char * fen, game_t * g) {
     king_attack_pieces = options::get_value("KingAttackPieces");
     null_adaptive_depth = options::get_value("NullAdaptiveDepth");
     null_adaptive_value = options::get_value("NullAdaptiveValue");
+    alpha_pruning = options::get_value("AlphaPruning");
     beta_pruning = options::get_value("BetaPruning");
     null_verify = options::get_value("NullVerify");
     null_enabled = options::get_value("NullMove");
@@ -493,16 +528,6 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
 }
 
 /**
- * Move extensions
- */
-int search_t::extend_move(move_t * move, int gives_check, int depth, bool first) {
-    if (gives_check > 0) {
-        return (bool) depth < 4 || first || gives_check > 1 || brd.see(move) >= 0;
-    }
-    return 0;
-}
-
-/**
  * Verifies is a position is drawn by 
  * a) lack of material
  * b) fifty quiet moves
@@ -616,9 +641,20 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const int eval = evaluate(this);
     const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.us());
 
+    //fail low (alpha) pruning, or razoring
+    const int mg = 180 + 50 * depth;
+    if (do_prune_node && eval + mg < alpha && depth < 4 && alpha_pruning) {
+        const int delta = beta - mg;
+        int razor_value = qsearch(delta - 1, delta, 0);
+        if (razor_value < delta) {
+            return razor_value;
+        }
+
+    }
+
     //fail high (beta) pruning
-    if (do_prune_node && eval - 230 > beta && depth < 4 && beta_pruning) {
-        return eval - 230;
+    if (do_prune_node && eval - mg > beta && depth < 4 && beta_pruning) {
+        return eval - mg;
     }
 
     //null move pruning
@@ -682,9 +718,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int best = -score::INF;
     int searched_moves = 0;
     const int score_max = score::MATE - brd.ply - 1;
-    const int max_reduce = depth - 1;
     const bool do_ffp = !pv && depth < 8 && eval + 40 * (depth + 1) <= alpha && ffp_enabled;
-    const bool do_lmp = !pv && depth < 4 && lmp_enabled;
+    const bool do_lmp = !pv && depth < 4 && eval + 20 * (depth + 1) <= alpha && lmp_enabled;
     stack->best_move.clear();
     do {
 
@@ -702,13 +737,14 @@ int search_t::pvs(int alpha, int beta, int depth) {
         const bool is_dangerous = !is_quiet_stage || in_check || gives_check || is_passed_pawn(move);
         const bool do_prune = !is_dangerous && searched_moves > 1 && best > -score::DEEPEST_MATE;
 
-        //futile quiet moves (futility pruning)
+        //prune futile quiet moves (forward futility pruning, FFP)
         if (do_prune && do_ffp) {
             pruned_nodes++;
             continue;
         }
 
-        if (do_prune && do_lmp && searched_moves >= depth * 4) {
+        //prune late quiet moves (late move pruning, LMP)
+        if (do_prune && do_lmp && searched_moves >= 4 + (2 * depth)) {
             pruned_nodes++;
             continue;
         }
@@ -717,26 +753,25 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Move Extensions
          */
 
-        //const int extend = extend_move(move, gives_check, depth, searched_moves == 0);
         int extend = 0;
         if (gives_check > 1) {
             extend = 1;
-        } else if (gives_check > 0 && (pv || brd.see(move) >= 0)) {
+        } else if (gives_check > 0 && (depth < 4 || pv || brd.see(move) >= 0)) {
+            extend = 1;
+        } else if (pv && depth < 4 && brd.is_gain(move)) {
+            extend = 1;
+        } else if (pv && !in_check && depth < 4 && !move->promotion && is_passed_pawn(move)) {
             extend = 1;
         }
-        //} else if (brd.is_gain(move)) {
-        //    extend = 1;
-        //}
 
         /*
          * Late Move Reductions (LMR) 
          */
 
         int reduce = 0;
-        if (is_quiet_stage && max_reduce > 0 && lmr_enabled) {
-            reduce = tt_move != 0;
-            reduce += (bool) !is_dangerous && searched_moves >= 3 && reduce < max_reduce;
-            reduce += (bool) !is_dangerous && searched_moves >= 6 && reduce < max_reduce;
+        const bool do_reduce = depth > 1 && is_quiet_stage;
+        if (do_reduce && lmr_enabled) {
+            reduce = LMR::reduce(depth, searched_moves, pv);
             assert((depth - reduce) >= 1);
         }
 

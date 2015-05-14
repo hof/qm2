@@ -92,6 +92,10 @@ int main() {
     mv.set(BBISHOP, f7, d5, WBISHOP);
     assert_see(&brd, &mv, vminor);
     
+    brd.init("8/1p3p1p/2k1p1p1/5P2/p3K3/8/1P3PPP/8 b - - 0 1");
+    mv.set(BPAWN, e6, f5, WPAWN);
+    assert_see(&brd, &mv, vpawn);
+    
     brd.init("rnbqkbnr/pppp1ppp/8/4p3/8/4P3/PPPP1PPP/RNBQKBNR w KQkq e6 0 1");
     mv.set(WPAWN, d2, d4);
     assert_see(&brd, &mv, 0);
