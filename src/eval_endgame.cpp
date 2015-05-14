@@ -217,7 +217,6 @@ namespace eg {
                 U64 control_them = KING_MOVES[s->brd.get_sq(KING[them])] | s->brd.bb[KING[them]];
                 control_them &= ~control_us;
                 if ((control_them & queening_squares) == queening_squares) {
-
                     return draw(score, 128);
                 }
                 return draw(score, 4);

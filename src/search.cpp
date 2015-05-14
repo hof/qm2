@@ -31,6 +31,7 @@
 #include "engine.h"
 #include "eval.h"
 #include "timeman.h"
+#include "eval_material.h"
 
 namespace LMR {
 
@@ -39,28 +40,52 @@ namespace LMR {
         0.0008, 0.0007, 0.0007, 0.0007, 0.0007, 0.0007, 0.0007, 0.0006
     };
 
-    uint8_t reduction[32][16];
+    uint8_t reduction[2][32][16];
 
-    void init_reduction() {
+    int lmr_non_pv(int d, int m) {
         const double f = 0.01;
         const double df = 0.25;
+        double base_red = MIN(1.0, d * df / 2.0);
+        double extra_red = d * df;
+        double pct = 1.0 - cutoff_pct[m];
+        double mul = MAX(0.0, pct - (1.0 - f)) / f;
+        return pct * base_red + mul * extra_red + 0.25;
+    }
+
+    int lmr_pv(int d, int m) {
+        const double f = 0.005;
+        const double df = 0.15;
+        double base_red = MIN(1.0, d * df / 2.0);
+        double extra_red = d * df;
+        double pct = 1.0 - cutoff_pct[m];
+        double mul = MAX(0.0, pct - (1.0 - f)) / f;
+        return pct * base_red + mul * extra_red + 0.25;
+    }
+
+    void init() {
         for (int d = 0; d < 32; d++) {
-            double base_red = MIN(1.0, d * df / 2.0);
-            double extra_red = d * df;
-            //std::cout << "d" << d << " ";
             for (int m = 0; m < 16; m++) {
-                double pct = 1.0 - cutoff_pct[m];
-                double mul = MAX(0.0, pct - (1.0 - f)) / f;
-                reduction[d][m] = (int) (pct * base_red + mul * extra_red + 0.25);
-                //std::cout << (int) reduction[d][m] << " ";
+                reduction[0][d][m] = lmr_non_pv(d, m);
+                reduction[1][d][m] = lmr_pv(d, m);
             }
-            //std::cout << std::endl << std::endl;
+        }
+    }
+
+    void print() {
+        for (int pv = 0; pv < 2; pv++) {
+            std::cout << (pv? "pv reductions: " : "non-pv reductions: ") << std::endl;
+            for (int d = 0; d < 32; d++) {
+                std::cout << "d" << d << " ";
+                for (int m = 0; m < 16; m++) {
+                    std::cout << (int) reduction[pv][d][m] << " ";
+                }
+                std::cout << std::endl;
+            }
         }
     }
 
     int reduce(int d, int m, bool pv) {
-        int result = reduction[MIN(d-pv, 31)][MIN(m, 15)];
-        return result;
+        return reduction[pv][MIN(d - pv, 31)][MIN(m, 15)];
     }
 }
 
@@ -99,7 +124,7 @@ int root_move_t::compare(root_move_t * m, move_t * best_move) {
  * @param fen string representing the board position
  */
 void search_t::init(const char * fen, game_t * g) {
-    LMR::init_reduction();
+    LMR::init();
     brd.init(fen);
     game = g ? g : game::instance();
     game->init_tm(brd.us());
@@ -737,6 +762,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
         const bool is_dangerous = !is_quiet_stage || in_check || gives_check || is_passed_pawn(move);
         const bool do_prune = !is_dangerous && searched_moves > 1 && best > -score::DEEPEST_MATE;
 
+        if (do_prune && do_lmp && history[move->piece][move->tsq] <= 0) {
+            pruned_nodes++;
+            continue;
+        }
+
         //prune futile quiet moves (forward futility pruning, FFP)
         if (do_prune && do_ffp) {
             pruned_nodes++;
@@ -771,7 +801,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         int reduce = 0;
         const bool do_reduce = depth > 1 && is_quiet_stage;
         if (do_reduce && lmr_enabled) {
-            reduce = LMR::reduce(depth, searched_moves, pv);
+            reduce = LMR::reduce(depth, searched_moves, pv || is_dangerous);
             assert((depth - reduce) >= 1);
         }
 
@@ -921,8 +951,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      */
 
     const int fbase = eval + 50;
-    const bool them = move->piece > WKING;
-    const bool last_piece = max_1(brd.all_pieces(them));
+    const bool is_eg = !in_check && material::is_eg(this);
     do {
 
         /*
@@ -940,7 +969,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             continue;
         }
 
-        bool do_prune = !in_check && !gives_check && !last_piece;
+        bool do_prune = !in_check && !gives_check && !is_eg;
 
         //prune if the capture or promotion can't raise alpha
         if (do_prune && fbase + brd.max_gain(move) <= alpha) {
