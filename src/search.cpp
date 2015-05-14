@@ -125,6 +125,7 @@ int root_move_t::compare(root_move_t * m, move_t * best_move) {
  */
 void search_t::init(const char * fen, game_t * g) {
     LMR::init();
+    //LMR::print();
     brd.init(fen);
     game = g ? g : game::instance();
     game->init_tm(brd.us());
