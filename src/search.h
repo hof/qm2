@@ -108,6 +108,7 @@ public:
     bool null_enabled;
     bool alpha_pruning;
     bool beta_pruning;
+    bool pv_extensions;
     bool lmr_enabled;
     bool ffp_enabled;
     bool lmp_enabled;

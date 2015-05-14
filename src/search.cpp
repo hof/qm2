@@ -40,21 +40,13 @@ namespace LMR {
         0.0008, 0.0007, 0.0007, 0.0007, 0.0007, 0.0007, 0.0007, 0.0006
     };
 
-    uint8_t reduction[2][32][16];
+    uint8_t reduction[32][16];
 
-    int lmr_non_pv(int d, int m) {
-        const double f = 0.01;
-        const double df = 0.25;
-        double base_red = MIN(1.0, d * df / 2.0);
-        double extra_red = d * df;
-        double pct = 1.0 - cutoff_pct[m];
-        double mul = MAX(0.0, pct - (1.0 - f)) / f;
-        return pct * base_red + mul * extra_red + 0.25;
-    }
+    bool init_done = false;
 
-    int lmr_pv(int d, int m) {
-        const double f = 0.005;
-        const double df = 0.15;
+    int calc_reduction(int d, int m) {
+        const double f = 0.01; //higher number: more reductions
+        const double df = 0.25; //higher number: more reductions
         double base_red = MIN(1.0, d * df / 2.0);
         double extra_red = d * df;
         double pct = 1.0 - cutoff_pct[m];
@@ -63,29 +55,28 @@ namespace LMR {
     }
 
     void init() {
-        for (int d = 0; d < 32; d++) {
-            for (int m = 0; m < 16; m++) {
-                reduction[0][d][m] = lmr_non_pv(d, m);
-                reduction[1][d][m] = lmr_pv(d, m);
+        if (!init_done) {
+            for (int d = 0; d < 32; d++) {
+                for (int m = 0; m < 16; m++) {
+                    reduction[d][m] = calc_reduction(d, m);
+                }
             }
+            init_done = true;
         }
     }
 
     void print() {
-        for (int pv = 0; pv < 2; pv++) {
-            std::cout << (pv? "pv reductions: " : "non-pv reductions: ") << std::endl;
-            for (int d = 0; d < 32; d++) {
-                std::cout << "d" << d << " ";
-                for (int m = 0; m < 16; m++) {
-                    std::cout << (int) reduction[pv][d][m] << " ";
-                }
-                std::cout << std::endl;
+        for (int d = 0; d < 32; d++) {
+            std::cout << "d" << d << " ";
+            for (int m = 0; m < 16; m++) {
+                std::cout << (int) reduction[d][m] << " ";
             }
+            std::cout << std::endl;
         }
     }
 
-    int reduce(int d, int m, bool pv) {
-        return reduction[pv][MIN(d - pv, 31)][MIN(m, 15)];
+    int reduce(int d, int m) {
+        return reduction[MIN(d, 31)][MIN(m, 15)];
     }
 }
 
@@ -126,6 +117,7 @@ int root_move_t::compare(root_move_t * m, move_t * best_move) {
 void search_t::init(const char * fen, game_t * g) {
     LMR::init();
     //LMR::print();
+    PST::init();
     brd.init(fen);
     game = g ? g : game::instance();
     game->init_tm(brd.us());
@@ -142,6 +134,7 @@ void search_t::init(const char * fen, game_t * g) {
     lmr_enabled = options::get_value("LMR");
     ffp_enabled = options::get_value("FutilityPruning");
     lmp_enabled = options::get_value("LateMovePruning");
+    pv_extensions = options::get_value("PVExtensions");
     ponder_move.clear();
     nodes = 0;
     pruned_nodes = 0;
@@ -153,7 +146,6 @@ void search_t::init(const char * fen, game_t * g) {
     result_score = 0;
     memset(_stack, 0, sizeof (_stack));
     memset(history, 0, sizeof (history));
-    init_pst();
     stack->eval_result = score::INVALID;
 }
 
@@ -763,11 +755,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
         const bool is_dangerous = !is_quiet_stage || in_check || gives_check || is_passed_pawn(move);
         const bool do_prune = !is_dangerous && searched_moves > 1 && best > -score::DEEPEST_MATE;
 
-        if (do_prune && do_lmp && history[move->piece][move->tsq] <= 0) {
-            pruned_nodes++;
-            continue;
-        }
-
         //prune futile quiet moves (forward futility pruning, FFP)
         if (do_prune && do_ffp) {
             pruned_nodes++;
@@ -789,9 +776,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
             extend = 1;
         } else if (gives_check > 0 && (depth < 4 || pv || brd.see(move) >= 0)) {
             extend = 1;
-        } else if (pv && depth < 4 && brd.is_gain(move)) {
+        } else if (pv && depth < 4 && pv_extensions && brd.is_gain(move)) {
             extend = 1;
-        } else if (pv && !in_check && depth < 4 && !move->promotion && is_passed_pawn(move)) {
+        } else if (pv && !in_check && pv_extensions && depth < 4 && !move->promotion && is_passed_pawn(move)) {
             extend = 1;
         }
 
@@ -802,7 +789,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
         int reduce = 0;
         const bool do_reduce = depth > 1 && is_quiet_stage;
         if (do_reduce && lmr_enabled) {
-            reduce = LMR::reduce(depth, searched_moves, pv || is_dangerous);
+            reduce = LMR::reduce(depth, searched_moves);
+            if (reduce > 1 && is_dangerous) {
+                reduce = 1;
+            }
             assert((depth - reduce) >= 1);
         }
 

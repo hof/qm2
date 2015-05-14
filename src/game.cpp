@@ -36,6 +36,7 @@ namespace options {
         { "AlphaPruning", BOOL, 1, "type check default true" },
         { "BetaPruning", BOOL, 1, "type check default true" },
         { "LMR", BOOL, 1, "type check default true" },
+        { "PVExtensions", BOOL, 1, "type check default true" },
         { "FutilityPruning", BOOL, 1, "type check default true" },
         { "LateMovePruning", BOOL, 1, "type check default true" },
         { "NullVerify", BOOL, 1, "type check default true" },

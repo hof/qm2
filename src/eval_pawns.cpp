@@ -201,8 +201,8 @@ namespace pawns {
                 }
 
                 //update the score
-                pawn_score[us].add(PST[PAWN[us]][sq]);
-                trace("PST", sq, PST[PAWN[us]][sq]);
+                pawn_score[us].add(PST::table[PAWN[us]][sq]);
+                trace("PST", sq, PST::table[PAWN[us]][sq]);
 
                 if (isolated) {
                     pawn_score[us].add(ISOLATED[opposed]);
@@ -264,8 +264,8 @@ namespace pawns {
              */
 
             //piece square table
-            pawn_score[us].add(PST[KING[us]][kpos[us]]);
-            trace("PST KING", kpos[us], PST[KING[us]][kpos[us]]);
+            pawn_score[us].add(PST::table[KING[us]][kpos[us]]);
+            trace("PST KING", kpos[us], PST::table[KING[us]][kpos[us]]);
 
             //king attacking pawns
             U64 king_atcks = KING_MOVES[kpos[us]] & e->attack[us];

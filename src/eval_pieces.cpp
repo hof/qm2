@@ -23,8 +23,7 @@
 #include "search.h"
 #include "bits.h"
 #include "score.h"
-
-extern pst_t PST;
+#include "eval.h"
 
 namespace pieces {
 
@@ -179,7 +178,7 @@ namespace pieces {
                  * Add piece square table score
                  */
 
-                sc->add(PST[pc][sq]);
+                sc->add(PST::table[pc][sq]);
                 trace("PST", sq, sc);
 
                 /*

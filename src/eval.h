@@ -28,11 +28,14 @@
 #include "score.h"
 
 class search_t;
-extern pst_t PST;
 extern const score_t TEMPO[2];
 
 int evaluate(search_t * s);
-void init_pst();
+
+namespace PST {
+    extern pst_t table;
+    void init();
+}
 
 
 #endif	/* EVALUATE_H */
