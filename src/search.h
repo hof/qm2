@@ -85,7 +85,6 @@ public:
     search_stack_t _stack[MAX_PLY + 1];
     game_t * game;
     board_t brd;
-    board_t brd2;
     root_t root;
     search_stack_t * stack;
     search_stack_t * root_stack;

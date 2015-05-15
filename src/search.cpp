@@ -343,27 +343,27 @@ bool search_t::pondering() {
  */
 std::string search_t::pv_to_string() {
     std::string result = "";
-    board_t * b = &brd2;
-    b->init(brd.to_string().c_str());
+    board_t b;
+    b.init(brd.to_string().c_str());
 
-    //retrieve what's available from stack
+    //retrieve pv from stack
     for (int i = 0; i < stack->pv_count; i++) {
         result += stack->pv_moves[i].to_string() + " ";
-        b->forward(&stack->pv_moves[i]);
+        b.forward(&stack->pv_moves[i]);
     }
 
+    //retrieve extra moves from hash if the pv is short
     if (stack->pv_count < 8) {
-        //retrieve extra moves from hash
         int tt_move = 0, tt_flags, tt_score;
         move_t m;
-        for (int i = 0; i < 10; i++) {
-            trans_table::retrieve(b->stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
+        for (int i = 0; i < 8; i++) {
+            trans_table::retrieve(b.stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
             if (tt_move == 0) {
                 break;
             }
             m.set(tt_move);
             result += m.to_string() + " ";
-            b->forward(&m);
+            b.forward(&m);
         }
     }
     
@@ -375,19 +375,19 @@ std::string search_t::pv_to_string() {
  * to make sure pv moves are searched again first
  */
 void search_t::store_pv() {
-    board_t * b = &brd2;
-    b->init(brd.to_string().c_str());
+    board_t b;
+    b.init(brd.to_string().c_str());
     int tt_move = 0, tt_flags, tt_score;
     move_t m;
     for (int i = 0; i < stack->pv_count; i++) {
         if (i > 0) {
-            trans_table::retrieve(b->stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
+            trans_table::retrieve(b.stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
             m.set(tt_move);
             if (m.equals(&stack->pv_moves[i]) == false) {
-                trans_table::store(b->stack->tt_key, 0, 0, 1, 0, m.to_int(), 0);
+                trans_table::store(b.stack->tt_key, 0, 0, 1, 0, m.to_int(), 0);
             }
         }
-        b->forward(&stack->pv_moves[i]);
+        b.forward(&stack->pv_moves[i]);
     }
 }
 
@@ -770,7 +770,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
 
         /*
-         * Move Extensions
+         * Move extensions
          */
 
         int extend = 0;
@@ -785,7 +785,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
 
         /*
-         * Late Move Reductions (LMR) 
+         * Move Reductions (Late Move Reductions, LMR) 
          */
 
         int reduce = 0;
@@ -869,9 +869,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
 }
 
 /**
- * Quiescence search - only consider tactical moves:
+ * Quiescence search with tactical moves only.
  * At depth 0: captures, promotions and quiet checks
- * At depth < 0: only captures and promotions
+ * At depth < 0: captures and promotions
  * @param alpha lowerbound value
  * @param beta upperbound value
  * @param depth depth (0 or lower)
@@ -918,10 +918,9 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return draw_score();
     }
 
+    //stand-pat: return if eval is already good enough
     const int eval = evaluate(this);
     const bool in_check = stack->in_check;
-
-    //stand-pat: return if eval is already good enough
     if (eval >= beta && !in_check) {
         return eval;
     }
@@ -962,9 +961,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             continue;
         }
 
-        bool do_prune = !in_check && !gives_check && !is_eg;
-
         //prune if the capture or promotion can't raise alpha
+        bool do_prune = !in_check && !gives_check && !is_eg;
         if (do_prune && fbase + brd.max_gain(move) <= alpha) {
             pruned_nodes++;
             continue;
