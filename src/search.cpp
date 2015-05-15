@@ -352,18 +352,21 @@ std::string search_t::pv_to_string() {
         b->forward(&stack->pv_moves[i]);
     }
 
-    //retrieve extra moves from hash
-    int tt_move = 0, tt_flags, tt_score;
-    move_t m;
-    for (int i = 0; i < 10; i++) {
-        trans_table::retrieve(b->stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
-        if (tt_move == 0) {
-            break;
+    if (stack->pv_count < 8) {
+        //retrieve extra moves from hash
+        int tt_move = 0, tt_flags, tt_score;
+        move_t m;
+        for (int i = 0; i < 10; i++) {
+            trans_table::retrieve(b->stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
+            if (tt_move == 0) {
+                break;
+            }
+            m.set(tt_move);
+            result += m.to_string() + " ";
+            b->forward(&m);
         }
-        m.set(tt_move);
-        result += m.to_string() + " ";
-        b->forward(&m);
     }
+    
     return result;
 }
 
@@ -659,7 +662,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const int eval = evaluate(this);
     const bool do_prune_node = !in_check && !skip_null && !pv && beta > -score::DEEPEST_MATE && brd.has_pieces(brd.us());
 
-    //fail low (alpha) pruning, or razoring
+    //fail low (alpha) pruning: razoring
     const int mg = 180 + 50 * depth;
     if (do_prune_node && eval + mg < alpha && depth < 4 && alpha_pruning) {
         const int delta = beta - mg;
@@ -667,7 +670,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
         if (razor_value < delta) {
             return razor_value;
         }
-
     }
 
     //fail high (beta) pruning
@@ -691,7 +693,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             return alpha;
         } else if (null_score >= beta) {
             const int RV = 5;
-            if (null_verify && depth > RV && brd.has_one_piece(brd.us())) {
+            if (null_verify && depth > RV && material::is_eg(this)) {
                 //verification
                 skip_null = true;
                 int verified_score = pvs(alpha, beta, depth - 1 - RV);
