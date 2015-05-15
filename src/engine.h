@@ -74,7 +74,7 @@ public:
         _stop_all = false;
         this->create(_learn, this);
     }
-
+    
     void set_ponder(bool do_ponder) {
         _ponder = do_ponder;
     }
@@ -126,6 +126,7 @@ namespace engine {
     void go();
     void analyse();
     void learn();
+    void print_lmr();
     void new_game(std::string fen);
     void set_position(std::string fen);
     void set_ponder(bool ponder);

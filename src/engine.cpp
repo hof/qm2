@@ -49,6 +49,11 @@ namespace engine {
         _stopped = false;
         _engine.learn();
     }
+    
+    void print_lmr() {
+        LMR::init();
+        LMR::print();
+    }
 
     void new_game(std::string fen) {
         _engine.new_game(fen);

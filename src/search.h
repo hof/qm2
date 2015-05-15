@@ -33,6 +33,11 @@
 #include "movepicker.h"
 #include "hashtable.h"
 
+namespace LMR {
+    void init();
+    void print();
+};
+
 class root_move_t {
 public:
     move_t move;

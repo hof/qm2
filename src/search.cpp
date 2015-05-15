@@ -47,7 +47,7 @@ namespace LMR {
     int calc_reduction(int d, int m) {
         const double f = 0.01; //higher number: more reductions
         const double df = 0.25; //higher number: more reductions
-        double base_red = MIN(1.0, d * df / 2.0);
+        double base_red = MIN(1.8, d * df / 2.0);
         double extra_red = d * df;
         double pct = 1.0 - cutoff_pct[m];
         double mul = MAX(0.0, pct - (1.0 - f)) / f;
@@ -66,10 +66,11 @@ namespace LMR {
     }
 
     void print() {
+        std::cout << "move 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16" << std::endl;
         for (int d = 0; d < 32; d++) {
-            std::cout << "d" << d << " ";
+            std::cout << (d < 10? "  d" : " d") << d << " ";
             for (int m = 0; m < 16; m++) {
-                std::cout << (int) reduction[d][m] << " ";
+                std::cout << (int) reduction[d][m] << "  ";
             }
             std::cout << std::endl;
         }

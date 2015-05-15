@@ -104,6 +104,8 @@ namespace uci {
                 result = handle_eval(parser);
             } else if (token == "learn") {
                 result = handle_learn();
+            } else if (token == "lmr") {
+                result = handle_lmr();
             }
         }
         return result;
@@ -268,7 +270,7 @@ namespace uci {
     }
 
     /*
-     * XLearn can be used to determine if a new evaluation or search 
+     * Learn can be used to determine if a new evaluation or search 
      * feature gives better performance, and what is the ideal score
      * 
      */
@@ -277,6 +279,14 @@ namespace uci {
         engine::set_ponder(false);
         engine::set_position(fen);
         engine::learn();
+        return true;
+    }
+    
+    /*
+     * LMR prints the late move reduction table
+     */
+    bool handle_lmr() {
+        engine::print_lmr();
         return true;
     }
 
