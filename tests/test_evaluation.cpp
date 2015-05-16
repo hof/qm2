@@ -54,31 +54,13 @@ int testEval(int idx, std::string fen, int min_score, int max_score) {
     return score;
 }
 
-void testKingAttackZero(int idx, std::string fen) {
-    if (test_stop) {
-        return;
-    }
-    search_t * s = new search_t(fen.c_str());
-    evaluate(s);
-    int score = s->stack->pc_score[WKING].mg;
-    if (score != 0) {
-        testFail(idx, "!=", 0, score, fen, global_engine);
-    } else {
-        score = s->stack->pc_score[BKING].mg;
-        if (score != 0) {
-            testFail(idx, "!=", 0, score, fen, global_engine);
-        }
-    }
-    delete s;
-}
-
 void testEvaluationSuite() {
 
     /*
      * Endgames
      */
+    
     // case 0:  ----- ------ vs ----- ------ (KK)
-
     testEval(0, "6k1/8/8/8/8/8/8/1K6 w - - 0 1", -10, 10);
 
     // case 1:  pawns ------ vs ----- ------
@@ -124,6 +106,7 @@ void testEvaluationSuite() {
     // case 6:  ----- pieces vs pawns ------
     testEval(6001, "8/8/K7/8/8/8/4kpQ1/8 w - - 0 1", 1, 50); //KQKP
     testEval(6002, "R7/4K3/8/8/4kp2/8/8/8 w - - 66 1", 1, 50); //KRKP
+    testEval(6003, "8/K7/8/4k3/3p4/8/4B3/8 w - - 0 4", 0, 10); //KBKP
 
     // case 7:  pawns pieces vs pawns ------
     testEval(7001, "8/7k/7P/6K1/8/8/5p2/5B2 w - - 1 101", 1, 10); //wrong bishop ending
@@ -148,8 +131,9 @@ void testEvaluationSuite() {
     testEval(13003, "8/8/8/4b3/3k4/2N1q3/RP6/KQ6 w - - 0 1", score::WIN / 8, score::WIN / 3);
     testEval(13004, "8/8/8/8/6k1/6bp/8/6K1 w - - 0 1", -10, -1); //KBPK
     testEval(13005, "8/Pk6/8/1N6/8/8/5K2/8 w - - 0 1", 1, 10); //KNPK
-    testEval(13006, "8/8/4k3/3N1b2/3K1P2/8/8/8 w - - 7 1", 1, 50); //KNPKB
-
+    testEval(13006, "8/8/8/2k2p2/1q6/7R/2K5/8 w - - 0 29", -score::WIN, -score::WIN / 8);
+    testEval(13007, "8/8/4k3/3N1b2/3K1P2/8/8/8 w - - 7 1", 1, 50); //KNPKB
+  
     // case 14: ----- pieces vs pawns pieces
     testEval(14001, "K2k4/PR6/8/8/2q5/8/8/8 w - - 0 169", -250, -150);
     testEval(14002, "7r/8/8/5k2/4p3/2KNR3/8/8 w - - 12 1", 0, 100);
@@ -158,36 +142,8 @@ void testEvaluationSuite() {
     // case 15: pawns pieces vs pawns pieces
     testEval(15001, "8/1K6/3k4/P2p4/8/4b3/4B3/8 w - - 27 1", -10, 10); //opp. bishops
 
-
-    /*
-     * Opening
-     */
-
-    //start position: white has advantage of the first move
-    //testEval(1, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 1, SCORE_10);
-
-    //king shelter
-    //testKingAttackZero(2, "r1bq1rk1/ppppbppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQ1RK1 w - - 3 6");
-
-
-
-
-
-
-    /*    
-        
-        testEval(6, "8/8/4k3/3N1b2/3K1P2/8/8/8 w - - 7 1", 1, SCORE_10);
-       
-        testEval(8, "8/8/8/2k2p2/1q6/7R/2K5/8 w - - 0 29", -SCORE_MATE, -score::WIN / 8);
-
-        //no pawns, piece up but no mating power
-        testEval(9, "8/K7/8/4k3/3p4/8/4B3/8 w - - 0 4", SCORE_DRAW_MIN, SCORE_10);
-    
-        
-     * 
-     * testEval("8/8/8/pB1k4/P5r1/3K4/8/8 w - - 13 32", -100, -1); //KBPKRP -> draw
-        
-     */
+    //phase 0: all pieces on the board
+    testEval(1, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 1, 20); //opening
 }
 
 int main() {
