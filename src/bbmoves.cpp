@@ -20,7 +20,7 @@
  * - Bitboards with (pseudo) moves per piece.
  * - Magic bitboards with credits and thanks to Pradyumna Kannan. 
  * The original code for magic bitboards is available at his website. 
- * Note the function InitMagicMoves() needs to be called before using the engine.
+ * Note the function magic::init() needs to be called before using the engine.
  */
 
 #include "bbmoves.h"

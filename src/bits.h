@@ -422,6 +422,5 @@ inline void bb_print(std::string title, U64 bb) {
     std::cout << std::endl << std::endl;
 }
 
-
 #endif	/* BITS_H */
 

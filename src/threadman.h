@@ -89,6 +89,7 @@ private:
         return (index >= 0 && index < MAX_THREADS) ? _threads[index] : 0;
     }
 
+    /*
     void mutex_lock() {
         pthread_mutex_lock(&this->_mutex);
     }
@@ -104,6 +105,7 @@ private:
     void spin_release() {
         pthread_spin_unlock(&this->_spin);
     }
+     */ 
 };
 
 

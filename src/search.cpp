@@ -26,7 +26,6 @@
  * 
  */
 
-
 #include "search.h"
 #include "engine.h"
 #include "eval.h"
