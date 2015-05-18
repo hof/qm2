@@ -146,6 +146,7 @@ public:
     void update_history(move_t * move);
     void update_killers(move_t * move);
     bool is_killer(move_t * const move);
+    bool in_searched(move_t * move, int searched_moves);
     void reset_stack();
 
     int draw_score() {

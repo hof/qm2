@@ -399,6 +399,7 @@ void search_t::store_pv() {
 void search_t::update_history(move_t * move) {
     assert(move->capture == EMPTY);
     assert(move->promotion == EMPTY);
+    assert(move->castle == EMPTY);
     const int HISTORY_MAX = 2000;
     const int HISTORY_DIV = 64;
     int * record = &history[move->piece][move->tsq];
@@ -414,6 +415,7 @@ void search_t::update_history(move_t * move) {
 void search_t::update_killers(move_t * move) {
     assert(move->capture == EMPTY);
     assert(move->promotion == EMPTY);
+    assert(move->castle == EMPTY);
     if (stack->killer[0].equals(move)) {
         return;
     }
@@ -745,6 +747,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         assert(brd.valid(move) && brd.legal(move));
         assert(stack->best_move.equals(move) == false);
+        assert(in_searched(move, searched_moves) == false);
 
         const int gives_check = brd.gives_check(move);
         assert(gives_check == 0 || gives_check == 1 || gives_check == 2);
@@ -829,12 +832,12 @@ int search_t::pvs(int alpha, int beta, int depth) {
             stack->best_move.set(move);
             if (score >= beta) {
                 trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_int(), score::LOWERBOUND);
-                if (!move->capture && !move->promotion) {
+                if (!move->capture && !move->promotion && !move->castle) {
                     update_killers(move);
                     update_history(move);
                     for (int i = 0; i < searched_moves; i++) {
                         move_t * m = &stack->searched[i];
-                        if (!m->capture && !m->promotion) {
+                        if (!m->capture && !m->promotion && !m->castle) {
                             history[m->piece][m->tsq] >>= searched_moves;
                         }
                     }
@@ -1003,6 +1006,21 @@ int search_t::qsearch(int alpha, int beta, int depth) {
  */
 bool search_t::is_killer(move_t * const move) {
     return !move->capture && (stack->killer[0].equals(move) || stack->killer[1].equals(move));
+}
+
+/**
+ * Tests if a move is stored in the searched moves list
+ * @param move
+ * @param searched_moves
+ * @return true is listed, false otherwise
+ */
+bool search_t::in_searched(move_t* move, int searched_moves) {
+    for (int i = 0; i < searched_moves; i++) {
+        if (stack->searched[i].equals(move)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /*
