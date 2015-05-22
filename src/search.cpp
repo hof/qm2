@@ -611,7 +611,9 @@ bool search_t::is_draw() {
  * @return 
  */
 int search_t::eval_mg() {
-    assert(stack->in_check == false);
+    if (stack->in_check) {
+        return 0;
+    }
     assert(stack->eval_result != score::INVALID);
     const int phase = stack->mt->phase;
     return ABS(stack->pc_score[WKING].get(phase))
