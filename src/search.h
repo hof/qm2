@@ -148,6 +148,7 @@ public:
     bool is_killer(move_t * const move);
     bool in_searched(move_t * move, int searched_moves);
     void reset_stack();
+    int eval_mg();
 
     int draw_score() {
         return 0;
