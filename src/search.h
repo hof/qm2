@@ -42,12 +42,13 @@ class root_move_t {
 public:
     move_t move;
     bool gives_check;
+    bool is_dangerous;
     int nodes;
     int see;
     int checker_sq;
     U64 checkers;
 
-    void init(move_t * m, bool checks, int see_value);
+    void init(move_t * m, bool checks, bool dangerous, int see_value);
     int compare(root_move_t * m, move_t * best_move);
 };
 
@@ -96,7 +97,6 @@ public:
     U64 nodes;
     U64 pruned_nodes;
     bool stop_all;
-    bool skip_null;
     int next_poll;
     int sel_depth;
     int result_score;
@@ -110,7 +110,6 @@ public:
     bool null_adaptive_value;
     bool null_verify;
     bool null_enabled;
-    bool alpha_pruning;
     bool beta_pruning;
     bool pv_extensions;
     bool lmr_enabled;
@@ -131,6 +130,7 @@ public:
     int pvs_root(int alpha, int beta, int depth);
     virtual int pvs(int alpha, int beta, int depth);
     int qsearch(int alpha, int beta, int depth);
+    int qstatic(int beta, int gain);
     std::string pv_to_string();
     bool is_draw();
     bool abort(bool force_poll);
@@ -149,19 +149,30 @@ public:
     bool in_searched(move_t * move, int searched_moves);
     void reset_stack();
     int eval_mg();
+    int extension(move_t * move, int depth, bool pv, int gives_check);
+    int reduction(int depth, int searched_moves, bool is_dangerous);
 
     int draw_score() {
         return 0;
     }
 
     bool is_recapture(move_t * move) {
+        if (stack == root_stack) {
+            return 0;
+        }
+        assert(brd.ply > 0);
         move_t * prev_move = &(stack - 1)->current_move;
         return move->capture && prev_move->capture && move->tsq == prev_move->tsq;
     }
 
     bool is_passed_pawn(move_t * move) {
-        assert(stack->eval_result != score::INVALID);
-        return BIT(move->ssq) & stack->pt->passers;
+        if (move->piece != WPAWN && move->piece != BPAWN) {
+            return false;
+        }
+        if (move->capture || stack->in_check || stack->eval_result == score::INVALID) {
+            return false;
+        }
+        return BIT(move->ssq) & stack->pt->passers & SIDE[brd.them()];
     }
 
     search_stack_t * get_stack(int ply) {

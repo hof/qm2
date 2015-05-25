@@ -22,7 +22,7 @@
  * - null move pruning 
  * - futility pruning
  * - late move reductions (LMR)
- * - check extensions
+ * - check and pv extensions
  * 
  */
 
@@ -38,7 +38,7 @@
 
 void trace(search_t * s, move_t * move, int score, int alpha, int beta, int depth, std::string txt) {
     const int f_len = 3;
-    const std::string filter[f_len] = { "d7h3", "g2h3", "e8d7" };
+    const std::string filter[f_len] = {"d7h3", "g2h3", "e8d7"};
     std::string path = "";
     for (int i = 0; i < s->brd.ply; i++) {
         std::string m_str = s->get_stack(i)->current_move.to_string();
@@ -115,11 +115,12 @@ namespace LMR {
  * @param checks if the move checks the opponent
  * @param see_value static exchange value
  */
-void root_move_t::init(move_t * m, bool checks, int see_value) {
+void root_move_t::init(move_t * m, bool checks, bool dangerous, int see_value) {
     move.set(m);
     gives_check = checks;
+    is_dangerous = dangerous;
     see = see_value;
-    nodes = see / 100;
+    nodes = see / 100 + dangerous; //initial sort order
 }
 
 /**
@@ -155,7 +156,6 @@ void search_t::init(const char * fen, game_t * g) {
     king_attack_pieces = options::get_value("KingAttackPieces");
     null_adaptive_depth = options::get_value("NullAdaptiveDepth");
     null_adaptive_value = options::get_value("NullAdaptiveValue");
-    alpha_pruning = options::get_value("AlphaPruning");
     beta_pruning = options::get_value("BetaPruning");
     null_verify = options::get_value("NullVerify");
     null_enabled = options::get_value("NullMove");
@@ -167,7 +167,6 @@ void search_t::init(const char * fen, game_t * g) {
     nodes = 0;
     pruned_nodes = 0;
     stop_all = false;
-    skip_null = false;
     next_poll = 0;
     sel_depth = 0;
     root_stack = stack = &_stack[0];
@@ -314,7 +313,6 @@ bool search_t::abort(bool force_poll = false) {
  * Do a null move
  */
 void search_t::forward() {
-    skip_null = true;
     stack->current_move.clear();
     stack++;
     stack->in_check = false;
@@ -329,7 +327,6 @@ void search_t::forward() {
 void search_t::backward() {
     stack--;
     brd.backward();
-    skip_null = false;
     assert(stack == &_stack[brd.ply]);
 }
 
@@ -467,14 +464,16 @@ int search_t::init_root_moves() {
     int tt_move = 0, tt_flags, tt_score;
     trans_table::retrieve(brd.stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
     stack->tt_move.set(tt_move);
-    for (move_t * move = move::first(this, 1);
-            move; move = move::next(this, 1)) {
-        root_move_t * rmove = &root.moves[root.move_count++];
-        rmove->init(move, brd.gives_check(move), brd.see(move));
-    }
     root.in_check = brd.in_check();
     stack->tt_key = brd.stack->tt_key;
     stack->best_move.set(0);
+    for (move_t * move = move::first(this, 1);
+            move; move = move::next(this, 1)) {
+        int gives_check = brd.gives_check(move);
+        bool is_dangerous = root.in_check || gives_check || move->capture || move->promotion || is_passed_pawn(move);
+        root_move_t * rmove = &root.moves[root.move_count++];
+        rmove->init(move, gives_check, is_dangerous, brd.see(move));
+    }
     return root.move_count;
 }
 
@@ -521,18 +520,46 @@ void root_t::sort_moves(move_t * best_move) {
     }
 }
 
+int search_t::extension(move_t * move, int depth, bool pv, int gives_check) {
+
+    if (gives_check > 1) {
+        return 1;
+    } else if (depth <= 4 && gives_check > 0) {
+        return 1;
+    } else if (depth <= 4 && is_recapture(move)) {
+        return 1;
+    } else if (pv && gives_check > 0 && pv_extensions) {
+        return 1;
+    } else if (pv && brd.is_gain(move) && pv_extensions) {
+        return 1;
+    } else if (pv && is_passed_pawn(move) && pv_extensions) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+int search_t::reduction(int depth, int searched_moves, bool is_dangerous) {
+    if (is_dangerous) {
+        return 0;
+    }
+    return LMR::reduce(depth, searched_moves);
+    return 0;
+}
+
 /**
  * Principle Variation Search (root node)
  * Difference with normal (non-root) search:
  * - Sending new PVs asap to the interface
  * - Sort order based on pv and amount of nodes of the subtrees
- * - No pruning, reductions, extensions and hash table lookup/store
+ * - No pruning and hash table lookup/store
  * - Compatible with all supported wild variants
  */
 int search_t::pvs_root(int alpha, int beta, int depth) {
 
     assert(root.move_count > 0);
     int best = -score::INF;
+    const bool is_pv = true;
     root.sort_moves(&stack->best_move);
     //trace_root(alpha, beta, depth);
 
@@ -544,16 +571,25 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         root_move_t * rmove = &root.moves[i];
         move_t * move = &rmove->move;
         int nodes_before = nodes;
-        int extend = rmove->gives_check;
+
+        //extensions and reductions
+        int extend = extension(move, depth, is_pv, rmove->gives_check);
+        int reduce = reduction(depth, i, rmove->is_dangerous);
         int score = 0;
+
+        //go forward and search one level deeper
         forward(move, rmove->gives_check);
-        if (i > 0) {
-            score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
-        }
-        if (i == 0 || score > alpha) {
+        if (i == 0) {
             score = -pvs(-beta, -alpha, depth - 1 + extend);
+        } else {
+            score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
+            if (score > alpha) { //open window research w/o reductions
+                score = -pvs(-beta, -alpha, depth - 1 + extend);
+            }
         }
         backward(move);
+
+        //handle results
         rmove->nodes += nodes - nodes_before;
         if (stop_all) {
             return alpha;
@@ -718,27 +754,18 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
-    const bool do_prune_node = !in_check && !skip_null && !pv && alpha < score::WIN && beta > -score::WIN && brd.has_pieces(brd.us());
+    const bool do_prune_node = eval >= beta && !in_check && !pv && !score::is_mate(beta);
 
-    //fail low (alpha) pruning: razoring
-    const int mg = 150 + eval_mg() + 50 * depth;
-    if (do_prune_node && eval + mg < alpha && depth < 4 && alpha_pruning) {
-        const int delta = beta - mg;
-        int razor_value = qsearch(delta - 1, delta, 0);
-        if (razor_value < delta) {
-            trace(this, NULL, razor_value, alpha, beta, depth, "alpha pruned");
-            return razor_value;
+    // beta pruning
+    if (do_prune_node && depth < 4 && beta_pruning) {
+        int bp_score = eval - 50 * depth;
+        if (bp_score >= beta) {
+            return bp_score;
         }
     }
 
-    //fail high (beta) pruning
-    if (do_prune_node && eval - mg > beta && depth < 4 && beta_pruning) {
-        trace(this, NULL, eval - mg, alpha, beta, depth, "beta pruned");
-        return eval - mg;
-    }
-
     //null move pruning
-    if (do_prune_node && eval >= beta && depth > 1 && null_enabled) {
+    if (do_prune_node && brd.has_pieces(brd.us()) && null_enabled) {
         int R = 3;
         if (depth >= 7 && null_adaptive_depth) {
             R += depth / 7;
@@ -747,18 +774,17 @@ int search_t::pvs(int alpha, int beta, int depth) {
             R += MIN((eval - beta) / 100, 3);
         }
         forward();
-        int null_score = -pvs(-beta, -alpha, depth - 1 - R);
+        int null_score = depth > R ? -pvs(-beta, -alpha, depth - 1 - R)
+                : -qstatic(-beta + 1, 100);
         backward();
         if (stop_all) {
             trace(this, NULL, alpha, alpha, beta, depth, "stopped");
             return alpha;
         } else if (null_score >= beta) {
             const int RV = 5;
-            if (null_verify && depth > RV /*&& material::is_eg(this)*/) {
+            if (null_verify && depth > RV && material::is_eg(this)) {
                 //verification
-                skip_null = true;
                 int verified_score = pvs(alpha, beta, depth - 1 - RV);
-                skip_null = false;
                 if (verified_score >= beta) {
                     trace(this, NULL, verified_score, alpha, beta, depth, "null move pruned (verified)");
                     return verified_score;
@@ -775,10 +801,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Internal iterative deepening (IID)
      */
 
-    if (depth >= 6 && tt_move == 0) {
-        skip_null = pv;
-        int R = pv ? 2 : 4;
-        int iid_score = pvs(alpha, beta, depth - R);
+    if (pv && depth > 2 && tt_move == 0) {
+        int iid_score = pvs(alpha, beta, depth - 2);
         if (score::is_mate(iid_score)) {
             trace(this, NULL, iid_score, alpha, beta, depth, "iid mate score");
             return iid_score;
@@ -798,13 +822,21 @@ int search_t::pvs(int alpha, int beta, int depth) {
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
 
+    //set futility pruning delta value
+    bool do_ffp = false;
+    int delta = score::INVALID;
+    if (depth <= 8 && !in_check && !score::is_mate(alpha) && !material::is_eg(this) && ffp_enabled) {
+        int ffp_score = eval + 40 * depth;
+        if (ffp_score <= alpha) {
+            do_ffp = true;
+            delta = ffp_score + 50;
+        }
+    }
+
     //prepare and do the loop
-    skip_null = false;
     int best = -score::INF;
     int searched_moves = 0;
     const int score_max = score::MATE - brd.ply - 1;
-    const bool do_ffp = !pv && depth < 8 && eval + 40 * (depth + 1) <= alpha && ffp_enabled;
-    const bool do_lmp = !pv && depth < 4 && eval + 20 * (depth + 1) <= alpha && lmp_enabled;
     stack->best_move.clear();
     do {
 
@@ -819,18 +851,23 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Move pruning: skip all futile moves
          */
 
-        const bool is_quiet_stage = stack->move_list.stage > QUIET_MOVES && searched_moves > 0;
-        const bool is_dangerous = !is_quiet_stage || in_check || gives_check || is_passed_pawn(move);
-        const bool do_prune = !is_dangerous && searched_moves > 1 && best > -score::DEEPEST_MATE;
-
-        //prune futile quiet moves (forward futility pruning, FFP)
-        if (do_prune && do_ffp) {
+        if (do_ffp && searched_moves > 0 && gives_check == 0 && (move->capture || move->promotion) && brd.max_gain(move) + delta <= alpha) {
             pruned_nodes++;
             continue;
         }
 
-        //prune late quiet moves (late move pruning, LMP)
-        if (do_prune && do_lmp && searched_moves >= 4 + (2 * depth)) {
+        const bool is_dangerous = in_check || gives_check || move->capture || move->promotion || move->castle || is_passed_pawn(move);
+        if (do_ffp && searched_moves > 0 && !is_dangerous) {
+            pruned_nodes++;
+            continue;
+        }
+
+        if (do_ffp && searched_moves > 0 && brd.see(move) < 0) {
+            pruned_nodes++;
+            continue;
+        }
+
+        if (!pv && !is_dangerous && depth < 4 && searched_moves >= 4 * depth && !score::is_mate(best) && lmp_enabled) {
             pruned_nodes++;
             continue;
         }
@@ -839,30 +876,13 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Move extensions
          */
 
-        int extend = 0;
-        if (gives_check > 1) {
-            extend = 1;
-        } else if (gives_check > 0 && (depth < 4 || pv || brd.see(move) >= 0)) {
-            extend = 1;
-        } else if (pv && depth < 4 && pv_extensions && brd.is_gain(move)) {
-            extend = 1;
-        } else if (pv && !in_check && pv_extensions && depth < 4 && !move->promotion && is_passed_pawn(move)) {
-            extend = 1;
-        }
+        int extend = extension(move, depth, pv, gives_check);
 
         /*
          * Move Reductions (Late Move Reductions, LMR) 
          */
 
-        int reduce = 0;
-        const bool do_reduce = depth > 1 && is_quiet_stage;
-        if (do_reduce && lmr_enabled) {
-            reduce = LMR::reduce(depth, searched_moves);
-            if (reduce > 1 && is_dangerous) {
-                reduce = 1;
-            }
-            assert((depth - reduce) >= 1);
-        }
+        int reduce = reduction(depth, searched_moves, is_dangerous);
 
         /*
          * Go forward and search next node
@@ -874,12 +894,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             score = -pvs(-beta, -alpha, depth - 1 + extend);
         } else {
             score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
-            if (score > alpha && reduce > 0) {
-                //research without reductions
-                score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
-            }
-            if (pv && score > alpha) {
-                //full window research
+            if (score > alpha && (pv || reduce > 0)) { //open window research without reductions
                 score = -pvs(-beta, -alpha, depth - 1 + extend);
             }
         }
@@ -1068,6 +1083,43 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 }
 
 /**
+ * Static 
+ * @param beta
+ * @param gain
+ * @return 
+ */
+int search_t::qstatic(int beta, int gain) {
+    nodes++;
+    int best = evaluate(this);
+    if (best >= beta) {
+        return best;
+    }
+    int val = best + gain;
+    U64 done = 0;
+    stack->tt_move.clear();
+    for (move_t * move = move::first(this, -1); move; move = move::next(this, -1)) {
+        if (BIT(move->tsq) & done) {
+            pruned_nodes++;
+            continue;
+        }
+        done |= BIT(move->tsq);
+        int see = brd.see(move);
+        if (see <= 0) {
+            pruned_nodes++;
+            continue;
+        }
+        int score = val + see;
+        if (score > best) {
+            if (score >= beta) {
+                return score;
+            }
+            best = score;
+        }
+    }
+    return best;
+}
+
+/**
  * Tests if a move equals one of the killer moves
  */
 bool search_t::is_killer(move_t * const move) {
@@ -1131,7 +1183,6 @@ void search_t::debug_print_search(int alpha, int beta, int depth) {
     std::cout << "\nFEN: " << brd.to_string() << std::endl;
     std::cout << "Hash: " << brd.stack->tt_key << std::endl;
     std::cout << "nodes: " << nodes << std::endl;
-    std::cout << "Skip nullmove: " << skip_null << std::endl;
     std::cout << std::endl;
     exit(0);
 }

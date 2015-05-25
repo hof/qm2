@@ -143,6 +143,14 @@ public:
     bool us() {
         return stack->wtm;
     }
+    
+     /**
+     * Gets reversed side to move
+     * @return boolean 1: black to move, 0: white to move
+     */
+    bool them() {
+        return !stack->wtm;
+    }
 
     /**
      * Counts amount of piece for a given piece type
