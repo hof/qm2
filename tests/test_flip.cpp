@@ -20,6 +20,7 @@
  */
 
 #include "engine.h"
+#include "game.h"
 
 /*
  * Simple C++ Test Suite
@@ -215,6 +216,7 @@ void flipTestSuite(int depth) {
 int main() {
     magic::init();
     global_engine = engine::instance();
+    options::get_option("PVExtensions")->value = false;
     trans_table::disable();
     uci::silent(true);
     static const int MAX_TEST_DEPTH = 1;

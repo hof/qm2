@@ -130,7 +130,6 @@ namespace engine {
     void new_game(std::string fen);
     void set_position(std::string fen);
     void set_ponder(bool ponder);
-    void set_option(std::string name, int value);
     bool is_stopped();
     bool is_ponder();
     game_t * settings();

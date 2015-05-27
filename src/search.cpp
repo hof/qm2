@@ -520,8 +520,15 @@ void root_t::sort_moves(move_t * best_move) {
     }
 }
 
+/**
+ * Determine if the move should be extended, inspired on Senpai 1.0 engine
+ * @param move the move
+ * @param depth remaining search depth
+ * @param pv pv node
+ * @param gives_check if the move checks
+ * @return 1 for extending, 0 otherwise
+ */
 int search_t::extension(move_t * move, int depth, bool pv, int gives_check) {
-
     if (gives_check > 1) {
         return 1;
     } else if (depth <= 4 && gives_check > 0) {
@@ -530,21 +537,26 @@ int search_t::extension(move_t * move, int depth, bool pv, int gives_check) {
         return 1;
     } else if (pv && gives_check > 0 && pv_extensions) {
         return 1;
-    } else if (pv && brd.is_gain(move) && pv_extensions) {
-        return 1;
     } else if (pv && is_passed_pawn(move) && pv_extensions) {
         return 1;
-    } else {
-        return 0;
-    }
+    } else if (pv && brd.is_gain(move) && pv_extensions) {
+        return 1;
+    } 
+    return 0;
 }
 
+/**
+ * Determine reduction for the current move
+ * @param depth remaining search depth
+ * @param searched_moves how many moves have been searched in the current node
+ * @param is_dangerous if the move is dangerous, e.g. a capture
+ * @return amount of plies to reduce
+ */
 int search_t::reduction(int depth, int searched_moves, bool is_dangerous) {
     if (is_dangerous) {
         return 0;
     }
     return LMR::reduce(depth, searched_moves);
-    return 0;
 }
 
 /**
@@ -576,7 +588,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         int extend = extension(move, depth, is_pv, rmove->gives_check);
         int reduce = reduction(depth, i, rmove->is_dangerous);
         int score = 0;
-
+        
         //go forward and search one level deeper
         forward(move, rmove->gives_check);
         if (i == 0) {
@@ -822,7 +834,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
 
-    //set futility pruning delta value
+    //set futility pruning delta value, inspired on Senpai engine
     bool do_ffp = false;
     int delta = score::INVALID;
     if (depth <= 8 && !in_check && !score::is_mate(alpha) && !material::is_eg(this) && ffp_enabled) {
@@ -1083,18 +1095,20 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 }
 
 /**
- * Static 
- * @param beta
- * @param gain
- * @return 
+ * Static qsearch, a simplified and fast capture search for estimating the 
+ * score based on evaluation and possible captures.
+ * @credits Fabien Letouzey, Senpai engine
+ * @param beta the upperbound
+ * @param delta base value is set to static evaluation score + delta 
+ * @return estimated evaluation score, considering captures
  */
-int search_t::qstatic(int beta, int gain) {
+int search_t::qstatic(int beta, int delta) {
     nodes++;
     int best = evaluate(this);
     if (best >= beta) {
         return best;
     }
-    int val = best + gain;
+    int base_val = best + delta;
     U64 done = 0;
     stack->tt_move.clear();
     for (move_t * move = move::first(this, -1); move; move = move::next(this, -1)) {
@@ -1108,7 +1122,7 @@ int search_t::qstatic(int beta, int gain) {
             pruned_nodes++;
             continue;
         }
-        int score = val + see;
+        int score = base_val + see;
         if (score > best) {
             if (score >= beta) {
                 return score;
