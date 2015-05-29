@@ -553,10 +553,14 @@ int search_t::extension(move_t * move, int depth, bool pv, int gives_check) {
  * @return amount of plies to reduce
  */
 int search_t::reduction(int depth, int searched_moves, bool is_dangerous) {
-    if (is_dangerous) {
+    if (is_dangerous || searched_moves < 3) {
         return 0;
     }
-    return LMR::reduce(depth, searched_moves);
+    if (searched_moves >= 6) {
+        return depth / 3;
+    }
+    return 1; 
+    //return LMR::reduce(depth, searched_moves);
 }
 
 /**
@@ -863,13 +867,13 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Move pruning: skip all futile moves
          */
 
-        if (do_ffp && searched_moves > 0 && gives_check == 0 && (move->capture || move->promotion) && brd.max_gain(move) + delta <= alpha) {
+        const bool is_dangerous = in_check || gives_check || move->capture || move->promotion || move->castle || is_passed_pawn(move);
+        if (do_ffp && searched_moves > 0 && !is_dangerous) {
             pruned_nodes++;
             continue;
         }
-
-        const bool is_dangerous = in_check || gives_check || move->capture || move->promotion || move->castle || is_passed_pawn(move);
-        if (do_ffp && searched_moves > 0 && !is_dangerous) {
+        
+        if (do_ffp && searched_moves > 0 && gives_check == 0 && (move->capture || move->promotion) && brd.max_gain(move) + delta <= alpha) {
             pruned_nodes++;
             continue;
         }

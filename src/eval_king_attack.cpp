@@ -55,9 +55,9 @@ namespace king_attack {
     };
 
     const int16_t KING_SHELTER[24] = {//structural shelter value (pawns & kings)
-        0, 15, 25, 30, 40, 50, 60, 75,
-        90, 105, 125, 145, 160, 175, 190, 200,
-        210, 220, 225, 235, 235, 240, 245, 250
+        0, 5, 10, 15, 20, 25, 30, 35,
+        40, 50, 60, 70, 80, 90, 95, 100,
+        105, 110, 115, 120, 125, 125, 125, 125
     };
 
     const int16_t KING_SHELTER_MUL[8] = {
@@ -108,7 +108,7 @@ namespace king_attack {
             attack_score = attack_score / 2;
             trace("CLOSED CENTER MUL", us, attack_score);
         }
-        
+
         if (my_attack_force < 8) {
             attack_score = (KING_SHELTER_MUL[my_attack_force] * attack_score) / 256;
             trace("PIECE FORCE MUL", us, attack_score);
@@ -134,12 +134,14 @@ namespace king_attack {
         const bool fianchetto_ok = up1(brd->bb[KING[them]], them) & (brd->bb[PAWN[them]] | brd->bb[BISHOP[them]]);
         defend_units += KING_DEFEND_BACKRANK[backrank_ok];
         defend_units += KING_DEFEND_FIANCHETTO[fianchetto_ok];
+        bool queen_involved = false;
 
         for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
             int a = KA_UNITS(s->stack->king_attack[pc]);
             int d = KD_UNITS(s->stack->king_attack[pc + offs[us]]);
             if (a) {
                 attack_pcs += a;
+                queen_involved = pc == QUEEN[us];
                 attack_units += a * KING_ATTACK_UNIT[pc];
             }
             if (d) {
@@ -148,9 +150,23 @@ namespace king_attack {
             }
         }
 
+        if (attack_pcs > 1 && queen_involved) {
+            queen_involved = false;
+            U64 queens = brd->bb[QUEEN[us]];
+            assert(queens);
+            while (queens) {
+                int sq = pop(queens);
+                U64 qa = magic::queen_moves(sq, brd->bb[ALLPIECES]) & s->stack->pt->mob[us];
+                queen_involved |= qa & KING_ZONE[brd->get_sq(KING[!us])];
+            }
+        }
+        if (attack_pcs > 0 && !queen_involved) {
+            attack_pcs -= 1;
+        }
+
         int pc_attack_score = attack_units * 20 - defend_units * 5;
         pc_attack_score = (s->king_attack_pieces * pc_attack_score) / 256;
-        const int pc_ix = attack_pcs + (attack_pcs == 0 && defend_pcs);
+        int pc_ix = attack_pcs + (attack_pcs == 0 && defend_pcs);
         trace("PIECE ATTACK (base) ", us, pc_attack_score);
         trace("PIECE ATTACK (mul) ", us, (KING_ATTACK_PCS[pc_ix] * pc_attack_score) / 256);
         attack_score += (KING_ATTACK_PCS[pc_ix] * pc_attack_score) / 256;

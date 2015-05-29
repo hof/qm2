@@ -39,8 +39,8 @@ namespace options {
         { "FutilityPruning", BOOL, 1, "type check default true" },
         { "LateMovePruning", BOOL, 1, "type check default true" },
         { "NullVerify", BOOL, 1, "type check default true" },
-        { "NullAdaptiveValue", BOOL, 1, "type check default true" },
-        { "NullAdaptiveDepth", BOOL, 1, "type check default true" },
+        { "NullAdaptiveValue", BOOL, 0, "type check default false" },
+        { "NullAdaptiveDepth", BOOL, 0, "type check default false" },
         { "Wild", STRING, 0, "type combo default standard var standard var losers" },
         { "KingAttackShelter", INT, 256, "type spin default 256 min 0 max 512" },
         { "KingAttackPieces", INT, 256, "type spin default 256 min 0 max 512" }
