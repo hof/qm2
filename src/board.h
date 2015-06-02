@@ -170,6 +170,23 @@ public:
         return bsf(bb[pc]);
     }
 
+    
+    /**
+     * Returns bitboard popupulated with all pieces
+     * @return bitboard
+     */
+    U64 all() {
+        return bb[ALLPIECES];
+    }
+    
+    /**
+     * Returns bitboard popupulated with empty squarse
+     * @return bitboard
+     */
+    U64 empty() {
+        return ~bb[ALLPIECES];
+    }
+    
     /**
      * Returns bitboard populated with all pieces
      * @param us white or black

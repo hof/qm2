@@ -553,7 +553,7 @@ int search_t::extension(move_t * move, int depth, bool pv, int gives_check) {
  * @return amount of plies to reduce
  */
 int search_t::reduction(int depth, int searched_moves, bool is_dangerous) {
-    if (is_dangerous || searched_moves < 3) {
+    if (is_dangerous || searched_moves < 3 || !lmr_enabled) {
         return 0;
     }
     if (searched_moves >= 6) {

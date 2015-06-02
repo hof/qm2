@@ -57,7 +57,7 @@ namespace pieces {
     };
 
     const int8_t ATTACKED[BKING + 1] = {
-        0, 0, -30, -30, -40, -50, 0, 0, -30, -30, -40, -50, 0
+        0, 0, -30, -30, -50, -90, 0, 0, -30, -30, -50, -90, 0
     };
 
     const uint8_t OUTPOST[2][64] = {
@@ -109,6 +109,7 @@ namespace pieces {
         score_t * result = &s->stack->pc_score[0];
         result->clear();
         board_t * brd = &s->brd;
+        
         if (s->stack->mt->phase == 16) {
             return result;
         }
@@ -120,6 +121,8 @@ namespace pieces {
         pawn_table::entry_t * pi = s->stack->pt;
         const int kpos[2] = {brd->get_sq(BKING), brd->get_sq(WKING)};
         const U64 occ = brd->pawns_kings();
+        
+        
 
         for (int pc = WKNIGHT; pc <= BQUEEN; pc++) {
 
@@ -237,6 +240,7 @@ namespace pieces {
 
                 if (brd->is_attacked_by_pawn(sq, !us)) {
                     sc->add(ATTACKED[pc]);
+                    //todo: increase bonus if the piece is also pinned
                     trace("ATTACKED", sq, sc);
                 }
 

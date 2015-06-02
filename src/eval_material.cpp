@@ -131,7 +131,9 @@ namespace material {
             result += (wbishops - bbishops) * VBISHOP;
         }
         if (wrooks != brooks) {
-            result += (wrooks - brooks) * VROOK;
+            const int rook_eval_mg = (wrooks - brooks) * (VROOK - 40);
+            const int rook_eval_eg = (wrooks - brooks) * (VROOK + 40);
+            result += score::interpolate(rook_eval_mg, rook_eval_eg, e->phase);
             result += REDUNDANT_ROOK[wrooks > 1];
             result -= REDUNDANT_ROOK[brooks > 1];
         }
@@ -181,7 +183,7 @@ namespace material {
 
         const bool mating_power_w = wrooks || wqueens || wminors > 2 || (wminors == 2 && wbishops > 0);
         const bool mating_power_b = brooks || bqueens || bminors > 2 || (bminors == 2 && bbishops > 0);
-        
+
         if (mating_power_w) {
             e->flags |= MFLAG_MATING_POWER_W;
         }

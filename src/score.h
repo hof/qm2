@@ -106,6 +106,18 @@ namespace score {
         assert(score::is_valid(score));
         return score >= beta ? LOWERBOUND : (score <= alpha ? UPPERBOUND : EXACT);
     }
+    
+    /**
+     * 
+     * @param mg
+     * @param eg
+     * @param phase
+     * @return 
+     */
+    inline int interpolate(int mg, int eg, int phase) {
+        assert(phase >= 0 && phase <= score::MAX_PHASE);
+        return (mg * (score::MAX_PHASE - phase) + eg * phase) / score::MAX_PHASE;
+    }
 }
 
 struct score_t {
@@ -149,8 +161,7 @@ struct score_t {
     }
 
     short get(short phase) {
-        assert(phase >= 0 && phase <= score::MAX_PHASE);
-        return (mg * (score::MAX_PHASE - phase) + eg * phase) / score::MAX_PHASE;
+        return score::interpolate(mg, eg, phase);
     }
 
     void set(const score_t & s) {
