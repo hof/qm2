@@ -437,9 +437,7 @@ namespace eg {
      */
 
     int kqpskq(search_t * s, const int score, const bool us) {
-        int bonus = s->stack->passer_score[us].eg / 2;
-        bonus = us == WHITE ? bonus : -bonus;
-        return mul256(score, 112 + 16 * s->brd.count(PAWN[us])) + bonus;
+        return mul256(score, 224);
     }
 
     /**
@@ -558,7 +556,6 @@ namespace eg {
         } else if (material::has_mating_power(s, them)) { //win 
             return score + win(us, 8) + corner_king(s, them, 8);
         } else { //win and they can impossibly win
-
             return score + win(us, 4) + corner_king(s, them, 4);
         }
     }
@@ -585,7 +582,6 @@ namespace eg {
         } else if (s->brd.is_eg(KRPKR, us)) {
             return krpkr(s, score, us);
         } else if (s->brd.is_eg(KQPSKQ, us)) {
-
             return kqpskq(s, score, us);
         }
         return score;
@@ -623,9 +619,7 @@ namespace eg {
         if (s->brd.is_eg(OPP_BISHOPS, us)) {
             return opp_bishops(s, score, us);
         } else if (s->brd.is_eg(KQPSKQPS, us)) {
-
-            return mul256(score, 128 + 16 * s->brd.count(PAWN[us]));
-            ;
+            return mul256(score, 200);
         }
         return score;
     }

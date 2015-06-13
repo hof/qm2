@@ -107,6 +107,8 @@ namespace material {
         int bqueens = brd->count(BQUEEN);
         int wminors = wknights + wbishops;
         int bminors = bknights + bbishops;
+        int wmajors = wrooks + 2 * wqueens;
+        int bmajors = brooks + 2 * bqueens;
 
         /*
          * Game phase
@@ -148,7 +150,7 @@ namespace material {
          */
 
         e->flags = 0;
-        bool balance = (wminors == bminors) && (wrooks + 2 * wqueens) == (brooks + 2 * bqueens);
+        bool balance = (wminors == bminors) && (wmajors == bmajors);
         if (!balance) { //material imbalance
             if (result > 400) {
                 e->flags |= MFLAG_MAJOR_IMBALANCE_W;

@@ -31,3 +31,4 @@
 /tests/genPct.exe
 /sublime-project
 /src/version.h
+*.exe
