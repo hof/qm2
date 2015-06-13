@@ -7,7 +7,7 @@ add_subdirectory(tests)
 
 find_package(Git)
 if (GIT_FOUND)
-    execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+    execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
         OUTPUT_VARIABLE REVISION
         OUTPUT_STRIP_TRAILING_WHITESPACE)

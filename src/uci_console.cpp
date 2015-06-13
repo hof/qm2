@@ -1,20 +1,20 @@
 /**
- * Maxima, a chess playing program. 
- * Copyright (C) 1996-2015 Erik van het Hof and Hermen Reitsma 
- * 
+ * Maxima, a chess playing program.
+ * Copyright (C) 1996-2015 Erik van het Hof and Hermen Reitsma
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 3
  * of the License, or (at your option) any later version.
- *  
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *  
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
- *  
+ *
  * File: uci_console.cpp
  * Handling text input from the console following the UCI protocol by Stefan-Meyer Kahlen.
  * See http://wbec-ridderkerk.nl/html/UCIProtocol.html
@@ -235,7 +235,7 @@ namespace uci {
                         while (parser >> token) {
                             value += (" " + token);
                         }
-                        
+
                         //parse option value
                         options::option_t * opt = options::get_option(name.c_str());
                         handled = std::string(opt->key) == name;
@@ -247,9 +247,9 @@ namespace uci {
                         } else if (name == "Wild") {
                             if (value == "losers" || value == "17") {
                                 opt->value = 17;
-                            } 
-                        } 
-                        
+                            }
+                        }
+
                         //handle option
                         if (name == "Hash") {
                             trans_table::set_size(opt->value);
@@ -270,9 +270,9 @@ namespace uci {
     }
 
     /*
-     * Learn can be used to determine if a new evaluation or search 
+     * Learn can be used to determine if a new evaluation or search
      * feature gives better performance, and what is the ideal score
-     * 
+     *
      */
     bool handle_learn() {
         engine::settings()->clear();
@@ -281,7 +281,7 @@ namespace uci {
         engine::learn();
         return true;
     }
-    
+
     /*
      * LMR prints the late move reduction table
      */
@@ -312,7 +312,7 @@ namespace uci {
     }
 
     void send_id() {
-        out("id name Maxima 2.0");
+        out(std::string("id name Maxima ") + std::string(MAXIMA_REVISION));
         out("id author Hermen Reitsma and Erik van het Hof");
     }
 
