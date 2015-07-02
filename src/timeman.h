@@ -71,6 +71,10 @@ public:
     void set_max(const int ms) {
         max = start + ticks(ms);
     }
+    
+    int get_min() {
+        return min;
+    }
 
     bool time_is_up() {
         return clock() >= max;

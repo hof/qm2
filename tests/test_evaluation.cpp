@@ -144,6 +144,9 @@ void testEvaluationSuite() {
 
     //phase 0: all pieces on the board
     testEval(1, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 1, 20); //opening
+    
+    //king attack: material down but better position
+    testEval(20001, "6k1/6r1/pr6/3P1b2/5Pq1/3NR2p/PP1Q3K/5R2 w - - 0 44", 100, 300); 
 }
 
 int main() {
