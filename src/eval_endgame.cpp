@@ -639,7 +639,6 @@ namespace eg {
             case 1: //  pawns ------ vs ----- ------
                 return pawns_vs_king(s, score, us);
             case 2: //  ----- ------ vs pawns ------
-                assert(false);
                 return draw(score);
             case 3: //  pawns ------ vs pawns ------
                 return pawns_vs_pawns(s, score, us);
@@ -652,12 +651,10 @@ namespace eg {
             case 7: // pawns pieces vs pawns ------
                 return pcs_n_pawns_vs_pawns(s, score, us);
             case 8: //  ----- ------ vs ----- pieces
-                assert(false);
                 return draw(score);
             case 9: //  pawns ------ vs ----- pieces
                 return pawns_vs_pcs(s, score, us);
             case 10: // ----- ------ vs pawns pieces
-                assert(false);
                 return draw(score);
             case 11: // pawns ------ vs pawns pieces
                 return pawns_vs_pcs_n_pawns(s, score, us);
