@@ -11,9 +11,16 @@ if (GIT_FOUND)
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
         OUTPUT_VARIABLE REVISION
         OUTPUT_STRIP_TRAILING_WHITESPACE)
-    message(STATUS "Git revision is ${REVISION}")
+    message(STATUS "Git revision: ${REVISION}")
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" rev-parse --abbrev-ref HEAD
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+      OUTPUT_VARIABLE GIT_BRANCH
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+      message(STATUS "Git branch: ${GIT_BRANCH}")
 else()
-    set(REVISION "none")
+    set(REVISION "unknown")
+    set(GIT_BRANCH "unknown")
 endif()
 
 SET(CMAKE_CXX_FLAGS_COVERAGE
