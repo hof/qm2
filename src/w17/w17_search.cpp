@@ -207,7 +207,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
                     trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_int(), score::LOWERBOUND);
                 }
 
-                if (depth > 0 && !move->capture && !move->promotion) {
+                if (depth > 0 && !move->capture && !move->promotion && !move->castle) {
                     update_killers(move);
                     update_history(move);
                     for (int i = 0; i < searched_moves; i++) {
