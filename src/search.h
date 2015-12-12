@@ -106,15 +106,11 @@ public:
     int wild;
     int king_attack_shelter;
     int king_attack_pieces;
-    bool null_adaptive_depth;
-    bool null_adaptive_value;
     bool null_verify;
     bool null_enabled;
     bool beta_pruning;
-    bool pv_extensions;
     bool lmr_enabled;
     bool ffp_enabled;
-    bool lmp_enabled;
 
     search_t(const char * fen, game_t * g = NULL) {
         init(fen, g);
@@ -173,6 +169,16 @@ public:
             return false;
         }
         return BIT(move->ssq) & stack->pt->passers & SIDE[brd.them()];
+    }
+    
+    bool is_advanced_passed_pawn(move_t * move) {
+        if (move->piece == WPAWN && move->tsq >= a6 && is_passed_pawn(move)) {
+            return true;
+        } else if (move->piece == BPAWN && move->tsq <= h3 && is_passed_pawn(move)) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     search_stack_t * get_stack(int ply) {

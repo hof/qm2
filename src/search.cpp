@@ -154,15 +154,11 @@ void search_t::init(const char * fen, game_t * g) {
     book_name = "book.bin";
     king_attack_shelter = options::get_value("KingAttackShelter");
     king_attack_pieces = options::get_value("KingAttackPieces");
-    null_adaptive_depth = options::get_value("NullAdaptiveDepth");
-    null_adaptive_value = options::get_value("NullAdaptiveValue");
     beta_pruning = options::get_value("BetaPruning");
     null_verify = options::get_value("NullVerify");
     null_enabled = options::get_value("NullMove");
     lmr_enabled = options::get_value("LMR");
     ffp_enabled = options::get_value("FutilityPruning");
-    lmp_enabled = options::get_value("LateMovePruning");
-    pv_extensions = options::get_value("PVExtensions");
     ponder_move.clear();
     nodes = 0;
     pruned_nodes = 0;
@@ -528,7 +524,7 @@ void root_t::sort_moves(move_t * best_move) {
 }
 
 /**
- * Determine if the move should be extended, inspired on Senpai 1.0 engine
+ * Move extensions
  * @param move the move
  * @param depth remaining search depth
  * @param pv pv node
@@ -538,17 +534,9 @@ void root_t::sort_moves(move_t * best_move) {
 int search_t::extension(move_t * move, int depth, bool pv, int gives_check) {
     if (gives_check > 1) {
         return 1;
-    } else if (depth <= 4 && gives_check > 0) {
+    } else if (gives_check == 1 && brd.see(move) >= 0) {
         return 1;
-    } else if (depth <= 4 && is_recapture(move)) {
-        return 1;
-    } else if (pv && gives_check > 0 && pv_extensions) {
-        return 1;
-    } else if (pv && is_passed_pawn(move) && pv_extensions) {
-        return 1;
-    } else if (pv && brd.is_gain(move) && pv_extensions) {
-        return 1;
-    } 
+    }
     return 0;
 }
 
@@ -777,7 +765,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
-    const bool do_prune_node = eval >= beta && !in_check && !pv && !score::is_mate(beta);
+    const bool do_prune_node = eval >= beta && !in_check && !pv && !score::is_mate(beta) && brd.has_pieces(brd.us());
 
     // beta pruning
     if (do_prune_node && depth < 4 && beta_pruning) {
@@ -788,17 +776,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     //null move pruning
-    if (do_prune_node && brd.has_pieces(brd.us()) && null_enabled) {
+    if (do_prune_node && null_enabled) {
         int R = 3;
-        if (depth >= 7 && null_adaptive_depth) {
-            R += depth / 7;
-        }
-        if (depth > R && (eval - beta) >= 100 && null_adaptive_value) {
-            R += MIN((eval - beta) / 100, 3);
-        }
         forward();
-        int null_score = depth > R ? -pvs(-beta, -alpha, depth - 1 - R)
-                : -qstatic(-beta + 1, 100);
+        int null_score = -pvs(-beta, -alpha, depth - 1 - R);
         backward();
         if (stop_all) {
             trace(this, NULL, alpha, alpha, beta, depth, "stopped");
@@ -845,7 +826,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
 
-    //set futility pruning delta value, inspired on Senpai engine
+    //set futility pruning delta value
     bool do_ffp = false;
     int delta = score::INVALID;
     if (depth <= 8 && !in_check && !score::is_mate(alpha) && !material::is_eg(this) && ffp_enabled) {
@@ -874,23 +855,14 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Move pruning: skip all futile moves
          */
 
-        const bool is_dangerous = in_check || gives_check || move->capture || move->promotion || move->castle || is_passed_pawn(move);
+        const bool is_dangerous = in_check || gives_check || move->capture || move->promotion || move->castle || is_advanced_passed_pawn(move);
+        
         if (do_ffp && searched_moves > 0 && !is_dangerous) {
             pruned_nodes++;
             continue;
         }
         
         if (do_ffp && searched_moves > 0 && gives_check == 0 && (move->capture || move->promotion) && brd.max_gain(move) + delta <= alpha) {
-            pruned_nodes++;
-            continue;
-        }
-
-        if (do_ffp && searched_moves > 0 && brd.see(move) < 0) {
-            pruned_nodes++;
-            continue;
-        }
-
-        if (!pv && !is_dangerous && depth < 4 && searched_moves >= 4 * depth && !score::is_mate(best) && lmp_enabled) {
             pruned_nodes++;
             continue;
         }
@@ -1103,45 +1075,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         }
     } while ((move = move::next(this, depth)));
     return alpha;
-}
-
-/**
- * Static qsearch, a simplified and fast capture search for estimating the 
- * score based on evaluation and possible captures.
- * @credits Fabien Letouzey, Senpai engine
- * @param beta the upperbound
- * @param delta base value is set to static evaluation score + delta 
- * @return estimated evaluation score, considering captures
- */
-int search_t::qstatic(int beta, int delta) {
-    nodes++;
-    int best = evaluate(this);
-    if (best >= beta) {
-        return best;
-    }
-    int base_val = best + delta;
-    U64 done = 0;
-    stack->tt_move.clear();
-    for (move_t * move = move::first(this, -1); move; move = move::next(this, -1)) {
-        if (BIT(move->tsq) & done) {
-            pruned_nodes++;
-            continue;
-        }
-        done |= BIT(move->tsq);
-        int see = brd.see(move);
-        if (see <= 0) {
-            pruned_nodes++;
-            continue;
-        }
-        int score = base_val + see;
-        if (score > best) {
-            if (score >= beta) {
-                return score;
-            }
-            best = score;
-        }
-    }
-    return best;
 }
 
 /**
