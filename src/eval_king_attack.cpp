@@ -55,10 +55,14 @@ namespace king_attack {
     };
 
     const int16_t KING_SHELTER[24] = {//structural shelter value (pawns & kings)
-        0, 5, 10, 15, 20, 25, 30, 35,
-        40, 50, 60, 70, 80, 90, 95, 100,
-        105, 110, 115, 120, 125, 125, 125, 125
+       -50, -40, -30, -20, -10, 0, 10, 20,
+        30, 45, 60, 75, 90, 105, 115, 120,
+        125, 130, 135, 140, 145, 150, 155, 160
     };
+    
+    const int8_t WEAK_BACKRANK = 2;
+    
+    const int8_t MISSING_FIANCHETTO = 2;
 
     const int16_t KING_SHELTER_MUL[8] = {
         128, 128, 128, 128, 128, 128, 196, 230
@@ -74,7 +78,7 @@ namespace king_attack {
         464, 496, 512, 512, 512, 512, 512, 512
     };
 
-    const int8_t KING_ATTACK_OFFSET = 8; //perfectly castled king -9 units
+    const int8_t KING_ATTACK_OFFSET = 6; //perfectly castled king -6 units
     const int8_t KING_DEFEND_FIANCHETTO[2] = {-1, 1};
     const int8_t KING_DEFEND_BACKRANK[2] = {-1, 1};
 
@@ -92,10 +96,26 @@ namespace king_attack {
         /*
          * 1. Shelter score
          */
+        
+        //pawn shelter units (previously calculated in pawns evaluation)
+        int shelter_units = s->stack->pt->king_attack[us];
 
+        //back rank protection and fianchetto
         board_t * brd = &s->brd;
+        const bool them = !us;
+        const bool backrank_ok = RANK[us][8] & brd->bb[ROOK[them]];
+        const bool fianchetto_ok = up1(brd->bb[KING[them]], them) & (brd->bb[PAWN[them]] | brd->bb[BISHOP[them]]);
+        if (!backrank_ok) {
+            trace("WEAK BACKRANK", !us, WEAK_BACKRANK);
+            shelter_units += WEAK_BACKRANK;
+        }
+        if (!fianchetto_ok) {
+            trace("MISSING FIANCHETTO", !us, MISSING_FIANCHETTO);
+            shelter_units += MISSING_FIANCHETTO;
+        }
+          
         int attack_score = 0;
-        int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + s->stack->pt->king_attack[us]);
+        int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + shelter_units);
         attack_score = KING_SHELTER[shelter_ix];
         trace("SHELTER ATTACK", us, KING_SHELTER[shelter_ix]);
 
@@ -128,10 +148,6 @@ namespace king_attack {
         int defend_pcs = 0;
         int offs[2] = {-6, 6};
 
-        //back rank protection and fianchetto
-        const bool them = !us;
-        const bool backrank_ok = RANK[us][8] & brd->bb[ROOK[them]];
-        const bool fianchetto_ok = up1(brd->bb[KING[them]], them) & (brd->bb[PAWN[them]] | brd->bb[BISHOP[them]]);
         defend_units += KING_DEFEND_BACKRANK[backrank_ok];
         defend_units += KING_DEFEND_FIANCHETTO[fianchetto_ok];
         bool queen_involved = false;
@@ -166,12 +182,16 @@ namespace king_attack {
 
         int pc_attack_score = attack_units * 20 - defend_units * 5;
         pc_attack_score = (s->king_attack_pieces * pc_attack_score) / 256;
-        int pc_ix = attack_pcs + (attack_pcs == 0 && defend_pcs);
         trace("PIECE ATTACK (base) ", us, pc_attack_score);
-        trace("PIECE ATTACK (mul) ", us, (KING_ATTACK_PCS[pc_ix] * pc_attack_score) / 256);
-        attack_score += (KING_ATTACK_PCS[pc_ix] * pc_attack_score) / 256;
+        if (pc_attack_score > 0) { 
+            assert(attack_pcs > 0);
+            trace("PIECE ATTACK (mul) ", us, (KING_ATTACK_PCS[attack_pcs] * pc_attack_score) / 256);
+            attack_score += (KING_ATTACK_PCS[attack_pcs] * pc_attack_score) / 256;
+        } else {
+            attack_score += pc_attack_score;
+        }
         result->set(attack_score, 0);
-        trace("PIECE ATTACK (total) ", us, attack_score);
+        trace("KING ATTACK (total) ", us, attack_score);
         return result;
     }
 

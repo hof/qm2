@@ -54,7 +54,7 @@ namespace uci {
         }
 #ifdef DO_LOG
         std::ofstream myfile;
-        myfile.open("uci.log", std::ios::app);
+        myfile.open("maxima_uci.log", std::ios::app);
         myfile << "< " << str << std::endl;
         myfile.close();
 #endif
@@ -69,7 +69,7 @@ namespace uci {
     bool in(std::string cmd) {
 #ifdef DO_LOG
         std::ofstream myfile;
-        myfile.open("uci.log", std::ios::app);
+        myfile.open("maxima_uci.log", std::ios::app);
         myfile << "> " << cmd << std::endl;
         myfile.close();
 #endif

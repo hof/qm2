@@ -37,12 +37,12 @@
 #ifdef ENABLE_SEARCH_TRACE
 
 void trace(search_t * s, move_t * move, int score, int alpha, int beta, int depth, std::string txt) {
-    const int f_len = 3;
-    const std::string filter[f_len] = {"d7h3", "g2h3", "e8d7"};
+    const int f_len = 0;
+    const std::string filter[f_len] = {}; //{"d7h3", "g2h3", "e8d7"};
     std::string path = "";
     for (int i = 0; i < s->brd.ply; i++) {
         std::string m_str = s->get_stack(i)->current_move.to_string();
-        if (i < f_len && filter[i] != m_str) {
+        if (f_len > 0 && i < f_len && filter[i] != m_str) {
             return;
         }
         path += m_str + " ";
@@ -105,6 +105,52 @@ namespace LMR {
 
     int reduce(int d, int m) {
         return reduction[MIN(d, 31)][MIN(m, 15)];
+    }
+}
+
+namespace prune_stats {
+    const bool enabled = false;
+    U64 total_prunes[MAX_PLY + 1];
+    U64 prune_errors[MAX_PLY + 1][WKING + 1];
+
+    void add_error(int depth, int pc) {
+        if (!enabled) {
+            return;
+        } else if (pc > WKING) {
+            prune_errors[depth][pc - WKING]++;
+        } else {
+            prune_errors[depth][pc]++;
+        }
+        prune_errors[depth][0]++;
+    }
+
+    void init() {
+        if (!enabled) {
+            return;
+        }
+        memset(total_prunes, 0, sizeof (total_prunes));
+        memset(prune_errors, 0, sizeof (prune_errors));
+    }
+
+    void print() {
+        if (!enabled) {
+            return;
+        }
+        uci::out("prune errors: ");
+        for (int d = 0; d < MAX_PLY; d++) {
+            if (total_prunes[d] == 0) {
+                if (d > 8) {
+                    return;
+                }
+                continue;
+            }
+            std::cout << std::setw(3) << d << " ";
+            for (int pc = 0; pc <= WKING; pc++) {
+                double pct = (100.0 * prune_errors[d][pc]) / total_prunes[d];
+                std::cout << "TPNBRQK"[pc] << ": " << prune_errors[d][pc] << "/" << total_prunes[d] << " (" << pct << "%) ";
+            }
+            std::cout << std::endl;
+        }
     }
 }
 
@@ -221,8 +267,10 @@ void search_t::iterative_deepening() {
     const int min_time = game->tm.reserved_min();
     bool timed_search = game->white_time || game->black_time;
     int depth;
+    prune_stats::init();
     for (depth = 1; depth <= game->max_depth; depth++) {
         int score = aspiration(depth, last_score);
+        prune_stats::print();
         if (abort(true)) {
             break;
         }
@@ -554,7 +602,7 @@ int search_t::reduction(int depth, int searched_moves, bool is_dangerous) {
     if (searched_moves >= 6) {
         return depth / 3;
     }
-    return 1; 
+    return 1;
     //return LMR::reduce(depth, searched_moves);
 }
 
@@ -572,7 +620,6 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     int best = -score::INF;
     const bool is_pv = true;
     root.sort_moves(&stack->best_move);
-    //trace_root(alpha, beta, depth);
 
     /*
      * Moves loop
@@ -587,7 +634,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         int extend = extension(move, depth, is_pv, rmove->gives_check);
         int reduce = reduction(depth, i, rmove->is_dangerous);
         int score = 0;
-        
+
         //go forward and search one level deeper
         forward(move, rmove->gives_check);
         if (i == 0) {
@@ -599,6 +646,8 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             }
         }
         backward(move);
+
+        trace(this, move, score, alpha, beta, depth, "pvs_root move result");
 
         //handle results
         rmove->nodes += nodes - nodes_before;
@@ -651,22 +700,6 @@ bool search_t::is_draw() {
         }
     }
     return false;
-}
-
-/**
- * Returns dynamic eval margin based on positional score
- * @return 
- */
-int search_t::eval_mg() {
-    if (stack->in_check) {
-        return 0;
-    }
-    assert(stack->eval_result != score::INVALID);
-    const int phase = stack->mt->phase;
-    return ABS(stack->pc_score[WKING].get(phase))
-            + ABS(stack->passer_score[WHITE].get(phase))
-            + ABS(stack->pc_score[BKING].get(phase))
-            + ABS(stack->passer_score[BLACK].get(phase));
 }
 
 /**
@@ -856,16 +889,21 @@ int search_t::pvs(int alpha, int beta, int depth) {
          */
 
         const bool is_dangerous = in_check || gives_check || move->capture || move->promotion || move->castle || is_advanced_passed_pawn(move);
-        
-        if (do_ffp && searched_moves > 0 && !is_dangerous) {
-            pruned_nodes++;
-            continue;
+
+        bool pruned = false;
+        if (do_ffp && searched_moves > 0) {
+            pruned = !is_dangerous;
+            pruned |= gives_check == 0 && (move->capture || move->promotion) && brd.max_gain(move) + delta <= alpha;
+            if (pruned) {
+                pruned_nodes++;
+                if (prune_stats::enabled) {
+                    prune_stats::total_prunes[depth]++;
+                } else {
+                    continue;
+                }
+            }
         }
-        
-        if (do_ffp && searched_moves > 0 && gives_check == 0 && (move->capture || move->promotion) && brd.max_gain(move) + delta <= alpha) {
-            pruned_nodes++;
-            continue;
-        }
+
 
         /*
          * Move extensions
@@ -901,6 +939,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         if (stop_all) {
             return alpha;
+        } else if (prune_stats::enabled && pruned && score > best) { //prune error
+            prune_stats::add_error(depth, move->piece);
         } else if (score > best) {
             stack->best_move.set(move);
             if (score >= beta) {
@@ -955,6 +995,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
  * @param depth depth (0 or lower)
  * @return score
  */
+
 int search_t::qsearch(int alpha, int beta, int depth) {
 
     assert(depth <= 0);
@@ -1020,7 +1061,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      * Moves loop
      */
 
-    const int fbase = eval + 50;
+    const int delta = 50;
+    const int fbase = eval + delta;
     const bool is_eg = !in_check && material::is_eg(this);
     do {
 
@@ -1041,14 +1083,18 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
         //prune if the capture or promotion can't raise alpha
         bool do_prune = !in_check && !gives_check && !is_eg;
-        if (do_prune && fbase + brd.max_gain(move) <= alpha) {
-            pruned_nodes++;
-            continue;
-        }
-
-        if (do_prune && fbase + brd.see(move) <= alpha) {
-            pruned_nodes++;
-            continue;
+        bool pruned = false;
+        if (do_prune) {
+            pruned = fbase + brd.max_gain(move) <= alpha;
+            pruned |= fbase + brd.see(move) <= alpha;
+            if (pruned) {
+                pruned_nodes++;
+                if (prune_stats::enabled) {
+                    prune_stats::total_prunes[0]++;
+                } else {
+                    continue;
+                }
+            }
         }
 
         /*
@@ -1066,6 +1112,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         if (stop_all) {
             trace(this, NULL, score, alpha, beta, depth, "stop");
             return alpha;
+        } else if (prune_stats::enabled && pruned && score > alpha) {
+            prune_stats::add_error(0, move->piece);
         } else if (score > alpha) {
             stack->best_move.set(move);
             if (score >= beta) {
@@ -1143,20 +1191,4 @@ void search_t::debug_print_search(int alpha, int beta, int depth) {
     std::cout << "nodes: " << nodes << std::endl;
     std::cout << std::endl;
     exit(0);
-}
-
-/**
- * Print debug info on the root search
- */
-void search_t::trace_root(int alpha, int beta, int depth) {
-    std::cout << "\npvs root (alpha, beta, depth) = (" << alpha << ","
-            << beta << ", " << depth << ") " << std::endl;
-    for (int i = 0; i < root.move_count; i++) {
-        root_move_t * rmove = &root.moves[i];
-        std::cout << rmove->move.to_string()
-                << " n: " << rmove->nodes
-                << " h: " << history[rmove->move.piece][rmove->move.tsq]
-                << ";  \n";
-    }
-    std::cout << std::endl;
 }

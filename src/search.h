@@ -144,7 +144,6 @@ public:
     bool is_killer(move_t * const move);
     bool in_searched(move_t * move, int searched_moves);
     void reset_stack();
-    int eval_mg();
     int extension(move_t * move, int depth, bool pv, int gives_check);
     int reduction(int depth, int searched_moves, bool is_dangerous);
 

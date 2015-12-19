@@ -26,10 +26,11 @@
 #include "bits.h"
 
 namespace pawns {
-    
+
 #define __ENABLE_PAWN_EVAL_TRACE
 
 #ifdef ENABLE_PAWN_EVAL_TRACE
+
     void trace(std::string msg, int sq, const score_t & s) {
         if (s.mg == 0 && s.eg == 0) {
             return;
@@ -76,6 +77,7 @@ namespace pawns {
     };
 
     const int8_t SHELTER_OPEN_FILES[4] = {-1, 1, 2, 3};
+    const int8_t PAWN_SHIELD_GAPS[4] = { -1, 1, 3, 5};
     const int8_t SHELTER_OPEN_EDGE_FILE = 1;
     const int8_t SHELTER_CASTLING_KINGSIDE = -3;
     const int8_t SHELTER_CASTLING_QUEENSIDE = -2;
@@ -307,9 +309,20 @@ namespace pawns {
                 trace("KING ATTACK UNITS (OPEN A/H FILE)", kpos[them], SHELTER_OPEN_EDGE_FILE);
             }
 
+            //attack units - shield
+            U64 pawn_shield_gaps = KING_MOVES[kpos[them]] & upward_ranks(RANK(kpos[them]), them) & ~pawns_them;
+#ifdef ENABLE_PAWN_EVAL_TRACE
+            bb_print("pawn shield gaps", pawn_shield_gaps);
+#endif
+            e->king_attack[us] += PAWN_SHIELD_GAPS[popcnt0(pawn_shield_gaps)];
+            trace("KING ATTACK UNITS (pawn shield gaps)", kpos[them], PAWN_SHIELD_GAPS[popcnt0(pawn_shield_gaps)]);
+
             //attack units - mask
             U64 king_attack_mask = (KING_ZONE[kpos[them]] | magic::queen_moves(kpos[them], pawns_all | brd->bb[KING[us]]));
             king_attack_mask &= e->mob[us] & (RANK_3 | RANK_4 | RANK_5 | RANK_6);
+#ifdef ENABLE_PAWN_EVAL_TRACE
+            bb_print("king attack mask", king_attack_mask);
+#endif
             e->king_attack[us] += popcnt0(king_attack_mask);
             trace("KING ATTACK UNITS (mask)", kpos[them], popcnt0(king_attack_mask));
 
@@ -383,6 +396,7 @@ namespace pawns {
             result->add(0, kdist_them_bonus - kdist_us_bonus);
 
             //advancing bonus
+            int advance_bonus = PP_ADVANCE[r];
             for (int r_to = r + 1; r_to <= 6; r_to++) {
                 if (BIT(to) & sd->brd.bb[ALLPIECES]) {
                     break; //the path to promotion is blocked by something
@@ -402,9 +416,10 @@ namespace pawns {
                         break; //passed pawn can't safely advance
                     }
                 }
-                result->add(PP_ADVANCE[r] * (1 + (r_to == r + 1) + (r_to == 6)));
-                trace("PP Advance", sq, PP_ADVANCE[r] * (1 + (r_to == r + 1) + (r_to == 6)));
+                result->add(advance_bonus);
+                trace("PP Advance", sq, advance_bonus);
                 to += step;
+                advance_bonus = advance_bonus / 2;
             }
         }
 

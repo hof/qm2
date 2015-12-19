@@ -46,14 +46,14 @@ namespace pieces {
 #endif
 
     const int8_t MOBILITY[32] = {
-        -40, -20, -10, 0, 5, 10, 15, 20,
-        20, 20, 20, 20, 20, 20, 20, 20,
-        20, 20, 20, 20, 20, 20, 20, 20,
-        20, 20, 20, 20, 20, 20, 20, 20
+       -50,-30, -20, -10, -5, 0,  0,   5,
+         5,  5,  10,  10, 10, 10, 15, 15,
+        15, 15,  15,  15, 15, 15, 15, 15,
+        15, 15,  15,  15, 15, 15, 15, 15
     };
-
+    
     const int8_t ATTACKS[8] = {
-        -5, 5, 10, 15, 20, 20, 20, 20
+        -5, 0, 5, 10, 10, 10, 10, 10
     };
 
     const int8_t ATTACKED[BKING + 1] = {
@@ -66,7 +66,7 @@ namespace pieces {
             0, 5, 5, 5, 5, 5, 5, 0,
             0, 5, 5, 10, 10, 5, 5, 0,
             0, 0, 5, 5, 5, 5, 0, 0,
-            0, 0, 0, 5, 5, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0 //a1..h1
@@ -84,14 +84,14 @@ namespace pieces {
     };
 
     const score_t BLOCKED_CENTER_PAWN[2] = {//them, us
-        S(20, 0), S(-20, 0)
+        S(10, 0), S(-10, 0)
     };
 
-    const int8_t VBISHOPPAIR = 50;
+    const score_t VBISHOPPAIR = S(30, 50);
     const score_t DEFENDED = S(5, 0);
     const score_t ROOK_7TH = S(20, 30);
-    const score_t SEMIOPEN_FILE = S(10, 10);
-    const score_t OPEN_FILE = S(20, 15);
+    const score_t SEMIOPEN_FILE = S(5, 0);
+    const score_t OPEN_FILE = S(15, 5);
     const score_t CLOSED_FILE = S(-5, -5);
     const score_t SUPPORTED_PASSER = S(10, 20);
     const score_t CONNECTED_ROOKS(10, 20);
