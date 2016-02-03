@@ -27,14 +27,11 @@
 
 namespace pawns {
 
-#define __ENABLE_PAWN_EVAL_TRACE
+//#define ENABLE_PAWN_EVAL_TRACE
 
 #ifdef ENABLE_PAWN_EVAL_TRACE
 
     void trace(std::string msg, int sq, const score_t & s) {
-        if (s.mg == 0 && s.eg == 0) {
-            return;
-        }
         if (sq >= 0) {
             std::cout << msg << " " << FILE_SYMBOL(sq) << RANK_SYMBOL(sq) << ": ";
         } else {
@@ -56,8 +53,8 @@ namespace pawns {
     const int KING_ACTIVITY = 5; //endgame score for king attacking or defending pawns
 
     const score_t CANDIDATE[8] = {//rank
-        S(0, 0), S(5, 10), S(5, 10), S(10, 20),
-        S(15, 40), S(30, 65), S(0, 0), S(0, 0)
+        S(0, 0), S(0, 5), S(0, 5), S(0, 10),
+        S(0, 20), S(0, 40), S(0, 0), S(0, 0)
     };
 
     const int DUO[8] = {//or defended, indexed by rank 
@@ -70,19 +67,16 @@ namespace pawns {
         9, 9, 9, 9, 9, 9, 9, 9,
         9, 9, 9, 9, 9, 9, 9, 9,
         6, 6, 7, 8, 8, 7, 6, 6,
-        3, 3, 4, 5, 5, 4, 3, 3,
-        1, 1, 3, 4, 4, 3, 1, 1,
-        0, 0, 1, 3, 3, 1, 0, 0,
-        -1, 0, 1, 2, 2, 1, 0, -1 //a1..h1
+        4, 4, 5, 6, 6, 5, 4, 4,
+        2, 2, 3, 4, 4, 3, 2, 2,
+        1, 1, 2, 3, 3, 2, 1, 1,
+        0, 0, 1, 2, 2, 1, 0, 0 //a1..h1
     };
 
-    const int8_t SHELTER_OPEN_FILES[4] = {-1, 1, 2, 3};
-    const int8_t PAWN_SHIELD_GAPS[4] = { -1, 1, 3, 5};
-    const int8_t SHELTER_OPEN_EDGE_FILE = 1;
-    const int8_t SHELTER_CASTLING_KINGSIDE = -3;
-    const int8_t SHELTER_CASTLING_QUEENSIDE = -2;
-    const int8_t CASTLED_KINGSIDE = -4;
-    const int8_t CASTLED_QUEENSIDE = -3;
+    const int8_t SHELTER_OPEN_FILES[4] = {0, 1, 2, 3};
+    const int8_t PAWN_SHIELD_GAPS[4] = {0, 1, 2, 3};
+
+    int shelter_attack_units(const search_t * s, const int kpos_them, const bool them);
 
     /**
      * Main pawns and kings evaluation function
@@ -260,7 +254,7 @@ namespace pawns {
 
             e->mob[us] = ~(pawns_us | brd->pawn_attacks(them) | brd->bb[KING[us]]);
             e->attack[us] = e->mob[us] & (pawns_them | brd->bb[KING[them]]);
-
+                        
             /*
              * c) King score
              */
@@ -272,59 +266,19 @@ namespace pawns {
             //king attacking pawns
             U64 king_atcks = KING_MOVES[kpos[us]] & e->attack[us];
             pawn_score[us].add(0, popcnt0(king_atcks) * KING_ACTIVITY);
-            trace("KING ATTACK", kpos[us], S(0, popcnt0(king_atcks) * KING_ACTIVITY));
+            trace("KING ACTIVITY", kpos[us], S(0, popcnt0(king_atcks) * KING_ACTIVITY));
 
-            //attack units - king position
-            e->king_attack[us] += SHELTER_KPOS[ISQ(kpos[them], them)];
-            trace("KING ATTACK UNITS (POS)", kpos[them], SHELTER_KPOS[ISQ(kpos[them], them)]);
-
-            //attack units - castling options
-            if (brd->can_castle_ks(them) && brd->good_shelter_ks(them)) {
-                e->king_attack[us] += SHELTER_CASTLING_KINGSIDE;
-                trace("KING ATTACK UNITS (CASTLE KS)", kpos[them], SHELTER_CASTLING_KINGSIDE);
-            } else if (brd->can_castle_qs(them) && brd->good_shelter_qs(them)) {
-                e->king_attack[us] += SHELTER_CASTLING_QUEENSIDE;
-                trace("KING ATTACK UNITS (CASTLE QS)", kpos[them], SHELTER_CASTLING_QUEENSIDE);
-            } else if (!brd->can_castle(them)) {
-                if ((brd->bb[KING[them]] & (FILE_A | FILE_B | FILE_C))
-                        && brd->good_shelter_qs(them)) {
-                    e->king_attack[us] += CASTLED_QUEENSIDE;
-                    trace("KING ATTACK UNITS (CASTLED QS)", kpos[them], CASTLED_QUEENSIDE);
-                } else if ((brd->bb[KING[them]] & (FILE_G | FILE_H))
-                        && brd->good_shelter_ks(them)) {
-                    e->king_attack[us] += CASTLED_KINGSIDE;
-                    trace("KING ATTACK UNITS (CASTLED KS)", kpos[them], CASTLED_KINGSIDE);
-                } else {
-                    e->king_attack[us] -= popcnt0(KING_MOVES[kpos[them]] & pawns_them);
-                    trace("KING ATTACK UNITS (SHELTER PAWNS)", kpos[them], -popcnt0(KING_MOVES[kpos[them]] & pawns_them));
-                }
+            //shelter
+            int sau = shelter_attack_units(s, kpos[them], them);
+            if (sau > 2 && brd->can_castle_ks(them)) {
+                sau = MIN(sau, shelter_attack_units(s, ISQ(g8, them), them) + 2);
             }
-
-            //attack units - (half)open files
-            U64 open_files_king = e->open_files[us] & fill_south(KING_MOVES[kpos[them]]);
-            e->king_attack[us] += SHELTER_OPEN_FILES[popcnt0(open_files_king)];
-            trace("KING ATTACK UNITS (OPEN FILES)", kpos[them], SHELTER_OPEN_FILES[popcnt0(open_files_king)]);
-            if (open_files_king & (FILE_A | FILE_B | FILE_G | FILE_H)) {
-                e->king_attack[us] += SHELTER_OPEN_EDGE_FILE;
-                trace("KING ATTACK UNITS (OPEN A/H FILE)", kpos[them], SHELTER_OPEN_EDGE_FILE);
+            if (sau > 2 && brd->can_castle_qs(them)) {
+                sau = MIN(sau, shelter_attack_units(s, ISQ(c8, them), them) + 2);
             }
-
-            //attack units - shield
-            U64 pawn_shield_gaps = KING_MOVES[kpos[them]] & upward_ranks(RANK(kpos[them]), them) & ~pawns_them;
-#ifdef ENABLE_PAWN_EVAL_TRACE
-            bb_print("pawn shield gaps", pawn_shield_gaps);
-#endif
-            e->king_attack[us] += PAWN_SHIELD_GAPS[popcnt0(pawn_shield_gaps)];
-            trace("KING ATTACK UNITS (pawn shield gaps)", kpos[them], PAWN_SHIELD_GAPS[popcnt0(pawn_shield_gaps)]);
-
-            //attack units - mask
-            U64 king_attack_mask = (KING_ZONE[kpos[them]] | magic::queen_moves(kpos[them], pawns_all | brd->bb[KING[us]]));
-            king_attack_mask &= e->mob[us] & (RANK_3 | RANK_4 | RANK_5 | RANK_6);
-#ifdef ENABLE_PAWN_EVAL_TRACE
-            bb_print("king attack mask", king_attack_mask);
-#endif
-            e->king_attack[us] += popcnt0(king_attack_mask);
-            trace("KING ATTACK UNITS (mask)", kpos[them], popcnt0(king_attack_mask));
+            
+            e->king_attack[us] += sau;
+            trace("KING ATTACK UNITS (shelter)", kpos[them], sau);
 
         }
 
@@ -335,7 +289,6 @@ namespace pawns {
 
         trace("WHITE ATTACKS UNITS (TOTAL)", kpos[BLACK], e->king_attack[WHITE]);
         trace("BLACK ATTACKS UNITS (TOTAL)", kpos[WHITE], e->king_attack[BLACK]);
-
         trace("WHITE PAWN SCORE (TOTAL)", -1, pawn_score[WHITE]);
         trace("BLACK PAWN SCORE (TOTAL)", -1, pawn_score[BLACK]);
 
@@ -347,6 +300,55 @@ namespace pawns {
         e->score.sub(pawn_score[BLACK]);
         e->key = brd->stack->pawn_hash;
         return &e->score;
+    }
+
+    /**
+     * Calculate shelter attack units: the (weighted) amount of weaknesses in 
+     * the pawn shelter protecting their king. This value is used later in the 
+     * king attack evaluation.
+     * @param s search object with search stack
+     * @param kpos_them square location of their king
+     * @param them side
+     * @return amount of attack units, 0 for a perfect shelter to approx 10 or more for no shelter
+     */
+    int shelter_attack_units(const search_t * s, const int kpos_them, const bool them) {
+
+        const bool us = !them;
+
+        const board_t * brd = &s->brd;
+        pawn_table::entry_t * e = s->stack->pt;
+
+        //attack units - king position
+        int units = SHELTER_KPOS[ISQ(kpos_them, them)];
+        trace("KING ATTACK UNITS (POS)", kpos_them, units);
+
+        //attack units - (half)open files
+        U64 open_files_king = e->open_files[!them] & fill_south(KING_MOVES[kpos_them]);
+        units += SHELTER_OPEN_FILES[popcnt0(open_files_king)];
+        trace("KING ATTACK UNITS (OPEN FILES)", kpos_them, SHELTER_OPEN_FILES[popcnt0(open_files_king)]);
+
+        //attack units - shield
+        U64 pawn_shield_gaps = KING_MOVES[kpos_them] & upward_ranks(RANK(kpos_them), them) & ~brd->bb[PAWN[them]];
+#ifdef ENABLE_PAWN_EVAL_TRACE
+        bb_print("pawn shield gaps", pawn_shield_gaps);
+#endif
+        units += PAWN_SHIELD_GAPS[popcnt0(pawn_shield_gaps)];
+        trace("KING ATTACK UNITS (pawn shield gaps)", kpos_them, PAWN_SHIELD_GAPS[popcnt0(pawn_shield_gaps)]);
+
+        //attack units - mask of unsafe lines and squares (also diagonally)
+        U64 king_attack_mask = (KING_ZONE[kpos_them] | magic::queen_moves(kpos_them, (brd->bb[WPAWN] | brd->bb[BPAWN]) | brd->bb[KING[us]]));
+        king_attack_mask &= e->mob[us] & (RANK_3 | RANK_4 | RANK_5 | RANK_6);
+#ifdef ENABLE_PAWN_EVAL_TRACE
+        bb_print("king attack mask", king_attack_mask);
+#endif
+        units += popcnt0(king_attack_mask) / 2;
+        trace("KING ATTACK UNITS (mask)", kpos_them, popcnt0(king_attack_mask) / 2);
+        
+        //@todo: storm pawns (threatening to open a line)
+        
+        trace("KING ATTACK UNITS (total)", kpos_them, units);
+
+        return units;
     }
 
     /**

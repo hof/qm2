@@ -28,10 +28,6 @@
 #ifndef SCORE_H
 #define	SCORE_H
 
-#define KA_ENCODE(p,s) (MIN(p,3)|(MIN(s,3)<<2))
-#define KA_UNITS(k) ((k) & 3)
-#define KD_UNITS(k) ((k) >> 2)
-
 namespace score {
 
     enum constants {

@@ -407,10 +407,11 @@ inline int rank(int sq, bool w) {
  * For debugging
  */
 inline void bb_print(std::string title, U64 bb) {
-    std::cout << title << std::endl;
     for (int sq = 0; sq < 64; sq++) {
         int rsq = FLIP_SQUARE(sq);
-        if (FILE(rsq) == 0) {
+        if (sq == 8) {
+            std::cout << " " << title << std::endl;
+        } else if (FILE(rsq) == 0) {
             std::cout << std::endl;
         }
         if (BIT(rsq) & bb) {

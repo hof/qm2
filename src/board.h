@@ -290,38 +290,6 @@ public:
     }
 
     /**
-     * Determines if shelter on the kingside is intact for castling
-     * @param white side to move
-     * @return true if pawn shelter is ok-ish
-     */
-    bool good_shelter_ks(const bool white) {
-        if (white) {
-            return (matrix[h2] == WPAWN && matrix[g2] == WPAWN)
-                    || (matrix[f2] == WPAWN && matrix[h2] == WPAWN && matrix[g3] == WPAWN)
-                    || (matrix[h3] == WPAWN && matrix[g2] == WPAWN && matrix[f2] == WPAWN);
-        } else {
-            return (matrix[h7] == BPAWN && matrix[g7] == BPAWN)
-                    || (matrix[f7] == BPAWN && matrix[h7] == BPAWN && matrix[g6] == BPAWN)
-                    || (matrix[h6] == BPAWN && matrix[g7] == BPAWN && matrix[f7] == BPAWN);
-        }
-    }
-
-    /**
-     * Determines if shelter on the queenside is intact for castling
-     * @param white side to move
-     * @return true if pawn shelter is ok-ish
-     */
-    bool good_shelter_qs(const bool white) {
-        if (white) {
-            return (matrix[a2] == WPAWN && matrix[b2] == WPAWN && matrix[c2] == WPAWN)
-                    || (matrix[a2] == WPAWN && matrix[b3] == WPAWN && matrix[c2] == WPAWN);
-        } else {
-            return (matrix[a7] == BPAWN && matrix[b7] == BPAWN && matrix[c7] == BPAWN)
-                    || (matrix[a7] == BPAWN && matrix[b6] == BPAWN && matrix[c7] == BPAWN);
-        }
-    }
-
-    /**
      * Test if a side has the bishop pair
      * @param us side to test
      * @return true: side has bishop pair, false: side does not have the bishop pair

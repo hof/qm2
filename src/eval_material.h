@@ -29,7 +29,6 @@ namespace material {
     int eval(search_t * s);
     bool has_mating_power(search_t * s, bool us);
     bool has_imbalance(search_t * s, bool us);
-    bool has_king_attack_force(search_t * s, bool us);
     bool has_major_imbalance(search_t * s);
     bool is_eg(search_t * s);
 }

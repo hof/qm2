@@ -16,7 +16,7 @@
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  *  
  * File: eval_pieces.cpp
- * Piece (kight, bishop, rook, queen) evaluation functions for normal chess
+ * Piece (knight, bishop, rook, queen) evaluation functions for normal chess
  */
 
 #include "eval_pieces.h"
@@ -27,7 +27,7 @@
 
 namespace pieces {
 
-#define __ENABLE_PIECE_EVAL_TRACE
+    //#define ENABLE_PIECE_EVAL_TRACE
 
 #ifdef ENABLE_PIECE_EVAL_TRACE
 
@@ -45,13 +45,20 @@ namespace pieces {
 #define trace(a,b,c) /* notn */
 #endif
 
-    const int8_t MOBILITY[32] = {
-       -50,-30, -20, -10, -5, 0,  0,   5,
-         5,  5,  10,  10, 10, 10, 15, 15,
-        15, 15,  15,  15, 15, 15, 15, 15,
-        15, 15,  15,  15, 15, 15, 15, 15
+    const int8_t ATTACK_WEIGHT[BKING + 1] = {
+        //  x, p, n, b, r, q, k, p, n, b, r, q, k
+        /**/0, 0, 3, 3, 5, 9, 0, 0, 3, 3, 5, 9, 0
     };
+
+    const int8_t ATTACK_WEIGHT_SQUARE = 3;
     
+    const int8_t MOBILITY[32] = {
+        -50, -30, -20, -10, -5, 0, 0, 5,
+        5, 5, 10, 10, 10, 10, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15
+    };
+
     const int8_t ATTACKS[8] = {
         -5, 0, 5, 10, 10, 10, 10, 10
     };
@@ -109,20 +116,21 @@ namespace pieces {
         score_t * result = &s->stack->pc_score[0];
         result->clear();
         board_t * brd = &s->brd;
-        
-        if (s->stack->mt->phase == 16) {
-            return result;
-        }
         const bool equal_pawns = brd->ply > 0
                 && brd->stack->pawn_hash == (brd->stack - 1)->pawn_hash
                 && score::is_valid((s->stack - 1)->eval_result);
         const int prev_pc = equal_pawns ? (s->stack - 1)->current_move.capture : 0;
         const int prev_cap = equal_pawns ? (s->stack - 1)->current_move.piece : 0;
         pawn_table::entry_t * pi = s->stack->pt;
-        const int kpos[2] = {brd->get_sq(BKING), brd->get_sq(WKING)};
         const U64 occ = brd->pawns_kings();
-        
-        
+
+        const int kpos[2] = {brd->get_sq(BKING), brd->get_sq(WKING)};
+        const U64 king_zone[2] = {KING_ZONE[kpos[BLACK]], KING_ZONE[kpos[WHITE]]};
+
+        s->stack->attack[BPAWN] = brd->pawn_attacks(BLACK);
+        s->stack->attack[WPAWN] = brd->pawn_attacks(WHITE);
+        s->stack->attack[BKING] = KING_MOVES[kpos[BLACK]];
+        s->stack->attack[WKING] = KING_MOVES[kpos[WHITE]];
 
         for (int pc = WKNIGHT; pc <= BQUEEN; pc++) {
 
@@ -144,11 +152,12 @@ namespace pieces {
             if (equal_pawns && pc != prev_pc && pc != prev_cap) {
                 s->stack->pc_score[pc] = (s->stack - 1)->pc_score[pc];
                 s->stack->king_attack[pc] = (s->stack - 1)->king_attack[pc];
+                s->stack->attack[pc] = (s->stack - 1)->attack[pc];
+                result->add_us(s->stack->pc_score[pc], pc <= WKING);
                 assert(score::is_valid(s->stack->pc_score[pc].mg));
                 assert(score::is_valid(s->stack->pc_score[pc].eg));
-                assert(s->stack->king_attack[pc] >= 0);
-                assert(s->stack->king_attack[pc] <= KA_ENCODE(3, 3));
-                result->add_us(s->stack->pc_score[pc], pc <= WKING);
+                assert(s->stack->king_attack[pc].mg >= 0);
+                assert(s->stack->king_attack[pc].eg >= 0);
                 continue;
             }
 
@@ -156,8 +165,9 @@ namespace pieces {
              * Calculate evaluation for this piece type
              */
 
-            s->stack->king_attack[pc] = 0;
             s->stack->pc_score[pc].clear();
+            s->stack->king_attack[pc].clear();
+            s->stack->attack[pc] = 0;
 
             if (brd->bb[pc] == 0) {
                 continue;
@@ -167,14 +177,11 @@ namespace pieces {
             score_t * sc = &s->stack->pc_score[pc];
             U64 bb_pc = brd->bb[pc];
             U64 moves;
-            int king_attack_units = 0;
-            int king_defend_units = 0;
 
             do {
                 int sq = pop(bb_pc);
                 bool defended = brd->is_attacked_by_pawn(sq, us);
                 bool is_minor = false;
-                bool king_attack = false;
                 U64 bsq = BIT(sq);
 
                 /*
@@ -212,7 +219,6 @@ namespace pieces {
                 if (pc == WKNIGHT || pc == BKNIGHT) {
                     moves = KNIGHT_MOVES[sq];
                     is_minor = true;
-                    king_attack = moves & KNIGHT_MOVES[kpos[!us]];
                 } else if (pc == WBISHOP || pc == BBISHOP) {
                     moves = magic::bishop_moves(sq, occ);
                     is_minor = true;
@@ -233,6 +239,8 @@ namespace pieces {
                 trace("MOBILITY", sq, sc);
                 sc->add(ATTACKS[popcnt0(safe_moves & pi->attack[us])]);
                 trace("ATTACKS", sq, sc);
+                s->stack->attack[pc] |= moves;
+
 
                 /*
                  * Hanging piece
@@ -252,7 +260,6 @@ namespace pieces {
                     sc->add(TRAPPED_PC * (rank(sq, us) - 3));
                     trace("TRAPPED", sq, sc);
                 }
-
 
                 /*
                  * Minor piece on outpost
@@ -303,11 +310,16 @@ namespace pieces {
                 }
 
                 /*
-                 * King attacks info for later use in king attack evaluation
+                 * King safety info 
                  */
+                
+                if (safe_moves & king_zone[!us]) {
+                    s->stack->king_attack[pc].mg++;
+                    s->stack->king_attack[pc].eg += ATTACK_WEIGHT[pc];
+                    const int attacked_king_squares = popcnt0(safe_moves & s->stack->attack[KING[!us]]);
+                    s->stack->king_attack[pc].eg += ATTACK_WEIGHT_SQUARE * attacked_king_squares;
+                }
 
-                king_attack_units += king_attack || bool(safe_moves & KING_MOVES[kpos[!us]]);
-                king_defend_units += bool(moves & KING_MOVES[kpos[us]]);
 
             } while (bb_pc);
 
@@ -322,10 +334,9 @@ namespace pieces {
             }
 
             /*
-             * Add score and attack info to the totals
+             * Add score to the totals
              */
 
-            s->stack->king_attack[pc] = KA_ENCODE(king_attack_units, king_defend_units);
             result->add_us(sc, us);
         }
         return result;

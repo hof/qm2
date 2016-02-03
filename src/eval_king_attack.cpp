@@ -30,7 +30,7 @@
 
 namespace king_attack {
 
-#define __ENABLE_KING_ATTACK_TRACE
+//#define ENABLE_KING_ATTACK_TRACE
 
 #ifdef ENABLE_KING_ATTACK_TRACE
 
@@ -43,154 +43,131 @@ namespace king_attack {
 #define trace(a,b,c) /* notn */
 #endif
 
-
-    const int8_t KING_ATTACK_UNIT[BKING + 1] = {
-        //  x, p, n, b, r, q, k, p, n, b, r, q, k
-        /**/0, 0, 1, 1, 2, 4, 0, 0, 1, 1, 2, 4, 0
+    const int16_t KING_SHELTER[24] = {//shelter attack value (pawns & kings)
+        -50, -30, -15, -5, 0, 5, 10, 15,
+        20, 25, 30, 35, 40, 45, 50, 55, 
+        60, 65, 70, 75, 80, 85, 90, 95
     };
 
-    const int8_t KING_DEFEND_UNIT[BKING + 1] = {
-        //  x, p, n, b, r, q, k, p, n, b, r, q, k
-        /**/0, 0, 3, 2, 1, 0, 0, 0, 3, 2, 1, 0, 0
+    const int16_t KING_ATTACK[64] = {
+        0, 0, 1, 2, 3, 5, 7, 9, 
+        12, 15, 18, 22, 26, 30, 35, 40, 
+        45, 50, 56, 62, 69, 75, 82, 90, 
+        98, 105, 114, 122, 131, 141, 150, 160, 
+        170, 181, 192, 203, 214, 226, 238, 249, 
+        261, 273, 285, 296, 308, 320, 332, 343, 
+        355, 367, 379, 390, 402, 414, 426, 438, 
+        449, 461, 473, 485, 496, 501, 501, 501
     };
 
-    const int16_t KING_SHELTER[24] = {//structural shelter value (pawns & kings)
-       -50, -40, -30, -20, -10, 0, 10, 20,
-        30, 45, 60, 75, 90, 105, 115, 120,
-        125, 130, 135, 140, 145, 150, 155, 160
-    };
-    
-    const int8_t WEAK_BACKRANK = 2;
-    
-    const int8_t MISSING_FIANCHETTO = 2;
-
-    const int16_t KING_SHELTER_MUL[8] = {
-        128, 128, 128, 128, 128, 128, 196, 230
-    };
-
-    const int16_t KING_ATTACK_PCS[16] = {//multipliers
-        0, 48, 128, 256, 384, 464, 496, 512,
-        512, 512, 512, 512, 512, 512, 512, 512
-    };
-
-    const int16_t KING_ATTACK_UNITS[16] = {//multipliers
-        0, 0, 0, 16, 48, 128, 256, 384,
-        464, 496, 512, 512, 512, 512, 512, 512
-    };
-
-    const int8_t KING_ATTACK_OFFSET = 6; //perfectly castled king -6 units
-    const int8_t KING_DEFEND_FIANCHETTO[2] = {-1, 1};
-    const int8_t KING_DEFEND_BACKRANK[2] = {-1, 1};
+    const uint8_t CLOSED_CENTER_MUL = 180;
+    const int8_t FIANCHETTO_UNIT[2] = {1, 0}; //bad, good fianchetto
+    const int8_t BACKRANK_UNIT[2] = {1, 0}; //bad, good backrank
 
     score_t * eval(search_t * s, bool us) {
 
-        int pc = KING[us];
-        score_t * result = &s->stack->pc_score[pc];
+        /*
+         * 1. Return early if we have no queen or little attack force
+         */
+
+        score_t * result = &s->stack->pc_score[KING[us]];
         result->clear();
+        const board_t * brd = &s->brd;
+
+        if (brd->bb[QUEEN[us]] == 0) {
+            return result;
+        }
 
         const int my_attack_force = s->stack->mt->attack_force[us];
-        if (my_attack_force < 6) { //less than QR
+
+        if (my_attack_force <= 12) {
             return result;
         }
 
         /*
-         * 1. Shelter score
+         * 2. Shelter score
          */
-        
-        //pawn shelter units (previously calculated in pawns evaluation)
+
+        //get the shelter units previously calculated in the pawn eval
         int shelter_units = s->stack->pt->king_attack[us];
 
-        //back rank protection and fianchetto
-        board_t * brd = &s->brd;
+        //add finachetto and weak backrank
         const bool them = !us;
         const bool backrank_ok = RANK[us][8] & brd->bb[ROOK[them]];
-        const bool fianchetto_ok = up1(brd->bb[KING[them]], them) & (brd->bb[PAWN[them]] | brd->bb[BISHOP[them]]);
-        if (!backrank_ok) {
-            trace("WEAK BACKRANK", !us, WEAK_BACKRANK);
-            shelter_units += WEAK_BACKRANK;
-        }
-        if (!fianchetto_ok) {
-            trace("MISSING FIANCHETTO", !us, MISSING_FIANCHETTO);
-            shelter_units += MISSING_FIANCHETTO;
-        }
-          
-        int attack_score = 0;
-        int shelter_ix = range(0, 23, KING_ATTACK_OFFSET + shelter_units);
-        attack_score = KING_SHELTER[shelter_ix];
-        trace("SHELTER ATTACK", us, KING_SHELTER[shelter_ix]);
+        const bool fianchetto_ok = up1(brd->bb[KING[them]], them) & (brd->bb[BISHOP[them]] | brd->bb[PAWN[them]]);
+        shelter_units += FIANCHETTO_UNIT[fianchetto_ok];
+        shelter_units += BACKRANK_UNIT[backrank_ok];
+        
+        trace("SHELTER ATTACK UNITS (fianchetto / backrank)", us, shelter_units);
+        
+        //consider material situation
+        shelter_units += my_attack_force - s->stack->mt->attack_force[!us];
+
+        //convert units to score using the king shelter table
+        int shelter_ix = range(0, 23, shelter_units);
+        int attack_score = KING_SHELTER[shelter_ix];
+        trace("SHELTER ATTACK", us, attack_score);
 
         /*
-         * 2. Reduce the shelter score for some cases:
+         * 3. Adjust the shelter score for some cases:
          */
 
         //closed center
         if ((s->stack->pt->flags & pawn_table::FLAG_CLOSED_CENTER) != 0) {
-            attack_score = attack_score / 2;
+            attack_score = (CLOSED_CENTER_MUL * attack_score) / 256;
             trace("CLOSED CENTER MUL", us, attack_score);
         }
 
-        if (my_attack_force < 8) {
-            attack_score = (KING_SHELTER_MUL[my_attack_force] * attack_score) / 256;
-            trace("PIECE FORCE MUL", us, attack_score);
-        }
-
         //interface parameter adjustment
-        attack_score = (s->king_attack_shelter * attack_score) / 256;
-        trace("SHELTER TOTAL (UI MUL)", us, attack_score);
+        if (s->king_attack_shelter != 256) {
+            attack_score = (s->king_attack_shelter * attack_score) / 256;
+            trace("SHELTER TOTAL (UI MUL)", us, attack_score);
+        }
 
         /*
-         * 3. Calculate the total piece attack score
+         * 4. Calculate the total piece attack score
          */
 
-        int attack_units = 0;
-        int defend_units = 0;
-        int attack_pcs = 0;
-        int defend_pcs = 0;
-        int offs[2] = {-6, 6};
-
-        defend_units += KING_DEFEND_BACKRANK[backrank_ok];
-        defend_units += KING_DEFEND_FIANCHETTO[fianchetto_ok];
-        bool queen_involved = false;
-
+        int attackers = 0;
+        int weight = 0;
+        U64 attacks = s->stack->attack[PAWN[us]] | s->stack->attack[KING[us]];
+        U64 defends = s->stack->attack[PAWN[!us]];
+        
         for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
-            int a = KA_UNITS(s->stack->king_attack[pc]);
-            int d = KD_UNITS(s->stack->king_attack[pc + offs[us]]);
-            if (a) {
-                attack_pcs += a;
-                queen_involved = pc == QUEEN[us];
-                attack_units += a * KING_ATTACK_UNIT[pc];
-            }
-            if (d) {
-                defend_pcs += d;
-                defend_units += d * KING_DEFEND_UNIT[pc];
-            }
+            attackers += s->stack->king_attack[pc].mg;
+            weight += s->stack->king_attack[pc].eg;
+            attacks |= s->stack->attack[pc];
+            defends |= s->stack->attack[pc > 6 ? pc - 6 : pc + 6];
         }
 
-        if (attack_pcs > 1 && queen_involved) {
-            queen_involved = false;
-            U64 queens = brd->bb[QUEEN[us]];
-            assert(queens);
-            while (queens) {
-                int sq = pop(queens);
-                U64 qa = magic::queen_moves(sq, brd->bb[ALLPIECES]) & s->stack->pt->mob[us];
-                queen_involved |= qa & KING_ZONE[brd->get_sq(KING[!us])];
-            }
+        if (attackers == 0) {
+            result->set(attack_score, 0);
+            trace("KING ATTACK (shelter only) ", us, attack_score);
         }
-        if (attack_pcs > 0 && !queen_involved) {
-            attack_pcs -= 1;
-        }
-
-        int pc_attack_score = attack_units * 20 - defend_units * 5;
-        pc_attack_score = (s->king_attack_pieces * pc_attack_score) / 256;
-        trace("PIECE ATTACK (base) ", us, pc_attack_score);
-        if (pc_attack_score > 0) { 
-            assert(attack_pcs > 0);
-            trace("PIECE ATTACK (mul) ", us, (KING_ATTACK_PCS[attack_pcs] * pc_attack_score) / 256);
-            attack_score += (KING_ATTACK_PCS[attack_pcs] * pc_attack_score) / 256;
-        } else {
-            attack_score += pc_attack_score;
-        }
+        
+        //initialize attack units with the shelter score and piece attack weights
+        int units = attack_score / 32; 
+        units += (attackers * weight) / 2;
+        
+        //add units for attacked squares around the king that are not defended
+        const U64 undefended_attacks = s->stack->attack[KING[!us]] & attacks & ~defends;
+        units += popcnt0(undefended_attacks) * 3;
+        
+        //add units for contact checks
+        const U64 safe_queen_contact_checks = undefended_attacks & s->stack->attack[QUEEN[us]]
+            & (attacks ^ s->stack->attack[QUEEN[us]]);
+        
+        units += popcnt0(safe_queen_contact_checks) * 6;
+        const int pc_attack_score = KING_ATTACK[range(0, 63, units)];
+        
+        trace("ATTACKERS", us, attackers);
+        trace("WEIGHT", us, weight);
+        trace("UNITS", us, units);
+        trace("ATTACK (pieces)", us, pc_attack_score);
+        
+        attack_score += pc_attack_score;
         result->set(attack_score, 0);
+         
         trace("KING ATTACK (total) ", us, attack_score);
         return result;
     }

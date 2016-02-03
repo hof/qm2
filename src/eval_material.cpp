@@ -40,6 +40,24 @@ namespace material {
     const short REDUNDANT_KNIGHT[2] = {0, -5};
     const short REDUNDANT_QUEEN[2] = {0, -20};
 
+    const short MINOR_PAWNS_ADJUSTMENT[17] = {
+        -5, -5, -5, -5, -5, -5, -5, -5, -5,
+        0, 0, 5, 5, 5, 5, 5, 5
+    };
+    
+    const short IMBALANCE[9][9] = { 
+       //-4,-3,-2,-1, = +1 +2 +3 +4 minor pieces (white's point of view)
+        { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //-4
+        { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //-3
+        { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //-2
+        { 0, 0, 0, 0, 0, 0, 50, 75, 95 }, //-1
+        { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //major pieces in balance
+        { -95, -75,-50, 0, 0, 0, 0, 0, 0 }, //+1
+        { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //+2
+        { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //+3
+        { 0, 0, 0, 0, 0, 0, 0, 0, 0 }  //+4 major pieces
+    };
+
     enum mflag_t {
         MFLAG_EG = 128,
         MFLAG_MATING_POWER_W = 64,
@@ -95,20 +113,21 @@ namespace material {
          * 2. Calculate material value and store in material hash table
          */
 
-        int wpawns = brd->count(WPAWN);
-        int bpawns = brd->count(BPAWN);
-        int wknights = brd->count(WKNIGHT);
-        int bknights = brd->count(BKNIGHT);
-        int wbishops = brd->count(WBISHOP);
-        int bbishops = brd->count(BBISHOP);
-        int wrooks = brd->count(WROOK);
-        int brooks = brd->count(BROOK);
-        int wqueens = brd->count(WQUEEN);
-        int bqueens = brd->count(BQUEEN);
-        int wminors = wknights + wbishops;
-        int bminors = bknights + bbishops;
-        int wmajors = wrooks + 2 * wqueens;
-        int bmajors = brooks + 2 * bqueens;
+        const int wpawns = brd->count(WPAWN);
+        const int bpawns = brd->count(BPAWN);
+        const int wknights = brd->count(WKNIGHT);
+        const int bknights = brd->count(BKNIGHT);
+        const int wbishops = brd->count(WBISHOP);
+        const int bbishops = brd->count(BBISHOP);
+        const int wrooks = brd->count(WROOK);
+        const int brooks = brd->count(BROOK);
+        const int wqueens = brd->count(WQUEEN);
+        const int bqueens = brd->count(BQUEEN);
+        const int wminors = wknights + wbishops;
+        const int bminors = bknights + bbishops;
+        const int wmajors = wrooks + 2 * wqueens;
+        const int bmajors = brooks + 2 * bqueens;
+        const int minor_pawn_adj = MINOR_PAWNS_ADJUSTMENT[wpawns + bpawns];
 
         /*
          * Game phase
@@ -125,12 +144,12 @@ namespace material {
 
         int result = 0;
         if (wknights != bknights) {
-            result += (wknights - bknights) * VKNIGHT;
+            result += (wknights - bknights) * (VKNIGHT + minor_pawn_adj);
             result += REDUNDANT_KNIGHT[wknights > 1];
             result -= REDUNDANT_KNIGHT[bknights > 1];
         }
         if (wbishops != bbishops) {
-            result += (wbishops - bbishops) * VBISHOP;
+            result += (wbishops - bbishops) * (VBISHOP - minor_pawn_adj) ;
         }
         if (wrooks != brooks) {
             const int rook_eval_mg = (wrooks - brooks) * (VROOK - 40);
@@ -161,6 +180,9 @@ namespace material {
             } else if (result < -100) {
                 e->flags |= MFLAG_MINOR_IMBALANCE_B;
             }
+            int minors_ix = range(0, 8, 4 + wminors - bminors);
+            int majors_ix = range(0, 8, 4 + wmajors - bmajors);
+            result += IMBALANCE[majors_ix][minors_ix];
         }
 
         /*
@@ -173,11 +195,8 @@ namespace material {
          * Attack power 
          */
 
-        e->attack_force[WHITE] = 4 * wqueens + 2 * wrooks + wminors;
-        e->attack_force[BLACK] = 4 * bqueens + 2 * brooks + bminors;
-
-        assert(e->attack_force[WHITE] <= 36);
-        assert(e->attack_force[BLACK] <= 36);
+        e->attack_force[WHITE] = 9 * wqueens + 5 * wrooks + 3 * wminors;
+        e->attack_force[BLACK] = 9 * bqueens + 5 * brooks + 3 * bminors;
 
         /*
          * Mating power flags, endgame flags
