@@ -96,7 +96,7 @@ bool flip_test(int test_num, const char * fen, int divide_steps = MAX_DIVIDE_STE
     global_engine->new_game(brd.to_string());
     global_engine->think();
     global_engine->stop_all();
-    int nodes1 = global_engine->get_total_nodes();
+    //int nodes1 = global_engine->get_total_nodes();
     score1 = global_engine->get_score();
 
     brd.do_flip();
@@ -104,14 +104,14 @@ bool flip_test(int test_num, const char * fen, int divide_steps = MAX_DIVIDE_STE
     global_engine->new_game(brd.to_string());
     global_engine->think();
     global_engine->stop_all();
-    int nodes2 = global_engine->get_total_nodes();
+    //int nodes2 = global_engine->get_total_nodes();
     score2 = global_engine->get_score();
 
-    if (score1 != score2) {
-        std::cout << "\ntesting position " << test_num << ": " << brd.to_string() << std::endl;
-        std::cout << "d1 score difference - dividing position" << std::endl;
-        std::cout << "original: " << fen1 << " score: " << score1 << " nodes: " << nodes1 << std::endl;
-        std::cout << "flipped:  " << fen2 << " score: " << score2 << " nodes: " << nodes2 << std::endl;
+    if (score1 != score2) { //confirm difference with a divide
+        //std::cout << "\ntesting position " << test_num << ": " << brd.to_string() << std::endl;
+        //std::cout << "d1 score difference - dividing position" << std::endl;
+        //std::cout << "original: " << fen1 << " score: " << score1 << " nodes: " << nodes1 << std::endl;
+        //std::cout << "flipped:  " << fen2 << " score: " << score2 << " nodes: " << nodes2 << std::endl;
         flip_divide(test_num, fen, divide_steps);
         flip_divide(test_num, fen2.c_str(), divide_steps);
     }
@@ -120,7 +120,7 @@ bool flip_test(int test_num, const char * fen, int divide_steps = MAX_DIVIDE_STE
 }
 
 void flip_divide(int test_num, const char * fen, int divide_steps) {
-    std::cout << "*** dividing (" << divide_steps << ") " << fen << std::endl;
+    //std::cout << "*** dividing (" << divide_steps << ") " << fen << std::endl;
     search_t * s = new search_t(fen);
     int mc = s->init_root_moves();
     for (int i = 0; i < mc; i++) {
@@ -130,7 +130,7 @@ void flip_divide(int test_num, const char * fen, int divide_steps) {
         flip_test(test_num, fen.c_str(), divide_steps - 1);
         s->backward(&rmove->move);
     }
-    std::cout << "*** end of divide" << std::endl;
+    //std::cout << "*** end of divide" << std::endl;
     delete s;
 }
 
