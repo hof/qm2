@@ -27,7 +27,7 @@
 
 namespace pieces {
 
-    //#define ENABLE_PIECE_EVAL_TRACE
+//#define ENABLE_PIECE_EVAL_TRACE
 
 #ifdef ENABLE_PIECE_EVAL_TRACE
 
@@ -44,13 +44,6 @@ namespace pieces {
 #ifndef ENABLE_PIECE_EVAL_TRACE 
 #define trace(a,b,c) /* notn */
 #endif
-
-    const int8_t ATTACK_WEIGHT[BKING + 1] = {
-        //  x, p, n, b, r, q, k, p, n, b, r, q, k
-        /**/0, 0, 3, 3, 5, 9, 0, 0, 3, 3, 5, 9, 0
-    };
-
-    const int8_t ATTACK_WEIGHT_SQUARE = 3;
     
     const int8_t MOBILITY[32] = {
         -50, -30, -20, -10, -5, 0, 0, 5,
@@ -105,7 +98,7 @@ namespace pieces {
     const U64 PAT_BLOCKED_CENTER = BIT(d3) | BIT(e3) | BIT(d6) | BIT(e6);
     const U64 PAT_BACKRANKS[2] = {RANK_1 | RANK_2, RANK_7 | RANK_8};
     const U64 PAT_TRAPPED[2] = {(RANK_1 | RANK_2 | RANK_3) & EDGE, (RANK_6 | RANK_7 | RANK_8) & EDGE};
-    const int8_t TRAPPED_PC = -35;
+    const int8_t TRAPPED_PC = -25;
 
     /**
      * Piece evaluation routine
@@ -131,6 +124,8 @@ namespace pieces {
         s->stack->attack[WPAWN] = brd->pawn_attacks(WHITE);
         s->stack->attack[BKING] = KING_MOVES[kpos[BLACK]];
         s->stack->attack[WKING] = KING_MOVES[kpos[WHITE]];
+        s->stack->king_attack[WPAWN] = s->stack->attack[WPAWN] & king_zone[BLACK];
+        s->stack->king_attack[BPAWN] = s->stack->attack[BPAWN] & king_zone[WHITE];
 
         for (int pc = WKNIGHT; pc <= BQUEEN; pc++) {
 
@@ -156,8 +151,6 @@ namespace pieces {
                 result->add_us(s->stack->pc_score[pc], pc <= WKING);
                 assert(score::is_valid(s->stack->pc_score[pc].mg));
                 assert(score::is_valid(s->stack->pc_score[pc].eg));
-                assert(s->stack->king_attack[pc].mg >= 0);
-                assert(s->stack->king_attack[pc].eg >= 0);
                 continue;
             }
 
@@ -166,7 +159,7 @@ namespace pieces {
              */
 
             s->stack->pc_score[pc].clear();
-            s->stack->king_attack[pc].clear();
+            s->stack->king_attack[pc] = 0;
             s->stack->attack[pc] = 0;
 
             if (brd->bb[pc] == 0) {
@@ -218,16 +211,26 @@ namespace pieces {
 
                 if (pc == WKNIGHT || pc == BKNIGHT) {
                     moves = KNIGHT_MOVES[sq];
+                    s->stack->king_attack[pc] += bool(moves & (king_zone[!us] | KNIGHT_MOVES[kpos[!us]]));
                     is_minor = true;
                 } else if (pc == WBISHOP || pc == BBISHOP) {
                     moves = magic::bishop_moves(sq, occ);
+                    s->stack->king_attack[pc] += bool(moves & king_zone[!us]);
                     is_minor = true;
                 } else if (pc == WROOK || pc == BROOK) {
                     moves = magic::rook_moves(sq, occ);
+                    s->stack->king_attack[pc] += bool(moves & king_zone[!us]);
                 } else {
                     assert(pc == WQUEEN || pc == BQUEEN);
                     moves = magic::queen_moves(sq, occ);
+                    s->stack->king_attack[pc] += bool(moves & king_zone[!us]);
                 }
+                
+                /*
+                 * King safety info 
+                 */
+                
+                
 
                 /*
                  * Mobility and activity
@@ -308,18 +311,6 @@ namespace pieces {
                         sc->add(ROOK_7TH);
                     }
                 }
-
-                /*
-                 * King safety info 
-                 */
-                
-                if (safe_moves & king_zone[!us]) {
-                    s->stack->king_attack[pc].mg++;
-                    s->stack->king_attack[pc].eg += ATTACK_WEIGHT[pc];
-                    const int attacked_king_squares = popcnt0(safe_moves & s->stack->attack[KING[!us]]);
-                    s->stack->king_attack[pc].eg += ATTACK_WEIGHT_SQUARE * attacked_king_squares;
-                }
-
 
             } while (bb_pc);
 

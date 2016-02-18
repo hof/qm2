@@ -328,7 +328,7 @@ public:
                 || (bb[ROOK[us]] | bb[QUEEN[us]]) & magic::rook_moves(sq, bb[ALLPIECES])
                 || (bb[BISHOP[us]] | bb[QUEEN[us]]) & magic::bishop_moves(sq, bb[ALLPIECES]);
     }
-
+    
     /**
      * Return a bitboard with all attacks to a given square
      * @param sq the square to investigate
@@ -342,7 +342,7 @@ public:
                 | (magic::bishop_moves(sq, bb[ALLPIECES]) & (bb[WBISHOP] | bb[WQUEEN] | bb[BBISHOP] | bb[BQUEEN]))
                 | (magic::rook_moves(sq, bb[ALLPIECES]) & (bb[WROOK] | bb[WQUEEN] | bb[BROOK] | bb[BQUEEN]));
     }
-
+    
     /**
      * Get all pawn attacks for white or black
      * @param white white (true) or black (false)

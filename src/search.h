@@ -80,11 +80,11 @@ struct search_stack_t {
     score_t eval_score;
     score_t pc_score[BKING + 1];
     score_t passer_score[2];
-    score_t king_attack[BKING+1];
     pawn_table::entry_t * pt;
     material_table::entry_t * mt;
     U64 tt_key;
     U64 attack[BKING + 1];
+    uint8_t king_attack[BKING+1];
 };
 
 class search_t {

@@ -106,11 +106,14 @@ namespace eg {
      * @return 0 (false) or the amount of steps
      */
     int most_advanced_pawn_steps(search_t * s, const bool us) {
-        int psq = us == WHITE ? bsr(s->brd.bb[WPAWN]) : bsf(s->brd.bb[BPAWN]);
+        const int psq = us == WHITE ? bsr(s->brd.bb[WPAWN]) : bsf(s->brd.bb[BPAWN]);
         int steps = us == WHITE ? 7 - RANK(psq) : RANK(psq);
-        bool is_passed = s->stack->pt->passers & BIT(psq);
+        steps -= steps == 6;
+        const bool is_passed = s->stack->pt->passers & BIT(psq);
+        const U64 path = fill_up(BIT(psq), us) ^ BIT(psq);
+        const bool is_blocked = path & s->brd.all(us);
         bool utm = s->brd.us() == us;
-        steps += !is_passed + !utm;
+        steps += !is_passed + !utm + is_blocked;
         return steps;
     }
 
@@ -121,14 +124,18 @@ namespace eg {
      * @return 0 (false) or the amount of steps
      */
     int most_advanced_passer_steps(search_t * s, const bool us) {
-        U64 passers = s->stack->pt->passers & s->brd.bb[PAWN[us]];
+        const U64 passers = s->stack->pt->passers & s->brd.bb[PAWN[us]];
         if (passers == 0) {
             return 0;
         }
-        int psq = us == WHITE ? bsr(passers) : bsf(passers);
+        const int psq = us == WHITE ? bsr(passers) : bsf(passers);
         int steps = us == WHITE ? 7 - RANK(psq) : RANK(psq);
+        steps -= steps == 6;
+        const U64 path = fill_up(BIT(psq), us) ^ BIT(psq);
+        const bool is_blocked = path & s->brd.all(us);
         bool utm = s->brd.us() == us;
         steps += !utm;
+        steps += is_blocked;
         return steps;
     }
 
@@ -151,7 +158,7 @@ namespace eg {
         int kpos_us = s->brd.get_sq(KING[us]);
         int result = 0;
         int best = 10;
-        U64 attacks_us = s->brd.pawn_attacks(us) | KING_MOVES[kpos_us];
+        const U64 pawn_attacks_us = s->brd.pawn_attacks(us);
         while (passers && best > 1) {
             int psq = pop(passers);
             int steps_pawn = us == WHITE ? 7 - RANK(psq) : RANK(psq);
@@ -161,21 +168,45 @@ namespace eg {
                 continue;
             }
 
-            //case 1: path is fully defended
-            U64 path = fill_up(BIT(psq), us) ^ BIT(psq);
-            bool unstoppable = (path & attacks_us) == path;
-
-            //case 2: path is free and their king is too far away to stop us
-            if (!unstoppable && (path & s->brd.bb[ALLPIECES]) == 0) {
-                int steps_them = distance(kpos_them, queening_square(psq, us)) - !utm;
-                unstoppable = steps_them > steps_pawn;
+            //if they are blocking the pawn's path to promotion, it can't be unstoppable
+            const U64 path = fill_up(BIT(psq), us) ^ BIT(psq);
+            if (path & s->brd.all(them)) {
+                continue;
             }
 
-            //update best and result score
-            if (unstoppable) {
-                best = steps_pawn;
-                result = best;
+            //adjust steps for pawn on 2nd, blocks and having right to move
+            steps_pawn -= steps_pawn == 6;
+            steps_pawn += popcnt0(path & s->brd.all(us));
+            steps_pawn += !utm;
+
+            U64 king_moves = BIT(kpos_us);
+
+            //if our king is blocking the path, consider moving him out of the way
+            if (utm && (path & BIT(kpos_us))) {
+                const U64 exclude = KING_MOVES[kpos_them] | s->brd.pawn_attacks(them) | s->brd.all(us) | path;
+                king_moves |= KING_MOVES[kpos_us] & ~exclude;
             }
+
+            //loop through king moves, including the option to not move the king
+            do {
+                int king_sq = pop(king_moves);
+
+                //case 1: path is fully defended
+                const U64 attacks_us = pawn_attacks_us | KING_MOVES[king_sq];
+                bool unstoppable = (path & attacks_us) == path;
+
+                //case 2: their king is too far away to stop us
+                if (!unstoppable) {
+                    int steps_them = distance(kpos_them, queening_square(psq, us));
+                    unstoppable = steps_them > steps_pawn;
+                }
+
+                //update best score 
+                if (unstoppable && steps_pawn < best) {
+                    best = steps_pawn;
+                    result = best;
+                }
+            } while (king_moves);
         };
         return result;
     }
@@ -390,8 +421,9 @@ namespace eg {
         }
 
         //KPSK -> case 2: any pawn defending another pawn wins the game
+        steps = most_advanced_passer_steps(s, us);
         if (s->brd.pawn_attacks(us) & s->brd.bb[PAWN[us]]) {
-            return score + win(us, 8);
+            return score + win(us, 8 + steps);
         }
         return score;
     }
@@ -399,8 +431,9 @@ namespace eg {
     /**
      * Evaluate endgames with only kings and pawns (case 3)
      */
-    const uint8_t UNSTOPPABLE_PAWN[8] = {0, 200, 150, 100, 50, 25, 25, 25};
-    const uint8_t BEST_PASSER[8] = {0, 80, 60, 40, 20, 0, 0, 0};
+
+    const uint8_t UNSTOPPABLE_PAWN[9] = {0, 100, 80, 60, 40, 35, 30, 25, 20};
+    const uint8_t BEST_PASSER[9] = {0, 40, 20, 10, 5, 0, 0, 0, 0};
     const int16_t UNSTOPPABLE_BONUS[2] = {-500, 500};
 
     int pawns_vs_pawns(search_t * s, int score, const bool us) {
@@ -410,7 +443,8 @@ namespace eg {
         int up_tm = unstoppable_pawn_steps(s, them);
         int forw_us = most_advanced_pawn_steps(s, us);
         int forw_tm = most_advanced_pawn_steps(s, them);
-        assert(up_us < 8 && up_tm < 8 && up_us >= 0 && up_tm >= 0);
+        assert(up_us <= 8 && up_tm <= 8 && up_us >= 0 && up_tm >= 0);
+        assert(forw_us <= 8 && forw_tm <= 8 && forw_us >= 0 && forw_tm >= 0);
 
         //case 1: unstoppable and at least two tempos sooner to promote
         if (up_us && !up_tm && up_us < forw_tm + 2) {
@@ -425,7 +459,7 @@ namespace eg {
         //case 3: all other cases are fuzzy (?) - just reward unstoppable and most advanced passers
         int pass_us = most_advanced_passer_steps(s, us);
         int pass_tm = most_advanced_passer_steps(s, them);
-        assert(pass_us < 8 && pass_tm < 8 && pass_us >= 0 && pass_tm >= 0);
+        assert(pass_us <= 8 && pass_tm <= 8 && pass_us >= 0 && pass_tm >= 0);
         int bonus = UNSTOPPABLE_PAWN[up_us] - UNSTOPPABLE_PAWN[up_tm];
         bonus += BEST_PASSER[pass_us] - BEST_PASSER[pass_tm];
         score += us == WHITE ? bonus : -bonus;
@@ -437,6 +471,11 @@ namespace eg {
      */
 
     int kqpskq(search_t * s, const int score, const bool us) {
+        /*
+         * Todo: heuristics for typical wins/losses/draw cases in kqpskq endgame
+         */
+
+        //endgame tends to be drawish so lower the score a bit
         return mul256(score, 224);
     }
 
@@ -499,7 +538,7 @@ namespace eg {
         if (is_1(s->brd.bb[BISHOP[us]] && s->brd.has_one_piece(us))) {
             return kbpsk(s, score, us);
         }
-        
+
         //endgame seems very favorable: give some extra bonus
         int bonus = 20;
         if (material::has_mating_power(s, us)) {

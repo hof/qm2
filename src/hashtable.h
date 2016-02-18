@@ -87,11 +87,11 @@ namespace pawn_table {
         U64 mob[2];
         U64 attack[2];
         score_t score; //32
-        int8_t king_attack[2]; //16 (48)
-        uint8_t open_files[2]; //16 (64)
+        int8_t king_attack[2]; //16 
+        uint8_t open_files[2]; //16
         uint8_t flags; //8 
-        uint8_t width[2]; //16 (24)
-        uint8_t count[2]; //16 (40)
+        uint8_t width[2]; //16 
+        uint8_t count[2]; //16 
 
         bool is_open_file(int sq, bool us) {
             return open_files[us] & (1 << FILE(sq));

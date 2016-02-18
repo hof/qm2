@@ -73,8 +73,10 @@ namespace pawns {
         0, 0, 1, 2, 2, 1, 0, 0 //a1..h1
     };
 
-    const int8_t SHELTER_OPEN_FILES[4] = {0, 1, 2, 3};
-    const int8_t PAWN_SHIELD_GAPS[4] = {0, 1, 2, 3};
+    const int8_t SHELTER_OPEN_FILES[4] = {0, 2, 4, 5};
+    const int8_t PAWN_SHIELD_GAPS[6] = {0, 1, 3, 5, 6, 7};
+    const int8_t SIDE_PAWNS[3] = {0, -1, -2};
+    const int8_t STORM_PAWNS[8] = {0, 1, 2, 3, 3, 4, 4, 4};
 
     int shelter_attack_units(const search_t * s, const int kpos_them, const bool them);
 
@@ -254,7 +256,7 @@ namespace pawns {
 
             e->mob[us] = ~(pawns_us | brd->pawn_attacks(them) | brd->bb[KING[us]]);
             e->attack[us] = e->mob[us] & (pawns_them | brd->bb[KING[them]]);
-                        
+
             /*
              * c) King score
              */
@@ -276,7 +278,7 @@ namespace pawns {
             if (sau > 2 && brd->can_castle_qs(them)) {
                 sau = MIN(sau, shelter_attack_units(s, ISQ(c8, them), them) + 2);
             }
-            
+
             e->king_attack[us] += sau;
             trace("KING ATTACK UNITS (shelter)", kpos[them], sau);
 
@@ -335,6 +337,22 @@ namespace pawns {
         units += PAWN_SHIELD_GAPS[popcnt0(pawn_shield_gaps)];
         trace("KING ATTACK UNITS (pawn shield gaps)", kpos_them, PAWN_SHIELD_GAPS[popcnt0(pawn_shield_gaps)]);
 
+        //attack units - pawns beside the king
+        U64 side_pawns = KING_MOVES[kpos_them] & RANKS[RANK(kpos_them)] & brd->bb[PAWN[them]];
+#ifdef ENABLE_PAWN_EVAL_TRACE
+        bb_print("side_pawns", side_pawns);
+#endif
+        units += SIDE_PAWNS[popcnt0(side_pawns)];
+        trace("KING ATTACK UNITS (side pawns)", kpos_them, SIDE_PAWNS[popcnt0(side_pawns)]);
+        
+        //storm pawns
+        U64 storm_pawns = KING_ZONE[kpos_them] &  upward_ranks(RANK(kpos_them), them) & brd->bb[PAWN[us]];
+        #ifdef ENABLE_PAWN_EVAL_TRACE
+        bb_print("storm pawns", storm_pawns);
+#endif
+        units += STORM_PAWNS[popcnt0(storm_pawns)];
+        trace("KING ATTACK UNITS (storm pawns)", kpos_them, STORM_PAWNS[popcnt0(storm_pawns)]);
+
         //attack units - mask of unsafe lines and squares (also diagonally)
         U64 king_attack_mask = (KING_ZONE[kpos_them] | magic::queen_moves(kpos_them, (brd->bb[WPAWN] | brd->bb[BPAWN]) | brd->bb[KING[us]]));
         king_attack_mask &= e->mob[us] & (RANK_3 | RANK_4 | RANK_5 | RANK_6);
@@ -343,9 +361,9 @@ namespace pawns {
 #endif
         units += popcnt0(king_attack_mask) / 2;
         trace("KING ATTACK UNITS (mask)", kpos_them, popcnt0(king_attack_mask) / 2);
-        
+
         //@todo: storm pawns (threatening to open a line)
-        
+
         trace("KING ATTACK UNITS (total)", kpos_them, units);
 
         return units;
