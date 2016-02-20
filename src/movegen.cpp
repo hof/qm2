@@ -216,7 +216,7 @@ namespace move {
         const int pawn_up = PAWN_DIRECTION[us];
         int pc = PAWN[us];
         int ssq;
-        
+
         //pawn moves:
         U64 pieces = board->bb[pc] & ~RANK[us][7];
         while (pieces) {
@@ -233,27 +233,27 @@ namespace move {
                 }
             }
         }
-        
+
         //knight moves:
         pieces = board->bb[++pc];
         while (pieces) {
-            ssq = pop(pieces); 
+            ssq = pop(pieces);
             moves = KNIGHT_MOVES[ssq] & targets;
             while (moves) {
                 (current++)->set(pc, ssq, pop(moves));
             }
         }
-        
+
         //bishop moves:
         pieces = board->bb[++pc];
         while (pieces) {
-            ssq = pop(pieces); 
+            ssq = pop(pieces);
             moves = magic::bishop_moves(ssq, occ) & targets;
             while (moves) {
                 (current++)->set(pc, ssq, pop(moves));
             }
         }
-        
+
         //rook moves:
         pieces = board->bb[++pc];
         while (pieces) {
@@ -263,24 +263,58 @@ namespace move {
                 (current++)->set(pc, ssq, pop(moves));
             }
         }
-        
+
         //queen moves:
         pieces = board->bb[++pc];
         while (pieces) {
-            ssq = pop(pieces); 
+            ssq = pop(pieces);
             moves = magic::queen_moves(ssq, occ) & targets;
             while (moves) {
                 (current++)->set(pc, ssq, pop(moves));
             }
         }
-        
+
         //king moves:
         int kpos = board->get_sq(++pc);
         moves = KING_MOVES[kpos] & targets;
         while (moves) {
             (current++)->set(pc, kpos, pop(moves));
         }
-        
+
         list->last = current;
+    }
+
+    U64 get_moves_bb(board_t * brd, int pc, int sq) {
+        switch (pc) {
+            case EMPTY:
+                return 0;
+            case WPAWN:
+                return PAWN_CAPTURES[WHITE][sq] & ~brd->all(WHITE);
+            case WKNIGHT:
+                return KNIGHT_MOVES[sq] & ~brd->all(WHITE);
+            case WBISHOP:
+                return magic::bishop_moves(sq, brd->all()) & ~brd->all(WHITE);
+            case WROOK:
+                return magic::rook_moves(sq, brd->all()) & ~brd->all(WHITE);
+            case WQUEEN:
+                return magic::queen_moves(sq, brd->all()) & ~brd->all(WHITE);
+            case WKING:
+                return KING_MOVES[sq] & ~brd->all(WHITE);
+            case BPAWN:
+                return PAWN_CAPTURES[BLACK][sq] & ~brd->all(BLACK);
+            case BKNIGHT:
+                return KNIGHT_MOVES[sq] & ~brd->all(BLACK);
+            case BBISHOP:
+                return magic::bishop_moves(sq, brd->all())  & ~brd->all(BLACK);
+            case BROOK:
+                return magic::rook_moves(sq, brd->all()) & ~brd->all(BLACK);
+            case BQUEEN:
+                return magic::queen_moves(sq, brd->all()) & ~brd->all(BLACK);
+            case BKING:
+                return KING_MOVES[sq] & ~brd->all(BLACK);
+            default:
+                assert(false);
+                return 0;
+        }
     }
 }

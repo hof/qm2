@@ -342,7 +342,7 @@ namespace eg {
 
         //Philidor's after advancing the pawn to 6th / 7th rank (endless checks)
         if (dq_tm <= 1 && pr >= 5 && rr_tm <= 1) {
-            return draw(score, 16);
+            return draw(score, 12);
         }
 
         //Work towards building a bridge (Lucena's position)
@@ -356,9 +356,9 @@ namespace eg {
         bonus += kf_us == pf && rf_us == pf;
         bonus += rr_tm != 7;
         bonus += pf > 0 && pf < 7;
+        bonus += 2 * (pr - 6);
         score += bonus * BONUS[us];
-        int steps = 7 - pr - utm;
-        return draw(score, steps);
+        return mul256(score, 196);
     }
 
     /**

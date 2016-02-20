@@ -56,23 +56,31 @@ namespace king_attack {
     };
 
     const int16_t KING_ATTACK[64] = {
-        0, 0, 0, 1, 2, 3, 5, 7, 
-        9, 12, 15, 18, 22, 26, 30, 35, 
-        40, 45, 50, 56, 62, 68, 75, 82, 
-        90, 98, 105, 114, 123, 132, 141, 150, 
-        160, 170, 180, 191, 202, 214, 226, 238, 
-        250, 262, 274, 286, 296, 308, 320, 332, 
-        344, 356, 368, 380, 392, 404, 414, 426, 
+        0, 0, 0, 1, 2, 3, 5, 7,
+        9, 12, 15, 18, 22, 26, 30, 35,
+        40, 45, 50, 56, 62, 68, 75, 82,
+        90, 98, 105, 114, 123, 132, 141, 150,
+        160, 170, 180, 191, 202, 214, 226, 238,
+        250, 262, 274, 286, 296, 308, 320, 332,
+        344, 356, 368, 380, 392, 404, 414, 426,
         438, 450, 462, 472, 482, 490, 495, 500
     };
+
+    const int8_t CONTACT_CHECK_UNITS[BKING + 1] = {//piece
+        // P  N  B  R   Q   K  P  N  B   R   Q  K
+        0, 0, 0, 6, 10, 20, 0, 0, 0, 6, 10, 20, 0
+    };
+
+    const int8_t DISTANCE_CHECK_UNITS[BKING + 1] = {//piece
+        // P  N  B  R  Q   K  P  N  B  R   Q  K
+        0, 0, 3, 2, 5, 10, 0, 0, 3, 2, 5, 10, 0
+    };
+
 
     const uint8_t CLOSED_CENTER_MUL = 180;
     const int8_t FIANCHETTO_UNIT[2] = {1, 0}; //units for bad, good fianchetto
     const int8_t BACKRANK_UNIT[2] = {1, 0}; //units for bad, good backrank
-    const int8_t QUEEN_CONTACT_CHECK = 20; //units
-    const int8_t QUEEN_DISTANT_CHECK = 10; //units
 
-    
     bool verify_defended(search_t * s, int sq, int exclude_sq, bool them) {
         const U64 bsq = BIT(sq);
         const U64 direct_attacks = s->stack->attack[PAWN[them]] | s->stack->attack[KNIGHT[them]];
@@ -87,7 +95,7 @@ namespace king_attack {
         }
         return result;
     }
-    
+
     bool verify_supported(search_t * s, int sq, int exclude_sq, bool us) {
         const U64 bsq = BIT(sq);
         const U64 direct_attacks = s->stack->attack[PAWN[us]] | s->stack->attack[KNIGHT[us]] | s->stack->attack[KING[us]];
@@ -102,7 +110,7 @@ namespace king_attack {
         }
         return result;
     }
-    
+
     score_t * eval(search_t * s, bool us) {
 
         /*
@@ -164,7 +172,7 @@ namespace king_attack {
         /*
          * 4. Calculate the total piece attack score
          */
-        
+
         int attackers_count = 0;
         int attackers_weight = 0;
         U64 attacks = 0;
@@ -181,20 +189,20 @@ namespace king_attack {
             attackers_weight += count * ATTACK_WEIGHT[pc];
             attacks |= s->stack->attack[pc];
         }
-        
+
         //return immediately if no piece is attacking
         if (attackers_count == 0) {
             result->set(sh_attack_score, 0);
             trace("KING ATTACK (total) ", us, result->mg);
             return result;
         }
-        
+
         const int ksq_them = brd->get_sq(KING[them]);
         const U64 king_zone = KING_ZONE[ksq_them];
-        
+
         //include pawn defends
         defends |= s->stack->attack[PAWN[them]];
-        
+
         //include pawn attacks
         if (s->stack->attack[PAWN[us]] & king_zone) {
             attackers_count++;
@@ -207,22 +215,22 @@ namespace king_attack {
             attackers_count++;
             attackers_weight += ATTACK_WEIGHT[KING[us]];
             attacks |= s->stack->attack[KING[us]];
-        } 
+        }
 
         //initialize attack units with the shelter score and piece attack weights
         int units = sh_attack_score / 10;
         trace("PIECE ATTACK (shelter)", us, units);
-        
+
         //include piece attack
         units += (attackers_count * attackers_weight) / 4;
         trace("PIECE ATTACK (count)", us, attackers_count);
         trace("PIECE ATTACK (weight)", us, attackers_weight);
         trace("PIECE ATTACK (piece units)", us, (attackers_count * attackers_weight) / 4);
-        
+
         //include material imbalance
         units += my_attack_force - s->stack->mt->attack_force[!us];
         trace("PIECE ATTACK (imbalance)", us, my_attack_force - s->stack->mt->attack_force[!us]);
-        
+
         //include amount of attacked squares around their king
         const U64 king_area = KING_MOVES[ksq_them];
         const U64 area_attacks = king_area & attacks;
@@ -231,52 +239,57 @@ namespace king_attack {
         units += 2 * popcnt0(undefended_area_attacks);
         trace("PIECE ATTACK (squares)", us, 1 * popcnt0(area_attacks));
         trace("PIECE ATTACK (undefended squares)", us, 2 * popcnt0(undefended_area_attacks));
-        
-        const U64 checks_diag = magic::bishop_moves(ksq_them, brd->all());
-        const U64 checks_hv = magic::rook_moves(ksq_them, brd->all());
-        
-        //include queen checks
-        if (s->stack->attack[QUEEN[us]] & king_area) {
-            U64 queens = brd->bb[QUEEN[us]];
-            while (queens) {
-                int qsq = pop(queens);
-                U64 queen_attacks = magic::queen_moves(qsq, s->brd.all()) & ~s->brd.all(us);
-                U64 contact_checks = queen_attacks & king_area;
+
+        //include checks
+        for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
+            if (s->stack->king_attack[pc] == 0) {
+                continue;
+            }
+            const U64 check_mask = move::get_moves_bb(brd, pc, ksq_them);
+            U64 pieces = brd->bb[pc];
+            while (pieces) {
+                int pc_sq = pop(pieces);
+                U64 pc_attacks = move::get_moves_bb(brd, pc, pc_sq);
+                U64 contact_checks = pc_attacks & king_area;
                 while (contact_checks) {
                     units++;
-                    trace("PIECE ATTACK (queen contact check)", us, 1);
+                    trace("PIECE ATTACK (king area)", us, 1);
                     int attack_sq = pop(contact_checks);
                     const bool defended = BIT(attack_sq) & defends;
-                    if (defended && verify_defended(s, attack_sq, qsq, them)) {
+                    if (defended && verify_defended(s, attack_sq, pc_sq, them)) {
                         continue;
                     }
                     units++;
-                    trace("PIECE ATTACK (undefended queen contact check)", us, 1);
-                    if (verify_supported(s, attack_sq, qsq, us)) {
-                        units += QUEEN_CONTACT_CHECK;
-                        trace("PIECE ATTACK (supported queen contact check)", us, QUEEN_CONTACT_CHECK);
+                    trace("PIECE ATTACK (king area undefended)", us, 1);
+                    if ((BIT(attack_sq) & check_mask) && verify_supported(s, attack_sq, pc_sq, us)) {
+                        units += CONTACT_CHECK_UNITS[pc];
+                        trace("PIECE ATTACK (supported contact check)", us, CONTACT_CHECK_UNITS[pc]);
+                        if (brd->us() == us) {
+                            units += CONTACT_CHECK_UNITS[pc] / 2;
+                            trace("PIECE ATTACK (supported contact check + right to move)", us, CONTACT_CHECK_UNITS[pc]/2);
+                        }
                     }
                 }
-                U64 distance_checks = queen_attacks & (checks_diag | checks_hv) & ~king_area & s->stack->pt->mob[us];
+                U64 distance_checks = pc_attacks & check_mask & ~king_area & s->stack->pt->mob[us];
                 while (distance_checks) {
                     units++;
-                    trace("PIECE ATTACK (queen distant check)", us, 1);
+                    trace("PIECE ATTACK (distance check)", us, 1);
                     int attack_sq = pop(distance_checks);
                     const bool defended = BIT(attack_sq) & defends;
-                    if (defended && verify_defended(s, attack_sq, qsq, them)) {
+                    if (defended && verify_defended(s, attack_sq, pc_sq, them)) {
                         continue;
                     }
-                    units += QUEEN_DISTANT_CHECK;
-                    trace("PIECE ATTACK (undefended queen distant)", us, QUEEN_DISTANT_CHECK);
+                    units += DISTANCE_CHECK_UNITS[pc];
+                    trace("PIECE ATTACK (undefended distance check)", us, DISTANCE_CHECK_UNITS[pc]);
                 }
             }
         }
-              
+
         //convert units to score
         int pc_attack_score = KING_ATTACK[range(0, 63, units)];
         trace("PIECE ATTACK (total units)", us, units);
         trace("PIECE ATTACK (score)", us, pc_attack_score);
-        
+
         //interface parameter adjustment
         if (s->king_attack_pieces != 256) {
             pc_attack_score = (s->king_attack_pieces * pc_attack_score) / 256;

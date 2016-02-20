@@ -53,6 +53,8 @@ namespace move {
     void gen_promotions(board_t * board, list_t * list);
     void gen_castles(board_t * board, list_t * list);
     void gen_captures(board_t * board, list_t * list);
+    
+    U64 get_moves_bb(board_t * board, int pc, int sq);
 }
 
 #endif	/* MOVEGEN_H */

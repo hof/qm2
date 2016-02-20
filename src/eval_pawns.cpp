@@ -378,9 +378,9 @@ namespace pawns {
 
     const uint8_t PP_MG[6] = {5, 5, 15, 35, 70, 130};
     const uint8_t PP_EG[6] = {10, 10, 15, 25, 50, 80};
-    const uint8_t PP_DIST_US[6] = {0, 0, 2, 5, 10, 15};
-    const uint8_t PP_DIST_THEM[6] = {0, 0, 5, 15, 20, 40};
-    const uint8_t PP_ADVANCE[6] = {0, 0, 0, 10, 20, 40};
+    const uint8_t PP_DIST_US[6] = {0, 0, 3, 7, 12, 15};
+    const uint8_t PP_DIST_THEM[6] = {0, 0, 5, 12, 20, 40};
+    const uint8_t PP_ADVANCE[6] = {0, 0, 0, 20, 30, 50};
 
     score_t * eval_passed_pawns(search_t * sd, bool us) {
 
@@ -412,7 +412,6 @@ namespace pawns {
             int kdist_them_bonus = distance(sd->brd.get_sq(KING[them]), to) * PP_DIST_THEM[r];
             trace("PP King Distance (us)", sq, S(distance(sd->brd.get_sq(KING[us]), to), -kdist_us_bonus));
             trace("PP King Distance (them)", sq, S(distance(sd->brd.get_sq(KING[them]), to), kdist_them_bonus));
-            trace("PP King Distance", sq, S(0, kdist_them_bonus - kdist_us_bonus));
             result->add(0, kdist_them_bonus - kdist_us_bonus);
 
             //advancing bonus
@@ -445,9 +444,9 @@ namespace pawns {
 
         if (material::has_imbalance(sd, them)) {
             if (material::has_major_imbalance(sd)) {
-                result->mul256(128);
-            } else {
                 result->mul256(196);
+            } else {
+                result->mul256(232);
             }
         }
         return result;
