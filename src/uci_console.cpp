@@ -22,7 +22,7 @@
 
 #include "uci_console.h"
 
-//#define DO_LOG
+#define DO_LOG
 
 namespace uci {
 
@@ -124,6 +124,11 @@ namespace uci {
     }
 
     bool handle_ucinewgame() {
+
+#ifdef DO_LOG
+        std::remove("maxima_uci.log");
+#endif     
+
         fen = start_fen;
         engine::new_game(fen);
         return true;
