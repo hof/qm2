@@ -200,7 +200,11 @@ namespace uci {
                     move_t move;
                     move.set(&brd, token.c_str());
                     brd.forward(&move);
-                    rep_table::store(brd.stack->fifty_count, brd.stack->tt_key);
+                    if (brd.stack->fifty_count >= 100) {
+                        //it's a draw
+                    } else {
+                        rep_table::store(brd.stack->fifty_count, brd.stack->tt_key);
+                    }
                     if (brd.ply > MAX_PLY - 2) {
                         brd.init(brd.to_string().c_str()); //preventing overflow
                     }

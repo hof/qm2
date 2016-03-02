@@ -64,10 +64,10 @@ public:
         return sysconf(_SC_NPROCESSORS_ONLN);
     }
 
-    void think() {
+    bool think() {
         stop();
         _stop_all = false;
-        this->create(_think, this);
+        return this->create(_think, this);
     }
 
     void learn() {

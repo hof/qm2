@@ -253,6 +253,7 @@ void search_t::go() {
     } else if (init_root_moves() > 0) { //do id search
         iterative_deepening();
     }
+    assert(stack->best_move.piece > 0);
     uci::send_bestmove(stack->best_move, ponder_move);
 }
 
@@ -511,7 +512,11 @@ int search_t::init_root_moves() {
     root.move_count = 0;
     root.moves[0].move.clear();
     root.fifty_count = brd.stack->fifty_count;
-    rep_table::store(brd.stack->fifty_count, brd.stack->tt_key);
+    if (brd.stack->fifty_count < 100) {
+        rep_table::store(brd.stack->fifty_count, brd.stack->tt_key);
+    } else {
+        //it's a draw
+    }
     int tt_move = 0, tt_flags, tt_score;
     trans_table::retrieve(brd.stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
     stack->tt_move.set(tt_move);

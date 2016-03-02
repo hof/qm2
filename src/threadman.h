@@ -34,46 +34,49 @@ public:
     threads_t() {
         _count = 0;
         _stop_all = false;
-        pthread_mutex_init(&this->_mutex, NULL);
-        pthread_spin_init(&this->_spin, 0);
-        pthread_cond_init(&this->_cond, NULL);
+        pthread_mutex_init(&_mutex, NULL);
+        pthread_spin_init(&_spin, 0);
+        pthread_cond_init(&_cond, NULL);
     }
 
     ~threads_t() {
         stop_all();
-        pthread_mutex_destroy(&this->_mutex);
-        pthread_spin_destroy(&this->_spin);
-        pthread_cond_destroy(&this->_cond);
+        pthread_mutex_destroy(&_mutex);
+        pthread_spin_destroy(&_spin);
+        pthread_cond_destroy(&_cond);
     }
 
     int create(void* function_ptr(void *ptr), void* params) {
-        if (this->_count < MAX_THREADS) {
+        if (_count < MAX_THREADS) {
             pthread_t thread = get(_count);
             if (pthread_create(&thread, NULL, function_ptr, params) == 0) {
-                this->_threads[this->_count++] = thread;
+                _threads[_count++] = thread;
+            } else {
+                //todo: some additional attempts to create a pthread
+                return 0;
             }
         }
-        return this->_count;
+        return _count;
     }
 
     void wait_for(int ix) {
-        pthread_t thread = this->get(ix);
-        if (thread && ix < this->_count) {
+        pthread_t thread = get(ix);
+        if (thread && ix < _count) {
             pthread_join(thread, NULL);
         }
     }
 
     void stop_all() {
         this->_stop_all = true;
-        for (int i = 0; i < this->_count; i++) {
+        for (int i = 0; i < _count; i++) {
             this->stop(i);
         }
-        this->_count = 0;
-        this->_stop_all = false;
+        _count = 0;
+        _stop_all = false;
     }
 
     void stop(int ix) {
-        this->wait_for(ix);
+        wait_for(ix);
     }
 
 private:
@@ -105,7 +108,7 @@ private:
     void spin_release() {
         pthread_spin_unlock(&this->_spin);
     }
-     */ 
+     */
 };
 
 
