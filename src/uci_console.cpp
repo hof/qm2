@@ -369,12 +369,15 @@ namespace uci {
     }
 
     void send_bestmove(move_t move, move_t ponder_move) {
+        std::string msg = "bestmove ";
         if (move.piece > 0) {
-            std::string msg = "bestmove " + move.to_string();
+            msg += move.to_string();
             if (ponder_move.piece > 0) {
                 msg += " ponder " + ponder_move.to_string();
             }
-            out(msg);
+        } else { //a null move
+            msg += "0000";
         }
+        out(msg);
     }
 };

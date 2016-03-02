@@ -38,7 +38,7 @@ namespace engine {
     void go() {
         _stopped = false;
         if (!_engine.think()) {
-            uci::in("error - could not create thread");
+            uci::in("error could not create thread");
         }
     }
 

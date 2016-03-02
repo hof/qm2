@@ -253,7 +253,6 @@ void search_t::go() {
     } else if (init_root_moves() > 0) { //do id search
         iterative_deepening();
     }
-    assert(stack->best_move.piece > 0);
     uci::send_bestmove(stack->best_move, ponder_move);
 }
 
