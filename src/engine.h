@@ -39,8 +39,8 @@ private:
     std::string _root_fen;
     U64 _total_nodes;
     bool _target_found;
-    bool _stop_all;
-    bool _ponder;
+    volatile bool _stop_all;
+    volatile bool _ponder;
     move_t _result_move;
     int _result_score;
     

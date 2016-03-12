@@ -27,8 +27,8 @@ using namespace std;
 namespace engine {
 
     engine_t _engine;
-    bool _stopped = false;
-    bool _ponder = false;
+    volatile bool _stopped = false;
+    volatile bool _ponder = false;
 
     void stop() {
         _stopped = true;
