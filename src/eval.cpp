@@ -123,6 +123,6 @@ int evaluate(search_t * s) {
 
     result = (result / GRAIN_SIZE) * GRAIN_SIZE;
     s->stack->eval_result = result;
-    assert(result > -10000 && result < 10000);
+    assert(result > -score::DEEPEST_MATE && result < score::DEEPEST_MATE);
     return result;
 }
