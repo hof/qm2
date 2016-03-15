@@ -47,15 +47,13 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
 
     //adjustment based on opponent's time
     const int delta = my_time - opp_time;
-    if (delta > 0 && my_inc >= opp_inc) {
-        const int min_opp_bonus = MIN(delta, my_time - tot_min);
-        const int max_opp_bonus = MIN(delta, my_time - tot_max);
-        tot_min += min_opp_bonus / 4;
-        tot_max += max_opp_bonus / 2;
-    } else if (delta < 0 && my_inc <= opp_inc && moves_left == 0) {
-        const double factor = (1.0 * my_time) / (1.0 * opp_time + 1.0);
-        tot_min *= MAX(0.5, factor);
-        tot_max *= MAX(0.5, factor);
+    if (delta > 0 && tot_max < delta && my_inc >= opp_inc && opp_time > 0) {
+        tot_min += (32 * delta) / 256;
+        tot_max += (64 * delta) / 256;
+    } else if (delta < 0 && tot_max < -delta && my_inc <= opp_inc && moves_left == 0) {
+        const double factor = MAX(0.5, (1.0 * my_time) / (1.0 * opp_time + 1.0));
+        tot_min *= factor;
+        tot_max *= factor;
     }
 
     //increment bonus
