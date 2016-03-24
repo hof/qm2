@@ -101,11 +101,11 @@ namespace king_attack {
         const U64 direct_attacks = s->stack->attack[PAWN[us]] | s->stack->attack[KNIGHT[us]] | s->stack->attack[KING[us]];
         bool result = bsq & direct_attacks;
         if (!result) {
-            U64 diag = magic::bishop_moves(sq, s->brd.all()) & ~BIT(exclude_sq);
+            U64 diag = magic::bishop_moves(sq, s->brd.all() & ~BIT(exclude_sq)) & ~BIT(exclude_sq);
             result |= diag & (s->brd.bb[BISHOP[us]] | s->brd.bb[QUEEN[us]]);
         }
         if (!result) {
-            U64 hv = magic::rook_moves(sq, s->brd.all()) & ~BIT(exclude_sq);
+            U64 hv = magic::rook_moves(sq, s->brd.all() & ~BIT(exclude_sq)) & ~BIT(exclude_sq);
             result |= hv & (s->brd.bb[ROOK[us]] | s->brd.bb[QUEEN[us]]);
         }
         return result;
@@ -178,7 +178,7 @@ namespace king_attack {
         U64 attacks = 0;
         U64 defends = 0;
 
-        //get the piece attacks (using attack info from eval_pieces)
+        //get the "pseudo" piece attacks (using x-rayed attack info from eval_pieces)
         for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
             defends |= s->stack->attack[pc > 6 ? pc - 6 : pc + 6];
             const int count = s->stack->king_attack[pc];
@@ -204,16 +204,20 @@ namespace king_attack {
         defends |= s->stack->attack[PAWN[them]];
 
         //include pawn attacks
+        
+        int verified_attackers_count = 0;
+        int verified_attackers_weight = 0;
+        
         if (s->stack->attack[PAWN[us]] & king_zone) {
-            attackers_count++;
-            attackers_weight += ATTACK_WEIGHT[PAWN[us]];
+            verified_attackers_count++;
+            verified_attackers_weight += ATTACK_WEIGHT[PAWN[us]];
             attacks |= s->stack->attack[PAWN[us]];
         }
 
         //include king attacks
         if (s->stack->attack[KING[us]] & king_zone) {
-            attackers_count++;
-            attackers_weight += ATTACK_WEIGHT[KING[us]];
+            verified_attackers_count++;
+            verified_attackers_weight += ATTACK_WEIGHT[KING[us]];
             attacks |= s->stack->attack[KING[us]];
         }
 
@@ -221,11 +225,11 @@ namespace king_attack {
         int units = sh_attack_score / 10;
         trace("PIECE ATTACK (shelter)", us, units);
 
-        //include piece attack
-        units += (attackers_count * attackers_weight) / 4;
-        trace("PIECE ATTACK (count)", us, attackers_count);
-        trace("PIECE ATTACK (weight)", us, attackers_weight);
-        trace("PIECE ATTACK (piece units)", us, (attackers_count * attackers_weight) / 4);
+        //include (pseudo) piece attack
+        units += (attackers_count * attackers_weight) / 8;
+        trace("PIECE ATTACK (pseudo count)", us, attackers_count);
+        trace("PIECE ATTACK (pseudo weight)", us, attackers_weight);
+        trace("PIECE ATTACK (pseudo piece units)", us, (attackers_count * attackers_weight) / 8);
 
         //include material imbalance
         units += my_attack_force - s->stack->mt->attack_force[!us];
@@ -240,7 +244,7 @@ namespace king_attack {
         trace("PIECE ATTACK (squares)", us, 1 * popcnt0(area_attacks));
         trace("PIECE ATTACK (undefended squares)", us, 2 * popcnt0(undefended_area_attacks));
 
-        //include checks
+        //verify piece attack info and include piece checks
         for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
             if (s->stack->king_attack[pc] == 0) {
                 continue;
@@ -251,6 +255,10 @@ namespace king_attack {
                 int pc_sq = pop(pieces);
                 U64 pc_attacks = move::get_moves_bb(brd, pc, pc_sq);
                 U64 contact_checks = pc_attacks & king_area;
+                if (pc_attacks & king_zone) {
+                    verified_attackers_count++;
+                    verified_attackers_weight += ATTACK_WEIGHT[pc];
+                }
                 while (contact_checks) {
                     units++;
                     trace("PIECE ATTACK (king area)", us, 1);
@@ -284,6 +292,12 @@ namespace king_attack {
                 }
             }
         }
+        
+        //include (verified) piece attack
+        units += (verified_attackers_count * verified_attackers_weight) / 4;
+        trace("PIECE ATTACK (verified count)", us, verified_attackers_count);
+        trace("PIECE ATTACK (verified weight)", us, verified_attackers_weight);
+        trace("PIECE ATTACK (verified piece units)", us, (verified_attackers_count * verified_attackers_weight) / 4);
 
         //convert units to score
         int pc_attack_score = KING_ATTACK[range(0, 63, units)];
