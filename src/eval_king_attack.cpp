@@ -46,7 +46,7 @@ namespace king_attack {
     const int8_t ATTACK_WEIGHT[BKING + 1] = {
         // P  N  B  R  Q  K  
         0, 1, 3, 3, 5, 9, 2,
-        1, 3, 3, 5, 9, 2
+        /**/1, 3, 3, 5, 9, 2
     };
 
     const int16_t KING_SHELTER[24] = {//shelter attack value (pawns & kings)
@@ -178,7 +178,7 @@ namespace king_attack {
         U64 attacks = 0;
         U64 defends = 0;
 
-        //get the "pseudo" piece attacks (using x-rayed attack info from eval_pieces)
+        //get the piece attacks (using attack info from eval_pieces)
         for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
             defends |= s->stack->attack[pc > 6 ? pc - 6 : pc + 6];
             const int count = s->stack->king_attack[pc];
@@ -186,7 +186,7 @@ namespace king_attack {
                 continue;
             }
             attackers_count += count;
-            attackers_weight += count * ATTACK_WEIGHT[pc];
+            attackers_weight += count * (ATTACK_WEIGHT[pc] / 3);
             attacks |= s->stack->attack[pc];
         }
 
@@ -204,32 +204,21 @@ namespace king_attack {
         defends |= s->stack->attack[PAWN[them]];
 
         //include pawn attacks
-        
-        int verified_attackers_count = 0;
-        int verified_attackers_weight = 0;
-        
         if (s->stack->attack[PAWN[us]] & king_zone) {
-            verified_attackers_count++;
-            verified_attackers_weight += ATTACK_WEIGHT[PAWN[us]];
+            attackers_weight += ATTACK_WEIGHT[PAWN[us]];
             attacks |= s->stack->attack[PAWN[us]];
         }
 
         //include king attacks
         if (s->stack->attack[KING[us]] & king_zone) {
-            verified_attackers_count++;
-            verified_attackers_weight += ATTACK_WEIGHT[KING[us]];
+            attackers_count++;
+            attackers_weight += ATTACK_WEIGHT[KING[us]];
             attacks |= s->stack->attack[KING[us]];
         }
 
         //initialize attack units with the shelter score and piece attack weights
         int units = sh_attack_score / 10;
         trace("PIECE ATTACK (shelter)", us, units);
-
-        //include (pseudo) piece attack
-        units += (attackers_count * attackers_weight) / 8;
-        trace("PIECE ATTACK (pseudo count)", us, attackers_count);
-        trace("PIECE ATTACK (pseudo weight)", us, attackers_weight);
-        trace("PIECE ATTACK (pseudo piece units)", us, (attackers_count * attackers_weight) / 8);
 
         //include material imbalance
         units += my_attack_force - s->stack->mt->attack_force[!us];
@@ -239,10 +228,8 @@ namespace king_attack {
         const U64 king_area = KING_MOVES[ksq_them];
         const U64 area_attacks = king_area & attacks;
         const U64 undefended_area_attacks = area_attacks & ~defends;
-        units += 1 * popcnt0(area_attacks);
-        units += 2 * popcnt0(undefended_area_attacks);
-        trace("PIECE ATTACK (squares)", us, 1 * popcnt0(area_attacks));
-        trace("PIECE ATTACK (undefended squares)", us, 2 * popcnt0(undefended_area_attacks));
+        int area_attack = popcnt0(area_attacks);
+        area_attack += 2 * popcnt0(undefended_area_attacks);
 
         //verify piece attack info and include piece checks
         for (int pc = KNIGHT[us]; pc <= QUEEN[us]; pc++) {
@@ -256,25 +243,22 @@ namespace king_attack {
                 U64 pc_attacks = move::get_moves_bb(brd, pc, pc_sq);
                 U64 contact_checks = pc_attacks & king_area;
                 if (pc_attacks & king_zone) {
-                    verified_attackers_count++;
-                    verified_attackers_weight += ATTACK_WEIGHT[pc];
+                    attackers_weight += (2 * ATTACK_WEIGHT[pc]) / 3;
                 }
                 while (contact_checks) {
-                    units++;
-                    trace("PIECE ATTACK (king area)", us, 1);
+                    area_attack++;
                     int attack_sq = pop(contact_checks);
                     const bool defended = BIT(attack_sq) & defends;
                     if (defended && verify_defended(s, attack_sq, pc_sq, them)) {
                         continue;
                     }
-                    units++;
-                    trace("PIECE ATTACK (king area undefended)", us, 1);
+                    area_attack++;
                     if ((BIT(attack_sq) & check_mask) && verify_supported(s, attack_sq, pc_sq, us)) {
                         units += CONTACT_CHECK_UNITS[pc];
                         trace("PIECE ATTACK (supported contact check)", us, CONTACT_CHECK_UNITS[pc]);
                         if (brd->us() == us) {
                             units += CONTACT_CHECK_UNITS[pc] / 2;
-                            trace("PIECE ATTACK (supported contact check + right to move)", us, CONTACT_CHECK_UNITS[pc]/2);
+                            trace("PIECE ATTACK (supported contact check + right to move)", us, CONTACT_CHECK_UNITS[pc] / 2);
                         }
                     }
                 }
@@ -292,12 +276,16 @@ namespace king_attack {
                 }
             }
         }
+
+        //include piece attack
+        units += (attackers_count * attackers_weight) / 4;
+        trace("PIECE ATTACK (count)", us, attackers_count);
+        trace("PIECE ATTACK (weight)", us, attackers_weight);
+        trace("PIECE ATTACK (piece units)", us, (attackers_count * attackers_weight) / 4);
         
-        //include (verified) piece attack
-        units += (verified_attackers_count * verified_attackers_weight) / 4;
-        trace("PIECE ATTACK (verified count)", us, verified_attackers_count);
-        trace("PIECE ATTACK (verified weight)", us, verified_attackers_weight);
-        trace("PIECE ATTACK (verified piece units)", us, (verified_attackers_count * verified_attackers_weight) / 4);
+        //include area (square) attack
+        units += area_attack;
+        trace("PIECE ATTACK (squares)", us, area_attack);
 
         //convert units to score
         int pc_attack_score = KING_ATTACK[range(0, 63, units)];
