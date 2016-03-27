@@ -121,6 +121,7 @@ public:
     };
     void init(const char * fen, game_t * g);
     void go();
+    void book_calc();
     void iterative_deepening();
     int aspiration(int depth, int last_score);
     bool book_lookup();

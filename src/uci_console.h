@@ -38,6 +38,8 @@
 namespace uci {
     typedef std::istringstream input_parser_t;
     
+    std::string itoa(int64_t number);
+    
     bool in(std::string cmd);
     void out(std::string str);
     
@@ -55,6 +57,7 @@ namespace uci {
     bool handle_eval(input_parser_t &parser);
     bool handle_lmr();
     bool handle_learn();
+    bool handle_book(input_parser_t &parser);
     
     void send_id();
     void send_options();

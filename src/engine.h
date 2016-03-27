@@ -46,6 +46,7 @@ private:
     
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
+    static void * _book_calc(void * engineObjPrt);
     
     void _create_start_positions(search_t * root, book_t * book, std::string * pos, int &x, const int max);
 
@@ -73,6 +74,11 @@ public:
     void learn() {
         _stop_all = false;
         this->create(_learn, this);
+    }
+    
+    void book_calc() {
+        _stop_all = false;
+        this->create(_book_calc, this);
     }
     
     void set_ponder(bool do_ponder) {
@@ -126,6 +132,7 @@ namespace engine {
     void go();
     void analyse();
     void learn();
+    void book_calc();
     void print_lmr();
     void new_game(std::string fen);
     void set_position(std::string fen);

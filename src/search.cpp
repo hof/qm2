@@ -257,6 +257,28 @@ void search_t::go() {
 }
 
 /**
+ * Get a score for every legal move
+ */
+void search_t::book_calc() {
+    const int count = init_root_moves();
+    uci::out("book_calc start depth " + uci::itoa(game->max_depth));
+    for (int i = 0; i < count; i++) {
+        root_move_t * rmove = &root.moves[i];
+        move_t * move = &rmove->move;
+        forward(move, rmove->gives_check);
+        int score = 0;
+        U64 nodes_before = nodes;
+        for (int depth = 1; depth <= game->max_depth; depth++) {
+            score = -pvs(-score::INF, score::INF, depth - 1);
+        }
+        backward(move);
+        uci::out("book_calc move " + move->to_string() + " score " + uci::itoa(score) + " nodes " +  uci::itoa(nodes - nodes_before));
+    }
+    uci::out("book_calc stop");
+}
+
+
+/**
  * Iterative deepening - call aspiration search iterating over the depth. 
  * For timed searched, the function decides if a new iteration should be started 
  * or not.

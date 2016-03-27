@@ -106,6 +106,8 @@ namespace uci {
                 result = handle_learn();
             } else if (token == "lmr") {
                 result = handle_lmr();
+            } else if (token == "book") {
+                result = handle_book(parser);
             }
         }
         return result;
@@ -320,6 +322,22 @@ namespace uci {
         return true;
     }
 
+    /*
+     * Book handles commands for book making / learning
+     */
+    bool handle_book(input_parser_t & parser) {
+        engine::settings()->clear();
+        engine::set_ponder(false);
+        engine::new_game(fen);
+        std::string token;
+        while (parser >> token) {
+            if (token == "calc") {
+                engine::book_calc();
+            }
+        }
+        return true;
+    }
+    
     void send_id() {
         out(std::string("id name Maxima ") + std::string(MAXIMA_REVISION));
         out("id author Hermen Reitsma and Erik van het Hof");

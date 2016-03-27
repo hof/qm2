@@ -51,7 +51,12 @@ namespace engine {
         _stopped = false;
         _engine.learn();
     }
-    
+
+    void book_calc() {
+        _stopped = false;
+        _engine.book_calc();
+    }
+
     void print_lmr() {
         LMR::init();
         LMR::print();
@@ -243,6 +248,37 @@ void engine_t::analyse() {
     print_row("Total", s->stack->eval_result);
 
     delete s;
+}
+
+/**
+ * Thread function for searching and finding plausible book moves in a chess position
+ * @param engineObjPtr pointer to the (parent) engine object
+ * @return NULL
+ */
+void * engine_t::_book_calc(void * engine_p) {
+
+    //initialize
+    engine_t * engine = (engine_t*) engine_p;
+    search_t * s;
+    if (options::get_value("Wild") == 17) {
+        s = new w17_search_t(engine->_root_fen.c_str(), engine->settings());
+        engine->settings()->max_depth = 6 + 2 * popcnt(s->brd.all(s->brd.us()));
+    } else {
+        s = new search_t(engine->_root_fen.c_str(), engine->settings());
+        engine->settings()->max_depth = 36 - popcnt0(s->brd.bb[WKNIGHT] | s->brd.bb[BKNIGHT] 
+            | s->brd.bb[WBISHOP] | s->brd.bb[BBISHOP] 
+            | s->brd.bb[WROOK] | s->brd.bb[BROOK])
+                - 2 * popcnt0(s->brd.bb[WQUEEN] | s->brd.bb[BQUEEN]);
+    }
+
+    //get book moves
+    s->book_calc();
+
+    //copy search results and clean up
+    engine->copy_results(s);
+    delete s;
+    pthread_exit(NULL);
+    return NULL;
 }
 
 /**
