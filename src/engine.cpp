@@ -265,10 +265,7 @@ void * engine_t::_book_calc(void * engine_p) {
         engine->settings()->max_depth = 6 + 2 * popcnt(s->brd.all(s->brd.us()));
     } else {
         s = new search_t(engine->_root_fen.c_str(), engine->settings());
-        engine->settings()->max_depth = 36 - popcnt0(s->brd.bb[WKNIGHT] | s->brd.bb[BKNIGHT] 
-            | s->brd.bb[WBISHOP] | s->brd.bb[BBISHOP] 
-            | s->brd.bb[WROOK] | s->brd.bb[BROOK])
-                - 2 * popcnt0(s->brd.bb[WQUEEN] | s->brd.bb[BQUEEN]);
+        engine->settings()->max_depth = 20;
     }
 
     //get book moves
