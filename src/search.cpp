@@ -261,7 +261,8 @@ void search_t::go() {
  */
 void search_t::book_calc() {
     const int count = init_root_moves();
-    uci::out("book_calc start depth " + uci::itoa(game->max_depth));
+    std::string fen = brd.to_string();
+    uci::out("book_calc start");
     for (int i = 0; i < count; i++) {
         root_move_t * rmove = &root.moves[i];
         move_t * move = &rmove->move;
@@ -272,9 +273,11 @@ void search_t::book_calc() {
             score = -pvs(-score::INF, score::INF, depth - 1);
         }
         backward(move);
-        uci::out("book_calc move " + move->to_string() + " score " + uci::itoa(score) + " nodes " +  uci::itoa(nodes - nodes_before));
+        uci::out("book_calc fen " + fen + " move " + move->to_string() + " depth " 
+            + uci::itoa(game->max_depth) + " score " + uci::itoa(score) + " nodes " 
+            +  uci::itoa(nodes - nodes_before) + " variant " + uci::itoa(wild));
     }
-    uci::out("book_calc stop");
+    uci::out("book_calc ready");
 }
 
 
