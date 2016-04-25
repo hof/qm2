@@ -205,6 +205,7 @@ void search_t::init(const char * fen, game_t * g) {
     null_enabled = options::get_value("NullMove");
     lmr_enabled = options::get_value("LMR");
     ffp_enabled = options::get_value("FutilityPruning");
+    draw_contempt = options::get_value("DrawContempt");
     ponder_move.clear();
     nodes = 0;
     pruned_nodes = 0;
@@ -212,6 +213,7 @@ void search_t::init(const char * fen, game_t * g) {
     next_poll = 0;
     sel_depth = 0;
     root_stack = stack = &_stack[0];
+    root_wtm = brd.stack->wtm;
     result_score = 0;
     memset(_stack, 0, sizeof (_stack));
     memset(history, 0, sizeof (history));

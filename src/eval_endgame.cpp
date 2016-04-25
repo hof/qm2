@@ -432,7 +432,7 @@ namespace eg {
      * Evaluate endgames with only kings and pawns (case 3)
      */
 
-    const uint8_t UNSTOPPABLE_PAWN[9] = {0, 100, 80, 60, 40, 35, 30, 25, 20};
+    const uint8_t UNSTOPPABLE_PAWN[9] = {0, 130, 100, 75, 55, 40, 30, 25, 20};
     const uint8_t BEST_PASSER[9] = {0, 40, 20, 10, 5, 0, 0, 0, 0};
     const int16_t UNSTOPPABLE_BONUS[2] = {-500, 500};
 
@@ -447,12 +447,12 @@ namespace eg {
         assert(forw_us <= 8 && forw_tm <= 8 && forw_us >= 0 && forw_tm >= 0);
 
         //case 1: unstoppable and at least two tempos sooner to promote
-        if (up_us && !up_tm && up_us < forw_tm + 2) {
+        if (up_us && !up_tm && up_us + 1 < forw_tm) {
             return score + UNSTOPPABLE_BONUS[us];
         }
 
         //case 2: reversed case 1 (they promote much sooner)
-        if (up_tm && !up_us && up_tm < forw_us + 2) {
+        if (up_tm && !up_us && up_tm + 1 < forw_us) {
             return score - UNSTOPPABLE_BONUS[us];
         }
 

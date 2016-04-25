@@ -38,6 +38,7 @@ namespace options {
         { "FutilityPruning", BOOL, 1, "type check default true" },
         { "NullVerify", BOOL, 1, "type check default true" },
         { "Wild", STRING, 0, "type combo default standard var standard var losers" },
+        { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100" },
         { "KingAttackShelter", INT, 256, "type spin default 256 min 0 max 512" },
         { "KingAttackPieces", INT, 256, "type spin default 256 min 0 max 512" }
     };

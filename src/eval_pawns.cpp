@@ -380,7 +380,7 @@ namespace pawns {
     const uint8_t PP_EG[6] = {10, 10, 15, 25, 50, 80};
     const uint8_t PP_DIST_US[6] = {0, 0, 3, 7, 12, 15};
     const uint8_t PP_DIST_THEM[6] = {0, 0, 5, 12, 20, 40};
-    const uint8_t PP_ADVANCE[6] = {0, 0, 0, 20, 30, 50};
+    const uint8_t PP_ADVANCE[6] = {0, 0, 0, 20, 50, 120};
 
     score_t * eval_passed_pawns(search_t * sd, bool us) {
 

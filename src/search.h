@@ -104,9 +104,11 @@ public:
     int history[BKING + 1][64];
     move_t ponder_move;
     std::string book_name;
+    bool root_wtm;
     int wild;
     int king_attack_shelter;
     int king_attack_pieces;
+    int draw_contempt;
     bool null_verify;
     bool null_enabled;
     bool beta_pruning;
@@ -150,7 +152,7 @@ public:
     int reduction(int depth, int searched_moves, bool is_dangerous);
 
     int draw_score() {
-        return 0;
+        return brd.stack->wtm == root_wtm? draw_contempt: - draw_contempt;
     }
 
     bool is_recapture(move_t * move) {
