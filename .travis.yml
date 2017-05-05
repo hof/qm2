@@ -1,0 +1,9 @@
+language: cpp
+
+compiler:
+    - g++
+    - clang
+
+script:
+    - cmake -H. -B_builds
+    - cmake --build _builds
