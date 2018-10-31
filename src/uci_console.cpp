@@ -104,8 +104,6 @@ namespace uci {
                 result = handle_eval(parser);
             } else if (token == "learn") {
                 result = handle_learn();
-            } else if (token == "lmr") {
-                result = handle_lmr();
             } else if (token == "book") {
                 result = handle_book(parser);
             }
@@ -293,13 +291,6 @@ namespace uci {
         return true;
     }
 
-    /*
-     * LMR prints the late move reduction table
-     */
-    bool handle_lmr() {
-        engine::print_lmr();
-        return true;
-    }
 
     /*
      * Eval prints the evaluation result on the current position

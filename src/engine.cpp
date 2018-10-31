@@ -57,11 +57,6 @@ namespace engine {
         _engine.book_calc();
     }
 
-    void print_lmr() {
-        LMR::init();
-        LMR::print();
-    }
-
     void new_game(std::string fen) {
         _engine.new_game(fen);
     }

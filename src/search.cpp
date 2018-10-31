@@ -32,128 +32,6 @@
 #include "timeman.h"
 #include "eval_material.h"
 
-#define __ENABLE_SEARCH_TRACE
-
-#ifdef ENABLE_SEARCH_TRACE
-
-void trace(search_t * s, move_t * move, int score, int alpha, int beta, int depth, std::string txt) {
-    const int f_len = 0;
-    const std::string filter[f_len] = {}; //{"d7h3", "g2h3", "e8d7"};
-    std::string path = "";
-    for (int i = 0; i < s->brd.ply; i++) {
-        std::string m_str = s->get_stack(i)->current_move.to_string();
-        if (f_len > 0 && i < f_len && filter[i] != m_str) {
-            return;
-        }
-        path += m_str + " ";
-    }
-    std::cout << path;
-    if (move) {
-        std::cout << move->to_string() << " ";
-    }
-    std::cout << "[d" << depth << " ";
-    std::cout << score << " (" << alpha << "," << beta << ")] " << txt << std::endl;
-}
-#endif
-
-#ifndef ENABLE_SEARCH_TRACE 
-#define trace(s,m,e,a,b,d,t) /* notn */
-#endif
-
-namespace LMR {
-
-    const double cutoff_pct[16] = {
-        0.8835, 0.0618, 0.0221, 0.0101, 0.0051, 0.0028, 0.0018, 0.0011,
-        0.0008, 0.0007, 0.0007, 0.0007, 0.0007, 0.0007, 0.0007, 0.0006
-    };
-
-    uint8_t reduction[32][16];
-
-    bool init_done = false;
-
-    int calc_reduction(int d, int m) {
-        const double f = 0.01; //higher number: more reductions
-        const double df = 0.25; //higher number: more reductions
-        double base_red = MIN(1.8, d * df / 2.0);
-        double extra_red = d * df;
-        double pct = 1.0 - cutoff_pct[m];
-        double mul = MAX(0.0, pct - (1.0 - f)) / f;
-        return pct * base_red + mul * extra_red + 0.25;
-    }
-
-    void init() {
-        if (!init_done) {
-            for (int d = 0; d < 32; d++) {
-                for (int m = 0; m < 16; m++) {
-                    reduction[d][m] = calc_reduction(d, m);
-                }
-            }
-            init_done = true;
-        }
-    }
-
-    void print() {
-        std::cout << "move 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16" << std::endl;
-        for (int d = 0; d < 32; d++) {
-            std::cout << (d < 10 ? "  d" : " d") << d << " ";
-            for (int m = 0; m < 16; m++) {
-                std::cout << (int) reduction[d][m] << "  ";
-            }
-            std::cout << std::endl;
-        }
-    }
-
-    int reduce(int d, int m) {
-        return reduction[MIN(d, 31)][MIN(m, 15)];
-    }
-}
-
-namespace prune_stats {
-    const bool enabled = false;
-    U64 total_prunes[MAX_PLY + 1];
-    U64 prune_errors[MAX_PLY + 1][WKING + 1];
-
-    void add_error(int depth, int pc) {
-        if (!enabled) {
-            return;
-        } else if (pc > WKING) {
-            prune_errors[depth][pc - WKING]++;
-        } else {
-            prune_errors[depth][pc]++;
-        }
-        prune_errors[depth][0]++;
-    }
-
-    void init() {
-        if (!enabled) {
-            return;
-        }
-        memset(total_prunes, 0, sizeof (total_prunes));
-        memset(prune_errors, 0, sizeof (prune_errors));
-    }
-
-    void print() {
-        if (!enabled) {
-            return;
-        }
-        uci::out("prune errors: ");
-        for (int d = 0; d < MAX_PLY; d++) {
-            if (total_prunes[d] == 0) {
-                if (d > 8) {
-                    return;
-                }
-                continue;
-            }
-            std::cout << std::setw(3) << d << " ";
-            for (int pc = 0; pc <= WKING; pc++) {
-                double pct = (100.0 * prune_errors[d][pc]) / total_prunes[d];
-                std::cout << "TPNBRQK"[pc] << ": " << prune_errors[d][pc] << "/" << total_prunes[d] << " (" << pct << "%) ";
-            }
-            std::cout << std::endl;
-        }
-    }
-}
-
 /**
  * Initialize sort values for root move
  * @param m move
@@ -190,8 +68,6 @@ int root_move_t::compare(root_move_t * m, move_t * best_move) {
  * @param fen string representing the board position
  */
 void search_t::init(const char * fen, game_t * g) {
-    LMR::init();
-    //LMR::print();
     PST::init();
     brd.init(fen);
     game = g ? g : game::instance();
@@ -294,10 +170,8 @@ void search_t::iterative_deepening() {
     const int min_time = game->tm.reserved_min();
     bool timed_search = game->white_time || game->black_time;
     int depth;
-    prune_stats::init();
     for (depth = 1; depth <= game->max_depth; depth++) {
         int score = aspiration(depth, last_score);
-        prune_stats::print();
         if (abort(true)) {
             break;
         }
@@ -634,7 +508,6 @@ int search_t::reduction(int depth, int searched_moves, bool is_dangerous) {
         return depth / 3;
     }
     return 1;
-    //return LMR::reduce(depth, searched_moves);
 }
 
 /**
@@ -678,8 +551,6 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         }
         backward(move);
 
-        trace(this, move, score, alpha, beta, depth, "pvs_root move result");
-
         //handle results
         rmove->nodes += nodes - nodes_before;
         if (stop_all) {
@@ -696,14 +567,12 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             uci::send_pv(best, depth, sel_depth, nodes + pruned_nodes, game->tm.elapsed(),
                     pv_to_string().c_str(), score::flags(best, alpha, beta));
             if (!exact) { //adjust asp. window
-                trace(this, move, score, alpha, beta, depth, "pvs_root cutoff");
                 return score;
             }
             assert(alpha < best);
             alpha = best;
         }
     }
-    trace(this, &stack->best_move, best, alpha, beta, depth, "pvs_root result");
     return best;
 }
 
@@ -756,7 +625,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     if (depth < 1) {
         const int score = qsearch(alpha, beta, 0);
-        trace(this, NULL, score, alpha, beta, depth, "qsearch result");
         return score;
     }
 
@@ -767,13 +635,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
     //time 
     nodes++;
     if (abort()) {
-        trace(this, NULL, alpha, alpha, beta, depth, "abort");
         return alpha;
     }
 
     //ceiling
     if (brd.ply >= (MAX_PLY - 1)) {
-        trace(this, NULL, evaluate(this), alpha, beta, depth, "ceiling");
         return evaluate(this);
     }
 
@@ -784,21 +650,18 @@ int search_t::pvs(int alpha, int beta, int depth) {
     if ((score::MATE - brd.ply) < beta) {
         beta = score::MATE - brd.ply;
         if (alpha >= beta) {
-            trace(this, NULL, beta, alpha, beta, depth, "mate distance");
             return beta;
         }
     }
     if ((-score::MATE + brd.ply) > alpha) {
         alpha = -score::MATE + brd.ply;
         if (beta <= alpha) {
-            trace(this, NULL, alpha, alpha, beta, depth, "mate distance");
             return alpha;
         }
     }
 
     //draw by lack of material or fifty quiet moves
     if (is_draw()) {
-        trace(this, NULL, draw_score(), alpha, beta, depth, "trivial draw");
         return draw_score();
     }
 
@@ -811,13 +674,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
     int tt_move = 0, tt_flag = 0, tt_score;
     if (trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag)) {
         if (pv && tt_flag == score::EXACT) {
-            trace(this, NULL, tt_score, alpha, beta, depth, "tt: exact");
             return tt_score;
         } else if (!pv && tt_score >= beta && tt_flag == score::LOWERBOUND) {
-            trace(this, NULL, tt_score, alpha, beta, depth, "tt: lowerbound");
             return tt_score;
         } else if (!pv && tt_score <= alpha && tt_flag == score::UPPERBOUND) {
-            trace(this, NULL, tt_score, alpha, beta, depth, "tt: upperbound");
             return tt_score;
         }
     }
@@ -846,7 +706,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
         int null_score = -pvs(-beta, -alpha, depth - 1 - R);
         backward();
         if (stop_all) {
-            trace(this, NULL, alpha, alpha, beta, depth, "stopped");
             return alpha;
         } else if (null_score >= beta) {
             const int RV = 5;
@@ -854,12 +713,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 //verification
                 int verified_score = pvs(alpha, beta, depth - 1 - RV);
                 if (verified_score >= beta) {
-                    trace(this, NULL, verified_score, alpha, beta, depth, "null move pruned (verified)");
                     return verified_score;
                 }
             } else {
                 //no verification
-                trace(this, NULL, null_score, alpha, beta, depth, "null move pruned");
                 return null_score;
             }
         }
@@ -872,7 +729,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
     if (pv && depth > 2 && tt_move == 0) {
         int iid_score = pvs(alpha, beta, depth - 2);
         if (score::is_mate(iid_score)) {
-            trace(this, NULL, iid_score, alpha, beta, depth, "iid mate score");
             return iid_score;
         } else if (stack->best_move.piece) {
             stack->tt_move.set(&stack->best_move);
@@ -886,7 +742,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
     //if there is no first move, it's checkmate or stalemate
     move_t * move = move::first(this, depth);
     if (!move) {
-        trace(this, NULL, in_check ? -score::MATE + brd.ply : draw_score(), alpha, beta, depth, "(stale)mate");
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
 
@@ -927,11 +782,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             pruned |= gives_check == 0 && (move->capture || move->promotion) && brd.max_gain(move) + delta <= alpha;
             if (pruned) {
                 pruned_nodes++;
-                if (prune_stats::enabled) {
-                    prune_stats::total_prunes[depth]++;
-                } else {
-                    continue;
-                }
+                continue;
             }
         }
 
@@ -970,8 +821,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         if (stop_all) {
             return alpha;
-        } else if (prune_stats::enabled && pruned && score > best) { //prune error
-            prune_stats::add_error(depth, move->piece);
         } else if (score > best) {
             stack->best_move.set(move);
             if (score >= beta) {
@@ -986,7 +835,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
                         }
                     }
                 }
-                trace(this, move, score, alpha, beta, depth, "beta cutoff");
                 return score;
             }
             best = score;
@@ -1013,7 +861,6 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     int flag = score::flags(best, alpha1, beta);
     trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
-    trace(this, &stack->best_move, best, alpha, beta, depth, "pvs result");
     return best;
 }
 
@@ -1120,11 +967,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             pruned |= fbase + brd.see(move) <= alpha;
             if (pruned) {
                 pruned_nodes++;
-                if (prune_stats::enabled) {
-                    prune_stats::total_prunes[0]++;
-                } else {
-                    continue;
-                }
+                continue;
             }
         }
 
@@ -1141,10 +984,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
         if (stop_all) {
-            trace(this, NULL, score, alpha, beta, depth, "stop");
             return alpha;
-        } else if (prune_stats::enabled && pruned && score > alpha) {
-            prune_stats::add_error(0, move->piece);
         } else if (score > alpha) {
             stack->best_move.set(move);
             if (score >= beta) {

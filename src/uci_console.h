@@ -55,7 +55,6 @@ namespace uci {
     bool handle_forward(input_parser_t & p);
     bool handle_setoption(input_parser_t &parser);
     bool handle_eval(input_parser_t &parser);
-    bool handle_lmr();
     bool handle_learn();
     bool handle_book(input_parser_t &parser);
     

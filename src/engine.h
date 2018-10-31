@@ -133,7 +133,6 @@ namespace engine {
     void analyse();
     void learn();
     void book_calc();
-    void print_lmr();
     void new_game(std::string fen);
     void set_position(std::string fen);
     void set_ponder(bool ponder);
