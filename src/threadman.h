@@ -24,7 +24,7 @@
 #ifndef THREADMAN_H
 #define	THREADMAN_H
 
-#include <pthread.h>
+#include <thread>
 
 #define MAX_THREADS 256
 
@@ -34,27 +34,16 @@ public:
     threads_t() {
         _count = 0;
         _stop_all = false;
-        pthread_mutex_init(&_mutex, NULL);
-        pthread_spin_init(&_spin, 0);
-        pthread_cond_init(&_cond, NULL);
     }
 
     ~threads_t() {
         stop_all();
-        pthread_mutex_destroy(&_mutex);
-        pthread_spin_destroy(&_spin);
-        pthread_cond_destroy(&_cond);
     }
 
     int create(void* function_ptr(void *ptr), void* params) {
         if (_count < MAX_THREADS) {
-            pthread_t thread = get(_count);
-            if (pthread_create(&thread, NULL, function_ptr, params) == 0) {
-                _threads[_count++] = thread;
-            } else {
-                //todo: some additional attempts to create a pthread
-                return 0;
-            }
+            // _threads[_count++] =
+            std::thread((*function_ptr));
         }
         return _count;
     }
@@ -82,33 +71,11 @@ public:
 private:
     int _count;
     bool _stop_all;
-    pthread_t _threads[MAX_THREADS];
+    std::thread _threads[MAX_THREADS];
 
-    pthread_cond_t _cond;
-    pthread_mutex_t _mutex;
-    pthread_spinlock_t _spin;
-
-    inline pthread_t get(int index) {
+    inline std::thread get(int index) {
         return (index >= 0 && index < MAX_THREADS) ? _threads[index] : 0;
     }
-
-    /*
-    void mutex_lock() {
-        pthread_mutex_lock(&this->_mutex);
-    }
-
-    void mutex_release() {
-        pthread_mutex_unlock(&this->_mutex);
-    }
-
-    void spin_lock() {
-        pthread_spin_lock(&this->_spin);
-    }
-
-    void spin_release() {
-        pthread_spin_unlock(&this->_spin);
-    }
-     */
 };
 
 
