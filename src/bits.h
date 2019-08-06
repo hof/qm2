@@ -118,7 +118,7 @@ inline unsigned popcnt(U64 x) {
 }
 
 inline unsigned popcnt0(U64 x) {
-    return (x == 0) ? 0 : popCount(x);
+    return (x == 0) ? 0 : popcnt(x);
 }
 #endif 
 
