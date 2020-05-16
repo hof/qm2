@@ -1,0 +1,11 @@
+> go
+< info depth 1 seldepth 1 score cp -12 nodes 21 time 0 nps 21 pv a2a3 
+< info depth 1 seldepth 1 score cp 24 nodes 63 time 0 nps 63 pv g1h3 
+< info depth 1 seldepth 1 score cp 64 nodes 105 time 0 nps 105 pv g1f3 
+< info depth 1 seldepth 1 score cp 68 nodes 157 time 1 nps 157 pv d2d4 
+< info depth 2 seldepth 2 score cp 8 nodes 385 time 1 nps 385 pv d2d4 b8c6 
+< info depth 3 seldepth 3 score cp 64 nodes 1942 time 2 nps 1942 pv d2d4 b8c6 g1f3 
+< info depth 4 seldepth 4 score cp 8 nodes 2962 time 3 nps 2962 pv d2d4 b8c6 g1f3 g8f6 
+< info depth 5 seldepth 7 score cp 52 nodes 14880 time 8 nps 14880 pv d2d4 b8c6 g1f3 g8f6 b1c3 
+< info depth 6 seldepth 7 score cp 32 upperbound nodes 20397 time 11 nps 20397 pv d2d4 b8c6 g1f3 g8f6 b1c3 e7e6 
+< info depth 6 seldepth 7 score cp 20 nodes 27091 time 14 nps 27091 pv d2d4 b8c6 d4d5 c6e5 g1f3 d7d6 
