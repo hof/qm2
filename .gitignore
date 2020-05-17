@@ -33,3 +33,4 @@
 /src/version.h
 *.exe
 /src/book.w17.bin
+*.log
