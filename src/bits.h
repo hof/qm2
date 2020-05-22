@@ -1,34 +1,28 @@
 /**
- * Maxima, a chess playing program. 
- * Copyright (C) 1996-2015 Erik van het Hof and Hermen Reitsma 
- * 
+ * Maxima, a chess playing program.
+ * Copyright (C) 1996-2020 Erik van het Hof and Hermen Reitsma
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 3
  * of the License, or (at your option) any later version.
- *  
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *  
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
- *  
+ *
  * File: bits.h
  * Defines bitwise operators, bitboard type and commonly used bitboards and macro's
  *
  * Created on 8 april 2011, 20:20
- * 
- * For 64 bits architectures, make sure to #define HARDWARE_64BITS
- * For hardware popcount support, make sure to #define HARDWARE_POPCOUNT
  */
 
 #ifndef BITS_H
 #define	BITS_H
-
-#define HARDWARE_POPCOUNT
-#define HARDWARE_64BITS
 
 #include <assert.h>
 #include <stdint.h>
@@ -39,88 +33,30 @@
 #include <fstream>
 #include <time.h>
 #include <iomanip> //setw
-#include <math.h> 
+#include <math.h>
 
 typedef uint64_t U64;
 
 #define C64(x) x##UL
 
-#ifdef HARDWARE_64BITS
-
-/* 64 bits bitscan */
-
 inline int bsf(U64 x) {
     assert(x);
-    asm ("bsfq %0, %0" : "=r" (x) : "0" (x));
-    return x;
+    return __builtin_ctzll(x);
 }
 
 inline int bsr(U64 x) {
     assert(x);
-    asm ("bsrq %0, %0" : "=r" (x) : "0" (x));
-    return x;
+    return 63 - __builtin_clzll(x);
 }
-#endif 
 
-#ifndef HARDWARE_64BITS
-
-/* 32 bits bitscan */
-
-const U64 BIT32 = (C64(1) << 32);
-
-inline int bsf(U64 x) {
+inline int popcnt(U64 x) {
     assert(x);
-    if (x < BIT32) {
-        asm ("bsf %0, %0" : "=r" (x) : "0" (x));
-        return x;
-    }
-    x >>= 32;
-    asm ("bsf %0, %0" : "=r" (x) : "0" (x));
-    return x + 32;
-}
-
-inline int bsr(U64 x) {
-    assert(x);
-    if (x >= BIT32) {
-        x >>= 32;
-        asm ("bsr %0, %0" : "=r" (x) : "0" (x));
-        return x + 32;
-    }
-    asm ("bsr %0, %0" : "=r" (x) : "0" (x));
-    return x;
-}
-#endif /* 32 bits bitscan */
-
-#ifdef HARDWARE_POPCOUNT 
-
-/* hardware popcount */
-
-inline int popcnt(U64 b) {
-    __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
-    return b;
-}
-
-inline unsigned popcnt0(U64 b) {
-    __asm__("popcnt %1, %0" : "=r" (b) : "r" (b));
-    return b;
-}
-#endif 
-
-#ifndef HARDWARE_POPCOUNT 
-
-/* software popcount */
-
-inline unsigned popcnt(U64 x) {
-    x = (x & C64(0x5555555555555555)) + ((x >> 1) & C64(0x5555555555555555));
-    x = (x & C64(0x3333333333333333)) + ((x >> 2) & C64(0x3333333333333333));
-    x = (x & C64(0x0F0F0F0F0F0F0F0F)) + ((x >> 4) & C64(0x0F0F0F0F0F0F0F0F));
-    return (x * C64(0x0101010101010101)) >> 56;
+    return __builtin_popcountll(x);
 }
 
 inline unsigned popcnt0(U64 x) {
-    return (x == 0) ? 0 : popcnt(x);
+    return __builtin_popcountll(x);
 }
-#endif 
 
 #define BIT(sq) (C64(1) << (sq))
 
@@ -318,7 +254,7 @@ inline U64 up1(const U64 x, const bool us) {
 #define MAX_PLY              128
 #define MAX(x,y)            ((x)>(y)?(x):(y))
 #define MIN(x,y)            ((x)<(y)?(x):(y))
-#define ABS(x)              ((x)>=0?(x):(-(x)))    
+#define ABS(x)              ((x)>=0?(x):(-(x)))
 #define FLIP_SQUARE(sq)     (((sq)^56))
 
 #define ISQ(sq,w)           (((sq)^(bool(w)*56)))
@@ -424,4 +360,3 @@ inline void bb_print(std::string title, U64 bb) {
 }
 
 #endif	/* BITS_H */
-
