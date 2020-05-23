@@ -484,7 +484,7 @@ void root_t::sort_moves(move_t * best_move) {
  * @param gives_check if the move checks
  * @return 1 for extending, 0 otherwise
  */
-int search_t::extension(move_t * move, int depth, bool pv, int gives_check) {
+int search_t::extension(move_t * move, int gives_check) {
     if (gives_check > 1) {
         return 1;
     } else if (gives_check == 1 && brd.see(move) >= 0) {
@@ -522,7 +522,6 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
 
     assert(root.move_count > 0);
     int best = -score::INF;
-    const bool is_pv = true;
     root.sort_moves(&stack->best_move);
 
     /*
@@ -533,20 +532,16 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         root_move_t * rmove = &root.moves[i];
         move_t * move = &rmove->move;
         int nodes_before = nodes;
-
-        //extensions and reductions
-        int extend = extension(move, depth, is_pv, rmove->gives_check);
-        int reduce = reduction(depth, i, rmove->is_dangerous);
         int score = 0;
 
         //go forward and search one level deeper
         forward(move, rmove->gives_check);
         if (i == 0) {
-            score = -pvs(-beta, -alpha, depth - 1 + extend);
+            score = -pvs(-beta, -alpha, depth - 1);
         } else {
-            score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
+            score = -pvs(-alpha - 1, -alpha, depth - 1);
             if (score > alpha) { //open window research w/o reductions
-                score = -pvs(-beta, -alpha, depth - 1 + extend);
+                score = -pvs(-beta, -alpha, depth - 1);
             }
         }
         backward(move);
@@ -632,7 +627,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
      * Stop conditions
      */
 
-    //time 
+    //time
     nodes++;
     if (abort()) {
         return alpha;
@@ -788,15 +783,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
 
         /*
-         * Move extensions
+         * Move extensions and reductions
          */
 
-        int extend = extension(move, depth, pv, gives_check);
-
-        /*
-         * Move Reductions (Late Move Reductions, LMR) 
-         */
-
+        int extend = extension(move, gives_check);
         int reduce = reduction(depth, searched_moves, is_dangerous);
 
         /*
@@ -885,7 +875,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      * Stop conditions
      */
 
-    //time 
+    //time
     nodes++;
     if (abort()) {
         return alpha;
@@ -952,7 +942,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         bool dangerous = depth < 0 || move->capture || in_check || gives_check
                 || move->promotion || move->castle;
 
-        //prune all quiet moves 
+        //prune all quiet moves
         if (!dangerous) {
             assert(depth == 0);
             pruned_nodes++;
@@ -1019,11 +1009,11 @@ bool search_t::in_searched(move_t* move, int searched_moves) {
 }
 
 /*
- * Helper function to reset the search stack. 
- * This is used for self-playing games, where  
- * MAX_PLY is not sufficient to hold all moves of a chess game-> 
+ * Helper function to reset the search stack.
+ * This is used for self-playing games, where
+ * MAX_PLY is not sufficient to hold all moves of a chess game->
  * Note: in UCI mode this is not an issue, because each position
- * starts with a new stack. 
+ * starts with a new stack.
  */
 void search_t::reset_stack() {
     brd.ply = 0;
@@ -1037,9 +1027,9 @@ void search_t::reset_stack() {
 }
 
 /**
- * Prints the positon debug info and search path upto the point in the tree where 
+ * Prints the positon debug info and search path upto the point in the tree where
  * the function was called and exits the program
- * @param alpha lowerbound value 
+ * @param alpha lowerbound value
  * @param beta upperbound value
  */
 void search_t::debug_print_search(int alpha, int beta, int depth) {

@@ -561,6 +561,7 @@ int board_t::gives_check(const move_t * move) {
                 if (QUEEN_MOVES[kpos] & tsq_bit) {
                     checkers = magic::queen_moves(kpos, bb[ALLPIECES]) & tsq_bit;
                 }
+                break;
             case WKING:
                 if (move->castle) {
                     if (move->castle == CASTLE_K) {
@@ -590,6 +591,7 @@ int board_t::gives_check(const move_t * move) {
                 if (QUEEN_MOVES[kpos] & tsq_bit) {
                     checkers = magic::queen_moves(kpos, bb[ALLPIECES]) & tsq_bit;
                 }
+                break;
             case BKING:
                 if (move->castle) {
                     if (move->castle == CASTLE_k) {
