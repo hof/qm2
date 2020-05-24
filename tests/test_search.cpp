@@ -137,7 +137,6 @@ int main() {
     int targetValues2[] = {48, 2039, 97862, 4085603};
     int targetValues3[] = {14, 191, 2812, 43238, 674624, 11030083};
     int targetValues4[] = {37, 1141, 42739, 1313295};
-    
     int totalNodes = arraySum(targetValues1, sizeof (targetValues1) / sizeof (int));
     totalNodes += arraySum(targetValues2, sizeof (targetValues2) / sizeof (int));
     totalNodes += arraySum(targetValues3, sizeof (targetValues3) / sizeof (int));
