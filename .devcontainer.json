@@ -1,9 +1,9 @@
 {
     "name": "qm2",
-    "image": "docker.pkg.github.com/hof/qm2-devcontainer/qm2-build:latest",
+    "image": "docker.pkg.github.com/hof/qm2-devcontainer/qm2-build-aarch64:latest",
     "extensions": [
         "ms-vscode.cpptools",
-        "twxs.cmake",
+        "ms-vscode.cmake-tools",
         "shardulm94.trailing-spaces"
     ]
 }

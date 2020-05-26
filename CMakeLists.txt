@@ -1,8 +1,6 @@
 cmake_minimum_required (VERSION 2.8.4)
 project (MAX2)
 
-add_compile_options(-march=native)
-
 add_custom_target(debug
     COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Debug ${CMAKE_SOURCE_DIR}
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target all
