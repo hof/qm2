@@ -927,8 +927,8 @@ bool board_t::is_eg(endgame_t eg, bool us) {
 void board_t::init(const char* fen) {
     //initialize:
     clear();
-    char offset = a8;
-    unsigned char pos = a8;
+    int offset = a8;
+    int pos = a8;
     bool wtm = true;
     int i, end = strlen(fen);
     //piece placement:
@@ -936,7 +936,7 @@ void board_t::init(const char* fen) {
         switch (fen[i]) {
             case ' ': offset = -1;
                 break;
-            case '/': offset -= char(8);
+            case '/': offset -= 8;
                 pos = offset;
                 break;
             case '1': pos += 1;
