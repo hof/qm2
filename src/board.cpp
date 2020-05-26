@@ -927,8 +927,8 @@ bool board_t::is_eg(endgame_t eg, bool us) {
 void board_t::init(const char* fen) {
     //initialize:
     clear();
-    char offset = a8;
-    unsigned char pos = a8;
+    int offset = a8;
+    int pos = a8;
     bool wtm = true;
     int i, end = strlen(fen);
     //piece placement:
@@ -936,7 +936,7 @@ void board_t::init(const char* fen) {
         switch (fen[i]) {
             case ' ': offset = -1;
                 break;
-            case '/': offset -= char(8);
+            case '/': offset -= 8;
                 pos = offset;
                 break;
             case '1': pos += 1;
@@ -1181,7 +1181,7 @@ std::string board_t::to_string() {
 /**
  * Flip the board, useful for testing on white/black bugs. A flipped
  * board should give exactly the same search and evaluation results.
- */
+ */ 
 void board_t::do_flip() {
     bb[ALLPIECES] = bb_flip(bb[ALLPIECES]);
     U64 tmp = bb[WPIECES];
