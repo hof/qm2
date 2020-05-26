@@ -212,13 +212,13 @@ int main() {
     board_t * brd = &s->brd;
     const U64 occ = brd->bb[ALLPIECES];
     if (occ != (RANK_1 | RANK_2 | RANK_7 | RANK_8)) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=sshift != sshift_expected: " << sshift << " != " << RANK_7 << std::endl;
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=occ != occ_expected: " << occ << " != " << (RANK_1 | RANK_2 | RANK_7 | RANK_8) << std::endl;
         bb_print("occ", occ);
         bb_print("occ_expected", (RANK_1 | RANK_2 | RANK_7 | RANK_8));
     }
     const U64 targets = ~occ;
     if (targets != (RANK_3 | RANK_4 | RANK_5 | RANK_6)) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=sshift != sshift_expected: " << sshift << " != " << RANK_7 << std::endl;
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=targets != targets_expected: " << sshift << " != " << (RANK_3 | RANK_4 | RANK_5 | RANK_6) << std::endl;
         bb_print("targets", targets);
         bb_print("targets_expected", (RANK_3 | RANK_4 | RANK_5 | RANK_6));
     }
@@ -228,7 +228,7 @@ int main() {
      * Finalize
      */
 
-    now = clock();
+     now = clock();
     int elapsed = (now - begin) / CLOCKS_PER_SEC;
 
     std::cout << "%TEST_FINISHED% time=" << elapsed << " test_bists (test_bits)" << std::endl;
