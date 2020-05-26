@@ -26,6 +26,8 @@
 #include <stdio.h>
 
 #include "engine.h"
+#include "hashtable.h"
+#include "search.h"
 
 /*
  * Simple C++ Test Suite
@@ -139,11 +141,11 @@ int main() {
     }
     std::cout << "   done" << std::endl << std::endl;
 
-
     /*
      * North / South fill tests
      */
 
+    std::cout << "4. fill test" << std::endl;
     U64 bb = BIT(a4);
     int sq = bsf(bb);
     if (sq != a4) {
@@ -201,11 +203,31 @@ int main() {
         bb_print("sshift", nshift);
         bb_print("sshift_expected", RANK_2);
     }
+    std::cout << "   done" << std::endl << std::endl;
 
+    /* Start position tests */
+    std::cout << "5. start pos test" << std::endl;
+    trans_table::disable();
+    search_t * s = new search_t("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    board_t * brd = &s->brd;
+    const U64 occ = brd->bb[ALLPIECES];
+    if (occ != (RANK_1 | RANK_2 | RANK_7 | RANK_8)) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=sshift != sshift_expected: " << sshift << " != " << RANK_7 << std::endl;
+        bb_print("occ", occ);
+        bb_print("occ_expected", (RANK_1 | RANK_2 | RANK_7 | RANK_8));
+    }
+    const U64 targets = ~occ;
+    if (targets != (RANK_3 | RANK_4 | RANK_5 | RANK_6)) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=sshift != sshift_expected: " << sshift << " != " << RANK_7 << std::endl;
+        bb_print("targets", targets);
+        bb_print("targets_expected", (RANK_3 | RANK_4 | RANK_5 | RANK_6));
+    }
+    std::cout << "   done" << std::endl << std::endl;
 
     /*
-     * Finalize 
+     * Finalize
      */
+
     now = clock();
     int elapsed = (now - begin) / CLOCKS_PER_SEC;
 
