@@ -27,7 +27,7 @@
 
 #include "engine.h"
 #include "hashtable.h"
-#include "search.h"
+#include "board.h"
 
 /*
  * Simple C++ Test Suite
@@ -207,9 +207,8 @@ int main() {
 
     /* Start position tests */
     std::cout << "5. start pos test" << std::endl;
-    trans_table::disable();
-    search_t * s = new search_t("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    board_t * brd = &s->brd;
+    board_t * brd = new board_t();
+    brd->init("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     const U64 occ = brd->bb[ALLPIECES];
     if (occ != (RANK_1 | RANK_2 | RANK_7 | RANK_8)) {
         std::cout << "%TEST_FAILED% time=0 testname=test_bits (test_bits) message=occ != occ_expected: " << occ << " != " << (RANK_1 | RANK_2 | RANK_7 | RANK_8) << std::endl;
@@ -222,6 +221,7 @@ int main() {
         bb_print("targets", targets);
         bb_print("targets_expected", (RANK_3 | RANK_4 | RANK_5 | RANK_6));
     }
+    delete brd;
     std::cout << "   done" << std::endl << std::endl;
 
     /*
