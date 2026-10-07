@@ -72,6 +72,6 @@ int main() {
     testEvaluationSuite();
     std::cout << "%TEST_FINISHED% time=0 test1 (evaluation_test)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=0" << std::endl;
-    return (EXIT_SUCCESS);
+    return test_stop ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 

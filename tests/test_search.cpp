@@ -88,17 +88,20 @@ void divide(search_t * s, int depth) {
 /**
  * Move generaration test (perft test)
  */
-void testMoveGeneration(std::string fen, int targetValues[], int maxDepth) {
+bool test_move_generation(std::string fen, int targetValues[], int maxDepth) {
+    bool success = true;
     std::cout << "\n\ntest_genmoves test testMoveGeneration " << fen << std::endl;
     search_t * s = new search_t(fen.c_str());
     std::string fen2 = s->brd.to_string();
     if (fen2 != fen) {
+        success = false;
         std::cout << "%TEST_FAILED% time=0 testname=testMoveGeneration (test_genmoves) message=basic fen mismatch " << fen2 << std::endl;
     }
     s->init_root_moves();
     for (int i = 0; i < maxDepth; i++) {
         int count = rootPerft(s, i + 1);
         if (count != targetValues[i]) {
+            success = false;
             std::cout << "%TEST_FAILED% time=0 testname=testMoveGeneration (test_genmoves) message=depth "
                     << i + 1 << " node mismatch: " << count << std::endl;
             divide(s, i);
@@ -106,12 +109,14 @@ void testMoveGeneration(std::string fen, int targetValues[], int maxDepth) {
         }
         std::string fen_test = s->brd.to_string();
         if (fen.compare(fen_test) != 0) {
+            success = false;
             std::cout << "%TEST_FAILED% time=0 testname=testMoveGeneration (test_genmoves) message=depth "
                     << i + 1 << ": fen mismatch " << fen_test << std::endl;
             break;
         }
     }
     delete s;
+    return success;
 }
 
 int arraySum(int anArray[], int arraySize) {
@@ -123,6 +128,7 @@ int arraySum(int anArray[], int arraySize) {
 }
 
 int main() {
+    bool success = true;
 
     clock_t begin;
     clock_t now;
@@ -143,10 +149,10 @@ int main() {
     totalNodes += arraySum(targetValues4, sizeof (targetValues4) / sizeof (int));
 
     begin = clock();
-    testMoveGeneration("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", targetValues1, sizeof (targetValues1) / sizeof (int));
-    testMoveGeneration("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", targetValues2, sizeof (targetValues2) / sizeof (int));
-    testMoveGeneration("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1", targetValues3, sizeof (targetValues3) / sizeof (int));
-    testMoveGeneration("r5r1/p1q2p1k/1p1R2pB/3pP3/6bQ/2p5/P1P1NPPP/6K1 w - - 0 1", targetValues4, sizeof (targetValues4) / sizeof (int));
+    success &= test_move_generation("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", targetValues1, sizeof (targetValues1) / sizeof (int));
+    success &= test_move_generation("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", targetValues2, sizeof (targetValues2) / sizeof (int));
+    success &= test_move_generation("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1", targetValues3, sizeof (targetValues3) / sizeof (int));
+    success &= test_move_generation("r5r1/p1q2p1k/1p1R2pB/3pP3/6bQ/2p5/P1P1NPPP/6K1 w - - 0 1", targetValues4, sizeof (targetValues4) / sizeof (int));
     now = clock();
 
     std::cout << totalNodes << " nodes generated in " << (now - begin) << "ms (" << U64(CLOCKS_PER_SEC * U64(totalNodes)) / (now - begin) << "nps)" << std::endl;
@@ -154,7 +160,7 @@ int main() {
     std::cout << "%TEST_FINISHED% time=" << (now - begin) / CLOCKS_PER_SEC << " testMoveGeneration (test_genmoves)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=" << (now - begin) / CLOCKS_PER_SEC << std::endl;
 
-    return (EXIT_SUCCESS);
+    return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 

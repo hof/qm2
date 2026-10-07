@@ -40,6 +40,7 @@ bool assert_see(board_t * brd, move_t * mv, int expected) {
 }
 
 int main() {
+    bool success = true;
     
     time_t begin;
     time_t now;
@@ -57,7 +58,7 @@ int main() {
     
     brd.init("r1bqkbnr/pppppppp/2n5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 1");
     mv.set(WPAWN, d2, d4);
-    assert_see(&brd, &mv, 0);
+    success &= assert_see(&brd, &mv, 0);
     
     int vpawn = board::PVAL[WPAWN];
     int vminor = board::PVAL[WKNIGHT];
@@ -66,44 +67,44 @@ int main() {
     
     brd.init("r4rk1/p5p1/1p2p2p/3pPn1P/b1p3Bq/P1PQN1P1/2P2P2/R4RK1 w - - 0 2");
     mv.set(WBISHOP, g4, f5, BKNIGHT);
-    assert_see(&brd, &mv, vpawn);
+    success &= assert_see(&brd, &mv, vpawn);
     mv.set(WKNIGHT, e3, f5, BKNIGHT);
-    assert_see(&brd, &mv, vpawn);
+    success &= assert_see(&brd, &mv, vpawn);
     mv.set(WQUEEN, d3, f5, BKNIGHT);
-    assert_see(&brd, &mv, -vrook-vpawn);   
+    success &= assert_see(&brd, &mv, -vrook-vpawn);
     mv.set(BBISHOP, a4, c2, WPAWN);
-    assert_see(&brd, &mv, -vminor + vpawn);  
+    success &= assert_see(&brd, &mv, -vminor + vpawn);
     mv.set(BPAWN, c4, d3, WQUEEN);
-    assert_see(&brd, &mv, vqueen - vpawn);  
+    success &= assert_see(&brd, &mv, vqueen - vpawn);
     mv.set(BQUEEN, h4, g4, WBISHOP);
-    assert_see(&brd, &mv, -vrook - vpawn);
+    success &= assert_see(&brd, &mv, -vrook - vpawn);
     
     brd.init("8/8/5p2/8/k7/p1B5/Kb6/8 w - - 0 1");
     mv.set(WBISHOP, c3, f6, BPAWN);
-    assert_see(&brd, &mv, -vminor + vpawn);
+    success &= assert_see(&brd, &mv, -vminor + vpawn);
     mv.set(WBISHOP, c3, b2, BBISHOP);
-    assert_see(&brd, &mv, vpawn);
+    success &= assert_see(&brd, &mv, vpawn);
     
     brd.init("1r6/1r1q4/1p6/8/8/1R6/KR6/1Q6 w - - 0 1");
     mv.set(WROOK, b3, b6, BPAWN);
-    assert_see(&brd, &mv, vpawn);
+    success &= assert_see(&brd, &mv, vpawn);
     
     brd.init("3r2qk/5bpp/8/3B4/8/8/PPPR4/1K1R4 b - - 0 1");
     mv.set(BBISHOP, f7, d5, WBISHOP);
-    assert_see(&brd, &mv, vminor);
+    success &= assert_see(&brd, &mv, vminor);
     
     brd.init("8/1p3p1p/2k1p1p1/5P2/p3K3/8/1P3PPP/8 b - - 0 1");
     mv.set(BPAWN, e6, f5, WPAWN);
-    assert_see(&brd, &mv, vpawn);
+    success &= assert_see(&brd, &mv, vpawn);
     
     brd.init("rnbqkbnr/pppp1ppp/8/4p3/8/4P3/PPPP1PPP/RNBQKBNR w KQkq e6 0 1");
     mv.set(WPAWN, d2, d4);
-    assert_see(&brd, &mv, 0);
+    success &= assert_see(&brd, &mv, 0);
     
     time(&now);
     std::cout << "%TEST_FINISHED% time=0 testPolyglotKeys (test_polyglot)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=" << difftime(now, begin) << std::endl;
 
-    return (EXIT_SUCCESS);
+    return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

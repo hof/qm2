@@ -28,11 +28,12 @@
 
 engine_t * global_engine;
 bool stop_test;
+static bool test_failed = false;
 int MAX_DIVIDE_STEPS = 5;
 void flip_divide(int test_num, const char * fen, int divide_steps);
 
 bool flip_test(int test_num, const char * fen, int divide_steps = MAX_DIVIDE_STEPS) {
-    if (stop_test) {
+    if (stop_test || test_failed) {
         return false;
     }
     stop_test = true;
@@ -52,6 +53,7 @@ bool flip_test(int test_num, const char * fen, int divide_steps = MAX_DIVIDE_STE
     //test 1: fen notations should be equal
     if (fen1 != fen3) {
         std::cout << "\ntesting position " << test_num << ": " << brd.to_string() << std::endl;
+        test_failed = true;
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=FEN does not match" << std::endl;
         std::cout << "original: " << fen1 << std::endl;
         std::cout << "flipped:  " << fen2 << std::endl;
@@ -65,11 +67,12 @@ bool flip_test(int test_num, const char * fen, int divide_steps = MAX_DIVIDE_STE
     int score1 = evaluate(s1);
     int phase1 = s1->stack->mt->phase;
     int score2 = evaluate(s2);
-    int phase2 = s1->stack->mt->phase;
+    int phase2 = s2->stack->mt->phase;
     delete s1;
     delete s2;
     if (score1 != score2 || phase1 != phase2) {
         std::cout << "\ntesting position " << test_num << ": " << brd.to_string() << std::endl;
+        test_failed = true;
         std::cout << "%TEST_FAILED% time=0 testname=flip (flip_test) message=Evaluation does not match" << std::endl;
         std::cout << "original: " << fen1 << " score: " << score1 << " phase: " << phase1 << std::endl;
         std::cout << "flipped:  " << fen2 << " score: " << score2 << " phase: " << phase2 << std::endl;
@@ -236,7 +239,7 @@ int main() {
     double elapsed = (now - begin) / CLOCKS_PER_SEC;
     std::cout << "%TEST_FINISHED% time=" << elapsed << " flip (flip_test)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=0" << elapsed << std::endl;
-    return (EXIT_SUCCESS);
+    return test_failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 

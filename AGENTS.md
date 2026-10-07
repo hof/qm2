@@ -76,11 +76,9 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-Known test limitation: some existing tests print `%TEST_FAILED%` while returning
-success, so CTest can report a passing suite despite failures. Until failure
-reporting is repaired, inspect test output, including
-`build/Testing/Temporary/LastTest.log`. The material-table test currently expects
-an outdated attack-force value and returns before its transposition-table checks.
+Tests must return a nonzero exit code when a check fails, so both direct execution
+and CTest detect failures. Detailed test output is available in
+`build/Testing/Temporary/LastTest.log`.
 
 - Run checks appropriate to the change. For engine behavior changes, cover
   relevant move generation, make/unmake behavior, UCI commands, and search

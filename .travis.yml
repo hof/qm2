@@ -8,3 +8,4 @@ script:
     - cmake --version
     - cmake -H. -B_builds
     - cmake --build _builds
+    - cd _builds && ctest --output-on-failure

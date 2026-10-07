@@ -90,7 +90,7 @@ void movePerftDivide(search_t * s, int depth) {
 /**
  * Move generaration test (perft test)
  */
-void testMoveGeneration(std::string fen, int targetValues[], int maxDepth, search_t * s) {
+bool test_move_generation(std::string fen, int targetValues[], int maxDepth, search_t * s) {
     std::cout << "\n\ntest_genmoves test testMoveGeneration " << fen << std::endl;
     s->brd.init(fen.c_str());
     for (int i = 0; i < maxDepth; i++) {
@@ -99,9 +99,10 @@ void testMoveGeneration(std::string fen, int targetValues[], int maxDepth, searc
             std::cout << "%TEST_FAILED% time=0 testname=testMoveGeneration (test_genmoves) message=depth "
                     << i + 1 << " node mismatch: " << count << std::endl;
             movePerftDivide(s, i);
-            break;
+            return false;
         }
     }
+    return true;
 }
 
 int arraySum(int anArray[], int arraySize) {
@@ -113,6 +114,7 @@ int arraySum(int anArray[], int arraySize) {
 }
 
 int main() {
+    bool success = true;
 
     clock_t begin;
     clock_t now;
@@ -139,9 +141,9 @@ int main() {
     totalNodes += arraySum(targetValues3, sizeof (targetValues3) / sizeof (int));
 
     begin = clock();
-    testMoveGeneration("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", targetValues1, sizeof (targetValues1) / sizeof (int), s);
-    testMoveGeneration("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", targetValues2, sizeof (targetValues2) / sizeof (int), s);
-    testMoveGeneration("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1", targetValues3, sizeof (targetValues3) / sizeof (int), s);
+    success &= test_move_generation("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", targetValues1, sizeof (targetValues1) / sizeof (int), s);
+    success &= test_move_generation("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", targetValues2, sizeof (targetValues2) / sizeof (int), s);
+    success &= test_move_generation("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1", targetValues3, sizeof (targetValues3) / sizeof (int), s);
     now = clock();
 
     std::cout << totalNodes << " nodes generated in " << (now - begin) << "ms (" << U64(CLOCKS_PER_SEC * U64(totalNodes)) / (now - begin) << "nps)" << std::endl;
@@ -151,6 +153,6 @@ int main() {
 
     delete s;
 
-    return (EXIT_SUCCESS);
+    return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

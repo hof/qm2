@@ -58,7 +58,7 @@ void test_fen(std::string fen, std::string move, int expected_score) {
     std::cout << tested + 1 << ") " << brd.to_string() << " bm " << bm.to_string();
     engine->think();
     engine->stop_all();
-    bool solved = engine->target_found();
+    bool solved = engine->target_found() && engine->get_score() >= expected_score;
     test_results[tested].fen = fen;
     test_results[tested].solved = solved;
     test_results[tested].nodes = engine->get_total_nodes();
@@ -126,5 +126,5 @@ int main() {
     test_w17_positions();
     double elapsed = (clock() - begin) / (1.0 * CLOCKS_PER_SEC);
     test_report(elapsed);
-    return (EXIT_SUCCESS);
+    return total_solved == tested ? EXIT_SUCCESS : EXIT_FAILURE;
 }

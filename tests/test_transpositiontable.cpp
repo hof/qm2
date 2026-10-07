@@ -28,7 +28,7 @@
  * Simple C++ Test Suite
  */
 
-void test_tt() {
+bool test_tt() {
     std::cout << "test_transpositiontable test tt" << std::endl;
 
     pawn_table::set_size(4);
@@ -51,7 +51,8 @@ void test_tt() {
             || pe->flags != 0
             ) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=pawn table store/retrieve error 2" << std::endl;
-        return;
+        delete s;
+        return false;
     }
 
     /*
@@ -61,16 +62,18 @@ void test_tt() {
     U64 key = s->brd.stack->material_hash;
     material_table::entry_t * me = material_table::retrieve(key);   
 
+    //Starting attack force: queen (9), two rooks (10), four minors (12).
     //check for valid entry
     if (me->key != key
             || me->score != 0
             || me->phase != 0
             || me->flags != 96
-            || me->attack_force[WHITE] != 12
-            || me->attack_force[BLACK] != 12
+            || me->attack_force[WHITE] != 31
+            || me->attack_force[BLACK] != 31
             ) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=material table store/retrieve error" << std::endl;
-        return;
+        delete s;
+        return false;
     }
 
     //transposition table - test storing and retrieving
@@ -90,7 +93,8 @@ void test_tt() {
                 || move != i + 100
                 || flag != 3) {
             std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=store/retrieve error" << std::endl;
-            return;
+            delete s;
+            return false;
         }
     }
 
@@ -106,14 +110,13 @@ void test_tt() {
             || move != tmove->to_int()) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=store/retrieve error" << std::endl;
         delete s;
-        return;
+        return false;
     }
 
     //testing the Lasker-Reichhelm Position
     //test if searching the position with a hashtable finished a depth 15 
     //search with less than 50.000 nodes
 
-    magic::init();
     uci::silent(true);
     engine_t * engine = engine::instance();
     engine::settings()->max_depth = 15;
@@ -123,20 +126,24 @@ void test_tt() {
 
     if (engine->get_total_nodes() > 50000) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=hashtable not effective" << std::endl;
+        delete s;
+        return false;
     }
     delete s;
+    return true;
 }
 
 int main() {
+    magic::init();
     std::cout << "%SUITE_STARTING% test_transpositiontable" << std::endl;
     std::cout << "%SUITE_STARTED%" << std::endl;
 
     std::cout << "%TEST_STARTED% test_tt (test_transpositiontable)\n" << std::endl;
-    test_tt();
+    bool success = test_tt();
     std::cout << "%TEST_FINISHED% time=0 test_tt (test_transpositiontable)" << std::endl;
 
     std::cout << "%SUITE_FINISHED% time=0" << std::endl;
 
-    return (EXIT_SUCCESS);
+    return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
