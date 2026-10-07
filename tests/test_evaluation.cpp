@@ -22,56 +22,76 @@
 
 #include "engine.h"
 
-/*
- * Simple C++ Test Suite
- */
+namespace {
 
-engine_t * global_engine;
-bool test_stop;
+struct evaluation_case_t {
+    const char * name;
+    const char * fen;
+    int min_score;
+    int max_score;
+};
 
-void testFail(int idx, std::string operation, int score, int bound, std::string fen, engine_t * engine) {
-    test_stop = true;
-    std::cout << "Test " << idx << ": " << fen;
-    std::cout << ": " << score << " " << operation << " " << bound << " ";
-    std::cout << std::endl;
-    std::cout << "%TEST_FAILED% time=0 testname=evaluation (test_evaluation) message=evaluation test failed" << std::endl;
-    engine->new_game(fen.c_str());
-    engine->analyse();
+bool test_evaluation(const evaluation_case_t & test) {
+    pawn_table::clear();
+    material_table::clear();
+    search_t search(test.fen);
+    const int cold_score = evaluate(&search);
+    search_t cached_search(test.fen);
+    const int warm_score = evaluate(&cached_search);
+    search.brd.do_flip();
+    const std::string flipped_fen = search.brd.to_string();
+    search_t flipped_search(flipped_fen.c_str());
+    const int flipped_score = evaluate(&flipped_search);
+    const bool success = cold_score >= test.min_score && cold_score <= test.max_score
+        && warm_score == cold_score && flipped_score == cold_score;
+    if (!success) {
+        std::cerr << test.name << ": expected [" << test.min_score << ", "
+            << test.max_score << "], cold=" << cold_score << ", warm="
+            << warm_score << ", flipped=" << flipped_score << "\n";
+    }
+    return success;
 }
 
-int testEval(int idx, std::string fen, int min_score, int max_score) {
-    if (test_stop) {
-        return 0;
+bool test_incremental_evaluation() {
+    search_t search("7k/8/8/8/8/8/3R4/K7 w - - 0 1");
+    const int original_score = evaluate(&search);
+    move_t move;
+    move.set(&search.brd, "d2d3");
+    search.forward(&move, search.brd.gives_check(&move));
+    const int incremental_score = evaluate(&search);
+    const std::string child_fen = search.brd.to_string();
+    pawn_table::clear();
+    material_table::clear();
+    search_t fresh_search(child_fen.c_str());
+    const int fresh_score = evaluate(&fresh_search);
+    search.backward(&move);
+    const int restored_score = evaluate(&search);
+    const bool success = incremental_score == fresh_score && restored_score == original_score;
+    if (!success) {
+        std::cerr << "incremental evaluation: child=" << incremental_score
+            << ", fresh=" << fresh_score << ", restored=" << restored_score
+            << ", original=" << original_score << "\n";
     }
-    search_t * s = new search_t(fen.c_str());
-    int score = evaluate(s);
-    if (score < min_score) {
-        testFail(idx, "<", score, min_score, fen, global_engine);
-    } else if (score > max_score) {
-        testFail(idx, ">", score, max_score, fen, global_engine);
-    }
-    delete s;
-    return score;
+    return success;
 }
 
-void testEvaluationSuite() {
-
-    //phase 0: all pieces on the board
-    testEval(1, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 0, 30); //opening
-    
 }
 
 int main() {
-    std::cout << "%SUITE_STARTING% evaluation_test" << std::endl;
-    std::cout << "%SUITE_STARTED%" << std::endl;
-    std::cout << "%TEST_STARTED% test1 (evaluation_test)" << std::endl;
-    test_stop = false;
     magic::init();
-    global_engine = engine::instance();
-    engine::settings()->max_depth = 20;
-    testEvaluationSuite();
-    std::cout << "%TEST_FINISHED% time=0 test1 (evaluation_test)" << std::endl;
-    std::cout << "%SUITE_FINISHED% time=0" << std::endl;
-    return test_stop ? EXIT_FAILURE : EXIT_SUCCESS;
+    // Broad bands check material advantage and score perspective without freezing tuning.
+    const evaluation_case_t cases[] = {
+        {"starting position", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 0, 30},
+        // Won endgames include the engine's WIN bonus as well as material.
+        {"white queen advantage", "7k/8/8/8/8/8/3Q4/K7 w - - 0 1", 500, 10000},
+        {"black facing queen advantage", "7k/8/8/8/8/8/3Q4/K7 b - - 0 1", -10000, -500},
+        {"white rook advantage", "7k/8/8/8/8/8/3R4/K7 w - - 0 1", 200, 10000},
+        {"black facing rook advantage", "7k/8/8/8/8/8/3R4/K7 b - - 0 1", -10000, -200},
+    };
+    bool success = true;
+    for (const evaluation_case_t & test : cases) {
+        success &= test_evaluation(test);
+    }
+    success &= test_incremental_evaluation();
+    return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
-
