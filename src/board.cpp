@@ -846,9 +846,10 @@ bool board_t::is_draw() {
 
     int wminors = wbc + wn;
     int bminors = bbc + bn;
-    if ((wminors == 0 && bminors == 1)
+    if ((wminors == 0 && bminors == 0)
+            || (wminors == 0 && bminors == 1)
             || (bminors == 0 && wminors == 1)) {
-        return true; //simple case of 1 minor vs no minors (KBK or KNK)
+        return true; //bare kings, or one minor against a bare king
     }
 
     //for other cases, mates are only possible with a king on the edge
