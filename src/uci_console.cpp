@@ -21,6 +21,7 @@
  */
 
 #include "uci_console.h"
+#include "tablebase.h"
 
 #define DO_LOG
 
@@ -272,7 +273,17 @@ namespace uci {
                         }
 
                         //handle option
-                        if (name == "Hash") {
+                        if (name == "SyzygyPath") {
+                            const bool initialized = tablebase::set_path(value);
+                            trans_table::clear();
+                            out(initialized ? "info string Syzygy supports up to "
+                                + itoa(tablebase::max_pieces()) + " pieces"
+                                : "info string Syzygy initialization failed");
+                        } else if (name == "SyzygyProbeLimit") {
+                            opt->value = MAX(0, MIN(5, opt->value));
+                        } else if (name == "SyzygyProbeDepth") {
+                            opt->value = MAX(0, MIN(64, opt->value));
+                        } else if (name == "Hash") {
                             trans_table::set_size(opt->value);
                         }
                     }
@@ -372,7 +383,7 @@ namespace uci {
         out("info string " + msg);
     }
 
-    void send_pv(int cp_score, int depth, int sel_depth, U64 nodes, int time, const char * pv, int flag) {
+    void send_pv(int cp_score, int depth, int sel_depth, U64 nodes, int time, const char * pv, int flag, U64 tablebase_hits) {
         std::string msg = "info depth " + itoa(depth) + " seldepth " + itoa(MAX(depth, sel_depth));
         if (ABS(cp_score) < score::DEEPEST_MATE) {
             msg += " score cp " + itoa(cp_score);
@@ -388,7 +399,10 @@ namespace uci {
         }
         msg += " nodes " + itoa(nodes) + " time " + itoa(time) + " nps ";
         int nps = time < 50 ? nodes : (1000 * U64(nodes)) / time;
-        msg += itoa(nps) + " pv " + pv;
+        msg += itoa(nps);
+        if (tablebase_hits) msg += " tbhits " + itoa(tablebase_hits);
+        msg += " pv ";
+        msg += pv;
         out(msg);
     }
 

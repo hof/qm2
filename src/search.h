@@ -106,6 +106,9 @@ public:
     search_stack_t * root_stack;
     U64 nodes;
     U64 pruned_nodes;
+    U64 tablebase_hits;
+    int tablebase_limit;
+    int tablebase_probe_depth;
     bool stop_all;
     int next_poll;
     int sel_depth;
@@ -142,6 +145,8 @@ public:
     void iterative_deepening();
     int aspiration(int depth, int last_score);
     bool book_lookup();
+    bool tablebase_lookup();
+    bool probe_tablebase(int alpha, int beta, int depth, int & value);
     int pvs_root(int alpha, int beta, int depth);
     virtual int pvs(int alpha, int beta, int depth);
     int qsearch(int alpha, int beta, int depth);

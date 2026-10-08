@@ -1,4 +1,6 @@
 import contextlib
+from pathlib import Path
+import shutil
 import queue
 import subprocess
 import sys
@@ -78,6 +80,52 @@ def running_engine():
 
 
 class search_lifecycle_tests(unittest.TestCase):
+    def test_tablebase_path_reconfiguration(self):
+        with tempfile.TemporaryDirectory(prefix="qm2-tables-") as directory:
+            tables = Path(directory) / "tables with spaces"
+            shutil.copytree(Path(__file__).parent / "data" / "syzygy", tables)
+            with running_engine() as engine:
+                engine.send("uci")
+                engine.wait_for("uciok")
+                self.assertTrue(any(line.startswith("option name SyzygyPath ")
+                                    for line in engine.transcript))
+                engine.start_search()
+                engine.send(f"setoption name SyzygyPath value {tables}")
+                engine.wait_for_bestmove()
+                engine.wait_for("info string Syzygy supports up to 3 pieces")
+                engine.send("setoption name DrawContempt value 0")
+                engine.send("position fen 7k/8/8/8/8/8/8/KR6 w - - 0 1\ngo depth 3")
+                info = engine.wait_for("info depth 0 ")
+                self.assertIn("score cp 28000", info)
+                self.assertIn("tbhits 1", info)
+                engine.wait_for_bestmove()
+                engine.send("setoption name SyzygyPath value <empty>")
+                engine.wait_for("info string Syzygy supports up to 0 pieces")
+                engine.send("position fen 7k/8/8/8/8/8/8/KR6 w - - 0 1\ngo depth 1")
+                info = engine.wait_for("info depth 1 ")
+                self.assertNotIn("tbhits", info)
+                engine.wait_for_bestmove()
+                engine.send("quit")
+                engine.wait_for_exit()
+
+    def test_tablebase_infinite_and_ponder(self):
+        tables = Path(__file__).parent / "data" / "syzygy"
+        with running_engine() as engine:
+            engine.send(f"setoption name SyzygyPath value {tables}")
+            engine.wait_for("info string Syzygy supports up to 3 pieces")
+            for command, finish in (("go infinite", "stop"), ("go ponder", "ponderhit")):
+                engine.transcript.clear()
+                engine.send("position fen 7k/8/8/8/8/8/8/KR6 w - - 0 1")
+                engine.send(command)
+                engine.wait_for("info depth 0 ")
+                engine.send("isready")
+                engine.wait_for("readyok")
+                self.assertFalse(any(line.startswith("bestmove ") for line in engine.transcript))
+                engine.send(finish)
+                engine.wait_for_bestmove()
+            engine.send("quit")
+            engine.wait_for_exit()
+
     def test_long_position_history(self):
         with running_engine() as engine:
             moves = "g1f3 g8f6 f3g1 f6g8 " * 80

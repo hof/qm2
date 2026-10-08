@@ -38,3 +38,7 @@ target_link_libraries(test_search_tt_context MAX2SRC)
 
 add_executable(test_kpk test_kpk.cpp)
 target_link_libraries(test_kpk MAX2SRC)
+
+add_executable(test_tablebase test_tablebase.cpp)
+target_link_libraries(test_tablebase MAX2SRC)
+target_compile_definitions(test_tablebase PRIVATE TABLEBASE_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data/syzygy")

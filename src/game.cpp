@@ -40,7 +40,10 @@ namespace options {
         { "Wild", STRING, 0, "type combo default standard var standard var losers" },
         { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100" },
         { "KingAttackShelter", INT, 256, "type spin default 256 min 0 max 512" },
-        { "KingAttackPieces", INT, 256, "type spin default 256 min 0 max 512" }
+        { "KingAttackPieces", INT, 256, "type spin default 256 min 0 max 512" },
+        { "SyzygyPath", STRING, 0, "type string default <empty>" },
+        { "SyzygyProbeLimit", INT, 5, "type spin default 5 min 0 max 5" },
+        { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64" }
     };
     
     option_t * get_option(const char * key) {

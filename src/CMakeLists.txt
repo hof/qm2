@@ -10,6 +10,7 @@ add_library(MAX2SRC
 	book.cpp
         eval_material.cpp
         eval_pieces.cpp
+        tablebase.cpp
         eval_endgame.cpp
         eval_pawns.cpp
         eval_king_attack.cpp
@@ -27,7 +28,10 @@ link_directories(${MAX2_BINARY_DIR}/src)
 
 add_executable(maxima2 main.cpp)
 
-target_link_libraries(MAX2SRC pthread)
+add_library(fathom STATIC ../third_party/fathom/tbprobe.c)
+target_include_directories(fathom PUBLIC ../third_party/fathom)
+target_link_libraries(fathom PRIVATE pthread)
+target_link_libraries(MAX2SRC pthread fathom)
 target_link_libraries(maxima2 MAX2SRC)
 
 install (TARGETS maxima2 RUNTIME DESTINATION bin)

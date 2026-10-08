@@ -1,5 +1,7 @@
 cmake_minimum_required (VERSION 3.30)
-project (MAX2 LANGUAGES CXX)
+project (MAX2 LANGUAGES C CXX)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_STANDARD 26 CACHE STRING "C++ language standard")
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -74,6 +76,10 @@ add_test(test_search_pv tests/test_search_pv)
 add_test(test_search_repetition tests/test_search_repetition)
 add_test(test_search_tt_context tests/test_search_tt_context)
 add_test(test_kpk tests/test_kpk)
+add_test(test_tablebase tests/test_tablebase)
+add_test(test_download_tablebases ${Python3_EXECUTABLE}
+    ${PROJECT_SOURCE_DIR}/tests/test_download_tablebases.py
+    ${PROJECT_SOURCE_DIR}/tools/download_tablebases.py)
 set_tests_properties(test_search_ownership PROPERTIES TIMEOUT 10)
 add_test(test_search_lifecycle ${Python3_EXECUTABLE}
     ${PROJECT_SOURCE_DIR}/tests/test_search_lifecycle.py

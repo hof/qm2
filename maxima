@@ -1,0 +1,23 @@
+#!/bin/sh
+# Project entry point; Python is only needed for the download command.
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ "${1-}" = "tablebases:syzygy:download" ]; then
+    shift
+    exec python3 "$project_dir/tools/download_tablebases.py" "$@"
+fi
+if [ "${1-}" = "--help" ]; then
+    echo 'Usage: ./maxima [tablebases:syzygy:download --pieces 3|4|5|6|7 [--dry-run]]'
+    exit 0
+fi
+if [ "$#" -gt 0 ]; then
+    echo "Unknown command: $1" >&2
+    exit 2
+fi
+for build_type in release debug; do
+    engine_path="$project_dir/build/cpp26/$build_type/src/maxima2"
+    if [ -x "$engine_path" ]; then
+        exec "$engine_path"
+    fi
+done
+echo 'Build Maxima first: cmake --build --preset cpp26_release' >&2
+exit 1

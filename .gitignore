@@ -35,3 +35,8 @@
 /src/book.w17.bin
 *.log
 /.tools/
+
+/tablebases/
+
+/.context/
+__pycache__/

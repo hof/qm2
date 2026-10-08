@@ -28,12 +28,15 @@
 
 #include "search.h"
 #include <limits>
+#include <chrono>
+#include <thread>
 #include "book.h"
 #include "uci_console.h"
 #include "eval.h"
 #include "timeman.h"
 #include "eval_material.h"
 #include "eval_endgame.h"
+#include "tablebase.h"
 
 namespace {
 
@@ -123,6 +126,9 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     ffp_enabled = options::get_value("FutilityPruning");
     draw_contempt = options::get_value("DrawContempt");
     ponder_move.clear();
+    tablebase_hits = 0;
+    tablebase_limit = MIN(options::get_value("SyzygyProbeLimit"), tablebase::max_pieces());
+    tablebase_probe_depth = options::get_value("SyzygyProbeDepth");
     nodes = 0;
     pruned_nodes = 0;
     stop_all = false;
@@ -170,10 +176,57 @@ void search_t::go() {
     assert(stack->best_move.piece == 0 && ponder_move.piece == 0);
     if (book_lookup()) { //book hit
         uci::send_pv(0, 1, 1, 1, game.tm.elapsed(),
-                stack->best_move.to_string().c_str(), score::EXACT);
+                stack->best_move.to_string().c_str(), score::EXACT, tablebase_hits);
     } else if (init_root_moves() > 0) { //do id search
-        iterative_deepening();
+        if (!tablebase_lookup()) {
+            iterative_deepening();
+        } else {
+            // A solved position still honors UCI infinite/ponder publication rules.
+            const bool infinite = !game.ponder && game.max_depth == MAX_PLY
+                && !game.max_nodes && !game.max_time_per_move
+                && !game.white_time && !game.black_time;
+            while ((infinite || pondering()) && !abort(true)) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }
     }
+}
+
+// Root DTZ results lack repetition history. Use the shortcut only when no
+// reversible game history is known; otherwise retain normal search.
+bool search_t::tablebase_lookup() {
+    if (wild != 0 || tablebase_limit == 0 || root.move_count == 0
+            || !_position_history.empty() || abort(true)) return false;
+    tablebase::root_result_t result;
+    if (!tablebase::probe_root(brd, tablebase_limit, result)) return false;
+    for (int i = 0; i < root.move_count; ++i) {
+        move_t & move = root.moves[i].move;
+        if (move.ssq != result.from || move.tsq != result.to
+                || move.promotion != result.promotion) continue;
+        if (abort(true)) return false;
+        stack->best_move = move;
+        stack->pv_moves[0] = move;
+        stack->pv_count = 1;
+        result_score = result.outcome == 0 ? draw_score() : result.outcome * score::TABLEBASE;
+        ++tablebase_hits;
+        uci::send_pv(result_score, 0, 0, nodes, game.tm.elapsed(),
+            move.to_string().c_str(), score::EXACT, tablebase_hits);
+        return true;
+    }
+    return false;
+}
+
+bool search_t::probe_tablebase(int alpha, int beta, int depth, int & value) {
+    if (wild != 0 || tablebase_limit == 0 || stack->in_check) return false;
+    const int outcome = tablebase::probe_wdl(brd, tablebase_limit, depth, tablebase_probe_depth);
+    if (outcome == -3) return false;
+    ++tablebase_hits;
+    const int magnitude = score::TABLEBASE - brd.ply;
+    const bool draw = outcome >= -1 && outcome <= 1;
+    value = draw ? draw_score() : outcome > 0 ? magnitude : -magnitude;
+    if (!draw && !(outcome > 0 ? value >= beta : value <= alpha)) return false;
+    stack->tt_clocks.include_child({0, 0}, 0);
+    return true;
 }
 
 /**
@@ -252,7 +305,7 @@ void search_t::iterative_deepening() {
     }
     if (stack->pv_count > 0) {
         uci::send_pv(result_score, MIN(depth, game.max_depth), sel_depth,
-                nodes + pruned_nodes, game.tm.elapsed(), pv_to_string().c_str(), score::EXACT);
+                nodes + pruned_nodes, game.tm.elapsed(), pv_to_string().c_str(), score::EXACT, tablebase_hits);
         if (stack->pv_count > 1) {
             ponder_move.set(&stack->pv_moves[1]);
         }
@@ -617,7 +670,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
                 update_pv(&rmove->move);
             }
             uci::send_pv(best, depth, sel_depth, nodes + pruned_nodes, game.tm.elapsed(),
-                    pv_to_string().c_str(), score::flags(best, alpha, beta));
+                    pv_to_string().c_str(), score::flags(best, alpha, beta), tablebase_hits);
             if (!exact) { //adjust asp. window
                 return score;
             }
@@ -734,6 +787,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
     //draw by lack of material or fifty quiet moves
     if (is_draw()) {
         return draw_score();
+    }
+    int tablebase_score;
+    if (tablebase_limit && probe_tablebase(alpha, beta, depth, tablebase_score)) {
+        return tablebase_score;
     }
 
     /*
@@ -994,6 +1051,10 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     //draw by lack of material or fifty quiet moves
     if (is_draw()) {
         return draw_score();
+    }
+    int tablebase_score;
+    if (tablebase_limit && probe_tablebase(alpha, beta, depth, tablebase_score)) {
+        return tablebase_score;
     }
 
     //stand-pat: return if eval is already good enough

@@ -125,18 +125,18 @@ void trans_table_t::set_size(int size_in_MB) {
 }
 
 int trans_table_t::make_score(int score, int ply) {
-    if (score > score::DEEPEST_MATE) {
+    if (score >= score::TABLEBASE - MAX_PLY) {
         return score + ply;
-    } else if (score < -score::DEEPEST_MATE) {
+    } else if (score <= -score::TABLEBASE + MAX_PLY) {
         return score - ply;
     }
     return score;
 }
 
 int trans_table_t::unmake_score(int score, int ply) {
-    if (score > score::DEEPEST_MATE) {
+    if (score >= score::TABLEBASE - MAX_PLY) {
         return score - ply;
-    } else if (score < -score::DEEPEST_MATE) {
+    } else if (score <= -score::TABLEBASE + MAX_PLY) {
         return score + ply;
     }
     return score;

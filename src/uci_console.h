@@ -62,7 +62,7 @@ namespace uci {
     void send_options();
     void send_ok();   
     void send_ready();
-    void send_pv(int cp_score, int depth, int sel_depth, U64 nodes, int time, const char * pv, int flag); 
+    void send_pv(int cp_score, int depth, int sel_depth, U64 nodes, int time, const char * pv, int flag, U64 tablebase_hits = 0);
     void send_bestmove(move_t move, move_t ponder_move);
     void send_unknown_option(std::string option);
     void send_string(std::string msg);

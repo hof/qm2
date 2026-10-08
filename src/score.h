@@ -37,6 +37,7 @@ namespace score {
         INVALID = 32002,
         MATE = 30000,
         DEEPEST_MATE = 29500,
+        TABLEBASE = 28000,
         WIN = 5000,
         DRAW = 0,
         LOWERBOUND = 1,
