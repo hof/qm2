@@ -1,11 +1,17 @@
 language: cpp
+dist: jammy
 
-compiler:
-    - g++
-    - clang
+install:
+    - mkdir -p .tools/bootstrap
+    - curl -fL https://micro.mamba.pm/api/micromamba/linux-64/latest -o .tools/bootstrap/micromamba.tar.bz2
+    - tar -xjf .tools/bootstrap/micromamba.tar.bz2 -C .tools/bootstrap bin/micromamba
+    - export MAMBA_ROOT_PREFIX="$PWD/.tools/mamba"
+    - .tools/bootstrap/bin/micromamba create -y -p "$PWD/.tools/cpp26" -f cpp26_environment.yml
 
 script:
-    - cmake --version
-    - cmake -H. -B_builds
-    - cmake --build _builds
-    - cd _builds && ctest --output-on-failure
+    - .tools/bootstrap/bin/micromamba run -p .tools/cpp26 cmake --preset cpp26_debug
+    - .tools/bootstrap/bin/micromamba run -p .tools/cpp26 cmake --build --preset cpp26_debug --parallel 2
+    - .tools/bootstrap/bin/micromamba run -p .tools/cpp26 ctest --preset cpp26_debug
+    - .tools/bootstrap/bin/micromamba run -p .tools/cpp26 cmake --preset cpp26_release
+    - .tools/bootstrap/bin/micromamba run -p .tools/cpp26 cmake --build --preset cpp26_release --parallel 2
+    - .tools/bootstrap/bin/micromamba run -p .tools/cpp26 ctest --preset cpp26_release

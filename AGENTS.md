@@ -77,19 +77,24 @@ header manually.
 
 ## Build and validation
 
-The UCI lifecycle tests require Python 3.7 or newer.
+The default build uses C++26. It requires a compiler supporting that mode
+(validated with GCC 16), CMake 3.30 or newer, and Ninja for the presets.
+The UCI lifecycle tests require Python 3.7 or newer. `cpp26_environment.yml`
+defines an isolated Linux compiler environment; see README.md for setup.
 
 Run from the repository root:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build -j
-ctest --test-dir build --output-on-failure
+cmake --preset cpp26_debug
+cmake --build --preset cpp26_debug --parallel
+ctest --preset cpp26_debug
 ```
 
 Tests must return a nonzero exit code when a check fails, so both direct execution
 and CTest detect failures. Detailed test output is available in
-`build/Testing/Temporary/LastTest.log`.
+`build/cpp26/debug/Testing/Temporary/LastTest.log`. Use `cpp26_release` for
+Release checks. When using the local toolchain, prefix these commands with
+`.tools/bootstrap/bin/micromamba run -p .tools/cpp26`.
 
 - Run checks appropriate to the change. For engine behavior changes, cover
   relevant move generation, make/unmake behavior, UCI commands, and search

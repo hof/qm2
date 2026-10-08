@@ -1,0 +1,38 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 30, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "cpp26_debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cpp26/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "",
+        "CMAKE_CXX_STANDARD": "26"
+      }
+    },
+    {
+      "name": "cpp26_release",
+      "inherits": "cpp26_debug",
+      "binaryDir": "${sourceDir}/build/cpp26/release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "cpp26_debug", "configurePreset": "cpp26_debug" },
+    { "name": "cpp26_release", "configurePreset": "cpp26_release" }
+  ],
+  "testPresets": [
+    {
+      "name": "cpp26_debug",
+      "configurePreset": "cpp26_debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "cpp26_release",
+      "configurePreset": "cpp26_release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

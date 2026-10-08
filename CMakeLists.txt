@@ -1,5 +1,9 @@
-cmake_minimum_required (VERSION 2.8.4)
-project (MAX2)
+cmake_minimum_required (VERSION 3.30)
+project (MAX2 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 26 CACHE STRING "C++ language standard")
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_options(-march=native)
 
@@ -52,7 +56,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 # tests
 enable_testing()
-find_package(PythonInterp 3.7 REQUIRED)
+find_package(Python3 3.7 REQUIRED COMPONENTS Interpreter)
 
 add_test(testBits tests/testBits)
 add_test(testSEE tests/testSEE)
@@ -69,7 +73,7 @@ add_test(test_search_history tests/test_search_history)
 add_test(test_search_pv tests/test_search_pv)
 add_test(test_search_repetition tests/test_search_repetition)
 set_tests_properties(test_search_ownership PROPERTIES TIMEOUT 10)
-add_test(test_search_lifecycle ${PYTHON_EXECUTABLE}
+add_test(test_search_lifecycle ${Python3_EXECUTABLE}
     ${PROJECT_SOURCE_DIR}/tests/test_search_lifecycle.py
     ${PROJECT_BINARY_DIR}/src/maxima2)
 set_tests_properties(test_search_lifecycle PROPERTIES TIMEOUT 45)

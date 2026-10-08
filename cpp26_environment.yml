@@ -1,0 +1,6 @@
+channels:
+  - conda-forge
+dependencies:
+  - gxx_linux-64=16
+  - cmake>=3.30,<5
+  - ninja
