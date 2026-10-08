@@ -85,3 +85,14 @@ add_test(test_search_lifecycle ${Python3_EXECUTABLE}
     ${PROJECT_SOURCE_DIR}/tests/test_search_lifecycle.py
     ${PROJECT_BINARY_DIR}/src/maxima2)
 set_tests_properties(test_search_lifecycle PROPERTIES TIMEOUT 45)
+
+# Suite parsing has an isolated, optional tooling dependency.
+find_program(SUITE_PYTHON_EXECUTABLE NAMES python3 python
+    PATHS "${PROJECT_SOURCE_DIR}/.tools/suites/bin" NO_DEFAULT_PATH)
+if(NOT SUITE_PYTHON_EXECUTABLE)
+    set(SUITE_PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
+endif()
+add_test(test_run_suite ${SUITE_PYTHON_EXECUTABLE}
+    ${PROJECT_SOURCE_DIR}/tests/test_run_suite.py
+    ${PROJECT_SOURCE_DIR}/tools/run_suite.py)
+set_tests_properties(test_run_suite PROPERTIES TIMEOUT 15)

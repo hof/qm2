@@ -111,7 +111,9 @@ information. Tests independently verify all legal normalized KPK states.
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
-(tested with GCC 16), CMake 3.30 or newer, Ninja, and Python 3.7 or newer.
+(tested with GCC 16), CMake 3.30 or newer, Ninja, and Python 3.7 or newer
+for lifecycle/download tests. Position-suite tests need Python 3.8+ and the
+optional tooling dependency described in chapter 6.1.
 Release builds retain `-O3 -DNDEBUG -march=native`; Debug builds retain assertions
 and debug symbols. Fathom is compiled separately as C11; a C compiler is also required.
 Native CPU tuning means the binary targets the build machine.
@@ -174,6 +176,85 @@ for performance comparisons. Track nodes, NPS, and time to depth; only match
 testing establishes a playing-strength gain. Test score bounds and cache reuse
 as well as best moves. Keep regular tests offline and deterministic.
 
+### 6.1 Position suites through UCI
+
+Position benchmarks live outside the engine. `tools/run_suite.py` communicates
+through ordinary UCI commands; the `maxima` shell launcher dispatches tooling.
+C++ correctness tests link the engine library, while lifecycle and suite runners
+exercise the executable. No suite-specific UCI command or search hook is needed.
+
+```bash
+./maxima suite:run --suite bratko-kopec --movetime 1000
+./maxima suite:run --suite bratko-kopec --nodes 200000 --json /tmp/bk.json
+./maxima suite:run --suite /path/to/positions.epd --engine /path/to/engine
+```
+
+The default is the bundled 24-position Bratko–Kopec suite, one second per
+position, and 64 MiB hash. The positions and historical expected moves were
+recovered from `tests/test_bratkokopec.cpp` before commit `be07fda` (2014).
+Treat these expected moves as benchmark targets, not proofs that alternatives
+are wrong. Review targets before using individual positions as correctness tests.
+
+Suite parsing requires Python 3.8+ and the pinned `chess` package from
+[python-chess](https://python-chess.readthedocs.io/en/latest/core.html).
+Install it in the ignored tooling environment:
+
+```bash
+python3 -m venv .tools/suites
+.tools/suites/bin/python -m pip install -r tools/requirements.txt
+```
+
+On systems missing `ensurepip`, but with system pip available, use
+`python3 -m venv --without-pip --system-site-packages .tools/suites` instead of
+the first command. The `suite:run` launcher and CTest select this environment
+when present; otherwise they use the normal Python interpreter, which must have
+the package installed. Reconfigure CMake after creating the environment.
+`--help`, engine execution, and the downloader do not import this dependency.
+
+The runner accepts standard EPD with one or more `bm` moves in **SAN** (such as
+`Nf3`, `Bxe6+`, `O-O`, or `a8=N`), and still accepts legal UCI coordinate moves.
+Moves are resolved against the position and normalized to UCI for comparison.
+Ambiguous or illegal moves and invalid positions are rejected with a
+line-numbered error before the engine starts. Castling uses the letter `O`.
+Blank lines and lines beginning with `#` are ignored.
+
+EPD operations can appear in any order. Quoted `id` labels are optional;
+`hmvc` and `fmvn` preserve the halfmove clock and fullmove number, defaulting to
+zero and one. Other operations are parsed and retained in the original EPD
+report field but do not affect scoring: a nonempty `bm` is required, so
+`am`-only suites are not supported. JSON includes canonical `expected_san` and
+normalized `expected_moves`, along with the original `epd`. For example:
+
+```text
+8/8/8/8/8/8/4P3/K6k w - - bm e3 e4; id "pawn advance";
+```
+
+Each position starts a fresh process in an empty temporary working directory,
+so Maxima's automatic book and previous caches cannot affect results. Supported
+options are set to hash 64 MiB (or `--hash`), one thread, one PV, no pondering,
+no opening book, zero draw contempt, and disabled Syzygy. The JSON report records
+engine identity and the options actually applied. Other engines may have additional
+book/tablebase options; inspect their configuration when comparing engines.
+
+Only the final `bestmove` determines solved/missed. The report also records the
+first observed expected PV move, latest primary-PV score/depth, engine-reported
+nodes/time, and wall time until `bestmove`. Reported depth/score can describe the
+last completed iteration rather than the final interrupted search. Time/node
+limits follow the engine's UCI implementation. Maxima currently reports visited
+plus pruned nodes but enforces `go nodes` against visited nodes; reported totals
+can therefore exceed the requested budget. Avoid equating node totals across
+engines. Time comparisons also depend on hardware and compiler flags.
+
+`--timeout` bounds response waits (default 30 seconds, extended to cover the
+requested time budget). Protocol errors/timeouts return nonzero and clean up the
+process. Unsolved positions are normal benchmark results and return success.
+`--json FILE` saves the complete report after a successful run. Suite results do
+not establish Elo; use engine matches for playing strength.
+
+CTest exercises the runner's parsing, protocol handling, final-move scoring,
+isolation, and timeout cleanup offline. The BK strength benchmark is deliberately
+run manually rather than enforced as a build check.
+
 ## 7. CLI and local tablebases
 
 ### 7.1 Download command
@@ -192,7 +273,8 @@ storage without downloading table files. `--directory /path/to/tables` selects
 another destination; the default `tablebases/syzygy/` is ignored by Git.
 Downloads check the mirror's published SHA-256 hashes, replace files atomically,
 and verify/reuse completed files when rerun. Python 3.7 or newer is needed only
-for this download command and the Python tests, not to run the compiled engine.
+for this download command and lifecycle/download tests, not to run the compiled
+engine. Position-suite parsing has its own dependency; see chapter 6.1.
 
 ### 7.2 Engine and UCI configuration
 

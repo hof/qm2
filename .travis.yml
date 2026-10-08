@@ -1,7 +1,15 @@
 language: cpp
 dist: jammy
 
+addons:
+    apt:
+        packages:
+            - python3-venv
+            - python3-pip
+
 install:
+    - python3 -m venv .tools/suites
+    - .tools/suites/bin/python -m pip install -r tools/requirements.txt
     - mkdir -p .tools/bootstrap
     - curl -fL https://micro.mamba.pm/api/micromamba/linux-64/latest -o .tools/bootstrap/micromamba.tar.bz2
     - tar -xjf .tools/bootstrap/micromamba.tar.bz2 -C .tools/bootstrap bin/micromamba

@@ -19,7 +19,9 @@ in `src/w17/`.
 ### Development
 
 See [MAXIMA.md](MAXIMA.md#5-build-and-debugging) for requirements, isolated toolchain setup,
-Debug and Release modes, and validation. Quick Release build:
+Debug and Release modes, and validation. Full tests need the
+[position-suite Python dependency](MAXIMA.md#61-position-suites-through-uci).
+Quick Release build:
 
 ```bash
 cmake --preset cpp26_release
@@ -47,9 +49,13 @@ is the quick contributor entry.
 
 ```bash
 ./maxima                                         # start the built engine
+./maxima suite:run --suite bratko-kopec --movetime 1000
 ./maxima tablebases:syzygy:download --pieces 4    # local three/four-piece tables
 ./maxima tablebases:syzygy:download --pieces 5 --dry-run
 ```
 
 See [local tablebases](MAXIMA.md#7-cli-and-local-tablebases) for UCI configuration,
 probe policies, storage selection, and download verification.
+
+See [position suites](MAXIMA.md#61-position-suites-through-uci) for SAN/EPD input,
+external engine selection, search budgets, and JSON reports.

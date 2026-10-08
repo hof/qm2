@@ -1,12 +1,21 @@
 #!/bin/sh
-# Project entry point; Python is only needed for the download command.
+# Project entry point; Python is only needed for tooling commands.
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 if [ "${1-}" = "tablebases:syzygy:download" ]; then
     shift
     exec python3 "$project_dir/tools/download_tablebases.py" "$@"
 fi
+if [ "${1-}" = "suite:run" ]; then
+    shift
+    suite_python="$project_dir/.tools/suites/bin/python"
+    if [ ! -x "$suite_python" ]; then
+        suite_python=python3
+    fi
+    exec "$suite_python" "$project_dir/tools/run_suite.py" "$@"
+fi
 if [ "${1-}" = "--help" ]; then
     echo 'Usage: ./maxima [tablebases:syzygy:download --pieces 3|4|5|6|7 [--dry-run]]'
+    echo '       ./maxima suite:run [--suite bratko-kopec|FILE] [--movetime MS|--nodes N] [--json FILE]'
     exit 0
 fi
 if [ "$#" -gt 0 ]; then
