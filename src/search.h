@@ -82,6 +82,8 @@ struct search_stack_t {
     pawn_table::entry_t * pt;
     material_table::entry_t * mt;
     U64 tt_key;
+    U64 tt_history;
+    clock_range_t tt_clocks;
     U64 attack[BKING + 1];
     uint8_t king_attack[BKING+1];
 };
@@ -93,6 +95,7 @@ private:
 protected:
     // Repetition keys before the root, oldest first; never includes the root itself.
     std::vector<U64> _position_history;
+    void init_tt_history();
 
 public:
     search_stack_t _stack[MAX_PLY + 1];
@@ -161,6 +164,7 @@ public:
     bool is_killer(move_t * const move);
     bool in_searched(move_t * move, int searched_moves);
     void reset_stack();
+    U64 tt_context() const;
     int extension(move_t * move, int gives_check);
     int reduction(int depth, int searched_moves, bool is_dangerous);
 

@@ -32,3 +32,6 @@ target_link_libraries(test_search_ownership MAX2SRC)
 target_link_libraries(test_search_history MAX2SRC)
 target_link_libraries(test_search_pv MAX2SRC)
 target_link_libraries(test_search_repetition MAX2SRC)
+
+add_executable(test_search_tt_context test_search_tt_context.cpp)
+target_link_libraries(test_search_tt_context MAX2SRC)

@@ -16,6 +16,10 @@ bool check(const char * name, bool success) {
 void play(search_t & search, const char * text) {
     move_t move;
     move.set(&search.brd, text);
+    if (!check("test sequence must contain legal moves",
+        search.brd.valid(&move) && search.brd.legal(&move))) {
+        std::exit(EXIT_FAILURE);
+    }
     search.forward(&move, search.brd.gives_check(&move));
 }
 
@@ -23,11 +27,13 @@ bool test_owned_history() {
     board_t board;
     board.init(start_fen);
     std::vector<U64> history;
-    for (const char * text : cycle) {
-        history.push_back(board.stack->repetition_key());
-        move_t move;
-        move.set(&board, text);
-        board.forward(&move);
+    for (int occurrence = 0; occurrence < 2; ++occurrence) {
+        for (const char * text : cycle) {
+            history.push_back(board.stack->repetition_key());
+            move_t move;
+            move.set(&board, text);
+            board.forward(&move);
+        }
     }
     const std::string fen = board.to_string();
     search_t repeated(fen.c_str(), nullptr, nullptr, history);
@@ -46,7 +52,8 @@ bool test_owned_history() {
     search_t partial(fen.c_str(), nullptr, nullptr, short_history);
     success &= check("unknown positions before a partial history must not be consulted",
         !partial.is_repetition());
-    const std::vector<U64> wrong_side_history = {key ^ 1, key, key ^ 1, key ^ 1};
+    const std::vector<U64> wrong_side_history = {
+        key ^ 1, key, key ^ 1, key, key ^ 1, key, key ^ 1, key};
     search_t wrong_side(fen.c_str(), nullptr, nullptr, wrong_side_history);
     success &= check("only positions with the same side to move can repeat",
         !wrong_side.is_repetition());
@@ -64,8 +71,8 @@ bool test_search_path() {
         search.forward(&moves[i], search.brd.gives_check(&moves[i]));
     }
     // No PVS call populated search-stack keys: board history must be sufficient.
-    bool success = check("a legal search cycle must be detected independently of PVS",
-        search.is_repetition());
+    bool success = check("one return to the root is only twofold repetition",
+        !search.is_repetition());
     for (int i = 3; i >= 0; --i) {
         search.backward(&moves[i]);
     }
@@ -75,7 +82,15 @@ bool test_search_path() {
         play(search, text);
     }
     search.reset_stack();
-    success &= check("rebasing the search stack must retain played history",
+    success &= check("rebasing must preserve twofold history without declaring a draw",
+        search.brd.ply == 0 && !search.is_repetition());
+    for (const char * text : cycle) {
+        play(search, text);
+    }
+    success &= check("root and pre-root matches together must count as threefold",
+        search.is_repetition());
+    search.reset_stack();
+    success &= check("rebasing the search stack must retain threefold history",
         search.brd.ply == 0 && search.is_repetition());
     play(search, "e2e4");
     success &= check("a pawn move must stop repetition scanning", !search.is_repetition());
@@ -94,6 +109,10 @@ bool test_null_moves_and_bounds() {
     for (int i = 0; i < 4; ++i) {
         search.backward();
     }
+    for (const char * text : cycle) {
+        play(search, text);
+    }
+    success &= check("undoing null moves must restore the root boundary", !search.is_repetition());
     for (const char * text : cycle) {
         play(search, text);
     }
@@ -122,14 +141,94 @@ bool test_cycle_after_pawn_push() {
         history.push_back(search.brd._stack[ply].repetition_key());
     }
     search_t supplied(search.brd.to_string().c_str(), nullptr, nullptr, history);
-    success &= check("supplied history must also normalize unavailable EP", supplied.is_repetition());
+    success &= check("a supplied twofold EP history must not declare a draw", !supplied.is_repetition());
     search.reset_stack();
-    success &= check("rebasing must preserve normalized EP history", search.is_repetition());
+    success &= check("rebasing turns a search cycle into twofold game history", !search.is_repetition());
+    for (const char * text : moves) {
+        play(search, text);
+    }
+    for (int ply = 0; ply < search.brd.ply; ++ply) {
+        history.push_back(search.brd._stack[ply].repetition_key());
+    }
+    search_t supplied_threefold(search.brd.to_string().c_str(), nullptr, nullptr, history);
+    success &= check("supplied threefold history must normalize unavailable EP",
+        supplied_threefold.is_repetition());
+    search.reset_stack();
+    success &= check("rebasing must preserve normalized EP for genuine threefold", search.is_repetition());
     search_t available("7k/8/8/3pP3/8/8/8/K7 w - d6 0 1");
+    for (int occurrence = 0; occurrence < 2; ++occurrence) {
+        for (const char * text : {"a1a2", "h8h7", "a2a1", "h7h8"}) {
+            play(available, text);
+        }
+        available.reset_stack();
+    }
+    success &= check("an expired legal EP capture must distinguish positions", !available.is_repetition());
     for (const char * text : {"a1a2", "h8h7", "a2a1", "h7h8"}) {
         play(available, text);
     }
-    success &= check("an expired legal EP capture must distinguish positions", !available.is_repetition());
+    available.reset_stack();
+    success &= check("three occurrences without legal EP must still count", available.is_repetition());
+    return success;
+}
+
+bool test_pre_root_matches() {
+    board_t board;
+    board.init(start_fen);
+    std::vector<U64> history;
+    bool success = true;
+    // Stop one move before returning to startpos. The matching occurrence is
+    // before the search root, while the node being tested is inside the search.
+    for (int occurrence = 0; occurrence < 2; ++occurrence) {
+        for (int i = 0; i < 3; ++i) {
+            history.push_back(board.stack->repetition_key());
+            move_t move;
+            move.set(&board, cycle[i]);
+            board.forward(&move);
+        }
+        search_t search(board.to_string().c_str(), nullptr, nullptr, history);
+        play(search, cycle[3]);
+        success &= check(occurrence == 0
+            ? "one pre-root match must not draw a search descendant"
+            : "two pre-root matches must draw a search descendant",
+            search.is_repetition() == (occurrence == 1));
+        history.push_back(board.stack->repetition_key());
+        move_t move;
+        move.set(&board, cycle[3]);
+        board.forward(&move);
+    }
+    return success;
+}
+
+bool test_repetition_scores() {
+    search_t search("7k/8/8/8/8/8/8/KR6 w - - 0 1");
+    search.draw_contempt = 0;
+    bool success = true;
+    for (int occurrence = 0; occurrence < 2; ++occurrence) {
+        for (const char * text : {"a1a2", "h8h7", "a2a1", "h7h8"}) {
+            play(search, text);
+        }
+        search.reset_stack();
+        search.init_root_moves();
+        success &= check("only genuine threefold game history must score as a draw",
+            search.is_draw() == (occurrence == 1));
+        const std::string fen = search.brd.to_string();
+        const U64 key = search.brd.stack->repetition_key();
+        const int score = search.qsearch(-score::INF, score::INF, 0);
+        success &= check(occurrence == 0
+            ? "quiescence must retain a rook advantage after twofold repetition"
+            : "quiescence must score genuine threefold repetition as a draw",
+            occurrence == 0 ? score > 200 : score == 0);
+        trans_table::clear();
+        const int full_score = search.pvs(-score::INF, score::INF, 1);
+        success &= check(occurrence == 0
+            ? "one-ply search must retain a rook advantage after twofold repetition"
+            : "one-ply search must score genuine threefold repetition as a draw",
+            occurrence == 0 ? full_score > 200 : full_score == 0);
+        success &= check("repetition score checks must finish and restore the root",
+            !search.stop_all && search.brd.ply == 0
+            && search.brd.to_string() == fen && search.brd.stack->repetition_key() == key
+            && search.stack == search.root_stack);
+    }
     return success;
 }
 
@@ -218,5 +317,7 @@ int main() {
     success &= test_null_moves_and_bounds();
     success &= test_cycle_after_pawn_push();
     success &= test_enpassant_identity();
+    success &= test_pre_root_matches();
+    success &= test_repetition_scores();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

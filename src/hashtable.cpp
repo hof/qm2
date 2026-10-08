@@ -117,9 +117,9 @@ void trans_table_t::set_size(int size_in_MB) {
     }
     int entry_size = sizeof (entry_t);
     int max_entries = (size_in_MB * 1024 * 1024) / entry_size;
-    size = 1 << (max_entries ? bsr(max_entries) : 0);
+    cluster_count = MAX(1, max_entries / BUCKETS);
+    size = cluster_count * BUCKETS;
     table = new entry_t[size];
-    max_hash_key = size - 1;
     size_in_mb = size_in_MB;
     clear();
 }
@@ -142,19 +142,20 @@ int trans_table_t::unmake_score(int score, int ply) {
     return score;
 }
 
-void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int flags) {
+void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int flags, U64 context, clock_range_t clocks) {
     assert(depth > 0);
     entry_t * best_entry = NULL;
     int best_score = -score::INF;
     age = age % 64;
     score = make_score(score, ply);
-    U64 value = encode(age, depth, score, move, flags);
+    U64 value = encode(age, depth, score, move, flags, clocks);
     int ix = index(key);
     int bix = ix;
     for (int i = 0; i < BUCKETS; i++) {
-        bix = (ix + i) & max_hash_key;
+        bix = ix + i;
         entry_t & entry = table[bix];
-        if ((entry.key ^ entry.value) == key) { //overwrite; note the entry did not work anyway)  
+        if (decode_depth(entry.value) && (entry.key ^ entry.value) == key) {
+            entry.context = context;
             entry.value = value;
             entry.key = value ^ key;
             return;
@@ -173,25 +174,32 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
     }
     //no match; store in bucket with 1) oldest age and 2) lowest depth
     assert(best_entry != NULL);
+    best_entry->context = context;
     best_entry->value = value;
     best_entry->key = value ^ key;
 }
 
-bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags) {
+bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks) {
     assert(depth >= 0);
     move = 0;
     if (enabled) {
         int ix = index(key);
         int bix = ix;
         for (int i = 0; i < BUCKETS; i++) {
-            bix = (ix + i) & max_hash_key;
+            bix = ix + i;
             entry_t & entry = table[bix];
-            if ((entry.key ^ entry.value) == key) {
+            if (decode_depth(entry.value) && (entry.key ^ entry.value) == key) {
                 move = decode_move(entry.value);
                 score = unmake_score(decode_score(entry.value), ply);
                 flags = decode_flag(entry.value);
                 int entry_depth = decode_depth(entry.value);
-                return entry_depth >= depth;
+                const clock_range_t stored_clocks = decode_clocks(entry.value);
+                const bool usable = entry_depth >= depth && entry.context == context
+                    && stored_clocks.contains(clock);
+                if (usable && clocks) {
+                    *clocks = stored_clocks;
+                }
+                return usable;
             }
         }
     }
@@ -202,12 +210,12 @@ namespace trans_table {
 
     trans_table_t _global_table(TABLE_SIZE);
 
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag) {
-        _global_table.store(key, age, ply, depth, score, move, flag);
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context, clock_range_t clocks) {
+        _global_table.store(key, age, ply, depth, score, move, flag, context, clocks);
     }
 
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags) {
-        return _global_table.retrieve(key, ply, depth, score, move, flags);
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks) {
+        return _global_table.retrieve(key, ply, depth, score, move, flags, context, clock, clocks);
     }
 
     void clear() {

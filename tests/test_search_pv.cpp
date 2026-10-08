@@ -24,7 +24,7 @@ bool test_store_pv(table_state_t state) {
             move_t stored_move;
             stored_move.set(&board, state == table_state_t::matching ? pv_moves[i] : stale_moves[i]);
             trans_table::store(board.stack->tt_key, 0, 0, 7, 123 + i,
-                stored_move.to_int(), score::EXACT);
+                stored_move.to_compact(), score::EXACT);
         }
         board.forward(&move);
     }
@@ -39,7 +39,7 @@ bool test_store_pv(table_state_t state) {
         if (i > 0) {
             int score = 0, move = 0, flag = 0;
             const bool found = trans_table::retrieve(board.stack->tt_key, 0, 1, score, move, flag);
-            const bool correct_move = found && move == search.stack->pv_moves[i].to_int();
+            const bool correct_move = found && move == search.stack->pv_moves[i].to_compact();
             // Matching entries retain their real search bounds. New/replaced moves
             // are ordering hints and must not masquerade as exact evaluations.
             const bool correct_bound = state == table_state_t::matching

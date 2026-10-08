@@ -36,11 +36,14 @@ namespace {
 }
 
 bool w17_search_t::w17_is_draw() {
+    const int threshold = 100 + stack->in_check;
+    if (brd.stack->fifty_count >= threshold) {
+        stack->tt_clocks = {static_cast<uint8_t>(threshold), 101};
+        return true;
+    }
+    stack->tt_clocks.max = MIN(stack->tt_clocks.max, threshold - 1);
     if (brd.stack->fifty_count < 4) {
         return false;
-    }
-    if (brd.stack->fifty_count >= (100 + stack->in_check)) {
-        return true; //50 reversible moves
     }
     return is_repetition();
 }
@@ -52,6 +55,7 @@ int w17_search_t::pvs(int alpha, int beta, int depth) {
 int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
 
     nodes++;
+    stack->tt_clocks = {0, 101};
     stack->pv_count = 0;
 
     //win by having no more pieces
@@ -108,12 +112,16 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
      * Transposition table lookup
      */
 
-    stack->tt_key = brd.stack->tt_key; //needed for testing repetitions
+    stack->tt_key = brd.stack->tt_key;
+    const U64 context = tt_context();
+    clock_range_t tt_clocks;
     int tt_move = 0, tt_flag = 0, tt_score;
-    if (depth > 0 && trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag)) {
+    if (depth > 0 && trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag, context,
+            brd.stack->fifty_count, &tt_clocks)) {
         if ((tt_flag == score::LOWERBOUND && tt_score >= beta)
                 || (tt_flag == score::UPPERBOUND && tt_score <= alpha)
                 || tt_flag == score::EXACT) {
+            stack->tt_clocks.include_child(tt_clocks, 0);
             return tt_score;
         }
     }
@@ -124,7 +132,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
      * are a win in losers chess
      */
 
-    stack->tt_move.set(tt_move);
+    stack->tt_move.set_compact(&brd, tt_move);
     move_t * move = move::first(this, 0);
     if (!move) {
         return score::MATE - brd.ply;
@@ -182,7 +190,9 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
             score = -w17_pvs(-alpha - 1, -alpha, in_mate_search, depth - 1 + extend);
             if (pv && score > alpha) {
                 //full window research
+                const clock_range_t previous_clocks = stack->tt_clocks;
                 score = -w17_pvs(-beta, -alpha, in_mate_search, depth - 1 + extend);
+                stack->tt_clocks.include_child(previous_clocks, 0);
             }
         }
         backward(move);
@@ -198,7 +208,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
             if (score >= beta) {
 
                 if (depth > 0) {
-                    trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_int(), score::LOWERBOUND);
+                    trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
                 }
 
                 if (depth > 0 && !move->capture && !move->promotion && !move->castle) {
@@ -237,7 +247,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
 
     if (depth > 0) {
         int flag = score::flags(best, alpha1, beta); 
-        trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
+        trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_compact(), flag, context, stack->tt_clocks);
     }
 
     return best;

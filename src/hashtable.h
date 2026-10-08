@@ -134,6 +134,24 @@ namespace pawn_table {
 
 };
 
+// Clock values for which the searched result remains valid. Child constraints
+// include quiescence and TT cutoffs; 101 denotes no upper limit.
+struct clock_range_t {
+    uint8_t min;
+    uint8_t max;
+
+    bool contains(int clock) const {
+        return clock >= min && (max == 101 || clock <= max);
+    }
+
+    void include_child(clock_range_t child, int advance) {
+        min = MAX(min, MAX(0, int(child.min) - advance));
+        if (child.max != 101) {
+            max = MIN(max, MAX(0, int(child.max) - advance));
+        }
+    }
+};
+
 class trans_table_t {
 private:
 
@@ -142,50 +160,54 @@ private:
     struct entry_t {
         U64 key;
         U64 value;
+        U64 context;
     };
+    static_assert(sizeof(entry_t) == 24);
 
     int size_in_mb;
     int size;
-    int max_hash_key;
+    int cluster_count;
     entry_t * table;
 
     int index(U64 hash_code) {
-        return hash_code & max_hash_key;
+        return int((static_cast<__uint128_t>(hash_code) * cluster_count) >> 64) * BUCKETS;
     }
 
-    /**
-     * Encodes ply, depth, score, flag and move into single U64 integer
-     * 0..31 | 32..33 (flag)        | 34..49 | 50..57 | 58..63
-     * move  | up=1, low=2, exact=3 | score  | depth  | age (using root ply)
-     */
-    U64 encode(int age, int depth, int score, int move, int flag) {
+    // Move 16, bound 2, score 16, depth 8, age 6, clock limits 7 each.
+    U64 encode(int age, int depth, int score, int move, int flag, clock_range_t clocks) {
         assert(age >= 0 && age <= 63);
-        assert(depth >= 0 && depth <= 255);
-        assert(score < score::INF);
-        assert(score > -score::INF);
+        assert(depth > 0 && depth <= 255);
+        assert(score < score::INF && score > -score::INF);
+        assert(move >= 0 && move <= 65535);
         assert(flag >= 0 && flag <= 3);
-        U64 result = move | (U64(flag) << 32) | (U64((unsigned short) score) << 34) | (U64(depth) << 50) | (U64(age) << 58);
-        return result;
+        assert(clocks.min <= clocks.max && clocks.max <= 101);
+        return U64(move) | (U64(flag) << 16) | (U64(uint16_t(score)) << 18)
+            | (U64(depth) << 34) | (U64(age) << 42)
+            | (U64(clocks.min) << 48) | (U64(clocks.max) << 55);
     }
 
-    uint32_t decode_move(U64 x) {
-        return x & 0x0FFFFFFFF;
+    uint16_t decode_move(U64 value) {
+        return value & 65535;
     }
 
-    uint8_t decode_flag(U64 x) {
-        return (x >> 32) & 3;
+    uint8_t decode_flag(U64 value) {
+        return (value >> 16) & 3;
     }
 
-    int16_t decode_score(U64 x) {
-        return (x >> 34) & 0x0FFFF;
+    int16_t decode_score(U64 value) {
+        return (value >> 18) & 65535;
     }
 
-    uint8_t decode_depth(U64 x) {
-        return (x >> 50) & 255;
+    uint8_t decode_depth(U64 value) {
+        return (value >> 34) & 255;
     }
 
-    uint8_t decode_age(U64 x) {
-        return (x >> 58) & 63;
+    uint8_t decode_age(U64 value) {
+        return (value >> 42) & 63;
+    }
+
+    clock_range_t decode_clocks(U64 value) {
+        return {uint8_t((value >> 48) & 127), uint8_t((value >> 55) & 127)};
     }
 
     int make_score(int score, int ply);
@@ -198,8 +220,9 @@ public:
     trans_table_t(int size_in_MB);
     void set_size(int size_in_MB);
 
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag);
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags);
+    // Moves use move_t::to_compact(); score validation retains both full keys.
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101});
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr);
 
     ~trans_table_t() {
         delete [] table;
@@ -212,8 +235,8 @@ public:
 
 namespace trans_table {
     const int TABLE_SIZE = options::get_value("Hash");
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag);
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags);
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101});
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr);
     void clear();
     void set_size(int size_in_MB);
     void enable();

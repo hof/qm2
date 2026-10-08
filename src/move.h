@@ -45,6 +45,8 @@ public:
     void set(board_t * pos, const char * move_str);
     std::string to_string();
     int to_int();
+    uint16_t to_compact() const;
+    void set_compact(board_t * pos, uint16_t move);
 
     /**
      * Sets a quiet move

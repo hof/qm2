@@ -44,6 +44,7 @@ public:
         for (U64 & key : _position_history) {
             key ^= hash::codes[13][17];
         }
+        init_tt_history();
         brd.stack->material_hash ^= hash::codes[13][17];
         brd.stack->pawn_hash ^= hash::codes[13][17];
     }

@@ -72,6 +72,7 @@ add_test(test_search_ownership tests/test_search_ownership)
 add_test(test_search_history tests/test_search_history)
 add_test(test_search_pv tests/test_search_pv)
 add_test(test_search_repetition tests/test_search_repetition)
+add_test(test_search_tt_context tests/test_search_tt_context)
 set_tests_properties(test_search_ownership PROPERTIES TIMEOUT 10)
 add_test(test_search_lifecycle ${Python3_EXECUTABLE}
     ${PROJECT_SOURCE_DIR}/tests/test_search_lifecycle.py

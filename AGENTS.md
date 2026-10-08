@@ -45,6 +45,8 @@ Keep commits focused and independently reviewable.
 - Use Stockfish as inspiration for chess algorithms, playing-strength
   improvements, and testing practices. Express useful ideas in Maxima2's own
   style rather than adopting Stockfish's code style or architecture wholesale.
+- Prioritize missing engine fundamentals and substantial measured strength gains
+  over complex changes aimed at marginal Elo improvements.
 - Keep heuristics understandable and independently testable. Justify added
   complexity with measured benefits.
 - Treat performance as a first-class requirement. Preserve useful low-level

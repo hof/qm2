@@ -99,7 +99,7 @@ bool test_tt() {
     }
 
     move_t * tmove = move::first(s, 0);
-    trans_table::store(s->brd.stack->tt_key, s->brd.root_ply, s->brd.ply, 123, -12345, tmove->to_int(), 3);
+    trans_table::store(s->brd.stack->tt_key, s->brd.root_ply, s->brd.ply, 123, -12345, tmove->to_compact(), 3);
 
     bool result = trans_table::retrieve(s->brd.stack->tt_key, s->brd.ply, 123, score, move, flag);
 
@@ -107,25 +107,25 @@ bool test_tt() {
     if (result == false
             || score != -12345
             || flag != 3
-            || move != tmove->to_int()) {
+            || move != tmove->to_compact()) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=store/retrieve error" << std::endl;
         delete s;
         return false;
     }
 
-    //testing the Lasker-Reichhelm Position
-    //test if searching the position with a hashtable finished a depth 15 
-    //search with less than 50.000 nodes
-
-    uci::silent(true);
-    engine_t * engine = engine::instance();
-    engine::settings()->max_depth = 15;
-    engine->new_game("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - -");
-    engine->think();
-    engine->stop_all();
-
-    if (engine->get_total_nodes() > 50000) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=hashtable not effective" << std::endl;
+    // Verify actual score reuse on the Lasker-Reichhelm position. A fixed node
+    // ceiling conflates cache correctness with search policy and move ordering.
+    trans_table::clear();
+    const char * fen = "8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1";
+    search_t cold(fen);
+    cold.stack->in_check = cold.brd.in_check();
+    const int expected = cold.pvs(-score::INF, score::INF, 8);
+    search_t warm(fen);
+    warm.stack->in_check = warm.brd.in_check();
+    const int actual = warm.pvs(-score::INF, score::INF, 8);
+    if (cold.stop_all || warm.stop_all || cold.nodes <= 1 || warm.nodes != 1
+            || actual != expected || warm.brd.to_string() != fen) {
+        std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=matching-context score reuse failed" << std::endl;
         delete s;
         return false;
     }

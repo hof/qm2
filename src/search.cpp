@@ -34,6 +34,36 @@
 #include "timeman.h"
 #include "eval_material.h"
 
+namespace {
+
+constexpr U64 game_history_salt = 0x9e3779b97f4a7c15ULL;
+constexpr U64 search_history_salt = 0xd1b54a32d192ed03ULL;
+
+U64 mix_context(U64 key) {
+    key = (key ^ (key >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    key = (key ^ (key >> 27)) * 0x94d049bb133111ebULL;
+    return key ^ (key >> 31);
+}
+
+}
+
+// A multiset fingerprint preserves occurrence counts without requiring the
+// same move order. Game history and search history have different draw policies.
+void search_t::init_tt_history() {
+    stack->tt_history = 0;
+    for (U64 key : _position_history) {
+        stack->tt_history += mix_context(key ^ game_history_salt);
+    }
+}
+
+U64 search_t::tt_context() const {
+    const U64 node_kind = brd.ply == 0 ? game_history_salt
+        : brd.ply < stack->repetition_start ? 0 : search_history_salt;
+    const int white_contempt = root_wtm ? draw_contempt : -draw_contempt;
+    return stack->tt_history ^ node_kind
+        ^ mix_context(static_cast<U64>(white_contempt) ^ 0xa0761d6478bd642fULL);
+}
+
 /**
  * Initialize sort values for root move
  * @param m move
@@ -104,6 +134,8 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     memset(history, 0, sizeof (history));
     stack->eval_result = score::INVALID;
     stack->repetition_start = -static_cast<int>(_position_history.size());
+    init_tt_history();
+    stack->tt_clocks = {0, 101};
 }
 
 /**
@@ -281,6 +313,8 @@ void search_t::forward() {
     brd.forward();
     // A null move is not part of legal game history.
     stack->repetition_start = brd.ply + 1;
+    stack->tt_history = 0;
+    stack->tt_clocks = {0, 101};
     assert(stack == &_stack[brd.ply]);
 }
 
@@ -288,8 +322,10 @@ void search_t::forward() {
  * Undo a null move
  */
 void search_t::backward() {
+    (stack - 1)->tt_clocks.include_child(stack->tt_clocks, 0);
     stack--;
     brd.backward();
+    assert(stack->tt_clocks.contains(brd.stack->fifty_count));
     assert(stack == &_stack[brd.ply]);
 }
 
@@ -301,10 +337,18 @@ void search_t::backward() {
 void search_t::forward(move_t * move, bool gives_check) {
     stack->current_move.set(move);
     (stack + 1)->repetition_start = stack->repetition_start;
+    (stack + 1)->tt_history = stack->tt_history;
     stack++;
     stack->in_check = gives_check;
+    stack->tt_clocks = {0, 101};
     stack->eval_result = score::INVALID;
     brd.forward(move);
+    if (brd.stack->fifty_count == 0) {
+        stack->tt_history = 0;
+    } else if (brd.ply - 1 >= stack->repetition_start) {
+        stack->tt_history += mix_context((brd.stack - 1)->repetition_key()
+            ^ (brd.ply == 1 ? game_history_salt : search_history_salt));
+    }
     assert(stack == &_stack[brd.ply]);
 }
 
@@ -313,8 +357,14 @@ void search_t::forward(move_t * move, bool gives_check) {
  * @param move
  */
 void search_t::backward(move_t * move) {
+    // Pawn moves and captures reset the clock, so their result cannot depend
+    // on the parent clock. Quiet moves advance it by one; null moves do not.
+    if (brd.stack->fifty_count != 0) {
+        (stack - 1)->tt_clocks.include_child(stack->tt_clocks, 1);
+    }
     stack--;
     brd.backward(move);
+    assert(stack->tt_clocks.contains(brd.stack->fifty_count));
     assert(stack == &_stack[brd.ply]);
 }
 
@@ -350,7 +400,7 @@ std::string search_t::pv_to_string() {
             if (tt_move == 0) {
                 break;
             }
-            m.set(tt_move);
+            m.set_compact(&b, tt_move);
             result += m.to_string() + " ";
             b.forward(&m);
         }
@@ -371,9 +421,9 @@ void search_t::store_pv() {
     for (int i = 0; i < stack->pv_count; i++) {
         if (i > 0) {
             trans_table::retrieve(b.stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
-            m.set(tt_move);
+            m.set_compact(&b, tt_move);
             if (m.equals(&stack->pv_moves[i]) == false) {
-                trans_table::store(b.stack->tt_key, 0, 0, 1, 0, stack->pv_moves[i].to_int(), 0);
+                trans_table::store(b.stack->tt_key, 0, 0, 1, 0, stack->pv_moves[i].to_compact(), 0);
             }
         }
         b.forward(&stack->pv_moves[i]);
@@ -425,7 +475,7 @@ int search_t::init_root_moves() {
     root.moves[0].move.clear();
     int tt_move = 0, tt_flags, tt_score;
     trans_table::retrieve(brd.stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
-    stack->tt_move.set(tt_move);
+    stack->tt_move.set_compact(&brd, tt_move);
     root.in_check = brd.in_check();
     stack->tt_key = brd.stack->tt_key;
     stack->best_move.set(0);
@@ -582,23 +632,26 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
  * a) lack of material
  * b) fifty quiet moves
  * c) repetition
- * Repetition uses the existing search-cycle policy: one earlier match suffices.
+ * Game history requires three occurrences; cycles strictly inside search
+ * are cut off after one earlier match as a search heuristic.
  * @return true if search should score this node as drawn
  */
 bool search_t::is_draw() {
     if (brd.is_draw()) { //draw by no mating material
         return true;
     }
-    if (brd.stack->fifty_count < 4) {
-        return false;
-    }
     if (brd.stack->fifty_count >= 100) {
-        if (!stack->in_check) {
-            return true;
-        }
         // Checkmate takes precedence. Probe fresh legal evasions, including quiet moves.
         stack->tt_move.clear();
-        return move::first(this, 1) != nullptr;
+        if (!stack->in_check || move::first(this, 1) != nullptr) {
+            stack->tt_clocks = {100, 101};
+            return true;
+        }
+        return false;
+    }
+    stack->tt_clocks.max = MIN(stack->tt_clocks.max, 99);
+    if (brd.stack->fifty_count < 4) {
+        return false;
     }
     return is_repetition();
 }
@@ -606,10 +659,12 @@ bool search_t::is_draw() {
 bool search_t::is_repetition() const {
     const int stop_ply = MAX(brd.ply - brd.stack->fifty_count, stack->repetition_start);
     const U64 repetition_key = brd.stack->repetition_key();
+    int matches = 0;
     for (int ply = brd.ply - 4; ply >= stop_ply; ply -= 2) {
         const U64 key = ply >= 0 ? brd._stack[ply].repetition_key()
             : _position_history[static_cast<int>(_position_history.size()) + ply];
-        if (key == repetition_key) {
+        // The root belongs to game history, not to an internal search cycle.
+        if (key == repetition_key && (ply > 0 || ++matches == 2)) {
             return true;
         }
     }
@@ -624,6 +679,7 @@ bool search_t::is_repetition() const {
  * @return score for the current node
  */
 int search_t::pvs(int alpha, int beta, int depth) {
+    stack->tt_clocks = {0, 101};
 
     assert(alpha < beta);
     assert(alpha >= -score::INF);
@@ -684,18 +740,24 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
 
     const bool pv = alpha + 1 < beta;
-    stack->tt_key = brd.stack->tt_key; //needed for testing repetitions
+    stack->tt_key = brd.stack->tt_key;
+    const U64 context = tt_context();
+    clock_range_t tt_clocks;
     int tt_move = 0, tt_flag = 0, tt_score;
-    if (trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag)) {
+    if (trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag, context,
+            brd.stack->fifty_count, &tt_clocks)) {
         if (pv && tt_flag == score::EXACT) {
+            stack->tt_clocks.include_child(tt_clocks, 0);
             return tt_score;
         } else if (!pv && tt_score >= beta && tt_flag == score::LOWERBOUND) {
+            stack->tt_clocks.include_child(tt_clocks, 0);
             return tt_score;
         } else if (!pv && tt_score <= alpha && tt_flag == score::UPPERBOUND) {
+            stack->tt_clocks.include_child(tt_clocks, 0);
             return tt_score;
         }
     }
-    stack->tt_move.set(tt_move);
+    stack->tt_move.set_compact(&brd, tt_move);
 
     /*
      * Node pruning
@@ -725,7 +787,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
             const int RV = 5;
             if (null_verify && depth > RV && material::is_eg(this)) {
                 //verification
+                const clock_range_t previous_clocks = stack->tt_clocks;
                 int verified_score = pvs(alpha, beta, depth - 1 - RV);
+                stack->tt_clocks.include_child(previous_clocks, 0);
                 if (verified_score >= beta) {
                     return verified_score;
                 }
@@ -741,7 +805,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
 
     if (pv && depth > 2 && tt_move == 0) {
+        const clock_range_t previous_clocks = stack->tt_clocks;
         int iid_score = pvs(alpha, beta, depth - 2);
+        stack->tt_clocks.include_child(previous_clocks, 0);
         if (score::is_mate(iid_score)) {
             return iid_score;
         } else if (stack->best_move.piece) {
@@ -819,7 +885,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
         } else {
             score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
             if (score > alpha && (pv || reduce > 0)) { //open window research without reductions
+                const clock_range_t previous_clocks = stack->tt_clocks;
                 score = -pvs(-beta, -alpha, depth - 1 + extend);
+                stack->tt_clocks.include_child(previous_clocks, 0);
             }
         }
         backward(move);
@@ -833,7 +901,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         } else if (score > best) {
             stack->best_move.set(move);
             if (score >= beta) {
-                trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_int(), score::LOWERBOUND);
+                trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
                 if (!move->capture && !move->promotion && !move->castle) {
                     update_killers(move);
                     update_history(move);
@@ -871,7 +939,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     assert(brd.legal(&stack->best_move));
 
     int flag = score::flags(best, alpha1, beta);
-    trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_int(), flag);
+    trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_compact(), flag, context, stack->tt_clocks);
     return best;
 }
 
@@ -886,6 +954,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
  */
 
 int search_t::qsearch(int alpha, int beta, int depth) {
+    stack->tt_clocks = {0, 101};
 
     assert(depth <= 0);
     assert(alpha < beta);
@@ -1048,6 +1117,8 @@ void search_t::reset_stack() {
     stack = root_stack;
     stack->eval_result = score::INVALID;
     stack->repetition_start = -static_cast<int>(_position_history.size());
+    init_tt_history();
+    stack->tt_clocks = {0, 101};
     brd._stack[0].copy(brd.stack);
     brd.stack = &brd._stack[0];
     nodes = 0;
