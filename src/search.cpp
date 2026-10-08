@@ -363,7 +363,7 @@ void search_t::store_pv() {
             trans_table::retrieve(b.stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
             m.set(tt_move);
             if (m.equals(&stack->pv_moves[i]) == false) {
-                trans_table::store(b.stack->tt_key, 0, 0, 1, 0, m.to_int(), 0);
+                trans_table::store(b.stack->tt_key, 0, 0, 1, 0, stack->pv_moves[i].to_int(), 0);
             }
         }
         b.forward(&stack->pv_moves[i]);

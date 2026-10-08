@@ -66,6 +66,7 @@ add_test(testMates tests/testMates)
 add_test(test_leaf_search tests/test_leaf_search)
 add_test(test_search_ownership tests/test_search_ownership)
 add_test(test_search_history tests/test_search_history)
+add_test(test_search_pv tests/test_search_pv)
 set_tests_properties(test_search_ownership PROPERTIES TIMEOUT 10)
 add_test(test_search_lifecycle ${PYTHON_EXECUTABLE}
     ${PROJECT_SOURCE_DIR}/tests/test_search_lifecycle.py
