@@ -187,6 +187,7 @@ exercise the executable. No suite-specific UCI command or search hook is needed.
 ./maxima suite:run --suite bratko-kopec --movetime 1000
 ./maxima suite:run --suite bratko-kopec --nodes 200000 --json /tmp/bk.json
 ./maxima suite:run --suite /path/to/positions.epd --engine /path/to/engine
+./maxima suite:run --suite /path/to/positions.epd --syzygy-path tablebases/syzygy
 ```
 
 The default is the bundled 24-position Bratko–Kopec suite, one second per
@@ -232,8 +233,15 @@ normalized `expected_moves`, along with the original `epd`. For example:
 Each position starts a fresh process in an empty temporary working directory,
 so Maxima's automatic book and previous caches cannot affect results. Supported
 options are set to hash 64 MiB (or `--hash`), one thread, one PV, no pondering,
-no opening book, zero draw contempt, and disabled Syzygy. The JSON report records
-engine identity and the options actually applied. Other engines may have additional
+no opening book, zero draw contempt, and disabled Syzygy by default for a
+search/evaluation baseline. To test the complete engine with local probing, pass
+`--syzygy-path /path/to/tables`. The runner resolves the path before changing
+working directories, requires WDL files, sets `SyzygyPath`, and sets the probe
+limit to five when advertised. Engines without `SyzygyPath` are rejected when
+probing is requested. Partial table coverage remains valid; uncovered positions
+use normal search. Per-position output and JSON include `tbhits` (zero when no
+hit was reported). The JSON report records engine identity and the options
+actually applied. Other engines may have additional
 book/tablebase options; inspect their configuration when comparing engines.
 
 Only the final `bestmove` determines solved/missed. The report also records the

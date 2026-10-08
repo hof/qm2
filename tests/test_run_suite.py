@@ -22,6 +22,8 @@ for line in sys.stdin:
         print("id name fixture")
         print("option name Hash type spin default 16 min 1 max 1024")
         print("option name OwnBook type check default true")
+        print("option name SyzygyPath type string default <empty>")
+        print("option name SyzygyProbeLimit type spin default 5 min 0 max 5")
         print("uciok", flush=True)
     elif command == "isready":
         print("readyok", flush=True)
@@ -31,7 +33,10 @@ for line in sys.stdin:
         assert commands.index("ucinewgame") < commands.index("isready")
         assert sum(c.startswith("go ") for c in commands) == 1
         print("info depth 3 score cp 20 nodes 20 time 1 pv e2e4 e7e5")
-        print("info depth 4 score cp 30 nodes 40 time 2 pv d2d4 d7d5")
+        enabled = "setoption name SyzygyProbeLimit value 5" in commands
+        if enabled:
+            assert any(c.startswith("setoption name SyzygyPath value ") for c in commands)
+        print(f"info depth 4 score cp 30 nodes 40 time 2 tbhits {3 if enabled else 0} pv d2d4 d7d5")
         print("bestmove d2d4", flush=True)
     elif command == "quit":
         break
@@ -133,7 +138,27 @@ class suite_tests(unittest.TestCase):
                 self.assertIsNotNone(result['first_expected_ms'])
                 self.assertEqual(result['depth'], 4)
                 self.assertEqual(result['nodes'], 40)
-                self.assertEqual(metadata['options'], {'Hash': '32', 'OwnBook': 'false'})
+                self.assertEqual(metadata['options'], {'Hash': '32', 'OwnBook': 'false', 'SyzygyProbeLimit': '0'})
+                self.assertEqual(result['tbhits'], 0)
+
+    def test_syzygy_configuration_and_hits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = Path(directory) / 'engine.py'
+            engine.write_text(fake_engine)
+            tables = Path(directory) / 'tables with spaces'
+            tables.mkdir()
+            position = {'fen': '8/8/8/8/8/8/4P3/K6k w - - 0 1',
+                        'expected_moves': ['d2d4']}
+            result, metadata = runner.run_position([sys.executable, str(engine)], position,
+                                                   'nodes 40', 32, 3, tables)
+            self.assertEqual(metadata['options']['SyzygyPath'], str(tables.resolve()))
+            self.assertEqual(metadata['options']['SyzygyProbeLimit'], '5')
+            self.assertEqual(result['tbhits'], 3)
+            engine.write_text(fake_engine.replace(
+                '        print("option name SyzygyPath type string default <empty>")', ''))
+            with self.assertRaisesRegex(RuntimeError, 'does not advertise SyzygyPath'):
+                runner.run_position([sys.executable, str(engine)], position,
+                                    'nodes 40', 32, 3, tables)
 
     def test_exit_and_timeout_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:

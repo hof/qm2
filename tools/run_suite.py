@@ -123,7 +123,7 @@ def parse_info(line):
     return result
 
 
-def run_position(command, position, budget, hash_mb, timeout):
+def run_position(command, position, budget, hash_mb, timeout, syzygy_path=None):
     # Fresh processes guarantee cold caches, even without a Clear Hash option.
     # An empty working directory also excludes Maxima's automatic opening book.
     with tempfile.TemporaryDirectory(prefix="maxima-suite-") as directory:
@@ -136,6 +136,11 @@ def run_position(command, position, budget, hash_mb, timeout):
             settings = {"Hash": str(hash_mb), "Threads": "1", "OwnBook": "false",
                         "MultiPV": "1", "Ponder": "false", "DrawContempt": "0",
                         "SyzygyProbeLimit": "0"}
+            if syzygy_path is not None:
+                if "SyzygyPath" not in options:
+                    raise RuntimeError("engine does not advertise SyzygyPath")
+                settings.update(SyzygyPath=str(Path(syzygy_path).resolve()),
+                                SyzygyProbeLimit="5")
             applied = {name: value for name, value in settings.items() if name in options}
             for name, value in applied.items():
                 engine.send(f"setoption name {name} value {value}")
@@ -145,7 +150,7 @@ def run_position(command, position, budget, hash_mb, timeout):
             engine.send("position fen " + position["fen"])
             started = time.monotonic()
             engine.send("go " + budget)
-            result = dict(position, first_expected_ms=None)
+            result = dict(position, first_expected_ms=None, tbhits=0)
             deadline = started + timeout
             while True:
                 timestamp, line = engine.receive(deadline)
@@ -184,6 +189,8 @@ def main():
     limits.add_argument("--movetime", type=positive_int, help="milliseconds per position (default 1000)")
     limits.add_argument("--nodes", type=positive_int)
     parser.add_argument("--hash", type=positive_int, default=64, dest="hash_mb")
+    parser.add_argument("--syzygy-path", type=Path,
+                        help="enable local tablebases (up to five pieces); disabled by default")
     parser.add_argument("--timeout", type=positive_int, default=30, help="response timeout in seconds")
     parser.add_argument("--json", type=Path, help="write full report")
     args = parser.parse_args()
@@ -191,16 +198,21 @@ def main():
     budget = f"nodes {args.nodes}" if args.nodes else f"movetime {args.movetime or 1000}"
     try:
         positions = read_suite(suite)
+        if args.syzygy_path is not None:
+            args.syzygy_path = args.syzygy_path.resolve()
+            if not args.syzygy_path.is_dir() or not any(args.syzygy_path.glob("*.rtbw")):
+                raise ValueError("Syzygy path must be a directory containing WDL (.rtbw) tables")
         command = [str(Path(args.engine).resolve())]
         timeout = max(args.timeout, (args.movetime or 1000) / 1000 + 10)
         results = []
         for position in positions:
-            result, metadata = run_position(command, position, budget, args.hash_mb, timeout)
+            result, metadata = run_position(command, position, budget, args.hash_mb, timeout,
+                                            args.syzygy_path)
             results.append(result)
             print(f"{position['id']:>6} {'ok' if result['solved'] else 'miss':4} "
                   f"{result['bestmove']:5} expected {','.join(position['expected_moves'])} "
                   f"depth {result.get('depth', '?')} nodes {result.get('nodes', '?')} "
-                  f"time {result['elapsed_ms']:.0f}ms", flush=True)
+                  f"time {result['elapsed_ms']:.0f}ms tbhits {result['tbhits']}", flush=True)
         solved = sum(result["solved"] for result in results)
         report = {"suite": str(suite.resolve()), "engine": command[0], "engine_metadata": metadata,
                   "budget": budget, "cold_cache": True, "solved": solved,
