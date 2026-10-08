@@ -27,6 +27,7 @@
  */
 
 #include "search.h"
+#include <limits>
 #include "book.h"
 #include "uci_console.h"
 #include "eval.h"
@@ -819,10 +820,12 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 if (!move->capture && !move->promotion && !move->castle) {
                     update_killers(move);
                     update_history(move);
+                    // History is nonnegative; saturate penalties before the shift becomes invalid.
+                    const int history_shift = MIN(searched_moves, std::numeric_limits<int>::digits);
                     for (int i = 0; i < searched_moves; i++) {
                         move_t * m = &stack->searched[i];
                         if (!m->capture && !m->promotion && !m->castle) {
-                            history[m->piece][m->tsq] >>= searched_moves;
+                            history[m->piece][m->tsq] >>= history_shift;
                         }
                     }
                 }
