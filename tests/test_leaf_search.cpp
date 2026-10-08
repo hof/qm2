@@ -131,6 +131,51 @@ bool test_recapture() {
     return success;
 }
 
+bool test_material_draws() {
+    struct material_case_t {
+        const char * name;
+        const char * fen;
+        bool dead;
+    };
+    const material_case_t cases[] = {
+        {"white knight against bare king", "7k/8/8/8/8/8/8/KN6 w - - 0 1", true},
+        {"black knight against bare king", "kn6/8/8/8/8/8/8/7K b - - 0 1", true},
+        {"white bishop against bare king", "7k/8/8/8/8/8/8/KB6 w - - 0 1", true},
+        {"black bishop against bare king", "kb6/8/8/8/8/8/8/7K b - - 0 1", true},
+        {"same-color bishops, edge kings", "k7/8/2b5/8/8/5B2/8/7K w - - 0 1", true},
+        {"same-color bishops, central kings", "8/8/2b1k3/8/8/3K1B2/8/8 b - - 0 1", true},
+        {"promoted bishops on one color", "k7/8/2b5/8/4B3/5B2/8/7K w - - 0 1", true},
+        {"two white knights, central kings", "8/8/8/4k3/8/3KNN2/8/8 w - - 0 1", false},
+        {"two black knights, central kings", "8/8/8/3knn2/8/4K3/8/8 b - - 0 1", false},
+        {"knight against knight", "8/8/2n1k3/8/8/3K1N2/8/8 w - - 0 1", false},
+        {"bishop against knight", "8/8/2n1k3/8/8/3K1B2/8/8 w - - 0 1", false},
+        {"opposite-color bishops", "8/8/1b2k3/8/8/3K1B2/8/8 w - - 0 1", false},
+        {"bishop and knight", "8/8/4k3/8/8/3KNB2/8/8 w - - 0 1", false},
+        {"bishops on both colors", "8/8/4k3/8/8/3KBB2/8/8 w - - 0 1", false},
+        {"three knights", "8/8/4k3/8/8/3KNNN1/8/8 w - - 0 1", false},
+        {"pawn remains", "7k/8/8/8/8/8/P7/K7 w - - 0 1", false},
+        {"rook remains", "7k/8/8/8/8/8/8/KR6 w - - 0 1", false},
+        {"queen remains", "7k/8/8/8/8/8/8/KQ6 w - - 0 1", false},
+    };
+    bool success = true;
+    for (const material_case_t & test : cases) {
+        search_t search(test.fen);
+        prepare_search(search);
+        if (search.brd.is_draw() != test.dead || search.is_draw() != test.dead) {
+            std::cerr << test.name << ": incorrect material draw classification\n";
+            success = false;
+        }
+        if (test.dead) {
+            success &= check_score(test.name, "quiescence",
+                search.qsearch(-score::INF, score::INF, 0), 0);
+            success &= check_score(test.name, "one-ply search",
+                search.pvs(-score::INF, score::INF, 1), 0);
+            success &= restored_position(search, test.fen);
+        }
+    }
+    return success;
+}
+
 }
 
 int main() {
@@ -139,6 +184,8 @@ int main() {
     const position_case_t cases[] = {
         {"black checkmated", "7k/6Q1/5K2/8/8/8/8/8 b - - 0 1", true, 0, -score::MATE},
         {"white checkmated", "8/8/8/8/8/5k2/6q1/7K w - - 0 1", true, 0, -score::MATE},
+        {"black checkmated by two knights", "7k/5K2/5NN1/8/8/8/8/8 b - - 0 1", true, 0, -score::MATE},
+        {"white checkmated by two knights", "8/8/8/8/8/5nn1/5k2/7K w - - 0 1", true, 0, -score::MATE},
         {"black stalemated", "7k/5K2/6Q1/8/8/8/8/8 b - - 0 1", false, 0, 0},
         {"white stalemated", "8/8/8/8/8/6q1/5k2/7K w - - 0 1", false, 0, 0},
         {"bare kings on edges", "7k/8/8/8/8/8/8/K7 w - - 0 1", false, 3, 0},
@@ -153,5 +200,6 @@ int main() {
     success &= test_quiet_evasion();
     success &= test_capture();
     success &= test_recapture();
+    success &= test_material_draws();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

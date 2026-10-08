@@ -816,47 +816,25 @@ int board_t::see(const move_t * move) {
 }
 
 /**
- * Verify if the position on the board is a trivial, theoretical draw
- * @return true: it's a draw; false: not a trivial draw
+ * Recognize dead positions from material alone.
+ * @return true: no legal sequence can lead to mate; false: not proven dead
  */
 bool board_t::is_draw() {
     if (bb[WPAWN] || bb[BPAWN]
             || bb[WROOK] || bb[BROOK]
-            || bb[WQUEEN] || bb[BQUEEN]
-            || (bb[WKNIGHT] && bb[WBISHOP]) || (bb[BKNIGHT] && bb[BBISHOP])
-            || gt_1(bb[WBISHOP]) || gt_1(bb[BBISHOP])) {
-        return false; //not a draw.. there is mating material on the board
-    }
-    int wn = count(WKNIGHT);
-    if (wn > 2) { //3 knights, exotic!
+            || bb[WQUEEN] || bb[BQUEEN]) {
         return false;
     }
-    int bn = count(BKNIGHT);
-    if (bn > 2) {
+    const U64 knights = bb[WKNIGHT] | bb[BKNIGHT];
+    const U64 bishops = bb[WBISHOP] | bb[BBISHOP];
+    if (!gt_1(knights | bishops)) {
+        return true; //bare kings, or a single minor against a bare king
+    }
+    if (knights) {
         return false;
     }
-
-    //at this point a side can have: a) no pieces, b) 1 knight, c) 2 knights or d) 1 bishop.
-    int wbc = count(WBISHOP);
-    int bbc = count(BBISHOP);
-    assert(wn <= 2 && wbc <= 1);
-    assert(bn <= 2 && bbc <= 1);
-    assert(!(wbc >= 1 && wn >= 1));
-    assert(!(bbc >= 1 && bn >= 1));
-
-    int wminors = wbc + wn;
-    int bminors = bbc + bn;
-    if ((wminors == 0 && bminors == 0)
-            || (wminors == 0 && bminors == 1)
-            || (bminors == 0 && wminors == 1)) {
-        return true; //bare kings, or one minor against a bare king
-    }
-
-    //for other cases, mates are only possible with a king on the edge
-    if ((bb[WKING] & EDGE) || (bb[BKING] & EDGE)) {
-        return false;
-    }
-    return true; //save to assume theoretical draw, when no king is on the edge
+    //Any number of bishops on a single square color cannot produce mate.
+    return !(bishops & WHITE_SQUARES) || !(bishops & BLACK_SQUARES);
 }
 
 bool board_t::is_eg(endgame_t eg, bool us) {
