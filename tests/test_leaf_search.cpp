@@ -176,6 +176,63 @@ bool test_material_draws() {
     return success;
 }
 
+bool test_fifty_move_boundary() {
+    bool success = true;
+    for (int halfmoves : {99, 100, 101, 150}) {
+        const std::string suffix = " " + std::to_string(halfmoves) + " 1";
+        const std::string mate_name = "checkmate at halfmove " + std::to_string(halfmoves);
+        for (const char * position : {
+                "7k/6Q1/5K2/8/8/8/8/8 b - -",
+                "8/8/8/8/8/5k2/6q1/7K w - -"}) {
+            const std::string fen = position + suffix;
+            const position_case_t test = {mate_name.c_str(),
+                fen.c_str(), true, 0, -score::MATE};
+            success &= test_position(test);
+        }
+        const std::string fen = "R6k/8/5K2/8/8/8/8/8 b - -" + suffix;
+        for (bool quiescence : {false, true}) {
+            search_t search(fen.c_str());
+            prepare_search(search);
+            success &= check_score("quiet escape at the fifty-move boundary", "draw detection",
+                search.is_draw(), halfmoves >= 100);
+            const int actual = quiescence ? search.qsearch(-score::INF, score::INF, 0)
+                : search.pvs(-score::INF, score::INF, 1);
+            success &= check_score("quiet escape at the fifty-move boundary", "search", actual, 0);
+            // At 99 the escape reaches the limit; at 100 a draw is already available.
+            success &= (halfmoves >= 100 || search.nodes > 1) && !search.stop_all;
+            success &= restored_position(search, fen.c_str());
+        }
+        const std::string capture_fen = "7k/6Q1/8/8/8/8/8/K7 b - -" + suffix;
+        search_t capture_evasion(capture_fen.c_str());
+        prepare_search(capture_evasion);
+        success &= check_score("capture escape at the fifty-move boundary", "draw detection",
+            capture_evasion.is_draw(), halfmoves >= 100);
+        const position_case_t capture_case = {"capture escape at the fifty-move boundary",
+            capture_fen.c_str(), true, 1, 0};
+        success &= test_position(capture_case);
+        for (bool capture : {false, true}) {
+            const std::string reset_fen = std::string(capture
+                ? "7k/8/8/3q4/8/8/8/K2R4 w - -"
+                : "7k/8/8/8/8/8/P7/KR6 w - -") + suffix;
+            search_t search(reset_fen.c_str());
+            prepare_search(search);
+            move_t move;
+            move.set(&search.brd, capture ? "d1d5" : "a2a3");
+            success &= search.brd.valid(&move) && search.brd.legal(&move);
+            search.forward(&move, search.brd.gives_check(&move));
+            success &= search.brd.stack->fifty_count == 0 && !search.is_draw();
+            // The side that just moved retains winning material after resetting the clock.
+            success &= search.qsearch(-score::INF, score::INF, 0) < -200 && !search.stop_all;
+            search.backward(&move);
+            success &= restored_position(search, reset_fen.c_str());
+        }
+    }
+    const position_case_t last_move_mate = {"quiet move mates on halfmove 100",
+        "7k/8/5KQ1/8/8/8/8/8 w - - 99 1", false, 23, score::MATE - 1};
+    success &= test_position(last_move_mate);
+    return success;
+}
+
 }
 
 int main() {
@@ -201,5 +258,6 @@ int main() {
     success &= test_capture();
     success &= test_recapture();
     success &= test_material_draws();
+    success &= test_fifty_move_boundary();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

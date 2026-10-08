@@ -592,8 +592,13 @@ bool search_t::is_draw() {
     if (brd.stack->fifty_count < 4) {
         return false;
     }
-    if (brd.stack->fifty_count >= (100 + stack->in_check)) {
-        return true; //50 reversible moves
+    if (brd.stack->fifty_count >= 100) {
+        if (!stack->in_check) {
+            return true;
+        }
+        // Checkmate takes precedence. Probe fresh legal evasions, including quiet moves.
+        stack->tt_move.clear();
+        return move::first(this, 1) != nullptr;
     }
     return is_repetition();
 }
