@@ -605,10 +605,11 @@ bool search_t::is_draw() {
 
 bool search_t::is_repetition() const {
     const int stop_ply = MAX(brd.ply - brd.stack->fifty_count, stack->repetition_start);
+    const U64 repetition_key = brd.stack->repetition_key();
     for (int ply = brd.ply - 4; ply >= stop_ply; ply -= 2) {
-        const U64 key = ply >= 0 ? brd._stack[ply].tt_key
+        const U64 key = ply >= 0 ? brd._stack[ply].repetition_key()
             : _position_history[static_cast<int>(_position_history.size()) + ply];
-        if (key == brd.stack->tt_key) {
+        if (key == repetition_key) {
             return true;
         }
     }
@@ -1037,7 +1038,7 @@ bool search_t::in_searched(move_t* move, int searched_moves) {
  */
 void search_t::reset_stack() {
     for (int ply = 0; ply < brd.ply; ++ply) {
-        _position_history.push_back(brd._stack[ply].tt_key);
+        _position_history.push_back(brd._stack[ply].repetition_key());
     }
     if (_position_history.size() > static_cast<size_t>(brd.stack->fifty_count)) {
         _position_history.erase(_position_history.begin(),

@@ -203,7 +203,7 @@ namespace uci {
                 while (parser >> token) {
                     move_t move;
                     move.set(&brd, token.c_str());
-                    position_history.push_back(brd.stack->tt_key);
+                    position_history.push_back(brd.stack->repetition_key());
                     brd.forward(&move);
                     if (brd.stack->fifty_count == 0) {
                         position_history.clear();
@@ -227,7 +227,7 @@ namespace uci {
         engine::stop();
         while (parser >> token) {
             move.set(&brd, token.c_str());
-            position_history.push_back(brd.stack->tt_key);
+            position_history.push_back(brd.stack->repetition_key());
             brd.forward(&move);
             if (brd.stack->fifty_count == 0) {
                 position_history.clear();

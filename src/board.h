@@ -27,6 +27,7 @@
 
 #include "bbmoves.h"
 #include "move.h"
+#include "hashcodes.h"
 
 enum square_t {
     a1, b1, c1, d1, e1, f1, g1, h1,
@@ -77,11 +78,17 @@ public:
     int castling_flags;
     int fifty_count;
     bool wtm; //white to move
+    bool legal_enpassant; //cached legality for repetition identity
     U64 tt_key; //transposition table (hash) key
     U64 material_hash;
     U64 pawn_hash;
 
     void do_flip();
+
+    U64 repetition_key() const {
+        return enpassant_sq && !legal_enpassant
+            ? tt_key ^ hash::codes[0][enpassant_sq] : tt_key;
+    }
 
     /**
      * Clears a board stack
@@ -117,6 +124,7 @@ public:
     void clear();
     void do_flip();
     bool is_draw();
+    bool has_legal_enpassant();
     void init(const char* fen);
     std::string to_string();
     void forward(const move_t * move);

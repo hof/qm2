@@ -32,7 +32,9 @@ void board_stack_t::do_flip() {
     wtm = !wtm;
     HASH_STM(tt_key);
     if (enpassant_sq) {
+        HASH_EP(tt_key, enpassant_sq);
         enpassant_sq = FLIP_SQUARE(enpassant_sq);
+        HASH_EP(tt_key, enpassant_sq);
     }
     uint8_t flags = castling_flags;
     castling_flags = 0;
@@ -244,6 +246,7 @@ void board_t::forward(const move_t * move) {
     stack->wtm = !stack->wtm;
     HASH_STM(stack->tt_key);
 
+    stack->legal_enpassant = stack->enpassant_sq && has_legal_enpassant();
     assert(matrix[get_sq(WKING)] == WKING && matrix[get_sq(BKING)] == BKING);
     assert(piece == matrix[tsq] || (promotion && promotion == matrix[tsq]));
 }
@@ -309,6 +312,7 @@ void board_t::forward() {
     ply++;
     HASH_EP(stack->tt_key, stack->enpassant_sq); //remove enpassant_square if it is set
     stack->enpassant_sq = EMPTY;
+    stack->legal_enpassant = false;
     stack->wtm = !stack->wtm;
     HASH_STM(stack->tt_key);
 }
@@ -837,6 +841,24 @@ bool board_t::is_draw() {
     return !(bishops & WHITE_SQUARES) || !(bishops & BLACK_SQUARES);
 }
 
+bool board_t::has_legal_enpassant() {
+    const int target = stack->enpassant_sq;
+    const int capture_square = target + (us() ? -8 : 8);
+    if (target < (us() ? a6 : a3) || target > (us() ? h6 : h3)
+            || matrix[target] != EMPTY || matrix[capture_square] != PAWN[them()]) {
+        return false;
+    }
+    U64 candidates = PAWN_CAPTURES[them()][target] & bb[PAWN[us()]];
+    while (candidates) {
+        move_t move{};
+        move.set(PAWN[us()], pop(candidates), target, PAWN[them()]);
+        if (legal(&move)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool board_t::is_eg(endgame_t eg, bool us) {
     const bool them = !us;
     switch (eg) {
@@ -1086,6 +1108,7 @@ half_move:
         HASH_STM(stack->tt_key);
         root_ply++;
     }
+    stack->legal_enpassant = stack->enpassant_sq && has_legal_enpassant();
 }
 
 /**

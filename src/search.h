@@ -91,7 +91,7 @@ private:
     const search_control_t * _control;
 
 protected:
-    // Positions before the root, oldest first; never includes the root itself.
+    // Repetition keys before the root, oldest first; never includes the root itself.
     std::vector<U64> _position_history;
 
 public:

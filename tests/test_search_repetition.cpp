@@ -24,7 +24,7 @@ bool test_owned_history() {
     board.init(start_fen);
     std::vector<U64> history;
     for (const char * text : cycle) {
-        history.push_back(board.stack->tt_key);
+        history.push_back(board.stack->repetition_key());
         move_t move;
         move.set(&board, text);
         board.forward(&move);
@@ -108,6 +108,107 @@ bool test_null_moves_and_bounds() {
     return success;
 }
 
+bool test_cycle_after_pawn_push() {
+    search_t search(start_fen);
+    play(search, "e2e4");
+    const char * moves[] = {"g8f6", "g1f3", "f6g8", "f3g1"};
+    for (const char * text : moves) {
+        play(search, text);
+    }
+    bool success = check("an unavailable EP marker must not hide the first repeated position",
+        search.is_repetition());
+    std::vector<U64> history;
+    for (int ply = 1; ply < search.brd.ply; ++ply) {
+        history.push_back(search.brd._stack[ply].repetition_key());
+    }
+    search_t supplied(search.brd.to_string().c_str(), nullptr, nullptr, history);
+    success &= check("supplied history must also normalize unavailable EP", supplied.is_repetition());
+    search.reset_stack();
+    success &= check("rebasing must preserve normalized EP history", search.is_repetition());
+    search_t available("7k/8/8/3pP3/8/8/8/K7 w - d6 0 1");
+    for (const char * text : {"a1a2", "h8h7", "a2a1", "h7h8"}) {
+        play(available, text);
+    }
+    success &= check("an expired legal EP capture must distinguish positions", !available.is_repetition());
+    return success;
+}
+
+bool matches_fresh(board_t & board) {
+    board_t fresh;
+    fresh.init(board.to_string().c_str());
+    return check("incremental EP state must match a fresh FEN",
+        board.stack->tt_key == fresh.stack->tt_key
+        && board.stack->repetition_key() == fresh.stack->repetition_key()
+        && board.stack->legal_enpassant == fresh.stack->legal_enpassant);
+}
+
+bool test_enpassant_identity() {
+    struct ep_case_t {
+        const char * position;
+        const char * target;
+        bool legal;
+    };
+    const ep_case_t cases[] = {
+        {"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq", "e3", false},
+        {"rnbqkbnr/pppp1ppp/8/4p3/8/8/PPPPPPPP/RNBQKBNR w KQkq", "e6", false},
+        {"7k/8/8/3pP3/8/8/8/K7 w -", "d6", true},
+        {"k7/8/8/8/3Pp3/8/8/7K b -", "d3", true},
+        {"k3r3/8/8/3pP3/8/8/8/4K3 w -", "d6", false},
+        {"4k3/8/8/8/3Pp3/8/8/K3R3 b -", "d3", false},
+        {"7k/8/8/r4pPK/8/8/8/8 w -", "f6", false},
+        {"8/8/8/8/R4Ppk/8/8/7K b -", "f3", false},
+        {"7k/6b1/8/3pP3/8/2K5/8/8 w -", "d6", false},
+        {"k3r3/8/8/2PpP3/8/8/8/4K3 w -", "d6", true},
+        {"7k/8/8/3pP3/4K3/8/8/8 w -", "d6", true},
+    };
+    bool success = true;
+    for (const ep_case_t & test : cases) {
+        const std::string fen = std::string(test.position) + " " + test.target + " 0 1";
+        const std::string without_ep = std::string(test.position) + " - 0 1";
+        board_t board, plain;
+        board.init(fen.c_str());
+        plain.init(without_ep.c_str());
+        success &= check(fen.c_str(), board.stack->legal_enpassant == test.legal
+            && (board.stack->repetition_key() != plain.stack->repetition_key()) == test.legal
+            && board.to_string() == fen);
+        const U64 key = board.stack->repetition_key();
+        board.forward();
+        success &= matches_fresh(board);
+        board.backward();
+        success &= check("undoing null must restore EP identity", board.stack->repetition_key() == key);
+        board.do_flip();
+        plain.do_flip();
+        success &= check("flipped EP legality must match the cached flag",
+            board.has_legal_enpassant() == board.stack->legal_enpassant);
+        success &= check("flipping must preserve repetition identity with unavailable EP",
+            (board.stack->repetition_key() != plain.stack->repetition_key()) == test.legal);
+        board.do_flip();
+        success &= matches_fresh(board);
+    }
+    for (bool pinned : {false, true}) {
+        const char * fen = pinned ? "k3r3/3p4/8/4P3/8/8/8/4K3 b - - 0 1"
+            : "k7/3p4/8/4P3/8/8/8/4K3 b - - 0 1";
+        board_t board;
+        board.init(fen);
+        const U64 root_key = board.stack->repetition_key();
+        move_t push, reply;
+        push.set(&board, "d7d5");
+        board.forward(&push);
+        success &= check("double push must cache EP legality", board.stack->legal_enpassant == !pinned);
+        success &= matches_fresh(board);
+        reply.set(&board, pinned ? "e1f1" : "e5d6");
+        success &= board.valid(&reply) && board.legal(&reply);
+        board.forward(&reply);
+        success &= matches_fresh(board);
+        board.backward(&reply);
+        success &= matches_fresh(board);
+        board.backward(&push);
+        success &= check("undoing the push must restore the root",
+            board.to_string() == fen && board.stack->repetition_key() == root_key);
+    }
+    return success;
+}
+
 }
 
 int main() {
@@ -115,5 +216,7 @@ int main() {
     bool success = test_owned_history();
     success &= test_search_path();
     success &= test_null_moves_and_bounds();
+    success &= test_cycle_after_pawn_push();
+    success &= test_enpassant_identity();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
