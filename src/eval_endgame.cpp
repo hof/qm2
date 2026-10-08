@@ -29,6 +29,16 @@
 
 namespace eg {
 
+    int probe_kpk(board_t & board) {
+        const U64 pawns = board.bb[WPAWN] | board.bb[BPAWN];
+        if (board.has_pieces() || !is_1(pawns)) {
+            return -1;
+        }
+        const bool us = board.bb[WPAWN] != 0;
+        return KPK::probe(board.us() == us, board.get_sq(KING[us]),
+            board.get_sq(KING[!us]), board.get_sq(PAWN[us]), us == BLACK);
+    }
+
     const int BONUS[2] = {-10, 10};
     const int EDGE_DISTANCE[8] = {0, 2, 3, 4, 4, 3, 2, 0};
 
@@ -411,7 +421,7 @@ namespace eg {
             if (won) {
                 return score + win(us, 2);
             }
-            return draw(score, 64);
+            return 0;
         }
 
         //KPSK -> case 1: any unstoppable pawn wins the game

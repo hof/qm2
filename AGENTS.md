@@ -10,6 +10,8 @@ classical search and evaluation, and experimental losers-chess support.
   throughput, and compilation tuned for the target CPU.
 - Explore a learned evaluator, such as NNUE, with correctness tests and measured
   playing-strength gains guiding integration into search.
+- Strengthen endgame play with verified KPK integration and optional tablebases
+  that respect draw rules and work with partial, user-selected coverage.
 - Add multithreaded search with explicit ownership of worker state, safe shared
   caches, and reliable cancellation.
 - Make the code cleaner through focused refactoring: reduce global mutable

@@ -33,6 +33,7 @@
 #include "eval.h"
 #include "timeman.h"
 #include "eval_material.h"
+#include "eval_endgame.h"
 
 namespace {
 
@@ -637,7 +638,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
  * @return true if search should score this node as drawn
  */
 bool search_t::is_draw() {
-    if (brd.is_draw()) { //draw by no mating material
+    if (brd.is_draw() || (is_1(brd.bb[WPAWN] | brd.bb[BPAWN]) && eg::probe_kpk(brd) == 0)) {
         return true;
     }
     if (brd.stack->fifty_count >= 100) {

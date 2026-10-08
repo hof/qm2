@@ -28,6 +28,9 @@
 
 namespace eg {
     
+    // Returns -1 outside KPK, otherwise 0 for draw or 1 for a pawn-side win.
+    // Winning results do not account for the current fifty-move clock.
+    int probe_kpk(board_t & board);
     int eval(search_t * s, const int score);
     
 }

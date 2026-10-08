@@ -35,3 +35,6 @@ target_link_libraries(test_search_repetition MAX2SRC)
 
 add_executable(test_search_tt_context test_search_tt_context.cpp)
 target_link_libraries(test_search_tt_context MAX2SRC)
+
+add_executable(test_kpk test_kpk.cpp)
+target_link_libraries(test_kpk MAX2SRC)
