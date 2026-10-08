@@ -83,14 +83,33 @@ namespace engine {
  * Construct engine thread
  */
 engine_t::engine_t() : threads_t() {
-    _total_nodes = 0;
-    _target_found = false;
-    _stop_requested.store(false);
-    _ponder.store(false);
-    _root_fen = "";
-    _result_move.clear();
-    _result_score = 0;
     _game.clear();
+}
+
+bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
+    stop();
+    _control.stop_requested.store(false);
+    _control.ponder.store(_game.ponder);
+    // Capture the position, limits, and search options before starting the worker.
+    if (options::get_value("Wild") == 17) {
+        _search.reset(new w17_search_t(_root_fen.c_str(), &_game, &_control));
+    } else {
+        _search.reset(new search_t(_root_fen.c_str(), &_game, &_control));
+    }
+    if (calculate_book) {
+        _search->game.max_depth = _search->wild == 17
+            ? 6 + 2 * popcnt(_search->brd.all(_search->brd.us())) : 20;
+    }
+    {
+        std::lock_guard<std::mutex> lock(_result_mutex);
+        _result = search_result_t();
+    }
+    if (!create(function, this)) {
+        _control.stop_requested.store(true);
+        _search.reset();
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -99,8 +118,10 @@ engine_t::engine_t() : threads_t() {
  */
 void engine_t::new_game(std::string fen) {
     stop();
-    _result_move.clear();
-    _result_score = 0;
+    {
+        std::lock_guard<std::mutex> lock(_result_mutex);
+        _result = search_result_t();
+    }
     trans_table::clear();
     set_position(fen);
 }
@@ -110,10 +131,14 @@ void engine_t::new_game(std::string fen) {
  * @param s search object
  */
 void engine_t::copy_results(search_t * s) {
-    set_target_found(s->stack->best_move.equals(&_game.target_move));
-    set_move(&s->stack->best_move);
-    set_score(s->result_score);
-    set_total_nodes(s->nodes);
+    search_result_t result;
+    result.target_found = s->game.target_move.piece
+        && s->stack->best_move.equals(&s->game.target_move);
+    result.move = s->stack->best_move;
+    result.score = s->result_score;
+    result.nodes = s->nodes;
+    std::lock_guard<std::mutex> lock(_result_mutex);
+    _result = result;
 }
 
 /**
@@ -125,19 +150,14 @@ void * engine_t::_think(void * engine_p) {
 
     //initialize
     engine_t * engine = (engine_t*) engine_p;
-    search_t * s;
-    if (options::get_value("Wild") == 17) {
-        s = new w17_search_t(engine->_root_fen.c_str(), engine->settings());
-    } else {
-        s = new search_t(engine->_root_fen.c_str(), engine->settings());
-    }
+    search_t * s = engine->_search.get();
 
     //think
     s->go();
 
-    //copy search results and clean up
+    // Publish results; the owner releases search state after joining the worker.
     engine->copy_results(s);
-    delete s;
+    uci::send_bestmove(s->stack->best_move, s->ponder_move);
     pthread_exit(NULL);
     return NULL;
 }
@@ -248,21 +268,13 @@ void * engine_t::_book_calc(void * engine_p) {
 
     //initialize
     engine_t * engine = (engine_t*) engine_p;
-    search_t * s;
-    if (options::get_value("Wild") == 17) {
-        s = new w17_search_t(engine->_root_fen.c_str(), engine->settings());
-        engine->settings()->max_depth = 6 + 2 * popcnt(s->brd.all(s->brd.us()));
-    } else {
-        s = new search_t(engine->_root_fen.c_str(), engine->settings());
-        engine->settings()->max_depth = 20;
-    }
+    search_t * s = engine->_search.get();
 
     //get book moves
     s->book_calc();
 
-    //copy search results and clean up
+    // Publish results; the owner releases search state after joining the worker.
     engine->copy_results(s);
-    delete s;
     pthread_exit(NULL);
     return NULL;
 }
@@ -405,11 +417,11 @@ void * engine_t::_learn(void * engineObjPtr) {
      */
     engine_t * engine = (engine_t*) engineObjPtr;
     trans_table::disable();
-    search_t * sd_root = new search_t(engine->_root_fen.c_str());
-    search_t * sd_game = new search_t(engine->_root_fen.c_str());
+    search_t * sd_root = new search_t(engine->_root_fen.c_str(), engine->settings(), &engine->_control);
+    search_t * sd_game = new search_t(engine->_root_fen.c_str(), engine->settings(), &engine->_control);
 
-    engine->settings()->max_depth = MAXDEPTH;
-    engine->settings()->init_tm(true);
+    sd_root->game.max_depth = MAXDEPTH;
+    sd_game->game.max_depth = MAXDEPTH;
 
     double bestFactor = 1.0;
     double upperBound = score::INF;
@@ -481,11 +493,11 @@ void * engine_t::_learn(void * engineObjPtr) {
                      * 2) engine(base) vs engine(learn)
                      */
                     if (game % 2 == 0) {
-                        sd_game->game->learn_factor = side_to_move ? strongest : opponent;
+                        sd_game->game.learn_factor = side_to_move ? strongest : opponent;
                     } else {
-                        sd_game->game->learn_factor = side_to_move ? opponent : strongest;
+                        sd_game->game.learn_factor = side_to_move ? opponent : strongest;
                     }
-                    bool learning_side = sd_game->game->learn_factor == strongest;
+                    bool learning_side = sd_game->game.learn_factor == strongest;
 
                     /*
                      * Prepare search: cleanup and reset search stack. 

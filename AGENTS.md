@@ -6,6 +6,8 @@ classical search and evaluation, and experimental losers-chess support.
 ## Project goals
 
 - Improve playing strength, correctness, performance, and reliability.
+- Preserve the engine's focus on speed: efficient chess algorithms, high search
+  throughput, and compilation tuned for the target CPU.
 - Explore a learned evaluator, such as NNUE, with correctness tests and measured
   playing-strength gains guiding integration into search.
 - Add multithreaded search with explicit ownership of worker state, safe shared
@@ -45,6 +47,11 @@ Keep commits focused and independently reviewable.
   style rather than adopting Stockfish's code style or architecture wholesale.
 - Keep heuristics understandable and independently testable. Justify added
   complexity with measured benefits.
+- Treat performance as a first-class requirement. Preserve useful low-level
+  techniques, including intrinsics and assembly; use profiling and benchmarks
+  to guide hot-path changes and compiler choices. Compare Release builds with
+  identical positions, limits, and compiler flags, checking NPS, time to depth,
+  and playing strength rather than assuming any one metric proves improvement.
 - Prefer incremental changes with clear ownership and explicit dependencies.
 - Keep board representations, hashes, ply counters, and search stacks consistent
   through operations that own their invariants.

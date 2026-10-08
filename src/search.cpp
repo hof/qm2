@@ -27,7 +27,8 @@
  */
 
 #include "search.h"
-#include "engine.h"
+#include "book.h"
+#include "uci_console.h"
 #include "eval.h"
 #include "timeman.h"
 #include "eval_material.h"
@@ -67,11 +68,12 @@ int root_move_t::compare(root_move_t * m, move_t * best_move) {
  * Initializes the object, preparing to start a new search
  * @param fen string representing the board position
  */
-void search_t::init(const char * fen, game_t * g) {
+void search_t::init(const char * fen, const game_t * g, const search_control_t * control) {
     PST::init();
     brd.init(fen);
-    game = g ? g : game::instance();
-    game->init_tm(brd.us());
+    game = g ? *g : game_t();
+    _control = control;
+    game.init_tm(brd.us());
     wild = 0;
     book_name = "book.bin";
     king_attack_shelter = options::get_value("KingAttackShelter");
@@ -126,12 +128,11 @@ bool search_t::book_lookup() {
 void search_t::go() {
     assert(stack->best_move.piece == 0 && ponder_move.piece == 0);
     if (book_lookup()) { //book hit
-        uci::send_pv(0, 1, 1, 1, game->tm.elapsed(),
+        uci::send_pv(0, 1, 1, 1, game.tm.elapsed(),
                 stack->best_move.to_string().c_str(), score::EXACT);
     } else if (init_root_moves() > 0) { //do id search
         iterative_deepening();
     }
-    uci::send_bestmove(stack->best_move, ponder_move);
 }
 
 /**
@@ -147,12 +148,12 @@ void search_t::book_calc() {
         forward(move, rmove->gives_check);
         int score = 0;
         U64 nodes_before = nodes;
-        for (int depth = 1; depth <= game->max_depth; depth++) {
+        for (int depth = 1; depth <= game.max_depth; depth++) {
             score = -pvs(-score::INF, score::INF, depth - 1);
         }
         backward(move);
         uci::out("book_calc fen " + fen + " move " + move->to_string() + " depth " 
-            + uci::itoa(game->max_depth) + " score " + uci::itoa(score) + " nodes " 
+            + uci::itoa(game.max_depth) + " score " + uci::itoa(score) + " nodes "
             +  uci::itoa(nodes - nodes_before) + " variant " + uci::itoa(wild));
     }
     uci::out("book_calc ready");
@@ -166,11 +167,11 @@ void search_t::book_calc() {
  */
 void search_t::iterative_deepening() {
     int last_score = -score::INF;
-    const int max_time = game->tm.reserved_max();
-    const int min_time = game->tm.reserved_min();
-    bool timed_search = game->white_time || game->black_time;
+    const int max_time = game.tm.reserved_max();
+    const int min_time = game.tm.reserved_min();
+    bool timed_search = game.white_time || game.black_time;
     int depth;
-    for (depth = 1; depth <= game->max_depth; depth++) {
+    for (depth = 1; depth <= game.max_depth; depth++) {
         int score = aspiration(depth, last_score);
         if (abort(true)) {
             break;
@@ -178,7 +179,7 @@ void search_t::iterative_deepening() {
         store_pv();
         if (timed_search) {
             bool score_jump = depth >= 6 && ((ABS(score - last_score) > 20) || score > score::WIN);
-            int elapsed = game->tm.elapsed();
+            int elapsed = game.tm.elapsed();
             bool do_stop = false;
             if (root.move_count <= 1 && elapsed > min_time / 8) {
                 //one legal move, still search a bit to get a ponder move
@@ -198,19 +199,19 @@ void search_t::iterative_deepening() {
             }
             //abort search or prepare pondering to abort early
             if (do_stop && pondering()) {
-                game->tm.set_max(0);
+                game.tm.set_max(0);
             } else if (do_stop) {
                 break;
             }
-        } else if (depth >= 15 && game->target_score && score >= game->target_score &&
-                game->target_move.piece && game->target_move.equals(&stack->best_move)) {
+        } else if (depth >= 15 && game.target_score && score >= game.target_score &&
+                game.target_move.piece && game.target_move.equals(&stack->best_move)) {
             break;
         }
         last_score = score;
     }
     if (stack->pv_count > 0) {
-        uci::send_pv(result_score, MIN(depth, game->max_depth), sel_depth,
-                nodes + pruned_nodes, game->tm.elapsed(), pv_to_string().c_str(), score::EXACT);
+        uci::send_pv(result_score, MIN(depth, game.max_depth), sel_depth,
+                nodes + pruned_nodes, game.tm.elapsed(), pv_to_string().c_str(), score::EXACT);
         if (stack->pv_count > 1) {
             ponder_move.set(&stack->pv_moves[1]);
         }
@@ -249,13 +250,13 @@ int search_t::aspiration(int depth, int last_score) {
 bool search_t::abort(bool force_poll = false) {
     static const int NODES_BETWEEN_POLLS = 5000;
     bool result = false;
-    if (game->max_nodes > 0 && nodes >= game->max_nodes) {
+    if (game.max_nodes > 0 && nodes >= game.max_nodes) {
         result = true;
-    } else if (stop_all || engine::is_stopped()) {
+    } else if (stop_all || (_control && _control->stop_requested.load())) {
         result = true;
     } else if (force_poll || --next_poll <= 0) {
         next_poll = NODES_BETWEEN_POLLS;
-        result = !pondering() && game->tm.time_is_up() && root_stack->best_move.piece > 0;
+        result = !pondering() && game.tm.time_is_up() && root_stack->best_move.piece > 0;
     }
     stop_all = result;
     return result;
@@ -311,7 +312,7 @@ void search_t::backward(move_t * move) {
  * @return bool true if pondering 
  */
 bool search_t::pondering() {
-    return game->ponder && engine::is_ponder();
+    return game.ponder && (!_control || _control->ponder.load());
 }
 
 /**
@@ -559,7 +560,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             if (exact || false == move->equals(&stack->pv_moves[0])) {
                 update_pv(&rmove->move);
             }
-            uci::send_pv(best, depth, sel_depth, nodes + pruned_nodes, game->tm.elapsed(),
+            uci::send_pv(best, depth, sel_depth, nodes + pruned_nodes, game.tm.elapsed(),
                     pv_to_string().c_str(), score::flags(best, alpha, beta));
             if (!exact) { //adjust asp. window
                 return score;
@@ -1011,7 +1012,7 @@ bool search_t::in_searched(move_t* move, int searched_moves) {
 /*
  * Helper function to reset the search stack.
  * This is used for self-playing games, where
- * MAX_PLY is not sufficient to hold all moves of a chess game->
+ * MAX_PLY is not sufficient to hold all moves of a chess game.
  * Note: in UCI mode this is not an issue, because each position
  * starts with a new stack.
  */

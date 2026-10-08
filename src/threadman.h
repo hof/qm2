@@ -48,7 +48,7 @@ public:
 
     int create(void* function_ptr(void *ptr), void* params) {
         if (_count < MAX_THREADS) {
-            pthread_t thread = get(_count);
+            pthread_t thread;
             if (pthread_create(&thread, NULL, function_ptr, params) == 0) {
                 _threads[_count++] = thread;
             } else {

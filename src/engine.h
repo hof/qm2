@@ -24,7 +24,8 @@
 #ifndef ENGINE_H
 #define	ENGINE_H
 
-#include <atomic>
+#include <memory>
+#include <mutex>
 
 #include "eval.h"
 #include "search.h"
@@ -35,17 +36,24 @@
 #include "timeman.h"
 #include "version.h"
 
+struct search_result_t {
+    move_t move{};
+    int score = 0;
+    U64 nodes = 0;
+    bool target_found = false;
+};
+
 class engine_t : public threads_t {
 private:
     game_t _game;
     std::string _root_fen;
-    U64 _total_nodes;
-    bool _target_found;
-    std::atomic<bool> _stop_requested;
-    std::atomic<bool> _ponder;
-    move_t _result_move;
-    int _result_score;
-    
+    search_control_t _control;
+    std::unique_ptr<search_t> _search;
+    mutable std::mutex _result_mutex;
+    search_result_t _result;
+
+    bool start_search(void * (*function)(void *), bool calculate_book);
+
     static void * _think(void * engineObjPtr);
     static void * _learn(void * engineObjPtr);
     static void * _book_calc(void * engineObjPrt);
@@ -69,38 +77,34 @@ public:
     }
 
     bool think() {
-        stop();
-        _stop_requested.store(false);
-        return this->create(_think, this);
+        return start_search(_think, false);
     }
 
     void learn() {
         stop();
-        _stop_requested.store(false);
+        _control.stop_requested.store(false);
         this->create(_learn, this);
     }
-    
+
     void book_calc() {
-        stop();
-        _stop_requested.store(false);
-        this->create(_book_calc, this);
+        start_search(_book_calc, true);
     }
-    
+
     void set_ponder(bool do_ponder) {
-        _ponder.store(do_ponder);
+        _control.ponder.store(do_ponder);
     }
 
     void stop() {
-        _stop_requested.store(true);
+        _control.stop_requested.store(true);
         this->stop_all();
     }
 
     bool stop_requested() const {
-        return _stop_requested.load();
+        return _control.stop_requested.load();
     }
 
     bool is_pondering() const {
-        return _ponder.load();
+        return _control.ponder.load();
     }
 
     void set_position(std::string fen) {
@@ -108,37 +112,27 @@ public:
         _root_fen = fen;
     }
 
-    void set_total_nodes(U64 total_nodes) {
-        _total_nodes = total_nodes;
+    search_result_t get_result() const {
+        std::lock_guard<std::mutex> lock(_result_mutex);
+        return _result;
     }
 
     U64 get_total_nodes() {
-        return _total_nodes;
+        return get_result().nodes;
     }
 
-    void set_target_found(bool found) {
-        _target_found = found;
-    }
-
-    void set_move(move_t * move) {
-        _result_move.set(move);
-    }
-
-    void set_score(int score) {
-        _result_score = score;
-    }
-    
     int get_score() {
-        return _result_score;
+        return get_result().score;
     }
 
     move_t get_move() {
-        return _result_move;
+        return get_result().move;
     }
-    
+
     bool target_found() {
-        return _target_found;
+        return get_result().target_found;
     }
+
 };
 
 namespace engine {

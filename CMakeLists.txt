@@ -64,6 +64,8 @@ add_test(testEvaluation tests/testEvaluation)
 add_test(testFlip tests/testFlip)
 add_test(testMates tests/testMates)
 add_test(test_leaf_search tests/test_leaf_search)
+add_test(test_search_ownership tests/test_search_ownership)
+set_tests_properties(test_search_ownership PROPERTIES TIMEOUT 10)
 add_test(test_search_lifecycle ${PYTHON_EXECUTABLE}
     ${PROJECT_SOURCE_DIR}/tests/test_search_lifecycle.py
     ${PROJECT_BINARY_DIR}/src/maxima2)

@@ -30,6 +30,7 @@
 
 #include "board.h"
 #include "game.h"
+#include "search_control.h"
 #include "movepicker.h"
 #include "hashtable.h"
 
@@ -84,9 +85,12 @@ struct search_stack_t {
 };
 
 class search_t {
+private:
+    const search_control_t * _control;
+
 public:
     search_stack_t _stack[MAX_PLY + 1];
-    game_t * game;
+    game_t game;
     board_t brd;
     root_t root;
     search_stack_t * stack;
@@ -111,13 +115,17 @@ public:
     bool lmr_enabled;
     bool ffp_enabled;
 
-    search_t(const char * fen, game_t * g = NULL) {
-        init(fen, g);
+    search_t(const char * fen, const game_t * g = NULL,
+            const search_control_t * control = NULL) {
+        init(fen, g, control);
     }
 
     virtual ~search_t() {
     };
-    void init(const char * fen, game_t * g);
+    search_t(const search_t &) = delete;
+    search_t & operator=(const search_t &) = delete;
+    void init(const char * fen, const game_t * g,
+            const search_control_t * control = NULL);
     void go();
     void book_calc();
     void iterative_deepening();

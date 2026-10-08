@@ -33,7 +33,8 @@ public:
     virtual int pvs(int alpha, int beta, int depth);
     bool w17_is_draw();
 
-    w17_search_t(const char * fen, game_t * g = NULL) : search_t(fen, g) {
+    w17_search_t(const char * fen, const game_t * g = NULL,
+            const search_control_t * control = NULL) : search_t(fen, g, control) {
         wild = 17;
         book_name = "book.w17.bin";
         
