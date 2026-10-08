@@ -28,6 +28,8 @@
 #ifndef SEARCH_H
 #define	SEARCH_H
 
+#include <vector>
+
 #include "board.h"
 #include "game.h"
 #include "search_control.h"
@@ -53,7 +55,6 @@ class root_t {
 public:
     root_move_t moves[move::MAX_MOVES];
     int move_count;
-    int fifty_count;
     bool in_check;
 
     bool is_complex();
@@ -71,6 +72,7 @@ struct search_stack_t {
     move_t killer[2];
     move_t pv_moves[MAX_PLY + 1];
     bool in_check;
+    int repetition_start;
     uint8_t pv_count;
     int16_t eval_result;
     int16_t eg_score;
@@ -87,6 +89,10 @@ struct search_stack_t {
 class search_t {
 private:
     const search_control_t * _control;
+
+protected:
+    // Positions before the root, oldest first; never includes the root itself.
+    std::vector<U64> _position_history;
 
 public:
     search_stack_t _stack[MAX_PLY + 1];
@@ -116,8 +122,9 @@ public:
     bool ffp_enabled;
 
     search_t(const char * fen, const game_t * g = NULL,
-            const search_control_t * control = NULL) {
-        init(fen, g, control);
+            const search_control_t * control = NULL,
+            const std::vector<U64> & position_history = {}) {
+        init(fen, g, control, position_history);
     }
 
     virtual ~search_t() {
@@ -125,7 +132,8 @@ public:
     search_t(const search_t &) = delete;
     search_t & operator=(const search_t &) = delete;
     void init(const char * fen, const game_t * g,
-            const search_control_t * control = NULL);
+            const search_control_t * control = NULL,
+            const std::vector<U64> & position_history = {});
     void go();
     void book_calc();
     void iterative_deepening();
@@ -137,6 +145,7 @@ public:
     int qstatic(int beta, int gain);
     std::string pv_to_string();
     bool is_draw();
+    bool is_repetition() const;
     bool abort(bool force_poll);
     bool pondering();
     int init_root_moves();

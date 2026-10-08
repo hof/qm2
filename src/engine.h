@@ -47,6 +47,7 @@ class engine_t : public threads_t {
 private:
     game_t _game;
     std::string _root_fen;
+    std::vector<U64> _position_history;
     search_control_t _control;
     std::unique_ptr<search_t> _search;
     mutable std::mutex _result_mutex;
@@ -107,9 +108,10 @@ public:
         return _control.ponder.load();
     }
 
-    void set_position(std::string fen) {
+    void set_position(std::string fen, const std::vector<U64> & position_history = {}) {
         stop();
         _root_fen = fen;
+        _position_history = position_history;
     }
 
     search_result_t get_result() const {
@@ -142,7 +144,7 @@ namespace engine {
     void learn();
     void book_calc();
     void new_game(std::string fen);
-    void set_position(std::string fen);
+    void set_position(std::string fen, const std::vector<U64> & position_history = {});
     void set_ponder(bool ponder);
     bool is_stopped();
     bool is_ponder();

@@ -101,21 +101,6 @@ namespace pawn_table {
     }
 };
 
-namespace rep_table {
-
-    U64 _rep_table[100];
-
-    void store(int fifty_count, U64 hash_code) {
-        assert(fifty_count >= 0 && fifty_count < 100);
-        _rep_table[fifty_count] = hash_code;
-    };
-
-    U64 retrieve(int fifty_count) {
-        assert(fifty_count >= 0 && fifty_count < 100);
-        return _rep_table[fifty_count];
-    }
-}
-
 trans_table_t::trans_table_t(int size_in_MB) {
     table = NULL;
     enabled = true;

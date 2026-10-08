@@ -54,8 +54,8 @@ namespace engine {
         _engine.new_game(fen);
     }
 
-    void set_position(std::string fen) {
-        _engine.set_position(fen);
+    void set_position(std::string fen, const std::vector<U64> & position_history) {
+        _engine.set_position(fen, position_history);
     }
 
     void set_ponder(bool ponder) {
@@ -92,9 +92,9 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
     _control.ponder.store(_game.ponder);
     // Capture the position, limits, and search options before starting the worker.
     if (options::get_value("Wild") == 17) {
-        _search.reset(new w17_search_t(_root_fen.c_str(), &_game, &_control));
+        _search.reset(new w17_search_t(_root_fen.c_str(), &_game, &_control, _position_history));
     } else {
-        _search.reset(new search_t(_root_fen.c_str(), &_game, &_control));
+        _search.reset(new search_t(_root_fen.c_str(), &_game, &_control, _position_history));
     }
     if (calculate_book) {
         _search->game.max_depth = _search->wild == 17
@@ -480,7 +480,7 @@ void * engine_t::_learn(void * engineObjPtr) {
                 std::cout << "\nError: no start position (book.bin missing?)" << std::endl;
                 break;
             }
-            sd_game->brd.init(fen.c_str());
+            sd_game->init(fen.c_str(), engine->settings(), &engine->_control);
             int ply_count = 0;
             int prevScore = 0;
             bool gameover = false;

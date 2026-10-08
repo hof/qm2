@@ -78,6 +78,28 @@ def running_engine():
 
 
 class search_lifecycle_tests(unittest.TestCase):
+    def test_long_position_history(self):
+        with running_engine() as engine:
+            moves = "g1f3 g8f6 f3g1 f6g8 " * 80
+            engine.send("position startpos moves " + moves)
+            engine.send("go depth 1")
+            engine.wait_for_bestmove()
+            engine.send("position startpos\ngo depth 2")
+            engine.wait_for_bestmove()
+            engine.send("quit")
+            engine.wait_for_exit()
+
+    def test_position_history_at_fifty_move_boundary(self):
+        with running_engine() as engine:
+            for halfmoves in (99, 100, 101, 150):
+                engine.send(f"position fen 7k/8/8/8/8/8/8/K6R b - - {halfmoves} 1 moves h8g8")
+                engine.send("isready")
+                engine.wait_for("readyok")
+                engine.send("go depth 1")
+                engine.wait_for_bestmove()
+            engine.send("quit")
+            engine.wait_for_exit()
+
     def test_stop_and_restart(self):
         with running_engine() as engine:
             for _ in range(3):

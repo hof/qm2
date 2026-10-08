@@ -36,20 +36,13 @@ namespace {
 }
 
 bool w17_search_t::w17_is_draw() {
-    if (brd.stack->fifty_count > 3) {
-        if (brd.stack->fifty_count >= (100 + stack->in_check)) {
-            return true; //50 reversible moves
-        }
-        int stop_ply = brd.ply - brd.stack->fifty_count;
-        for (int ply = brd.ply - 4; ply >= stop_ply; ply -= 2) { //draw by repetition
-            if (ply >= 0 && get_stack(ply)->tt_key == brd.stack->tt_key) {
-                return true;
-            } else if (ply < 0 && rep_table::retrieve(root.fifty_count + ply) == brd.stack->tt_key) {
-                return true;
-            }
-        }
+    if (brd.stack->fifty_count < 4) {
+        return false;
     }
-    return false;
+    if (brd.stack->fifty_count >= (100 + stack->in_check)) {
+        return true; //50 reversible moves
+    }
+    return is_repetition();
 }
 
 int w17_search_t::pvs(int alpha, int beta, int depth) {

@@ -134,11 +134,6 @@ namespace pawn_table {
 
 };
 
-namespace rep_table {
-    void store(int fifty_count, U64 hash_code);
-    U64 retrieve(int fifty_count);
-};
-
 class trans_table_t {
 private:
 

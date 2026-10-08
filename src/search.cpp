@@ -69,11 +69,17 @@ int root_move_t::compare(root_move_t * m, move_t * best_move) {
  * Initializes the object, preparing to start a new search
  * @param fen string representing the board position
  */
-void search_t::init(const char * fen, const game_t * g, const search_control_t * control) {
+void search_t::init(const char * fen, const game_t * g, const search_control_t * control,
+        const std::vector<U64> & position_history) {
     PST::init();
     brd.init(fen);
     game = g ? *g : game_t();
     _control = control;
+    _position_history = position_history;
+    if (_position_history.size() > static_cast<size_t>(brd.stack->fifty_count)) {
+        _position_history.erase(_position_history.begin(),
+            _position_history.end() - brd.stack->fifty_count);
+    }
     game.init_tm(brd.us());
     wild = 0;
     book_name = "book.bin";
@@ -97,6 +103,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     memset(_stack, 0, sizeof (_stack));
     memset(history, 0, sizeof (history));
     stack->eval_result = score::INVALID;
+    stack->repetition_start = -static_cast<int>(_position_history.size());
 }
 
 /**
@@ -272,6 +279,8 @@ void search_t::forward() {
     stack->in_check = false;
     stack->eval_result = score::INVALID;
     brd.forward();
+    // A null move is not part of legal game history.
+    stack->repetition_start = brd.ply + 1;
     assert(stack == &_stack[brd.ply]);
 }
 
@@ -291,6 +300,7 @@ void search_t::backward() {
  */
 void search_t::forward(move_t * move, bool gives_check) {
     stack->current_move.set(move);
+    (stack + 1)->repetition_start = stack->repetition_start;
     stack++;
     stack->in_check = gives_check;
     stack->eval_result = score::INVALID;
@@ -413,12 +423,6 @@ void search_t::update_killers(move_t * move) {
 int search_t::init_root_moves() {
     root.move_count = 0;
     root.moves[0].move.clear();
-    root.fifty_count = brd.stack->fifty_count;
-    if (brd.stack->fifty_count < 100) {
-        rep_table::store(brd.stack->fifty_count, brd.stack->tt_key);
-    } else {
-        //it's a draw
-    }
     int tt_move = 0, tt_flags, tt_score;
     trans_table::retrieve(brd.stack->tt_key, 0, 0, tt_score, tt_move, tt_flags);
     stack->tt_move.set(tt_move);
@@ -578,22 +582,29 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
  * a) lack of material
  * b) fifty quiet moves
  * c) repetition
- * @return true if it's an official draw
+ * Repetition uses the existing search-cycle policy: one earlier match suffices.
+ * @return true if search should score this node as drawn
  */
 bool search_t::is_draw() {
     if (brd.is_draw()) { //draw by no mating material
         return true;
-    } else if (brd.stack->fifty_count > 3) {
-        if (brd.stack->fifty_count >= (100 + stack->in_check)) {
-            return true; //50 reversible moves
-        }
-        int stop_ply = brd.ply - brd.stack->fifty_count;
-        for (int ply = brd.ply - 4; ply >= stop_ply; ply -= 2) { //draw by repetition
-            if (ply >= 0 && get_stack(ply)->tt_key == brd.stack->tt_key) {
-                return true;
-            } else if (ply < 0 && rep_table::retrieve(root.fifty_count + ply) == brd.stack->tt_key) {
-                return true;
-            }
+    }
+    if (brd.stack->fifty_count < 4) {
+        return false;
+    }
+    if (brd.stack->fifty_count >= (100 + stack->in_check)) {
+        return true; //50 reversible moves
+    }
+    return is_repetition();
+}
+
+bool search_t::is_repetition() const {
+    const int stop_ply = MAX(brd.ply - brd.stack->fifty_count, stack->repetition_start);
+    for (int ply = brd.ply - 4; ply >= stop_ply; ply -= 2) {
+        const U64 key = ply >= 0 ? brd._stack[ply].tt_key
+            : _position_history[static_cast<int>(_position_history.size()) + ply];
+        if (key == brd.stack->tt_key) {
+            return true;
         }
     }
     return false;
@@ -1020,9 +1031,17 @@ bool search_t::in_searched(move_t* move, int searched_moves) {
  * starts with a new stack.
  */
 void search_t::reset_stack() {
+    for (int ply = 0; ply < brd.ply; ++ply) {
+        _position_history.push_back(brd._stack[ply].tt_key);
+    }
+    if (_position_history.size() > static_cast<size_t>(brd.stack->fifty_count)) {
+        _position_history.erase(_position_history.begin(),
+            _position_history.end() - brd.stack->fifty_count);
+    }
     brd.ply = 0;
     stack = root_stack;
     stack->eval_result = score::INVALID;
+    stack->repetition_start = -static_cast<int>(_position_history.size());
     brd._stack[0].copy(brd.stack);
     brd.stack = &brd._stack[0];
     nodes = 0;

@@ -28,6 +28,7 @@ namespace uci {
 
     const std::string start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     std::string fen = start_fen;
+    std::vector<U64> position_history;
     bool _silent = false;
 
     std::string itoa(int64_t number) {
@@ -130,6 +131,7 @@ namespace uci {
 #endif     
 
         fen = start_fen;
+        position_history.clear();
         engine::new_game(fen);
         return true;
     }
@@ -171,7 +173,7 @@ namespace uci {
             }
         }
         engine::set_ponder(engine::settings()->ponder);
-        engine::set_position(fen);
+        engine::set_position(fen, position_history);
         engine::go();
         return result;
     }
@@ -194,18 +196,17 @@ namespace uci {
                 fen = start_fen;
                 parser >> token;
             }
+            position_history.clear();
             board_t brd;
             brd.init(fen.c_str());
             if (token == "moves") {
-                rep_table::store(brd.stack->fifty_count, brd.stack->tt_key);
                 while (parser >> token) {
                     move_t move;
                     move.set(&brd, token.c_str());
+                    position_history.push_back(brd.stack->tt_key);
                     brd.forward(&move);
-                    if (brd.stack->fifty_count >= 100) {
-                        //it's a draw
-                    } else {
-                        rep_table::store(brd.stack->fifty_count, brd.stack->tt_key);
+                    if (brd.stack->fifty_count == 0) {
+                        position_history.clear();
                     }
                     if (brd.ply > MAX_PLY - 2) {
                         brd.init(brd.to_string().c_str()); //preventing overflow
@@ -223,9 +224,17 @@ namespace uci {
         board_t brd;
         move_t move;
         brd.init(fen.c_str());
+        engine::stop();
         while (parser >> token) {
             move.set(&brd, token.c_str());
+            position_history.push_back(brd.stack->tt_key);
             brd.forward(&move);
+            if (brd.stack->fifty_count == 0) {
+                position_history.clear();
+            }
+            if (brd.ply > MAX_PLY - 2) {
+                brd.init(brd.to_string().c_str());
+            }
         }
         fen = brd.to_string();
         return result;
@@ -290,7 +299,7 @@ namespace uci {
         engine::stop();
         engine::settings()->clear();
         engine::set_ponder(false);
-        engine::set_position(fen);
+        engine::set_position(fen, position_history);
         engine::learn();
         return true;
     }

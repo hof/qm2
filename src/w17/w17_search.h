@@ -34,12 +34,16 @@ public:
     bool w17_is_draw();
 
     w17_search_t(const char * fen, const game_t * g = NULL,
-            const search_control_t * control = NULL) : search_t(fen, g, control) {
+            const search_control_t * control = NULL,
+            const std::vector<U64> & position_history = {}) : search_t(fen, g, control, position_history) {
         wild = 17;
         book_name = "book.w17.bin";
         
         //use different hash codes for w17
-        brd.stack->tt_key ^= hash::codes[13][17]; 
+        brd.stack->tt_key ^= hash::codes[13][17];
+        for (U64 & key : _position_history) {
+            key ^= hash::codes[13][17];
+        }
         brd.stack->material_hash ^= hash::codes[13][17];
         brd.stack->pawn_hash ^= hash::codes[13][17];
     }
