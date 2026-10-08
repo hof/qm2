@@ -52,6 +52,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 # tests
 enable_testing()
+find_package(PythonInterp 3.7 REQUIRED)
 
 add_test(testBits tests/testBits)
 add_test(testSEE tests/testSEE)
@@ -63,3 +64,7 @@ add_test(testEvaluation tests/testEvaluation)
 add_test(testFlip tests/testFlip)
 add_test(testMates tests/testMates)
 add_test(test_leaf_search tests/test_leaf_search)
+add_test(test_search_lifecycle ${PYTHON_EXECUTABLE}
+    ${PROJECT_SOURCE_DIR}/tests/test_search_lifecycle.py
+    ${PROJECT_BINARY_DIR}/src/maxima2)
+set_tests_properties(test_search_lifecycle PROPERTIES TIMEOUT 45)

@@ -27,33 +27,26 @@ using namespace std;
 namespace engine {
 
     engine_t _engine;
-    volatile bool _stopped = false;
-    volatile bool _ponder = false;
 
     void stop() {
-        _stopped = true;
         _engine.stop();
     }
 
     void go() {
-        _stopped = false;
         if (!_engine.think()) {
             uci::in("error could not create thread");
         }
     }
 
     void analyse() {
-        _stopped = false;
         _engine.analyse();
     }
 
     void learn() {
-        _stopped = false;
         _engine.learn();
     }
 
     void book_calc() {
-        _stopped = false;
         _engine.book_calc();
     }
 
@@ -66,16 +59,15 @@ namespace engine {
     }
 
     void set_ponder(bool ponder) {
-        _ponder = ponder;
         _engine.set_ponder(ponder);
     }
 
     bool is_stopped() {
-        return _stopped;
+        return _engine.stop_requested();
     }
 
     bool is_ponder() {
-        return _ponder;
+        return _engine.is_pondering();
     }
 
     engine_t * instance() {
@@ -93,8 +85,8 @@ namespace engine {
 engine_t::engine_t() : threads_t() {
     _total_nodes = 0;
     _target_found = false;
-    _stop_all = false;
-    _ponder = false;
+    _stop_requested.store(false);
+    _ponder.store(false);
     _root_fen = "";
     _result_move.clear();
     _result_score = 0;
@@ -106,6 +98,7 @@ engine_t::engine_t() : threads_t() {
  * @param fen position represented by a FEN string
  */
 void engine_t::new_game(std::string fen) {
+    stop();
     _result_move.clear();
     _result_score = 0;
     trans_table::clear();
@@ -208,6 +201,7 @@ void print_row(std::string cap, score_t & w, score_t & b, int phase) {
 }
 
 void engine_t::analyse() {
+    stop();
 
     search_t * s = new search_t(_root_fen.c_str());
     evaluate(s);

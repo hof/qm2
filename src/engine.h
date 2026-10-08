@@ -24,6 +24,8 @@
 #ifndef ENGINE_H
 #define	ENGINE_H
 
+#include <atomic>
+
 #include "eval.h"
 #include "search.h"
 #include "movepicker.h"
@@ -39,8 +41,8 @@ private:
     std::string _root_fen;
     U64 _total_nodes;
     bool _target_found;
-    volatile bool _stop_all;
-    volatile bool _ponder;
+    std::atomic<bool> _stop_requested;
+    std::atomic<bool> _ponder;
     move_t _result_move;
     int _result_score;
     
@@ -53,6 +55,7 @@ private:
 public:
     
     engine_t();
+    ~engine_t() { stop(); }
     void new_game(std::string fen);
     void copy_results(search_t * s);
     void analyse();
@@ -67,30 +70,41 @@ public:
 
     bool think() {
         stop();
-        _stop_all = false;
+        _stop_requested.store(false);
         return this->create(_think, this);
     }
 
     void learn() {
-        _stop_all = false;
+        stop();
+        _stop_requested.store(false);
         this->create(_learn, this);
     }
     
     void book_calc() {
-        _stop_all = false;
+        stop();
+        _stop_requested.store(false);
         this->create(_book_calc, this);
     }
     
     void set_ponder(bool do_ponder) {
-        _ponder = do_ponder;
+        _ponder.store(do_ponder);
     }
 
     void stop() {
-        _stop_all = true;
+        _stop_requested.store(true);
         this->stop_all();
     }
 
+    bool stop_requested() const {
+        return _stop_requested.load();
+    }
+
+    bool is_pondering() const {
+        return _ponder.load();
+    }
+
     void set_position(std::string fen) {
+        stop();
         _root_fen = fen;
     }
 

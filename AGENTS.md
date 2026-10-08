@@ -70,6 +70,8 @@ header manually.
 
 ## Build and validation
 
+The UCI lifecycle tests require Python 3.7 or newer.
+
 Run from the repository root:
 
 ```bash

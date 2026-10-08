@@ -140,6 +140,7 @@ namespace uci {
     }
 
     bool handle_go(input_parser_t &parser) {
+        engine::stop();
         bool result = true;
         std::string token;
         engine::settings()->clear();
@@ -176,6 +177,7 @@ namespace uci {
     }
 
     bool handle_position(input_parser_t & parser) {
+        engine::stop();
         bool result = true;
         std::string token;
         if (parser >> token) {
@@ -230,6 +232,7 @@ namespace uci {
     }
 
     bool handle_setoption(input_parser_t & parser) {
+        engine::stop();
         bool result = true;
         bool handled = false;
         std::string token, name, value;
@@ -284,6 +287,7 @@ namespace uci {
      *
      */
     bool handle_learn() {
+        engine::stop();
         engine::settings()->clear();
         engine::set_ponder(false);
         engine::set_position(fen);
@@ -296,6 +300,7 @@ namespace uci {
      * Eval prints the evaluation result on the current position
      */
     bool handle_eval(input_parser_t & parser) {
+        engine::stop();
         engine::settings()->clear();
         engine::set_ponder(false);
         engine::settings()->max_depth = 1;
@@ -317,6 +322,7 @@ namespace uci {
      * Book handles commands for book making / learning
      */
     bool handle_book(input_parser_t & parser) {
+        engine::stop();
         engine::settings()->clear();
         engine::set_ponder(false);
         engine::new_game(fen);
