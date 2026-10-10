@@ -5,6 +5,8 @@ import time
 
 import chess.engine
 
+from .variants import royal_losers_board
+
 
 class engine_session:
     def __init__(self, protocol, timeout):
@@ -28,12 +30,28 @@ class engine_session:
     async def search(self, board, limit, *, game=None, on_info=None):
         if not board.is_valid():
             raise ValueError("invalid chess position")
+        if board.chess960:
+            raise ValueError("unsupported board variant")
+        settings = {}
+        if type(board) is royal_losers_board:
+            wild = self.protocol.options.get("Wild")
+            if wild is None or wild.type != "combo" or "losers" not in wild.var:
+                raise ValueError("engine does not support royal losers through Wild=losers")
+            settings["Wild"] = "losers"
+        elif type(board) is chess.Board:
+            wild = self.protocol.options.get("Wild")
+            if wild is not None:
+                if wild.type != "combo" or "standard" not in wild.var:
+                    raise ValueError("engine does not support Wild=standard")
+                settings["Wild"] = "standard"
+        else:
+            raise ValueError("unsupported board variant")
         started = time.monotonic()
         analysis = None
 
         async def consume():
             nonlocal analysis
-            analysis = await self.protocol.analysis(board, limit, game=game)
+            analysis = await self.protocol.analysis(board, limit, game=game, options=settings)
             async for info in analysis:
                 if info.get("multipv", 1) == 1 and on_info is not None:
                     on_info(info, (time.monotonic() - started) * 1000)

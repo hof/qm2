@@ -475,9 +475,25 @@ Private audit records and benchmark artifacts live under `.context/baselines/`.
 Record the revision, dirty-tree status, binary hashes, positions, limits, build
 configuration, and commands. A short benchmark does not establish a performance
 or playing-strength gain. The 2026-10-10 audit adds zero-time, root-restriction,
-book-shortcut, tiny-node, and losers terminal/draw regression cases. Further audit
-priorities include accurate unsupported capabilities and broader independent
-move-generation/state comparisons.
+book-shortcut, tiny-node, and losers terminal/draw regression cases.
+
+Independent rule/state checks use `maxima_runner.variants.royal_losers_board`,
+a python-chess subclass for [FICS royal losers](https://www.freechess.org/Help/HelpFiles/losers.html).
+Hand-authored fixtures verify both colors' compulsory legal captures, pinned
+captures, capture/quiet check evasions, legal/illegal en passant, all promotions,
+orthodox castling, king-only/checkmate/stalemate wins, terminal precedence,
+and ordinary claimable fifty-move/threefold draws. Insufficient orthodox mating
+material alone does not adjudicate a losers draw.
+
+`test_board_state` checks incremental hashes against freshly initialized boards
+and restores bitboards, matrix, active board/history stacks, counters, castling,
+en passant, and search-stack pointers after each legal child and an entire
+repetition history. The test-only `tests/board_oracle_probe` target also serves
+runner integration checks: fixed fixtures and sorted-move random games with
+seeds 17, 2026, and 24301 compare complete move sets, every legal child's six-field
+FEN, and repetition equivalence against python-chess for standard and losers.
+The bridge does not add engine protocol commands. These sampled checks do not
+prove exhaustive chess correctness or validate all search/draw/TT behavior.
 
 ## 7. CLI and local tablebases
 
@@ -711,6 +727,13 @@ Polyglot keys, and UCI process handling. Its `uci` module uses asyncio for engin
 sessions, streaming analysis, response deadlines, cancellation, and bounded
 shutdown followed by process reaping. Async operations can be awaited by future
 server clients; ordinary CLI entry points run their event loop with `asyncio.run`.
+Sessions accept ordinary `chess.Board` and `royal_losers_board`. Before search,
+they select `Wild=standard` or `Wild=losers` when supported; royal losers requires
+an advertised combo option containing `losers`. Unsupported board variants and
+Chess960 are rejected before analysis. The losers board retains ordinary UCI
+position transport and independent rule/terminal semantics. This foundation does
+not yet add losers CLI suites, PGN import/export, matches, or experience support;
+those workflows must preserve variant identity when introduced.
 Generic UCI orchestration has no dependency on the Maxima source tree.
 Maxima's SQLite experience accounting and binary snapshot serialization remain
 in the runner's experience module; their formats are unchanged.

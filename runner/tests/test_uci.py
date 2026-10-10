@@ -118,3 +118,39 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
         lines = transcript.read_text().splitlines()
         self.assertIn('position startpos moves g1f3 g8f6 f3g1 f6g8', lines)
         self.assertEqual(lines.count('ucinewgame'), 2)
+
+
+class variant_session_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_reject_unsupported_variant_before_analysis(self):
+        from unittest.mock import AsyncMock
+        from types import SimpleNamespace
+        from maxima_runner.uci import engine_session
+        from maxima_runner.variants import royal_losers_board
+        import chess.variant
+        protocol = SimpleNamespace(options={}, analysis=AsyncMock())
+        session = engine_session(protocol, 1)
+        with self.assertRaisesRegex(ValueError, "Wild=losers"):
+            await session.search(royal_losers_board(), chess.engine.Limit(depth=1))
+        with self.assertRaisesRegex(ValueError, "unsupported board variant"):
+            await session.search(chess.variant.SuicideBoard(), chess.engine.Limit(depth=1))
+        protocol.analysis.assert_not_called()
+
+    async def test_real_engine_switches_variants_and_preserves_history(self):
+        import os
+        from maxima_runner.variants import royal_losers_board
+        engine = os.environ.get("MAXIMA_ENGINE")
+        if not engine:
+            self.skipTest("MAXIMA_ENGINE is unset")
+        async with open_engine([engine], None, 5) as session:
+            await session.configure({"OwnBook": False, "UseExperience": False})
+            fen = "4k3/7p/8/8/8/8/p7/R3K3 w - - 0 1"
+            for board in (royal_losers_board(fen), chess.Board(fen), royal_losers_board()):
+                if board.board_fen() == chess.Board().board_fen():
+                    for move in ("e2e4", "d7d5", "e4d5"):
+                        board.push_uci(move)
+                before = (board.fen(), list(board.move_stack))
+                best, _ = await session.search(board, chess.engine.Limit(depth=2))
+                self.assertIn(best.move, board.legal_moves)
+                self.assertEqual((board.fen(), board.move_stack), before)
+                expected = "losers" if type(board) is royal_losers_board else "standard"
+                self.assertEqual(session.protocol.config["Wild"], expected)
