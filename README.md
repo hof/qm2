@@ -19,8 +19,9 @@ in `src/w17/`.
 ### Development
 
 See [MAXIMA.md](MAXIMA.md#5-build-and-debugging) for requirements, isolated toolchain setup,
-Debug and Release modes, and validation. Full tests need the
-[position-suite Python dependency](MAXIMA.md#61-position-suites-through-uci).
+Debug and Release modes, and validation. Engine CTest uses no third-party Python
+dependencies. Install the [Python runner](MAXIMA.md#10-python-runner-and-project-cli)
+for suites, experience tooling, and combined checks.
 Quick Release build:
 
 ```bash
@@ -49,7 +50,11 @@ is the quick contributor entry.
 
 ```bash
 ./maxima                                         # start the built engine
+./maxima build --release                          # configure and compile
+./maxima test --release                           # engine and runner checks
 ./maxima suite:run --suite bratko-kopec --movetime 1000
+./maxima experience:import --pgn completed.pgn
+./maxima experience:analyze --pgn completed.pgn --movetime 1000
 ./maxima tablebases:syzygy:download --pieces 4    # local three/four-piece tables
 ./maxima tablebases:syzygy:download --pieces 5 --dry-run
 ```
@@ -59,3 +64,6 @@ probe policies, storage selection, and download verification.
 
 See [position suites](MAXIMA.md#61-position-suites-through-uci) for SAN/EPD input,
 external engine selection, search budgets, and JSON reports.
+
+See [persistent experience](MAXIMA.md#9-opening-books-and-persistent-experience)
+for result statistics, opponent learning, saved analysis, and book configuration.

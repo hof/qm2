@@ -1,5 +1,4 @@
 import hashlib
-import importlib.util
 import io
 from pathlib import Path
 import sys
@@ -7,10 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location("download_tablebases", sys.argv.pop(1))
-downloader = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(downloader)
-
+from maxima_runner import download_tablebases as downloader
 
 class download_tests(unittest.TestCase):
     def test_selects_complete_sets(self):

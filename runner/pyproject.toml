@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maxima-runner"
+version = "0.1.0"
+description = "UCI chess runner and Maxima development CLI"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = ["chess==1.11.2"]
+
+[project.scripts]
+maxima = "maxima_runner.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["maxima_runner*"]
+
+[tool.setuptools.package-data]
+maxima_runner = ["data/suites/*.epd", "data/suites/*.md"]

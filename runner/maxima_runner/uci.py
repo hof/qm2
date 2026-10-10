@@ -1,0 +1,88 @@
+"""Asynchronous UCI sessions using python-chess, with bounded process cleanup."""
+import asyncio
+from contextlib import asynccontextmanager
+import time
+
+import chess.engine
+
+
+class engine_session:
+    def __init__(self, protocol, timeout):
+        self.protocol = protocol
+        self.timeout = timeout
+
+    @property
+    def identity(self):
+        return [f"{name} {value}" for name, value in self.protocol.id.items()]
+
+    async def configure(self, settings):
+        applied = {name: value for name, value in settings.items()
+                   if name in self.protocol.options}
+        # python-chess manages these when starting analysis.
+        configurable = {name: value for name, value in applied.items()
+                        if not self.protocol.options[name].is_managed()}
+        await asyncio.wait_for(self.protocol.configure(configurable), self.timeout)
+        return {name: str(value).lower() if isinstance(value, bool) else str(value)
+                for name, value in applied.items()}
+
+    async def search(self, board, limit, *, game=None, on_info=None):
+        if not board.is_valid():
+            raise ValueError("invalid chess position")
+        started = time.monotonic()
+        analysis = None
+
+        async def consume():
+            nonlocal analysis
+            analysis = await self.protocol.analysis(board, limit, game=game)
+            async for info in analysis:
+                if info.get("multipv", 1) == 1 and on_info is not None:
+                    on_info(info, (time.monotonic() - started) * 1000)
+            return await analysis.wait()
+
+        try:
+            best = await asyncio.wait_for(consume(), self.timeout)
+            return best, (time.monotonic() - started) * 1000
+        finally:
+            if analysis is not None:
+                analysis.stop()
+                # Reap analysis without cancelling its protocol-owned future.
+                completion = asyncio.ensure_future(analysis.wait())
+                completion.add_done_callback(
+                    lambda task: task.exception() if not task.cancelled() else None)
+                try:
+                    await asyncio.wait_for(asyncio.shield(completion), min(self.timeout, 2))
+                except (asyncio.TimeoutError, chess.engine.EngineError):
+                    pass
+
+
+@asynccontextmanager
+async def open_engine(command, directory, timeout=30):
+    transport = protocol = None
+    try:
+        # Keep the transport before the handshake so every failure can reap it.
+        transport, protocol = await chess.engine.UciProtocol.popen(command, cwd=directory)
+        await asyncio.wait_for(protocol.initialize(), timeout)
+        yield engine_session(protocol, timeout)
+    except asyncio.TimeoutError as error:
+        if protocol is not None and protocol.returncode.done():
+            raise RuntimeError(f"engine exited with status {protocol.returncode.result()}") from error
+        raise RuntimeError("engine response timed out") from error
+    except chess.engine.EngineTerminatedError as error:
+        raise RuntimeError(f"engine exited: {error}") from error
+    except chess.engine.EngineError as error:
+        raise RuntimeError(f"UCI protocol error: {error}") from error
+    finally:
+        if transport is not None:
+            try:
+                if not protocol.returncode.done():
+                    await asyncio.wait_for(protocol.quit(), min(timeout, 2))
+            except (asyncio.TimeoutError, chess.engine.EngineError, BrokenPipeError):
+                pass
+            finally:
+                if not protocol.returncode.done():
+                    try:
+                        transport.kill()
+                    except ProcessLookupError:
+                        pass
+                await asyncio.shield(protocol.returncode)
+                transport.close()

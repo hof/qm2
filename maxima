@@ -1,26 +1,15 @@
 #!/bin/sh
 # Project entry point; Python is only needed for tooling commands.
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-if [ "${1-}" = "tablebases:syzygy:download" ]; then
-    shift
-    exec python3 "$project_dir/tools/download_tablebases.py" "$@"
-fi
-if [ "${1-}" = "suite:run" ]; then
-    shift
-    suite_python="$project_dir/.tools/suites/bin/python"
-    if [ ! -x "$suite_python" ]; then
-        suite_python=python3
-    fi
-    exec "$suite_python" "$project_dir/tools/run_suite.py" "$@"
-fi
-if [ "${1-}" = "--help" ]; then
-    echo 'Usage: ./maxima [tablebases:syzygy:download --pieces 3|4|5|6|7 [--dry-run]]'
-    echo '       ./maxima suite:run [--suite bratko-kopec|FILE] [--movetime MS|--nodes N] [--json FILE]'
-    exit 0
-fi
 if [ "$#" -gt 0 ]; then
-    echo "Unknown command: $1" >&2
-    exit 2
+    runner_python="$project_dir/.tools/runner/bin/python"
+    if [ ! -x "$runner_python" ]; then
+        runner_python="$project_dir/.tools/suites/bin/python"
+    fi
+    if [ ! -x "$runner_python" ]; then runner_python=python3; fi
+    export MAXIMA_PROJECT_DIR="$project_dir"
+    export PYTHONPATH="$project_dir/runner${PYTHONPATH:+:$PYTHONPATH}"
+    exec "$runner_python" -m maxima_runner "$@"
 fi
 for build_type in release debug; do
     engine_path="$project_dir/build/cpp26/$build_type/src/maxima2"

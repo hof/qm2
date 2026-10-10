@@ -42,5 +42,11 @@
 __pycache__/
 
 /book.bin
+
 /book.bin:Zone.Identifier
+
 /experience/
+
+*.egg-info/
+/runner/build/
+/runner/dist/

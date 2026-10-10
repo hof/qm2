@@ -1,2 +1,0 @@
-# Position suite parsing only; not required by the engine or downloader.
-chess==1.11.2

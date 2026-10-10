@@ -15,6 +15,7 @@ optional private context lives in `.context/agents.md`, outside Git.
 7. [CLI and local tablebases](#7-cli-and-local-tablebases)
 8. [Roadmap](#8-roadmap)
 9. [Opening books and persistent experience](#9-opening-books-and-persistent-experience)
+10. [Python runner and project CLI](#10-python-runner-and-project-cli)
 
 Keep chapter numbers stable; append new chapters rather than renumbering existing
 ones. Use descriptive headings and keep each chapter understandable independently.
@@ -90,7 +91,8 @@ header manually.
 
 - `src/tablebase.*`: Maxima's Syzygy adapter and probing policies.
 - `third_party/fathom/`: pinned, unmodified MIT-licensed table decoder.
-- `tools/`: development utilities, including the tablebase downloader.
+- `runner/`: independently packaged Python CLI, UCI orchestration, suites,
+  tablebase downloads, experience tooling, and their tests.
 - `tests/data/syzygy/`: small offline tablebase test fixtures.
 - `tablebases/syzygy/`: downloaded user tables, ignored by Git.
 
@@ -144,9 +146,10 @@ information. Tests independently verify all legal normalized KPK states.
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
-(tested with GCC 16), CMake 3.30 or newer, Ninja, and Python 3.7 or newer
-for lifecycle/download tests. Position-suite tests need Python 3.8+ and the
-optional tooling dependency described in chapter 6.1.
+(tested with GCC 16), CMake 3.30 or newer, and Ninja. Engine lifecycle tests need
+Python 3.7+ with its standard library. Configure with `-DBUILD_TESTING=OFF`
+to build the engine without Python or test targets. The separately packaged
+runner needs Python 3.8+; see chapters 6.1 and 10.
 Release builds retain `-O3 -DNDEBUG -march=native`; Debug builds retain assertions
 and debug symbols. Fathom is compiled separately as C11; a C compiler is also required.
 Native CPU tuning means the binary targets the build machine.
@@ -211,7 +214,7 @@ as well as best moves. Keep regular tests offline and deterministic.
 
 ### 6.1 Position suites through UCI
 
-Position benchmarks live outside the engine. `tools/run_suite.py` communicates
+Position benchmarks live outside the engine. The Python runner uses python-chess
 through ordinary UCI commands; the `maxima` shell launcher dispatches tooling.
 C++ correctness tests link the engine library, while lifecycle and suite runners
 exercise the executable. No suite-specific UCI command or search hook is needed.
@@ -229,21 +232,22 @@ recovered from `tests/test_bratkokopec.cpp` before commit `be07fda` (2014).
 Treat these expected moves as benchmark targets, not proofs that alternatives
 are wrong. Review targets before using individual positions as correctness tests.
 
-Suite parsing requires Python 3.8+ and the pinned `chess` package from
+The runner requires Python 3.8+ and pins the `chess` package from
 [python-chess](https://python-chess.readthedocs.io/en/latest/core.html).
-Install it in the ignored tooling environment:
+Install the package and its dependency in the ignored runner environment:
 
 ```bash
-python3 -m venv .tools/suites
-.tools/suites/bin/python -m pip install -r tools/requirements.txt
+python3 -m venv .tools/runner
+.tools/runner/bin/python -m pip install -e ./runner
 ```
 
 On systems missing `ensurepip`, but with system pip available, use
-`python3 -m venv --without-pip --system-site-packages .tools/suites` instead of
-the first command. The `suite:run` launcher and CTest select this environment
-when present; otherwise they use the normal Python interpreter, which must have
-the package installed. Reconfigure CMake after creating the environment.
-`--help`, engine execution, and the downloader do not import this dependency.
+`python3 -m venv --without-pip --system-site-packages .tools/runner` instead of
+the first command. The launcher prefers this environment, falls back to the
+legacy `.tools/suites` environment, then uses `python3`. The runner is also
+installable with `python -m pip install ./runner`, providing a `maxima` command.
+Help, build helpers, and the downloader do not import python-chess. Engine
+execution through `./maxima` or the binary needs no Python.
 
 The runner accepts standard EPD with one or more `bm` moves in **SAN** (such as
 `Nf3`, `Bxe6+`, `O-O`, or `a8=N`), and still accepts legal UCI coordinate moves.
@@ -263,10 +267,11 @@ normalized `expected_moves`, along with the original `epd`. For example:
 8/8/8/8/8/8/4P3/K6k w - - bm e3 e4; id "pawn advance";
 ```
 
+The bundled suite is package data under `runner/maxima_runner/data/suites/`.
 Each position starts a fresh process in an empty temporary working directory,
 so Maxima's automatic book and previous caches cannot affect results. Supported
 options are set to hash 64 MiB (or `--hash`), one thread, one PV, no pondering,
-no opening book, zero draw contempt, and disabled Syzygy by default for a
+no opening book, disabled analysis mode, zero draw contempt, and disabled Syzygy by default for a
 search/evaluation baseline. To test the complete engine with local probing, pass
 `--syzygy-path /path/to/tables`. The runner resolves the path before changing
 working directories, requires WDL files, sets `SyzygyPath`, and sets the probe
@@ -279,7 +284,8 @@ book/tablebase options; inspect their configuration when comparing engines.
 
 Only the final `bestmove` determines solved/missed. The report also records the
 first observed expected PV move, latest primary-PV score/depth, engine-reported
-nodes/time, and wall time until `bestmove`. Reported depth/score can describe the
+nodes/time, and wall time until `bestmove`. Wall timing includes the initial
+new-game readiness exchange; streaming observations use the runner clock. Reported depth/score can describe the
 last completed iteration rather than the final interrupted search. Time/node
 limits follow the engine's UCI implementation. Maxima currently reports visited
 plus pruned nodes but enforces `go nodes` against visited nodes; reported totals
@@ -292,9 +298,10 @@ process. Unsolved positions are normal benchmark results and return success.
 `--json FILE` saves the complete report after a successful run. Suite results do
 not establish Elo; use engine matches for playing strength.
 
-CTest exercises the runner's parsing, protocol handling, final-move scoring,
-isolation, and timeout cleanup offline. The BK strength benchmark is deliberately
-run manually rather than enforced as a build check.
+Runner tests exercise parsing, protocol handling, final-move scoring,
+isolation, and timeout cleanup offline; they are separate from engine CTest.
+The BK strength benchmark is deliberately run manually rather than enforced
+as a build check.
 
 ### 6.2 Bug audit and sanitizer checks
 
@@ -347,9 +354,9 @@ three- and four-piece set is 70 files, about 4.14 MiB. `--dry-run` lists total
 storage without downloading table files. `--directory /path/to/tables` selects
 another destination; the default `tablebases/syzygy/` is ignored by Git.
 Downloads check the mirror's published SHA-256 hashes, replace files atomically,
-and verify/reuse completed files when rerun. Python 3.7 or newer is needed only
-for this download command and lifecycle/download tests, not to run the compiled
-engine. Position-suite parsing has its own dependency; see chapter 6.1.
+and verify/reuse completed files when rerun. The download command is part of
+the Python 3.8+ runner and uses only the standard library; see chapter 6.1.
+Running the compiled engine requires no Python.
 
 ### 7.2 Engine and UCI configuration
 
@@ -547,3 +554,102 @@ and analysis never change fifty-move/repetition identity or TT score semantics.
 Tests cover confidence smoothing, both-side result attribution, duplicate and
 repeated-position handling, stronger annotations, unfinished games, atomic
 publication, legal selection, rejected reloads, OwnBook, and unchanged book bytes.
+
+
+## 10. Python runner and project CLI
+
+One repository contains two independently usable components: the C++ engine and
+an installable Python runner. The engine owns search, evaluation, time allocation,
+UCI handling, book/tablebase probing, and reading immutable experience snapshots.
+It never imports, embeds, or invokes Python. The runtime boundary is UCI plus
+existing book, tablebase, and experience files.
+
+The runner uses python-chess for boards, legal moves, SAN/UCI notation, EPD, PGN,
+Polyglot keys, and UCI process handling. Its `uci` module uses asyncio for engine
+sessions, streaming analysis, response deadlines, cancellation, and bounded
+shutdown followed by process reaping. Async operations can be awaited by future
+server clients; ordinary CLI entry points run their event loop with `asyncio.run`.
+Generic UCI orchestration has no dependency on the Maxima source tree.
+Maxima's SQLite experience accounting and binary snapshot serialization remain
+in the runner's experience module; their formats are unchanged.
+
+The CLI owns repository paths and build helpers. Existing `suite:run`,
+`experience:*`, and `tablebases:syzygy:download` commands remain available.
+Default engine selection prefers Release, falling back to Debug. Installed
+commands discover the checkout from the current directory or
+`MAXIMA_PROJECT_DIR`; outside a checkout, generic suite commands accept
+`--engine /absolute/path/to/engine` and experience/download data defaults to the
+current directory. Benchmark positions ship with the installed package.
+
+```bash
+./maxima build                 # configure and compile Release
+./maxima build --debug
+./maxima test                  # Release engine checks, then runner integration checks
+./maxima test --debug
+./maxima test --engine-only    # CTest, no python-chess required
+./maxima test --runner-only    # runner checks against the selected built engine
+./maxima uci                   # replace the CLI process with Maxima2
+./maxima uci --engine /path/to/engine
+./maxima uci --engine /path/to/engine -- --engine-option
+```
+
+`maxima uci` uses the Release engine, falling back to Debug. `--engine PATH`
+selects another executable; relative paths resolve against the current directory.
+Arguments after `--` pass unchanged to that executable, including `--help`.
+This command requires only Python's standard library and uses `os.execv`, so
+the engine inherits the process ID, working directory, environment, standard
+streams, and normal signal handling. There is no persistent Python proxy and no
+CLI banner or styling in protocol output. Launch failures report on stderr and
+return nonzero. Use `maxima help uci` or `maxima uci --help` for command help.
+
+Build helpers use the existing CMake presets and automatically use the local
+micromamba compiler environment when present; otherwise they use tools on PATH.
+Tests require an existing configured build and propagate failed commands' exit
+codes. CTest contains engine correctness tests, including raw-UCI lifecycle
+checks using the Python standard library. Runner tests are separate:
+
+```bash
+.tools/runner/bin/python -m unittest discover -s runner/tests -v
+MAXIMA_ENGINE="$PWD/build/cpp26/release/src/maxima2" \
+    .tools/runner/bin/python -m unittest discover -s runner/tests -v
+```
+
+Without `MAXIMA_ENGINE`, real-engine integration tests are explicitly skipped;
+`./maxima test` supplies it and runs both layers. Runner test fixtures may use
+raw UCI to assert engine-specific behavior; application code uses python-chess.
+With the pinned python-chess version, malformed engine `bestmove` responses
+may surface as logged protocol errors followed by the response deadline;
+the runner still fails and reaps the process. Async lifecycle checks require
+local socket access for asyncio's event-loop wake-up mechanism.
+
+JDrone's Java implementation remains operational in its own existing checkout.
+The next migration increment is FICS transport, game/clock orchestration,
+automation, and PGN capture built on this async runner. ICC, legacy database
+migration, remote control, and notifications are deferred. Learning writes stay
+in Python; snapshot reading and move selection stay in Maxima.
+
+### 10.1 Documentation and CLI interface
+
+Update this document in the same change whenever implemented behavior, public
+commands, configuration, architecture, or workflows change. Keep examples runnable
+and distinguish available functionality from planned features. Private milestone
+status, decisions, known bugs, and reproducible measurement records belong in
+`.context/plan-maxima.md`; that file is ignored by Git.
+
+The CLI follows the local Nimbly CLI's concise command summaries and section
+separators, with a left-aligned ASCII crown above the Maxima name. It provides
+the tagline "Chess engine & ops" and
+`maxima --help` / `-h` for common
+commands, `maxima help` for the full implemented command listing, and
+`maxima help COMMAND` or `maxima COMMAND --help` for detailed usage, options,
+and defaults. Build/test help includes examples. Current command groups are
+engine operation, development, and chess data; online-play commands will be added
+when implemented. Existing colon-style commands and the
+no-argument native-engine launch are preserved.
+
+Help must work without an engine build, credentials, network access, or optional
+runtime dependencies. Invalid commands or arguments return nonzero with useful
+guidance. Output must remain readable when redirected; any styling is limited to
+terminals and respects `NO_COLOR`: the crown is gold, separators cyan, and titles
+bold. Native UCI streams remain free of banners and styling. Detailed examples
+for every data command remain a planned documentation improvement.

@@ -1,5 +1,5 @@
 """Offline checks for suite parsing, UCI isolation, and final-move scoring."""
-import importlib.util
+import asyncio
 from pathlib import Path
 import sys
 import tempfile
@@ -7,10 +7,13 @@ import unittest
 from unittest.mock import patch
 
 
-spec = importlib.util.spec_from_file_location("run_suite", sys.argv.pop(1))
-runner = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(runner)
+from maxima_runner import run_suite as runner
+import chess
+import chess.engine
 
+
+def run_position(*args):
+    return asyncio.run(runner.run_position(*args))
 
 fake_engine = '''
 import sys
@@ -33,7 +36,7 @@ for line in sys.stdin:
         assert commands.index("ucinewgame") < commands.index("isready")
         assert sum(c.startswith("go ") for c in commands) == 1
         print("info depth 3 score cp 20 nodes 20 time 1 pv e2e4 e7e5")
-        enabled = "setoption name SyzygyProbeLimit value 5" in commands
+        enabled = "setoption name SyzygyProbeLimit value 0" not in commands
         if enabled:
             assert any(c.startswith("setoption name SyzygyPath value ") for c in commands)
         print(f"info depth 4 score cp 30 nodes 40 time 2 tbhits {3 if enabled else 0} pv d2d4 d7d5")
@@ -109,29 +112,30 @@ class suite_tests(unittest.TestCase):
 
     def test_missing_parser_dependency(self):
         with patch.dict(sys.modules, {'chess': None}):
-            with self.assertRaisesRegex(RuntimeError, 'tools/requirements.txt'):
+            with self.assertRaisesRegex(RuntimeError, 'runner package'):
                 self.parse('8/8/8/8/8/8/4P3/K6k w - - bm e4;')
 
     def test_bundled_suite(self):
-        positions = runner.read_suite(Path(__file__).parent / "data/suites/bratko-kopec.epd")
+        positions = runner.read_suite(Path(runner.__file__).parent / "data/suites/bratko-kopec.epd")
         self.assertEqual(len(positions), 24)
         self.assertEqual(len({position["id"] for position in positions}), 24)
 
-    def test_info_scores_and_multipv(self):
-        info = runner.parse_info('info depth 5 score mate -3 upperbound nodes 99 pv a7a8q')
+    def test_report_scores_and_time(self):
+        info = runner.report_info({'depth': 5, 'score': chess.engine.PovScore(
+            chess.engine.Mate(-3), chess.WHITE), 'upperbound': True, 'nodes': 99,
+            'time': 0.123, 'pv': [chess.Move.from_uci('a7a8q')]})
         self.assertEqual(info['score'], {'type': 'mate', 'value': -3, 'bound': 'upperbound'})
         self.assertEqual(info['pv'], ['a7a8q'])
-        self.assertEqual(runner.parse_info('info string nodes something'), {})
-        self.assertEqual(runner.parse_info('info multipv 2 depth 5 pv e2e4'), {})
+        self.assertEqual(info['time'], 123)
 
     def test_final_move_and_fresh_engine(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = Path(directory) / 'engine.py'
             engine.write_text(fake_engine)
-            position = {'id': 'fixture', 'fen': '8/8/8/8/8/8/4P3/K6k w - - 0 1',
+            position = {'id': 'fixture', 'fen': chess.STARTING_FEN,
                         'expected_moves': ['e2e4']}
             for _ in range(2):
-                result, metadata = runner.run_position([sys.executable, str(engine)], position,
+                result, metadata = run_position([sys.executable, str(engine)], position,
                                                        'nodes 40', 32, 3)
                 self.assertFalse(result['solved'])
                 self.assertEqual(result['bestmove'], 'd2d4')
@@ -147,9 +151,9 @@ class suite_tests(unittest.TestCase):
             engine.write_text(fake_engine)
             tables = Path(directory) / 'tables with spaces'
             tables.mkdir()
-            position = {'fen': '8/8/8/8/8/8/4P3/K6k w - - 0 1',
+            position = {'fen': chess.STARTING_FEN,
                         'expected_moves': ['d2d4']}
-            result, metadata = runner.run_position([sys.executable, str(engine)], position,
+            result, metadata = run_position([sys.executable, str(engine)], position,
                                                    'nodes 40', 32, 3, tables)
             self.assertEqual(metadata['options']['SyzygyPath'], str(tables.resolve()))
             self.assertEqual(metadata['options']['SyzygyProbeLimit'], '5')
@@ -157,19 +161,19 @@ class suite_tests(unittest.TestCase):
             engine.write_text(fake_engine.replace(
                 '        print("option name SyzygyPath type string default <empty>")', ''))
             with self.assertRaisesRegex(RuntimeError, 'does not advertise SyzygyPath'):
-                runner.run_position([sys.executable, str(engine)], position,
+                run_position([sys.executable, str(engine)], position,
                                     'nodes 40', 32, 3, tables)
 
     def test_exit_and_timeout_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = Path(directory) / 'engine.py'
-            position = {'fen': '8/8/8/8/8/8/4P3/K6k w - - 0 1', 'expected_moves': ['e2e4']}
+            position = {'fen': chess.STARTING_FEN, 'expected_moves': ['e2e4']}
             engine.write_text('pass\n')
             with self.assertRaisesRegex(RuntimeError, 'exited'):
-                runner.run_position([sys.executable, str(engine)], position, 'nodes 40', 32, 1)
+                run_position([sys.executable, str(engine)], position, 'nodes 40', 32, 1)
             engine.write_text('import time\ntime.sleep(30)\n')
             with self.assertRaisesRegex(RuntimeError, 'timed out'):
-                runner.run_position([sys.executable, str(engine)], position, 'nodes 40', 32, 0.1)
+                run_position([sys.executable, str(engine)], position, 'nodes 40', 32, 0.1)
 
 
 if __name__ == '__main__':

@@ -34,8 +34,10 @@ ctest --preset cpp26_debug
 
 Use `cpp26_release` for Release builds and checks. The local toolchain prefix is
 `.tools/bootstrap/bin/micromamba run -p .tools/cpp26`; see `MAXIMA.md` for setup.
-Lifecycle/download tooling requires Python 3.7+; position suites require
-Python 3.8+ and tools/requirements.txt (see MAXIMA.md chapter 6.1).
+Engine lifecycle tests require Python 3.7+ with its standard library. The independent
+runner package requires Python 3.8+ and python-chess (install with `pip install -e ./runner`).
+Use `./maxima test` for engine and runner checks; `BUILD_TESTING=OFF` builds without Python.
+See MAXIMA.md chapters 6.1 and 10 for setup and ownership boundaries.
 Running the engine does not require Python.
 Run checks appropriate to the change, including search lifecycle tests for
 engine changes and sanitizer/race checks where relevant. Tests must return
