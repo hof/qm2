@@ -43,7 +43,10 @@ namespace options {
         { "KingAttackPieces", INT, 256, "type spin default 256 min 0 max 512" },
         { "SyzygyPath", STRING, 0, "type string default <empty>" },
         { "SyzygyProbeLimit", INT, 5, "type spin default 5 min 0 max 5" },
-        { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64" }
+        { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64" },
+        { "BookFile", STRING, 0, "type string default book.bin" },
+        { "ExperienceFile", STRING, 0, "type string default <empty>" },
+        { "ExperienceDepth", INT, 16, "type spin default 16 min 1 max 128" }
     };
     
     option_t * get_option(const char * key) {
@@ -77,6 +80,9 @@ void game_t::clear() {
     moves_left = 0;
     max_nodes = 0;
     ponder = false;
+    clock_limit = false;
+    movetime_limit = false;
+    search_moves.clear();
     learn_factor = 1.0;
 }
 
@@ -92,16 +98,19 @@ void game_t::copy(game_t* game) {
     moves_left = game->moves_left;
     max_nodes = game->max_nodes;
     ponder = game->ponder;
+    clock_limit = game->clock_limit;
+    movetime_limit = game->movetime_limit;
+    search_moves = game->search_moves;
     learn_factor = game->learn_factor;
     tm = game->tm;
 }
 
 void game_t::init_tm(bool us) {
     tm.set_start();
-    if (max_time_per_move) {
+    if (movetime_limit || max_time_per_move) {
         tm.set_min(max_time_per_move);
         tm.set_max(max_time_per_move);
-    } else if (white_time || black_time) {
+    } else if (clock_limit || white_time || black_time) {
         tm.set(time(us), time(!us), increment(us), increment(!us), moves_left);
     } else {
         tm.set_min(time_man::INFINITE_TIME);

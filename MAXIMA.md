@@ -14,6 +14,7 @@ optional private context lives in `.context/agents.md`, outside Git.
 6. [Testing and performance](#6-testing-and-performance)
 7. [CLI and local tablebases](#7-cli-and-local-tablebases)
 8. [Roadmap](#8-roadmap)
+9. [Opening books and persistent experience](#9-opening-books-and-persistent-experience)
 
 Keep chapter numbers stable; append new chapters rather than renumbering existing
 ones. Use descriptive headings and keep each chapter understandable independently.
@@ -62,6 +63,9 @@ or require every task to advance every goal.
   identical positions, limits, and compiler flags, checking NPS, time to depth,
   and playing strength rather than assuming any one metric proves improvement.
 - Prefer incremental changes with clear ownership and explicit dependencies.
+- Commit each completed, tested increment with its regressions and relevant
+  documentation before moving on. Use a one-line Conventional Commit message
+  (`type(scope): description`) with no body or footer.
 - Keep board representations, hashes, ply counters, and search stacks consistent
   through operations that own their invariants.
 - Validate external input before changing engine state. Assertions supplement
@@ -97,6 +101,35 @@ requires three occurrences; cycles strictly inside search use one earlier match
 as a search heuristic. Repetition identity excludes en passant squares when no
 legal capture is available. Irreversible moves and null moves bound history scans.
 Checkmate takes precedence over a fifty-move draw.
+
+The UCI boundary validates positions and moves before committing the new FEN and
+repetition history. `position fen` requires six fields, bounded nonnegative
+counters, one king per side, valid rank widths, and consistent castling/en passant
+metadata. Invalid move sequences reject the entire command, including `forward`.
+Moves must match a generated legal move; losers mode also enforces compulsory
+legal captures. Rejected input reports an `info string` diagnostic and leaves the
+previous position/history intact.
+
+`setoption` requires the `name` header and validates integers against advertised
+spin bounds, boolean values, and the supported `Wild` selections before changing
+options. Invalid `go` numeric limits are rejected without starting another search;
+clock values must fit the engine's integer clock representation, and depth is
+bounded by its search stack. Time-budget arithmetic avoids signed overflow for
+large valid clock values. These checks validate supported input; they do not prove
+that an arbitrary FEN is reachable from the initial position.
+
+Explicit zero clocks and `movetime 0` retain a time limit and return a legal
+move without requiring `stop`; absent time limits retain untimed search behavior.
+`go searchmoves` accepts a nonempty list of legal root moves, including losers'
+compulsory-capture rule. It restricts both search and book/experience selection;
+illegal or empty lists reject the command. Other supported `go` options can
+appear before or after the move list. A search interrupted before evaluating its
+first root move returns a legal fallback from that permitted set, rather than
+`0000`. This fallback is not a completed evaluation.
+
+In losers chess, king-only wins, checkmate, and stalemate precede draw scoring.
+Playable positions reach the fifty-move threshold at 100 halfmoves, including
+positions in check; checkmate does not become a draw at higher clock counts.
 
 The transposition table uses 24-byte entries: a full 64-bit position signature,
 a 64-bit context fingerprint, and packed move, score, depth, age, and halfmove
@@ -263,6 +296,40 @@ CTest exercises the runner's parsing, protocol handling, final-move scoring,
 isolation, and timeout cleanup offline. The BK strength benchmark is deliberately
 run manually rather than enforced as a build check.
 
+### 6.2 Bug audit and sanitizer checks
+
+`test_uci_input` covers malformed FENs and moves, atomic preservation of position
+and repetition history, invalid option/search values, special moves, compulsory
+losers captures, and large-clock arithmetic. Keep confirmed bug fixes accompanied
+by focused regressions; passing the suite is evidence for its covered cases,
+not a claim that the engine has no remaining bugs.
+
+An address/undefined-behavior audit build can be configured independently:
+
+```bash
+cmake -S . -B build/cpp26/sanitize -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+  -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+  -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+cmake --build build/cpp26/sanitize --parallel
+UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ASAN_OPTIONS=detect_leaks=1 \
+  ctest --test-dir build/cpp26/sanitize --output-on-failure
+```
+
+Use the local toolchain prefix and cache environment from chapter 5 when needed.
+LeakSanitizer requires an execution environment that permits thread inspection;
+the restricted workspace runner may require these checks to run outside its
+sandbox. Inspect sanitizer diagnostics and exit codes. Race checking remains a
+separate requirement for concurrency changes.
+
+Private audit records and benchmark artifacts live under `.context/baselines/`.
+Record the revision, dirty-tree status, binary hashes, positions, limits, build
+configuration, and commands. A short benchmark does not establish a performance
+or playing-strength gain. The 2026-10-10 audit adds zero-time, root-restriction,
+book-shortcut, tiny-node, and losers terminal/draw regression cases. Further audit
+priorities include ponder/stop interactions with combined limits, variant terminal
+behavior at the UCI root, and broader independent move-generation/state comparisons.
+
 ## 7. CLI and local tablebases
 
 ### 7.1 Download command
@@ -335,3 +402,148 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 - Evaluate learned evaluation after the search and testing foundation is sound.
 
 No speed or Elo gain should be claimed without the corresponding measurements.
+
+## 9. Opening books and persistent experience
+
+### 9.1 Playing configuration
+
+The reference Polyglot book is read-only. `BookFile` defaults to `book.bin` in
+its working directory; online clients should supply an absolute path. `OwnBook`
+is now honoured: false disables both reference-book selection and experience.
+`UCI_AnalyseMode=true` also disables them. These options affect future searches.
+
+```text
+setoption name BookFile value /home/hermen/dev/qm2/book.bin
+setoption name ExperienceFile value /home/hermen/dev/qm2/experience/experience.bin
+setoption name ExperienceDepth value 16
+setoption name OwnBook value true
+```
+
+Experience is optional, disabled until a file is configured. The engine loads a
+validated immutable snapshot; changing `ExperienceFile` stops the current worker
+before publishing a new snapshot. Reapply that option after importing new games.
+`<empty>` disables experience. Invalid reloads retain the previous snapshot.
+The engine never writes either the reference book or the experience file.
+
+Only generated legal moves can be selected from either source. Experienced
+positions with a previous occurrence of the root, imminent fifty-move draws, and covered
+Syzygy material fall back to normal search/tablebases. Saved scores are never
+used as transposition-table bounds or reported as proven evaluations. Book
+moves report zero cp, as before. Infinite/ponder searches still wait for the
+appropriate stop/ponderhit before publishing a book move.
+
+### 9.2 Importing online games
+
+Tooling uses the same pinned Python environment as the EPD runner (chapter 6.1).
+
+```bash
+./maxima experience:import --pgn games/BugChessFICS.pgn
+./maxima experience:import --pgn completed.pgn --player Maxima --player BugChess
+./maxima experience:show
+./maxima experience:export
+```
+
+Defaults are `experience/experience.sqlite` and `experience/experience.bin`,
+ignored by Git. `--database` and `--output` select other files. Snapshot export
+refuses to overwrite an existing file without an experience snapshot header.
+The reference `book.bin` is untouched. Imported games must be standard chess;
+invalid games roll back the current import rather than partly changing statistics.
+
+Default player aliases are Maxima and BugChess, matched without case sensitivity.
+Only games involving an alias contribute results, but **both sides' moves** are
+retained. An opponent's winning line is recorded as successful for that move's
+side, rather than penalised because Maxima lost. Own and opponent provenance and
+own win/draw/loss totals are stored separately. Scores count draws as half points.
+These are observed results, not causal proof that an opening caused the outcome.
+
+The default horizon is the first 32 plies (`--max-ply`). A position/move receives
+at most one result observation per game, even if it repeats. Stable game identity
+uses starting position, moves, result, and identifying PGN headers; importing the
+same game again does not increase its counts. A later import may add stronger
+annotations or extend the import horizon. Incomplete games (`*`) may contribute
+analysis but do not count as wins/draws/losses. Completed results are treated as
+authoritative; corrected game identities are not automatically reconciled.
+
+### 9.3 Confidence and repertoire exploration
+
+The importer keeps the counts as well as the percentages. Selection prefers
+Maxima's own results when available. Own results start with 32 neutral prior
+games: one win gives an estimated 51.5%, not 100%. Opponent-only observations
+use 64 neutral prior games because player strength can differ. With more games,
+actual results increasingly outweigh the prior.
+
+Book weights are multiplied by `0.1 + 0.9 * (2 * estimated_score)^4`. This is a
+first, unvalidated policy, not an Elo claim. The positive floor preserves trials
+of less successful moves. Randomness uses an independently seeded generator per
+search and is not reset every time the file opens. New observed moves get a small
+trial weight growing with sample count. When sparse experience has no reference
+book entry or qualifying analysis, it competes with a fresh search rather than
+forcing a previously seen move. This lets both Maxima's and its opponents' new
+lines enter the repertoire without treating one game as conclusive.
+
+### 9.4 Remembering serious analysis
+
+Annotated PGN supports standard `[%eval 0.40,18]` (White's score and depth) and
+`[%emt 0:01:00]` (elapsed move time). Optional `[%nodes 1200000]` and
+`[%pv e4 e5 Nf3]` comments retain effort and a legal SAN or coordinate PV.
+A PV candidate is kept separately from the move actually played; unplayed PV
+moves do not receive game-result counts. PV scores are attached only to their
+first move, not copied into descendant positions. Engine identity comes from
+WhiteEngine/BlackEngine headers, falling back to the player name. Unknown clock
+annotations are not interpreted as elapsed thinking time.
+
+Analysis retains score perspective, mate/cp type, depth, nodes, time, PV, engine
+identity and halfmove clock. Stronger depth/node/time evidence replaces weaker
+analysis for the same position/move/engine/clock. Engine versions remain visible
+in the database. The compact snapshot exports the strongest record per move.
+At a matching halfmove clock, analysis meeting `ExperienceDepth` (default 16)
+can qualify an extra book candidate even without result observations. Candidates
+must score within 50 cp of the best eligible saved analysis among legal moves;
+analysed inferior continuations do not become recommendations merely because
+they were examined deeply. Mate scores rank ahead of centipawn wins and behind
+centipawn losses as appropriate. It remains
+book evidence, not an exact score cache. A deeper recorded move can therefore
+be available immediately in a later short game; this reuse policy needs match
+validation and does not guarantee that past analysis was correct.
+
+### 9.5 Optional post-game analysis
+
+```bash
+./maxima experience:analyze --pgn completed.pgn --movetime 1000 --max-ply 32
+./maxima experience:analyze --pgn completed.pgn --movetime 60000 --max-ply 4
+```
+
+`--engine` selects an executable; default is the Release Maxima binary. The tool
+starts an external UCI engine in an empty directory with book/experience disabled.
+It analyses each position in the selected opening horizon and saves the best PV.
+If its preferred move differs from the played move, it also searches the played
+continuation and reports both scores and an estimated centipawn loss. This may
+use two time budgets per position; differing search horizons can produce noisy
+comparisons. Reports are candidate improvements, not proven mistakes. Analysis
+candidates do not acquire invented wins or losses. Snapshot publication happens
+when analysis completes. Result accounting remains a separate import command.
+
+An online client can save annotated PGN at game end, invoke these commands, and
+reload ExperienceFile before the next game. Automatic server connection,
+background-job scheduling, and live UCI analysis recording are not implemented
+here. The existing legacy `learn` self-match tuner is separate and is not used
+by this persistent experience layer.
+
+### 9.6 Storage and search ownership
+
+SQLite is the authoritative writable store, used only by external tooling.
+An atomic snapshot replace leaves readers with complete data. Snapshot format
+v1 is little-endian: `MXEXP001`, an unsigned 64-bit record count, then sorted
+80-byte records. Each has a full 64-bit Polyglot key, coordinate move (source six
+bits, target six bits, promotion N/B/R/Q encoded 1/2/3/4), total W/D/L, analysis
+depth/score/nodes/time/clock/type/engine fingerprint, own W/D/L, and a reserved
+zero field. Duplicate or unordered records, bad headers, invalid field ranges,
+incorrect lengths, and counts above two million are rejected.
+
+Searches hold shared immutable ownership of the loaded snapshot. Lookups and
+weighting occur only at the root, outside the search node hot path. Configuring
+a file parses it once; ordinary searches do not reopen or modify it. Statistics
+and analysis never change fifty-move/repetition identity or TT score semantics.
+Tests cover confidence smoothing, both-side result attribution, duplicate and
+repeated-position handling, stronger annotations, unfinished games, atomic
+publication, legal selection, rejected reloads, OwnBook, and unchanged book bytes.

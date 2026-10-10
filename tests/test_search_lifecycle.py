@@ -3,6 +3,7 @@ from pathlib import Path
 import shutil
 import queue
 import subprocess
+import struct
 import sys
 import tempfile
 import threading
@@ -80,6 +81,56 @@ def running_engine():
 
 
 class search_lifecycle_tests(unittest.TestCase):
+    def test_zero_time_returns_without_stop(self):
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            for command in ("go wtime 0 btime 0", "go movetime 0", "go wtime 1 btime 1"):
+                engine.send("position startpos")
+                engine.send(command)
+                engine.wait_for_bestmove()
+            engine.send("quit")
+            engine.wait_for_exit()
+
+    def test_searchmoves_restricts_root_with_options_in_either_order(self):
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            for command, allowed in (
+                    ("go depth 2 searchmoves a2a3", {"a2a3"}),
+                    ("go nodes 1 searchmoves a2a3", {"a2a3"}),
+                    ("go nodes 1", {"a2a3", "a2a4", "b2b3", "b2b4", "c2c3", "c2c4",
+                                    "d2d3", "d2d4", "e2e3", "e2e4", "f2f3", "f2f4",
+                                    "g2g3", "g2g4", "h2h3", "h2h4", "b1a3", "b1c3",
+                                    "g1f3", "g1h3"}),
+                    ("go searchmoves h2h3 depth 2", {"h2h3"}),
+                    ("go searchmoves a2a3 h2h3 nodes 1000", {"a2a3", "h2h3"})):
+                engine.send("position startpos")
+                engine.send(command)
+                self.assertIn(engine.wait_for("bestmove ").split()[1], allowed)
+            engine.send("go searchmoves e2e5 depth 2")
+            engine.wait_for("info string Invalid move:")
+            engine.send("go depth 2 searchmoves")
+            engine.wait_for("info string Invalid searchmoves:")
+            engine.send("isready")
+            engine.wait_for("readyok")
+            engine.send("quit")
+            engine.wait_for_exit()
+
+    def test_book_and_zero_time_obey_searchmoves(self):
+        with tempfile.TemporaryDirectory(prefix="qm2-book-") as directory:
+            book = Path(directory) / "book.bin"
+            # Known initial-position Polyglot key; the only book move is a2a3.
+            book.write_bytes(struct.pack(">QHHI", 0x463b96181691fc9c, (8 << 6) | 16, 10, 0))
+            with running_engine() as engine:
+                engine.send(f"setoption name BookFile value {book}")
+                for command, expected in (
+                        ("go depth 2 searchmoves h2h3", "h2h3"),
+                        ("go movetime 0 searchmoves a2a3", "a2a3")):
+                    engine.send("position startpos")
+                    engine.send(command)
+                    self.assertEqual(engine.wait_for("bestmove ").split()[1], expected)
+                engine.send("quit")
+                engine.wait_for_exit()
+
     def test_tablebase_path_reconfiguration(self):
         with tempfile.TemporaryDirectory(prefix="qm2-tables-") as directory:
             tables = Path(directory) / "tables with spaces"

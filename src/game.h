@@ -25,6 +25,8 @@
 #include "move.h"
 #include "timeman.h"
 #include "version.h"
+#include <string>
+#include <vector>
 
 namespace options {
 
@@ -39,7 +41,7 @@ namespace options {
         const char * uci_option; 
     };
 
-    const int length = 19;
+    const int length = 22;
     extern option_t PARAM[length+1];
     
     option_t * get_option(const char * key);
@@ -61,6 +63,9 @@ public:
     int black_increment;
     int moves_left;
     bool ponder;
+    bool clock_limit;
+    bool movetime_limit;
+    std::vector<std::string> search_moves;
     double learn_factor;
 
     void clear();

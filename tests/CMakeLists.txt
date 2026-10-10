@@ -42,3 +42,9 @@ target_link_libraries(test_kpk MAX2SRC)
 add_executable(test_tablebase test_tablebase.cpp)
 target_link_libraries(test_tablebase MAX2SRC)
 target_compile_definitions(test_tablebase PRIVATE TABLEBASE_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data/syzygy")
+
+add_executable(test_experience test_experience.cpp)
+target_link_libraries(test_experience MAX2SRC)
+
+add_executable(test_uci_input test_uci_input.cpp)
+target_link_libraries(test_uci_input MAX2SRC)

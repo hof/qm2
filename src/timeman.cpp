@@ -31,7 +31,7 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         M_MAX = 1;
         M_MIN = 1;
     } else if (moves_left > 0) {
-        M_MIN = MIN(2 * moves_left, time_man::M_MIN);
+        M_MIN = 2 * MIN(moves_left, time_man::M_MIN / 2);
         M_MAX = MIN(moves_left, time_man::M_MAX);
     } else if (my_inc == 0 && my_time < time_man::LOW_TIME) {
         M_MIN = time_man::M_MIN_LOW_TIME;
@@ -48,8 +48,8 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
     //adjustment based on opponent's time
     const int delta = my_time - opp_time;
     if (delta > 0 && tot_max < delta && my_inc >= opp_inc && opp_time > 0) {
-        tot_min += (32 * delta) / 256;
-        tot_max += (64 * delta) / 256;
+        tot_min += delta / 8;
+        tot_max += delta / 4;
     } else if (delta < 0 && tot_max < -delta && my_inc <= opp_inc && moves_left == 0) {
         const double factor = MAX(0.5, (1.0 * my_time) / (1.0 * opp_time + 1.0));
         tot_min *= factor;
@@ -60,7 +60,7 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
     if (my_inc > 0) {
         const int min_inc_bonus = MIN(my_inc, my_time - tot_min);
         const int max_inc_bonus = MIN(my_inc, my_time - tot_max);
-        tot_min += (196 * min_inc_bonus) / 256;
+        tot_min += static_cast<int>((int64_t(196) * min_inc_bonus) / 256);
         tot_max += max_inc_bonus;
     }
 

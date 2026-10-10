@@ -28,6 +28,7 @@
 
 #include "search.h"
 #include <limits>
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include "book.h"
@@ -116,7 +117,11 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     }
     game.init_tm(brd.us());
     wild = 0;
-    book_name = "book.bin";
+    book_name = book::path();
+    _own_book = options::get_value("OwnBook") && !options::get_value("UCI_AnalyseMode");
+    _experience_depth = options::get_value("ExperienceDepth");
+    _experience = experience::snapshot();
+    _book_seeded = false;
     king_attack_shelter = options::get_value("KingAttackShelter");
     king_attack_pieces = options::get_value("KingAttackPieces");
     beta_pruning = options::get_value("BetaPruning");
@@ -149,24 +154,89 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
  * Lookup current position in polyglot book database (file book.bin)
  */
 bool search_t::book_lookup() {
-    bool result = false;
-    book::open(book_name);
-    move::list_t * bmoves = &stack->move_list;
-    int total_score = book::find(&brd, bmoves);
-    if (total_score > 0) {
-        int rnd = (rand() % total_score) + 1;
-        int score = 0;
-        for (move_t * bmove = bmoves->first; bmove != bmoves->last; bmove++) {
-            score += bmove->score;
-            if (score >= rnd) {
-                result = true;
-                stack->best_move.set(bmove);
-                break;
+    if (!_own_book || brd.stack->fifty_count >= 90 || is_draw()) return false;
+    if (std::find(_position_history.begin(), _position_history.end(),
+                  brd.stack->repetition_key()) != _position_history.end()) return false;
+    // Let perfect endgame results take precedence over remembered book moves.
+    if (wild == 0 && tablebase_limit && popcnt0(brd.all()) <= tablebase_limit) return false;
+    book_t reader;
+    move::list_t book_moves;
+    reader.open(book_name);
+    reader.find(&brd, &book_moves);
+    if (book_moves.first == book_moves.last && (wild != 0 || !_experience)) return false;
+    const U64 key = book_t::polyglot_key(&brd);
+    double mean_weight = 100;
+    if (book_moves.first != book_moves.last) {
+        U64 total = 0;
+        for (auto entry = book_moves.first; entry != book_moves.last; ++entry) total += entry->score;
+        mean_weight = double(total) / (book_moves.last - book_moves.first);
+    }
+    std::vector<move_t> candidates;
+    std::vector<double> weights;
+    bool has_reference = false, has_analysis = false;
+    struct candidate_t {
+        move_t move;
+        double weight;
+        const experience::entry_t * learned;
+        int analysis_score;
+    };
+    std::vector<candidate_t> legal;
+    const int no_analysis = std::numeric_limits<int>::min();
+    int best_analysis = no_analysis;
+    stack->in_check = brd.in_check();
+    for (move_t * move = move::first(this, 1); move; move = move::next(this, 1)) {
+        if (!game.search_moves.empty() && std::find(game.search_moves.begin(),
+                game.search_moves.end(), move->to_string()) == game.search_moves.end()) continue;
+        double weight = 0;
+        for (auto entry = book_moves.first; entry != book_moves.last; ++entry)
+            if (move->equals(entry)) weight += entry->score;
+        has_reference |= weight > 0;
+        const unsigned promotion = move->promotion ? (move->promotion - 1) % 6 : 0;
+        const unsigned code = move->ssq | (move->tsq << 6) | (promotion << 12);
+        const auto * learned = wild == 0 && _experience ? _experience->find(key, code) : nullptr;
+        int analysis_score = no_analysis;
+        if (learned && learned->depth >= _experience_depth
+                && learned->clock == unsigned(brd.stack->fifty_count)) {
+            analysis_score = learned->score_type ? (learned->score > 0 ? 30000 : -30000)
+                : std::clamp(int(learned->score), -29000, 29000);
+            best_analysis = std::max(best_analysis, analysis_score);
+        }
+        legal.push_back({*move, weight, learned, analysis_score});
+    }
+    for (const auto & candidate : legal) {
+        double weight = candidate.weight;
+        if (candidate.learned) {
+            const auto & learned = *candidate.learned;
+            const double games = double(learned.wins) + learned.draws + learned.losses;
+            // Analysed mistakes remain observations, but do not qualify as recommendations.
+            const bool analysed = candidate.analysis_score != no_analysis
+                && candidate.analysis_score >= best_analysis - 50;
+            has_analysis |= analysed;
+            if (!weight && (games > 0 || analysed)) {
+                weight = mean_weight * (analysed ? 1 : 0.125 + 0.875 * games / (games + 8));
             }
+            weight *= learned.factor();
+        }
+        if (weight > 0) {
+            candidates.push_back(candidate.move);
+            weights.push_back(weight);
         }
     }
-    book::close();
-    return result;
+    if (candidates.empty()) return false;
+    if (!_book_seeded) {
+        _book_random.seed(std::random_device{}());
+        _book_seeded = true;
+    }
+    // Sparse unanalysed experience competes with doing a fresh search.
+    if (!has_reference && !has_analysis) weights.push_back(mean_weight);
+    std::discrete_distribution<size_t> choose(weights.begin(), weights.end());
+    const size_t selected = choose(_book_random);
+    if (selected == candidates.size()) return false;
+    stack->best_move = candidates[selected];
+    stack->pv_moves[0] = stack->best_move;
+    stack->pv_count = 1;
+    result_score = 0; // Experience scores are evidence, never transposition bounds.
+    return true;
 }
 
 /**
@@ -174,21 +244,27 @@ bool search_t::book_lookup() {
  */
 void search_t::go() {
     assert(stack->best_move.piece == 0 && ponder_move.piece == 0);
-    if (book_lookup()) { //book hit
+    bool solved = book_lookup();
+    if (solved) {
         uci::send_pv(0, 1, 1, 1, game.tm.elapsed(),
                 stack->best_move.to_string().c_str(), score::EXACT, tablebase_hits);
-    } else if (init_root_moves() > 0) { //do id search
-        if (!tablebase_lookup()) {
-            iterative_deepening();
-        } else {
-            // A solved position still honors UCI infinite/ponder publication rules.
-            const bool infinite = !game.ponder && game.max_depth == MAX_PLY
-                && !game.max_nodes && !game.max_time_per_move
-                && !game.white_time && !game.black_time;
-            while ((infinite || pondering()) && !abort(true)) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
+    } else if (init_root_moves() > 0) {
+        solved = tablebase_lookup();
+        if (!solved) iterative_deepening();
+        // A tiny node budget or early stop can interrupt the first root move.
+        // Still return a legal move from the permitted root set.
+        if (!stack->best_move.piece) {
+            stack->best_move = root.moves[0].move;
+            stack->pv_moves[0] = stack->best_move;
+            stack->pv_count = 1;
         }
+    }
+    if (solved) {
+        const bool infinite = !game.ponder && game.max_depth == MAX_PLY
+            && !game.max_nodes && !game.max_time_per_move
+            && !game.white_time && !game.black_time && !game.clock_limit && !game.movetime_limit;
+        while ((infinite || pondering()) && !abort(true))
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
@@ -535,6 +611,8 @@ int search_t::init_root_moves() {
     stack->best_move.set(0);
     for (move_t * move = move::first(this, 1);
             move; move = move::next(this, 1)) {
+        if (!game.search_moves.empty() && std::find(game.search_moves.begin(),
+                game.search_moves.end(), move->to_string()) == game.search_moves.end()) continue;
         int gives_check = brd.gives_check(move);
         bool is_dangerous = root.in_check || gives_check || move->capture || move->promotion || is_passed_pawn(move);
         root_move_t * rmove = &root.moves[root.move_count++];

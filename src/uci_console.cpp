@@ -22,6 +22,11 @@
 
 #include "uci_console.h"
 #include "tablebase.h"
+#include "experience.h"
+#include "book.h"
+#include "movegen.h"
+#include <charconv>
+#include <limits>
 
 #define DO_LOG
 
@@ -38,12 +43,96 @@ namespace uci {
         return tmp.str();
     }
 
-    template<class any_t>
-    any_t atoi(const std::string& s) {
-        std::istringstream stream(s);
-        any_t t;
-        stream >> t;
-        return t;
+    template<class integer_t>
+    bool parse_integer(const std::string & text, integer_t & value) {
+        auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+        return result.ec == std::errc() && result.ptr == text.data() + text.size();
+    }
+
+    bool valid_fen(const std::string & text) {
+        std::istringstream input(text);
+        std::string placement, side, castles, ep, halfmove, fullmove, extra;
+        if (!(input >> placement >> side >> castles >> ep >> halfmove >> fullmove)
+                || (input >> extra) || (side != "w" && side != "b")) {
+            return false;
+        }
+        int rank = 7, file = 0, white_kings = 0, black_kings = 0;
+        int pieces[2] = {0, 0};
+        char squares[64] = {};
+        for (char symbol : placement) {
+            if (symbol == '/') {
+                if (file != 8 || rank == 0) return false;
+                --rank;
+                file = 0;
+            } else if (symbol >= '1' && symbol <= '8') {
+                file += symbol - '0';
+            } else {
+                if (std::string("PNBRQKpnbrqk").find(symbol) == std::string::npos || file >= 8) return false;
+                if ((symbol == 'P' || symbol == 'p') && (rank == 0 || rank == 7)) return false;
+                white_kings += symbol == 'K';
+                black_kings += symbol == 'k';
+                ++pieces[symbol >= 'a'];
+                squares[rank * 8 + file] = symbol;
+                ++file;
+            }
+            if (file > 8) return false;
+        }
+        if (rank != 0 || file != 8 || white_kings != 1 || black_kings != 1
+                || pieces[0] > 16 || pieces[1] > 16) return false;
+        if (castles != "-") {
+            std::string seen;
+            for (char symbol : castles) {
+                if (std::string("KQkq").find(symbol) == std::string::npos
+                        || seen.find(symbol) != std::string::npos) return false;
+                if ((symbol == 'K' && (squares[e1] != 'K' || squares[h1] != 'R'))
+                        || (symbol == 'Q' && (squares[e1] != 'K' || squares[a1] != 'R'))
+                        || (symbol == 'k' && (squares[e8] != 'k' || squares[h8] != 'r'))
+                        || (symbol == 'q' && (squares[e8] != 'k' || squares[a8] != 'r'))) return false;
+                seen += symbol;
+            }
+        }
+        if (ep != "-" && (ep.size() != 2 || ep[0] < 'a' || ep[0] > 'h'
+                || ep[1] != (side == "w" ? '6' : '3'))) return false;
+        if (ep != "-") {
+            const int target = (ep[1] - '1') * 8 + ep[0] - 'a';
+            const int direction = side == "w" ? -8 : 8;
+            if (squares[target] || squares[target + direction] != (side == "w" ? 'p' : 'P')
+                    || squares[target - direction]) return false;
+        }
+        int halfmove_count, fullmove_count;
+        return parse_integer(halfmove, halfmove_count) && halfmove_count >= 0
+            && halfmove_count <= std::numeric_limits<int>::max() - MAX_PLY
+            && parse_integer(fullmove, fullmove_count) && fullmove_count >= 1
+            && fullmove_count <= (std::numeric_limits<int>::max() - MAX_PLY) / 2;
+    }
+
+    bool apply_moves(board_t & board, input_parser_t & input, std::vector<U64> & history) {
+        std::string token;
+        while (input >> token) {
+            move::list_t moves;
+            moves.clear();
+            move::gen_captures(&board, &moves);
+            move::gen_promotions(&board, &moves);
+            move::gen_castles(&board, &moves);
+            move::gen_quiet_moves(&board, &moves);
+            move_t * selected = nullptr;
+            bool capture_available = false;
+            for (move_t * move = moves.first; move != moves.last; ++move) {
+                if (!board.legal(move)) continue;
+                capture_available |= move->capture != 0;
+                if (move->to_string() == token) selected = move;
+            }
+            if (!selected || (options::get_value("Wild") == 17
+                    && capture_available && !selected->capture)) {
+                out("info string Invalid move: " + token);
+                return false;
+            }
+            history.push_back(board.stack->repetition_key());
+            board.forward(selected);
+            if (board.stack->fifty_count == 0) history.clear();
+            if (board.ply > MAX_PLY - 2) board.init(board.to_string().c_str());
+        }
+        return true;
     }
 
     void silent(bool on) {
@@ -144,101 +233,115 @@ namespace uci {
 
     bool handle_go(input_parser_t &parser) {
         engine::stop();
-        bool result = true;
         std::string token;
-        engine::settings()->clear();
+        game_t candidate;
         while (parser >> token) {
             if (token == "infinite") {
-                engine::settings()->max_depth = MAX_PLY;
+                candidate.max_depth = MAX_PLY;
             } else if (token == "ponder") {
-                engine::settings()->max_depth = MAX_PLY;
-                engine::settings()->ponder = true;
-            } else if (token == "wtime") {
-                parser >> engine::settings()->white_time;
-            } else if (token == "btime") {
-                parser >> engine::settings()->black_time;
-            } else if (token == "winc") {
-                parser >> engine::settings()->white_increment;
-            } else if (token == "binc") {
-                parser >> engine::settings()->black_increment;
-            } else if (token == "movestogo") {
-                parser >> engine::settings()->moves_left;
-            } else if (token == "depth") {
-                parser >> engine::settings()->max_depth;
-            } else if (token == "nodes") {
-                parser >> engine::settings()->max_nodes;
-            } else if (token == "movetime") {
-                parser >> engine::settings()->max_time_per_move;
+                candidate.max_depth = MAX_PLY;
+                candidate.ponder = true;
+            } else if (token == "wtime" || token == "btime" || token == "winc"
+                    || token == "binc" || token == "movestogo" || token == "depth"
+                    || token == "nodes" || token == "movetime") {
+                std::string value;
+                U64 number = 0;
+                if (!(parser >> value) || !parse_integer(value, number)
+                        || (token != "nodes" && number > std::numeric_limits<int>::max())
+                        || ((token == "nodes" || token == "depth" || token == "movestogo") && !number)
+                        || (token == "depth" && number > MAX_PLY)) {
+                    out("info string Invalid go value: " + token);
+                    return true;
+                }
+                if (token == "wtime") candidate.white_time = static_cast<int>(number);
+                if (token == "btime") candidate.black_time = static_cast<int>(number);
+                if (token == "wtime" || token == "btime") candidate.clock_limit = true;
+                if (token == "winc") candidate.white_increment = static_cast<int>(number);
+                if (token == "binc") candidate.black_increment = static_cast<int>(number);
+                if (token == "movestogo") candidate.moves_left = static_cast<int>(number);
+                if (token == "depth") candidate.max_depth = static_cast<int>(number);
+                if (token == "nodes") candidate.max_nodes = number;
+                if (token == "movetime") candidate.max_time_per_move = number;
+                if (token == "movetime") candidate.movetime_limit = true;
             } else if (token == "searchmoves") {
-
+                const size_t count = candidate.search_moves.size();
+                while (true) {
+                    const auto position = parser.tellg();
+                    std::string text;
+                    if (!(parser >> text)) break;
+                    if (text == "depth" || text == "nodes" || text == "movetime"
+                            || text == "wtime" || text == "btime" || text == "winc"
+                            || text == "binc" || text == "movestogo"
+                            || text == "ponder" || text == "infinite" || text == "searchmoves") {
+                        parser.seekg(position);
+                        break;
+                    }
+                    board_t board;
+                    board.init(fen.c_str());
+                    std::vector<U64> history;
+                    input_parser_t move_input(text);
+                    if (!apply_moves(board, move_input, history)) return true;
+                    candidate.search_moves.push_back(text);
+                }
+                if (candidate.search_moves.size() == count) {
+                    out("info string Invalid searchmoves: expected legal root moves");
+                    return true;
+                }
             }
         }
+        engine::settings()->copy(&candidate);
         engine::set_ponder(engine::settings()->ponder);
         engine::set_position(fen, position_history);
         engine::go();
-        return result;
+        return true;
     }
 
     bool handle_position(input_parser_t & parser) {
         engine::stop();
-        bool result = true;
         std::string token;
-        if (parser >> token) {
-            if (token == "startpos") {
-                fen = start_fen;
-                parser >> token;
-            } else if (token == "fen") {
-                fen = "";
-                while (parser >> token && token != "moves") {
-                    fen += token;
-                    fen += ' ';
-                }
-            } else { //should never happen
-                fen = start_fen;
-                parser >> token;
-            }
-            position_history.clear();
-            board_t brd;
-            brd.init(fen.c_str());
-            if (token == "moves") {
-                while (parser >> token) {
-                    move_t move;
-                    move.set(&brd, token.c_str());
-                    position_history.push_back(brd.stack->repetition_key());
-                    brd.forward(&move);
-                    if (brd.stack->fifty_count == 0) {
-                        position_history.clear();
-                    }
-                    if (brd.ply > MAX_PLY - 2) {
-                        brd.init(brd.to_string().c_str()); //preventing overflow
-                    }
-                }
-            }
-            fen = brd.to_string();
+        std::string candidate;
+        if (!(parser >> token)) {
+            out("info string Invalid position command");
+            return true;
         }
-        return result;
+        if (token == "startpos") {
+            candidate = start_fen;
+            if ((parser >> token) && token != "moves") {
+                out("info string Invalid position command");
+                return true;
+            }
+        } else if (token == "fen") {
+            while (parser >> token && token != "moves") candidate += token + ' ';
+        } else {
+            out("info string Invalid position command");
+            return true;
+        }
+        if (!valid_fen(candidate)) {
+            out("info string Invalid FEN");
+            return true;
+        }
+        board_t board;
+        board.init(candidate.c_str());
+        if (!board.legal()) {
+            out("info string Invalid FEN");
+            return true;
+        }
+        std::vector<U64> history;
+        if (token == "moves" && !apply_moves(board, parser, history)) return true;
+        fen = board.to_string();
+        position_history = std::move(history);
+        return true;
     }
 
     bool handle_forward(input_parser_t & parser) {
-        bool result = true;
-        std::string token;
         board_t brd;
-        move_t move;
         brd.init(fen.c_str());
         engine::stop();
-        while (parser >> token) {
-            move.set(&brd, token.c_str());
-            position_history.push_back(brd.stack->repetition_key());
-            brd.forward(&move);
-            if (brd.stack->fifty_count == 0) {
-                position_history.clear();
-            }
-            if (brd.ply > MAX_PLY - 2) {
-                brd.init(brd.to_string().c_str());
-            }
-        }
+        auto history = position_history;
+        if (!apply_moves(brd, parser, history)) return true;
         fen = brd.to_string();
-        return result;
+        position_history = std::move(history);
+        return true;
     }
 
     bool handle_setoption(input_parser_t & parser) {
@@ -247,7 +350,7 @@ namespace uci {
         bool handled = false;
         std::string token, name, value;
         name = "unknown";
-        if ((parser >> token) || token == "name") {
+        if ((parser >> token) && token == "name") {
             if (parser >> name) {
                 while (parser >> token && token != "value") {
                     name += (" " + token);
@@ -261,19 +364,49 @@ namespace uci {
                         //parse option value
                         options::option_t * opt = options::get_option(name.c_str());
                         handled = std::string(opt->key) == name;
-                        opt->value = 0;
+                        if (!handled) {
+                            send_unknown_option(name);
+                            return true;
+                        }
+                        int candidate = opt->value;
                         if (opt->type == options::BOOL) {
-                            opt->value = value == "true" || value == "1";
+                            if (value != "true" && value != "false" && value != "1" && value != "0") {
+                                out("info string Invalid option value: " + name);
+                                return true;
+                            }
+                            candidate = value == "true" || value == "1";
                         } else if (opt->type == options::INT) {
-                            opt->value = atoi<int>(value);
+                            int minimum = 0, maximum = 0;
+                            std::istringstream specification(opt->uci_option);
+                            while (specification >> token) {
+                                if (token == "min") specification >> minimum;
+                                if (token == "max") specification >> maximum;
+                            }
+                            if (!parse_integer(value, candidate) || candidate < minimum || candidate > maximum) {
+                                out("info string Invalid option value: " + name);
+                                return true;
+                            }
                         } else if (name == "Wild") {
                             if (value == "losers" || value == "17") {
-                                opt->value = 17;
+                                candidate = 17;
+                            } else if (value == "standard") {
+                                candidate = 0;
+                            } else {
+                                out("info string Invalid option value: " + name);
+                                return true;
                             }
                         }
+                        opt->value = candidate;
 
                         //handle option
-                        if (name == "SyzygyPath") {
+                        if (name == "ExperienceFile") {
+                            out(experience::set_path(value) ? "info string Experience loaded"
+                                : "info string Experience load failed; previous snapshot retained");
+                        } else if (name == "ExperienceDepth") {
+                            opt->value = MAX(1, MIN(128, opt->value));
+                        } else if (name == "BookFile") {
+                            book::set_path(value == "<empty>" ? "" : value);
+                        } else if (name == "SyzygyPath") {
                             const bool initialized = tablebase::set_path(value);
                             trans_table::clear();
                             out(initialized ? "info string Syzygy supports up to "
@@ -332,6 +465,10 @@ namespace uci {
         }
         if (pfen == "") {
             pfen = fen;
+        }
+        if (!valid_fen(pfen)) {
+            out("info string Invalid FEN");
+            return true;
         }
         engine::new_game(pfen);
         engine::analyse();

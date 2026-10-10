@@ -32,6 +32,8 @@
 
 #include "board.h"
 #include "game.h"
+#include "experience.h"
+#include <random>
 #include "search_control.h"
 #include "movepicker.h"
 #include "hashtable.h"
@@ -91,6 +93,11 @@ struct search_stack_t {
 class search_t {
 private:
     const search_control_t * _control;
+    std::shared_ptr<const experience::book_t> _experience;
+    std::mt19937_64 _book_random;
+    bool _book_seeded;
+    bool _own_book;
+    int _experience_depth;
 
 protected:
     // Repetition keys before the root, oldest first; never includes the root itself.

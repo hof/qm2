@@ -82,6 +82,8 @@ private:
 };
 
 namespace book {
+    void set_path(const std::string & path);
+    std::string path();
     void open(const std::string& file_name);
     void close();
     int find(board_t * pos, move::list_t * list);

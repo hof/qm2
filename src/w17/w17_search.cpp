@@ -36,16 +36,26 @@ namespace {
 }
 
 bool w17_search_t::w17_is_draw() {
-    const int threshold = 100 + stack->in_check;
-    if (brd.stack->fifty_count >= threshold) {
-        stack->tt_clocks = {static_cast<uint8_t>(threshold), 101};
-        return true;
-    }
-    stack->tt_clocks.max = MIN(stack->tt_clocks.max, threshold - 1);
-    if (brd.stack->fifty_count < 4) {
+    const bool fifty_move = brd.stack->fifty_count >= 100;
+    const bool repetition = brd.stack->fifty_count >= 4 && is_repetition();
+    if (fifty_move || repetition) {
+        // Losing all non-king pieces, checkmate, and stalemate win before a draw.
+        if (max_1(brd.all(brd.us())) || max_1(brd.all(brd.them()))) return false;
+        move::list_t moves;
+        move::gen_captures(&brd, &moves);
+        move::gen_promotions(&brd, &moves);
+        move::gen_castles(&brd, &moves);
+        move::gen_quiet_moves(&brd, &moves);
+        for (move_t * move = moves.first; move != moves.last; ++move) {
+            if (!brd.legal(move)) continue;
+            if (fifty_move) stack->tt_clocks = {100, 101};
+            else stack->tt_clocks.max = MIN(stack->tt_clocks.max, 99);
+            return true;
+        }
         return false;
     }
-    return is_repetition();
+    stack->tt_clocks.max = MIN(stack->tt_clocks.max, 99);
+    return false;
 }
 
 int w17_search_t::pvs(int alpha, int beta, int depth) {

@@ -40,3 +40,7 @@
 
 /.context/
 __pycache__/
+
+/book.bin
+/book.bin:Zone.Identifier
+/experience/

@@ -25,6 +25,7 @@
  */
 
 #include "book.h"
+#include <mutex>
 
 using namespace std;
 
@@ -261,6 +262,7 @@ int book_t::find(board_t * brd, move::list_t * list) {
         if (entry.weight == 0) {
             continue;
         }
+        if (list->last == list->first + move::MAX_MOVES) break;
         move_t * move = list->last++;
         read_polyglot_move(brd, move, entry.move);
         move->score = entry.weight;
@@ -332,8 +334,6 @@ void book_t::close() {
  * @param fname the filename 
  */
 void book_t::open(const string &fname) {
-
-    srand(time(NULL));
 
     // Close old file before opening the new
     close();
@@ -457,6 +457,20 @@ U64 book_t::polyglot_key(board_t* pos) {
 
 namespace book {
     book_t _book;
+    namespace {
+        std::mutex path_mutex;
+        std::string book_path = "book.bin";
+    }
+
+    void set_path(const std::string & path) {
+        std::lock_guard<std::mutex> lock(path_mutex);
+        book_path = path;
+    }
+
+    std::string path() {
+        std::lock_guard<std::mutex> lock(path_mutex);
+        return book_path;
+    }
 
     void open(const std::string& file_name) {
         _book.open(file_name);

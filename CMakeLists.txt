@@ -77,6 +77,8 @@ add_test(test_search_repetition tests/test_search_repetition)
 add_test(test_search_tt_context tests/test_search_tt_context)
 add_test(test_kpk tests/test_kpk)
 add_test(test_tablebase tests/test_tablebase)
+add_test(test_experience tests/test_experience)
+add_test(test_uci_input tests/test_uci_input)
 add_test(test_download_tablebases ${Python3_EXECUTABLE}
     ${PROJECT_SOURCE_DIR}/tests/test_download_tablebases.py
     ${PROJECT_SOURCE_DIR}/tools/download_tablebases.py)

@@ -1,7 +1,7 @@
 # Maxima quick entry
 
 [MAXIMA.md](MAXIMA.md) is the full reference. Read its relevant chapters for: goals,
-architecture, build setup, testing, performance practices, and tablebases.
+architecture, build setup, testing, performance practices, tablebases, and persistent experience.
 Update that document when behavior or workflows change.
 Read `.context/agents.md` when present for additional private local context;
 `.context/` is ignored by Git.
