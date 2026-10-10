@@ -135,6 +135,10 @@ search settings and do not start a replacement search. As with other `go` and
 
 UCI output serializes complete lines from the command and search threads, so
 readiness responses and search reports cannot merge into a malformed line.
+Both centipawn and mate scores retain lower/upper-bound qualifiers. NPS uses
+reported nodes per second with the reported monotonic elapsed milliseconds; a
+zero-millisecond sample uses a one-millisecond denominator. Rates retain unsigned
+64-bit range and saturate if that range is exceeded.
 
 Accepted changes to `KingAttackShelter` or `KingAttackPieces` stop and join the
 current search, then clear the transposition table before subsequent searches.
@@ -436,7 +440,9 @@ Keep confirmed bug fixes accompanied
 by focused regressions; passing the suite is evidence for its covered cases,
 not a claim that the engine has no remaining bugs.
 `test_uci_output` verifies that concurrent output preserves every message as one
-complete line, including scheduling delays between payloads and newlines.
+complete line, including scheduling delays between payloads and newlines. It
+also checks positive/negative cp and mate score bounds, zero/short elapsed-time
+NPS, and unsigned 64-bit node/rate formatting.
 Search ownership checks cover preparation/worker delays; lifecycle checks cover
 ordinary and zero clocks, bounded ponder/infinite requests in either argument
 order, exactly one authorized bestmove, standard/royal-losers terminal roots,

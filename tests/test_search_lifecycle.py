@@ -85,6 +85,26 @@ def running_engine():
 
 
 class search_lifecycle_tests(unittest.TestCase):
+    def test_reported_nps_uses_elapsed_milliseconds(self):
+        for variant in ("standard", "losers"):
+            with self.subTest(variant=variant), running_engine() as engine:
+                engine.send("setoption name OwnBook value false")
+                engine.send(f"setoption name Wild value {variant}")
+                engine.send("position startpos")
+                engine.send("go depth 4")
+                engine.wait_for_bestmove()
+                reports = [line.split() for line in engine.transcript
+                           if line.startswith("info depth ")]
+                self.assertTrue(reports, engine.transcript)
+                for fields in reports:
+                    nodes = int(fields[fields.index("nodes") + 1])
+                    elapsed = int(fields[fields.index("time") + 1])
+                    nps = int(fields[fields.index("nps") + 1])
+                    self.assertGreaterEqual(elapsed, 0)
+                    self.assertEqual(nps, nodes * 1000 // max(1, elapsed), fields)
+                engine.send("quit")
+                engine.wait_for_exit()
+
     def test_evaluation_option_changes_match_cold_searches(self):
         fen = "r4rk1/1p2ppbp/p2pbnp1/q7/3BPPP1/2N2B2/PPP4P/R2Q1RK1 b - - 0 1"
         for names in (("KingAttackShelter",), ("KingAttackPieces",),

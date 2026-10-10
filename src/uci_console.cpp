@@ -549,19 +549,26 @@ namespace uci {
         std::string msg = "info depth " + itoa(depth) + " seldepth " + itoa(MAX(depth, sel_depth));
         if (ABS(cp_score) < score::DEEPEST_MATE) {
             msg += " score cp " + itoa(cp_score);
-            if (flag == score::UPPERBOUND) {
-                msg += " upperbound";
-            } else if (flag == score::LOWERBOUND) {
-                msg += " lowerbound";
-            }
         } else { //mate score
             int mate_in_moves = (score::MATE - ABS(cp_score) + 1) / 2;
             msg += " score mate ";
             msg += itoa(cp_score > 0 ? mate_in_moves : -mate_in_moves);
         }
-        msg += " nodes " + itoa(nodes) + " time " + itoa(time) + " nps ";
-        int nps = time < 50 ? nodes : (1000 * U64(nodes)) / time;
-        msg += itoa(nps);
+        if (flag == score::UPPERBOUND) {
+            msg += " upperbound";
+        } else if (flag == score::LOWERBOUND) {
+            msg += " lowerbound";
+        }
+        // A zero-millisecond sample uses a one-millisecond denominator. Split
+        // the product to avoid overflow and saturate only unrepresentable rates.
+        const U64 divisor = std::max(1, time);
+        const U64 whole = nodes / divisor;
+        const U64 fraction = (nodes % divisor) * 1000 / divisor;
+        const U64 maximum = std::numeric_limits<U64>::max();
+        const U64 nps = whole > (maximum - fraction) / 1000
+            ? maximum : whole * 1000 + fraction;
+        msg += " nodes " + std::to_string(nodes) + " time " + itoa(time) + " nps ";
+        msg += std::to_string(nps);
         if (tablebase_hits) msg += " tbhits " + itoa(tablebase_hits);
         msg += " pv ";
         msg += pv;
