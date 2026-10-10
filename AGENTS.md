@@ -19,7 +19,8 @@ Read `.context/agents.md` when present for additional private local context;
 - Keep commits focused. Every commit message is exactly one line using
   Conventional Commits: `type(scope): description`, with optional scope and
   no body or footer.
-- Do not edit generated `src/version.h`; CMake generates it from its template.
+- Do not edit generated version headers; CMake generates `generated/maxima/version.h`
+  in each build directory from `src/version.h.in`.
 - Keep third-party decoder code isolated; project adapters follow our style.
 
 ## Build and checks

@@ -92,7 +92,7 @@ SET(CMAKE_CXX_FLAGS_COVERAGE
 
 configure_file (
     "${PROJECT_SOURCE_DIR}/src/version.h.in"
-    "${PROJECT_SOURCE_DIR}/src/version.h"
+    "${PROJECT_BINARY_DIR}/generated/maxima/version.h"
 )
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")

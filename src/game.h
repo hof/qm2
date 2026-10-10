@@ -24,7 +24,7 @@
 
 #include "move.h"
 #include "timeman.h"
-#include "version.h"
+#include "maxima/version.h"
 #include <string>
 #include <vector>
 

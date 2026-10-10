@@ -86,8 +86,10 @@ or require every task to advance every goal.
   evaluation, Polyglot keys, hash tables, evaluation, board flipping, and mates.
 - `gen/`: KPK bitbase generator.
 
-CMake generates `src/version.h` from `src/version.h.in`. Do not edit the generated
-header manually.
+CMake generates `generated/maxima/version.h` inside each build directory from
+`src/version.h.in`. Do not edit generated headers. The generated include directory
+propagates to engine-library consumers; any obsolete source-tree `src/version.h`
+is ignored and unused.
 
 - `src/tablebase.*`: Maxima's Syzygy adapter and probing policies.
 - `third_party/fathom/`: pinned, unmodified MIT-licensed table decoder.
@@ -271,9 +273,11 @@ ctest --test-dir build/cpp26/lto --output-on-failure
 ```
 
 Use the toolchain prefix and cache environment from chapter 5 when needed.
-Build configurations sequentially: the generated `src/version.h` is currently
-shared between build directories. Freeze each binary and its hash/settings
-before configuring the next build; never edit that header manually.
+Each configuration owns its generated version header in its build directory,
+so configuring Debug, Release, or profiling builds cannot overwrite another
+configuration's revision/build-type metadata. Freeze each playing binary with
+its hash and build settings. Revision metadata is captured at configure time;
+reconfigure from the intended clean revision before freezing a baseline binary.
 
 PGO has three steps: build an instrumented engine, train it with representative
 searches, then rebuild with the recorded profile. For example, from the repository

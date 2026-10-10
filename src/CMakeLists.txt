@@ -24,6 +24,8 @@ add_library(MAX2SRC
         w17/w17_eval.cpp
 )
 
+target_include_directories(MAX2SRC PUBLIC "${PROJECT_BINARY_DIR}/generated")
+
 include_directories(${MAX2_SOURCE_DIR}/src)
 link_directories(${MAX2_BINARY_DIR}/src)
 
