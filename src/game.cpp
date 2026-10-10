@@ -31,7 +31,6 @@ namespace options {
         { "OwnBook", BOOL, 1, "type check default true" },
         { "UCI_AnalyseMode", BOOL, 0, "type check default false" },
         { "UCI_Opponent", STRING, 0, "type string" },
-        { "UCI_Chess960", BOOL, 0, "type check default false" },
         { "NullMove", BOOL, 1, "type check default true" },
         { "BetaPruning", BOOL, 1, "type check default true" },
         { "LMR", BOOL, 1, "type check default true" },

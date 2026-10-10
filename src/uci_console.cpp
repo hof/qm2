@@ -243,7 +243,10 @@ namespace uci {
         game_t candidate;
         bool depth_limit = false;
         while (parser >> token) {
-            if (token == "infinite") {
+            if (token == "mate") {
+                out("info string Unsupported go limit: mate");
+                return true;
+            } else if (token == "infinite") {
                 candidate.infinite = true;
             } else if (token == "ponder") {
                 candidate.ponder = true;
@@ -281,7 +284,8 @@ namespace uci {
                     if (text == "depth" || text == "nodes" || text == "movetime"
                             || text == "wtime" || text == "btime" || text == "winc"
                             || text == "binc" || text == "movestogo"
-                            || text == "ponder" || text == "infinite" || text == "searchmoves") {
+                            || text == "ponder" || text == "infinite" || text == "searchmoves"
+                            || text == "mate") {
                         parser.seekg(position);
                         break;
                     }
@@ -371,6 +375,11 @@ namespace uci {
                     if (parser >> value) {
                         while (parser >> token) {
                             value += (" " + token);
+                        }
+
+                        if (name == "UCI_Chess960") {
+                            out("info string Unsupported option: UCI_Chess960");
+                            return true;
                         }
 
                         //parse option value

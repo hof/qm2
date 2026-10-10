@@ -55,6 +55,43 @@ int main() {
     success &= check("invalid boolean must preserve setting", options::get_value("Ponder") == 1);
     uci::in("setoption name Unknown value 123");
     success &= check("unknown option must not mutate sentinel", options::PARAM[0].value == 0);
+    success &= check("Chess960 must not be an available option",
+        std::string(options::get_option("UCI_Chess960")->key).empty());
+    std::vector<int> option_values;
+    for (const auto & option : options::PARAM) option_values.push_back(option.value);
+    for (const char * value : {"true", "1", "false", "nonsense"}) {
+        uci::in(std::string("setoption name UCI_Chess960 value ") + value);
+        for (int i = 0; i <= options::length; ++i) {
+            success &= check("unsupported Chess960 must preserve every option",
+                options::PARAM[i].value == option_values[i]);
+        }
+        success &= check("unsupported Chess960 must preserve the position and history",
+            uci::fen == fen && uci::position_history == history);
+    }
+    game_t saved_settings;
+    saved_settings.copy(engine::settings());
+    engine::settings()->max_depth = 4;
+    engine::settings()->max_nodes = 123;
+    engine::settings()->white_time = 456;
+    engine::settings()->search_moves = {"a2a3"};
+    game_t previous_settings;
+    previous_settings.copy(engine::settings());
+    for (const char * command : {"go mate 1", "go mate", "go mate 0",
+            "go depth 2 mate 1", "go mate 1 nodes 1",
+            "go searchmoves e2e4 mate 1 depth 2",
+            "go depth 2 searchmoves h2h3 mate 1 ponder", "go infinite mate 1"}) {
+        uci::in(command);
+        const auto * settings = engine::settings();
+        success &= check(command, engine::is_stopped()
+            && settings->max_depth == previous_settings.max_depth
+            && settings->max_nodes == previous_settings.max_nodes
+            && settings->white_time == previous_settings.white_time
+            && settings->ponder == previous_settings.ponder
+            && settings->infinite == previous_settings.infinite
+            && settings->search_moves == previous_settings.search_moves
+            && uci::fen == fen && uci::position_history == history);
+    }
+    engine::settings()->copy(&saved_settings);
     const int depth = engine::settings()->max_depth;
     for (const char * command : {"go depth 0", "go depth -1", "go depth 99999",
             "go depth", "go depth 2junk", "go nodes -1", "go nodes 0",

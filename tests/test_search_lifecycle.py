@@ -366,6 +366,65 @@ class search_lifecycle_tests(unittest.TestCase):
             engine.send("quit")
             engine.wait_for_exit()
 
+    def test_unsupported_chess960_is_not_advertised_or_enabled(self):
+        with running_engine() as engine:
+            engine.send("uci")
+            engine.wait_for("uciok")
+            self.assertFalse(any(line.startswith("option name UCI_Chess960 ")
+                                 for line in engine.transcript))
+            engine.send("setoption name OwnBook value false")
+            for value in ("true", "1", "false", "nonsense"):
+                start = len(engine.transcript)
+                engine.send(f"setoption name UCI_Chess960 value {value}")
+                engine.send("isready")
+                engine.wait_for("readyok")
+                self.assertIn("info string Unsupported option: UCI_Chess960",
+                              engine.transcript[start:])
+            # Ordinary castling remains available after rejected option requests.
+            engine.send("position fen 4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1")
+            engine.send("go depth 1 searchmoves e1g1")
+            self.assertEqual(engine.wait_for("bestmove "), "bestmove e1g1")
+            engine.send("quit")
+            engine.wait_for_exit()
+
+    def test_unsupported_mate_limits_do_not_start_search(self):
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            engine.send("position startpos moves g1f3 g8f6 f3g1 f6g8")
+            for command in ("go mate 1", "go mate", "go mate 0", "go mate nonsense",
+                            "go depth 1 mate 2", "go mate 2 nodes 1",
+                            "go searchmoves e2e4 mate 1 depth 1",
+                            "go depth 1 searchmoves a2a3 mate 1 ponder",
+                            "go infinite mate 1"):
+                with self.subTest(command=command):
+                    start = len(engine.transcript)
+                    engine.send(command)
+                    engine.send("isready")
+                    engine.wait_for("readyok")
+                    lines = engine.transcript[start:]
+                    self.assertIn("info string Unsupported go limit: mate", lines)
+                    self.assertFalse(any(line.startswith(("info depth ", "bestmove "))
+                                         for line in lines))
+            engine.send("go depth 1 searchmoves a2a3")
+            self.assertEqual(engine.wait_for("bestmove "), "bestmove a2a3")
+            engine.send("quit")
+            engine.wait_for_exit()
+
+    def test_unsupported_mate_stops_active_search_without_restarting(self):
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            engine.start_search()
+            engine.send("go searchmoves e2e4 mate 1 depth 1")
+            engine.send("isready")
+            engine.wait_for("readyok")
+            self.assertIn("info string Unsupported go limit: mate", engine.transcript)
+            self.assertEqual(sum(line.startswith("bestmove ")
+                                 for line in engine.transcript), 1)
+            engine.send("go depth 1 searchmoves h2h3")
+            self.assertEqual(engine.wait_for("bestmove "), "bestmove h2h3")
+            engine.send("quit")
+            engine.wait_for_exit()
+
     def test_searchmoves_restricts_root_with_options_in_either_order(self):
         with running_engine() as engine:
             engine.send("setoption name OwnBook value false")

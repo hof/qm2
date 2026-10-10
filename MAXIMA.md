@@ -125,6 +125,14 @@ bounded by its search stack. Time-budget arithmetic avoids signed overflow for
 large valid clock values. These checks validate supported input; they do not prove
 that an arbitrary FEN is reachable from the initial position.
 
+The engine supports orthodox castling and does not advertise `UCI_Chess960`.
+Requests to set that option report `info string Unsupported option: UCI_Chess960`
+and preserve options and the position/history. `go mate` limits are unsupported:
+the whole request reports `info string Unsupported go limit: mate`, including
+when the limit follows `searchmoves`. Rejected requests preserve the previous
+search settings and do not start a replacement search. As with other `go` and
+`setoption` commands, an active search is stopped and joined first.
+
 UCI output serializes complete lines from the command and search threads, so
 readiness responses and search reports cannot merge into a malformed line.
 
@@ -418,7 +426,12 @@ as a build check.
 
 `test_uci_input` covers malformed FENs and moves, atomic preservation of position
 and repetition history (including unsupported pawn counts), invalid option/search
-values, special moves, compulsory losers captures, and large-clock arithmetic.
+values, unsupported Chess960/mate requests, special moves, compulsory losers
+captures, and large-clock arithmetic. Lifecycle tests verify Chess960 is absent
+from advertised options, ordinary castling still works after rejection, and mate
+limits in either argument order preserve readiness and do not start searches.
+An unsupported mate request stops an active search with exactly one prior result
+and allows a subsequent supported bounded search.
 Keep confirmed bug fixes accompanied
 by focused regressions; passing the suite is evidence for its covered cases,
 not a claim that the engine has no remaining bugs.

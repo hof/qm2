@@ -41,7 +41,7 @@ namespace options {
         const char * uci_option; 
     };
 
-    const int length = 22;
+    const int length = 21;
     extern option_t PARAM[length+1];
     
     option_t * get_option(const char * key);
