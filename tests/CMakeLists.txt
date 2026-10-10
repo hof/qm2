@@ -48,3 +48,6 @@ target_link_libraries(test_experience MAX2SRC)
 
 add_executable(test_uci_input test_uci_input.cpp)
 target_link_libraries(test_uci_input MAX2SRC)
+
+add_executable(test_uci_output test_uci_output.cpp)
+target_link_libraries(test_uci_output MAX2SRC)

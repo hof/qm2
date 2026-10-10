@@ -125,6 +125,9 @@ bounded by its search stack. Time-budget arithmetic avoids signed overflow for
 large valid clock values. These checks validate supported input; they do not prove
 that an arbitrary FEN is reachable from the initial position.
 
+UCI output serializes complete lines from the command and search threads, so
+readiness responses and search reports cannot merge into a malformed line.
+
 Search deadlines and UCI elapsed times use a monotonic wall clock. Time spent
 preparing the search or waiting to run its worker counts toward the budget; a
 process pause does not extend the deadline. Pondering suppresses deadline
@@ -330,6 +333,8 @@ values, special moves, compulsory losers captures, and large-clock arithmetic.
 Keep confirmed bug fixes accompanied
 by focused regressions; passing the suite is evidence for its covered cases,
 not a claim that the engine has no remaining bugs.
+`test_uci_output` verifies that concurrent output preserves every message as one
+complete line, including scheduling delays between payloads and newlines.
 Search ownership checks cover preparation/worker delays; lifecycle checks cover
 ordinary and zero clocks, bounded ponder/infinite requests in either argument
 order, exactly one authorized bestmove, standard/royal-losers terminal roots,

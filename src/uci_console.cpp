@@ -21,6 +21,7 @@
  */
 
 #include "uci_console.h"
+#include <mutex>
 #include "tablebase.h"
 #include "experience.h"
 #include "book.h"
@@ -146,6 +147,8 @@ namespace uci {
         if (_silent) {
             return;
         }
+        static std::mutex output_mutex;
+        std::lock_guard<std::mutex> lock(output_mutex);
 #ifdef DO_LOG
         std::ofstream myfile;
         myfile.open("maxima_uci.log", std::ios::app);

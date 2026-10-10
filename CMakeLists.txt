@@ -88,4 +88,6 @@ if(BUILD_TESTING)
 
     add_test(test_experience tests/test_experience)
     add_test(test_uci_input tests/test_uci_input)
+    add_test(test_uci_output tests/test_uci_output)
+    set_tests_properties(test_uci_output PROPERTIES TIMEOUT 10)
 endif()
