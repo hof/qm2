@@ -167,6 +167,10 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     root_stack = stack = &_stack[0];
     root_wtm = brd.stack->wtm;
     result_score = 0;
+    result_flag = 0;
+    result_depth = completed_depth = attempted_depth = 0;
+    interrupted = false;
+    result_source = result_source_t::none;
     memset(_stack, 0, sizeof (_stack));
     memset(history, 0, sizeof (history));
     stack->eval_result = score::INVALID;
@@ -261,6 +265,7 @@ bool search_t::book_lookup() {
     stack->pv_moves[0] = stack->best_move;
     stack->pv_count = 1;
     result_score = 0; // Experience scores are evidence, never transposition bounds.
+    result_source = result_source_t::book;
     return true;
 }
 
@@ -279,11 +284,10 @@ void search_t::go() {
         solved = true;
     }
     if (solved) {
-        uci::send_pv(result_score, 0, 0, nodes, game.tm.elapsed(),
-            "", score::EXACT, tablebase_hits);
+        result_source = result_source_t::terminal;
+        result_flag = score::EXACT;
     } else if ((solved = book_lookup())) {
-        uci::send_pv(0, 1, 1, 1, game.tm.elapsed(),
-                stack->best_move.to_string().c_str(), score::EXACT, tablebase_hits);
+        // Book selection has no searched depth, nodes or evaluated score.
     } else if (init_root_moves() > 0) {
         solved = tablebase_lookup();
         if (!solved) iterative_deepening();
@@ -293,8 +297,30 @@ void search_t::go() {
             stack->best_move = root.moves[0].move;
             stack->pv_moves[0] = stack->best_move;
             stack->pv_count = 1;
+            result_source = result_source_t::fallback;
         }
+    } else {
+        result_source = result_source_t::terminal;
+        result_score = root.in_check ? -score::MATE : draw_score();
+        result_flag = score::EXACT;
     }
+    const char * source = "none";
+    switch (result_source) {
+        case result_source_t::partial: source = "partial"; break;
+        case result_source_t::complete: source = "complete"; break;
+        case result_source_t::fallback: source = "fallback"; break;
+        case result_source_t::book: source = "book"; break;
+        case result_source_t::terminal: source = "terminal"; break;
+        case result_source_t::tablebase: source = "tablebase"; break;
+        case result_source_t::none: break;
+    }
+    uci::out(std::string("info string search_result ") + source
+        + " completed_depth " + std::to_string(completed_depth)
+        + " attempted_depth " + std::to_string(attempted_depth)
+        + " interrupted " + std::to_string(interrupted)
+        + " pruned_moves " + std::to_string(pruned_nodes));
+    uci::send_pv(result_score, result_depth, sel_depth, nodes, game.tm.elapsed(),
+        pv_to_string().c_str(), result_flag, tablebase_hits);
     // Work limits may finish a search, but only protocol control releases its result.
     // Do not use abort(): it includes exhausted node/time budgets and stop_all.
     while ((game.infinite || pondering()) && _control && !_control->stop_requested.load())
@@ -318,8 +344,8 @@ bool search_t::tablebase_lookup() {
         stack->pv_count = 1;
         result_score = result.outcome == 0 ? draw_score() : result.outcome * score::TABLEBASE;
         ++tablebase_hits;
-        uci::send_pv(result_score, 0, 0, nodes, game.tm.elapsed(),
-            move.to_string().c_str(), score::EXACT, tablebase_hits);
+        result_source = result_source_t::tablebase;
+        result_flag = score::EXACT;
         return true;
     }
     return false;
@@ -375,10 +401,18 @@ void search_t::iterative_deepening() {
     bool timed_search = game.white_time || game.black_time;
     int depth;
     for (depth = 1; depth <= game.max_depth; depth++) {
+        attempted_depth = depth;
         int score = aspiration(depth, last_score);
         if (abort(true)) {
+            interrupted = true;
             break;
         }
+        completed_depth = result_depth = depth;
+        result_score = score;
+        result_flag = score::EXACT;
+        result_source = result_source_t::complete;
+        uci::send_pv(result_score, depth, sel_depth, nodes, game.tm.elapsed(),
+            pv_to_string().c_str(), result_flag, tablebase_hits);
         store_pv();
         if (timed_search) {
             bool score_jump = depth >= 6 && ((ABS(score - last_score) > 20) || score > score::WIN);
@@ -413,8 +447,6 @@ void search_t::iterative_deepening() {
         last_score = score;
     }
     if (stack->pv_count > 0) {
-        uci::send_pv(result_score, MIN(depth, game.max_depth), sel_depth,
-                nodes + pruned_nodes, game.tm.elapsed(), pv_to_string().c_str(), score::EXACT, tablebase_hits);
         if (stack->pv_count > 1) {
             ponder_move.set(&stack->pv_moves[1]);
         }
@@ -752,7 +784,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     for (int i = 0; i < root.move_count; i++) {
         root_move_t * rmove = &root.moves[i];
         move_t * move = &rmove->move;
-        int nodes_before = nodes;
+        U64 nodes_before = nodes;
         int score = 0;
 
         //go forward and search one level deeper
@@ -761,7 +793,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             score = -pvs(-beta, -alpha, depth - 1);
         } else {
             score = -pvs(-alpha - 1, -alpha, depth - 1);
-            if (score > alpha) { //open window research w/o reductions
+            if (!stop_all && score > alpha) { //open window research w/o reductions
                 score = -pvs(-beta, -alpha, depth - 1);
             }
         }
@@ -774,14 +806,19 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         } else if (score > best) {
             best = score;
             result_score = score;
+            result_depth = depth;
+            result_source = result_source_t::partial;
+            // A searched move bounds the root from below. A fail-low move
+            // cannot bound unsearched alternatives, so omit that root score.
+            result_flag = score <= alpha ? 0 : score::LOWERBOUND;
             rmove->nodes += i;
             stack->best_move.set(move);
             bool exact = score::flags(score, alpha, beta) == score::EXACT;
             if (exact || false == move->equals(&stack->pv_moves[0])) {
                 update_pv(&rmove->move);
             }
-            uci::send_pv(best, depth, sel_depth, nodes + pruned_nodes, game.tm.elapsed(),
-                    pv_to_string().c_str(), score::flags(best, alpha, beta), tablebase_hits);
+            uci::send_pv(best, depth, sel_depth, nodes, game.tm.elapsed(),
+                    pv_to_string().c_str(), result_flag, tablebase_hits);
             if (!exact) { //adjust asp. window
                 return score;
             }
@@ -1053,7 +1090,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             score = -pvs(-beta, -alpha, depth - 1 + extend);
         } else {
             score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
-            if (score > alpha && (pv || reduce > 0)) { //open window research without reductions
+            if (!stop_all && score > alpha && (pv || reduce > 0)) { //open window research without reductions
                 const clock_range_t previous_clocks = stack->tt_clocks;
                 score = -pvs(-beta, -alpha, depth - 1 + extend);
                 stack->tt_clocks.include_child(previous_clocks, 0);

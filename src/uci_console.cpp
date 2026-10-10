@@ -547,7 +547,9 @@ namespace uci {
 
     void send_pv(int cp_score, int depth, int sel_depth, U64 nodes, int time, const char * pv, int flag, U64 tablebase_hits) {
         std::string msg = "info depth " + itoa(depth) + " seldepth " + itoa(MAX(depth, sel_depth));
-        if (ABS(cp_score) < score::DEEPEST_MATE) {
+        if (flag == 0) {
+            // No evaluated score for book, fallback or incomplete fail-low work.
+        } else if (ABS(cp_score) < score::DEEPEST_MATE) {
             msg += " score cp " + itoa(cp_score);
         } else { //mate score
             int mate_in_moves = (score::MATE - ABS(cp_score) + 1) / 2;

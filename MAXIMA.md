@@ -138,7 +138,25 @@ readiness responses and search reports cannot merge into a malformed line.
 Both centipawn and mate scores retain lower/upper-bound qualifiers. NPS uses
 reported nodes per second with the reported monotonic elapsed milliseconds; a
 zero-millisecond sample uses a one-millisecond denominator. Rates retain unsigned
-64-bit range and saturate if that range is exceeded.
+64-bit range and saturate if that range is exceeded. Reported nodes count visited
+search calls, including quiescence, using the same counter as `go nodes`;
+pruned moves are excluded from nodes and NPS. Cancellation suppresses subsequent
+full-window re-searches once the first pass has stopped.
+
+Each finished search emits `info string search_result SOURCE completed_depth N
+attempted_depth N interrupted 0|1 pruned_moves N`. Sources are `complete`,
+`partial`, `fallback`, `book`, `terminal`, or `tablebase`. Completed depth counts
+fully finished root iterations; attempted depth can include interrupted work.
+The final score and PV depth belong to the selected result, which can remain from
+a completed earlier iteration or come from a partially searched root. Partial
+root scores use lower bounds; a fail-low score for only a subset of root moves
+cannot bound the whole root and is omitted. Only completed root iterations and
+terminal/tablebase shortcuts publish exact final scores. Book and legal fallback
+moves report depth zero without a score; book selection reports zero nodes.
+The engine result snapshot carries the same provenance, bounds and counters.
+`interrupted` describes search work, independently of the selected result source;
+for example, interruption before evaluating a new root move can leave the previous
+completed iteration selected.
 
 Accepted changes to `KingAttackShelter` or `KingAttackPieces` stop and join the
 current search, then clear the transposition table before subsequent searches.
@@ -442,7 +460,11 @@ not a claim that the engine has no remaining bugs.
 `test_uci_output` verifies that concurrent output preserves every message as one
 complete line, including scheduling delays between payloads and newlines. It
 also checks positive/negative cp and mate score bounds, zero/short elapsed-time
-NPS, and unsigned 64-bit node/rate formatting.
+NPS, and unsigned 64-bit node/rate formatting. Deterministic root-reporting
+checks cover interruption before/after a child evaluation, previous completed
+iterations, partial aspiration bounds for both signs of cp/mate scores, and
+visited/pruned counter separation. Raw-UCI checks cover standard/losers node
+budgets, result provenance, fallback scores and book result authorization.
 Search ownership checks cover preparation/worker delays; lifecycle checks cover
 ordinary and zero clocks, bounded ponder/infinite requests in either argument
 order, exactly one authorized bestmove, standard/royal-losers terminal roots,

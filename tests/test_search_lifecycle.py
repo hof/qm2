@@ -85,6 +85,42 @@ def running_engine():
 
 
 class search_lifecycle_tests(unittest.TestCase):
+    def test_search_result_provenance(self):
+        for variant in ("standard", "losers"):
+            for limit in (1, 2, 30, 1000):
+                with self.subTest(variant=variant, limit=limit), running_engine() as engine:
+                    engine.send("setoption name OwnBook value false")
+                    engine.send(f"setoption name Wild value {variant}")
+                    engine.send("position startpos")
+                    engine.send(f"go nodes {limit}")
+                    engine.wait_for_bestmove()
+                    reports = [line.split() for line in engine.transcript
+                               if line.startswith("info depth ")]
+                    self.assertTrue(reports, engine.transcript)
+                    for fields in reports:
+                        self.assertLessEqual(int(fields[fields.index("nodes") + 1]), limit)
+                    statuses = [line.split() for line in engine.transcript
+                                if line.startswith("info string search_result ")]
+                    self.assertEqual(len(statuses), 1, engine.transcript)
+                    status = statuses[0]
+                    final = reports[-1]
+                    completed = int(status[status.index("completed_depth") + 1])
+                    attempted = int(status[status.index("attempted_depth") + 1])
+                    self.assertGreaterEqual(attempted, completed)
+                    self.assertIn("interrupted 1", " ".join(status))
+                    if limit == 1:
+                        self.assertEqual(status[3], "fallback")
+                        self.assertEqual(int(final[2]), 0)
+                        self.assertNotIn("score", final)
+                    elif status[3] == "partial":
+                        self.assertIn("lowerbound", final)
+                    elif status[3] == "complete":
+                        self.assertEqual(int(final[2]), completed)
+                        self.assertNotIn("lowerbound", final)
+                        self.assertNotIn("upperbound", final)
+                    engine.send("quit")
+                    engine.wait_for_exit()
+
     def test_reported_nps_uses_elapsed_milliseconds(self):
         for variant in ("standard", "losers"):
             with self.subTest(variant=variant), running_engine() as engine:
@@ -317,8 +353,18 @@ class search_lifecycle_tests(unittest.TestCase):
             book.write_bytes(struct.pack(">QHHI", 0x463b96181691fc9c, (8 << 6) | 16, 10, 0))
             with running_engine() as engine:
                 engine.send(f"setoption name BookFile value {book}")
+                engine.send("position startpos")
+                engine.send("go depth 1")
+                self.assertEqual(engine.wait_for("bestmove ").split()[1], "a2a3")
+                info = next(line.split() for line in engine.transcript
+                            if line.startswith("info depth "))
+                self.assertEqual(info[2], "0")
+                self.assertNotIn("score", info)
+                self.assertEqual(info[info.index("nodes") + 1], "0")
+                self.assertTrue(any(line.startswith("info string search_result book ")
+                                    for line in engine.transcript), engine.transcript)
                 self.check_result_authorization(engine, "position startpos",
-                                                "info depth 1 ", "a2a3")
+                                                "info depth 0 ", "a2a3")
 
     def test_bounded_tablebase_result_authorization(self):
         tables = Path(__file__).parent / "data" / "syzygy"

@@ -90,6 +90,8 @@ struct search_stack_t {
     uint8_t king_attack[BKING+1];
 };
 
+enum class result_source_t { none, partial, complete, fallback, book, terminal, tablebase };
+
 class search_t {
 private:
     const search_control_t * _control;
@@ -120,6 +122,12 @@ public:
     int next_poll;
     int sel_depth;
     int result_score;
+    int result_flag;
+    int result_depth;
+    int completed_depth;
+    int attempted_depth;
+    bool interrupted;
+    result_source_t result_source;
     int history[BKING + 1][64];
     move_t ponder_move;
     std::string book_name;

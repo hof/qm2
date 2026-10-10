@@ -198,7 +198,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
             score = -w17_pvs(-beta, -alpha, in_mate_search, depth - 1 + extend);
         } else {
             score = -w17_pvs(-alpha - 1, -alpha, in_mate_search, depth - 1 + extend);
-            if (pv && score > alpha) {
+            if (!stop_all && pv && score > alpha) {
                 //full window research
                 const clock_range_t previous_clocks = stack->tt_clocks;
                 score = -w17_pvs(-beta, -alpha, in_mate_search, depth - 1 + extend);

@@ -83,16 +83,29 @@ bool test_result_snapshot() {
     search.game.target_move = search.stack->best_move;
     search.result_score = 600;
     search.nodes = 42;
+    search.pruned_nodes = 7;
+    search.result_flag = score::LOWERBOUND;
+    search.result_depth = search.attempted_depth = 4;
+    search.completed_depth = 3;
+    search.interrupted = true;
+    search.result_source = result_source_t::partial;
     // Publishing must use the search's target, rather than pending engine settings.
     engine.copy_results(&search);
     search_result_t result = engine.get_result();
     bool success = check(result.target_found && result.score == 600
-        && result.nodes == 42 && result.move.to_int() == search.stack->best_move.to_int(),
+        && result.nodes == 42 && result.pruned_moves == 7
+        && result.score_flag == score::LOWERBOUND && result.depth == 4
+        && result.completed_depth == 3 && result.attempted_depth == 4
+        && result.interrupted && result.source == result_source_t::partial
+        && result.move.to_int() == search.stack->best_move.to_int(),
         "move, score, nodes, and target status must be published together");
     engine.new_game(fen);
     const search_result_t cleared = engine.get_result();
     success &= check(!cleared.target_found && cleared.score == 0
-        && cleared.nodes == 0 && cleared.move.piece == 0,
+        && cleared.nodes == 0 && cleared.move.piece == 0 && cleared.pruned_moves == 0
+        && cleared.score_flag == 0 && cleared.depth == 0 && cleared.completed_depth == 0
+        && cleared.attempted_depth == 0 && !cleared.interrupted
+        && cleared.source == result_source_t::none,
         "a new game must clear every result field");
     return success;
 }
