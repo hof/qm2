@@ -142,8 +142,13 @@ In losers chess, king-only wins, checkmate, and stalemate precede draw scoring.
 These terminal rules also apply at the UCI root before book lookup: finished
 positions report an exact terminal score and `bestmove 0000`. The side to move
 wins when both sides have only their kings, matching interior search precedence.
-Unbounded pondering waits for `ponderhit` or `stop`; unbounded infinite analysis
-waits for `stop`. Combined-limit lifecycle handling remains an audit priority.
+Pondering retains a completed result until `ponderhit` or `stop`; explicit
+`infinite` analysis retains it until `stop`, even after `ponderhit`. Depth, node,
+and time limits may finish search work but do not authorize these results.
+Argument order does not change the limits or infinite intent. This behavior
+applies to ordinary searches, terminal roots, and book/tablebase shortcuts.
+A bare `go` also waits for `stop`; an explicit depth limit, including 128,
+remains bounded. Ordinary bounded searches publish their result when work finishes.
 Playable positions reach the fifty-move threshold at 100 halfmoves, including
 positions in check; checkmate does not become a draw at higher clock counts.
 
@@ -326,8 +331,9 @@ Keep confirmed bug fixes accompanied
 by focused regressions; passing the suite is evidence for its covered cases,
 not a claim that the engine has no remaining bugs.
 Search ownership checks cover preparation/worker delays; lifecycle checks cover
-ordinary and zero clocks, ponderhit/stop, royal-losers terminal roots, and
-pause/resume deadlines on platforms with SIGSTOP/SIGCONT.
+ordinary and zero clocks, bounded ponder/infinite requests in either argument
+order, exactly one authorized bestmove, standard/royal-losers terminal roots,
+book/tablebase shortcuts, and pause/resume deadlines on platforms with SIGSTOP/SIGCONT.
 `test_leaf_search` checks both colors' mate/stalemate at quiescence depths 0,
 -1, and -2, terminal score windows, captures reaching stalemate, quiet playable
 positions, board/hash restoration, and losers terminal root score signs.
@@ -358,8 +364,8 @@ Record the revision, dirty-tree status, binary hashes, positions, limits, build
 configuration, and commands. A short benchmark does not establish a performance
 or playing-strength gain. The 2026-10-10 audit adds zero-time, root-restriction,
 book-shortcut, tiny-node, and losers terminal/draw regression cases. Further audit
-priorities include ponder/stop interactions with combined limits, variant terminal
-behavior at the UCI root, and broader independent move-generation/state comparisons.
+priorities include evaluation-option cache invalidation, accurate unsupported
+capabilities, and broader independent move-generation/state comparisons.
 
 ## 7. CLI and local tablebases
 

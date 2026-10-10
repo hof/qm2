@@ -17,6 +17,7 @@ bool test_configuration_snapshot() {
     settings.max_depth = 3;
     settings.max_time_per_move = 10000;
     settings.ponder = true;
+    settings.infinite = true;
     search_control_t control;
     control.ponder.store(true);
     search_t search(fen, &settings, &control);
@@ -25,8 +26,9 @@ bool test_configuration_snapshot() {
     settings.max_depth = 0;
     settings.max_nodes = 1;
     settings.ponder = false;
+    settings.infinite = false;
     success &= check(search.game.max_depth == 3 && search.game.max_nodes == 0
-        && search.pondering(), "caller mutations must not change the search request");
+        && search.pondering() && search.game.infinite, "caller mutations must not change the search request");
     control.ponder.store(false);
     success &= check(!search.pondering(), "ponderhit must reach the active search");
     const int score = search.qsearch(-score::INF, score::INF, 0);

@@ -63,6 +63,7 @@ public:
     int black_increment;
     int moves_left;
     bool ponder;
+    bool infinite;
     bool clock_limit;
     bool movetime_limit;
     std::vector<std::string> search_moves;

@@ -238,11 +238,11 @@ namespace uci {
         engine::stop();
         std::string token;
         game_t candidate;
+        bool depth_limit = false;
         while (parser >> token) {
             if (token == "infinite") {
-                candidate.max_depth = MAX_PLY;
+                candidate.infinite = true;
             } else if (token == "ponder") {
-                candidate.max_depth = MAX_PLY;
                 candidate.ponder = true;
             } else if (token == "wtime" || token == "btime" || token == "winc"
                     || token == "binc" || token == "movestogo" || token == "depth"
@@ -262,7 +262,10 @@ namespace uci {
                 if (token == "winc") candidate.white_increment = static_cast<int>(number);
                 if (token == "binc") candidate.black_increment = static_cast<int>(number);
                 if (token == "movestogo") candidate.moves_left = static_cast<int>(number);
-                if (token == "depth") candidate.max_depth = static_cast<int>(number);
+                if (token == "depth") {
+                    candidate.max_depth = static_cast<int>(number);
+                    depth_limit = true;
+                }
                 if (token == "nodes") candidate.max_nodes = number;
                 if (token == "movetime") candidate.max_time_per_move = number;
                 if (token == "movetime") candidate.movetime_limit = true;
@@ -292,6 +295,9 @@ namespace uci {
                 }
             }
         }
+        // An unrestricted go also analyses until stop; explicit depth 128 is bounded.
+        candidate.infinite |= !candidate.ponder && !depth_limit && !candidate.max_nodes
+            && !candidate.clock_limit && !candidate.movetime_limit;
         engine::settings()->copy(&candidate);
         engine::set_ponder(engine::settings()->ponder);
         engine::set_position(fen, position_history);

@@ -80,6 +80,7 @@ void game_t::clear() {
     moves_left = 0;
     max_nodes = 0;
     ponder = false;
+    infinite = false;
     clock_limit = false;
     movetime_limit = false;
     search_moves.clear();
@@ -98,6 +99,7 @@ void game_t::copy(game_t* game) {
     moves_left = game->moves_left;
     max_nodes = game->max_nodes;
     ponder = game->ponder;
+    infinite = game->infinite;
     clock_limit = game->clock_limit;
     movetime_limit = game->movetime_limit;
     search_moves = game->search_moves;

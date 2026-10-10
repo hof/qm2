@@ -295,13 +295,10 @@ void search_t::go() {
             stack->pv_count = 1;
         }
     }
-    if (solved) {
-        const bool infinite = !game.ponder && game.max_depth == MAX_PLY
-            && !game.max_nodes && !game.max_time_per_move
-            && !game.white_time && !game.black_time && !game.clock_limit && !game.movetime_limit;
-        while ((infinite || pondering()) && !abort(true))
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+    // Work limits may finish a search, but only protocol control releases its result.
+    // Do not use abort(): it includes exhausted node/time budgets and stop_all.
+    while ((game.infinite || pondering()) && _control && !_control->stop_requested.load())
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
 // Root DTZ results lack repetition history. Use the shortcut only when no

@@ -39,8 +39,11 @@ class engine_session:
     def wait_for(self, prefix):
         deadline = time.monotonic() + timeout_seconds
         while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AssertionError(f"Timed out waiting for {prefix}: {self.transcript[-10:]}")
             try:
-                line = self.lines.get(timeout=max(0, deadline - time.monotonic()))
+                line = self.lines.get(timeout=remaining)
             except queue.Empty:
                 raise AssertionError(f"Timed out waiting for {prefix}: {self.transcript[-10:]}")
             if line is None:
@@ -143,6 +146,110 @@ class search_lifecycle_tests(unittest.TestCase):
                                          for line in engine.transcript), 1)
             engine.send("quit")
             engine.wait_for_exit()
+
+    def check_result_authorization(self, engine, position, info_prefix, expected_move,
+                                   restrict_move=False, tablebase_result=False):
+        commands = (
+            ("go", "stop"),
+            ("go ponder depth 1", "ponderhit"),
+            ("go depth 1 ponder", "ponderhit"),
+            ("go ponder nodes 1", "ponderhit"),
+            ("go nodes 1 ponder", "stop"),
+            ("go ponder movetime 0", "ponderhit"),
+            ("go movetime 0 ponder", "stop"),
+            ("go ponder wtime 0 btime 0 depth 1", "ponderhit"),
+            ("go wtime 0 btime 0 depth 1 ponder", "stop"),
+            ("go infinite depth 1", "stop"),
+            ("go depth 1 infinite", "stop"),
+            ("go infinite nodes 1", "stop"),
+            ("go nodes 1 infinite", "stop"),
+            ("go infinite movetime 0", "stop"),
+            ("go movetime 0 infinite", "stop"),
+            ("go infinite wtime 0 btime 0 depth 1", "stop"),
+            ("go wtime 0 btime 0 depth 1 infinite", "stop"),
+            ("go ponder infinite depth 1", "stop"),
+            ("go depth 1 infinite ponder", "stop"),
+        )
+        if expected_move != "0000":
+            commands += (("go searchmoves " + expected_move + " depth 1 ponder", "ponderhit"),)
+        for command, finish in commands:
+            with self.subTest(position=position, command=command):
+                engine.transcript.clear()
+                engine.send(position)
+                if restrict_move:
+                    command += " searchmoves " + expected_move
+                engine.send(command)
+                if tablebase_result and "nodes" not in command and "time" not in command:
+                    info = engine.wait_for("info depth 0 ")
+                    self.assertIn("tbhits 1", info)
+                elif info_prefix:
+                    engine.wait_for(info_prefix)
+                # Give the worker time to finish bounded work and enter its wait.
+                time.sleep(0.05)
+                if "infinite" in command:
+                    engine.send("ponderhit")
+                engine.send("isready")
+                engine.wait_for("readyok")
+                self.assertFalse(any(line.startswith("bestmove ")
+                                     for line in engine.transcript))
+                engine.send(finish)
+                self.assertEqual(engine.wait_for("bestmove ").split()[1], expected_move)
+                engine.send("stop\nisready")
+                engine.wait_for("readyok")
+                self.assertEqual(sum(line.startswith("bestmove ")
+                                     for line in engine.transcript), 1)
+                if "depth 1" in command:
+                    self.assertTrue(all(int(line.split()[2]) <= 1
+                                        for line in engine.transcript
+                                        if line.startswith("info depth ")))
+        # Ordinary bounded requests must still publish without authorization.
+        bounded_commands = ("go depth 1", "go nodes 1", "go movetime 0")
+        if expected_move == "0000" or info_prefix or tablebase_result:
+            bounded_commands += ("go depth 128",)
+        for command in bounded_commands:
+            if restrict_move:
+                command += " searchmoves " + expected_move
+            engine.send(position)
+            engine.send(command)
+            self.assertEqual(engine.wait_for("bestmove ").split()[1], expected_move)
+
+    def test_bounded_result_authorization(self):
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            # One legal move makes the expected result deterministic at every limit.
+            self.check_result_authorization(
+                engine, "position fen 8/8/8/8/8/2k5/2r5/K7 w - - 0 1",
+                None, "a1b1")
+            self.check_result_authorization(engine, "position startpos",
+                                            None, "e2e4", restrict_move=True)
+            for fen in ("7k/6Q1/5K2/8/8/8/8/8 b - - 0 1",
+                        "7k/5K2/6Q1/8/8/8/8/8 b - - 0 1"):
+                self.check_result_authorization(engine, "position fen " + fen,
+                                                None, "0000")
+            engine.send("setoption name Wild value losers")
+            for fen in ("7k/7p/8/8/8/8/8/K7 w - - 0 1",
+                        "7k/6Q1/5K2/8/8/8/p7/8 b - - 100 1",
+                        "7k/5K2/6Q1/8/8/p7/P7/8 b - - 100 1"):
+                self.check_result_authorization(engine, "position fen " + fen,
+                                                "info depth 0 ", "0000")
+
+    def test_bounded_book_result_authorization(self):
+        with tempfile.TemporaryDirectory(prefix="qm2-book-") as directory:
+            book = Path(directory) / "book.bin"
+            book.write_bytes(struct.pack(">QHHI", 0x463b96181691fc9c, (8 << 6) | 16, 10, 0))
+            with running_engine() as engine:
+                engine.send(f"setoption name BookFile value {book}")
+                self.check_result_authorization(engine, "position startpos",
+                                                "info depth 1 ", "a2a3")
+
+    def test_bounded_tablebase_result_authorization(self):
+        tables = Path(__file__).parent / "data" / "syzygy"
+        with running_engine() as engine:
+            engine.send(f"setoption name SyzygyPath value {tables}")
+            engine.wait_for("info string Syzygy supports up to 3 pieces")
+            self.check_result_authorization(
+                engine, "position fen 7k/8/8/8/8/8/8/KR6 w - - 0 1",
+                None, "b1g1", restrict_move=True, tablebase_result=True)
 
     def test_zero_time_returns_without_stop(self):
         with running_engine() as engine:
