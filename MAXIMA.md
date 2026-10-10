@@ -128,6 +128,15 @@ that an arbitrary FEN is reachable from the initial position.
 UCI output serializes complete lines from the command and search threads, so
 readiness responses and search reports cannot merge into a malformed line.
 
+Accepted changes to `KingAttackShelter` or `KingAttackPieces` stop and join the
+current search, then clear the transposition table before subsequent searches.
+Unchanged or rejected values preserve cached scores. Draw contempt remains part
+of the TT score context; pawn and material cache entries do not depend on these
+king-attack weights and remain reusable.
+These are manual UCI tuning weights: 256 preserves the normal contribution,
+0 disables it, and 512 doubles it. Search captures the configured values;
+the engine does not adjust them automatically during play.
+
 Search deadlines and UCI elapsed times use a monotonic wall clock. Time spent
 preparing the search or waiting to run its worker counts toward the budget; a
 process pause does not extend the deadline. Pondering suppresses deadline
@@ -345,6 +354,11 @@ positions, board/hash restoration, and losers terminal root score signs.
 `testEvaluation` additionally checks the material lookup at sixteen pawns and
 above its supported external range; lifecycle tests reject those FENs before
 evaluating and searching the preserved position.
+`test_search_tt_context` checks each king-attack weight independently and together
+in both directions, all TT bound types, unchanged/rejected-setting reuse, and
+draw-contempt context changes. Lifecycle tests compare completed warm and cold
+UCI search scores after king-attack option changes and verify that changing either
+weight safely stops an active search before another search begins.
 
 An address/undefined-behavior audit build can be configured independently:
 
@@ -369,8 +383,8 @@ Record the revision, dirty-tree status, binary hashes, positions, limits, build
 configuration, and commands. A short benchmark does not establish a performance
 or playing-strength gain. The 2026-10-10 audit adds zero-time, root-restriction,
 book-shortcut, tiny-node, and losers terminal/draw regression cases. Further audit
-priorities include evaluation-option cache invalidation, accurate unsupported
-capabilities, and broader independent move-generation/state comparisons.
+priorities include accurate unsupported capabilities and broader independent
+move-generation/state comparisons.
 
 ## 7. CLI and local tablebases
 

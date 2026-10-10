@@ -85,6 +85,64 @@ def running_engine():
 
 
 class search_lifecycle_tests(unittest.TestCase):
+    def test_evaluation_option_changes_match_cold_searches(self):
+        fen = "r4rk1/1p2ppbp/p2pbnp1/q7/3BPPP1/2N2B2/PPP4P/R2Q1RK1 b - - 0 1"
+        for names in (("KingAttackShelter",), ("KingAttackPieces",),
+                      ("KingAttackShelter", "KingAttackPieces")):
+            for before, after in ((0, 512), (512, 0)):
+                with self.subTest(options=names, before=before, after=after), running_engine() as engine:
+                    for name, value in (("Hash", "16"), ("OwnBook", "false"),
+                                        ("DrawContempt", "0"), ("NullMove", "false"),
+                                        ("BetaPruning", "false"), ("LMR", "false"),
+                                        ("FutilityPruning", "false"),
+                                        ("KingAttackShelter", "0"), ("KingAttackPieces", "0")):
+                        engine.send(f"setoption name {name} value {value}")
+
+                    def search_score():
+                        start = len(engine.transcript)
+                        engine.send(f"position fen {fen}")
+                        engine.send("go depth 2")
+                        engine.wait_for_bestmove()
+                        lines = [line for line in engine.transcript[start:]
+                                 if line.startswith("info depth 2 ")]
+                        self.assertTrue(lines, engine.transcript[start:])
+                        fields = lines[-1].split()
+                        self.assertNotIn("lowerbound", fields)
+                        self.assertNotIn("upperbound", fields)
+                        index = fields.index("score")
+                        return fields[index + 1:index + 3]
+
+                    for name in names:
+                        engine.send(f"setoption name {name} value {before}")
+                    search_score()
+                    for name in names:
+                        engine.send(f"setoption name {name} value {after}")
+                    warm = search_score()
+                    engine.send("ucinewgame")
+                    self.assertEqual(warm, search_score())
+                    engine.send("quit")
+                    engine.wait_for_exit()
+
+    def test_evaluation_option_changes_stop_active_search(self):
+        for name in ("KingAttackShelter", "KingAttackPieces"):
+            with self.subTest(option=name), running_engine() as engine:
+                engine.send("setoption name OwnBook value false")
+                engine.start_search()
+                engine.send(f"setoption name {name} value 512")
+                engine.send("isready")
+                engine.wait_for_bestmove()
+                engine.wait_for("readyok")
+                self.assertEqual(sum(line.startswith("bestmove ")
+                                     for line in engine.transcript), 1)
+                engine.send("go depth 2")
+                engine.wait_for_bestmove()
+                engine.send("isready")
+                engine.wait_for("readyok")
+                self.assertEqual(sum(line.startswith("bestmove ")
+                                     for line in engine.transcript), 2)
+                engine.send("quit")
+                engine.wait_for_exit()
+
     def test_unsupported_pawn_counts_preserve_search_position(self):
         with running_engine() as engine:
             engine.send("setoption name OwnBook value false")

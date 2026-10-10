@@ -29,6 +29,105 @@ int run(const std::string & fen, const std::vector<U64> & history = {}) {
     return result;
 }
 
+void set_option(const char * name, int value) {
+    uci::in(std::string("setoption name ") + name + " value " + std::to_string(value));
+}
+
+std::pair<int, U64> run_configured(const std::string & fen) {
+    auto search = std::make_unique<search_t>(fen.c_str());
+    prepare(*search);
+    search->draw_contempt = options::get_value("DrawContempt");
+    const int result = search->pvs(-score::INF, score::INF, 1);
+    if (search->stop_all || search->brd.ply != 0 || search->brd.to_string() != fen
+            || search->stack != search->root_stack) {
+        std::cerr << "option test search aborted or failed to restore state\n";
+        std::exit(EXIT_FAILURE);
+    }
+    return {result, search->nodes};
+}
+
+bool test_evaluation_options() {
+    const std::string fen = "r4rk1/1p2ppbp/p2pbnp1/q7/3BPPP1/2N2B2/PPP4P/R2Q1RK1 b - - 0 1";
+    const int saved_shelter = options::get_value("KingAttackShelter");
+    const int saved_pieces = options::get_value("KingAttackPieces");
+    const int saved_contempt = options::get_value("DrawContempt");
+    uci::silent(true);
+    set_option("DrawContempt", 0);
+    bool success = true;
+    for (const char * name : {"KingAttackShelter", "KingAttackPieces", "both"}) {
+        for (int before : {0, 512}) {
+            const int after = 512 - before;
+            const auto configure = [name](int value) {
+                set_option("KingAttackShelter", std::string(name) == "KingAttackPieces" ? 0 : value);
+                set_option("KingAttackPieces", std::string(name) == "KingAttackShelter" ? 0 : value);
+            };
+            configure(before);
+            trans_table::clear();
+            const auto original = run_configured(fen);
+            configure(before);
+            const auto unchanged = run_configured(fen);
+            success &= check("unchanged evaluation options must retain score reuse",
+                unchanged.first == original.first && unchanged.second == 1);
+            configure(after);
+            const auto warm = run_configured(fen);
+            trans_table::clear();
+            const auto cold = run_configured(fen);
+            success &= check("changed evaluation options must reject stale score reuse",
+                warm.first == cold.first && warm.second > 1);
+            success &= check("each evaluation option fixture must affect the score",
+                original.first != cold.first);
+        }
+    }
+    for (const char * name : {"KingAttackShelter", "KingAttackPieces"}) {
+        for (int before : {0, 512}) {
+            for (int bound : {score::LOWERBOUND, score::UPPERBOUND, score::EXACT}) {
+                set_option(name, before);
+                auto search = std::make_unique<search_t>(fen.c_str());
+                trans_table::store(search->brd.stack->tt_key, 0, 0, 1, 123, 0,
+                    bound, search->tt_context());
+                int value = 0, move = 0, flag = 0;
+                success &= check("bound fixture must be cached before the option change",
+                    trans_table::retrieve(search->brd.stack->tt_key, 0, 1,
+                        value, move, flag, search->tt_context()) && value == 123 && flag == bound);
+                set_option(name, 512 - before);
+                success &= check("option changes must invalidate every TT bound type",
+                    !trans_table::retrieve(search->brd.stack->tt_key, 0, 1,
+                        value, move, flag, search->tt_context()));
+            }
+        }
+        set_option(name, 256);
+        trans_table::clear();
+        const auto original = run_configured(fen);
+        for (const char * value : {"-1", "513", "garbage", "256junk", "2147483648"}) {
+            uci::in(std::string("setoption name ") + name + " value " + value);
+            const auto retained = run_configured(fen);
+            success &= check("rejected evaluation values must preserve settings and score reuse",
+                options::get_value(name) == 256 && retained.first == original.first
+                && retained.second == 1);
+        }
+    }
+    for (int before : {-12, 12}) {
+        const std::string draw_fen = "7k/8/8/8/8/8/8/KR6 w - - 99 1";
+        set_option("DrawContempt", before);
+        trans_table::clear();
+        const auto original = run_configured(draw_fen);
+        set_option("DrawContempt", before);
+        const auto unchanged = run_configured(draw_fen);
+        success &= check("unchanged draw contempt must retain score reuse",
+            unchanged.first == original.first && unchanged.second == 1);
+        set_option("DrawContempt", -before);
+        const auto warm = run_configured(draw_fen);
+        trans_table::clear();
+        const auto cold = run_configured(draw_fen);
+        success &= check("changed draw contempt must retain context protection",
+            original.first != cold.first && warm.first == cold.first && warm.second > 1);
+    }
+    set_option("KingAttackShelter", saved_shelter);
+    set_option("KingAttackPieces", saved_pieces);
+    set_option("DrawContempt", saved_contempt);
+    return success;
+}
+
 bool test_fifty_move_context() {
     const std::string fresh = "7k/8/8/8/8/8/8/KR6 w - - 0 1";
     const std::string near_draw = "7k/8/8/8/8/8/8/KR6 w - - 99 1";
@@ -336,5 +435,6 @@ int main() {
     success &= test_clock_range_propagation();
     success &= test_compact_moves();
     success &= test_table_boundaries();
+    success &= test_evaluation_options();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

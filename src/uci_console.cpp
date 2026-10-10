@@ -408,6 +408,10 @@ namespace uci {
                                 return true;
                             }
                         }
+                        if (candidate != opt->value
+                                && (name == "KingAttackShelter" || name == "KingAttackPieces")) {
+                            trans_table::clear();
+                        }
                         opt->value = candidate;
 
                         //handle option
