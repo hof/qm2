@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "w17/w17_search.h"
 
 namespace {
 
@@ -31,7 +32,8 @@ void prepare_search(search_t & search) {
 }
 
 bool restored_position(search_t & search, const char * fen) {
-    search_t original(fen);
+    auto original_storage = std::make_unique<search_t>(fen);
+    search_t & original = *original_storage;
     const bool success = search.brd.to_string() == original.brd.to_string()
         && search.brd.stack->tt_key == original.brd.stack->tt_key
         && search.brd.stack->pawn_hash == original.brd.stack->pawn_hash
@@ -54,17 +56,34 @@ bool test_position(const position_case_t & test) {
         std::cerr << test.name << ": unexpected check status or legal move count: "
             << search.brd.in_check() << ", " << legal_moves << "\n";
     }
-    search_t quiet_search(test.fen, &game);
-    prepare_search(quiet_search);
-    const int quiet_score = quiet_search.qsearch(-score::INF, score::INF, 0);
-    success &= check_score(test.name, "quiescence", quiet_score, test.expected_score);
-    success &= restored_position(quiet_search, test.fen);
+    for (int depth : {0, -1, -2}) {
+        auto quiet_storage = std::make_unique<search_t>(test.fen, &game);
+        search_t & quiet_search = *quiet_storage;
+        prepare_search(quiet_search);
+        const int quiet_score = quiet_search.qsearch(-score::INF, score::INF, depth);
+        // Quiet checks are intentionally omitted below depth zero.
+        if (depth == 0 || test.legal_moves == 0 || test.expected_score == 0) {
+            success &= check_score(test.name, "quiescence", quiet_score, test.expected_score);
+        }
+        success &= restored_position(quiet_search, test.fen);
+        success &= !quiet_search.stop_all;
+        if (test.legal_moves == 0) {
+            for (int alpha : {-10000, -1, 0, 10000}) {
+                auto bounded_storage = std::make_unique<search_t>(test.fen, &game);
+                search_t & bounded = *bounded_storage;
+                prepare_search(bounded);
+                const int actual = bounded.qsearch(alpha, alpha + 1, depth);
+                success &= check_score(test.name, "bounded quiescence", actual, test.expected_score);
+                success &= restored_position(bounded, test.fen);
+            }
+        }
+    }
     search_t full_search(test.fen, &game);
     prepare_search(full_search);
     const int full_score = full_search.pvs(-score::INF, score::INF, 1);
     success &= check_score(test.name, "one-ply search", full_score, test.expected_score);
     success &= restored_position(full_search, test.fen);
-    if (quiet_search.stop_all || full_search.stop_all) {
+    if (full_search.stop_all) {
         std::cerr << test.name << ": search aborted\n";
         success = false;
     }
@@ -127,6 +146,90 @@ bool test_recapture() {
     if (!success) {
         std::cerr << "rook recapture: static=" << before_recapture
             << ", quiescence=" << after_recapture << "\n";
+    }
+    return success;
+}
+
+bool test_capture_stalemate() {
+    const char * fen = "7k/5K2/6n1/6Q1/8/8/8/8 w - - 0 1";
+    search_t search(fen);
+    prepare_search(search);
+    move_t capture;
+    capture.set(&search.brd, "g5g6");
+    bool success = search.brd.valid(&capture) && search.brd.legal(&capture);
+    search.forward(&capture, search.brd.gives_check(&capture));
+    for (int depth : {-1, -2}) {
+        success &= check_score("capture reaches stalemate", "quiescence",
+            search.qsearch(-score::INF, score::INF, depth), 0);
+    }
+    search.backward(&capture);
+    success &= restored_position(search, fen);
+    return success;
+}
+
+bool test_recursive_stalemate() {
+    bool success = true;
+    for (const char * fen : {"7k/5K2/6q1/6Q1/8/8/8/8 w - - 0 1",
+                            "8/8/8/8/6q1/6Q1/5k2/7K b - - 0 1"}) {
+        for (int depth : {0, -1, -2}) {
+            search_t search(fen);
+            prepare_search(search);
+            success &= search.stack->in_check;
+            success &= check_score("capture evasion reaches stalemate", "quiescence",
+                search.qsearch(-1, 0, depth), 0);
+            // The first queen capture supplies a valid draw lower bound.
+            success &= search.stack->best_move.to_string()
+                == (search.brd.us() ? "g5g6" : "g4g3");
+            success &= search.nodes > 1 && !search.stop_all;
+            success &= restored_position(search, fen);
+        }
+    }
+    return success;
+}
+
+bool test_quiet_playable() {
+    bool success = true;
+    for (const char * fen : {"7k/8/8/8/8/8/8/KR6 w - - 0 1",
+                            "kr6/8/8/8/8/8/8/7K b - - 0 1",
+                            "7k/p4K2/6Q1/8/8/8/8/8 b - - 0 1",
+                            "8/8/8/8/8/6q1/P4k2/7K w - - 0 1"}) {
+        for (int depth : {-1, -2}) {
+            search_t search(fen);
+            prepare_search(search);
+            const int expected = evaluate(&search);
+            success &= std::abs(expected) > 200;
+            success &= check_score("quiet playable", "quiescence",
+                search.qsearch(-score::INF, score::INF, depth), expected);
+            success &= restored_position(search, fen);
+        }
+    }
+    return success;
+}
+
+bool test_losers_root_scores() {
+    bool success = true;
+    game_t game;
+    game.max_depth = 1;
+    const position_case_t cases[] = {
+        {"white king-only win", "7k/7p/8/8/8/8/8/K7 w - - 0 1", false, 3, score::MATE},
+        {"black king-only win", "k7/8/8/8/8/8/7P/7K b - - 0 1", false, 3, score::MATE},
+        {"black king-only loss", "7k/7p/8/8/8/8/8/K7 b - - 0 1", false, 0, -score::MATE},
+        {"white king-only loss", "k7/8/8/8/8/8/7P/7K w - - 0 1", false, 0, -score::MATE},
+        {"both king-only", "7k/8/8/8/8/8/8/K7 w - - 0 1", false, 3, score::MATE},
+        {"black checkmate win", "7k/6Q1/5K2/8/8/8/p7/8 b - - 100 1", true, 0, score::MATE},
+        {"white checkmate win", "8/P7/8/8/8/5k2/6q1/7K w - - 100 1", true, 0, score::MATE},
+        {"black stalemate win", "7k/5K2/6Q1/8/8/p7/P7/8 b - - 100 1", false, 0, score::MATE},
+        {"white stalemate win", "8/p7/P7/8/8/6q1/5k2/7K w - - 100 1", false, 0, score::MATE},
+    };
+    for (const auto & test : cases) {
+        w17_search_t search(test.fen, &game);
+        const auto fen = search.brd.to_string();
+        const U64 key = search.brd.stack->tt_key;
+        search.go();
+        success &= check_score(test.name, "root", search.result_score, test.expected_score);
+        success &= !search.stack->best_move.piece && search.stack->pv_count == 0
+            && search.brd.to_string() == fen && search.brd.stack->tt_key == key
+            && search.brd.ply == 0 && search.stack == search.root_stack;
     }
     return success;
 }
@@ -256,6 +359,10 @@ int main() {
     }
     success &= test_quiet_evasion();
     success &= test_capture();
+    success &= test_capture_stalemate();
+    success &= test_recursive_stalemate();
+    success &= test_quiet_playable();
+    success &= test_losers_root_scores();
     success &= test_recapture();
     success &= test_material_draws();
     success &= test_fifty_move_boundary();

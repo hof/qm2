@@ -102,7 +102,9 @@ Search owns its configuration and pre-root repetition history. Real game history
 requires three occurrences; cycles strictly inside search use one earlier match
 as a search heuristic. Repetition identity excludes en passant squares when no
 legal capture is available. Irreversible moves and null moves bound history scans.
-Checkmate takes precedence over a fifty-move draw.
+Checkmate takes precedence over a fifty-move draw. Standard quiescence detects
+stalemate at every tactical depth, including before a stand-pat cutoff; absence
+of captures or promotions alone does not imply stalemate.
 
 The UCI boundary validates positions and moves before committing the new FEN and
 repetition history. `position fen` requires six fields, bounded nonnegative
@@ -137,6 +139,11 @@ first root move returns a legal fallback from that permitted set, rather than
 `0000`. This fallback is not a completed evaluation.
 
 In losers chess, king-only wins, checkmate, and stalemate precede draw scoring.
+These terminal rules also apply at the UCI root before book lookup: finished
+positions report an exact terminal score and `bestmove 0000`. The side to move
+wins when both sides have only their kings, matching interior search precedence.
+Unbounded pondering waits for `ponderhit` or `stop`; unbounded infinite analysis
+waits for `stop`. Combined-limit lifecycle handling remains an audit priority.
 Playable positions reach the fifty-move threshold at 100 halfmoves, including
 positions in check; checkmate does not become a draw at higher clock counts.
 
@@ -319,8 +326,11 @@ Keep confirmed bug fixes accompanied
 by focused regressions; passing the suite is evidence for its covered cases,
 not a claim that the engine has no remaining bugs.
 Search ownership checks cover preparation/worker delays; lifecycle checks cover
-ordinary and zero clocks, ponderhit/stop, and pause/resume deadlines on platforms
-with SIGSTOP/SIGCONT.
+ordinary and zero clocks, ponderhit/stop, royal-losers terminal roots, and
+pause/resume deadlines on platforms with SIGSTOP/SIGCONT.
+`test_leaf_search` checks both colors' mate/stalemate at quiescence depths 0,
+-1, and -2, terminal score windows, captures reaching stalemate, quiet playable
+positions, board/hash restoration, and losers terminal root score signs.
 `testEvaluation` additionally checks the material lookup at sixteen pawns and
 above its supported external range; lifecycle tests reject those FENs before
 evaluating and searching the preserved position.

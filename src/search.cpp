@@ -50,6 +50,30 @@ U64 mix_context(U64 key) {
     return key ^ (key >> 31);
 }
 
+// Most playable positions have a king escape. Fall back to fresh generation
+// without disturbing the quiescence move picker or its exclusions.
+bool has_legal_move(board_t & brd) {
+    const int king = KING[brd.us()];
+    const int from = brd.get_sq(king);
+    U64 targets = KING_MOVES[from] & ~brd.all(brd.us());
+    while (targets) {
+        const int to = pop(targets);
+        move_t move{};
+        move.set(king, from, to, brd.matrix[to]);
+        if (brd.legal(&move)) return true;
+    }
+    move::list_t moves;
+    for (auto generate : {move::gen_quiet_moves, move::gen_captures,
+            move::gen_promotions, move::gen_castles}) {
+        moves.clear();
+        generate(&brd, &moves);
+        for (move_t * move = moves.first; move != moves.last; ++move) {
+            if (brd.legal(move)) return true;
+        }
+    }
+    return false;
+}
+
 }
 
 // A multiset fingerprint preserves occurrence counts without requiring the
@@ -245,8 +269,19 @@ bool search_t::book_lookup() {
  */
 void search_t::go() {
     assert(stack->best_move.piece == 0 && ponder_move.piece == 0);
-    bool solved = book_lookup();
+    // Royal losers terminal rules apply before book selection or root moves.
+    bool solved = false;
+    if (wild == 17 && (max_1(brd.all(brd.us())) || max_1(brd.all(brd.them())))) {
+        result_score = max_1(brd.all(brd.us())) ? score::MATE : -score::MATE;
+        solved = true;
+    } else if (wild == 17 && !has_legal_move(brd)) {
+        result_score = score::MATE; // Both checkmate and stalemate win.
+        solved = true;
+    }
     if (solved) {
+        uci::send_pv(result_score, 0, 0, nodes, game.tm.elapsed(),
+            "", score::EXACT, tablebase_hits);
+    } else if ((solved = book_lookup())) {
         uci::send_pv(0, 1, 1, 1, game.tm.elapsed(),
                 stack->best_move.to_string().c_str(), score::EXACT, tablebase_hits);
     } else if (init_root_moves() > 0) {
@@ -1140,7 +1175,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     const int eval = evaluate(this);
     const bool in_check = stack->in_check;
     if (eval >= beta && !in_check) {
-        return eval;
+        return has_legal_move(brd) ? eval : draw_score();
     }
 
     //get first move; if there's none it's mate, stalemate, or there are no captures/promotions
@@ -1150,7 +1185,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         if (in_check) {
             return -score::MATE + brd.ply;
         }
-        return depth == 0 ? draw_score() : eval;
+        return depth == 0 || !has_legal_move(brd) ? draw_score() : eval;
     }
     if (eval > alpha && !in_check) {
         alpha = eval;

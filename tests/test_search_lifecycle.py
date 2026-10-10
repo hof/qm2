@@ -106,6 +106,44 @@ class search_lifecycle_tests(unittest.TestCase):
             engine.send("quit")
             engine.wait_for_exit()
 
+    def test_losers_terminal_roots(self):
+        positions = (
+            "7k/7p/8/8/8/8/8/K7 w - - 0 1",  # king-only win
+            "k7/8/8/8/8/8/7P/7K b - - 0 1",
+            "7k/7p/8/8/8/8/8/K7 b - - 0 1",  # opponent already won
+            "k7/8/8/8/8/8/7P/7K w - - 0 1",
+            "7k/6Q1/5K2/8/8/8/p7/8 b - - 100 1",  # royal checkmate wins
+            "8/P7/8/8/8/5k2/6q1/7K w - - 100 1",
+            "7k/5K2/6Q1/8/8/p7/P7/8 b - - 100 1",  # stalemate wins
+            "8/p7/P7/8/8/6q1/5k2/7K w - - 100 1",
+        )
+        with running_engine() as engine:
+            engine.send("setoption name Wild value losers")
+            # Leave book enabled: terminal rules must precede shortcuts.
+            for position in positions:
+                for command, finish in (("go depth 1", None),
+                                        ("go infinite", "stop"),
+                                        ("go ponder", "ponderhit")):
+                    engine.transcript.clear()
+                    engine.send(f"position fen {position}")
+                    engine.send(command)
+                    info = engine.wait_for("info depth 0 ")
+                    self.assertIn(" score mate 0 ", info)
+                    if finish:
+                        time.sleep(0.05)
+                        engine.send("isready")
+                        engine.wait_for("readyok")
+                        self.assertFalse(any(line.startswith("bestmove ")
+                                             for line in engine.transcript))
+                        engine.send(finish)
+                    self.assertEqual(engine.wait_for("bestmove "), "bestmove 0000")
+                    engine.send("isready")
+                    engine.wait_for("readyok")
+                    self.assertEqual(sum(line.startswith("bestmove ")
+                                         for line in engine.transcript), 1)
+            engine.send("quit")
+            engine.wait_for_exit()
+
     def test_zero_time_returns_without_stop(self):
         with running_engine() as engine:
             engine.send("setoption name OwnBook value false")
