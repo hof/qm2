@@ -105,8 +105,8 @@ void game_t::copy(game_t* game) {
     tm = game->tm;
 }
 
-void game_t::init_tm(bool us) {
-    tm.set_start();
+void game_t::init_tm(bool us, std::chrono::steady_clock::time_point started) {
+    tm.set_start(started);
     if (movetime_limit || max_time_per_move) {
         tm.set_min(max_time_per_move);
         tm.set_max(max_time_per_move);

@@ -76,9 +76,8 @@ time_manager_t::time_manager_t() {
 }
 
 void time_manager_t::clear() {
-    start = 0;
-    min = 0;
-    max = 0;
+    start = std::chrono::steady_clock::now();
+    max = start;
     tot_min = 0;
     tot_max = 0;
 }

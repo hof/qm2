@@ -106,6 +106,7 @@ int root_move_t::compare(root_move_t * m, move_t * best_move) {
  */
 void search_t::init(const char * fen, const game_t * g, const search_control_t * control,
         const std::vector<U64> & position_history) {
+    const auto started = std::chrono::steady_clock::now();
     PST::init();
     brd.init(fen);
     game = g ? *g : game_t();
@@ -115,7 +116,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         _position_history.erase(_position_history.begin(),
             _position_history.end() - brd.stack->fifty_count);
     }
-    game.init_tm(brd.us());
+    game.init_tm(brd.us(), started);
     wild = 0;
     book_name = book::path();
     _own_book = options::get_value("OwnBook") && !options::get_value("UCI_AnalyseMode");

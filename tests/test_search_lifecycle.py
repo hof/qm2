@@ -1,6 +1,7 @@
 import contextlib
 from pathlib import Path
 import shutil
+import signal
 import queue
 import subprocess
 import struct
@@ -112,6 +113,53 @@ class search_lifecycle_tests(unittest.TestCase):
                 engine.send("position startpos")
                 engine.send(command)
                 engine.wait_for_bestmove()
+            engine.send("quit")
+            engine.wait_for_exit()
+
+    @unittest.skipUnless(hasattr(signal, "SIGSTOP"), "requires process pause signals")
+    def test_elapsed_deadline_after_process_pause(self):
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            for command in ("go movetime 1000", "go wtime 25200 btime 25200"):
+                engine.start_search(command)
+                engine.process.send_signal(signal.SIGSTOP)
+                try:
+                    time.sleep(1.2)
+                finally:
+                    resumed = time.monotonic()
+                    engine.process.send_signal(signal.SIGCONT)
+                engine.wait_for_bestmove()
+                self.assertLess(time.monotonic() - resumed, 0.5,
+                                "expired search must finish promptly after resumption")
+                info = [line for line in engine.transcript if line.startswith("info depth ")][-1]
+                fields = info.split()
+                self.assertGreaterEqual(int(fields[fields.index("time") + 1]), 1200)
+
+    def test_ponderhit_after_elapsed_deadline(self):
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            engine.start_search("go ponder movetime 200")
+            time.sleep(0.3)
+            engine.send("isready")
+            engine.wait_for("readyok")
+            self.assertFalse(any(line.startswith("bestmove ") for line in engine.transcript))
+            started = time.monotonic()
+            engine.send("ponderhit")
+            engine.wait_for_bestmove()
+            self.assertLess(time.monotonic() - started, 0.5)
+            fields = [line for line in engine.transcript if line.startswith("info depth ")][-1].split()
+            self.assertGreaterEqual(int(fields[fields.index("time") + 1]), 300)
+            engine.send("quit")
+            engine.wait_for_exit()
+
+    def test_ordinary_time_budgets(self):
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            for command in ("go movetime 200", "go wtime 6000 btime 6000 winc 100 binc 100"):
+                started = time.monotonic()
+                engine.start_search(command)
+                engine.wait_for_bestmove()
+                self.assertLess(time.monotonic() - started, 1.0)
             engine.send("quit")
             engine.wait_for_exit()
 

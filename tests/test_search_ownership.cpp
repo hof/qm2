@@ -20,7 +20,7 @@ bool test_configuration_snapshot() {
     search_control_t control;
     control.ponder.store(true);
     search_t search(fen, &settings, &control);
-    bool success = check(settings.tm.get_min() == 0,
+    bool success = check(settings.tm.reserved_min() == 0,
         "constructing a search must not start the caller's timer");
     settings.max_depth = 0;
     settings.max_nodes = 1;
@@ -32,6 +32,25 @@ bool test_configuration_snapshot() {
     const int score = search.qsearch(-score::INF, score::INF, 0);
     success &= check(score > 200 && search.nodes > 1 && !search.stop_all,
         "changing the caller's node limit must not abort its existing search");
+    return success;
+}
+
+bool test_elapsed_timer() {
+    game_t settings;
+    settings.movetime_limit = true;
+    settings.max_time_per_move = 20;
+    search_t search(fen, &settings);
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    bool success = check(search.game.tm.elapsed() >= 40 && search.game.tm.time_is_up(),
+        "worker startup delay must count toward elapsed time and deadline");
+    search.game.tm.set_max(10);
+    success &= check(search.game.tm.reserved_max() == 10 && search.game.tm.time_is_up(),
+        "deadline changes must retain the original start and update the budget");
+    search.stack->best_move.set(&search.brd, "d1d5");
+    success &= check(search.abort(true), "a delayed worker must honor an expired deadline");
+    settings.init_tm(WHITE, std::chrono::steady_clock::now() - std::chrono::milliseconds(40));
+    success &= check(settings.tm.time_is_up() && settings.tm.elapsed() >= 40,
+        "timer setup must preserve time spent preparing the request");
     return success;
 }
 
@@ -133,6 +152,7 @@ int main() {
     magic::init();
     uci::silent(true);
     bool success = test_configuration_snapshot();
+    success &= test_elapsed_timer();
     success &= test_independent_cancellation();
     success &= test_result_snapshot();
     success &= test_worker_snapshot();

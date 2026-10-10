@@ -28,11 +28,13 @@
 #define	TIMEMAN_H
 
 #include "bits.h"
+#include <algorithm>
+#include <chrono>
+#include <limits>
 
 class time_manager_t;
 
 namespace time_man {
-    const double ONE_MS = CLOCKS_PER_SEC / 1000;
     const int INFINITE_TIME = 24 * 60 * 60 * 1000;
     const int M = 24; //assume game is decided after M moves from now
     const int M_MIN = M*2;
@@ -45,9 +47,8 @@ namespace time_man {
 
 class time_manager_t {
 private:
-    clock_t start; //in ticks
-    clock_t min; //minimum time to use, in ticks
-    clock_t max; //maximum time to use, in ticks 
+    std::chrono::steady_clock::time_point start;
+    std::chrono::steady_clock::time_point max;
     int tot_min;
     int tot_max;
 
@@ -56,49 +57,36 @@ public:
     void clear();
     void set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left);
     
-    clock_t ticks(const int time_in_ms) {
-        return time_in_ms * time_man::ONE_MS;
-    }
-
-    void set_start() {
-        start = clock();
+    void set_start(std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now()) {
+        start = started;
     }
 
     void set_min(const int ms) {
-        min = start + ticks(ms);
+        tot_min = ms;
     }
-    
+
     void set_max(const int ms) {
-        max = start + ticks(ms);
-    }
-    
-    int get_min() {
-        return min;
+        tot_max = ms;
+        max = start + std::chrono::milliseconds(ms);
     }
 
-    bool time_is_up() {
-        return clock() >= max;
+    bool time_is_up() const {
+        return std::chrono::steady_clock::now() >= max;
     }
 
-    int elapsed() {
-        clock_t ticks = clock() - start;
-        return ticks / time_man::ONE_MS;
+    int elapsed() const {
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start).count();
+        return static_cast<int>(std::min<int64_t>(ms, std::numeric_limits<int>::max()));
     }
-    
-    int reserved_min() {
-        if (tot_min <= 0) {
-            tot_min = (min - start) / time_man::ONE_MS;
-        }
+
+    int reserved_min() const {
         return tot_min;
     }
-    
-    int reserved_max() {
-        if (tot_max <= 0) {
-            tot_max = (max - start) / time_man::ONE_MS;
-        }
+
+    int reserved_max() const {
         return tot_max;
     }
 };
 
-#endif	/* TIMEMANAGER_H */
-
+#endif /* TIMEMANAGER_H */

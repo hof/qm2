@@ -123,6 +123,10 @@ bounded by its search stack. Time-budget arithmetic avoids signed overflow for
 large valid clock values. These checks validate supported input; they do not prove
 that an arbitrary FEN is reachable from the initial position.
 
+Search deadlines and UCI elapsed times use a monotonic wall clock. Time spent
+preparing the search or waiting to run its worker counts toward the budget; a
+process pause does not extend the deadline. Pondering suppresses deadline
+cancellation until `ponderhit`, preserving elapsed time from the search start.
 Explicit zero clocks and `movetime 0` retain a time limit and return a legal
 move without requiring `stop`; absent time limits retain untimed search behavior.
 `go searchmoves` accepts a nonempty list of legal root moves, including losers'
@@ -314,6 +318,9 @@ values, special moves, compulsory losers captures, and large-clock arithmetic.
 Keep confirmed bug fixes accompanied
 by focused regressions; passing the suite is evidence for its covered cases,
 not a claim that the engine has no remaining bugs.
+Search ownership checks cover preparation/worker delays; lifecycle checks cover
+ordinary and zero clocks, ponderhit/stop, and pause/resume deadlines on platforms
+with SIGSTOP/SIGCONT.
 `testEvaluation` additionally checks the material lookup at sixteen pawns and
 above its supported external range; lifecycle tests reject those FENs before
 evaluating and searching the preserved position.
