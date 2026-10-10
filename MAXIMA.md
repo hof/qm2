@@ -220,6 +220,86 @@ You can use [Visual Studio Code](https://code.visualstudio.com/) to develop and 
 
 ![Image of VS Code](vscode.png)
 
+### 5.1 Optional Release LTO and GCC PGO
+
+Ordinary builds keep their existing flags. Enable LTO explicitly with
+`-Dmaxima_lto=ON`; CMake checks compiler/linker IPO support. LTO applies to
+Release targets and allows optimization across source files. GCC PGO is
+selected with `-Dmaxima_pgo_mode=generate` or `use` (default `off`) and
+`-Dmaxima_pgo_dir=/absolute/path`. PGO requires Release and GCC for both C and
+C++. It instruments the engine and Fathom, uses atomic profile counters, and
+supplies the profiling runtime to executables linking the engine library.
+
+Start with an isolated LTO build:
+
+```bash
+cmake -S . -B build/cpp26/lto -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS= -DCMAKE_CXX_FLAGS= \
+  -Dmaxima_lto=ON
+cmake --build build/cpp26/lto --parallel
+ctest --test-dir build/cpp26/lto --output-on-failure
+```
+
+Use the toolchain prefix and cache environment from chapter 5 when needed.
+Build configurations sequentially: the generated `src/version.h` is currently
+shared between build directories. Freeze each binary and its hash/settings
+before configuring the next build; never edit that header manually.
+
+PGO has three steps: build an instrumented engine, train it with representative
+searches, then rebuild with the recorded profile. For example, from the repository
+root with the compiler environment active:
+
+```bash
+cmake -S . -B build/cpp26/pgo -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_FLAGS= -DCMAKE_CXX_FLAGS= \
+  -Dmaxima_pgo_mode=generate -Dmaxima_pgo_dir="$PWD/build/cpp26/profiles"
+cmake --build build/cpp26/pgo --target maxima2 --parallel
+./maxima suite:run --engine build/cpp26/pgo/src/maxima2 \
+  --suite /path/to/training.epd --nodes 500000 --timeout 60
+cmake -S . -B build/cpp26/pgo -Dmaxima_pgo_mode=use
+cmake --build build/cpp26/pgo --parallel
+ctest --test-dir build/cpp26/pgo --output-on-failure
+```
+
+The suite runner requires its Python environment. Its standard-chess EPD input
+requires a legal `bm`; these moves are suite targets, not instructions selecting
+compiler optimizations. A bounded UCI corpus driver can train other variants
+without that EPD scoring requirement. Training must wait for each search result
+and quit cleanly so GCC writes the `.gcda` profiles. Do not use correctness tests
+as the training workload. Configuration rejects an empty profile directory;
+compilation rejects missing and incompatible profiles rather than silently
+falling back to untrained optimization.
+
+Include openings, early and late middlegames (quiet and tactical), queen, rook,
+minor-piece, pawn, and promotion endgames, with both sides to move. Include
+royal-losers searches if that variant will use the optimized binary. Keep books,
+experience, and tablebases disabled when training search/evaluation code, and use
+fixed hash/search options. This search-only workload does not exercise tablebase
+decoder probing paths; assess tablebase performance separately before adopting a
+production profile. Keep a separate held-out corpus with the same stage coverage
+for measurement.
+
+Keep the same source, compiler, build directory, and ordinary optimization
+settings between profile generation and use. Save the training corpus and build
+metadata with the profiles; start with a fresh profile directory when changing
+source/compiler/LTO settings. To test PGO+LTO, repeat both PGO steps in another
+build/profile directory with `-Dmaxima_lto=ON` from the start. Do not reuse the
+plain PGO profile as evidence for the combined configuration.
+
+Compare ordinary Release, LTO, PGO, and PGO+LTO only after builds and tests stop.
+Pin identical C/C++ flags in all four configurations: compiler environment
+activation can supply extra flags, while the ordinary presets clear them. The
+examples above match the preset's empty additional flag settings.
+Use repeated fixed-work searches and alternate execution order, preserving wall
+times, search results, and variation by game stage and variant. Instrumented
+engines are training tools, not performance candidates. Node/NPS reporting has
+the limitations described in chapter 6.1; compiler optimization alone establishes
+neither a speedup nor an Elo gain. Keep these build modes opt-in until measured.
+
+See [GCC profiling](https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html)
+and [GCC optimization](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)
+for the underlying flags.
+
 ## 6. Testing and performance
 
 Tests must return a nonzero exit code when a check fails, so both direct execution

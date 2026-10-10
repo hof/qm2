@@ -35,4 +35,21 @@ target_link_libraries(fathom PRIVATE pthread)
 target_link_libraries(MAX2SRC pthread fathom)
 target_link_libraries(maxima2 MAX2SRC)
 
+if(NOT maxima_pgo_mode STREQUAL "off")
+    foreach(maxima_target IN ITEMS MAX2SRC maxima2 fathom)
+        target_compile_options(${maxima_target} PRIVATE
+            "-fprofile-${maxima_pgo_mode}=${maxima_pgo_dir}"
+            "-fprofile-prefix-path=${CMAKE_BINARY_DIR}")
+        if(maxima_pgo_mode STREQUAL "generate")
+            target_compile_options(${maxima_target} PRIVATE -fprofile-update=atomic)
+        else()
+            target_compile_options(${maxima_target} PRIVATE
+                -Werror=missing-profile -Werror=coverage-mismatch)
+        endif()
+    endforeach()
+    # Consumers of the instrumented static library also need the GCC runtime.
+    target_link_options(MAX2SRC INTERFACE
+        "-fprofile-${maxima_pgo_mode}=${maxima_pgo_dir}")
+endif()
+
 install (TARGETS maxima2 RUNTIME DESTINATION bin)

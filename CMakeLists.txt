@@ -9,6 +9,44 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_options(-march=native)
 
+option(maxima_lto "Enable link-time optimization for Release builds" OFF)
+set(maxima_pgo_mode "off" CACHE STRING "GCC Release profiling: off, generate, or use")
+set_property(CACHE maxima_pgo_mode PROPERTY STRINGS off generate use)
+set(maxima_pgo_dir "" CACHE PATH "Directory containing GCC training profiles")
+
+if(NOT maxima_pgo_mode MATCHES "^(off|generate|use)$")
+    message(FATAL_ERROR "maxima_pgo_mode must be off, generate, or use")
+endif()
+if(NOT maxima_pgo_mode STREQUAL "off")
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Release"
+            OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+            OR NOT CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        message(FATAL_ERROR "PGO requires a Release build with GCC for C and C++")
+    endif()
+    if(NOT maxima_pgo_dir)
+        message(FATAL_ERROR "PGO requires maxima_pgo_dir")
+    endif()
+    get_filename_component(maxima_pgo_dir "${maxima_pgo_dir}" ABSOLUTE
+        BASE_DIR "${CMAKE_BINARY_DIR}")
+    if(maxima_pgo_mode STREQUAL "use")
+        file(GLOB_RECURSE maxima_pgo_profiles "${maxima_pgo_dir}/*.gcda")
+        if(NOT maxima_pgo_profiles)
+            message(FATAL_ERROR "No GCC training profiles found in maxima_pgo_dir")
+        endif()
+    endif()
+endif()
+
+if(maxima_lto)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT maxima_ipo_supported OUTPUT maxima_ipo_error
+        LANGUAGES C CXX)
+    if(NOT maxima_ipo_supported)
+        message(FATAL_ERROR "LTO is unavailable: ${maxima_ipo_error}")
+    endif()
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+endif()
+message(STATUS "Compiler optimization: LTO=${maxima_lto}, PGO=${maxima_pgo_mode}")
+
 add_custom_target(debug
     COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Debug ${CMAKE_SOURCE_DIR}
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target all
