@@ -58,6 +58,7 @@ namespace uci {
         }
         int rank = 7, file = 0, white_kings = 0, black_kings = 0;
         int pieces[2] = {0, 0};
+        int pawns[2] = {0, 0};
         char squares[64] = {};
         for (char symbol : placement) {
             if (symbol == '/') {
@@ -72,13 +73,15 @@ namespace uci {
                 white_kings += symbol == 'K';
                 black_kings += symbol == 'k';
                 ++pieces[symbol >= 'a'];
+                if (symbol == 'P' || symbol == 'p') ++pawns[symbol >= 'a'];
                 squares[rank * 8 + file] = symbol;
                 ++file;
             }
             if (file > 8) return false;
         }
         if (rank != 0 || file != 8 || white_kings != 1 || black_kings != 1
-                || pieces[0] > 16 || pieces[1] > 16) return false;
+                || pieces[0] > 16 || pieces[1] > 16
+                || pawns[0] > 8 || pawns[1] > 8) return false;
         if (castles != "-") {
             std::string seen;
             for (char symbol : castles) {

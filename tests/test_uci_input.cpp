@@ -33,6 +33,9 @@ int main() {
             "position fen 8/8/8/8/8/8/8/K6k w - a9 0 1",
             "position fen 8/8/8/8/8/8/8/K6k w - d6 0 1",
             "position fen 8/8/8/8/8/8/8/K6k w K - 0 1",
+            "position fen 7k/pppppppp/p7/8/8/P7/PPPPPPPP/K7 w - - 0 1",
+            "position fen 7k/pppppppp/8/8/8/P7/PPPPPPPP/K7 w - - 0 1",
+            "position fen 7k/pppppppp/p7/8/8/8/PPPPPPPP/K7 w - - 0 1",
             "position fen 8/8/8/8/8/8/8/K6k w - - 2147483648 1",
             "position fen 8/8/8/8/8/8/8/K6k w - - 0 2147483647",
             "position fen 8/8/8/8/8/8/8/Kk6 w - - 0 1"}) {
@@ -60,6 +63,9 @@ int main() {
         success &= check(command, engine::is_stopped() && engine::settings()->max_depth == depth);
     }
     uci::in("setoption name Wild value losers");
+    uci::in("position fen 7k/pppppppp/p7/8/8/P7/PPPPPPPP/K7 w - - 0 1");
+    success &= check("losers must also reject unsupported pawn counts atomically",
+        uci::fen == fen && uci::position_history == history);
     uci::in("setoption name Wild value antichess");
     success &= check("unknown variant must preserve selection", options::get_value("Wild") == 17);
     uci::in("position fen 7k/8/8/8/8/8/r7/R6K w - - 0 1");
@@ -73,6 +79,11 @@ int main() {
     uci::in("forward e2e3");
     success &= check("an illegal pinned capture must not forbid a quiet losers move", uci::fen != pinned_fen);
     uci::in("setoption name Wild value standard");
+    uci::in("position fen 7k/pppppppp/8/8/8/8/PPPPPPPP/K7 w - - 0 1");
+    success &= check("eight pawns per side must remain supported",
+        uci::fen == "7k/pppppppp/8/8/8/8/PPPPPPPP/K7 w - - 0 1");
+    uci::in("position fen 7k/Pppppppp/8/8/8/8/1PPPPPPP/K7 w - - 0 1 moves a7a8q");
+    success &= check("promotion from eight pawns must remain supported", uci::fen.find("Q6k") == 0);
     uci::in("position fen 4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1 moves e1g1");
     success &= check("castling input must remain supported", uci::fen.find("R4RK1") != std::string::npos);
     uci::in("position fen 7k/8/8/3pP3/8/8/8/K7 w - d6 0 1 moves e5d6");

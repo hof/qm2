@@ -81,6 +81,30 @@ def running_engine():
 
 
 class search_lifecycle_tests(unittest.TestCase):
+    def test_unsupported_pawn_counts_preserve_search_position(self):
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            engine.send("position startpos moves g1f3 g8f6 f3g1 f6g8")
+            for placement in ("7k/pppppppp/p7/8/8/P7/PPPPPPPP/K7",
+                              "7k/pppppppp/8/8/8/P7/PPPPPPPP/K7",
+                              "7k/pppppppp/p7/8/8/8/PPPPPPPP/K7"):
+                engine.send(f"position fen {placement} w - - 0 1")
+                engine.wait_for("info string Invalid FEN")
+                engine.send(f"eval {placement} w - - 0 1")
+                engine.wait_for("info string Invalid FEN")
+                engine.send("eval")
+                engine.send("go depth 1 searchmoves e2e4")
+                self.assertEqual(engine.wait_for("bestmove ").split()[1], "e2e4")
+            for position, move in (
+                    ("7k/pppppppp/8/8/8/8/PPPPPPPP/K7 w - - 0 1", "a2a3"),
+                    ("7k/Pppppppp/8/8/8/8/1PPPPPPP/K7 w - - 0 1", "a7a8q")):
+                engine.send(f"position fen {position}")
+                engine.send("eval")
+                engine.send(f"go depth 1 searchmoves {move}")
+                self.assertEqual(engine.wait_for("bestmove ").split()[1], move)
+            engine.send("quit")
+            engine.wait_for_exit()
+
     def test_zero_time_returns_without_stop(self):
         with running_engine() as engine:
             engine.send("setoption name OwnBook value false")

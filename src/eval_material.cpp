@@ -127,7 +127,9 @@ namespace material {
         const int bminors = bknights + bbishops;
         const int wmajors = wrooks + 2 * wqueens;
         const int bmajors = brooks + 2 * bqueens;
-        const int minor_pawn_adj = MINOR_PAWNS_ADJUSTMENT[wpawns + bpawns];
+        // Internal board construction can bypass the UCI pawn-count checks.
+        constexpr int max_pawns = sizeof(MINOR_PAWNS_ADJUSTMENT) / sizeof(MINOR_PAWNS_ADJUSTMENT[0]) - 1;
+        const int minor_pawn_adj = MINOR_PAWNS_ADJUSTMENT[MIN(max_pawns, wpawns + bpawns)];
 
         /*
          * Game phase

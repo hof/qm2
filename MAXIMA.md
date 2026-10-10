@@ -106,11 +106,14 @@ Checkmate takes precedence over a fifty-move draw.
 
 The UCI boundary validates positions and moves before committing the new FEN and
 repetition history. `position fen` requires six fields, bounded nonnegative
-counters, one king per side, valid rank widths, and consistent castling/en passant
-metadata. Invalid move sequences reject the entire command, including `forward`.
+counters, one king and at most eight pawns per side, valid rank widths, and
+consistent castling/en passant metadata. Invalid move sequences reject the
+entire command, including `forward`.
 Moves must match a generated legal move; losers mode also enforces compulsory
 legal captures. Rejected input reports an `info string` diagnostic and leaves the
 previous position/history intact.
+Material evaluation also bounds its pawn-count adjustment lookup for internal
+boards constructed without UCI validation. Promotions remain supported.
 
 `setoption` requires the `name` header and validates integers against advertised
 spin bounds, boolean values, and the supported `Wild` selections before changing
@@ -306,10 +309,14 @@ as a build check.
 ### 6.2 Bug audit and sanitizer checks
 
 `test_uci_input` covers malformed FENs and moves, atomic preservation of position
-and repetition history, invalid option/search values, special moves, compulsory
-losers captures, and large-clock arithmetic. Keep confirmed bug fixes accompanied
+and repetition history (including unsupported pawn counts), invalid option/search
+values, special moves, compulsory losers captures, and large-clock arithmetic.
+Keep confirmed bug fixes accompanied
 by focused regressions; passing the suite is evidence for its covered cases,
 not a claim that the engine has no remaining bugs.
+`testEvaluation` additionally checks the material lookup at sixteen pawns and
+above its supported external range; lifecycle tests reject those FENs before
+evaluating and searching the preserved position.
 
 An address/undefined-behavior audit build can be configured independently:
 

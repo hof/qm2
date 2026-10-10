@@ -21,6 +21,7 @@
  */
 
 #include "engine.h"
+#include "eval_material.h"
 
 namespace {
 
@@ -75,6 +76,29 @@ bool test_incremental_evaluation() {
     return success;
 }
 
+bool test_material_pawn_bounds() {
+    // Internal callers can bypass UCI validation. Excess pawns must not index
+    // outside the adjustment table; the upper endpoint applies to such boards.
+    bool success = true;
+    for (const char * fen : {
+            "7k/pppppppp/8/8/8/N7/PPPPPPPP/K7 w - - 0 1",
+            "7k/pppppppp/p7/8/8/N7/PPPPPPPP/K7 w - - 0 1",
+            "7k/pppppppp/p7/8/8/NP6/PPPPPPPP/K7 w - - 0 1"}) {
+        material_table::clear();
+        search_t search(fen);
+        const int expected_score = 330
+            + 100 * (search.brd.count(WPAWN) - search.brd.count(BPAWN));
+        const int cold_score = material::eval(&search);
+        const int warm_score = material::eval(&search);
+        if (cold_score != expected_score || warm_score != cold_score) {
+            std::cerr << "material pawn bounds: " << fen << ": expected="
+                << expected_score << ", cold=" << cold_score << ", warm=" << warm_score << '\n';
+            success = false;
+        }
+    }
+    return success;
+}
+
 }
 
 int main() {
@@ -93,5 +117,6 @@ int main() {
         success &= test_evaluation(test);
     }
     success &= test_incremental_evaluation();
+    success &= test_material_pawn_bounds();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
