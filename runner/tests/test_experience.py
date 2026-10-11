@@ -154,7 +154,10 @@ class experience_tests(unittest.TestCase):
                 self.assertIn('info string Experience loaded', lines)
                 move, lines = search(engine)
                 self.assertEqual(move, 'g1f3')
-                self.assertTrue(any(' nodes 1 ' in line for line in lines))
+                self.assertTrue(any(' nodes 0 ' in line for line in lines))
+                self.assertTrue(any('search_result book' in line for line in lines))
+                self.assertTrue(any(line.startswith('info depth 0 ') for line in lines))
+                self.assertFalse(any(' score ' in line for line in lines))
                 bad = directory / 'bad.bin'
                 content = snapshot.read_bytes()
                 invalid = [b'bad header', content[:-1], content + b'x',
@@ -179,7 +182,7 @@ class experience_tests(unittest.TestCase):
                 configure(engine, 'setoption name OwnBook value true')
                 # Solved book positions still wait for stop in infinite mode.
                 engine.send('position startpos'); engine.send('go infinite')
-                while not engine.receive(time.monotonic() + 5)[1].startswith('info depth 1 '):
+                while not engine.receive(time.monotonic() + 5)[1].startswith('info depth 0 '):
                     pass
                 engine.send('isready')
                 lines = engine.wait_for('readyok', 5)
