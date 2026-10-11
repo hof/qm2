@@ -203,8 +203,12 @@ positions in check; checkmate does not become a draw at higher clock counts.
 The transposition table uses 24-byte entries: a full 64-bit position signature,
 a 64-bit context fingerprint, and packed move, score, depth, age, and halfmove
 clock-range metadata. Move hints can survive a context mismatch, but score
-cutoffs require compatible context and clock ranges. Material and pawn caches
-and the transposition table still need synchronization before parallel search.
+cutoffs require compatible context and clock ranges. Royal-losers score context
+also includes the incoming mate-search mode (automatic, White, or Black), whose
+horizon rules differ. A node keeps that identity when it changes mode or reduces
+depth locally; incompatible modes retain move hints but cannot reuse scores.
+Material and pawn caches and the transposition table still need synchronization
+before parallel search.
 
 KPK is an embedded win/draw bitbase. Proven draws stop search with the configured
 draw score; winning positions retain search because KPK has no distance-to-zero
@@ -548,6 +552,10 @@ in both directions, all TT bound types, unchanged/rejected-setting reuse, and
 draw-contempt context changes. Lifecycle tests compare completed warm and cold
 UCI search scores after king-attack option changes and verify that changing either
 weight safely stops an active search before another search begins.
+`test_w17_tt_context` compares every royal-losers mate-search mode pair with
+cold and disabled tables, both colors, reversible clocks, and repetition history.
+It checks exact/lower/upper bounds, legal move hints, matching-mode reuse, and
+incoming-mode identity across local horizon transitions.
 
 An address/undefined-behavior audit build can be configured independently:
 

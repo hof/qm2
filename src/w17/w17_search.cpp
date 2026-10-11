@@ -58,6 +58,14 @@ bool w17_search_t::w17_is_draw() {
     return false;
 }
 
+U64 w17_search_t::w17_tt_context(int in_mate_search) const {
+    assert(in_mate_search >= -1 && in_mate_search <= 1);
+    constexpr U64 mode_salts[] = {
+        0x243f6a8885a308d3ULL, 0x13198a2e03707344ULL, 0xa4093822299f31d0ULL,
+    };
+    return tt_context() ^ mode_salts[in_mate_search + 1];
+}
+
 int w17_search_t::pvs(int alpha, int beta, int depth) {
     return w17_pvs(alpha, beta, -1, depth);
 }
@@ -123,7 +131,9 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
      */
 
     stack->tt_key = brd.stack->tt_key;
-    const U64 context = tt_context();
+    // Cache the incoming horizon semantics, before a quiet node changes mode
+    // or reduces depth. Descendants compute their own context from that mode.
+    const U64 context = w17_tt_context(in_mate_search);
     clock_range_t tt_clocks;
     int tt_move = 0, tt_flag = 0, tt_score;
     if (depth > 0 && trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag, context,
