@@ -432,9 +432,8 @@ first observed expected PV move, latest primary-PV score/depth, engine-reported
 nodes/time, and wall time until `bestmove`. Wall timing includes the initial
 new-game readiness exchange; streaming observations use the runner clock. Reported depth/score can describe the
 last completed iteration rather than the final interrupted search. Time/node
-limits follow the engine's UCI implementation. Maxima currently reports visited
-plus pruned nodes but enforces `go nodes` against visited nodes; reported totals
-can therefore exceed the requested budget. Avoid equating node totals across
+limits follow the engine's UCI implementation. Maxima reports visited nodes for
+both telemetry and `go nodes`, and reports pruned moves separately in result metadata. Avoid equating node totals across
 engines. Time comparisons also depend on hardware and compiler flags.
 
 `--timeout` bounds response waits (default 30 seconds, extended to cover the
@@ -447,6 +446,67 @@ Runner tests exercise parsing, protocol handling, final-move scoring,
 isolation, and timeout cleanup offline; they are separate from engine CTest.
 The BK strength benchmark is deliberately run manually rather than enforced
 as a build check.
+
+### Offline paired-opening matches
+
+```bash
+./maxima match:run --engine-a /path/to/baseline --engine-b /path/to/candidate \
+    --openings openings.json --pairs 2 --seed 2026 \
+    --seconds 10 --increment 0.1 --pgn games.pgn --json results.json
+```
+
+Use `--variant losers` with royal-losers openings and two engines advertising
+`Wild=losers`. Standard is the default. The opening file has this format:
+
+```json
+{"variant": "standard", "openings": [
+  {"id": "open-game", "moves": ["e2e4", "e7e5"]},
+  {"id": "queen-pawn", "moves": ["d2d4", "d7d5"]}
+]}
+```
+
+Each entry may also specify a six-field `fen`; moves then start from that FEN.
+Positions and move histories are validated before launching engines. Select at
+most the number of distinct entries with `--pairs`. The fixed seed samples
+without replacement; each opening is played twice with engine A assigned each
+color. Fixed selection is reproducible, but clock-based searches and results
+can vary. Both engines start fresh for every game in an empty temporary directory.
+Applied options request one thread/PV, no pondering/book/analysis mode/contempt,
+64 MiB hash (adjust with `--hash`), and no Syzygy probing. The report records
+advertised options actually applied, identities, binary hashes, opening-file
+hash, selected opening order, clocks, results, and terminations. Other engines
+may require additional book/learning/tablebase configuration; inspect the
+recorded options before accepting a baseline.
+
+Clocks use seconds plus a per-move increment. Wall time from the search request
+through its response is charged, including readiness and runner overhead;
+initial process startup/configuration is excluded. A late move loses on time,
+except when the opponent has insufficient material under the selected variant.
+Legal moves are verified before being pushed. Terminal outcomes and available
+threefold/fifty-move claims are adjudicated by the independent board. There is
+no evaluation-based adjudication. `--max-plies` (default 600 searched plies,
+excluding the opening) leaves a nonterminal game unfinished, with result `*`.
+`--timeout` bounds each protocol response (default 30 seconds); increase it for
+long clocks. Protocol/illegal-move failures preserve the current game's partial
+PGN and error record, stop the match, and return nonzero. Completed game records
+are flushed as they finish; abrupt interruption may lose the active game.
+Output paths must be new and distinct from each other and inputs.
+
+PGNs preserve opening history, setup FEN, clock comments, result, termination,
+and `Variant "Royal losers"` for losers. Use
+`maxima_runner.matches.read_match_pgn(stream)` to replay these PGNs with the
+correct board without changing python-chess's global variant registry. Generic
+PGN readers may reject this variant; do not import these into standard experience.
+
+JSON counts A's wins/draws/losses and unfinished games. The score estimate is the
+mean of complete opening-pair scores, each game scored 1/0.5/0. The final 95%
+confidence interval uses the conservative Hoeffding bound over pairs, retaining
+within-pair dependence. It assumes independent pairs representative of the
+opening population; narrow or biased opening sets limit conclusions. No interval
+is reported until every requested pair finishes, avoiding interpretation of
+partial or selectively completed runs as fixed-sample evidence. Small samples
+have broad bounds; these are score intervals, not Elo estimates or a sequential
+promotion test. Unfinished games or engine failures return nonzero.
 
 ### 6.2 Bug audit and sanitizer checks
 
@@ -763,9 +823,10 @@ Sessions accept ordinary `chess.Board` and `royal_losers_board`. Before search,
 they select `Wild=standard` or `Wild=losers` when supported; royal losers requires
 an advertised combo option containing `losers`. Unsupported board variants and
 Chess960 are rejected before analysis. The losers board retains ordinary UCI
-position transport and independent rule/terminal semantics. This foundation does
-not yet add losers CLI suites, PGN import/export, matches, or experience support;
-those workflows must preserve variant identity when introduced.
+position transport and independent rule/terminal semantics. Offline matches
+preserve variants in PGN export/replay.
+Losers CLI suites, general PGN imports, and experience remain pending; those
+workflows must preserve variant identity when introduced.
 Generic UCI orchestration has no dependency on the Maxima source tree.
 Maxima's SQLite experience accounting and binary snapshot serialization remain
 in the runner's experience module; their formats are unchanged.

@@ -67,7 +67,7 @@ class cli_tests(unittest.TestCase):
         self.assertEqual(run.call_args.args[0], ['ctest', '--preset', 'cpp26_release', '--no-tests=error'])
 
     def test_subcommand_help_needs_no_chess(self):
-        for command in ('uci', 'suite:run', 'experience:show', 'tablebases:syzygy:download'):
+        for command in ('uci', 'suite:run', 'match:run', 'experience:show', 'tablebases:syzygy:download'):
             with patch.dict(sys.modules, {'chess': None}), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as result:
                     cli.main([command, '--help'])

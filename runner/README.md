@@ -26,7 +26,8 @@ configuration and streamed searches using `chess.Board` and
 FICS royal losers with compulsory legal captures and orthodox king safety.
 Sessions map that board to an advertised `Wild=losers` option and ordinary boards
 to `Wild=standard`; unsupported variants/engines are rejected before search.
-Losers CLI suites, PGN workflows, matches, and experience remain future work.
+Offline matches preserve both variants in PGNs. Losers suites, general PGN
+imports, and experience remain future work.
 Maxima-specific experience storage lives separately in
 `maxima_runner.experience`. The CLI owns repository paths and compiler helpers.
 
@@ -46,3 +47,14 @@ runner checks.
 
 See [MAXIMA.md](../MAXIMA.md#10-python-runner-and-project-cli) for the full
 architecture, workflows, and JDrone migration roadmap.
+
+Offline paired matches use `maxima match:run --engine-a PATH --engine-b PATH
+--openings FILE --pairs 10 --seconds 10 --increment 0.1 --pgn games.pgn
+--json results.json`. Add `--variant losers` for royal losers. The opening JSON
+must declare `variant` (`standard` or `losers`) and an `openings` list of objects
+with unique `id`, optional six-field `fen`, and optional legal UCI `moves`.
+Each selected opening is played twice with swapped colors. The seed fixes
+selection without replacement; clock-based engine moves need not repeat.
+Read royal-losers match PGNs with `maxima_runner.matches.read_match_pgn`;
+ordinary readers may not recognize this variant. See MAXIMA.md for result and
+confidence-interval semantics.

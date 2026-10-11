@@ -15,6 +15,7 @@ command_groups = (
         ("build", "Build Maxima2 (Release by default)"),
         ("test", "Run engine and runner checks"),
         ("suite:run", "Evaluate a position suite"),
+        ("match:run", "Run offline paired-opening matches"),
     )),
     ("Chess data", (
         ("experience:import", "Import games into experience"),
@@ -40,7 +41,7 @@ def show_help(all_commands=False):
     for title, commands in command_groups:
         visible = commands if all_commands else tuple(
             item for item in commands if item[0] in (
-                "uci", "build", "test", "suite:run", "experience:show", "tablebases:syzygy:download"))
+                "uci", "build", "test", "suite:run", "match:run", "experience:show", "tablebases:syzygy:download"))
         print(styled("-" * 72, "36"))
         print(styled(title, "1"))
         print(styled("-" * 72, "36"))
@@ -141,7 +142,7 @@ def main(argv=None):
     arguments = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
-        "uci, build, test, suite:run, experience:import|export|show|analyze, "
+        "uci, build, test, suite:run, match:run, experience:import|export|show|analyze, "
         "tablebases:syzygy:download (no command: run engine)"))
     if arguments and arguments[0] in ("--help", "-h"):
         show_help()
@@ -167,6 +168,9 @@ def main(argv=None):
         if command == "suite:run":
             from . import run_suite
             entrypoint = run_suite.main
+        elif command == "match:run":
+            from . import matches
+            entrypoint = matches.main
         elif command in ("experience:import", "experience:export", "experience:show", "experience:analyze"):
             from . import experience
             remaining.insert(0, command.split(":", 1)[1])
