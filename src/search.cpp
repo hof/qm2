@@ -51,7 +51,7 @@ U64 mix_context(U64 key) {
 }
 
 // Most playable positions have a king escape. Fall back to fresh generation
-// without disturbing the quiescence move picker or its exclusions.
+// without disturbing the active move picker or its exclusions.
 bool has_legal_move(board_t & brd) {
     const int king = KING[brd.us()];
     const int from = brd.get_sq(king);
@@ -973,12 +973,17 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const int eval = evaluate(this);
     const bool do_prune_node = eval >= beta && !in_check && !pv && !score::is_mate(beta) && brd.has_pieces(brd.us());
 
+    // A static/null cutoff requires legal play: passing in stalemate would
+    // turn an exact draw into a heuristic fail-high. Probe only when pruning
+    // can run; the ordinary move loop handles the remaining terminal nodes.
+    const bool beta_cutoff = depth < 4 && beta_pruning && eval - 50 * depth >= beta;
+    if (do_prune_node && (beta_cutoff || null_enabled) && !has_legal_move(brd)) {
+        return draw_score();
+    }
+
     // beta pruning
-    if (do_prune_node && depth < 4 && beta_pruning) {
-        int bp_score = eval - 50 * depth;
-        if (bp_score >= beta) {
-            return bp_score;
-        }
+    if (do_prune_node && beta_cutoff) {
+        return eval - 50 * depth;
     }
 
     //null move pruning

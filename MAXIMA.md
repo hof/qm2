@@ -106,7 +106,11 @@ as a search heuristic. Repetition identity excludes en passant squares when no
 legal capture is available. Irreversible moves and null moves bound history scans.
 Checkmate takes precedence over a fifty-move draw. Standard quiescence detects
 stalemate at every tactical depth, including before a stand-pat cutoff; absence
-of captures or promotions alone does not imply stalemate.
+of captures or promotions alone does not imply stalemate. Standard interior
+search also verifies legal play before static beta or null-move pruning can
+run, so stalemate remains an exact draw with production pruning enabled. The
+probe uses a king escape first and fresh move generation when needed, without
+changing the active move picker.
 
 The UCI boundary validates positions and moves before committing the new FEN and
 repetition history. `position fen` requires six fields, bounded nonnegative

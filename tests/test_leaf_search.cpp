@@ -90,6 +90,66 @@ bool test_position(const position_case_t & test) {
     return success;
 }
 
+bool test_pruning_terminals() {
+    bool success = true;
+    const char * stalemates[] = {
+        "8/8/8/8/8/p1k5/P1P5/KB6 w - - 0 1",
+        "kb6/p1p5/P1K5/8/8/8/8/8 b - - 0 1",
+    };
+    const char * parents[] = {
+        "8/8/8/8/2k5/p7/P1P5/KB6 b - - 0 1",
+        "kb6/p1p5/P7/2K5/8/8/8/8 w - - 0 1",
+    };
+    for (int color = 0; color < 2; ++color) {
+        for (bool transition : {false, true}) {
+            for (int configuration = 0; configuration < 4; ++configuration) {
+                for (int depth : {1, 2, 3, 4, 6}) {
+                    for (int alpha : {-score::INF, -10000, -1, 0, 10000}) {
+                        const char * fen = transition ? parents[color] : stalemates[color];
+                        auto storage = std::make_unique<search_t>(fen);
+                        search_t & search = *storage;
+                        prepare_search(search);
+                        search.beta_pruning = configuration & 1;
+                        search.null_enabled = configuration & 2;
+                        search.lmr_enabled = true;
+                        search.ffp_enabled = true;
+                        move_t move;
+                        if (transition) {
+                            move.set(&search.brd, color == 0 ? "c4c3" : "c5c6");
+                            success &= search.brd.valid(&move) && search.brd.legal(&move);
+                            search.forward(&move, search.brd.gives_check(&move));
+                        }
+                        success &= !search.brd.in_check() && search.brd.has_pieces(search.brd.us())
+                            && search.init_root_moves() == 0;
+                        const int beta = alpha == -score::INF ? score::INF : alpha + 1;
+                        success &= check_score("trapped-bishop stalemate", "pruning PVS",
+                            search.pvs(alpha, beta, depth), 0);
+                        success &= !search.stop_all;
+                        if (transition) search.backward(&move);
+                        success &= restored_position(search, fen);
+                    }
+                }
+            }
+        }
+    }
+    // Playable fail-highs must retain the useful static cutoff, including when
+    // the king has no escape and the legal-move probe must find a rook move.
+    for (const char * fen : {"7k/8/8/8/8/8/8/KR6 w - - 0 1",
+                            "8/8/8/8/8/p1k5/P1P5/KB5R w - - 0 1"}) {
+        auto storage = std::make_unique<search_t>(fen);
+        search_t & search = *storage;
+        prepare_search(search);
+        search.beta_pruning = true;
+        search.null_enabled = true;
+        const int expected = evaluate(&search) - 50;
+        success &= expected >= 1 && search.init_root_moves() > 0;
+        success &= check_score("playable fail-high", "beta pruning", search.pvs(0, 1, 1), expected);
+        success &= search.nodes == 1 && !search.stop_all;
+        success &= restored_position(search, fen);
+    }
+    return success;
+}
+
 bool test_quiet_evasion() {
     game_t game;
     search_t search("R6k/8/5K2/8/8/8/8/8 b - - 0 1", &game);
@@ -357,6 +417,7 @@ int main() {
     for (const position_case_t & test : cases) {
         success &= test_position(test);
     }
+    success &= test_pruning_terminals();
     success &= test_quiet_evasion();
     success &= test_capture();
     success &= test_capture_stalemate();
