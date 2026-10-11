@@ -30,6 +30,9 @@ search and evaluation, and experimental losers-chess support.
 ### Goals
 
 - Improve playing strength, correctness, performance, and reliability.
+- Make clean, understandable code a first-class project goal. Preserve clear
+  control flow, explicit state ownership, and coherent interfaces as the engine
+  gains capabilities.
 - Preserve the engine's focus on speed: efficient chess algorithms, high search
   throughput, and compilation tuned for the target CPU.
 - Explore a learned evaluator, such as NNUE, with correctness tests and measured
@@ -49,9 +52,10 @@ or require every task to advance every goal.
 
 ## 2. Engineering conventions
 
-- Keep code clean, minimal, and readable. Prefer small, explicit functions and
-  simple data structures; introduce abstractions only when they simplify the
-  current implementation.
+- Keep code clean, understandable, and maintainable. Judge simplicity by how
+  easily behavior and invariants can be understood and changed safely. Prefer
+  focused functions, explicit dependencies, and purposeful abstractions. Explain
+  the reasoning behind heuristics and subtle invariants where it helps readers.
 - Use snake_case for new project-defined identifiers and filenames. Preserve
   externally defined names, such as UCI commands and options.
 - Prioritize missing engine fundamentals and substantial measured strength gains
