@@ -120,6 +120,13 @@ mate/tablebase score windows, and artificial null lines cannot supply reserved
 mate/tablebase scores as cutoffs. Pawn-only positions retain the non-pawn-material
 exclusion. These safeguards do not make selective search an exhaustive oracle.
 
+At the search-stack ceiling, standard PVS and quiescence resolve checkmate,
+stalemate, and draws before static evaluation. Royal losers preserves king-only
+and draw precedence and resolves checkmate/stalemate wins at its ceiling.
+Playable positions, including checks with legal evasions, retain static
+evaluation when no further child stack is available. Cancellation retains its
+existing precedence; a ceiling evaluation is not a completed deeper search.
+
 The UCI boundary validates positions and moves before committing the new FEN and
 repetition history. `position fen` requires six fields, bounded nonnegative
 counters, one king and at most eight pawns per side, valid rank widths, and
@@ -565,6 +572,13 @@ including consecutive-null exclusion, verification subtree exclusion, failed
 verification, cancellation, reserved scores, pawn-endgame bounds, and state
 restoration. Reserved-score tests inject search results through the virtual
 PVS boundary and require no tablebase files.
+
+`test_search_ceiling` checks both colors' mate/stalemate and playable checked
+and quiet positions at the final stack slot, clocks 0/99/100/101, full/null
+windows, standard PVS/quiescence and every losers mode, cold/seeded/disabled TT,
+legal mate transitions, interrupted restarts, and board/hash/history restoration.
+Synthetic placement isolates the boundary without claiming reachable histories
+of that length; playable ceiling evaluations remain horizon approximations.
 
 `test_w17_tt_context` compares every royal-losers mate-search mode pair with
 cold and disabled tables, both colors, reversible clocks, and repetition history.

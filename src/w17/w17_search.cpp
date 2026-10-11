@@ -107,6 +107,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
         sel_depth = brd.ply;
     }
     if (brd.ply >= MAX_PLY) {
+        if (!has_legal_move(brd)) return score::MATE - brd.ply;
         return w17_evaluate(this);
     }
 

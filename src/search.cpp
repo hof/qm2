@@ -50,9 +50,11 @@ U64 mix_context(U64 key) {
     return key ^ (key >> 31);
 }
 
+}
+
 // Most playable positions have a king escape. Fall back to fresh generation
 // without disturbing the active move picker or its exclusions.
-bool has_legal_move(board_t & brd) {
+bool search_t::has_legal_move(board_t & brd) {
     const int king = KING[brd.us()];
     const int from = brd.get_sq(king);
     U64 targets = KING_MOVES[from] & ~brd.all(brd.us());
@@ -72,8 +74,6 @@ bool has_legal_move(board_t & brd) {
         }
     }
     return false;
-}
-
 }
 
 // A multiset fingerprint preserves occurrence counts without requiring the
@@ -763,6 +763,15 @@ int search_t::reduction(int depth, int searched_moves, bool is_dangerous) {
     return 1;
 }
 
+// No child stack is available here. Resolve legal terminals and draws before
+// falling back to static evaluation, including check positions with an evasion.
+int search_t::ceiling_score() {
+    if (!has_legal_move(brd)) {
+        return stack->in_check ? -score::MATE + brd.ply : draw_score();
+    }
+    return is_draw() ? draw_score() : evaluate(this);
+}
+
 /**
  * Principle Variation Search (root node)
  * Difference with normal (non-root) search:
@@ -912,7 +921,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     //ceiling
     if (brd.ply >= (MAX_PLY - 1)) {
-        return evaluate(this);
+        return ceiling_score();
     }
 
     assert(depth > 0 && depth <= MAX_PLY);
@@ -1194,7 +1203,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
     //ceiling
     if (brd.ply >= (MAX_PLY - 1)) {
-        return evaluate(this);
+        return ceiling_score();
     }
 
     //mate distance pruning (if mate(d) in n: don't search deeper)

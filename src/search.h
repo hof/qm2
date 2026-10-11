@@ -105,6 +105,8 @@ protected:
     // Repetition keys before the root, oldest first; never includes the root itself.
     std::vector<U64> _position_history;
     void init_tt_history();
+    static bool has_legal_move(board_t & brd);
+    int ceiling_score();
 
 public:
     search_stack_t _stack[MAX_PLY + 1];
