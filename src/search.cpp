@@ -971,13 +971,17 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
-    const bool do_prune_node = eval >= beta && !in_check && !pv && !score::is_mate(beta) && brd.has_pieces(brd.us());
+    const int decisive_score = score::TABLEBASE - MAX_PLY;
+    const bool do_prune_node = eval >= beta && !in_check && !pv
+        && std::abs(beta) < decisive_score && brd.has_pieces(brd.us());
+    const bool previous_null = brd.ply > 0 && !(stack - 1)->current_move.piece;
+    const bool do_null = null_enabled && !previous_null;
 
     // A static/null cutoff requires legal play: passing in stalemate would
     // turn an exact draw into a heuristic fail-high. Probe only when pruning
     // can run; the ordinary move loop handles the remaining terminal nodes.
     const bool beta_cutoff = depth < 4 && beta_pruning && eval - 50 * depth >= beta;
-    if (do_prune_node && (beta_cutoff || null_enabled) && !has_legal_move(brd)) {
+    if (do_prune_node && (beta_cutoff || do_null) && !has_legal_move(brd)) {
         return draw_score();
     }
 
@@ -987,20 +991,26 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     //null move pruning
-    if (do_prune_node && null_enabled) {
+    if (do_prune_node && do_null) {
         int R = 3;
         forward();
         int null_score = -pvs(-beta, -alpha, depth - 1 - R);
         backward();
         if (stop_all) {
             return alpha;
-        } else if (null_score >= beta) {
+        } else if (null_score >= beta && std::abs(null_score) < decisive_score) {
             const int RV = 5;
             if (null_verify && depth > RV && material::is_eg(this)) {
                 //verification
                 const clock_range_t previous_clocks = stack->tt_clocks;
+                // Exclude artificial passes throughout the verification subtree.
+                null_enabled = false;
                 int verified_score = pvs(alpha, beta, depth - 1 - RV);
+                null_enabled = true;
                 stack->tt_clocks.include_child(previous_clocks, 0);
+                if (stop_all) {
+                    return alpha;
+                }
                 if (verified_score >= beta) {
                     return verified_score;
                 }

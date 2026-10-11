@@ -112,6 +112,14 @@ run, so stalemate remains an exact draw with production pruning enabled. The
 probe uses a king escape first and fresh move generation when needed, without
 changing the active move picker.
 
+Standard null-move pruning excludes consecutive artificial passes and runs
+endgame verification with null pruning disabled throughout its subtree. The
+setting and board/history state are restored before handling cancellation;
+an interrupted verification cannot authorize a cutoff. Node pruning excludes
+mate/tablebase score windows, and artificial null lines cannot supply reserved
+mate/tablebase scores as cutoffs. Pawn-only positions retain the non-pawn-material
+exclusion. These safeguards do not make selective search an exhaustive oracle.
+
 The UCI boundary validates positions and moves before committing the new FEN and
 repetition history. `position fen` requires six fields, bounded nonnegative
 counters, one king and at most eight pawns per side, valid rank widths, and
@@ -552,6 +560,12 @@ in both directions, all TT bound types, unchanged/rejected-setting reuse, and
 draw-contempt context changes. Lifecycle tests compare completed warm and cold
 UCI search scores after king-attack option changes and verify that changing either
 weight safely stops an active search before another search begins.
+`test_null_search` instruments artificial passes and endgame verification,
+including consecutive-null exclusion, verification subtree exclusion, failed
+verification, cancellation, reserved scores, pawn-endgame bounds, and state
+restoration. Reserved-score tests inject search results through the virtual
+PVS boundary and require no tablebase files.
+
 `test_w17_tt_context` compares every royal-losers mate-search mode pair with
 cold and disabled tables, both colors, reversible clocks, and repetition history.
 It checks exact/lower/upper bounds, legal move hints, matching-mode reuse, and
