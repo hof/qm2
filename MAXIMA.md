@@ -613,6 +613,24 @@ and `Variant "Royal losers"` for losers. Use
 correct board without changing python-chess's global variant registry. Generic
 PGN readers may reject this variant; do not import these into standard experience.
 
+For optional early stopping, predeclare `--sequential-check-pairs N`. `--pairs`
+then sets the maximum number of opening pairs; checks occur after every N whole
+pairs and at the maximum. Each check uses a two-sided Hoeffding interval with
+error budget `0.05 / ceil(maximum_pairs / N)`. The union bound (Bonferroni)
+provides at least 95% coverage across the planned checkpoints under the same
+opening-pair sampling assumptions as fixed-sample matches. Stop when the
+adjusted interval excludes 50%; otherwise finish the maximum sample. This is a
+conservative checkpoint rule, not SPRT, and does not establish equivalence when
+inconclusive. For example, `--pairs 50 --sequential-check-pairs 10` allows five
+checks over at most100games; each checkpoint interval has99% coverage. Reports
+identify the checkpoint confidence, total confidence, stop reason and whether
+stopping was early. A successful early stop has `complete=true` although fewer
+than the requested maximum games were played. Interim noncheckpoint reports
+have no interval. Omit the flag for the existing fixed-sample95% workflow; do not
+use those unadjusted intervals to decide when to stop.
+The bound follows [Hoeffding's inequality](https://www.stat.cmu.edu/~larry/=stat705/Lecture2.pdf)
+with an equal allocation of error across the predeclared checks.
+
 JSON counts A's wins/draws/losses and unfinished games. The score estimate is the
 mean of complete opening-pair scores, each game scored 1/0.5/0. The final 95%
 confidence interval uses the conservative Hoeffding bound over pairs, retaining

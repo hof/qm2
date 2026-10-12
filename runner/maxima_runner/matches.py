@@ -51,8 +51,10 @@ def read_openings(path, variant):
     return boards
 
 
-def paired_summary(games, requested_pairs=None):
-    """95% Hoeffding bound over independent opening-pair scores in [0, 1]."""
+def paired_summary(games, requested_pairs=None, *, confidence=0.95):
+    """Hoeffding bound over independent opening-pair scores in [0, 1]."""
+    if not 0 < confidence < 1:
+        raise ValueError('confidence must be between zero and one')
     grouped = {}
     wins = draws = losses = 0
     for game in games:
@@ -69,12 +71,31 @@ def paired_summary(games, requested_pairs=None):
     mean = sum(samples) / len(samples) if samples else None
     complete = (len(samples) == len(grouped) and not any(game['result'] == '*' for game in games)
                 and (requested_pairs is None or len(samples) == requested_pairs))
-    radius = math.sqrt(math.log(40) / (2 * len(samples))) if samples and complete else None
+    radius = math.sqrt(math.log(2 / (1 - confidence)) / (2 * len(samples))) if samples and complete else None
     return {'wins': wins, 'draws': draws, 'losses': losses,
             'unfinished': sum(game['result'] == '*' for game in games),
             'completed_pairs': len(samples), 'a_score': mean,
-            'confidence': 0.95, 'interval_method': 'opening-pair Hoeffding',
+            'confidence': confidence, 'interval_method': 'opening-pair Hoeffding',
             'score_interval': [max(0, mean - radius), min(1, mean + radius)] if radius is not None else None}
+
+
+
+def match_summary(games, args):
+    cadence = getattr(args, 'sequential_check_pairs', None)
+    if cadence is None:
+        return paired_summary(games, args.pairs)
+    checks = (args.pairs + cadence - 1) // cadence
+    checkpoint_confidence = 1 - 0.05 / checks
+    summary = paired_summary(games, confidence=checkpoint_confidence)
+    pairs = summary['completed_pairs']
+    checkpoint = (pairs > 0 and len(games) == 2 * pairs and
+                  (pairs % cadence == 0 or pairs == args.pairs))
+    if not checkpoint:
+        summary['score_interval'] = None
+    summary.update(confidence=0.95, checkpoint_confidence=checkpoint_confidence,
+                   planned_checks=checks, checkpoint=checkpoint,
+                   interval_method='opening-pair Hoeffding with Bonferroni checkpoints')
+    return summary
 
 
 def match_game_type():
@@ -230,12 +251,19 @@ async def run_match(commands, openings, args, report, pgn_stream):
                 report['games'].append(record)
                 pgn_stream.write(str(game) + '\n\n')
                 pgn_stream.flush()
-                report['summary'] = paired_summary(report['games'], args.pairs)
+                report['summary'] = match_summary(report['games'], args)
+                interval = report['summary']['score_interval']
+                if (getattr(args, 'sequential_check_pairs', None) is not None and
+                        interval is not None and (interval[0] > 0.5 or interval[1] < 0.5)):
+                    report['stop_reason'] = 'a_stronger' if interval[0] > 0.5 else 'b_stronger'
+                    report['stopped_early'] = pair + 1 < args.pairs
                 args.json.write_text(json.dumps(report, indent=2) + '\n')
                 if record['error'] is not None:
                     raise RuntimeError(record['error'])
                 print(f"Pair {pair + 1} A={'White' if a_white else 'Black'} "
                       f"{record['result']} ({record['termination']})", flush=True)
+                if report.get('stop_reason') in ('a_stronger', 'b_stronger'):
+                    return
 
 
 def positive_float(text):
@@ -265,6 +293,8 @@ def main():
     parser.add_argument('--variant', choices=('standard', 'losers'), default='standard')
     parser.add_argument('--openings', required=True, type=Path, help='variant-labeled JSON opening file')
     parser.add_argument('--pairs', type=positive_int, default=10)
+    parser.add_argument('--sequential-check-pairs', type=positive_int, metavar='N',
+                        help='check significance every N pairs with a 95%% joint Bonferroni bound')
     parser.add_argument('--seed', type=int, default=2026)
     parser.add_argument('--seconds', type=positive_float, default=10)
     parser.add_argument('--increment', type=nonnegative_float, default=0.1)
@@ -277,6 +307,8 @@ def main():
     report = None
     try:
         openings = read_openings(args.openings, args.variant)
+        if args.sequential_check_pairs is not None and args.sequential_check_pairs > args.pairs:
+            raise ValueError('sequential checkpoint cadence cannot exceed maximum pairs')
         if args.pairs > len(openings):
             raise ValueError('pairs cannot exceed distinct openings (sampling without replacement)')
         args.profiles = [engine_profile(args.option_a, args.model_a),
@@ -296,13 +328,17 @@ def main():
                   'engines': [{**file_identity(command[0]), **profile}
                               for command, profile in zip(commands, args.profiles)],
                   'openings_sha256': hashlib.sha256(args.openings.read_bytes()).hexdigest(),
-                  'games': [], 'complete': False}
+                  'games': [], 'complete': False, 'stopped_early': False, 'stop_reason': None,
+                  'sequential_check_pairs': args.sequential_check_pairs}
         # Refuse to overwrite an earlier match record.
         with args.pgn.open('x') as stream, args.json.open('x') as output:
             output.write(json.dumps(report, indent=2) + '\n')
             output.flush()
             asyncio.run(run_match(commands, openings, args, report, stream))
-        report['complete'] = all(game['result'] != '*' for game in report['games'])
+        report['complete'] = (all(game['result'] != '*' for game in report['games']) and
+                              (len(report['games']) == 2 * args.pairs or report['stopped_early']))
+        if report['stop_reason'] is None and report['complete']:
+            report['stop_reason'] = 'maximum_pairs'
         args.json.write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report['summary'], indent=2))
         return 0 if report['complete'] else 1
