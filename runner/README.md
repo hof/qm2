@@ -58,3 +58,11 @@ selection without replacement; clock-based engine moves need not repeat.
 Read royal-losers match PGNs with `maxima_runner.matches.read_match_pgn`;
 ordinary readers may not recognize this variant. See MAXIMA.md for result and
 confidence-interval semantics.
+
+Match profiles accept repeatable `--option-a NAME=VALUE` / `--option-b NAME=VALUE`
+assignments, validated against each engine's advertised option types and bounds.
+For example, compare the same binary with `--option-a LMR=true --option-b LMR=false`.
+Shared resource/variant controls are protected. Use `--model-a OPTION=PATH` or
+`--model-b OPTION=PATH` for external networks: paths become absolute and SHA-256
+identities are recorded and checked throughout the match. See MAXIMA.md for the
+full configuration and identity contract.

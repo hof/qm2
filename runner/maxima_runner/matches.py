@@ -10,6 +10,9 @@ import random
 import sys
 import tempfile
 
+from .match_options import (engine_profile, file_identity, option_assignment,
+                            validated_settings, verify_models)
+
 
 def read_openings(path, variant):
     import chess
@@ -178,6 +181,7 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
 
 async def run_match(commands, openings, args, report, pgn_stream):
     from .uci import open_engine
+    profiles = getattr(args, 'profiles', [engine_profile([], []), engine_profile([], [])])
     selected = random.Random(args.seed).sample(openings, args.pairs)
     report['selected_openings'] = [identifier for identifier, _ in selected]
     for pair, (identifier, position) in enumerate(selected):
@@ -188,17 +192,26 @@ async def run_match(commands, openings, args, report, pgn_stream):
                     directory = stack.enter_context(tempfile.TemporaryDirectory(prefix='maxima-match-'))
                     engines.append(await stack.enter_async_context(open_engine(command, directory, args.timeout)))
                 metadata = []
-                for engine in engines:
+                configurations = []
+                for engine, profile in zip(engines, profiles):
+                    verify_models(profile)
                     settings = {'Hash': args.hash_mb, 'Threads': 1, 'OwnBook': False,
                                 'MultiPV': 1, 'Ponder': False, 'DrawContempt': 0,
                                 'UCI_AnalyseMode': False, 'SyzygyProbeLimit': 0,
+                                'UseExperience': False,
                                 'Wild': 'losers' if args.variant == 'losers' else 'standard'}
                     if args.variant == 'losers':
                         option = engine.protocol.options.get('Wild')
                         if option is None or option.type != 'combo' or 'losers' not in option.var:
                             raise ValueError('engine does not support royal losers through Wild=losers')
+                    configurations.append(validated_settings(engine.protocol.options, settings, profile))
+                # Check both engines before configuring either one.
+                for engine, settings, profile in zip(engines, configurations, profiles):
                     applied = await engine.configure(settings)
-                    metadata.append({'id': engine.identity, 'options': applied})
+                    metadata.append({'id': engine.identity, 'options': applied,
+                                     'models': profile['models'],
+                                     'advertised_defaults': {name: option.default for name, option
+                                                             in engine.protocol.options.items()}})
                 game, record = await play_game(
                     engines, position.copy(), a_white=a_white, seconds=args.seconds,
                     increment=args.increment, max_plies=args.max_plies, pair=pair,
@@ -206,6 +219,14 @@ async def run_match(commands, openings, args, report, pgn_stream):
                 for label, engine in zip(('EngineA', 'EngineB'), engines):
                     game.headers[label] = '; '.join(engine.identity)
                 record['engines'] = metadata
+                try:
+                    for profile in profiles:
+                        verify_models(profile)
+                except (OSError, ValueError) as error:
+                    record['error'] = str(error)
+                    record['result'] = '*'
+                    record['termination'] = 'model identity failure'
+                    game.headers.update(Result='*', Termination=record['termination'])
                 report['games'].append(record)
                 pgn_stream.write(str(game) + '\n\n')
                 pgn_stream.flush()
@@ -236,6 +257,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--engine-a', required=True, type=Path)
     parser.add_argument('--engine-b', required=True, type=Path)
+    for label in ('a', 'b'):
+        parser.add_argument(f'--option-{label}', action='append', type=option_assignment,
+                            default=[], metavar='NAME=VALUE', help='repeatable per-engine UCI option')
+        parser.add_argument(f'--model-{label}', action='append', type=option_assignment,
+                            default=[], metavar='OPTION=PATH', help='set and hash an external model file')
     parser.add_argument('--variant', choices=('standard', 'losers'), default='standard')
     parser.add_argument('--openings', required=True, type=Path, help='variant-labeled JSON opening file')
     parser.add_argument('--pairs', type=positive_int, default=10)
@@ -253,18 +279,22 @@ def main():
         openings = read_openings(args.openings, args.variant)
         if args.pairs > len(openings):
             raise ValueError('pairs cannot exceed distinct openings (sampling without replacement)')
+        args.profiles = [engine_profile(args.option_a, args.model_a),
+                         engine_profile(args.option_b, args.model_b)]
         commands = [[str(path.resolve())] for path in (args.engine_a, args.engine_b)]
         paths = [args.openings.resolve(), args.engine_a.resolve(), args.engine_b.resolve(),
                  args.pgn.resolve(), args.json.resolve()]
-        if paths[-1] == paths[-2] or any(path in paths[:3] for path in paths[-2:]):
+        model_paths = [Path(identity['path']) for profile in args.profiles
+                       for identity in profile['models'].values()]
+        if paths[-1] == paths[-2] or any(path in paths[:3] + model_paths for path in paths[-2:]):
             raise ValueError('output paths must be distinct from inputs and each other')
         if args.pgn.exists() or args.json.exists():
             raise ValueError('output files already exist; choose new paths')
         report = {'variant': args.variant, 'seed': args.seed, 'pairs': args.pairs,
                   'seconds': args.seconds, 'increment': args.increment,
                   'max_plies': args.max_plies, 'timeout': args.timeout,
-                  'engines': [{'path': command[0], 'sha256': hashlib.sha256(
-                      Path(command[0]).read_bytes()).hexdigest()} for command in commands],
+                  'engines': [{**file_identity(command[0]), **profile}
+                              for command, profile in zip(commands, args.profiles)],
                   'openings_sha256': hashlib.sha256(args.openings.read_bytes()).hexdigest(),
                   'games': [], 'complete': False}
         # Refuse to overwrite an earlier match record.

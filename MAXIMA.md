@@ -542,11 +542,47 @@ without replacement; each opening is played twice with engine A assigned each
 color. Fixed selection is reproducible, but clock-based searches and results
 can vary. Both engines start fresh for every game in an empty temporary directory.
 Applied options request one thread/PV, no pondering/book/analysis mode/contempt,
-64 MiB hash (adjust with `--hash`), and no Syzygy probing. The report records
+64 MiB hash (adjust with `--hash`), and no Syzygy probing or experience lookup when advertised. The report records
 advertised options actually applied, identities, binary hashes, opening-file
 hash, selected opening order, clocks, results, and terminations. Other engines
 may require additional book/learning/tablebase configuration; inspect the
 recorded options before accepting a baseline.
+
+Use repeatable per-engine overrides to compare search settings or evaluation
+backends with the same executable:
+
+```bash
+./maxima match:run --engine-a build/cpp26/release/src/maxima2 \
+    --engine-b build/cpp26/release/src/maxima2 \
+    --option-a LMR=true --option-b LMR=false \
+    --openings openings.json --pairs 2 --seconds 10 --increment 0.1 \
+    --pgn lmr.pgn --json lmr.json
+```
+
+Assignments use `NAME=VALUE`; quote assignments containing spaces. Option names
+are case-insensitive, duplicate names are rejected, and explicit overrides must
+be advertised by that engine. Checks accept only `true`/`false`, spins must meet
+advertised integer bounds, and combos must match an advertised choice. Button
+options are not supported. Both profiles are validated before either engine is
+configured in each game. Hash, threads, PV count, pondering, variant, book,
+contempt, analysis mode, Syzygy probe limit and experience controls belong to the
+shared match policy; use `--hash` for the common hash size. Optional shared
+settings are applied only when advertised, and their values are validated too.
+
+For an external network, use `--model-b EvalFile=/path/to/network.nnue` (or
+`--model-a`), rather than a plain `--option` assignment. This repeatable flag
+accepts any advertised string option, sets an absolute file path before entering
+the temporary engine directory, and records its SHA-256. `EvalFile` and
+`EvalFileSmall` overrides require this model flag. File identities are checked
+before configuration and after every game; a changed or missing model stops the
+match, and a change during a game preserves an unfinished PGN/error record.
+Output paths must also differ from model inputs. The JSON records requested
+profiles and model identities at match level, plus applied settings, model
+identities and advertised defaults per game. The runner cannot prove that an
+external engine loaded the requested weights; use the engine's own load/parity
+checks before strength testing. Embedded networks are identified by the engine
+binary hash. Other default external files are not automatically discovered or
+hashed; explicitly select them with model flags for reproducible comparisons.
 
 For a baseline refresh after correctness fixes, finish the relevant native,
 lifecycle, sanitizer and runner checks first, then freeze a clean revision with
