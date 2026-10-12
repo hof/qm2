@@ -44,13 +44,14 @@ public:
     move_t move;
     bool gives_check;
     bool is_dangerous;
-    int nodes;
+    int64_t nodes;
     int see;
     int checker_sq;
     U64 checkers;
 
     void init(move_t * m, bool checks, bool dangerous, int see_value);
     int compare(root_move_t * m, move_t * best_move);
+    void add_nodes(U64 count);
 };
 
 class root_t {

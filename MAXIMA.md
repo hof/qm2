@@ -145,6 +145,22 @@ Playable positions, including checks with legal evasions, retain static
 evaluation when no further child stack is available. Cancellation retains its
 existing precedence; a ceiling evaluation is not a completed deeper search.
 
+Standard quiescence retains castling at entry and below entry, alongside captures
+and promotions; entry also searches quiet checks, and checked nodes search all
+legal evasions. Nonchecking castles remain subject to delta/SEE pruning.
+This is an existing bounded quiet extension, not a certified strength gain.
+
+An exact TT return can shorten the searched PV because an entry stores a score
+and move rather than a complete continuation. Search clears the stale PV before
+reuse. UCI text may append TT move hints to a short searched prefix; those hints
+are not a completed deeper search or a guaranteed line of the cached score.
+Ponder selection uses the searched prefix and can therefore be absent.
+
+Per-root ordering/complexity counters use signed 64-bit values to preserve their
+initial SEE bias, add unsigned visited work with saturation, and compare without
+subtraction. They are ordering estimates; the separate unsigned visited counter
+continues to drive UCI nodes and node budgets.
+
 The UCI boundary validates positions and moves before committing the new FEN and
 repetition history. `position fen` requires six fields, bounded nonnegative
 counters, one king and at most eight pawns per side, valid rank widths, and
@@ -532,6 +548,15 @@ hash, selected opening order, clocks, results, and terminations. Other engines
 may require additional book/learning/tablebase configuration; inspect the
 recorded options before accepting a baseline.
 
+For a baseline refresh after correctness fixes, finish the relevant native,
+lifecycle, sanitizer and runner checks first, then freeze a clean revision with
+its binary hash and build settings. Retain the previous frozen binary for
+comparison. Freeze distinct variant-specific openings and match clocks before
+running both color assignments; longer clocks can reduce short-clock artifacts.
+Replay every PGN independently and inspect terminations, applied options and
+pair uncertainty before using the corrected binary to judge strength candidates.
+A completed small baseline match is not a strength promotion result.
+
 Clocks use seconds plus a per-move increment. Wall time from the search request
 through its response is charged, including readiness and runner overhead;
 initial process startup/configuration is excluded. A late move loses on time,
@@ -656,10 +681,22 @@ evaluation or SEE. The sparse fixtures assert the endgame exclusion from
 quiescence capture pruning. Full/null windows, selective options enabled and
 disabled, cold/warm/disabled TT, incompatible deep entries at quiescence entry,
 real repetition histories, node-budget restart and state restoration are
-checked. This is bounded search-integration coverage; broader selective search
-and quiescence castling policy need separate review. Verify certificates with
+checked. This is bounded search-integration coverage, not a general proof of
+selective search. Verify certificates with
 `python tests/data/search/generate_horizon.py --check` in the runner environment.
 Native checks require no python-chess installation.
+
+`test_search_review` checks independently certified both-color castling,
+checking castles, attacked transit squares and check evasions at quiescence
+0/-1/-2. Every legal child reaches the fifty-move draw boundary; production
+stand-pat labels are an explicit shared dependency. It also checks exact-TT
+PV truncation/legal text for both variants, missing-move entries, signed root
+ordering biases, counters above 32 bits, saturation, sorting and complexity.
+Production-default tactical fixture searches check exact warm reuse, disabled
+TT, node-budget cancellation, fresh-state restarts and board/hash/history
+restoration. Deterministic comparisons use identical selective settings;
+they do not assert selective search equals exhaustive minimax. Verify the
+castling certificates with `python tests/data/search/generate_review.py --check`.
 
 `test_w17_tt_context` compares every royal-losers mate-search mode pair with
 cold and disabled tables, both colors, reversible clocks, and repetition history.

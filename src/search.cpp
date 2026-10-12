@@ -121,7 +121,22 @@ int root_move_t::compare(root_move_t * m, move_t * best_move) {
     if (m->move.equals(best_move)) {
         return -1;
     }
-    return nodes - m->nodes;
+    return (nodes > m->nodes) - (nodes < m->nodes);
+}
+
+// Keep the signed initial SEE ordering bias, then accumulate unsigned visited
+// work without narrowing or overflowing the root ordering/complexity counter.
+void root_move_t::add_nodes(U64 count) {
+    constexpr int64_t limit = std::numeric_limits<int64_t>::max();
+    const U64 capacity = static_cast<U64>(limit) - static_cast<U64>(nodes);
+    if (count > capacity) {
+        nodes = limit;
+    } else if (count <= static_cast<U64>(limit)) {
+        nodes += static_cast<int64_t>(count);
+    } else {
+        // A negative initial bias can leave room for a count above INT64_MAX.
+        nodes = static_cast<int64_t>(static_cast<U64>(nodes) + count);
+    }
 }
 
 /**
@@ -691,7 +706,7 @@ int search_t::init_root_moves() {
  * of nodes searched
  */
 bool root_t::is_complex() {
-    const int n0 = moves[0].nodes;
+    const int64_t n0 = moves[0].nodes;
     for (int i = 1; i < move_count; i++) {
         if (moves[i].nodes >= n0) {
             return true;
@@ -705,7 +720,7 @@ bool root_t::is_complex() {
  * of nodes searched
  */
 bool root_t::is_easy() {
-    const int n0 = moves[0].nodes / 8;
+    const int64_t n0 = moves[0].nodes / 8;
     for (int i = 1; i < move_count; i++) {
         if (moves[i].nodes >= n0) {
             return false;
@@ -809,7 +824,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         backward(move);
 
         //handle results
-        rmove->nodes += nodes - nodes_before;
+        rmove->add_nodes(nodes - nodes_before);
         if (stop_all) {
             return alpha;
         } else if (score > best) {
@@ -820,7 +835,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             // A searched move bounds the root from below. A fail-low move
             // cannot bound unsearched alternatives, so omit that root score.
             result_flag = score <= alpha ? 0 : score::LOWERBOUND;
-            rmove->nodes += i;
+            rmove->add_nodes(i);
             stack->best_move.set(move);
             bool exact = score::flags(score, alpha, beta) == score::EXACT;
             if (exact || false == move->equals(&stack->pv_moves[0])) {
@@ -1182,8 +1197,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
 /**
  * Quiescence search with tactical moves only.
- * At depth 0: captures, promotions and quiet checks
- * At depth < 0: captures and promotions
+ * At depth 0: captures, promotions, quiet checks and castling
+ * At depth < 0: captures, promotions and castling
+ * All legal evasions are searched in check. Castling retains the existing
+ * bounded quiet extension (each side can castle at most once); delta/SEE
+ * pruning still applies to nonchecking castles.
  * @param alpha lowerbound value
  * @param beta upperbound value
  * @param depth depth (0 or lower)

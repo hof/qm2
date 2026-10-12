@@ -76,3 +76,6 @@ target_link_libraries(test_search_selectivity MAX2SRC)
 
 add_executable(test_search_horizon test_search_horizon.cpp)
 target_link_libraries(test_search_horizon MAX2SRC)
+
+add_executable(test_search_review test_search_review.cpp)
+target_link_libraries(test_search_review MAX2SRC)
