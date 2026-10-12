@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 from maxima_runner import experience
 from uci_fixture import engine_session
@@ -207,7 +208,17 @@ class experience_tests(unittest.TestCase):
             path = directory / 'game.pgn'
             path.write_text('[White "Maxima"]\n[Black "Opponent"]\n[Result "0-1"]\n\n1. f3 0-1\n')
             db = experience.connect(directory / 'experience.sqlite')
-            changes = asyncio.run(experience.analyze_games(db, path, Path(engine_path), 1, 50))
+            from maxima_runner.uci import engine_session as async_session
+            import chess.engine
+            original_search = async_session.search
+
+            async def completed_search(session, board, limit, **kwargs):
+                # This fixture tests saved evidence, not interruption timing.
+                # A timed partial root move need not match completed analysis.
+                return await original_search(session, board, chess.engine.Limit(depth=4), **kwargs)
+
+            with patch.object(async_session, 'search', completed_search):
+                changes = asyncio.run(experience.analyze_games(db, path, Path(engine_path), 1, 50))
             self.assertEqual(db.execute('SELECT COUNT(*) FROM moves').fetchone()[0], 0)
             records = db.execute('SELECT move,depth,nodes,think_ms,pv FROM analysis').fetchall()
             self.assertGreaterEqual(len(records), 1)
