@@ -659,7 +659,10 @@ Verify certificates with `python tests/data/search/generate_tree.py --check` in
 the runner environment; native checks need no python-chess installation.
 
 `test_search_selectivity` observes production move-futility and LMR decisions
-through synthetic child contracts at the virtual PVS boundary. Independent
+through synthetic child contracts at the virtual PVS boundary. Both null and
+full PV windows cover reduced improvements, full-depth re-search, cancellation
+and restart. Parent internal iterative deepening is isolated by the test
+contract; real-search coverage remains separate. Independent
 python-chess certificates supply both colors' legal moves, checks, captures,
 promotions, castling and advanced passed pawns. It checks futility margins,
 depth/check/endgame/mate exclusions, first-move retention and gain-based tactical

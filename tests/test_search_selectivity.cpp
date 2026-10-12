@@ -26,6 +26,7 @@ public:
     std::string target;
     bool improve = false;
     int cancel_call = 0;
+    bool entry_active = false;
 
     explicit selective_search_t(const char * fen) : search_t(fen) {
         beta_pruning = null_enabled = false;
@@ -34,7 +35,14 @@ public:
     }
 
     int pvs(int alpha, int beta, int depth) override {
-        if (brd.ply == 0) return search_t::pvs(alpha, beta, depth);
+        if (brd.ply == 0) {
+            // Isolate LMR from the parent's PV internal iterative deepening.
+            if (entry_active) return parent_value;
+            entry_active = true;
+            const int result = search_t::pvs(alpha, beta, depth);
+            entry_active = false;
+            return result;
+        }
         auto name = (stack - 1)->current_move.to_string();
         calls.push_back({name, depth, alpha, beta});
         ++nodes;
@@ -150,71 +158,75 @@ bool test_futility(const fixture_t & fixture, int & probes, int & skipped, int &
 bool test_lmr(const fixture_t & fixture, int & probes, int & reductions, int & restarts) {
     bool ok = true;
     auto original = std::make_unique<search_t>(fixture.fen);
-    for (int depth : {1, 2, 3, 6, 9}) {
+    for (int depth : {1, 2, 3, 6, 9, 15}) {
         for (bool enabled : {false, true}) {
-            auto search = std::make_unique<selective_search_t>(fixture.fen);
-            std::map<std::string, move_info_t> moves;
-            ok &= certify(*search, fixture, moves);
-            search->ffp_enabled = false;
-            search->lmr_enabled = enabled;
-            search->pvs(0, 1, depth);
-            ok &= check(search->calls.size() == moves.size(), "LMR skipped a move", fixture.fen);
-            std::string target;
-            int target_call = 0, reduced_depth = 0, full_depth = 0;
-            for (size_t i = 0; i < search->calls.size(); ++i) {
-                auto & call = search->calls[i];
-                const auto info = moves.at(call.move);
-                const int reduce = !enabled || fixture.in_check || info.flags || i < 3
-                    ? 0 : i < 6 ? 1 : depth / 3;
-                ok &= check(call.depth == depth - 1 + info.extend - reduce,
-                    "LMR child depth differs", fixture.fen);
-                if (reduce) {
-                    ++reductions;
-                    target = call.move;
-                    target_call = static_cast<int>(i) + 1;
-                    reduced_depth = call.depth;
-                    full_depth = depth - 1 + info.extend;
+            for (bool pv : {false, true}) {
+                auto search = std::make_unique<selective_search_t>(fixture.fen);
+                std::map<std::string, move_info_t> moves;
+                ok &= certify(*search, fixture, moves);
+                search->ffp_enabled = false;
+                search->lmr_enabled = enabled;
+                const int beta = pv ? 2 : 1;
+                search->pvs(0, beta, depth);
+                ok &= check(search->calls.size() == moves.size(), "LMR skipped a move", fixture.fen);
+                std::string target;
+                int target_call = 0, reduced_depth = 0, full_depth = 0;
+                for (size_t i = 0; i < search->calls.size(); ++i) {
+                    auto & call = search->calls[i];
+                    const auto info = moves.at(call.move);
+                    const int reduce = !enabled || fixture.in_check || info.flags || i < 3
+                        ? 0 : i < 6 ? 1 : depth / 3;
+                    ok &= check(call.depth == depth - 1 + info.extend - reduce,
+                        "LMR child depth differs", fixture.fen);
+                    if (reduce) {
+                        ++reductions;
+                        target = call.move;
+                        target_call = static_cast<int>(i) + 1;
+                        reduced_depth = call.depth;
+                        full_depth = depth - 1 + info.extend;
+                    }
                 }
-            }
-            ++probes;
-            ok &= restored(*search, *original, fixture.fen);
-            if (target.empty()) continue;
-            for (int cancel : {0, target_call, target_call + 1}) {
-                auto retry = std::make_unique<selective_search_t>(fixture.fen);
-                retry->ffp_enabled = false;
-                retry->lmr_enabled = enabled;
-                retry->target = target;
-                retry->improve = true;
-                retry->cancel_call = cancel;
-                const int result = retry->pvs(0, 1, depth);
-                const int expected_calls = cancel ? cancel : static_cast<int>(moves.size()) + 1;
-                ok &= check(static_cast<int>(retry->calls.size()) == expected_calls,
-                    "reduced re-search call count differs", fixture.fen);
-                ok &= check(retry->calls[target_call - 1].depth == reduced_depth,
-                    "improving reduced depth differs", fixture.fen);
-                if (cancel != target_call && retry->calls.size() > static_cast<size_t>(target_call)) {
-                    auto & full = retry->calls[target_call];
-                    ok &= check(full.move == target && full.depth == full_depth
-                        && full.alpha == -1 && full.beta == 0,
-                        "improvement was not verified at full depth", fixture.fen);
-                }
-                ok &= check(result == 0 && retry->stop_all == (cancel != 0),
-                    "refuted/cancelled result differs", fixture.fen);
-                ok &= restored(*retry, *original, fixture.fen);
-                if (cancel) {
-                    retry->stop_all = false;
-                    retry->cancel_call = 0;
-                    retry->calls.clear();
-                    ok &= check(retry->pvs(0, 1, depth) == 0 && !retry->stop_all,
-                        "cancelled re-search restart differs", fixture.fen);
+                ++probes;
+                ok &= restored(*search, *original, fixture.fen);
+                if (target.empty()) continue;
+                for (int cancel : {0, target_call, target_call + 1}) {
+                    auto retry = std::make_unique<selective_search_t>(fixture.fen);
+                    retry->ffp_enabled = false;
+                    retry->lmr_enabled = enabled;
+                    retry->target = target;
+                    retry->improve = true;
+                    retry->cancel_call = cancel;
+                    const int result = retry->pvs(0, beta, depth);
+                    const int expected_calls = cancel ? cancel : static_cast<int>(moves.size()) + 1;
+                    ok &= check(static_cast<int>(retry->calls.size()) == expected_calls,
+                        "reduced re-search call count differs", fixture.fen);
+                    ok &= check(retry->calls[target_call - 1].depth == reduced_depth,
+                        "improving reduced depth differs", fixture.fen);
+                    if (cancel != target_call && retry->calls.size() > static_cast<size_t>(target_call)) {
+                        auto & full = retry->calls[target_call];
+                        ok &= check(full.move == target && full.depth == full_depth
+                            && full.alpha == -beta && full.beta == 0,
+                            "improvement was not verified at full depth", fixture.fen);
+                    }
+                    ok &= check(result == 0 && retry->stop_all == (cancel != 0),
+                        "refuted/cancelled result differs", fixture.fen);
                     ok &= restored(*retry, *original, fixture.fen);
-                    ++restarts;
+                    if (cancel) {
+                        retry->stop_all = false;
+                        retry->cancel_call = 0;
+                        retry->calls.clear();
+                        ok &= check(retry->pvs(0, beta, depth) == 0 && !retry->stop_all,
+                            "cancelled re-search restart differs", fixture.fen);
+                        ok &= restored(*retry, *original, fixture.fen);
+                        ++restarts;
+                    }
                 }
             }
         }
     }
     return ok;
 }
+
 }
 
 int main() {
