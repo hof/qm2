@@ -12,7 +12,7 @@ python3 -m venv .tools/runner
 .tools/runner/bin/python -m pip install -e ./runner
 ./maxima build --release
 ./maxima test --release
-./maxima suite:run --suite bratko-kopec --nodes 200000
+./maxima suite:run --nodes 200000
 ```
 
 Installing with `pip install ./runner` also provides the `maxima` console

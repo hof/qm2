@@ -117,8 +117,12 @@ class suite_tests(unittest.TestCase):
 
     def test_bundled_suite(self):
         positions = runner.read_suite(Path(runner.__file__).parent / "data/suites/bratko-kopec.epd")
-        self.assertEqual(len(positions), 24)
-        self.assertEqual(len({position["id"] for position in positions}), 24)
+        self.assertEqual(len(positions), 22)
+        ids = {position["id"] for position in positions}
+        self.assertEqual(len(ids), 22)
+        self.assertNotIn("BK.03", ids)
+        self.assertNotIn("BK.09", ids)
+        self.assertIn("BK.07", ids)
 
     def test_report_scores_and_time(self):
         info = runner.report_info({'depth': 5, 'score': chess.engine.PovScore(

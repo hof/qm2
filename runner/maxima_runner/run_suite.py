@@ -1,6 +1,7 @@
 """Run position suites through UCI, independently of engine internals."""
 import argparse
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -117,7 +118,8 @@ def positive_int(value):
 def main():
     root = project_root()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", default="bratko-kopec", help="bundled name or EPD file")
+    parser.add_argument("--suite", default="modern_2026",
+                        help="bundled name (default modern_2026) or EPD file")
     parser.add_argument("--engine", default=str(engine_path(root)),
                         help="engine executable path")
     limits = parser.add_mutually_exclusive_group()
@@ -129,15 +131,19 @@ def main():
     parser.add_argument("--timeout", type=positive_int, default=30, help="response timeout in seconds")
     parser.add_argument("--json", type=Path, help="write full report")
     args = parser.parse_args()
-    suite = Path(__file__).parent / "data/suites/bratko-kopec.epd" if args.suite == "bratko-kopec" else Path(args.suite)
+    bundled = {"modern_2026", "bratko-kopec"}
+    suite = (Path(__file__).parent / "data/suites" / f"{args.suite}.epd"
+             if args.suite in bundled else Path(args.suite))
     budget = f"nodes {args.nodes}" if args.nodes else f"movetime {args.movetime or 1000}"
     try:
+        suite_hash = hashlib.sha256(suite.read_bytes()).hexdigest()
         positions = read_suite(suite)
         if args.syzygy_path is not None:
             args.syzygy_path = args.syzygy_path.resolve()
             if not args.syzygy_path.is_dir() or not any(args.syzygy_path.glob("*.rtbw")):
                 raise ValueError("Syzygy path must be a directory containing WDL (.rtbw) tables")
         command = [str(Path(args.engine).resolve())]
+        engine_hash = hashlib.sha256(Path(command[0]).read_bytes()).hexdigest()
         timeout = max(args.timeout, (args.movetime or 1000) / 1000 + 10)
         results = []
         for position in positions:
@@ -149,7 +155,12 @@ def main():
                   f"depth {result.get('depth', '?')} nodes {result.get('nodes', '?')} "
                   f"time {result['elapsed_ms']:.0f}ms tbhits {result['tbhits']}", flush=True)
         solved = sum(result["solved"] for result in results)
-        report = {"suite": str(suite.resolve()), "engine": command[0], "engine_metadata": metadata,
+        if (hashlib.sha256(suite.read_bytes()).hexdigest() != suite_hash
+                or hashlib.sha256(Path(command[0]).read_bytes()).hexdigest() != engine_hash):
+            raise ValueError("suite or engine changed during the run")
+        report = {"suite": str(suite.resolve()), "suite_sha256": suite_hash,
+                  "engine": command[0], "engine_sha256": engine_hash,
+                  "engine_metadata": metadata,
                   "budget": budget, "cold_cache": True, "solved": solved,
                   "total": len(results), "results": results}
         if args.json:

@@ -406,17 +406,30 @@ C++ correctness tests link the engine library, while lifecycle and suite runners
 exercise the executable. No suite-specific UCI command or search hook is needed.
 
 ```bash
-./maxima suite:run --suite bratko-kopec --movetime 1000
-./maxima suite:run --suite bratko-kopec --nodes 200000 --json /tmp/bk.json
+./maxima suite:run --movetime 1000
+./maxima suite:run --nodes 200000 --json /tmp/modern.json
 ./maxima suite:run --suite /path/to/positions.epd --engine /path/to/engine
 ./maxima suite:run --suite /path/to/positions.epd --syzygy-path tablebases/syzygy
 ```
 
-The default is the bundled 24-position Bratko–Kopec suite, one second per
-position, and 64 MiB hash. The positions and historical expected moves were
-recovered from `tests/test_bratkokopec.cpp` before commit `be07fda` (2014).
-Treat these expected moves as benchmark targets, not proofs that alternatives
-are wrong. Review targets before using individual positions as correctness tests.
+The default is `modern_2026`: 22 positions sampled from the 2026 Tata Steel
+Masters broadcasts, one second per position and 64 MiB hash. Stockfish 19
+labels were checked with two cold, single-thread MultiPV searches at two million
+and eight million nodes. Targets must remain stable with at least a 50 cp margin
+over the runner-up at both budgets and a final completed depth of at least 18.
+The packaged manifest records sources, hashes, options, depths, scores and legal
+PVs; source PGNs and offline provenance checks accompany it. Rebuild the corpus
+with `runner/tools/build_modern_suite.py`; see the bundled suite README for the
+exact command and limitations. JSON run reports include corpus and executable
+SHA-256 hashes; a changed corpus or executable rejects the run report.
+
+Use `--suite bratko-kopec` explicitly for the historical suite, now 22 positions:
+BK.03 and BK.09 were removed following their disputed targets in
+[this analysis](https://talkchess.com/forum3/viewtopic.php?f=6&t=57166).
+Original IDs are retained; the old 24-position totals are historical.
+All expected moves remain diagnostic targets from finite analysis, not proofs
+that every alternative is wrong or mandatory engine correctness assertions.
+Position scores do not establish Elo; paired matches remain the strength gate.
 
 The runner requires Python 3.8+ and pins the `chess` package from
 [python-chess](https://python-chess.readthedocs.io/en/latest/core.html).

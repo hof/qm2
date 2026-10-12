@@ -1,0 +1,23 @@
+# Recent 2026 games; Stockfish 19 targets, see modern_2026.json and README.md.
+r3k2r/pp3pp1/2p5/2bpP2P/4nP1q/5B2/PPP3KP/R1B1QR2 b kq - bm Rxh5; id "MG26.01"; hmvc 4; fmvn 16;
+2kr3r/1p2bppp/p3b3/2pN4/8/2N1BP2/PPP3PP/R4RK1 b - - bm Bxd5; id "MG26.02"; hmvc 0; fmvn 16;
+r1b1k2r/ppp1nppp/3q4/b7/2B5/1Q3N1P/PP3PP1/R1B2RK1 b kq - bm O-O; id "MG26.03"; hmvc 3; fmvn 16;
+rn2r1k1/pQbq1ppp/2p5/2Pp4/8/2NbBNP1/PP3P1P/R3R1K1 b - - bm Na6; id "MG26.04"; hmvc 0; fmvn 16;
+r1bqr1k1/1pp1npp1/1b5p/2N5/pB1p4/P2P2P1/1PQ1PPBP/R4RK1 b - - bm Bxc5; id "MG26.05"; hmvc 3; fmvn 16;
+r4rk1/pbRnqppp/1p1pp3/8/3P4/P2BP3/1B3PPP/3Q1RK1 b - - bm Rab8; id "MG26.06"; hmvc 1; fmvn 16;
+b4rk1/3qbppp/3pBn2/1pp1p3/4P3/2NP1N1P/1PPB1PP1/1Q2R1K1 b - - bm fxe6; id "MG26.07"; hmvc 0; fmvn 16;
+r1q2r1k/1b1N1ppB/pp2pn1p/2b5/5B2/P1N1P3/1PQ2PPP/3R1RK1 b - - bm Nxd7; id "MG26.08"; hmvc 0; fmvn 16;
+r2q1rk1/pp2p2p/2Pp2p1/4bb2/2P5/2N2B2/PP3PPP/2RQ1RK1 b - - bm bxc6; id "MG26.09"; hmvc 0; fmvn 16;
+1r3rk1/pbqn1p2/1p1pP1pp/5Q2/8/P2BP3/1B3PPP/5RK1 w - - bm exf7+; id "MG26.10"; hmvc 0; fmvn 21;
+2kr4/pp3ppp/2p5/2b5/1n6/N2PrPPb/PPN1PK1P/R2R4 w - - bm Nxe3; id "MG26.11"; hmvc 0; fmvn 21;
+1r3rk1/1pq1p1np/p1p3p1/2Ppp3/5P2/2Q1P3/PP2N1PP/R4RK1 w - - bm fxe5; id "MG26.12"; hmvc 0; fmvn 21;
+r7/pp2k1p1/2p5/4P3/1P1br3/3RpK1P/P1P5/1RB5 b - - bm Rh4; id "MG26.13"; hmvc 3; fmvn 25;
+r6r/pp2k2p/2p2p2/B2p4/2PP1Pb1/3BP3/PP1K3P/6R1 b - - bm Rag8; id "MG26.14"; hmvc 1; fmvn 25;
+6k1/1p2qRp1/p5Qp/8/6b1/4P3/PP4PP/6K1 b - - bm Qxf7; id "MG26.15"; hmvc 0; fmvn 25;
+3q3k/pR2p2p/3pQ1p1/4br2/2P1N3/8/P4PPP/6K1 b - - bm Qa5; id "MG26.16"; hmvc 0; fmvn 25;
+r3k3/pp2n1pp/2p5/2q1N3/5rP1/3R3P/PP2Q1K1/4R3 w q - bm Nd7; id "MG26.17"; hmvc 4; fmvn 30;
+7r/pp1b1k1p/5p2/3p4/1B1PPP2/3B2r1/PP1K3P/8 w - - bm hxg3; id "MG26.18"; hmvc 0; fmvn 30;
+3qnrn1/pp2r2k/3p1ppb/2pPp2p/1PP1P3/P1N1B1P1/2B2PKP/1R1Q1R2 w - - bm f4; id "MG26.19"; hmvc 2; fmvn 30;
+7k/8/Bp1R2pp/p4b2/8/P1N2PP1/1r1b2P1/7K w - - bm Nd1; id "MG26.20"; hmvc 0; fmvn 39;
+r7/1R3pk1/2Q3p1/3p4/3Pn2p/4P2P/5PPK/5r2 b - - bm Raa1; id "MG26.21"; hmvc 0; fmvn 43;
+8/1pp3Bp/1p2k3/8/P7/6PP/2K5/5b2 b - - bm Bxh3; id "MG26.22"; hmvc 0; fmvn 43;
