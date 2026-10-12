@@ -36,6 +36,9 @@ target_link_libraries(test_search_repetition MAX2SRC)
 add_executable(test_w17_tt_context test_w17_tt_context.cpp)
 target_link_libraries(test_w17_tt_context MAX2SRC)
 
+add_executable(test_w17_evaluation test_w17_evaluation.cpp)
+target_link_libraries(test_w17_evaluation MAX2SRC)
+
 add_executable(test_search_tt_context test_search_tt_context.cpp)
 target_link_libraries(test_search_tt_context MAX2SRC)
 

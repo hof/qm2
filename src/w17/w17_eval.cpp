@@ -22,19 +22,15 @@
  */
 
 #include "w17_search.h"
+#include "w17_eval.h"
 #include "score.h"
 
 int w17_eval_material(w17_search_t * s);
-score_t * w17_eval_pawns_and_kings(search_t * s);
 
 int w17_evaluate(w17_search_t * s) {
     const bool us = s->brd.us();
-    int result = w17_eval_material(s);
-    if (s->stack->mt->flags == 16) {
-        score_t * score = &s->stack->eval_score;
-        score->set(w17_eval_pawns_and_kings(s));
-        result += score->get(s->stack->mt->phase);
-    }
+    // Pawn/king positional tables remain experimental until strength validation.
+    const int result = w17_eval_material(s);
     return us ? result : -result;
 }
 
@@ -174,7 +170,7 @@ const score_t PST_PAWN[64] = {
     S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0)
 };
 
-score_t * w17_eval_pawns_and_kings(search_t * s) {
+score_t * w17_eval_pawns_and_kings(w17_search_t * s) {
 
     /*
      * 1. Probe the hash table for the pawn score

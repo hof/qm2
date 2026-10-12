@@ -703,6 +703,24 @@ cold and disabled tables, both colors, reversible clocks, and repetition history
 It checks exact/lower/upper bounds, legal move hints, matching-mode reuse, and
 incoming-mode identity across local horizon transitions.
 
+Royal-losers playing evaluation deliberately remains material-only. The old
+positional gate required material flag 16, which its classifier never produces.
+The first restoration experiment added the existing pawn/king tables to ordinary
+classes 3, 12 and 15, preserving specialized near-win material scores. Against
+frozen ordinary Release `81f13b0`, 32 color-swapped opening pairs at 10+0.1 seconds
+scored 27 wins, 14 draws and 23 losses (53.125%; conservative 95% opening-pair
+interval 29.12–77.13%). This small screen did not establish a gain, so the
+candidate was reverted under its predeclared rule. It does not prove the tables
+are harmful. Future promotion needs adequate independent match evidence.
+
+`test_w17_evaluation` checks material-only playing scores separately from the
+experimental pawn/king component: hand-calculated table values and phase
+interpolation, both colors, cold/warm caches, color/rank symmetry, king-dependent
+pawn keys, phase changes with identical pawn keys, standard/losers cache
+separation, and board/hash/stack preservation. King-only search terminals still
+precede static evaluation and draw clocks. These component checks establish the
+covered evaluation contract, not the tables' playing strength.
+
 An address/undefined-behavior audit build can be configured independently:
 
 ```bash
