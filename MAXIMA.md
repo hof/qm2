@@ -609,6 +609,17 @@ Native checks require no python-chess installation. Regenerate or verify the
 certificates with `python tests/data/search/generate_boundary.py [--check]` in
 the runner environment, and review regenerated data before committing it.
 
+`test_search_tree` checks PVS against independently generated two-ply legal
+and minimax certificates, including arbitrary stable nonterminal leaf scores.
+Its test subclass supplies the explicit leaf contract through the virtual PVS
+boundary, stopping extensions at two plies. Null, beta, futility and LMR pruning
+are disabled: this isolates window/bound handling rather than asserting accuracy
+of the classical evaluator, quiescence or selective search. It compares every
+certified legal move set, crosses cold/warm/disabled TT with full and bounded
+windows, and checks state restoration and interrupted interior re-search restarts.
+Verify certificates with `python tests/data/search/generate_tree.py --check` in
+the runner environment; native checks need no python-chess installation.
+
 `test_w17_tt_context` compares every royal-losers mate-search mode pair with
 cold and disabled tables, both colors, reversible clocks, and repetition history.
 It checks exact/lower/upper bounds, legal move hints, matching-mode reuse, and

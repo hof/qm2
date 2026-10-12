@@ -67,3 +67,6 @@ target_link_libraries(test_uci_output MAX2SRC)
 # Invoked by the independent runner checks; does not require python-chess here.
 add_executable(board_oracle_probe board_oracle_probe.cpp)
 target_link_libraries(board_oracle_probe MAX2SRC)
+
+add_executable(test_search_tree test_search_tree.cpp)
+target_link_libraries(test_search_tree MAX2SRC)
