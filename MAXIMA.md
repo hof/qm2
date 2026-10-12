@@ -62,6 +62,14 @@ or require every task to advance every goal.
   over complex changes aimed at marginal Elo improvements.
 - Keep heuristics understandable and independently testable. Justify added
   complexity with measured benefits.
+- Before implementing or substantially changing a chess algorithm, read the
+  relevant [Chess Programming Wiki](https://chessprogramming.org/) articles.
+  Follow their references to original papers and engine implementations when
+  assessing technical details. Treat
+  [NNUE](https://chessprogramming.org/NNUE) and
+  [Late Move Reductions](https://chessprogramming.org/Late_Move_Reductions)
+  as required reading for their respective workstreams; validate designs and
+  tuning choices in Maxima.
 - Treat performance as a first-class requirement. Preserve useful low-level
   techniques, including intrinsics and assembly; use profiling and benchmarks
   to guide hot-path changes and compiler choices. Compare Release builds with
