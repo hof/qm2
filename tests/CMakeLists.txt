@@ -45,6 +45,9 @@ target_link_libraries(test_null_search MAX2SRC)
 add_executable(test_search_ceiling test_search_ceiling.cpp)
 target_link_libraries(test_search_ceiling MAX2SRC)
 
+add_executable(test_search_boundary test_search_boundary.cpp)
+target_link_libraries(test_search_boundary MAX2SRC)
+
 add_executable(test_kpk test_kpk.cpp)
 target_link_libraries(test_kpk MAX2SRC)
 

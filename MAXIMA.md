@@ -132,6 +132,12 @@ mate/tablebase score windows, and artificial null lines cannot supply reserved
 mate/tablebase scores as cutoffs. Pawn-only positions retain the non-pawn-material
 exclusion. These safeguards do not make selective search an exhaustive oracle.
 
+Static beta and null-move node pruning also stop at reversible clock 99: the
+next legal reversible move draws unless it checkmates, while static evaluation
+or an artificial pass can incorrectly claim a winning cutoff. Earlier node
+pruning restricts its compatible TT clock range through 98; parent entries
+inherit that restriction. Legal captures and pawn moves remain searchable.
+
 At the search-stack ceiling, standard PVS and quiescence resolve checkmate,
 stalemate, and draws before static evaluation. Royal losers preserves king-only
 and draw precedence and resolves checkmate/stalemate wins at its ceiling.
@@ -591,6 +597,17 @@ windows, standard PVS/quiescence and every losers mode, cold/seeded/disabled TT,
 legal mate transitions, interrupted restarts, and board/hash/history restoration.
 Synthetic placement isolates the boundary without claiming reachable histories
 of that length; playable ceiling evaluations remain horizon approximations.
+
+`test_search_boundary` uses independently generated python-chess certificates
+for legal move sets, mating moves and clock-100 child results. It checks both
+colors, full and null windows, mate distance, production defaults and individual
+heuristics, cold/warm/disabled TT, parent clock-range propagation, interruption
+and restart, and board/hash/history restoration. The certified trees terminate
+after one reversible move; they do not establish general selective-search
+equivalence or quiescence accuracy before a legal move reaches the draw clock.
+Native checks require no python-chess installation. Regenerate or verify the
+certificates with `python tests/data/search/generate_boundary.py [--check]` in
+the runner environment, and review regenerated data before committing it.
 
 `test_w17_tt_context` compares every royal-losers mate-search mode pair with
 cold and disabled tables, both colors, reversible clocks, and repetition history.

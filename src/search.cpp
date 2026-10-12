@@ -982,7 +982,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const int eval = evaluate(this);
     const int decisive_score = score::TABLEBASE - MAX_PLY;
     const bool do_prune_node = eval >= beta && !in_check && !pv
-        && std::abs(beta) < decisive_score && brd.has_pieces(brd.us());
+        && std::abs(beta) < decisive_score && brd.has_pieces(brd.us())
+        && brd.stack->fifty_count < 99;
     const bool previous_null = brd.ply > 0 && !(stack - 1)->current_move.piece;
     const bool do_null = null_enabled && !previous_null;
 
@@ -990,6 +991,12 @@ int search_t::pvs(int alpha, int beta, int depth) {
     // turn an exact draw into a heuristic fail-high. Probe only when pruning
     // can run; the ordinary move loop handles the remaining terminal nodes.
     const bool beta_cutoff = depth < 4 && beta_pruning && eval - 50 * depth >= beta;
+    // At clock 99 a reversible move draws unless it mates; static evaluation and
+    // an artificial pass can still claim a win. Search legal moves there.
+    // Propagate this restriction so cached parents cannot bypass the guard.
+    if (do_prune_node && (beta_cutoff || do_null)) {
+        stack->tt_clocks.max = MIN(stack->tt_clocks.max, 98);
+    }
     if (do_prune_node && (beta_cutoff || do_null) && !has_legal_move(brd)) {
         return draw_score();
     }
