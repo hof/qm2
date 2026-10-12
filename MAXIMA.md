@@ -620,6 +620,19 @@ windows, and checks state restoration and interrupted interior re-search restart
 Verify certificates with `python tests/data/search/generate_tree.py --check` in
 the runner environment; native checks need no python-chess installation.
 
+`test_search_selectivity` observes production move-futility and LMR decisions
+through synthetic child contracts at the virtual PVS boundary. Independent
+python-chess certificates supply both colors' legal moves, checks, captures,
+promotions, castling and advanced passed pawns. It checks futility margins,
+depth/check/endgame/mate exclusions, first-move retention and gain-based tactical
+pruning; protected tactical improvements must still reach a cutoff. LMR checks
+early and late move depths, dangerous-move exclusions, full-depth verification
+of a refuted reduced improvement, cancellation in either pass and restart/state
+restoration. These isolated guard probes disable node pruning and TT; they do
+not certify selective-search equality, evaluation or real quiescence. Verify
+data with `python tests/data/search/generate_selectivity.py --check`; native
+tests need no python-chess installation.
+
 `test_w17_tt_context` compares every royal-losers mate-search mode pair with
 cold and disabled tables, both colors, reversible clocks, and repetition history.
 It checks exact/lower/upper bounds, legal move hints, matching-mode reuse, and

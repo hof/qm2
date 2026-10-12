@@ -70,3 +70,6 @@ target_link_libraries(board_oracle_probe MAX2SRC)
 
 add_executable(test_search_tree test_search_tree.cpp)
 target_link_libraries(test_search_tree MAX2SRC)
+
+add_executable(test_search_selectivity test_search_selectivity.cpp)
+target_link_libraries(test_search_selectivity MAX2SRC)
