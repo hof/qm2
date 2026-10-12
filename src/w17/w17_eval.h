@@ -25,11 +25,7 @@
 #define	W17_EVAL_H
 
 class w17_search_t;
-struct score_t;
 int w17_evaluate(w17_search_t * s);
-
-// White-relative experimental component; not part of the playing evaluation.
-score_t * w17_eval_pawns_and_kings(w17_search_t * s);
 
 #endif	/* W17_EVAL_H */
 

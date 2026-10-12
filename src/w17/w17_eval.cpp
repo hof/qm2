@@ -29,7 +29,6 @@ int w17_eval_material(w17_search_t * s);
 
 int w17_evaluate(w17_search_t * s) {
     const bool us = s->brd.us();
-    // Pawn/king positional tables remain experimental until strength validation.
     const int result = w17_eval_material(s);
     return us ? result : -result;
 }
@@ -146,65 +145,4 @@ int w17_eval_material(w17_search_t * s) {
     s->stack->mt->flags = flags;
     s->stack->mt->score = result;
     return result;
-}
-
-const score_t PST_KING[64] = {
-    S(-90, 0), S(-90, 5), S(-90, 10), S(-90, 15), S(-90, 15), S(-90, 10), S(-90, 5), S(-90, 0),
-    S(-90, 5), S(-90, 10), S(-90, 15), S(-90, 20), S(-90, 20), S(-90, 15), S(-90, 10), S(-90, 5),
-    S(-80, 10), S(-80, 15), S(-80, 20), S(-80, 25), S(-80, 25), S(-80, 20), S(-80, 15), S(-80, 10),
-    S(-60, 15), S(-60, 20), S(-60, 25), S(-60, 30), S(-60, 30), S(-60, 25), S(-60, 20), S(-60, 15),
-    S(-40, 15), S(-40, 20), S(-40, 25), S(-40, 30), S(-40, 30), S(-40, 25), S(-40, 20), S(-40, 15),
-    S(-20, 10), S(-20, 15), S(-20, 20), S(-20, 25), S(-20, 25), S(-20, 20), S(-20, 15), S(-20, 10),
-    S(0, 5), S(0, 10), S(0, 15), S(0, 20), S(0, 20), S(0, 15), S(0, 10), S(0, 5),
-    S(10, 0), S(10, 5), S(10, 10), S(10, 15), S(10, 15), S(10, 10), S(10, 5), S(10, 0)
-};
-
-const score_t PST_PAWN[64] = {
-    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(80, 60), S(80, 60), S(60, 60), S(60, 60), S(60, 60), S(60, 60), S(80, 60), S(80, 60),
-    S(40, 30), S(40, 30), S(30, 30), S(30, 30), S(30, 30), S(30, 30), S(40, 30), S(40, 30),
-    S(20, 20), S(20, 20), S(15, 20), S(20, 20), S(20, 20), S(15, 20), S(20, 20), S(20, 20),
-    S(15, 10), S(15, 10), S(10, 10), S(10, 10), S(10, 10), S(10, 10), S(15, 10), S(15, 10),
-    S(5, 0), S(5, 0), S(5, 0), S(5, 0), S(5, 0), S(5, 0), S(5, 0), S(5, 0),
-    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0),
-    S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0), S(0, 0)
-};
-
-score_t * w17_eval_pawns_and_kings(w17_search_t * s) {
-
-    /*
-     * 1. Probe the hash table for the pawn score
-     */
-    
-    s->stack->pt = pawn_table::retrieve(s->brd.stack->pawn_hash);
-    if (s->stack->pt->key == s->brd.stack->pawn_hash) {
-        return &s->stack->pt->score;
-    }
-    
-    score_t pawn_score_us[2];
-    for (int us = BLACK; us <= WHITE; us++) {
-
-        /*
-         * 2. Evaluate King Position
-         */
-
-        int kpos = s->brd.get_sq(KING[us]);
-        pawn_score_us[us].add(PST_KING[ISQ(kpos, us)]);
-
-        /*
-         * 3. Evaluate Pawns
-         */
-        
-        U64 pawns = s->brd.bb[PAWN[us]];
-        while (pawns) {
-            int sq = pop(pawns);
-            pawn_score_us[us].add(PST_PAWN[ISQ(sq, us)]);
-        }
-
-    }
-    
-    s->stack->pt->key = s->brd.stack->pawn_hash;
-    s->stack->pt->score.set(pawn_score_us[WHITE]);
-    s->stack->pt->score.sub(pawn_score_us[BLACK]);
-    return &s->stack->pt->score;
 }

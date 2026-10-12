@@ -711,15 +711,17 @@ frozen ordinary Release `81f13b0`, 32 color-swapped opening pairs at 10+0.1 seco
 scored 27 wins, 14 draws and 23 losses (53.125%; conservative 95% opening-pair
 interval 29.12–77.13%). This small screen did not establish a gain, so the
 candidate was reverted under its predeclared rule. It does not prove the tables
-are harmful. Future promotion needs adequate independent match evidence.
+are harmful. NNUE promotion requires separate correctness and match evidence.
 
-`test_w17_evaluation` checks material-only playing scores separately from the
-experimental pawn/king component: hand-calculated table values and phase
-interpolation, both colors, cold/warm caches, color/rank symmetry, king-dependent
-pawn keys, phase changes with identical pawn keys, standard/losers cache
-separation, and board/hash/stack preservation. King-only search terminals still
-precede static evaluation and draw clocks. These component checks establish the
-covered evaluation contract, not the tables' playing strength.
+The unused W17 positional tables and helper have been removed. Its future
+positional evaluator will be a separately trained royal-losers NNUE. Standard
+chess retains its existing classical evaluation as the default and comparison
+baseline until standard NNUE passes correctness and measured strength gates.
+
+`test_w17_evaluation` checks active material-only scores, classifications and
+phase, both colors, cold/warm material caches, symmetry of the covered fixtures,
+standard/losers material-cache separation, and board/hash/stack preservation.
+King-only search terminals still precede static evaluation and draw clocks.
 
 An address/undefined-behavior audit build can be configured independently:
 
