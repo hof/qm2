@@ -633,6 +633,21 @@ not certify selective-search equality, evaluation or real quiescence. Verify
 data with `python tests/data/search/generate_selectivity.py --check`; native
 tests need no python-chess installation.
 
+`test_search_horizon` exercises real quiescence at depths 0/-1/-2 and PVS at
+depths 0/1 on independently certified capture, recapture, promotion, en passant,
+check-evasion and mate trees, including reversible clock 99. Its exhaustive
+reference uses certified legal/tactical move sets and terminal scores, Maxima's
+static stand-pat labels and its existing SEE-based check extensions. It has no
+alpha-beta pruning, TT or move ordering; it does not independently validate
+evaluation or SEE. The sparse fixtures assert the endgame exclusion from
+quiescence capture pruning. Full/null windows, selective options enabled and
+disabled, cold/warm/disabled TT, incompatible deep entries at quiescence entry,
+real repetition histories, node-budget restart and state restoration are
+checked. This is bounded search-integration coverage; broader selective search
+and quiescence castling policy need separate review. Verify certificates with
+`python tests/data/search/generate_horizon.py --check` in the runner environment.
+Native checks require no python-chess installation.
+
 `test_w17_tt_context` compares every royal-losers mate-search mode pair with
 cold and disabled tables, both colors, reversible clocks, and repetition history.
 It checks exact/lower/upper bounds, legal move hints, matching-mode reuse, and
