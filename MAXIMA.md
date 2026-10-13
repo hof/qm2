@@ -286,7 +286,11 @@ https://github.com/official-stockfish/networks. The GPL reference probe revision
 and source ownership are recorded in `third_party/nnue_reference/README.md`.
 
 Evaluation contract: standard scores are relative to the side to move, in the
-network's approximate centipawn units, clamped below the tablebase score range.
+Maxima centipawns, clamped below the tablebase score range. The pinned SF13
+core returns internal units: convert with `raw * 100 / 208`, matching its UCI
+conversion (`PawnValueEg=208`). Raw/full/incremental inference is checked before
+this conversion. Stockfish's separate material, tempo and rule50 scaling is not
+imported; any further calibration needs separate strength evidence.
 Search retains checks, terminal/draw/tablebase decisions and material/pawn
 pruning metadata. HCE tempo, positional terms and endgame score adjustments
 must not be added to NNUE scores. Search captures an immutable model snapshot;
@@ -320,8 +324,8 @@ en passant update the affected non-king features. Null moves exchange output
 perspectives without changing features. Unmake restores the parent accumulator.
 The loader checks exact size, version and architecture hashes before decoding;
 wide affine sums and score clamps keep external weights outside reserved scores.
-Native AVX2 feature accumulation has a scalar fallback. There is no network I/O
-or Python dependency in the engine or its build.
+Native AVX2 feature accumulation and dense inference have scalar fallbacks.
+There is no network I/O or Python dependency in the engine or its build.
 
 `test_nnue` runs offline using synthetic weights for load validation, score bounds,
 metadata, model lifetime, evaluator/TT isolation and HCE/losers preservation.
@@ -332,6 +336,36 @@ seeded legal games, skipped parent evaluation, null moves, cancellation and rest
 The lifecycle suite also runs with NNUE enabled and tests reload/disable/unload.
 The pinned reference is compiled only for these optional tests. Configure with
 `-Dmaxima_nnue_test_network=` to return to the model-independent suite.
+
+For paired A/B games, select `--model-a EvalFile=/absolute/path/to/network.nnue`
+and `--option-a UseNNUE=true`; engine B can use the same executable with HCE.
+The runner applies model options before evaluator-enabling flags, after validating
+both complete configurations, and records the model checksum in the match report.
+
+Bootstrap validation on the local Intel i5-10210U: Debug and Release each
+passed their 34-check suite; after the explicit SF13-to-centipawn conversion,
+all three NNUE checks passed again in both builds. The reference check covers
+3169 position comparisons, with bit-identical raw full/incremental/probe scores
+and accumulator values. The separately compiled scalar fallback also passed the
+reference and loader/contract checks. ASan/UBSan with leak detection passed all
+three corrected NNUE checks, including the 31-scenario lifecycle suite (outside
+the restricted sandbox so LeakSanitizer can inspect threads). The runner passed
+88/88 with real-engine integration enabled.
+
+Seven alternating Release samples of 20000 warmed evaluations measured a median
+0.083828 s with the initial scalar dense path versus 0.031709 s with AVX2 dense
+inference (2.64x). A separate five-repeat, three-position, 50000-node search
+benchmark measured median 1.471M NPS for HCE and 0.431M for NNUE (29.3%). These
+are local workload measurements, not general scaling or playing-strength results.
+An eight-game, four-pair 2+0.02s correctness smoke after unit conversion scored
+1W/5D/2L versus HCE, with 803 independently verified legal plies and no errors,
+unfinished games or forfeits. Both smoke runs used already reserved openings and
+are diagnostic only; the earlier raw-unit run is not a strength baseline. Neither
+run establishes an Elo gain or justifies changing the default. Further work is
+pretrained network quality, model/search score calibration and credible paired
+strength measurement. HCE tuning and parallel cache refactoring are not required
+first. Reproducible scripts, logs, identities and PGNs are private under
+`.context/baselines/2026-10-13/nnue-bootstrap/`; reserve these fixtures from training.
 
 ## 5. Build and debugging
 

@@ -31,10 +31,28 @@ std::array<int16_t, 32> affine(const std::array<int16_t, input_size> & input,
         const std::array<int32_t, 32> & biases) {
     std::array<int16_t, 32> output;
     for (size_t row = 0; row < 32; ++row) {
-        // External weights may contain extreme biases. Wide sums avoid UB.
-        int64_t sum = biases[row];
+        // Inputs are [0,127], weights [-128,127], at most 512 products:
+        // the dot product fits int32 even for extreme external weights.
+        int32_t dot = 0;
+#ifdef __AVX2__
+        auto sums = _mm256_setzero_si256();
+        for (size_t column = 0; column < input_size; column += 16) {
+            const auto values = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(input.data() + column));
+            const auto packed_weights = _mm_loadu_si128(
+                reinterpret_cast<const __m128i *>(weights.data() + row * input_size + column));
+            const auto wide_weights = _mm256_cvtepi8_epi16(packed_weights);
+            sums = _mm256_add_epi32(sums, _mm256_madd_epi16(values, wide_weights));
+        }
+        auto total = _mm_add_epi32(_mm256_castsi256_si128(sums), _mm256_extracti128_si256(sums, 1));
+        total = _mm_hadd_epi32(total, total);
+        total = _mm_hadd_epi32(total, total);
+        dot = _mm_cvtsi128_si32(total);
+#else
         for (size_t column = 0; column < input_size; ++column)
-            sum += int(input[column]) * int(weights[row * input_size + column]);
+            dot += int(input[column]) * int(weights[row * input_size + column]);
+#endif
+        // Biases are unrestricted int32 in the file. Add them in wide arithmetic.
+        const int64_t sum = int64_t(biases[row]) + dot;
         output[row] = static_cast<int16_t>(std::clamp(sum >> 6, int64_t(0), int64_t(127)));
     }
     return output;
