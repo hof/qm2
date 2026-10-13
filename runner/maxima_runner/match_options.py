@@ -48,14 +48,14 @@ def engine_profile(options, models):
     # These established network options must carry file identities too.
     for name in requested:
         if name.lower() in ('evalfile', 'evalfilesmall') and name not in identities:
-            raise ValueError(f'use --model-a/b for {name} to record its file identity')
+            raise ValueError(f'use --model for suites or --model-a/--model-b for matches to record {name}')
     return {'requested_options': requested, 'models': identities}
 
 
 def verify_models(profile):
     for name, identity in profile['models'].items():
         if file_identity(identity['path']) != identity:
-            raise ValueError(f'model file changed during match: {name}')
+            raise ValueError(f'model file changed during run: {name}')
 
 
 def validated_settings(advertised, settings, profile):
