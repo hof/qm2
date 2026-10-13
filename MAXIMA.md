@@ -379,6 +379,31 @@ strength measurement. HCE tuning and parallel cache refactoring are not required
 first. Reproducible scripts, logs, identities and PGNs are private under
 `.context/baselines/2026-10-13/nnue-bootstrap/`; reserve these fixtures from training.
 
+Expanded standalone checks passed in Debug, Release and ASan/UBSan with leak
+detection: 3426 raw/full/incremental/reference score comparisons, including
+independent reference accumulator lanes and the last allocated ply. The suite
+and shared model-option checks passed 19/19. Cold-process HCE/NNUE diagnostics
+with the same Release binary, Hash64, no book or tablebases, and alternating
+evaluator order measured the following solved-target counts:
+
+| Suite | HCE, 200k nodes | NNUE, 200k nodes | HCE, 1s | NNUE, 1s |
+| --- | ---: | ---: | ---: | ---: |
+| Bratko–Kopec (22) | 15 | 15 | 17 | 18 |
+| modern_2026 (22) | 20 | 20 | 22 | 20 |
+| corrected WAC (300) | 278 | 263 | 288 | 277 |
+
+All 1376 searches and 17567 PV plies passed the independent report audit,
+including inputs, legal moves, evaluator settings and executable/model hashes.
+Corrected WAC came from Arasan revision
+`207a88358c414c15eec7933774d25ffe24fd4598`, corpus SHA-256
+`9bfb7b42cf5bbc7f3d60ff767ca3be460e0ae4d9110ef9a71ddf0bd7071d4d46`.
+These are tactical target diagnostics, not a playing-strength result or proof
+that alternative moves lose. Light tooling ran during the timed comparisons;
+this was not an isolated-machine speed benchmark. The bootstrap has no measured
+Elo gain. Keep the paired-game strength gate open. Reports, provenance, scripts,
+and a preliminary standalone model assessment live privately in
+`.context/baselines/2026-10-13/nnue-sanity/`; reserve these fixtures from training.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
