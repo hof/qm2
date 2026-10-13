@@ -265,8 +265,10 @@ information. Tests independently verify all legal normalized KPK states.
 
 ### Standard NNUE bootstrap
 
-NNUE development lives on `feat/nnue-bootstrap`. HCE remains the standard
-chess default/fallback and strength reference; royal-losers remains material-only.
+NNUE development lives on `feat/nnue-bootstrap`. The target is standalone NNUE
+evaluation: no blending with HCE and no automatic classical-score fallbacks in
+NNUE mode. HCE remains separately selectable and the standard chess default
+until the strength gate passes; royal-losers remains material-only.
 The initial target is pretrained CPU inference, without training or GPU hardware.
 
 Candidate assessment: the current local Stockfish architecture combines HalfKA,
@@ -277,6 +279,11 @@ legacy HalfKP, 41024 inputs, two 256-wide accumulators, 512->32->32->1 integer
 inference. It has an independently pinned CFish-derived probe for exact reference
 checks and a compact board adapter. This is a correctness/bootstrap choice, not
 proof of the strongest evaluator or a commitment to this family indefinitely.
+These weights were deployed in Stockfish 13's hybrid evaluator. Exact agreement
+with its raw neural core does not validate using that core alone as a strong
+standalone evaluator. Assess replacement weights with their matching standalone
+inference implementation; importing Stockfish's hybrid policy is outside this
+target.
 
 Official CC0 bootstrap weights: `nn-62ef826d1a6d.nnue`, full SHA-256
 `62ef826d1a6d11b9e814188025aa02a60815c037292e0ef9bbb9bf4f724e5e63`.
@@ -333,6 +340,11 @@ To add real-weight independent-probe and NNUE lifecycle checks, configure either
 preset with `-Dmaxima_nnue_test_network=/absolute/path/to/nn-62ef826d1a6d.nnue`.
 Those checks compare both accumulators and integer scores across special moves,
 seeded legal games, skipped parent evaluation, null moves, cancellation and restart.
+Both accumulator arrays are also checked lane by lane against independently
+refreshed reference accumulators. Storage-boundary null fixtures exercise the
+last allocated ply and restoration. Synthetic constant-output weights check
+that material imbalance and move clocks do not trigger classical-score blending
+or fallback.
 The lifecycle suite also runs with NNUE enabled and tests reload/disable/unload.
 The pinned reference is compiled only for these optional tests. Configure with
 `-Dmaxima_nnue_test_network=` to return to the model-independent suite.
@@ -530,7 +542,15 @@ exercise the executable. No suite-specific UCI command or search hook is needed.
 ./maxima suite:run --nodes 200000 --json /tmp/modern.json
 ./maxima suite:run --suite /path/to/positions.epd --engine /path/to/engine
 ./maxima suite:run --suite /path/to/positions.epd --syzygy-path tablebases/syzygy
+./maxima suite:run --suite bratko-kopec --nodes 200000 \
+  --model EvalFile=networks/nn-62ef826d1a6d.nnue --option UseNNUE=true
 ```
+
+Repeatable `--option NAME=VALUE` and `--model OPTION=PATH` select the evaluator
+or search settings. Models are loaded before enabling evaluator options, hashed
+in the report, and checked for changes before and after each search. Requested
+options must be advertised by the engine. Use identical budgets and settings
+for HCE/NNUE comparisons; `--option UseNNUE=false` explicitly selects HCE.
 
 The default is `modern_2026`: 22 positions sampled from the 2026 Tata Steel
 Masters broadcasts, one second per position and 64 MiB hash. Stockfish 19
