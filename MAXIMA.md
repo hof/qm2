@@ -404,6 +404,32 @@ Elo gain. Keep the paired-game strength gate open. Reports, provenance, scripts,
 and a preliminary standalone model assessment live privately in
 `.context/baselines/2026-10-13/nnue-sanity/`; reserve these fixtures from training.
 
+A subsequent fixed 200-game, 100-pair match at 2+0.02s and Hash64 used fresh
+opening endpoints excluded from all earlier reserved match corpora. Standalone
+NNUE scored 37W/103D/60L versus HCE (44.25%, approximately -40 logistic Elo as a
+point estimate). The conservative 95% opening-pair Hoeffding score interval was
+30.67%–57.83%, so this run does not establish a precise rating or exclude equality.
+All 24996 PGN plies, paired openings/colors, terminal outcomes, settings and model/
+executable identities passed independent audit; no errors, unfinished games or
+forfeits. This short-clock sample shows no strength gain. The inference core was
+also compared directly with original Stockfish 13 revision
+`3597f1942ec6f2cfbd50b905683739b0900ff5dd`: all 2018 raw full evaluations matched
+exactly, including sampled match positions and quiet material-deletion probes.
+Only one diagnostic output line was added to its trace; its inference was unchanged.
+
+In the quiet starting-position probes, removing White's queen or c1 bishop
+changed NNUE by approximately 540 cp in either case; HCE changed by 932 cp and
+280 cp respectively. Original SF13 raw inference reproduces the NNUE responses.
+These probes include positional effects, not isolated piece values, and do not
+prove a calibration bug or explain the tactical deficit. Maxima's beta/futility
+and capture pruning still use fixed margins and classical exchange values;
+isolate evaluator/pruning interactions before assigning a cause. WAC at one
+second had median 1.31M visited nodes for HCE versus 475k for NNUE, and median
+depth 16 versus 14; at 200k nodes both median depths were 12. Inference speed
+therefore contributes to the timed deficit but cannot by itself explain the
+fixed-node result. Match, raw reference, probe and audit artifacts live privately
+in `.context/baselines/2026-10-13/nnue-games/`, reserved from future training.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
