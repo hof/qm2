@@ -17,4 +17,4 @@ maxima = "maxima_runner.cli:main"
 include = ["maxima_runner*"]
 
 [tool.setuptools.package-data]
-maxima_runner = ["data/suites/*.epd", "data/suites/*.md", "data/suites/*.json", "data/suites/sources/*.pgn"]
+maxima_runner = ["third_party/fastchess/LICENSE", "third_party/fastchess/README.md", "data/suites/*.epd", "data/suites/*.md", "data/suites/*.json", "data/suites/sources/*.pgn"]

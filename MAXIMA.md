@@ -613,6 +613,53 @@ and `Variant "Royal losers"` for losers. Use
 correct board without changing python-chess's global variant registry. Generic
 PGN readers may reject this variant; do not import these into standard experience.
 
+For strength testing, use paired-result SPRT with bounds selected before play:
+
+```bash
+./maxima match:run --engine-a /path/to/candidate --engine-b /path/to/baseline \
+    --openings openings.json --pairs 1000 --sprt 0 5 \
+    --seconds 10 --increment 0.1 --pgn sprt.pgn --json sprt.json
+```
+
+`--sprt ELO0 ELO1` uses logistic Elo for A relative to B, with nominal false-positive
+and false-negative targets of 0.05 each (`--sprt-alpha` and `--sprt-beta`). The
+supported bounds satisfy `-200 <= ELO0 < ELO1 <= 200`; error targets must be
+positive with sum less than one. Declare all parameters and the maximum number
+of pairs before results. `--pairs` is a cap, and requires at least that many
+unique opening entries. Each completed color-swapped pair contributes to one
+of five buckets: LL, LD/DL, DD/WL/LW, WD/DW, WW, from A's perspective. Incomplete
+pairs, engine failures and a lone first game cannot trigger a decision.
+
+The logistic generalized SPRT estimates the paired outcome distribution under
+each hypothesis. It stops after a whole pair when the log-likelihood ratio
+crosses `log(beta/(1-alpha))` (accept H0) or `log((1-beta)/alpha)` (accept H1).
+At the cap, a test without a crossing is explicitly inconclusive. H1 supports
+the higher hypothesis against the lower; it does not certify a gain of at least
+ELO1. H0 likewise is not proof of equal strength or regression. Error targets
+are nominal model-based rates, not distribution-free finite-sample guarantees.
+Generalized SPRT has asymptotic error control and assumes independent sampled
+opening pairs and stable testing conditions. Larger independent confirmation
+at longer clocks remains necessary before promoting a playing change.
+
+Reports record hypotheses/error targets, model/provenance, five paired counts,
+LLR, thresholds and decision. SPRT reports omit fixed-sample confidence intervals;
+those are not valid after optional stopping. This mode is mutually exclusive
+with Bonferroni checkpoints. Omitting both retains fixed-sample operation for
+baselines and smoke checks. The recommended future strength workflow is SPRT;
+existing historical match decisions retain their predeclared methods.
+The same SPRT mode works with `--variant losers`: our independent royal-losers
+board remains responsible for compulsory captures and variant terminal rules.
+The official fast-chess v1.8.2-alpha executable supports standard/Chess960 only;
+passing `Wild=losers` to an engine would not change its arbiter's rules. The
+statistics port itself is independent of chess rules, so both variants can use
+our existing match pipeline.
+The isolated [fast-chess port](runner/maxima_runner/third_party/fastchess/README.md)
+uses the upstream constrained multinomial likelihood, with a more precise
+bisection solver and independent pinned Fishtest reference fixtures. Runtime
+needs only the existing runner dependency. MIT attribution/license is bundled.
+See [Fishtest mathematics](https://github.com/official-stockfish/fishtest/wiki/Fishtest-mathematics)
+for the paired generalized SPRT model.
+
 For optional early stopping, predeclare `--sequential-check-pairs N`. `--pairs`
 then sets the maximum number of opening pairs; checks occur after every N whole
 pairs and at the maximum. Each check uses a two-sided Hoeffding interval with
@@ -638,7 +685,7 @@ within-pair dependence. It assumes independent pairs representative of the
 opening population; narrow or biased opening sets limit conclusions. No interval
 is reported until every requested pair finishes, avoiding interpretation of
 partial or selectively completed runs as fixed-sample evidence. Small samples
-have broad bounds; these are score intervals, not Elo estimates or a sequential
+have broad bounds; in fixed-sample mode these are score intervals, not Elo estimates or a sequential
 promotion test. Unfinished games or engine failures return nonzero.
 
 ### 6.2 Bug audit and sanitizer checks

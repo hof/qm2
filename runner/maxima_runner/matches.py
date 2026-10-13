@@ -81,6 +81,13 @@ def paired_summary(games, requested_pairs=None, *, confidence=0.95):
 
 
 def match_summary(games, args):
+    bounds = getattr(args, 'sprt', None)
+    if bounds is not None:
+        from .sprt import sprt_summary
+        summary = paired_summary(games, args.pairs)
+        summary.update(confidence=None, score_interval=None, interval_method=None,
+                       sprt=sprt_summary(games, *bounds, args.sprt_alpha, args.sprt_beta))
+        return summary
     cadence = getattr(args, 'sequential_check_pairs', None)
     if cadence is None:
         return paired_summary(games, args.pairs)
@@ -257,12 +264,16 @@ async def run_match(commands, openings, args, report, pgn_stream):
                         interval is not None and (interval[0] > 0.5 or interval[1] < 0.5)):
                     report['stop_reason'] = 'a_stronger' if interval[0] > 0.5 else 'b_stronger'
                     report['stopped_early'] = pair + 1 < args.pairs
+                sprt = report['summary'].get('sprt')
+                if sprt is not None and sprt['decision'] != 'continue':
+                    report['stop_reason'] = sprt['decision']
+                    report['stopped_early'] = pair + 1 < args.pairs
                 args.json.write_text(json.dumps(report, indent=2) + '\n')
                 if record['error'] is not None:
                     raise RuntimeError(record['error'])
                 print(f"Pair {pair + 1} A={'White' if a_white else 'Black'} "
                       f"{record['result']} ({record['termination']})", flush=True)
-                if report.get('stop_reason') in ('a_stronger', 'b_stronger'):
+                if report.get('stop_reason') in ('a_stronger', 'b_stronger', 'accept_h0', 'accept_h1'):
                     return
 
 
@@ -293,8 +304,13 @@ def main():
     parser.add_argument('--variant', choices=('standard', 'losers'), default='standard')
     parser.add_argument('--openings', required=True, type=Path, help='variant-labeled JSON opening file')
     parser.add_argument('--pairs', type=positive_int, default=10)
-    parser.add_argument('--sequential-check-pairs', type=positive_int, metavar='N',
+    stopping = parser.add_mutually_exclusive_group()
+    stopping.add_argument('--sprt', type=float, nargs=2, metavar=('ELO0', 'ELO1'),
+                          help='paired logistic GSPRT bounds for engine A versus B')
+    stopping.add_argument('--sequential-check-pairs', type=positive_int, metavar='N',
                         help='check significance every N pairs with a 95%% joint Bonferroni bound')
+    parser.add_argument('--sprt-alpha', type=float, default=0.05, help='SPRT false-positive target')
+    parser.add_argument('--sprt-beta', type=float, default=0.05, help='SPRT false-negative target')
     parser.add_argument('--seed', type=int, default=2026)
     parser.add_argument('--seconds', type=positive_float, default=10)
     parser.add_argument('--increment', type=nonnegative_float, default=0.1)
@@ -306,6 +322,11 @@ def main():
     args = parser.parse_args()
     report = None
     try:
+        if args.sprt is not None:
+            from .sprt import validate_sprt
+            validate_sprt(*args.sprt, args.sprt_alpha, args.sprt_beta)
+        elif args.sprt_alpha != 0.05 or args.sprt_beta != 0.05:
+            raise ValueError('SPRT error targets require --sprt')
         openings = read_openings(args.openings, args.variant)
         if args.sequential_check_pairs is not None and args.sequential_check_pairs > args.pairs:
             raise ValueError('sequential checkpoint cadence cannot exceed maximum pairs')
@@ -329,7 +350,12 @@ def main():
                               for command, profile in zip(commands, args.profiles)],
                   'openings_sha256': hashlib.sha256(args.openings.read_bytes()).hexdigest(),
                   'games': [], 'complete': False, 'stopped_early': False, 'stop_reason': None,
-                  'sequential_check_pairs': args.sequential_check_pairs}
+                  'sequential_check_pairs': args.sequential_check_pairs,
+                  'sprt': {'elo0': args.sprt[0], 'elo1': args.sprt[1],
+                           'alpha': args.sprt_alpha, 'beta': args.sprt_beta,
+                           'elo_model': 'logistic', 'upstream': 'Disservin/fast-chess',
+                           'upstream_revision': 'ebfd64cb7fac80d4822c50b07dca4fe934779d21'}
+                           if args.sprt is not None else None}
         # Refuse to overwrite an earlier match record.
         with args.pgn.open('x') as stream, args.json.open('x') as output:
             output.write(json.dumps(report, indent=2) + '\n')
@@ -339,6 +365,8 @@ def main():
                               (len(report['games']) == 2 * args.pairs or report['stopped_early']))
         if report['stop_reason'] is None and report['complete']:
             report['stop_reason'] = 'maximum_pairs'
+            if report['summary'].get('sprt') is not None:
+                report['summary']['sprt']['decision'] = 'inconclusive'
         args.json.write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report['summary'], indent=2))
         return 0 if report['complete'] else 1

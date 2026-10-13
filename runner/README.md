@@ -66,3 +66,12 @@ Shared resource/variant controls are protected. Use `--model-a OPTION=PATH` or
 `--model-b OPTION=PATH` for external networks: paths become absolute and SHA-256
 identities are recorded and checked throughout the match. See MAXIMA.md for the
 full configuration and identity contract.
+
+For strength decisions, select paired logistic GSPRT before playing with
+`--sprt 0 5` (engine A versus B), optionally `--sprt-alpha 0.05 --sprt-beta 0.05`.
+`--pairs` caps the run. Decisions occur only after complete color-swapped pairs;
+a capped test without a threshold crossing is inconclusive. Reports include
+pentanomial counts, likelihood ratio, thresholds and decision. Historical
+fixed-sample tests retain their original interpretation. No extra runtime
+statistics dependency is needed; the isolated fast-chess port retains its MIT
+license and upstream attribution.
