@@ -148,7 +148,7 @@ public:
      * Gets side to move
      * @return boolean 1: white to move, 0: black to move
      */
-    bool us() {
+    bool us() const {
         return stack->wtm;
     }
     
@@ -174,7 +174,7 @@ public:
      * @param pc piece type (WPAWN..BKING)
      * @return square_t a1..h8
      */
-    int get_sq(const int pc) {
+    int get_sq(const int pc) const {
         return bsf(bb[pc]);
     }
 

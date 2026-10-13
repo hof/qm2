@@ -35,6 +35,7 @@
 #include "experience.h"
 #include <random>
 #include "search_control.h"
+#include "nnue.h"
 #include "movepicker.h"
 #include "hashtable.h"
 
@@ -112,6 +113,8 @@ protected:
 public:
     search_stack_t _stack[MAX_PLY + 1];
     game_t game;
+    std::shared_ptr<const nnue::network_t> evaluation_network;
+    std::vector<nnue::accumulator_t> evaluation_accumulators;
     board_t brd;
     root_t root;
     search_stack_t * stack;

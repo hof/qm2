@@ -90,7 +90,9 @@ U64 search_t::tt_context() const {
         : brd.ply < stack->repetition_start ? 0 : search_history_salt;
     const int white_contempt = root_wtm ? draw_contempt : -draw_contempt;
     return stack->tt_history ^ node_kind
-        ^ mix_context(static_cast<U64>(white_contempt) ^ 0xa0761d6478bd642fULL);
+        ^ mix_context(static_cast<U64>(white_contempt) ^ 0xa0761d6478bd642fULL)
+        ^ (wild == 0 && evaluation_network
+            ? mix_context(evaluation_network->fingerprint() ^ 0x48414c464b503031ULL) : 0);
 }
 
 /**
@@ -170,6 +172,12 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     lmr_enabled = options::get_value("LMR");
     ffp_enabled = options::get_value("FutilityPruning");
     draw_contempt = options::get_value("DrawContempt");
+    evaluation_network = options::get_value("UseNNUE") ? nnue::snapshot() : nullptr;
+    evaluation_accumulators.clear();
+    if (evaluation_network) {
+        evaluation_accumulators.resize(MAX_PLY + 1);
+        evaluation_network->prepare(brd, nullptr, evaluation_accumulators[0]);
+    }
     ponder_move.clear();
     tablebase_hits = 0;
     tablebase_limit = MIN(options::get_value("SyzygyProbeLimit"), tablebase::max_pieces());
@@ -521,6 +529,8 @@ void search_t::forward() {
     stack->in_check = false;
     stack->eval_result = score::INVALID;
     brd.forward();
+    if (wild == 0 && evaluation_network)
+        evaluation_network->prepare(brd, nullptr, evaluation_accumulators[brd.ply]);
     // A null move is not part of legal game history.
     stack->repetition_start = brd.ply + 1;
     stack->tt_history = 0;
@@ -553,6 +563,8 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->tt_clocks = {0, 101};
     stack->eval_result = score::INVALID;
     brd.forward(move);
+    if (wild == 0 && evaluation_network)
+        evaluation_network->prepare(brd, move, evaluation_accumulators[brd.ply]);
     if (brd.stack->fifty_count == 0) {
         stack->tt_history = 0;
     } else if (brd.ply - 1 >= stack->repetition_start) {

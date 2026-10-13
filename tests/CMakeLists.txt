@@ -82,3 +82,18 @@ target_link_libraries(test_search_horizon MAX2SRC)
 
 add_executable(test_search_review test_search_review.cpp)
 target_link_libraries(test_search_review MAX2SRC)
+
+add_executable(test_nnue test_nnue.cpp)
+target_link_libraries(test_nnue MAX2SRC)
+
+set(maxima_nnue_test_network "" CACHE FILEPATH "Optional real HalfKP network for reference/lifecycle checks")
+if(maxima_nnue_test_network)
+    add_library(nnue_reference STATIC
+        ../third_party/nnue_reference/nnue.cpp
+        ../third_party/nnue_reference/misc.cpp)
+    # Scalar reference deliberately differs from Maxima's native SIMD path.
+    target_compile_definitions(nnue_reference PRIVATE IS_64BIT)
+    add_executable(test_nnue_reference test_nnue_reference.cpp)
+    target_link_libraries(test_nnue_reference MAX2SRC nnue_reference)
+    add_test(NAME test_nnue_reference COMMAND test_nnue_reference "${maxima_nnue_test_network}")
+endif()

@@ -45,7 +45,9 @@ namespace options {
         { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64" },
         { "BookFile", STRING, 0, "type string default book.bin" },
         { "ExperienceFile", STRING, 0, "type string default <empty>" },
-        { "ExperienceDepth", INT, 16, "type spin default 16 min 1 max 128" }
+        { "ExperienceDepth", INT, 16, "type spin default 16 min 1 max 128" },
+        { "UseNNUE", BOOL, 0, "type check default false" },
+        { "EvalFile", STRING, 0, "type string default <empty>" }
     };
     
     option_t * get_option(const char * key) {

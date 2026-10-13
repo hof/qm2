@@ -231,6 +231,15 @@ void engine_t::analyse() {
     stop();
 
     search_t * s = new search_t(_root_fen.c_str());
+    if (options::get_value("Wild") != 0) s->evaluation_network.reset();
+    if (s->evaluation_network) {
+        s->stack->in_check = s->brd.in_check();
+        const int value = evaluate(s);
+        uci::out(s->stack->in_check ? "info string NNUE static evaluation unavailable in check"
+            : "info string NNUE evaluation cp " + std::to_string(value) + " (side to move)");
+        delete s;
+        return;
+    }
     evaluate(s);
     int phase = s->stack->mt->phase;
     bool wtm = s->brd.us();

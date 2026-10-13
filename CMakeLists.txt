@@ -110,6 +110,7 @@ if(BUILD_TESTING)
     add_test(testPolyglot tests/testPolyglot)
     add_test(testTT tests/testTT)
     add_test(testEvaluation tests/testEvaluation)
+    add_test(test_nnue tests/test_nnue)
     add_test(testFlip tests/testFlip)
     add_test(testMates tests/testMates)
     add_test(test_leaf_search tests/test_leaf_search)
@@ -134,6 +135,12 @@ if(BUILD_TESTING)
         ${PROJECT_SOURCE_DIR}/tests/test_search_lifecycle.py
         ${PROJECT_BINARY_DIR}/src/maxima2)
     set_tests_properties(test_search_lifecycle PROPERTIES TIMEOUT 45)
+    if(maxima_nnue_test_network)
+        add_test(NAME test_nnue_lifecycle COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/test_nnue_lifecycle.py
+            ${PROJECT_BINARY_DIR}/src/maxima2 "${maxima_nnue_test_network}")
+        set_tests_properties(test_nnue_lifecycle PROPERTIES TIMEOUT 90)
+    endif()
 
     add_test(test_experience tests/test_experience)
     add_test(test_uci_input tests/test_uci_input)

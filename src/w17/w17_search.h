@@ -37,6 +37,8 @@ public:
             const search_control_t * control = NULL,
             const std::vector<U64> & position_history = {}) : search_t(fen, g, control, position_history) {
         wild = 17;
+        evaluation_network.reset();
+        evaluation_accumulators.clear();
         book_name = "book.w17.bin";
         
         //use different hash codes for w17

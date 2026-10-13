@@ -287,14 +287,51 @@ and source ownership are recorded in `third_party/nnue_reference/README.md`.
 
 Evaluation contract: standard scores are relative to the side to move, in the
 network's approximate centipawn units, clamped below the tablebase score range.
-Search retains checks, terminal/draw/tablebase decisions and material-based
-pruning classification. HCE tempo, positional terms and endgame score adjustments
+Search retains checks, terminal/draw/tablebase decisions and material/pawn
+pruning metadata. HCE tempo, positional terms and endgame score adjustments
 must not be added to NNUE scores. Search captures an immutable model snapshot;
 mutable accumulators belong to that search. Evaluator/model changes must prevent
 reuse of incompatible TT scores. Invalid loads must retain the previous model.
 Correctness gates include full/reference/incremental equivalence, special moves,
 null moves, restoration and cancellation. Measure CPU throughput and paired
 playing strength before changing the default. Parallel-cache work is separate.
+
+The engine now supports `EvalFile` and `UseNNUE` (default false). Load the model
+first, then enable NNUE:
+
+```text
+setoption name EvalFile value /absolute/path/to/nn-62ef826d1a6d.nnue
+setoption name UseNNUE value true
+```
+
+Missing/unsupported files report a load failure and retain the previous model.
+Enabling without a loaded model is rejected. `EvalFile value <empty>` unloads
+and selects HCE; `UseNNUE value false` retains the loaded model while selecting
+HCE. Changes stop/join active search and clear incompatible TT entries. Search
+score context also fingerprints the model and adapter version, so separately
+retained search snapshots cannot reuse another evaluator's score bounds. The
+fingerprint is a cache identity, not a cryptographic integrity check; the model
+downloader verifies the full pinned SHA-256. Royal-losers ignores standard NNUE.
+
+`src/nnue.cpp` owns the isolated HalfKP loader/inference implementation. Weights
+are immutable, accumulators are allocated per search/ply, and updates are lazy.
+A changed king refreshes its perspective; captures, promotions, castling and
+en passant update the affected non-king features. Null moves exchange output
+perspectives without changing features. Unmake restores the parent accumulator.
+The loader checks exact size, version and architecture hashes before decoding;
+wide affine sums and score clamps keep external weights outside reserved scores.
+Native AVX2 feature accumulation has a scalar fallback. There is no network I/O
+or Python dependency in the engine or its build.
+
+`test_nnue` runs offline using synthetic weights for load validation, score bounds,
+metadata, model lifetime, evaluator/TT isolation and HCE/losers preservation.
+To add real-weight independent-probe and NNUE lifecycle checks, configure either
+preset with `-Dmaxima_nnue_test_network=/absolute/path/to/nn-62ef826d1a6d.nnue`.
+Those checks compare both accumulators and integer scores across special moves,
+seeded legal games, skipped parent evaluation, null moves, cancellation and restart.
+The lifecycle suite also runs with NNUE enabled and tests reload/disable/unload.
+The pinned reference is compiled only for these optional tests. Configure with
+`-Dmaxima_nnue_test_network=` to return to the model-independent suite.
 
 ## 5. Build and debugging
 

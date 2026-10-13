@@ -26,6 +26,7 @@
 #include "experience.h"
 #include "book.h"
 #include "movegen.h"
+#include "nnue.h"
 #include <charconv>
 #include <limits>
 
@@ -417,8 +418,25 @@ namespace uci {
                                 return true;
                             }
                         }
+                        if (name == "UseNNUE" && candidate && !nnue::snapshot()) {
+                            out("info string NNUE enable failed: load EvalFile first; HCE retained");
+                            return true;
+                        }
+                        if (name == "EvalFile") {
+                            std::string error;
+                            const std::string path = value == "<empty>" ? "" : value;
+                            if (!nnue::set_path(path, error)) {
+                                out("info string NNUE load failed: " + error + "; previous model retained");
+                                return true;
+                            }
+                            if (path.empty()) options::get_option("UseNNUE")->value = 0;
+                            trans_table::clear();
+                            out(path.empty() ? "info string NNUE unloaded; HCE selected"
+                                : "info string NNUE loaded; UseNNUE selects evaluation");
+                            return true;
+                        }
                         if (candidate != opt->value
-                                && (name == "KingAttackShelter" || name == "KingAttackPieces")) {
+                                && (name == "KingAttackShelter" || name == "KingAttackPieces" || name == "UseNNUE")) {
                             trans_table::clear();
                         }
                         opt->value = candidate;

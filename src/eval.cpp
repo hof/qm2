@@ -86,6 +86,18 @@ int evaluate(search_t * s) {
         return s->stack->eval_result;
     }
 
+    if (s->wild == 0 && s->evaluation_network) {
+        // Search pruning still needs material flags and passed-pawn metadata.
+        // Neither classical score is blended into the network result.
+        material::eval(s);
+        pawns::eval(s);
+        auto & accumulator = s->evaluation_accumulators[s->brd.ply];
+        const auto * previous = s->brd.ply ? &s->evaluation_accumulators[s->brd.ply - 1] : nullptr;
+        const int result = s->evaluation_network->evaluate(s->brd, accumulator, previous);
+        s->stack->eg_score = s->stack->eval_result = result;
+        return result;
+    }
+
     /*
      * Calculate evaluation score. This needs to be done in the following order:
      * 1) Material balance. This also sets the game phase and material flags.
