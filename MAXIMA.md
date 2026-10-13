@@ -645,7 +645,7 @@ Reports record hypotheses/error targets, model/provenance, five paired counts,
 LLR, thresholds and decision. SPRT reports omit fixed-sample confidence intervals;
 those are not valid after optional stopping. This mode is mutually exclusive
 with Bonferroni checkpoints. Omitting both retains fixed-sample operation for
-baselines and smoke checks. The recommended future strength workflow is SPRT;
+baselines and smoke checks. SPRT remains available for small-gain hypothesis comparisons;
 existing historical match decisions retain their predeclared methods.
 The same SPRT mode works with `--variant losers`: our independent royal-losers
 board remains responsible for compulsory captures and variant terminal rules.
@@ -659,6 +659,45 @@ bisection solver and independent pinned Fishtest reference fixtures. Runtime
 needs only the existing runner dependency. MIT attribution/license is bundled.
 See [Fishtest mathematics](https://github.com/official-stockfish/fishtest/wiki/Fishtest-mathematics)
 for the paired generalized SPRT model.
+
+To stop on either a SPRT decision or evidence of a minimum gain, predeclare
+`--sprt 0 10 --sprt-min-elo-stop`. The additional rule checks a simultaneous
+confidence interval after every complete pair and compares it with the logistic
+score corresponding to ELO1 (about 51.44% for +10 Elo). It stops with
+`minimum_gain_established` when the lower bound is strictly above that score,
+or `below_minimum_gain` when the upper bound is below it. The first condition
+establishes at least the requested gain at the reported confidence level;
+the second establishes a smaller gain, which can still be a useful improvement.
+Whichever this rule or SPRT decides first ends the run. If both decide on the
+same pair, the minimum-gain decision determines the stop reason. Each test's
+own decision remains visible; `accept_h1` alone still does not certify ELO1.
+
+Adding a rule requires allocating the error budget. Hybrid mode gives SPRT
+half the requested alpha and beta, and the confidence bound an error budget
+of `min(alpha, beta) / 2`. At defaults this is 0.025 for each SPRT target and
+97.5% simultaneous coverage for the bound. By a union bound, positive errors
+at ELO0 and negative errors at ELO1 retain the requested nominal overall targets;
+the SPRT contribution remains asymptotic/model-based. Tightening its thresholds
+can lengthen small-gain tests compared with plain SPRT. This is not a promise
+of universally fastest stopping.
+
+For a positive decision that must establish a minimum gain, use `--min-elo 10`
+instead. It uses simultaneous 95% coverage and never accepts an ordinary SPRT
+decision. All stopping modes are exclusive except the explicit SPRT hybrid flag.
+Minimum gains must be finite within [0, 200] logistic Elo, always A relative
+to B; put the candidate in A. Reports identify the mode, target score, minimum
+Elo, allocated budgets, declared number of checks, bounds and stop reason.
+A cap without a crossing is inconclusive; incomplete/failing pairs cannot stop.
+
+The confidence rule uses pair scores in [0, 1] and radius
+`sqrt(log(2 * maximum_pairs / bound_alpha) / (2 * completed_pairs))`.
+Hoeffding plus Bonferroni controls all declared pair checkpoints, including
+optional stopping. It requires representative random opening-pair sampling
+and stable, independent playing outcomes; two games in a pair need not be
+independent. Predeclare the cap and rules before fresh games, do not extend
+the cap after inspecting results. The bound is conservative for small gains;
+SPRT and confidence-bound decisions answer different questions.
+See [Hoeffding's original bounded-sum inequality](https://doi.org/10.1080/01621459.1963.10500830).
 
 For optional early stopping, predeclare `--sequential-check-pairs N`. `--pairs`
 then sets the maximum number of opening pairs; checks occur after every N whole
