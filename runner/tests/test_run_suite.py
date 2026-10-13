@@ -12,8 +12,8 @@ import chess
 import chess.engine
 
 
-def run_position(*args):
-    return asyncio.run(runner.run_position(*args))
+def run_position(*args, **kwargs):
+    return asyncio.run(runner.run_position(*args, **kwargs))
 
 fake_engine = '''
 import sys
@@ -167,6 +167,45 @@ class suite_tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'does not advertise SyzygyPath'):
                 run_position([sys.executable, str(engine)], position,
                                     'nodes 40', 32, 3, tables)
+
+    def test_model_selection_identity_and_load_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = Path(directory) / 'engine.py'
+            model = Path(directory) / 'network file.nnue'
+            model.write_bytes(b'fixture weights')
+            source = fake_engine.replace('        print("uciok", flush=True)',
+                '        print("option name UseNNUE type check default false")\n'
+                '        print("option name EvalFile type string default <empty>")\n'
+                '        print("uciok", flush=True)')
+            source = source.replace('        assert "setoption name Hash value 32" in commands',
+                '        assert commands.index(' + repr('setoption name EvalFile value ' + str(model))
+                + ') < commands.index("setoption name UseNNUE value true")\n'
+                '        assert "setoption name Hash value 32" in commands')
+            engine.write_text(source)
+            profile = runner.engine_profile([('UseNNUE', 'true')], [('EvalFile', str(model))])
+            position = {'fen': chess.STARTING_FEN, 'expected_moves': ['d2d4']}
+            result, metadata = run_position([sys.executable, str(engine)], position,
+                                           'nodes 40', 32, 3, profile=profile)
+            self.assertTrue(result['solved'])
+            self.assertEqual(metadata['options']['UseNNUE'], 'true')
+            self.assertEqual(metadata['models'], profile['models'])
+            # Mutations while searching invalidate the model identity/report.
+            engine.write_text(source.replace('        print("bestmove d2d4", flush=True)',
+                '        open(' + repr(str(model)) + ', "wb").write(b"changed")\n'
+                '        print("bestmove d2d4", flush=True)'))
+            with self.assertRaisesRegex(ValueError, 'model file changed'):
+                run_position([sys.executable, str(engine)], position,
+                             'nodes 40', 32, 3, profile=profile)
+
+    def test_unsupported_requested_option_rejects_suite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = Path(directory) / 'engine.py'
+            engine.write_text(fake_engine)
+            profile = runner.engine_profile([('UseNNUE', 'true')], [])
+            with self.assertRaisesRegex(ValueError, 'does not advertise option'):
+                run_position([sys.executable, str(engine)],
+                             {'fen': chess.STARTING_FEN, 'expected_moves': ['d2d4']},
+                             'nodes 40', 32, 3, profile=profile)
 
     def test_exit_and_timeout_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
