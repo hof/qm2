@@ -86,15 +86,14 @@ def match_summary(games, args):
     hybrid = getattr(args, 'sprt_min_elo_stop', False)
     if minimum is not None or hybrid:
         from .strength import min_elo_summary
-        alpha = min(args.sprt_alpha, args.sprt_beta) / 2 if hybrid else 0.05
-        strength = min_elo_summary(games, bounds[1] if hybrid else minimum, args.pairs, alpha)
+        strength = min_elo_summary(games, bounds[1] if hybrid else minimum, args.pairs)
         summary = paired_summary(games, args.pairs)
         summary.update(confidence=strength['confidence'], score_interval=strength['score_interval'],
                        interval_method=strength['method'], a_score=strength['a_score'],
                        minimum_gain=strength)
         if hybrid:
             from .sprt import sprt_summary
-            summary['sprt'] = sprt_summary(games, *bounds, args.sprt_alpha / 2, args.sprt_beta / 2)
+            summary['sprt'] = sprt_summary(games, *bounds, args.sprt_alpha, args.sprt_beta)
         return summary
     if bounds is not None:
         from .sprt import sprt_summary
@@ -333,7 +332,7 @@ def main():
     parser.add_argument('--sprt-alpha', type=float, default=0.05, help='SPRT false-positive target')
     parser.add_argument('--sprt-beta', type=float, default=0.05, help='SPRT false-negative target')
     parser.add_argument('--sprt-min-elo-stop', action='store_true',
-                        help='also check confidence bounds against ELO1; reserve half each error budget for SPRT')
+                        help='also check simultaneous 95%% bounds against ELO1; keep SPRT targets unchanged')
     parser.add_argument('--seed', type=int, default=2026)
     parser.add_argument('--seconds', type=positive_float, default=10)
     parser.add_argument('--increment', type=nonnegative_float, default=0.1)
@@ -350,7 +349,7 @@ def main():
             validate_sprt(*args.sprt, args.sprt_alpha, args.sprt_beta)
             if args.sprt_min_elo_stop:
                 from .strength import validate_min_elo
-                validate_min_elo(args.sprt[1], args.pairs, min(args.sprt_alpha, args.sprt_beta) / 2)
+                validate_min_elo(args.sprt[1], args.pairs, 0.05)
         elif args.sprt_alpha != 0.05 or args.sprt_beta != 0.05:
             raise ValueError('SPRT error targets require --sprt')
         if args.sprt_min_elo_stop and args.sprt is None:
@@ -383,7 +382,7 @@ def main():
                   'games': [], 'complete': False, 'stopped_early': False, 'stop_reason': None,
                   'sequential_check_pairs': args.sequential_check_pairs,
                   'minimum_gain': {'minimum_elo': args.sprt[1] if args.sprt_min_elo_stop else args.min_elo,
-                                   'alpha': min(args.sprt_alpha, args.sprt_beta) / 2 if args.sprt_min_elo_stop else 0.05,
+                                   'alpha': 0.05,
                                    'planned_checks': args.pairs, 'elo_model': 'logistic'}
                                   if args.min_elo is not None or args.sprt_min_elo_stop else None,
                   'stopping_mode': 'sprt_or_minimum_gain' if args.sprt_min_elo_stop else
@@ -391,8 +390,7 @@ def main():
                                    'sprt' if args.sprt is not None else
                                    'sequential_checkpoints' if args.sequential_check_pairs else 'fixed_sample',
                   'sprt': {'elo0': args.sprt[0], 'elo1': args.sprt[1],
-                           'alpha': args.sprt_alpha / 2 if args.sprt_min_elo_stop else args.sprt_alpha,
-                           'beta': args.sprt_beta / 2 if args.sprt_min_elo_stop else args.sprt_beta,
+                           'alpha': args.sprt_alpha, 'beta': args.sprt_beta,
                            'requested_alpha': args.sprt_alpha, 'requested_beta': args.sprt_beta,
                            'elo_model': 'logistic', 'upstream': 'Disservin/fast-chess',
                            'upstream_revision': 'ebfd64cb7fac80d4822c50b07dca4fe934779d21'}
