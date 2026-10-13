@@ -63,7 +63,10 @@ def validated_settings(advertised, settings, profile):
     import chess.engine
     available = {name.lower(): option for name, option in advertised.items()}
     applied = {}
-    for name, value in {**settings, **profile['requested_options']}.items():
+    values = {**settings, **profile['requested_options']}
+    # Load weights before flags that enable an evaluator requiring those weights.
+    model_names = {name.lower() for name in profile['models']}
+    for name, value in sorted(values.items(), key=lambda item: item[0].lower() not in model_names):
         option = available.get(name.lower())
         if option is None:
             if name in profile['requested_options']:

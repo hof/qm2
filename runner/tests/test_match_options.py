@@ -72,6 +72,17 @@ class match_option_tests(unittest.TestCase):
             with self.assertRaises(OSError):
                 engine_profile([], [('EvalFile', str(path) + '.missing')])
 
+    def test_models_are_applied_before_dependent_flags(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'network.nnue'
+            path.write_bytes(b'fixture')
+            profile = engine_profile([('UseNNUE', 'true')], [('EvalFile', str(path))])
+            options = {'UseNNUE': option('UseNNUE', 'check', False),
+                       'EvalFile': option('EvalFile', 'string')}
+            settings = validated_settings(options, {'UseNNUE': False}, profile)
+            self.assertEqual(list(settings), ['EvalFile', 'UseNNUE'])
+            self.assertTrue(settings['UseNNUE'])
+
 
 class match_profile_tests(unittest.IsolatedAsyncioTestCase):
     async def test_distinct_profiles_and_validation_before_configuration(self):
