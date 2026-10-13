@@ -92,7 +92,7 @@ U64 search_t::tt_context() const {
     return stack->tt_history ^ node_kind
         ^ mix_context(static_cast<U64>(white_contempt) ^ 0xa0761d6478bd642fULL)
         ^ (wild == 0 && evaluation_network
-            ? mix_context(evaluation_network->fingerprint() ^ 0x48414c464b503031ULL) : 0);
+            ? mix_context(evaluation_network->fingerprint() ^ 0x48414c464b503032ULL) : 0);
 }
 
 /**

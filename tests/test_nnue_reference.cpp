@@ -20,7 +20,7 @@ bool compare(search_t & search) {
     const int incremental = search.evaluation_network->evaluate(search.brd, accumulator, previous);
     ++comparisons;
     bool success = reference == recomputed && reference == incremental && fresh.values == accumulator.values;
-    if (!search.brd.in_check()) success &= evaluate(&search) == reference;
+    if (!search.brd.in_check()) success &= evaluate(&search) == reference * 100 / 208;
     if (!success) std::cerr << fen << ": reference=" << reference << " full=" << recomputed
         << " incremental=" << incremental << '\n';
     return success;

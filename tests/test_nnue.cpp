@@ -30,6 +30,11 @@ int main() {
         std::filesystem::path path;
         ~cleanup_t() { std::error_code error; std::filesystem::remove(path, error); }
     } cleanup{path};
+    bool unit_checks = check(nnue::to_centipawns(208) == 100
+        && nnue::to_centipawns(-208) == -100 && nnue::to_centipawns(0) == 0
+        && nnue::to_centipawns(std::numeric_limits<int>::max()) == score::TABLEBASE - 1
+        && nnue::to_centipawns(std::numeric_limits<int>::min()) == -score::TABLEBASE + 1,
+        "Stockfish units must convert to Maxima centipawns without reserved scores or overflow");
     magic::init();
     uci::silent(true);
     std::vector<uint8_t> bytes(21022697);
@@ -40,10 +45,11 @@ int main() {
     put_u32(bytes, 8, 177);
     put_u32(bytes, 189, 0x5d69d7b8);
     put_u32(bytes, network_start, 0x63337156);
-    put_u32(bytes, output_bias_offset, 16 * 123);
+    put_u32(bytes, output_bias_offset, 16 * 208);
     write_file(path, bytes);
     std::string error;
-    bool success = check(nnue::set_path(path.string(), error), "Valid HalfKP model must load");
+    bool success = unit_checks;
+    success &= check(nnue::set_path(path.string(), error), "Valid HalfKP model must load");
     auto first = nnue::snapshot();
     if (!first) return 1;
     options::get_option("UseNNUE")->value = 0;
@@ -55,7 +61,7 @@ int main() {
     options::get_option("UseNNUE")->value = 1;
     auto neural_storage = std::make_unique<search_t>(fen);
     auto & neural = *neural_storage;
-    success &= check(evaluate(&neural) == 123 && neural.stack->mt && neural.stack->pt,
+    success &= check(evaluate(&neural) == 100 && neural.stack->mt && neural.stack->pt,
         "NNUE score must replace HCE while retaining material/pawn metadata");
     success &= check(neural.tt_context() != hce_context, "HCE and NNUE must not share TT score context");
     success &= check(evaluate(&hce) == hce_score && !hce.evaluation_network,
@@ -83,7 +89,7 @@ int main() {
         "NNUE must never synthesize tablebase/mate scores");
     success &= check(extreme.tt_context() != neural.tt_context(), "Different models need different TT contexts");
     neural.stack->eval_result = score::INVALID;
-    success &= check(evaluate(&neural) == 123, "Search must own immutable model across reloads");
+    success &= check(evaluate(&neural) == 100, "Search must own immutable model across reloads");
     auto checked_storage = std::make_unique<search_t>("7k/8/8/8/8/8/7r/K7 w - - 0 1");
     auto & checked = *checked_storage;
     checked.stack->in_check = true;
@@ -95,7 +101,7 @@ int main() {
         && losers_score != score::TABLEBASE - 1, "Royal-losers must retain material-only evaluator");
     nnue::set_path("", error);
     neural.stack->eval_result = score::INVALID;
-    success &= check(!nnue::snapshot() && evaluate(&neural) == 123,
+    success &= check(!nnue::snapshot() && evaluate(&neural) == 100,
         "Unload must not invalidate retained snapshots");
     options::get_option("UseNNUE")->value = 0;
     auto restored_storage = std::make_unique<search_t>(fen);

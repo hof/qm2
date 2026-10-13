@@ -177,7 +177,14 @@ int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
     const auto hidden2 = affine(hidden1, _hidden2_weights, _hidden2_biases);
     int64_t sum = _output_bias;
     for (size_t i = 0; i < 32; ++i) sum += int(hidden2[i]) * int(_output_weights[i]);
-    return static_cast<int>(std::clamp(sum / 16, int64_t(-score::TABLEBASE + 1), int64_t(score::TABLEBASE - 1)));
+    return static_cast<int>(sum / 16);
+}
+
+int to_centipawns(int raw_score) {
+    // Pinned sf_13 UCI::value(): 100 centipawns = PawnValueEg (208 units).
+    // This is a unit conversion, not Stockfish's material/tempo/rule50 scaling.
+    const int64_t centipawns = int64_t(raw_score) * 100 / 208;
+    return static_cast<int>(std::clamp(centipawns, int64_t(-score::TABLEBASE + 1), int64_t(score::TABLEBASE - 1)));
 }
 
 bool set_path(const std::string & path, std::string & error) {

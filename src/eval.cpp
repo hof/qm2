@@ -93,7 +93,7 @@ int evaluate(search_t * s) {
         pawns::eval(s);
         auto & accumulator = s->evaluation_accumulators[s->brd.ply];
         const auto * previous = s->brd.ply ? &s->evaluation_accumulators[s->brd.ply - 1] : nullptr;
-        const int result = s->evaluation_network->evaluate(s->brd, accumulator, previous);
+        const int result = nnue::to_centipawns(s->evaluation_network->evaluate(s->brd, accumulator, previous));
         s->stack->eg_score = s->stack->eval_result = result;
         return result;
     }

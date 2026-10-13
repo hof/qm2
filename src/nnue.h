@@ -28,6 +28,7 @@ struct alignas(64) accumulator_t {
 class network_t {
 public:
     static std::shared_ptr<const network_t> load(const std::string & path, std::string & error);
+    // Raw Stockfish 13 internal units. Convert before use by Maxima's search.
     int evaluate(const board_t & board, accumulator_t & accumulator,
         const accumulator_t * previous = nullptr) const;
     void prepare(const board_t & board, const move_t * move, accumulator_t & accumulator) const;
@@ -47,6 +48,8 @@ private:
     void add_feature(std::array<int16_t, 256> & values, bool color,
         int king, int piece, int square, bool subtract) const;
 };
+
+int to_centipawns(int raw_score);
 
 // Configuration changes occur after stopping/joining the engine worker.
 // Snapshots also retain their weights across later reloads or unloads.

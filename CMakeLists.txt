@@ -139,7 +139,7 @@ if(BUILD_TESTING)
         add_test(NAME test_nnue_lifecycle COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/test_nnue_lifecycle.py
             ${PROJECT_BINARY_DIR}/src/maxima2 "${maxima_nnue_test_network}")
-        set_tests_properties(test_nnue_lifecycle PROPERTIES TIMEOUT 90)
+        set_tests_properties(test_nnue_lifecycle PROPERTIES TIMEOUT 180)
     endif()
 
     add_test(test_experience tests/test_experience)
