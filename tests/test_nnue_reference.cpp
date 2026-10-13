@@ -3,25 +3,46 @@
 #include "nnue.h"
 #include <random>
 
-// Independent reference API; do not import its global piece/color enums.
-extern "C" void nnue_init(const char * path);
-extern "C" int nnue_evaluate_fen(const char * fen);
+// Keep the independent reference's piece/color names out of the engine scope.
+namespace reference {
+#include "../third_party/nnue_reference/nnue.h"
+}
 
 namespace {
 size_t comparisons = 0;
 
 bool compare(search_t & search) {
     const auto fen = search.brd.to_string();
-    const int reference = nnue_evaluate_fen(fen.c_str());
+    const int reference_score = reference::nnue_evaluate_fen(fen.c_str());
     nnue::accumulator_t fresh;
     const int recomputed = search.evaluation_network->evaluate(search.brd, fresh);
     auto & accumulator = search.evaluation_accumulators[search.brd.ply];
     const auto * previous = search.brd.ply ? &search.evaluation_accumulators[search.brd.ply - 1] : nullptr;
     const int incremental = search.evaluation_network->evaluate(search.brd, accumulator, previous);
     ++comparisons;
-    bool success = reference == recomputed && reference == incremental && fresh.values == accumulator.values;
-    if (!search.brd.in_check()) success &= evaluate(&search) == reference * 100 / 208;
-    if (!success) std::cerr << fen << ": reference=" << reference << " full=" << recomputed
+    // Independently refreshed reference accumulators also check the feature map
+    // and every loaded feature weight, rather than only the final score.
+    constexpr int piece_map[] = {0, 6, 5, 4, 3, 2, 1, 12, 11, 10, 9, 8, 7};
+    int pieces[33] = {reference::wking, reference::bking};
+    int squares[33] = {search.brd.get_sq(WKING), search.brd.get_sq(BKING)};
+    int count = 2;
+    for (int square = 0; square < 64; ++square) {
+        const int piece = search.brd.matrix[square];
+        if (!piece || piece == WKING || piece == BKING) continue;
+        pieces[count] = piece_map[piece];
+        squares[count++] = square;
+    }
+    reference::NNUEdata reference_data{};
+    reference::NNUEdata * reference_states[] = {&reference_data, nullptr, nullptr};
+    const int reference_refresh = reference::nnue_evaluate_incremental(
+        search.brd.us() ? reference::white : reference::black, pieces, squares, reference_states);
+    bool success = reference_score == recomputed && reference_score == incremental
+        && reference_score == reference_refresh && fresh.values == accumulator.values;
+    for (int color = 0; color < 2; ++color)
+        for (int lane = 0; lane < 256; ++lane)
+            success &= fresh.values[color][lane] == reference_data.accumulator.accumulation[!color][lane];
+    if (!search.brd.in_check()) success &= evaluate(&search) == reference_score * 100 / 208;
+    if (!success) std::cerr << fen << ": reference=" << reference_score << " full=" << recomputed
         << " incremental=" << incremental << '\n';
     return success;
 }
@@ -69,7 +90,7 @@ int main(int argc, char ** argv) {
         std::cerr << error << '\n';
         return 1;
     }
-    nnue_init(argv[1]);
+    reference::nnue_init(argv[1]);
     options::get_option("UseNNUE")->value = 1;
     options::get_option("OwnBook")->value = 0;
     bool success = true;
@@ -111,6 +132,22 @@ int main(int argc, char ** argv) {
         }
         success &= compare(search);
         if (search.brd.to_string() != start) success = false;
+    }
+    // Exercise the final allocated accumulator and restoration from that depth.
+    // This is a storage-boundary fixture, not a legal sequence of chess moves.
+    {
+        auto boundary_storage = std::make_unique<search_t>(start);
+        auto & boundary = *boundary_storage;
+        success &= compare(boundary);
+        for (int ply = 0; ply < MAX_PLY; ++ply) {
+            boundary.forward();
+            success &= compare(boundary);
+        }
+        for (int ply = MAX_PLY; ply > 0; --ply) {
+            boundary.backward();
+            success &= compare(boundary);
+        }
+        success &= boundary.brd.ply == 0 && boundary.brd.to_string() == start;
     }
     std::cout << comparisons << " full/incremental/reference comparisons" << std::endl;
     // Run the actual search, including node-budget cancellation and restart.

@@ -63,6 +63,17 @@ int main() {
     auto & neural = *neural_storage;
     success &= check(evaluate(&neural) == 100 && neural.stack->mt && neural.stack->pt,
         "NNUE score must replace HCE while retaining material/pawn metadata");
+    // A constant-output network must remain constant across positions where
+    // classical evaluation or hybrid selection would give different scores.
+    for (const char * position : {
+            "7k/8/8/8/8/8/P7/K7 w - - 0 1",
+            "7k/8/8/8/8/8/P7/K7 b - - 80 1",
+            "7k/8/8/8/8/8/3Q4/K7 w - - 0 1",
+            "7k/8/8/8/8/8/3q4/K7 b - - 80 1"}) {
+        auto position_storage = std::make_unique<search_t>(position);
+        success &= check(evaluate(position_storage.get()) == 100,
+            "NNUE mode must not blend or fall back to classical scores");
+    }
     success &= check(neural.tt_context() != hce_context, "HCE and NNUE must not share TT score context");
     success &= check(evaluate(&hce) == hce_score && !hce.evaluation_network,
         "Existing searches must retain their evaluator");
