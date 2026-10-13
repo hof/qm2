@@ -263,6 +263,39 @@ KPK is an embedded win/draw bitbase. Proven draws stop search with the configure
 draw score; winning positions retain search because KPK has no distance-to-zero
 information. Tests independently verify all legal normalized KPK states.
 
+### Standard NNUE bootstrap
+
+NNUE development lives on `feat/nnue-bootstrap`. HCE remains the standard
+chess default/fallback and strength reference; royal-losers remains material-only.
+The initial target is pretrained CPU inference, without training or GPU hardware.
+
+Candidate assessment: the current local Stockfish architecture combines HalfKA,
+threat and piece-pair features and has substantial position/accumulator coupling.
+Other engines' networks require their matching feature sets and inference cores;
+`.nnue` does not identify one universal format. The first supported family is
+legacy HalfKP, 41024 inputs, two 256-wide accumulators, 512->32->32->1 integer
+inference. It has an independently pinned CFish-derived probe for exact reference
+checks and a compact board adapter. This is a correctness/bootstrap choice, not
+proof of the strongest evaluator or a commitment to this family indefinitely.
+
+Official CC0 bootstrap weights: `nn-62ef826d1a6d.nnue`, full SHA-256
+`62ef826d1a6d11b9e814188025aa02a60815c037292e0ef9bbb9bf4f724e5e63`.
+Run `python3 tools/download_nnue.py` to fetch and verify them into ignored
+`networks/`. The downloader does not change engine defaults. Weight provenance:
+https://github.com/official-stockfish/networks. The GPL reference probe revision
+and source ownership are recorded in `third_party/nnue_reference/README.md`.
+
+Evaluation contract: standard scores are relative to the side to move, in the
+network's approximate centipawn units, clamped below the tablebase score range.
+Search retains checks, terminal/draw/tablebase decisions and material-based
+pruning classification. HCE tempo, positional terms and endgame score adjustments
+must not be added to NNUE scores. Search captures an immutable model snapshot;
+mutable accumulators belong to that search. Evaluator/model changes must prevent
+reuse of incompatible TT scores. Invalid loads must retain the previous model.
+Correctness gates include full/reference/incremental equivalence, special moves,
+null moves, restoration and cancellation. Measure CPU throughput and paired
+playing strength before changing the default. Parallel-cache work is separate.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
