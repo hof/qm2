@@ -40,20 +40,26 @@ class strength_tests(unittest.TestCase):
         summary = match_summary(pair_records([(2, 1)] * 150), args)
         self.assertEqual(summary['sprt']['decision'], 'accept_h1')
         self.assertEqual(summary['minimum_gain']['decision'], 'continue')
-        self.assertEqual(summary['sprt']['alpha'], .05)
-        self.assertEqual(summary['sprt']['beta'], .05)
-        self.assertEqual(summary['minimum_gain']['alpha'], .05)
+        self.assertEqual(summary['sprt']['alpha'], .025)
+        self.assertEqual(summary['sprt']['beta'], .025)
+        self.assertEqual(summary['minimum_gain']['alpha'], .025)
 
-    def test_hybrid_preserves_original_sprt_at_every_prefix(self):
+    def test_hybrid_allocates_requested_budgets_at_every_prefix(self):
         games = pair_records([(2, 2)] * 120)
-        args = SimpleNamespace(sprt=[0, 10], sprt_alpha=.05, sprt_beta=.05,
-                               sprt_min_elo_stop=True, pairs=200)
         from maxima_runner.sprt import sprt_summary
-        for n in range(1, len(games) + 1):
-            summary = match_summary(games[:n], args)
-            self.assertEqual(summary['sprt'], sprt_summary(games[:n], 0, 10))
-        self.assertAlmostEqual(summary['sprt']['upper_bound'], math.log(19))
-        self.assertEqual(summary['minimum_gain']['confidence'], .95)
+        for alpha, beta in ((.05, .05), (.08, .03), (.002, .2)):
+            args = SimpleNamespace(sprt=[0, 10], sprt_alpha=alpha, sprt_beta=beta,
+                                   sprt_min_elo_stop=True, pairs=200)
+            for n in range(1, len(games) + 1):
+                summary = match_summary(games[:n], args)
+                self.assertEqual(summary['sprt'], sprt_summary(games[:n], 0, 10, alpha / 2, beta / 2))
+                bound_alpha = summary['minimum_gain']['alpha']
+                self.assertEqual(bound_alpha, min(alpha, beta) / 2)
+                self.assertLessEqual(summary['sprt']['alpha'] + bound_alpha, alpha)
+                self.assertLessEqual(summary['sprt']['beta'] + bound_alpha, beta)
+            if alpha == beta == .05:
+                self.assertAlmostEqual(summary['sprt']['upper_bound'], math.log(39))
+                self.assertEqual(summary['minimum_gain']['confidence'], .975)
 
     def test_pair_integrity_and_parameters(self):
         games = pair_records([(2, 2)] * 100)
@@ -151,9 +157,9 @@ class strength_cli_tests(unittest.TestCase):
                 self.assertEqual(report['stop_reason'], 'maximum_pairs')
                 self.assertEqual(report['summary']['minimum_gain']['decision'], 'inconclusive')
                 if report['sprt']:
-                    self.assertEqual(report['sprt']['alpha'], .1)
-                    self.assertEqual(report['sprt']['beta'], .04)
-                    self.assertEqual(report['minimum_gain']['alpha'], .05)
+                    self.assertEqual(report['sprt']['alpha'], .05)
+                    self.assertEqual(report['sprt']['beta'], .02)
+                    self.assertEqual(report['minimum_gain']['alpha'], .02)
                     self.assertEqual(report['summary']['sprt']['decision'], 'inconclusive')
                 output.unlink()
                 pgn.unlink()

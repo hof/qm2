@@ -672,21 +672,21 @@ Whichever this rule or SPRT decides first ends the run. If both decide on the
 same pair, the minimum-gain decision determines the stop reason. Each test's
 own decision remains visible; `accept_h1` alone still does not certify ELO1.
 
-Hybrid mode preserves the original SPRT alpha, beta and thresholds exactly.
-The additional confidence bound has its own error budget of 0.05 and simultaneous
-95% coverage across its declared pair checkpoints. Report confidence is specific
-to that bound; SPRT retains its requested nominal model-based error targets.
-These are separate per-rule targets, not a joint 95% guarantee for selecting
-either rule, and the rules use the same games. On an identical sequence of
-results, hybrid mode cannot stop later than the original SPRT; clock-based
-reruns can produce different results. The added rule may not help close gains.
+Adding a rule requires allocating the error budget. Hybrid mode gives SPRT
+half the requested alpha and beta, and the confidence bound an error budget
+of `min(alpha, beta) / 2`. At defaults this is 0.025 for each SPRT target and
+97.5% simultaneous coverage for the bound. By a union bound, positive errors
+at ELO0 and negative errors at ELO1 retain the requested nominal overall targets;
+the SPRT contribution remains asymptotic/model-based. Tightening its thresholds
+can lengthen small-gain tests compared with plain SPRT. This is not a promise
+of universally fastest stopping.
 
 For a positive decision that must establish a minimum gain, use `--min-elo 10`
 instead. It uses simultaneous 95% coverage and never accepts an ordinary SPRT
 decision. All stopping modes are exclusive except the explicit SPRT hybrid flag.
 Minimum gains must be finite within [0, 200] logistic Elo, always A relative
 to B; put the candidate in A. Reports identify the mode, target score, minimum
-Elo, per-rule error targets, declared number of checks, bounds and stop reason.
+Elo, allocated budgets, declared number of checks, bounds and stop reason.
 A cap without a crossing is inconclusive; incomplete/failing pairs cannot stop.
 
 The confidence rule uses pair scores in [0, 1] and radius
