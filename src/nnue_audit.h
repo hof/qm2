@@ -17,7 +17,7 @@ struct audit_counters_t {
     uint64_t researches = 0, root_researches = 0, research_fail_highs = 0;
     uint64_t iid_calls = 0;
     uint64_t extension_candidates = 0, extension_see_rejected = 0;
-    uint64_t extension_budget_rejected = 0, extensions_applied = 0;
+    uint64_t extensions_applied = 0;
     uint64_t max_check_extensions = 0, max_main_ply = 0, max_q_ply = 0;
     uint64_t calls = 0, cached_returns = 0;
     uint64_t reuses = 0, updates = 0;
@@ -41,7 +41,6 @@ struct audit_state_t {
     bool quiet_checks = false;
     bool quiet_castling = false;
     bool check_extensions = false;
-    int check_extension_limit = 0;
     std::string root_fen;
     struct cutoff_t {
         std::string fen;

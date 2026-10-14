@@ -605,16 +605,16 @@ The standard-search visit count reconciles with `pvs_nodes + q_nodes`.
 
 `NNUEAuditCheckExtensions` (default false, audit builds only) adds a controlled
 check-extension rule in `quiet` mode: one extra main-search ply for a checking
-move with nonnegative SEE, including root moves. Each line can spend at most
-the nominal iteration depth in extra plies; at depth three this permits three
-extra plies and bounds main search to six plies. Child stack frames inherit
-the spent budget, including through null moves; siblings and re-searches
-retain the proper parent budget. Quiescence does not add these extensions and
-can continue beyond the main-search bound for captures and compulsory evasions.
-The `audit_extensions` report distinguishes candidates, SEE rejections, budget
-rejections and applied extensions, plus peak extensions per line and main/q
+move with nonnegative SEE, including root moves. There is no per-line extension
+cap; the existing draw, repetition, cancellation and stack-ceiling handling
+remain active. Child stack frames track accumulated extensions, including
+through null moves; siblings and re-searches retain the proper parent count.
+Quiescence does not add these extensions but retains captures and compulsory
+evasions. The `audit_extensions` report distinguishes candidates, SEE rejections
+and applied extensions, plus peak extensions per line and main/q
 ply. Changing the flag stops search and clears TT. Tests cover both colors and
-evaluators, safe/losing checks, budget exhaustion, inheritance and cancellation.
+evaluators, safe/losing checks, extension beyond the former three-ply budget,
+inheritance and cancellation.
 This controlled rule does not change ordinary search's existing extensions.
 Internal iterative deepening is explicitly disabled in `fixed` and `quiet`:
 extensions must not silently activate a second feature. `audit_iid` reports
@@ -1172,6 +1172,36 @@ root searches also passed independent checks. Full Release checks passed 35/35
 and focused ASan/UBSan/leak checks passed 3/3. Protocols, frozen binaries,
 source patches, interrupted-trial evidence and all reports are private under
 `.context/baselines/2026-10-14/check-extensions/`, reserved from training.
+
+The follow-up removed the per-line check-extension budget in both controls,
+retaining the same one-ply nonnegative-SEE rule and all other settings. All four
+100-game profiles reproduced the capped run's game records, searched positions,
+chosen moves and scores; a few PVs and work counters changed. Scores and median
+visits therefore remain exactly as in the table above. With extensions enabled
+in both engines, total visits changed from 10791888/13403611 to
+10792120/13403800, only +0.0021%/+0.0014%. Maximum accumulated extensions were
+five in Maxima and six in the SF13-only profile; positive-depth main-search ply
+reached seven/eight respectively. Quiescence peaks remained 23/39. Existing
+repetition, draw, cancellation and stack-ceiling handling remains in force.
+
+The same 400 opening-root searches reproduced every capped trace. A separate
+sample of 50 positions selected because the earlier games had exhausted the
+cap compared each engine's capped and uncapped searches with identical empty
+prior histories. Total visits increased 1.03% for Maxima and 0.35% for SF13,
+with no chosen-move changes. Median per-position ratios were 1.0, but the
+largest increases were 2.08 and 1.52 times: individual checking sequences can
+still grow substantially. These targeted diagnostics show little aggregate
+benefit from the cap at depth three, not a guarantee at higher depths or a
+timed strength measurement. The uncapped rule is the current controlled
+baseline; ordinary search behavior is unchanged.
+
+Independent audits passed all 400 games, 48440 legal PGN plies, 42040 game
+searches and 600 additional root searches, including legal PVs, counter
+equations, depth, identities and zero IID activity. No unfinished games or
+forfeits occurred. Full Release checks passed 35/35 and focused ASan/UBSan/leak
+checks passed 3/3. Protocols, binaries, source patches and comparison reports
+are private under `.context/baselines/2026-10-14/uncapped-extensions/`, reserved
+from training.
 
 ## 5. Build and debugging
 

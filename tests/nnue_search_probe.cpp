@@ -112,7 +112,6 @@ int main(int argc, char ** argv) {
                 << ",\"iid_calls\":" << counts.iid_calls
                 << ",\"extension_candidates\":" << counts.extension_candidates
                 << ",\"extension_see_rejected\":" << counts.extension_see_rejected
-                << ",\"extension_budget_rejected\":" << counts.extension_budget_rejected
                 << ",\"extensions_applied\":" << counts.extensions_applied
                 << ",\"max_check_extensions\":" << counts.max_check_extensions
                 << ",\"max_main_ply\":" << counts.max_main_ply

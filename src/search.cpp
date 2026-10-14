@@ -192,7 +192,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.quiet_checks = horizon == 2 && options::get_value("NNUEAuditQuietChecks");
     nnue_audit.quiet_castling = horizon == 2 && options::get_value("NNUEAuditCastling");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
-    nnue_audit.check_extension_limit = game.max_depth;
     if (horizon) {
         beta_pruning = ffp_enabled = null_enabled = lmr_enabled = false;
         nnue_audit.q_delta = nnue_audit.q_see = false;
@@ -400,7 +399,6 @@ void search_t::go() {
         uci::out("info string audit_castles searched " + std::to_string(nnue_audit.counters.q_castles));
         uci::out("info string audit_extensions candidates " + std::to_string(counts.extension_candidates)
             + " see_rejected " + std::to_string(counts.extension_see_rejected)
-            + " budget_rejected " + std::to_string(counts.extension_budget_rejected)
             + " applied " + std::to_string(counts.extensions_applied)
             + " max_per_line " + std::to_string(counts.max_check_extensions)
             + " max_main_ply " + std::to_string(counts.max_main_ply)
@@ -844,10 +842,6 @@ int search_t::extension(move_t * move, int gives_check) {
         if (!nnue_audit.check_extensions || !gives_check) return 0;
         auto & counts = nnue_audit.counters;
         ++counts.extension_candidates;
-        if (stack->check_extensions >= nnue_audit.check_extension_limit) {
-            ++counts.extension_budget_rejected;
-            return 0;
-        }
         if (!brd.see(move, 0)) {
             ++counts.extension_see_rejected;
             return 0;
@@ -901,7 +895,6 @@ int search_t::ceiling_score() {
 int search_t::pvs_root(int alpha, int beta, int depth) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     ++nnue_audit.counters.root_calls;
-    nnue_audit.check_extension_limit = depth;
 #endif
 
     assert(root.move_count > 0);
