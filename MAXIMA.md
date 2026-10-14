@@ -1273,6 +1273,12 @@ equations. No engine source or search defaults changed. Scripts and reports
 are private under `.context/baselines/2026-10-14/depth-four-pruning/`, reserved
 from training.
 
+Keep the current reverse-futility baseline unchanged while completing the
+stepwise search comparisons. More aggressive reverse futility is a deferred
+strength experiment: compare candidate margins and guards against this
+baseline, then validate playing strength with managed-time games. Fewer nodes
+alone are not sufficient evidence to adopt a change.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
