@@ -55,6 +55,8 @@ namespace options {
         , { "NNUEAuditFutility", BOOL, 0, "type check default false" }
         , { "NNUEAuditDelta", BOOL, 0, "type check default false" }
         , { "NNUEAuditSEE", BOOL, 0, "type check default false" }
+        , { "NNUEAuditQuietChecks", BOOL, 0, "type check default false" }
+        , { "NNUEAuditCastling", BOOL, 0, "type check default false" }
 #endif
     };
     

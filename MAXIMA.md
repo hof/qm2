@@ -219,7 +219,11 @@ existing precedence; a ceiling evaluation is not a completed deeper search.
 
 Standard quiescence retains castling at entry and below entry, alongside captures
 and promotions; entry also searches quiet checks, and checked nodes search all
-legal evasions. Delta/SEE now applies only to captures, preserving castling.
+legal evasions. Ordinary quiet checks at entry require `see(move, 0)`; at
+reversible clock 99 they remain searchable to preserve fifty-move draws.
+Checked nodes retain all legal evasions, including losing counterchecks.
+Capture delta/SEE preserves castling; castles have zero material SEE and their
+positional effect is evaluated after the move.
 This is an existing bounded quiet extension, not a certified strength gain.
 
 An exact TT return can shorten the searched PV because an entry stores a score
@@ -576,6 +580,17 @@ the diagnostic probe. Candidates are captures surviving delta and all common
 guards; the count is not the number of all captures. Tests cover losing and
 equal exchanges, checking sacrifices, low-material exclusions, HCE/NNUE parity
 and cancellation/restoration.
+
+`NNUEAuditQuietChecks` and `NNUEAuditCastling` (default false, audit builds
+only) independently add ordinary quiet checks and all legal castles at the
+first quiescence ply in `quiet` mode. Quiet checks use the production SEE and
+clock guards; checked nodes always retain every legal evasion. These controls
+do not add quiet moves below entry. Changing either stops search and clears TT.
+Worker-owned `audit_checks` counters distinguish candidates, SEE rejections
+and searched checks; `audit_castles` counts searched entry castles. Tests cover
+a hanging queen check, safe checks, losing countercheck evasions, checking and
+nonchecking castles, below-entry exclusions and cancellation/restoration with
+both evaluators. Ordinary search retains its existing below-entry castling.
 
 The agreed comparison order is to finish the feature-by-feature depth-three
 iteration, then advance to depth four and five one step at a time. Record
@@ -989,6 +1004,60 @@ Median paired elapsed ratios (after/before) were 1.0025 with HCE and 0.9859
 with NNUE; timings varied across repeats, so no reliable whole-engine speed or
 Elo gain is claimed. Protocols, frozen binaries, raw timings and equivalence
 checks are private under `.context/baselines/2026-10-14/see-threshold/`.
+
+The first-quiescence-ply quiet-check comparison retained null move, reverse
+futility, frontier futility, delta and capture SEE in both engines. Four fixed
+100-game/50-pair depth-three profiles used the same frozen binary pair, pinned
+network and reserved openings. Ordinary quiet checks require nonnegative SEE,
+except at reversible clock 99; checked nodes retain all legal evasions.
+Castling remained disabled in this step. Other selective features stayed off.
+
+| Quiet checks enabled | Maxima W/D/L | Maxima score | Median nodes Maxima/SF |
+| --- | ---: | ---: | ---: |
+| Neither engine | 19/64/17 | 51% | 1061 / 899 |
+| Maxima only | 31/64/5 | 63% | 1149 / 837.5 |
+| SF13 control only | 14/65/21 | 46.5% | 1114 / 1027 |
+| Both engines | 19/75/6 | 56.5% | 1131 / 899.5 |
+
+The baseline reproduced all preceding legality-repeat game records and 9361
+move rows exactly. Both-enabled Maxima median nodes increased about 6.6%; this
+is a shallow fixed-depth diagnostic, not a timed Elo or throughput claim.
+Independent audits and separate castling comparisons are recorded with source
+patches, declared protocols, frozen binaries and per-move counters privately
+under `.context/baselines/2026-10-14/nnue-quiet-control/`.
+
+The subsequent castling step retained quiet checks in both engines and
+independently added all legal castles at quiescence entry, including nonchecking
+castles. It reused the both-checks run as its baseline and the same frozen
+binaries, network and 50 paired openings for three additional 100-game runs.
+
+| Entry castling enabled | Maxima W/D/L | Maxima score | Median nodes Maxima/SF |
+| --- | ---: | ---: | ---: |
+| Neither engine | 19/75/6 | 56.5% | 1131 / 899.5 |
+| Maxima only | 21/75/4 | 58.5% | 1190.5 / 909 |
+| SF13 control only | 15/79/6 | 54.5% | 1130 / 890 |
+| Both engines | 17/76/7 | 55% | 1117 / 838 |
+
+A separate paired-root diagnostic searched the same 50 opening FENs with both
+engines at depth three. Maxima's median within-position node ratio was 1.0119
+when adding checks and 1.0191 when adding castles; the largest sampled ratios
+were 1.8133 and 2.8152. Total reported nodes were 108040/89476 in the baseline,
+112268/94855 with checks and 112284/103231 with checks and castles (Maxima/SF).
+Match medians also depend on the positions reached. Maxima counts search calls;
+SF13 counts made moves, with different null/re-search accounting. Cross-engine
+node ratios therefore do not directly measure relative efficiency. Neither
+these fixed-depth results nor the small point-score changes establish timed Elo.
+
+Independent audits passed all 700 games, 84444 legal PGN plies and 73244
+searched moves, with legal PVs, reported depth three and no unfinished games
+or forfeits. Counters verified disabled features stayed inactive and enabled
+ones actually searched checks/castles. Full Release-audit checks passed 35/35;
+focused ASan/UBSan/leak checks passed 3/3. The ordinary Release engine was
+rebuilt and exercised with HCE and NNUE. The independent clock-99 horizon and
+castling certificates retained their original expectations: an initial SEE
+filter lost drawing checks at that boundary, motivating the clock safeguard.
+All protocols, source patches, audits and paired-root data are preserved with
+the quiet-control artifacts above, reserved from training.
 
 ## 5. Build and debugging
 

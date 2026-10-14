@@ -455,6 +455,8 @@ namespace uci {
                                     || name == "NNUEAuditFutility"
                                     || name == "NNUEAuditDelta"
                                     || name == "NNUEAuditSEE"
+                                    || name == "NNUEAuditQuietChecks"
+                                    || name == "NNUEAuditCastling"
 #endif
                                     )) {
                             trans_table::clear();

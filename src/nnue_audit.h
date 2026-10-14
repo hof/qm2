@@ -18,6 +18,8 @@ struct audit_counters_t {
     uint64_t q_delta_prunes = 0, q_see_prunes = 0;
     uint64_t q_delta_candidates = 0;
     uint64_t q_see_candidates = 0;
+    uint64_t q_check_candidates = 0, q_check_rejected = 0, q_check_searched = 0;
+    uint64_t q_castles = 0;
     uint64_t null_attempts = 0, null_cutoffs = 0;
     uint64_t beta_candidates = 0, beta_cutoffs = 0;
     uint64_t ffp_candidates = 0, ffp_prunes = 0;
@@ -29,6 +31,8 @@ struct audit_state_t {
     bool q_delta = true, q_see = true;
     bool fixed_horizon = false;
     bool aligned_quiescence = false;
+    bool quiet_checks = false;
+    bool quiet_castling = false;
     std::string root_fen;
     struct cutoff_t {
         std::string fen;
