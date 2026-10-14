@@ -178,7 +178,8 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     draw_contempt = options::get_value("DrawContempt");
     evaluation_network = options::get_value("UseNNUE") ? nnue::snapshot() : nullptr;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    const int horizon = evaluation_network ? options::get_value("NNUEAuditHorizon") : 0;
+    const int requested_horizon = options::get_value("NNUEAuditHorizon");
+    const int horizon = requested_horizon == 1 && !evaluation_network ? 0 : requested_horizon;
     nnue_audit.fixed_horizon = horizon == 1;
     nnue_audit.aligned_quiescence = horizon == 2;
     if (horizon) {

@@ -61,5 +61,20 @@ int main(int argc, char ** argv) {
     options::get_option("NNUEAuditHorizon")->value = 0;
     if (!search.nnue_audit.aligned_quiescence || search.beta_pruning || search.ffp_enabled
             || search.null_enabled || search.lmr_enabled || search.extension(&search.root.moves[0].move, 2)) return 1;
+    options::get_option("NNUEAuditHorizon")->value = 2;
+    options::get_option("UseNNUE")->value = 0;
+    search.init(fen, nullptr);
+    if (search.evaluation_network || !search.nnue_audit.aligned_quiescence
+            || search.beta_pruning || search.ffp_enabled || search.null_enabled || search.lmr_enabled
+            || search.nnue_audit.q_delta || search.nnue_audit.q_see
+            || search.extension(&search.root.moves[0].move, 2)) return 1;
+    search.game.max_depth = 3;
+    search.go();
+    if (search.completed_depth != 3 || search.brd.ply || search.brd.to_string() != fen) return 1;
+    options::get_option("NNUEAuditHorizon")->value = 1;
+    search.init(fen, nullptr);
+    if (search.nnue_audit.fixed_horizon || search.nnue_audit.aligned_quiescence) return 1;
+    options::get_option("NNUEAuditHorizon")->value = 0;
+    options::get_option("UseNNUE")->value = 1;
     std::cout << "Live lane/cache corruption detected; audited cancellation/restoration passed\n";
 }

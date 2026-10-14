@@ -450,8 +450,9 @@ requested depth. Optional beta-cutoff recording is capped at 128 events per
 root and restricted to irreversible nodes, allowing FEN replay without relevant
 earlier repetition history. Policy controls are diagnostic probe arguments.
 Audit builds also expose `NNUEAuditHorizon` with `normal` (default), `fixed` and
-`quiet` values. With NNUE selected, the latter two disable heuristic pruning,
-reductions, extensions and TT score cutoffs. `fixed` evaluates neural leaves
+`quiet` values. `quiet` works with either HCE or NNUE; `fixed` is active only with
+NNUE selected. Active contracts disable heuristic pruning, reductions,
+extensions and TT score cutoffs. `fixed` evaluates neural leaves
 at exactly the requested ply; `quiet` adds captures, promotions and legal check
 evasions, without quiet checks or castling. Probe modes of these names require
 NNUE and policy zero. The UCI option is absent from ordinary builds; changing
@@ -534,6 +535,21 @@ castling choices, quiescence pruning and other selective features still need
 separate experiments. Scripts, fixed protocol, PGNs and audit are stored beside
 the prior controls as `games_quiet.py`, `quiet-games.json` and
 `quiet-games-audit.json`. Production behavior remains unchanged.
+
+An HCE sanity check used the same matched-quiescence search, depth three, 50
+opening pairs and SF13 NNUE-only opponent. The audit-only `quiet` horizon was
+corrected to remain active with HCE; previously its activation required a
+loaded NNUE snapshot. HCE and NNUE were then run from the same updated binary.
+HCE scored 7W/58D/35L (36%); NNUE repeated 24W/54D/22L (51%), reproducing all
+previous NNUE game records and move traces exactly. Both 100-game runs passed
+independent audits: HCE 10842 legal PGN plies/9242 searched moves, NNUE
+10940/9340, every reported depth three, no unfinished games or forfeits.
+This common-opponent diagnostic supports continuing with the current network;
+it is not a direct HCE-versus-NNUE match or proof of a normal-search Elo gain.
+The HCE initialization/restoration regression, standard and NNUE lifecycle
+checks, and ASan/UBSan with leak detection passed. Reports and scripts are
+stored as `quiet-hce-games.*`, `quiet-nnue-recheck-games.*` and
+`hce-comparison-summary.json` beside the other reserved controls.
 
 ## 5. Build and debugging
 
