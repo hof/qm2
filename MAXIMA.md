@@ -1248,6 +1248,31 @@ to isolate features, not because fixed-depth experiments make it invalid.
 Distinguish an ordering search from internal depth reduction when comparing
 host mechanisms.
 
+A depth-four fixed-position ablation investigated the additional work before
+attributing it to move ordering. Seven profiles searched the same 50 opening
+FENs in both engines, retaining uncapped check extensions, entry quiet checks
+and castles, with LMR/IID/aspiration still off. Disabling reverse futility alone
+changed the median paired Maxima/SF visit ratio from 1.485 to 1.008; total
+visits changed from 442334/303072 to 616825/715404. With all three main-search
+prunes off (reverse futility, null move and frontier futility), the median
+ratio was 0.997. With all five tested prunes off, including capture delta and
+capture SEE, it was 0.750. Quiet-check SEE filtering and check-extension
+eligibility remained active in these profiles.
+
+This identifies reverse-futility selectivity and its interactions as the main
+measured explanation of the typical work gap in this sample, not proof of a
+blanket move-ordering deficit. In particular, the opponent's improving
+adjustment can make its depth-one reverse-futility margin zero, whereas
+Maxima retains a 100-cp allowance. Other margins and guards differ too;
+conservative behavior is contextual. Disabling a feature changes subsequent
+ordering, windows and pruning opportunities, so these effects are not additive
+percentages or a playing-strength recommendation. Independent audits passed
+all 700 searches, including exact reproduction of the 100 baseline opening
+traces, identities, legal moves/PVs, depth, disabled-feature counters and visit
+equations. No engine source or search defaults changed. Scripts and reports
+are private under `.context/baselines/2026-10-14/depth-four-pruning/`, reserved
+from training.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
