@@ -138,7 +138,8 @@ public:
     void remove_piece(const int piece, const int sq, const bool hash);
     void move_piece(const int piece, const int ssq, const int tsq, const bool hash);
     bool is_eg(endgame_t eg, bool us);
-    int see(const move_t * capture);
+    int see(const move_t * move);
+    bool see(const move_t * move, int threshold);
     bool is_gain(const move_t * move);
     int max_gain(const move_t * capture);
     int mvvlva(const move_t * capture);

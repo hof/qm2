@@ -159,7 +159,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 for (move_t * move = list->current; move != list->last; move++) {
                     if (s->wild == 17) {
                         move->score = 10 - move->promotion;
-                    } else if (depth <= 0 || brd->see(move) >= 0) {
+                    } else if (depth <= 0 || brd->see(move, 0)) {
                         move->score = move->promotion;
                     } else {
                         move->score = -100 + move->promotion;

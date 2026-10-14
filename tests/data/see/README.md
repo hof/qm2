@@ -29,3 +29,9 @@ from seeded legal games and include captures and quiet moves.
 The native test verifies scores and unchanged piece bitboards, matrix, stack
 pointer, ply, clocks and hashes. A separate live-search regression verifies
 that the pinned-pawn witness survives qsearch SEE pruning with HCE and NNUE.
+
+Each certificate also checks the threshold overload against its independent
+score: below/at/above equality, zero/one, both integer extremes, and thresholds
+from -1500 through 1500 in steps of 25. This supplies 236,928 comparisons.
+Castling's zero score has a separate boundary check. The full-score and threshold
+interfaces must preserve board state and agree on the same exchange model.

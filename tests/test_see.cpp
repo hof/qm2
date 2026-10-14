@@ -24,6 +24,7 @@
 #include "board.h"
 #include "move.h"
 #include <memory>
+#include <limits>
 #include <sstream>
 
 namespace {
@@ -64,6 +65,21 @@ bool legal_exchange_certificates() {
         }
         const auto before = state(*board);
         const int result = board->see(&move);
+        // Test both equality boundaries and a wide range of thresholds
+        // against the independent material certificate, including overflow edges.
+        for (int threshold : {std::numeric_limits<int>::min(), std::numeric_limits<int>::max(),
+                certificate.expected - 1, certificate.expected, certificate.expected + 1, 0, 1}) {
+            if (board->see(&move, threshold) != (certificate.expected >= threshold)) {
+                std::cerr << certificate.name << " threshold " << threshold << " differs\n";
+                success = false;
+            }
+        }
+        for (int threshold = -1500; threshold <= 1500; threshold += 25) {
+            if (board->see(&move, threshold) != (certificate.expected >= threshold)) {
+                std::cerr << certificate.name << " threshold " << threshold << " differs\n";
+                success = false;
+            }
+        }
         if (result != certificate.expected || state(*board) != before) {
             std::cerr << certificate.name << " SEE " << result << " expected "
                 << certificate.expected << ": " << certificate.fen << ' ' << certificate.move << '\n';
@@ -71,6 +87,7 @@ bool legal_exchange_certificates() {
         }
     }
     std::cout << std::size(certificates) << " independent legal exchange certificates checked\n";
+    std::cout << std::size(certificates) * 128 << " threshold comparisons checked\n";
     return success;
 }
 }
@@ -110,6 +127,12 @@ int main() {
     brd.init("r1bqkbnr/pppppppp/2n5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 1");
     mv.set(WPAWN, d2, d4);
     success &= assert_see(&brd, &mv, 0);
+
+    brd.init("r3k2r/ppp2ppp/8/8/8/8/PPP2PPP/R3K2R w KQkq - 0 1");
+    move_t castle_move{};
+    castle_move.set(&brd, "e1g1");
+    success &= brd.valid(&castle_move) && brd.legal(&castle_move);
+    success &= brd.see(&castle_move) == 0 && brd.see(&castle_move, 0) && !brd.see(&castle_move, 1);
     
     int vpawn = board::PVAL[WPAWN];
     int vminor = board::PVAL[WKNIGHT];

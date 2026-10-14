@@ -184,6 +184,18 @@ a least-valuable-attacker material model, with either side allowed to decline;
 it does not search alternative move choices or positional compensation. These
 conservative exclusions require their own strength tests.
 
+The overloaded SEE interface supports both full scores and threshold tests:
+`see(move)` returns the material score, while `see(move, threshold)` returns
+whether that score is at least the threshold. Both share one exchange routine
+and its legality checks. The threshold path uses material bounds to stop when
+the answer is determined, including possible recapture promotion gains; it
+does not build or fold a complete gain list. Threshold arithmetic uses a wider
+integer to handle extreme inputs safely. Qsearch, check extensions and boolean
+gain tests use this path; ordering that needs the numeric score retains the
+full-score call. This is an implementation optimization, not a pruning-policy
+change. Certificate tests compare both interfaces at equality boundaries,
+extreme integer thresholds and a broad range of ordinary thresholds.
+
 Standard null-move pruning excludes consecutive artificial passes and runs
 endgame verification with null pruning disabled throughout its subtree. The
 setting and board/history state are restored before handling cancellation;
@@ -961,6 +973,22 @@ three, no unfinished games or forfeits. This is a correctness fix with no large
 observed depth-three deficit; the half-point change does not establish an Elo
 gain. Artifacts are private under
 `.context/baselines/2026-10-14/see-legality/`, reserved from training.
+
+The shared SEE threshold overload preserves the numeric exchange model and
+search policy. All 1851 independent scores and 236928 threshold comparisons
+passed, including equality, integer extremes, promotions and king safety;
+castling has an additional zero-score boundary check. Full release-audit checks
+passed 35/35, and targeted ASan/UBSan/leak checks passed 3/3.
+
+Five alternating repeats of 3702000 predicate calls had median times 0.3187
+seconds for full-score comparison and 0.1966 seconds for the threshold overload,
+about 38% less time. Ordinary fixed-node comparisons over eight opening
+positions, three balanced repeats and both evaluators matched all 48 paired
+searches exactly in moves, scores, PVs, reported/selective depths and nodes.
+Median paired elapsed ratios (after/before) were 1.0025 with HCE and 0.9859
+with NNUE; timings varied across repeats, so no reliable whole-engine speed or
+Elo gain is claimed. Protocols, frozen binaries, raw timings and equivalence
+checks are private under `.context/baselines/2026-10-14/see-threshold/`.
 
 ## 5. Build and debugging
 

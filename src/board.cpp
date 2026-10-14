@@ -24,6 +24,7 @@
 
 #include "board.h"
 #include "hashcodes.h"
+#include <type_traits>
 
 /**
  * Flips board stack (e.g. the castling rights and side to move)
@@ -710,12 +711,111 @@ int board_t::max_gain(const move_t * move) {
 
 bool board_t::is_gain(const move_t * move) {
     if (move->capture) {
-        return see(move) > 0;
+        return see(move, 1);
     }
     if (move->promotion == WQUEEN || move->promotion == BQUEEN) {
-        return see(move) >= 0;
+        return see(move, 0);
     }
     return false;
+}
+
+namespace {
+
+// Both public overloads share the recapture selection and legality checks.
+// Compile-time specialization removes threshold logic from full-score calls
+// and the gain list/backward fold from threshold calls.
+template<bool threshold_test>
+std::conditional_t<threshold_test, bool, int>
+see_exchange(board_t & board, const move_t * move, int threshold) {
+    const int initial_gain = move->castle ? 0 : board.max_gain(move);
+    if (move->castle || move->piece == WKING || move->piece == BKING) {
+        if constexpr (threshold_test) return initial_gain >= threshold;
+        else return initial_gain;
+    }
+    // The opponent can decline, so the initial gain is an upper bound.
+    if constexpr (threshold_test)
+        if (initial_gain < threshold) return false;
+
+    const int target = move->tsq;
+    const U64 target_bit = BIT(target);
+    U64 occupied = (board.bb[ALLPIECES] & ~BIT(move->ssq)) | target_bit;
+    if (move->en_passant)
+        occupied &= ~BIT(target + (move->piece == WPAWN ? -8 : 8));
+
+    int gain[32];
+    int depth = 0;
+    if constexpr (!threshold_test) gain[0] = initial_gain;
+    int occupant = move->promotion ? move->promotion : move->piece;
+    bool side = move->piece > WKING; // Opponent of the initial mover.
+    const int king_square[2] = {board.get_sq(BKING), board.get_sq(WKING)};
+    // Root score >= threshold iff the opponent's optional gain <= limit.
+    // For W = max(0, capture_gain - next_W), each exchange flips <= to >=.
+    int64_t limit = int64_t(initial_gain) - threshold;
+    bool at_least = false;
+
+    while (depth < 31) {
+        const bool promotion_rank = side ? target >= a8 : target <= h1;
+        if constexpr (threshold_test) {
+            if (at_least && limit <= 0) return true;
+            if (!at_least && limit < 0) return false;
+            const int upper = board::PVAL[occupant]
+                + (promotion_rank ? board::PVAL[WQUEEN] - board::PVAL[WPAWN] : 0);
+            if (at_least && upper < limit) return false;
+            if (!at_least && upper <= limit) return true;
+        }
+        // Original bitboards remain valid at every source still occupied.
+        // The target occupant is tracked separately and must be masked out.
+        const U64 attackers = board.attacks_to(target, occupied) & board.all(side) & ~target_bit;
+        U64 from_bit = 0;
+        int piece = PAWN[side];
+        for (; piece <= KING[side]; ++piece) {
+            U64 candidates = attackers & board.bb[piece];
+            while (candidates) {
+                const U64 candidate = candidates & -candidates;
+                candidates &= candidates - 1;
+                const U64 next_occupied = occupied & ~candidate;
+                const int king = piece == KING[side] ? target : king_square[side];
+                if (!(board.attacks_to(king, next_occupied) & board.all(!side) & ~target_bit)) {
+                    from_bit = candidate;
+                    break;
+                }
+            }
+            if (from_bit) break;
+        }
+        if (!from_bit) break;
+        occupied &= ~from_bit;
+        const bool promotes = piece == PAWN[side] && promotion_rank;
+        const int next_occupant = promotes ? QUEEN[side] : piece;
+        const int promotion_gain = promotes ? board::PVAL[next_occupant] - board::PVAL[piece] : 0;
+        const int capture_gain = board::PVAL[occupant] + promotion_gain;
+        if constexpr (threshold_test) {
+            // A legal king capture ends the exchange; otherwise declining
+            // bounds W between zero and this actual capture's gain.
+            if (piece == KING[side])
+                return at_least ? capture_gain >= limit : capture_gain <= limit;
+            if (at_least && capture_gain < limit) return false;
+            if (!at_least && capture_gain <= limit) return true;
+            limit = capture_gain - limit;
+            at_least = !at_least;
+        } else {
+            gain[depth + 1] = capture_gain - gain[depth];
+        }
+        ++depth;
+        occupant = next_occupant;
+        if (piece == KING[side]) break;
+        side = !side;
+    }
+    if constexpr (threshold_test) {
+        return at_least ? 0 >= limit : 0 <= limit;
+    } else {
+        while (depth > 0) {
+            gain[depth - 1] = -MAX(-gain[depth - 1], gain[depth]);
+            --depth;
+        }
+        return gain[0];
+    }
+}
+
 }
 
 /**
@@ -725,59 +825,11 @@ bool board_t::is_gain(const move_t * move) {
  * the board. This does not search positional compensation or other squares.
  */
 int board_t::see(const move_t * move) {
-    if (move->castle) return 0;
-    const int target = move->tsq;
-    const U64 target_bit = BIT(target);
-    U64 occupied = (bb[ALLPIECES] & ~BIT(move->ssq)) | target_bit;
-    if (move->en_passant)
-        occupied &= ~BIT(target + (move->piece == WPAWN ? -8 : 8));
+    return see_exchange<false>(*this, move, 0);
+}
 
-    int gain[32];
-    int depth = 0;
-    gain[0] = max_gain(move);
-    int occupant = move->promotion ? move->promotion : move->piece;
-    if (occupant == WKING || occupant == BKING) return gain[0];
-    bool side = move->piece > WKING; // Opponent of the initial mover.
-    const int king_square[2] = {get_sq(BKING), get_sq(WKING)};
-
-    while (depth < 31) {
-        // Original bitboards remain valid at every source still occupied.
-        // The target occupant is tracked separately and must be masked out.
-        const U64 attackers = attacks_to(target, occupied) & all(side) & ~target_bit;
-        U64 from_bit = 0;
-        int piece = PAWN[side];
-        for (; piece <= KING[side]; ++piece) {
-            U64 candidates = attackers & bb[piece];
-            while (candidates) {
-                const U64 candidate = candidates & -candidates;
-                candidates &= candidates - 1;
-                const U64 next_occupied = occupied & ~candidate;
-                const int king = piece == KING[side] ? target : king_square[side];
-                if (!(attacks_to(king, next_occupied) & all(!side) & ~target_bit)) {
-                    from_bit = candidate;
-                    break;
-                }
-            }
-            if (from_bit) break;
-        }
-        if (!from_bit) break;
-        occupied &= ~from_bit;
-        const bool promotes = piece == PAWN[side]
-            && (side ? target >= a8 : target <= h1);
-        const int next_occupant = promotes ? QUEEN[side] : piece;
-        const int promotion_gain = promotes ? board::PVAL[next_occupant] - board::PVAL[piece] : 0;
-        ++depth;
-        gain[depth] = board::PVAL[occupant] + promotion_gain - gain[depth - 1];
-        occupant = next_occupant;
-        // A legal king capture ends the exchange: kings cannot be captured.
-        if (piece == KING[side]) break;
-        side = !side;
-    }
-    while (depth > 0) {
-        gain[depth - 1] = -MAX(-gain[depth - 1], gain[depth]);
-        --depth;
-    }
-    return gain[0];
+bool board_t::see(const move_t * move, int threshold) {
+    return see_exchange<true>(*this, move, threshold);
 }
 
 /**

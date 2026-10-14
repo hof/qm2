@@ -810,7 +810,7 @@ int search_t::extension(move_t * move, int gives_check) {
 #endif
     if (gives_check > 1) {
         return 1;
-    } else if (gives_check == 1 && brd.see(move) >= 0) {
+    } else if (gives_check == 1 && brd.see(move, 0)) {
         return 1;
     }
     return 0;
@@ -1430,7 +1430,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                         ++nnue_audit.counters.q_see_candidates;
 #endif
-                        see_prune = brd.see(move) < 0;
+                        see_prune = !brd.see(move, 0);
                     }
                 }
             }
