@@ -18,6 +18,7 @@ struct audit_counters_t {
     uint64_t q_delta_prunes = 0, q_see_prunes = 0;
     uint64_t null_attempts = 0, null_cutoffs = 0;
     uint64_t beta_candidates = 0, beta_cutoffs = 0;
+    uint64_t ffp_candidates = 0, ffp_prunes = 0;
 };
 
 struct audit_state_t {

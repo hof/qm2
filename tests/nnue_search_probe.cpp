@@ -98,7 +98,9 @@ int main(int argc, char ** argv) {
                 << ",\"null_attempts\":" << counts.null_attempts
                 << ",\"null_cutoffs\":" << counts.null_cutoffs
                 << ",\"beta_candidates\":" << counts.beta_candidates
-                << ",\"beta_cutoffs\":" << counts.beta_cutoffs << "}" << std::endl;
+                << ",\"beta_cutoffs\":" << counts.beta_cutoffs
+                << ",\"ffp_candidates\":" << counts.ffp_candidates
+                << ",\"ffp_prunes\":" << counts.ffp_prunes << "}" << std::endl;
         }
     } catch (const std::exception & error) {
         std::cerr << error.what() << '\n';

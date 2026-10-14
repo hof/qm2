@@ -126,6 +126,21 @@ int main(int argc, char ** argv) {
     if (search.nodes != 128 || !search.stop_all || search.brd.ply
             || search.brd.to_string() != fen || evaluate(&search) != expected) return 1;
     options::get_option("NNUEAuditBetaPruning")->value = 0;
+    options::get_option("NNUEAuditFutility")->value = 1;
+    search.init(fen, nullptr);
+    if (!search.ffp_enabled || search.null_enabled || search.beta_pruning || search.lmr_enabled) return 1;
+    search.pvs(expected + 299, expected + 300, 1);
+    if (!search.nnue_audit.counters.ffp_candidates || search.nnue_audit.counters.ffp_prunes) return 1;
+    search.init(fen, nullptr);
+    search.pvs(expected + 300, expected + 301, 1);
+    if (!search.nnue_audit.counters.ffp_prunes || search.brd.to_string() != fen || search.brd.ply) return 1;
+    search.init(fen, nullptr);
+    search.game.max_depth = 3;
+    search.game.max_nodes = 128;
+    search.go();
+    if (search.nodes != 128 || !search.stop_all || search.brd.ply
+            || search.brd.to_string() != fen || evaluate(&search) != expected) return 1;
+    options::get_option("NNUEAuditFutility")->value = 0;
     options::get_option("NNUEAuditHorizon")->value = 0;
     std::cout << "Live lane/cache corruption detected; audited cancellation/restoration passed\n";
 }

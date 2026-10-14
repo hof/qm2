@@ -52,6 +52,7 @@ namespace options {
         , { "NNUEAuditHorizon", STRING, 0, "type combo default normal var normal var fixed var quiet" }
         , { "NNUEAuditNullMove", BOOL, 0, "type check default false" }
         , { "NNUEAuditBetaPruning", BOOL, 0, "type check default false" }
+        , { "NNUEAuditFutility", BOOL, 0, "type check default false" }
 #endif
     };
     

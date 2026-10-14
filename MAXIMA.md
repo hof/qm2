@@ -141,6 +141,21 @@ Evaluation functions and other pruning features are unchanged. Earlier 112/40
 experiments below remain historical controls, not measured results for this
 new combined 100/50 policy. Confirm strength at equal nodes/time before tuning.
 
+Forward futility now uses a conservative frontier-only baseline. At a non-PV
+node with exactly one ply remaining, an ordinary quiet move may be skipped
+when `eval + 300 <= alpha`, after at least one legal move has been searched
+and its score is outside the decisive-loss range. Never prune captures,
+promotions, checks, castling or advanced passed-pawn moves with this rule.
+Checked nodes, the existing material-defined endgame regime and decisive
+alpha/beta windows are excluded. It replaces `40 * depth` through depth eight
+and its capture/promotion gain filter. The round three-pawn allowance follows
+Heinz's practical discussion of two-to-four-pawn frontier margins, not a tuned
+NNUE optimum. His theoretical rule instead requires material balance and a
+proven positional bound, which this NNUE does not supply; our static-evaluation
+rule remains an empirically tested selective heuristic. See the original
+[theory](https://people.csail.mit.edu/heinz/dt/node23.html) and
+[practice](https://people.csail.mit.edu/heinz/dt/node24.html).
+
 Standard null-move pruning excludes consecutive artificial passes and runs
 endgame verification with null pruning disabled throughout its subtree. The
 setting and board/history state are restored before handling cancellation;
@@ -500,6 +515,21 @@ Worker-owned candidate/cutoff counters appear in `info string audit_beta ...`
 and probe output. Candidates reflect each engine's own eligibility guards and
 must not be treated as identical populations across engines.
 
+`NNUEAuditFutility` (default false, audit builds only) independently enables
+the same production frontier-futility rule in the `quiet` contract. Changing
+it stops search and clears TT entries. Worker-owned quiet-move candidate/prune
+counters are reported as `info string audit_ffp ...` and in probe output.
+Tests cover the 299/300-cp boundary, protected tactical moves, first legal move,
+PV/deeper-node exclusions and NNUE cancellation/restoration.
+
+The agreed comparison order is to finish the feature-by-feature depth-three
+iteration, then advance to depth four and five one step at a time. Record
+actual feature activity; deeper-only features remain unexercised until their
+activation depth. Diagnose a new gap by disabling features selectively at the
+same horizon. Fixed nodes can then compare work efficiency; normal builds,
+managed clocks and timed games remain the eventual strength gate. Avoid using
+expensive live-inference audit builds for timed performance conclusions.
+
 Across 344 tactical roots at 50000 nodes and 33 WAC evaluator disagreements at
 200000 nodes, 17576241 live evaluations, including cached returns, passed fresh
 verification. Normal, verified and forced-fresh searches agreed exactly on
@@ -748,6 +778,42 @@ close to even in this matched control; equal nodes/time and deeper horizons
 remain separate checks. Declared protocol, frozen Maxima binary, scripts,
 PGNs, counters, audit and comparison are private under
 `.context/baselines/2026-10-13/nnue-rounded-control/`, reserved from training.
+
+
+The frontier-futility depth-three comparison ran four fixed 100-game/50-pair
+profiles with null move and reverse futility retained in both engines. Each
+profile used the same frozen binary pair, pinned NNUE and reserved openings.
+The SF control used the same simple 300-cp frontier rule (624 internal units),
+matching tactical and material-endgame exclusions; its native history/LMR/SEE/
+move-count/parent-futility block remained disabled. This measures a common
+basic futility concept, not SF13's tuned production parent-futility policy.
+
+| Forward futility enabled | Maxima W/D/L | Maxima score | Median nodes Maxima/SF |
+| --- | ---: | ---: | ---: |
+| Neither engine | 22/60/18 | 52% | 1518 / 1474.5 |
+| Maxima only | 22/60/18 | 52% | 1411 / 1474.5 |
+| SF13 control only | 22/60/18 | 52% | 1521 / 1384 |
+| Both engines | 22/60/18 | 52% | 1414 / 1384 |
+
+Every individual game result matched the baseline across all profiles. The
+baseline reproduced the preceding rounded-control game records and core move
+rows exactly; enabling Maxima alone also preserved every move, root score and
+PV while reducing work. Counters confirmed actual futility prunes: Maxima
+599942 alone/599722 with both enabled, SF 508650 alone/508650 with both.
+Disabled sides recorded zero candidates/prunes. Independent audits passed
+all 400 games, 42220 legal PGN plies and 35820 searched moves, every reported
+depth three, with no unfinished games or forfeits. Full release-audit checks
+passed 35/35, and ASan/UBSan with leak detection passed the updated selective
+and NNUE search tests. The ordinary release binary was rebuilt and exercised
+with both HCE and NNUE.
+
+This simple frontier rule introduced no observed depth-three deficit, with
+roughly 7% fewer median Maxima nodes when enabled. It is not a timed-strength
+claim or a proof of NNUE pruning soundness. Finish the remaining depth-three
+features before advancing to depth four and five. Source patches, declared
+protocols, frozen binaries, PGNs, per-feature counters, audits and comparison
+scripts are private under `.context/baselines/2026-10-13/nnue-ffp-control/`,
+reserved from training.
 
 ## 5. Build and debugging
 

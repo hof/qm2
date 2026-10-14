@@ -96,8 +96,8 @@ bool test_futility(const fixture_t & fixture, int & probes, int & skipped, int &
                    int & tactical_wins) {
     bool ok = true;
     auto original = std::make_unique<search_t>(fixture.fen);
-    for (int depth : {1, 8, 9}) {
-        for (int margin : {-1, 0, 50, 1000}) {
+    for (int depth : {1, 2, 8, 9}) {
+        for (int margin : {-1, 0, 1, 1000}) {
             for (bool enabled : {false, true}) {
                 auto search = std::make_unique<selective_search_t>(fixture.fen);
                 std::map<std::string, move_info_t> moves;
@@ -105,21 +105,19 @@ bool test_futility(const fixture_t & fixture, int & probes, int & skipped, int &
                 search->ffp_enabled = enabled;
                 search->lmr_enabled = false;
                 const int eval = fixture.in_check ? 0 : evaluate(search.get());
-                const int alpha = eval + 40 * depth + margin;
+                const int alpha = eval + 300 + margin;
                 search->parent_value = alpha;
                 search->pvs(alpha, alpha + 1, depth);
                 std::map<std::string, int> observed;
                 for (auto & call : search->calls) ++observed[call.move];
-                const bool active = enabled && depth <= 8 && !fixture.in_check
+                const bool active = enabled && depth == 1 && !fixture.in_check
                     && !material::is_eg(search.get()) && margin >= 0;
                 ok &= check(!search->calls.empty(), "first legal move pruned", fixture.fen);
                 const std::string first = search->calls.empty() ? "" : search->calls.front().move;
                 int expected_skips = 0;
                 for (auto & [name, info] : moves) {
                     const bool dangerous = fixture.in_check || info.flags;
-                    const bool prune = active && name != first && (!dangerous
-                        || (!(info.flags & 8) && (info.flags & 3)
-                            && info.gain + eval + 40 * depth + 50 <= alpha));
+                    const bool prune = active && name != first && !dangerous;
                     expected_skips += prune;
                     ok &= check(observed[name] == (prune ? 0 : 1), "futility guard differs", fixture.fen);
                     if (active && name != first && !prune) protected_flags |= info.flags;
@@ -144,6 +142,15 @@ bool test_futility(const fixture_t & fixture, int & probes, int & skipped, int &
             }
         }
     }
+    auto pv_search = std::make_unique<selective_search_t>(fixture.fen);
+    pv_search->ffp_enabled = true;
+    pv_search->lmr_enabled = false;
+    const int pv_alpha = fixture.in_check ? 1000 : evaluate(pv_search.get()) + 1000;
+    pv_search->parent_value = pv_alpha;
+    pv_search->pvs(pv_alpha, pv_alpha + 2, 1);
+    ok &= check(static_cast<int>(pv_search->calls.size()) == original->init_root_moves(),
+        "PV futility pruned a legal move", fixture.fen);
+    ok &= restored(*pv_search, *original, fixture.fen);
     // Mate windows must retain every legal move even with a hopeless static score.
     auto search = std::make_unique<selective_search_t>(fixture.fen);
     search->ffp_enabled = true;

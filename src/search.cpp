@@ -47,6 +47,7 @@ constexpr U64 search_history_salt = 0xd1b54a32d192ed03ULL;
 // independent of history, improving flags and evaluator-specific adjustments.
 constexpr int reverse_futility_margin_per_ply = 100;
 constexpr int null_move_margin = 50;
+constexpr int forward_futility_margin = 300;
 
 U64 mix_context(U64 key) {
     key = (key ^ (key >> 30)) * 0xbf58476d1ce4e5b9ULL;
@@ -191,6 +192,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         nnue_audit.q_delta = nnue_audit.q_see = false;
         null_enabled = horizon == 2 && options::get_value("NNUEAuditNullMove");
         beta_pruning = horizon == 2 && options::get_value("NNUEAuditBetaPruning");
+        ffp_enabled = horizon == 2 && options::get_value("NNUEAuditFutility");
     }
 #endif
     evaluation_accumulators.clear();
@@ -368,6 +370,8 @@ void search_t::go() {
             + " cutoffs " + std::to_string(nnue_audit.counters.null_cutoffs));
         uci::out("info string audit_beta candidates " + std::to_string(nnue_audit.counters.beta_candidates)
             + " cutoffs " + std::to_string(nnue_audit.counters.beta_cutoffs));
+        uci::out("info string audit_ffp candidates " + std::to_string(nnue_audit.counters.ffp_candidates)
+            + " prunes " + std::to_string(nnue_audit.counters.ffp_prunes));
     }
 #endif
     uci::send_pv(result_score, result_depth, sel_depth, nodes, game.tm.elapsed(),
@@ -1154,16 +1158,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
 
-    //set futility pruning delta value
-    bool do_ffp = false;
-    int delta = score::INVALID;
-    if (depth <= 8 && !in_check && !score::is_mate(alpha) && !material::is_eg(this) && ffp_enabled) {
-        int ffp_score = eval + 40 * depth;
-        if (ffp_score <= alpha) {
-            do_ffp = true;
-            delta = ffp_score + 50;
-        }
-    }
+    // Frontier-only quiet-move futility. The positional allowance is a
+    // heuristic, not a proven bound on the neural evaluation.
+    const bool can_ffp = ffp_enabled && depth == 1 && !pv && !in_check
+        && std::abs(alpha) < decisive_score && std::abs(beta) < decisive_score
+        && !material::is_eg(this);
 
     //prepare and do the loop
     int best = -score::INF;
@@ -1186,10 +1185,15 @@ int search_t::pvs(int alpha, int beta, int depth) {
         const bool is_dangerous = in_check || gives_check || move->capture || move->promotion || move->castle || is_advanced_passed_pawn(move);
 
         bool pruned = false;
-        if (do_ffp && searched_moves > 0) {
-            pruned = !is_dangerous;
-            pruned |= gives_check == 0 && (move->capture || move->promotion) && brd.max_gain(move) + delta <= alpha;
+        if (can_ffp && searched_moves > 0 && best > -decisive_score && !is_dangerous) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++nnue_audit.counters.ffp_candidates;
+#endif
+            pruned = eval + forward_futility_margin <= alpha;
             if (pruned) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                ++nnue_audit.counters.ffp_prunes;
+#endif
                 pruned_nodes++;
                 continue;
             }

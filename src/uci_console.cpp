@@ -452,6 +452,7 @@ namespace uci {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                                     || name == "NNUEAuditNullMove"
                                     || name == "NNUEAuditBetaPruning"
+                                    || name == "NNUEAuditFutility"
 #endif
                                     )) {
                             trans_table::clear();
