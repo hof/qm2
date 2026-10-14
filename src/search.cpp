@@ -185,6 +185,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     if (horizon) {
         beta_pruning = ffp_enabled = null_enabled = lmr_enabled = false;
         nnue_audit.q_delta = nnue_audit.q_see = false;
+        null_enabled = horizon == 2 && options::get_value("NNUEAuditNullMove");
     }
 #endif
     evaluation_accumulators.clear();
@@ -356,6 +357,11 @@ void search_t::go() {
         + " attempted_depth " + std::to_string(attempted_depth)
         + " interrupted " + std::to_string(interrupted)
         + " pruned_moves " + std::to_string(pruned_nodes));
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    if (nnue_audit.aligned_quiescence)
+        uci::out("info string audit_null attempts " + std::to_string(nnue_audit.counters.null_attempts)
+            + " cutoffs " + std::to_string(nnue_audit.counters.null_cutoffs));
+#endif
     uci::send_pv(result_score, result_depth, sel_depth, nodes, game.tm.elapsed(),
         pv_to_string().c_str(), result_flag, tablebase_hits);
     // Work limits may finish a search, but only protocol control releases its result.
@@ -1072,6 +1078,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     //null move pruning
     if (do_prune_node && do_null) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++nnue_audit.counters.null_attempts;
+#endif
         int R = 3;
         forward();
         int null_score = -pvs(-beta, -alpha, depth - 1 - R);
@@ -1092,10 +1101,16 @@ int search_t::pvs(int alpha, int beta, int depth) {
                     return alpha;
                 }
                 if (verified_score >= beta) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                    ++nnue_audit.counters.null_cutoffs;
+#endif
                     return verified_score;
                 }
             } else {
                 //no verification
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                ++nnue_audit.counters.null_cutoffs;
+#endif
                 return null_score;
             }
         }

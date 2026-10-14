@@ -448,7 +448,11 @@ namespace uci {
                             return true;
                         }
                         if (candidate != opt->value
-                                && (name == "KingAttackShelter" || name == "KingAttackPieces" || name == "UseNNUE")) {
+                                && (name == "KingAttackShelter" || name == "KingAttackPieces" || name == "UseNNUE"
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                                    || name == "NNUEAuditNullMove"
+#endif
+                                    )) {
                             trans_table::clear();
                         }
                         opt->value = candidate;

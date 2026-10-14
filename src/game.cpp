@@ -50,6 +50,7 @@ namespace options {
         { "EvalFile", STRING, 0, "type string default <empty>" }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         , { "NNUEAuditHorizon", STRING, 0, "type combo default normal var normal var fixed var quiet" }
+        , { "NNUEAuditNullMove", BOOL, 0, "type check default false" }
 #endif
     };
     

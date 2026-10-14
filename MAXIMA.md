@@ -458,6 +458,12 @@ evasions, without quiet checks or castling. Probe modes of these names require
 NNUE and policy zero. The UCI option is absent from ordinary builds; changing
 it stops search and clears TT entries. These are comparison contracts, not
 strength configurations or changes to production defaults.
+`NNUEAuditNullMove` (default false, audit builds only) re-enables the existing
+null-move algorithm in the `quiet` contract while retaining the other
+restrictions. Changing it stops search and clears TT entries. Search-owned
+attempt/cutoff counters are reported as `info string audit_null ...` in that
+contract and in diagnostic probe output. The regression checks active null
+cutoffs, live inference equivalence and node-budget cancellation/restoration.
 
 Across 344 tactical roots at 50000 nodes and 33 WAC evaluator disagreements at
 200000 nodes, 17576241 live evaluations, including cached returns, passed fresh
@@ -550,6 +556,36 @@ The HCE initialization/restoration regression, standard and NNUE lifecycle
 checks, and ASan/UBSan with leak detection passed. Reports and scripts are
 stored as `quiet-hce-games.*`, `quiet-nnue-recheck-games.*` and
 `hce-comparison-summary.json` beside the other reserved controls.
+
+NNUE development resumed with a null-move-only comparison at depth three and
+the same common quiescence/opening pairs. Four fixed 100-game runs used one
+Maxima binary and the pinned network:
+
+| Null pruning enabled | Maxima W/D/L | Maxima score |
+| --- | ---: | ---: |
+| Neither engine | 24/54/22 | 51% |
+| Maxima only | 21/54/25 | 48% |
+| SF13 only | 25/54/21 | 52% |
+| Both engines | 20/58/22 | 49% |
+
+The separate SF13 null control retained its null reduction/guards but evaluated
+null positions directly with NNUE, removing its previous-static-score plus
+two-tempos shortcut and TT score substitution into evaluation. This preserves
+the pure neural leaf contract; it is not an unmodified SF13 search. All other
+heuristic pruning, reductions, extensions and TT score cutoffs remained off.
+The new baseline reproduced prior qsearch game records and core move traces.
+Counters verified actual cutoffs: Maxima 211910 alone/213341 with both enabled;
+SF13 172570 alone/161232 with both. Independent audits passed all 400 games,
+41895 legal PGN plies and 35495 searched moves, every reported depth three,
+no unfinished games or forfeits. Regression/lifecycle checks passed 3/3 and
+ASan/UBSan with leak detection passed the updated audit test.
+
+These small, reserved-opening diagnostics show no large observed deficit from
+adding null move at depth three. The small relative-score changes do not prove
+a strength loss, and the depth does not exercise deeper null verification.
+Production policy remains unchanged. Scripts, source patches, frozen binaries,
+declared protocols, move-level counters, PGNs and audits are private under
+`.context/baselines/2026-10-13/nnue-null-control/`, reserved from training.
 
 ## 5. Build and debugging
 
