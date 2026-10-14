@@ -196,6 +196,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         beta_pruning = horizon == 2 && options::get_value("NNUEAuditBetaPruning");
         ffp_enabled = horizon == 2 && options::get_value("NNUEAuditFutility");
         nnue_audit.q_delta = horizon == 2 && options::get_value("NNUEAuditDelta");
+        nnue_audit.q_see = horizon == 2 && options::get_value("NNUEAuditSEE");
     }
 #endif
     evaluation_accumulators.clear();
@@ -377,6 +378,8 @@ void search_t::go() {
             + " prunes " + std::to_string(nnue_audit.counters.ffp_prunes));
         uci::out("info string audit_delta candidates " + std::to_string(nnue_audit.counters.q_delta_candidates)
             + " prunes " + std::to_string(nnue_audit.counters.q_delta_prunes));
+        uci::out("info string audit_see candidates " + std::to_string(nnue_audit.counters.q_see_candidates)
+            + " prunes " + std::to_string(nnue_audit.counters.q_see_prunes));
     }
 #endif
     uci::send_pv(result_score, result_depth, sel_depth, nodes, game.tm.elapsed(),
@@ -1364,7 +1367,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      * Moves loop
      */
 
-    const int see_base = eval + 50;
     const bool is_eg = !in_check && material::is_eg(this);
     do {
 
@@ -1387,7 +1389,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             continue;
         }
 
-        //prune if the capture or promotion can't raise alpha
+        // Selective capture pruning; tactical moves stay searchable.
         bool do_prune = !in_check && !gives_check && !is_eg;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         do_prune &= nnue_audit.q_delta || nnue_audit.q_see;
@@ -1396,15 +1398,18 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         if (do_prune) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
             const bool use_delta = nnue_audit.q_delta;
+            const bool use_see = nnue_audit.q_see;
 #else
             const bool use_delta = true;
+            const bool use_see = true;
 #endif
             // Captures only. Keep promotions and advanced pawn moves, and
             // avoid pruning captures that enter a low-material endgame.
             const bool advanced_pawn = (move->piece == WPAWN && move->tsq >= a6)
                 || (move->piece == BPAWN && move->tsq <= h3);
             bool delta_prune = false;
-            if (use_delta && move->capture && !move->promotion && !advanced_pawn
+            bool see_prune = false;
+            if (move->capture && !move->promotion && !advanced_pawn
                     && std::abs(alpha) < score::TABLEBASE - MAX_PLY
                     && std::abs(beta) < score::TABLEBASE - MAX_PLY) {
                 const bool them = brd.them();
@@ -1413,20 +1418,27 @@ int search_t::qsearch(int alpha, int beta, int depth) {
                     remaining += popcnt0(brd.bb[piece]) * board::PVAL[piece];
                 if (move->capture != PAWN[them]) remaining -= board::PVAL[move->capture];
                 if (remaining > delta_endgame_material) {
+                    if (use_delta) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-                    ++nnue_audit.counters.q_delta_candidates;
+                        ++nnue_audit.counters.q_delta_candidates;
 #endif
-                    delta_prune = eval + board::PVAL[move->capture] + quiescence_delta_margin <= alpha;
+                        delta_prune = eval + board::PVAL[move->capture] + quiescence_delta_margin <= alpha;
+                    }
+                    // SEE estimates material on one square, not positional
+                    // compensation. Keep equal exchanges and tactical guards.
+                    if (use_see && !delta_prune) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                        ++nnue_audit.counters.q_see_candidates;
+#endif
+                        see_prune = brd.see(move) < 0;
+                    }
                 }
             }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            const bool see_prune = nnue_audit.q_see && see_base + brd.see(move) <= alpha;
             nnue_audit.counters.q_delta_prunes += delta_prune;
             nnue_audit.counters.q_see_prunes += see_prune;
-            pruned = delta_prune || see_prune;
-#else
-            pruned = delta_prune || see_base + brd.see(move) <= alpha;
 #endif
+            pruned = delta_prune || see_prune;
             if (pruned) {
                 pruned_nodes++;
                 continue;

@@ -152,26 +152,31 @@ and its score is outside the decisive-loss range. Never prune captures,
 promotions, checks, castling or advanced passed-pawn moves with this rule.
 Checked nodes, the existing material-defined endgame regime and decisive
 alpha/beta windows are excluded. It replaces `40 * depth` through depth eight
-and its capture/promotion gain filter. The round three-pawn allowance follows
-Heinz's practical discussion of two-to-four-pawn frontier margins, not a tuned
-NNUE optimum. His theoretical rule instead requires material balance and a
-proven positional bound, which this NNUE does not supply; our static-evaluation
-rule remains an empirically tested selective heuristic. See the original
-[theory](https://people.csail.mit.edu/heinz/dt/node23.html) and
-[practice](https://people.csail.mit.edu/heinz/dt/node24.html).
+and its capture/promotion gain filter. The round three-pawn allowance is a
+conservative starting value, not a tuned NNUE optimum. Static evaluation does
+not provide a proven upper bound on positional improvement; this remains an
+empirically tested selective heuristic.
 
 Quiescence delta pruning uses the simple captured-piece gain plus a 200-cp
 allowance: skip a nonchecking capture when `eval + captured_value + 200 <= alpha`.
 Exclude checked nodes, promotions, advanced pawn captures, existing endgame
 flags and decisive alpha/beta windows. Require the opponent's non-pawn material
 after the capture to exceed 1300 cp, protecting low-material transitions. The
-200-cp allowance and post-capture material guard follow the didactic
-[CPW engine implementation](https://github.com/nescitus/cpw-engine/blob/master/Quiescence.cpp)
-and its [endgame threshold](https://github.com/nescitus/cpw-engine/blob/master/eval_init.cpp).
-Use Maxima's existing capture values (100/325/325/500/925), not inferred NNUE
-piece prices. This remains selective pruning, not a proven NNUE bound. SEE
-pruning retains its separate existing rule and is disabled in delta controls;
-it will be reviewed as the next independent depth-three step.
+200-cp allowance and post-capture material threshold are provisional choices,
+requiring validation in Maxima. Use the existing capture values
+(100/325/325/500/925), not inferred NNUE piece prices. Checks,
+promotions and advanced pawn moves are protected separately because their gains
+can exceed a fixed positional allowance. This remains selective pruning, not a
+proven NNUE bound. Historical delta controls below have SEE disabled.
+
+Quiescence SEE pruning now skips only captures with `see(move) < 0`, after the
+same tactical, endgame, post-capture material and decisive-window exclusions.
+Equal exchanges remain searchable regardless of alpha. This replaces the former
+`eval + 50 + see(move) <= alpha` rule; delta runs first and SEE is tested only
+for captures that survive it. SEE models material exchanges on one square,
+not positional compensation, so even a negative SEE is not a proof that a
+sacrifice is unsound. Maxima's existing exchange estimator and move ordering
+are unchanged. These conservative exclusions require their own strength tests.
 
 Standard null-move pruning excludes consecutive artificial passes and runs
 endgame verification with null pruning disabled throughout its subtree. The
@@ -196,7 +201,7 @@ existing precedence; a ceiling evaluation is not a completed deeper search.
 
 Standard quiescence retains castling at entry and below entry, alongside captures
 and promotions; entry also searches quiet checks, and checked nodes search all
-legal evasions. Nonchecking castles remain subject to delta/SEE pruning.
+legal evasions. Delta/SEE now applies only to captures, preserving castling.
 This is an existing bounded quiet extension, not a certified strength gain.
 
 An exact TT return can shorten the searched PV because an entry stores a score
@@ -546,6 +551,14 @@ and in the diagnostic probe. Tests exercise the 200-cp boundary with HCE/NNUE
 and both colors, en passant protection, low-material transitions, live neural
 parity and node-budget cancellation/restoration.
 
+`NNUEAuditSEE` (default false, audit builds only) independently enables the
+production negative-SEE rule in `quiet`. Changing it stops search and clears TT.
+Worker-owned candidate/prune counters appear as `info string audit_see` and in
+the diagnostic probe. Candidates are captures surviving delta and all common
+guards; the count is not the number of all captures. Tests cover losing and
+equal exchanges, checking sacrifices, low-material exclusions, HCE/NNUE parity
+and cancellation/restoration.
+
 The agreed comparison order is to finish the feature-by-feature depth-three
 iteration, then advance to depth four and five one step at a time. Record
 actual feature activity; deeper-only features remain unexercised until their
@@ -876,6 +889,38 @@ in this small fixed-depth sample, not evidence of a timed Elo gain/loss. Keep
 finish the remaining depth-three features before depth four/five. Source patches,
 scripts, protocols, frozen binaries, PGNs, counters and audits are private under
 `.context/baselines/2026-10-13/nnue-delta-control/`, reserved from training.
+
+The isolated quiescence SEE step retained null move, reverse futility, frontier
+futility and delta in both engines. Four fixed 100-game/50-pair depth-three
+profiles tested the guarded negative-SEE rule with the same frozen binary pair,
+pinned NNUE and reserved openings. Both used the same capture values and outer
+eligibility guards; their existing exchange estimators and move ordering remained
+distinct. Other selective features stayed disabled.
+
+| SEE enabled | Maxima W/D/L | Maxima score | Median nodes Maxima/SF |
+| --- | ---: | ---: | ---: |
+| Neither engine | 23/55/22 | 50.5% | 1308 / 1305 |
+| Maxima only | 24/55/21 | 51.5% | 1103 / 1257 |
+| SF13 control only | 24/64/12 | 56% | 1227 / 903.5 |
+| Both engines | 19/63/18 | 50.5% | 1058 / 898 |
+
+The baseline exactly reproduced the preceding both-delta game records and
+existing core move-row fields. Enabled SEE prunes were Maxima 927999 alone/
+888652 with both, SF 1156317 alone/1243655 with both; disabled sides recorded
+zero candidates/prunes. All 400 games passed independent audits: 42305 legal
+PGN plies, 35905 searched moves, every reported depth three, no unfinished games
+or forfeits. Frozen identities, model, settings and seeded openings matched.
+Full release-audit checks passed 35/35; targeted ASan/UBSan with leak detection
+passed 3/3. The ordinary release engine was rebuilt and exercised with HCE/NNUE.
+
+The both-enabled result shows no large relative deficit in this reused sample;
+lower node counts do not establish a timed Elo gain. Maxima's existing SEE
+can count pinned recapturers: a legal witness labels a free pawn capture as a
+225-cp loss because the defending pawn cannot legally move. This estimator
+limitation remains open and its match impact has not been measured. Complete
+the remaining depth-three feature checks before advancing to depth four/five.
+Protocols, frozen binaries, PGNs, counters, audits and the witness are private
+under `.context/baselines/2026-10-13/nnue-see-control/`, reserved from training.
 
 ## 5. Build and debugging
 

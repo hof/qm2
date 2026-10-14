@@ -178,6 +178,50 @@ int main(int argc, char ** argv) {
     if (search.nodes != 128 || !search.stop_all || search.brd.ply
             || search.brd.to_string() != fen || evaluate(&search) != expected) return 1;
     options::get_option("NNUEAuditDelta")->value = 0;
+    options::get_option("NNUEAuditSEE")->value = 1;
+    for (bool neural : {false, true}) {
+        options::get_option("UseNNUE")->value = neural;
+        // Both knight captures lose 225 cp. SEE alone must reject them even
+        // when alpha is too close to stand pat for capture-gain delta pruning.
+        const char * losing_fen = "r3k2r/ppp2ppp/2n1bn2/3p4/3Pp3/2N1BN2/PPP2PPP/R2QK2R w KQkq - 0 1";
+        auto probe = std::make_unique<search_t>(losing_fen);
+        const int alpha = evaluate(probe.get()) + 1;
+        probe->qsearch(alpha, alpha + 1, -1);
+        if (probe->nodes != 1 || probe->nnue_audit.counters.q_see_candidates != 2
+                || probe->nnue_audit.counters.q_see_prunes != 2
+                || probe->nnue_audit.counters.q_delta_candidates || probe->brd.ply
+                || probe->brd.to_string() != losing_fen) return 1;
+        // c4xd5 is an equal exchange. A high alpha must not make SEE discard it.
+        const char * equal_fen = "r3k2r/ppp2ppp/2n1bn2/3p4/2PPp3/4BN2/PPP2PPP/R2QK2R w KQkq - 0 1";
+        probe->init(equal_fen, nullptr);
+        move_t equal_move;
+        equal_move.set(WPAWN, c4, d5, BPAWN);
+        if (!probe->brd.legal(&equal_move) || probe->brd.see(&equal_move) != 0) return 1;
+        const int high_alpha = evaluate(probe.get()) + 5000;
+        probe->qsearch(high_alpha, high_alpha + 1, -1);
+        if (probe->nodes <= 1 || !probe->nnue_audit.counters.q_see_candidates
+                || probe->brd.ply || probe->brd.to_string() != equal_fen) return 1;
+        // Losing captures remain searchable when they check or when the
+        // opponent is already below the post-capture material threshold.
+        for (const char * protected_fen : {
+                "r3k2r/ppp2ppp/2n5/8/2B5/2N5/PPP2PPP/R3K2R w KQkq - 0 1",
+                "r3k2r/ppp2ppp/4p3/3p4/3P4/2N5/PPP2PPP/R3K2R w KQkq - 0 1"}) {
+            probe->init(protected_fen, nullptr);
+            const int protected_alpha = evaluate(probe.get()) + 5000;
+            probe->qsearch(protected_alpha, protected_alpha + 1, -1);
+            if (probe->nodes <= 1 || probe->nnue_audit.counters.q_see_prunes
+                    || probe->brd.ply || probe->brd.to_string() != protected_fen) return 1;
+        }
+    }
+    options::get_option("UseNNUE")->value = 1;
+    search.init(fen, nullptr);
+    if (search.nnue_audit.q_delta || !search.nnue_audit.q_see) return 1;
+    search.game.max_nodes = 128;
+    search.game.max_depth = 3;
+    search.go();
+    if (search.nodes != 128 || !search.stop_all || search.brd.ply
+            || search.brd.to_string() != fen || evaluate(&search) != expected) return 1;
+    options::get_option("NNUEAuditSEE")->value = 0;
     options::get_option("NNUEAuditHorizon")->value = 0;
     std::cout << "Live lane/cache corruption detected; audited cancellation/restoration passed\n";
 }

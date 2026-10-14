@@ -54,6 +54,7 @@ namespace options {
         , { "NNUEAuditBetaPruning", BOOL, 0, "type check default false" }
         , { "NNUEAuditFutility", BOOL, 0, "type check default false" }
         , { "NNUEAuditDelta", BOOL, 0, "type check default false" }
+        , { "NNUEAuditSEE", BOOL, 0, "type check default false" }
 #endif
     };
     
