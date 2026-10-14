@@ -453,6 +453,7 @@ namespace uci {
                                     || name == "NNUEAuditNullMove"
                                     || name == "NNUEAuditBetaPruning"
                                     || name == "NNUEAuditFutility"
+                                    || name == "NNUEAuditDelta"
 #endif
                                     )) {
                             trans_table::clear();

@@ -141,6 +141,43 @@ int main(int argc, char ** argv) {
     if (search.nodes != 128 || !search.stop_all || search.brd.ply
             || search.brd.to_string() != fen || evaluate(&search) != expected) return 1;
     options::get_option("NNUEAuditFutility")->value = 0;
+    options::get_option("NNUEAuditDelta")->value = 1;
+    for (bool neural : {false, true}) {
+        options::get_option("UseNNUE")->value = neural;
+        for (const char * capture_fen : {
+                "r3k2r/ppp2ppp/2n1bn2/3p4/3Pp3/2N1BN2/PPP2PPP/R2QK2R w KQkq - 0 1",
+                "r2qk2r/ppp2ppp/2n1bn2/3pP3/3P4/2N1BN2/PPP2PPP/R3K2R b KQkq - 0 1"}) {
+            for (int surplus : {299, 300}) {
+                auto probe = std::make_unique<search_t>(capture_fen);
+                const int alpha = evaluate(probe.get()) + surplus;
+                probe->qsearch(alpha, alpha + 1, -1);
+                if (probe->nodes != uint64_t(surplus == 299 ? 3 : 1)
+                        || probe->nnue_audit.counters.q_delta_candidates != 2
+                        || probe->nnue_audit.counters.q_delta_prunes != uint64_t(surplus == 300 ? 2 : 0)
+                        || probe->nnue_audit.counters.q_see_prunes || probe->brd.ply
+                        || probe->brd.to_string() != capture_fen) return 1;
+            }
+        }
+    }
+    // A low-material transition and en passant must remain searchable even
+    // far below alpha. Their legal capture sets are independently fixed here.
+    for (const char * protected_fen : {
+            "r3k2r/ppp2ppp/8/3n4/3P4/2N5/PPP2PPP/R3K2R w KQkq - 0 1",
+            "r3k2r/ppp2ppp/2n5/3pP3/8/2N5/PPP2PPP/R3K2R w KQkq d6 0 1"}) {
+        auto probe = std::make_unique<search_t>(protected_fen);
+        const int alpha = evaluate(probe.get()) + 5000;
+        probe->qsearch(alpha, alpha + 1, -1);
+        if (probe->nodes != 2 || probe->brd.ply || probe->brd.to_string() != protected_fen) return 1;
+    }
+    options::get_option("UseNNUE")->value = 1;
+    search.init(fen, nullptr);
+    if (!search.nnue_audit.q_delta || search.nnue_audit.q_see) return 1;
+    search.game.max_nodes = 128;
+    search.game.max_depth = 3;
+    search.go();
+    if (search.nodes != 128 || !search.stop_all || search.brd.ply
+            || search.brd.to_string() != fen || evaluate(&search) != expected) return 1;
+    options::get_option("NNUEAuditDelta")->value = 0;
     options::get_option("NNUEAuditHorizon")->value = 0;
     std::cout << "Live lane/cache corruption detected; audited cancellation/restoration passed\n";
 }

@@ -94,6 +94,7 @@ int main(int argc, char ** argv) {
                 << ",\"king_refreshes\":" << counts.king_refreshes
                 << ",\"parent_refreshes\":" << counts.parent_refreshes
                 << ",\"q_delta_prunes\":" << counts.q_delta_prunes
+                << ",\"q_delta_candidates\":" << counts.q_delta_candidates
                 << ",\"q_see_prunes\":" << counts.q_see_prunes
                 << ",\"null_attempts\":" << counts.null_attempts
                 << ",\"null_cutoffs\":" << counts.null_cutoffs

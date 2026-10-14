@@ -48,6 +48,8 @@ constexpr U64 search_history_salt = 0xd1b54a32d192ed03ULL;
 constexpr int reverse_futility_margin_per_ply = 100;
 constexpr int null_move_margin = 50;
 constexpr int forward_futility_margin = 300;
+constexpr int quiescence_delta_margin = 200;
+constexpr int delta_endgame_material = 1300;
 
 U64 mix_context(U64 key) {
     key = (key ^ (key >> 30)) * 0xbf58476d1ce4e5b9ULL;
@@ -193,6 +195,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         null_enabled = horizon == 2 && options::get_value("NNUEAuditNullMove");
         beta_pruning = horizon == 2 && options::get_value("NNUEAuditBetaPruning");
         ffp_enabled = horizon == 2 && options::get_value("NNUEAuditFutility");
+        nnue_audit.q_delta = horizon == 2 && options::get_value("NNUEAuditDelta");
     }
 #endif
     evaluation_accumulators.clear();
@@ -372,6 +375,8 @@ void search_t::go() {
             + " cutoffs " + std::to_string(nnue_audit.counters.beta_cutoffs));
         uci::out("info string audit_ffp candidates " + std::to_string(nnue_audit.counters.ffp_candidates)
             + " prunes " + std::to_string(nnue_audit.counters.ffp_prunes));
+        uci::out("info string audit_delta candidates " + std::to_string(nnue_audit.counters.q_delta_candidates)
+            + " prunes " + std::to_string(nnue_audit.counters.q_delta_prunes));
     }
 #endif
     uci::send_pv(result_score, result_depth, sel_depth, nodes, game.tm.elapsed(),
@@ -1359,8 +1364,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      * Moves loop
      */
 
-    const int delta = 50;
-    const int fbase = eval + delta;
+    const int see_base = eval + 50;
     const bool is_eg = !in_check && material::is_eg(this);
     do {
 
@@ -1391,14 +1395,37 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         bool pruned = false;
         if (do_prune) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            const bool delta_prune = nnue_audit.q_delta && fbase + brd.max_gain(move) <= alpha;
-            const bool see_prune = nnue_audit.q_see && fbase + brd.see(move) <= alpha;
+            const bool use_delta = nnue_audit.q_delta;
+#else
+            const bool use_delta = true;
+#endif
+            // Captures only. Keep promotions and advanced pawn moves, and
+            // avoid pruning captures that enter a low-material endgame.
+            const bool advanced_pawn = (move->piece == WPAWN && move->tsq >= a6)
+                || (move->piece == BPAWN && move->tsq <= h3);
+            bool delta_prune = false;
+            if (use_delta && move->capture && !move->promotion && !advanced_pawn
+                    && std::abs(alpha) < score::TABLEBASE - MAX_PLY
+                    && std::abs(beta) < score::TABLEBASE - MAX_PLY) {
+                const bool them = brd.them();
+                int remaining = 0;
+                for (int piece : {KNIGHT[them], BISHOP[them], ROOK[them], QUEEN[them]})
+                    remaining += popcnt0(brd.bb[piece]) * board::PVAL[piece];
+                if (move->capture != PAWN[them]) remaining -= board::PVAL[move->capture];
+                if (remaining > delta_endgame_material) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                    ++nnue_audit.counters.q_delta_candidates;
+#endif
+                    delta_prune = eval + board::PVAL[move->capture] + quiescence_delta_margin <= alpha;
+                }
+            }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            const bool see_prune = nnue_audit.q_see && see_base + brd.see(move) <= alpha;
             nnue_audit.counters.q_delta_prunes += delta_prune;
             nnue_audit.counters.q_see_prunes += see_prune;
             pruned = delta_prune || see_prune;
 #else
-            pruned = fbase + brd.max_gain(move) <= alpha;
-            pruned |= fbase + brd.see(move) <= alpha;
+            pruned = delta_prune || see_base + brd.see(move) <= alpha;
 #endif
             if (pruned) {
                 pruned_nodes++;

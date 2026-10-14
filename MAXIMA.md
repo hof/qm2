@@ -66,6 +66,10 @@ or require every task to advance every goal.
   over complex changes aimed at marginal Elo improvements.
 - Keep heuristics understandable and independently testable. Justify added
   complexity with measured benefits.
+- During the NNUE search baseline work, use simple documented search rules and
+  conservative round margins. Apply this to every pruning/reduction/extension
+  under review. Establish a sound empirical baseline before adding adaptive
+  tweaks or tuning; cite original references and state heuristic limits.
 - Before implementing or substantially changing a chess algorithm, read the
   relevant [Chess Programming Wiki](https://chessprogramming.org/) articles.
   Follow their references to original papers and engine implementations when
@@ -155,6 +159,19 @@ proven positional bound, which this NNUE does not supply; our static-evaluation
 rule remains an empirically tested selective heuristic. See the original
 [theory](https://people.csail.mit.edu/heinz/dt/node23.html) and
 [practice](https://people.csail.mit.edu/heinz/dt/node24.html).
+
+Quiescence delta pruning uses the simple captured-piece gain plus a 200-cp
+allowance: skip a nonchecking capture when `eval + captured_value + 200 <= alpha`.
+Exclude checked nodes, promotions, advanced pawn captures, existing endgame
+flags and decisive alpha/beta windows. Require the opponent's non-pawn material
+after the capture to exceed 1300 cp, protecting low-material transitions. The
+200-cp allowance and post-capture material guard follow the didactic
+[CPW engine implementation](https://github.com/nescitus/cpw-engine/blob/master/Quiescence.cpp)
+and its [endgame threshold](https://github.com/nescitus/cpw-engine/blob/master/eval_init.cpp).
+Use Maxima's existing capture values (100/325/325/500/925), not inferred NNUE
+piece prices. This remains selective pruning, not a proven NNUE bound. SEE
+pruning retains its separate existing rule and is disabled in delta controls;
+it will be reviewed as the next independent depth-three step.
 
 Standard null-move pruning excludes consecutive artificial passes and runs
 endgame verification with null pruning disabled throughout its subtree. The
@@ -522,6 +539,13 @@ counters are reported as `info string audit_ffp ...` and in probe output.
 Tests cover the 299/300-cp boundary, protected tactical moves, first legal move,
 PV/deeper-node exclusions and NNUE cancellation/restoration.
 
+`NNUEAuditDelta` (default false, audit builds only) enables only delta pruning
+in the `quiet` contract; SEE stays off. Changing it stops search and clears TT.
+Worker-owned candidate/prune counters are reported as `info string audit_delta`
+and in the diagnostic probe. Tests exercise the 200-cp boundary with HCE/NNUE
+and both colors, en passant protection, low-material transitions, live neural
+parity and node-budget cancellation/restoration.
+
 The agreed comparison order is to finish the feature-by-feature depth-three
 iteration, then advance to depth four and five one step at a time. Record
 actual feature activity; deeper-only features remain unexercised until their
@@ -814,6 +838,44 @@ features before advancing to depth four and five. Source patches, declared
 protocols, frozen binaries, PGNs, per-feature counters, audits and comparison
 scripts are private under `.context/baselines/2026-10-13/nnue-ffp-control/`,
 reserved from training.
+
+
+The isolated 200-cp delta step retained null move, reverse futility and simple
+frontier futility in both engines, with SEE entirely disabled. Four fixed
+100-game/50-pair depth-three profiles used the same frozen binary pair, pinned
+NNUE and reserved openings. The SF control used the same plain captured-piece
+rule and post-capture material guard in normalized SF units; its native qsearch
+move-count, SEE and history pruning remained disabled.
+
+| Delta enabled | Maxima W/D/L | Maxima score | Median nodes Maxima/SF |
+| --- | ---: | ---: | ---: |
+| Neither engine | 22/60/18 | 52% | 1414 / 1384 |
+| Maxima only | 23/58/19 | 52% | 1324 / 1294.5 |
+| SF13 control only | 27/55/18 | 54.5% | 1387 / 1286 |
+| Both engines | 23/55/22 | 50.5% | 1308 / 1305 |
+
+The baseline exactly reproduced the preceding both-FFP game records and core
+move traces. Enabled delta prunes were Maxima 1561383 alone/1707858 with both,
+SF 7360991 alone/7503561 with both; disabled sides recorded zero candidates and
+prunes. Different candidate populations and move ordering prevent interpreting
+these totals as comparative pruning aggressiveness. All 400 games passed
+independent audits: 41929 legal PGN plies, 35529 searched moves, depth three,
+no unfinished games or forfeits; model/opening identities, seeded selection,
+settings and frozen executable identities matched across profiles.
+
+All 35 release checks passed across the full run and isolated rerun. The full
+run initially missed one timing-sensitive lifecycle assertion (1.057 seconds
+against a one-second bound) while compiling and running sanitizers concurrently;
+the isolated lifecycle rerun passed. ASan/UBSan with leak detection passed
+NNUE/horizon tests and the additional en-passant/endgame-transition witnesses.
+Actual-search boundary tests cover HCE/NNUE and both colors without changing
+qsearch's nonvirtual hot-path dispatch. The ordinary release engine was rebuilt
+and exercised with both evaluators. The both-enabled score remains near even
+in this small fixed-depth sample, not evidence of a timed Elo gain/loss. Keep
+200 cp as the documented starting margin; review SEE independently next, then
+finish the remaining depth-three features before depth four/five. Source patches,
+scripts, protocols, frozen binaries, PGNs, counters and audits are private under
+`.context/baselines/2026-10-13/nnue-delta-control/`, reserved from training.
 
 ## 5. Build and debugging
 
