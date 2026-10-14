@@ -441,14 +441,22 @@ Search-owned counters distinguish incremental updates, king refreshes and
 refreshes caused by an unevaluated immediate parent.
 
 The audit-only `nnue_search_probe` accepts
-`MODEL POSITIONS.tsv hce|nnue off|verify|full|replay POLICY NODES DEPTH [CUTOFFS.jsonl]`.
+`MODEL POSITIONS.tsv hce|nnue off|verify|full|replay|fixed|quiet POLICY NODES DEPTH [CUTOFFS.jsonl]`.
 Each TSV row is `id<TAB>FEN`; every root starts with cleared caches. Policy bits
 enable beta pruning (1), forward futility (2), null move (4), LMR (8), quiescence
 delta (16) and quiescence SEE (32). Normal policy is 63; conservative is 0.
 `full` forces fresh inference; `replay` performs one full-window PVS at the
 requested depth. Optional beta-cutoff recording is capped at 128 events per
 root and restricted to irreversible nodes, allowing FEN replay without relevant
-earlier repetition history. These controls are diagnostics, not UCI options.
+earlier repetition history. Policy controls are diagnostic probe arguments.
+Audit builds also expose `NNUEAuditHorizon` with `normal` (default), `fixed` and
+`quiet` values. With NNUE selected, the latter two disable heuristic pruning,
+reductions, extensions and TT score cutoffs. `fixed` evaluates neural leaves
+at exactly the requested ply; `quiet` adds captures, promotions and legal check
+evasions, without quiet checks or castling. Probe modes of these names require
+NNUE and policy zero. The UCI option is absent from ordinary builds; changing
+it stops search and clears TT entries. These are comparison contracts, not
+strength configurations or changes to production defaults.
 
 Across 344 tactical roots at 50000 nodes and 33 WAC evaluator disagreements at
 200000 nodes, 17576241 live evaluations, including cached returns, passed fresh
@@ -487,6 +495,31 @@ assuming the raw net is useful only in a hybrid, not a clean Elo measurement,
 proof of a gain in Maxima or a reason to import classical switching. Source
 patch, protocol, binaries, PGNs and audit are private under
 `.context/baselines/2026-10-13/nnue-sf13-control/`, reserved from training.
+
+At the user's request, matching nonselective depth-three controls were added
+to Maxima's native PVS and a separate original-SF13 build. Both use the pinned
+raw network and equivalent centipawn units; heuristic pruning, reductions,
+extensions and TT score cutoffs are disabled. The exact-ply neural-leaf control
+matched all 344 tactical root scores and 342 moves. The common quiescence
+contract (captures, all promotions, check evasions; no quiet checks or castling)
+also matched all 344 scores and 340 moves. Forced-move searches verified every
+different move as an equal-score alternative in the common score units.
+
+A fixed 100-game/50-pair exact-ply depth-three match then scored 28W/52D/20L
+(54%) for Maxima against SF13. All 10960 legal PGN plies and 9360 searched moves,
+depth reports, paired openings, outcomes and binary identities passed audit;
+no unfinished games or forfeits. Openings are reused reserved diagnostics, and
+this exact horizon is not normal depth-three play with quiescence or a rating
+estimate. These controls show no unexplained numerical/shallow-PVS deficit in
+the tested cases. They do not identify the complete cause of ordinary-search
+strength differences. Add selective features back in controlled experiments;
+the complexity of another engine's pruning rules alone is not an explanation.
+Scripts, source patches, binaries, move records and independent audits are
+private under `.context/baselines/2026-10-13/nnue-depth-control/`, reserved from
+training. Production scoring and search policy remain unchanged.
+The updated audit Release suite passed 35/35 and ordinary Release passed 34/34.
+ASan/UBSan with leak detection passed the audit test, including an exhaustive
+one-ply neural-leaf comparison and matched-horizon initialization/restoration.
 
 ## 5. Build and debugging
 

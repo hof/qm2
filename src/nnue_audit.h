@@ -22,6 +22,8 @@ struct audit_state_t {
     audit_mode_t mode = audit_mode_t::verify;
     audit_counters_t counters;
     bool q_delta = true, q_see = true;
+    bool fixed_horizon = false;
+    bool aligned_quiescence = false;
     std::string root_fen;
     struct cutoff_t {
         std::string fen;

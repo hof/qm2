@@ -39,5 +39,27 @@ int main(int argc, char ** argv) {
     search.go();
     if (search.nodes != 4000 || search.brd.ply || !search.nnue_audit.counters.calls) return 1;
     if (evaluate(&search) != expected) return 1;
+    search.init(fen, nullptr);
+    // Independent one-ply enumeration checks the matched-horizon PVS path.
+    int exhaustive = -score::INF;
+    for (int index = 0; index < search.root.move_count; ++index) {
+        auto & root_move = search.root.moves[index];
+        search.forward(&root_move.move, root_move.gives_check);
+        nnue::accumulator_t fresh;
+        const int value = -nnue::to_centipawns(search.evaluation_network->evaluate(search.brd, fresh));
+        exhaustive = MAX(exhaustive, value);
+        search.backward(&root_move.move);
+    }
+    search.nnue_audit.fixed_horizon = true;
+    search.beta_pruning = search.ffp_enabled = search.null_enabled = search.lmr_enabled = false;
+    search.game.max_depth = 1;
+    search.go();
+    if (search.result_score != exhaustive || search.completed_depth != 1
+            || search.brd.ply || search.brd.to_string() != fen) return 1;
+    options::get_option("NNUEAuditHorizon")->value = 2;
+    search.init(fen, nullptr);
+    options::get_option("NNUEAuditHorizon")->value = 0;
+    if (!search.nnue_audit.aligned_quiescence || search.beta_pruning || search.ffp_enabled
+            || search.null_enabled || search.lmr_enabled || search.extension(&search.root.moves[0].move, 2)) return 1;
     std::cout << "Live lane/cache corruption detected; audited cancellation/restoration passed\n";
 }

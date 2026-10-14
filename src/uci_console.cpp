@@ -418,6 +418,18 @@ namespace uci {
                                 return true;
                             }
                         }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                        if (name == "NNUEAuditHorizon") {
+                            if (value == "normal") candidate = 0;
+                            else if (value == "fixed") candidate = 1;
+                            else if (value == "quiet") candidate = 2;
+                            else {
+                                out("info string Invalid option value: " + name);
+                                return true;
+                            }
+                            trans_table::clear();
+                        }
+#endif
                         if (name == "UseNNUE" && candidate && !nnue::snapshot()) {
                             out("info string NNUE enable failed: load EvalFile first; HCE retained");
                             return true;

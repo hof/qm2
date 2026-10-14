@@ -48,6 +48,9 @@ namespace options {
         { "ExperienceDepth", INT, 16, "type spin default 16 min 1 max 128" },
         { "UseNNUE", BOOL, 0, "type check default false" },
         { "EvalFile", STRING, 0, "type string default <empty>" }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        , { "NNUEAuditHorizon", STRING, 0, "type combo default normal var normal var fixed var quiet" }
+#endif
     };
     
     option_t * get_option(const char * key) {

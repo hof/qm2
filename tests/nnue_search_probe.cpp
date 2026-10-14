@@ -21,8 +21,10 @@ int main(int argc, char ** argv) {
         if (policy > 63 || depth < 1 || depth > MAX_PLY) throw std::runtime_error("invalid policy/depth");
         const std::string evaluator(argv[3]), mode(argv[4]);
         if ((evaluator != "hce" && evaluator != "nnue")
-                || (mode != "off" && mode != "verify" && mode != "full" && mode != "replay"))
+                || (mode != "off" && mode != "verify" && mode != "full" && mode != "replay" && mode != "fixed" && mode != "quiet"))
             throw std::runtime_error("invalid evaluator/mode");
+        if ((mode == "fixed" || mode == "quiet") && (policy || evaluator != "nnue"))
+            throw std::runtime_error("matched horizon requires NNUE and policy zero");
         std::ifstream input(argv[2]);
         if (!input) throw std::runtime_error("cannot read positions");
         std::vector<std::pair<std::string, std::string>> positions;
@@ -63,6 +65,8 @@ int main(int argc, char ** argv) {
             search.nnue_audit.q_delta = policy & 16;
             search.nnue_audit.q_see = policy & 32;
             search.nnue_audit.record_cutoffs = argc == 9;
+            search.nnue_audit.fixed_horizon = mode == "fixed";
+            search.nnue_audit.aligned_quiescence = mode == "quiet";
             search.game.max_nodes = nodes;
             search.game.max_depth = depth;
             if (mode == "replay") {

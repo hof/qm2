@@ -177,6 +177,15 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     ffp_enabled = options::get_value("FutilityPruning");
     draw_contempt = options::get_value("DrawContempt");
     evaluation_network = options::get_value("UseNNUE") ? nnue::snapshot() : nullptr;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    const int horizon = evaluation_network ? options::get_value("NNUEAuditHorizon") : 0;
+    nnue_audit.fixed_horizon = horizon == 1;
+    nnue_audit.aligned_quiescence = horizon == 2;
+    if (horizon) {
+        beta_pruning = ffp_enabled = null_enabled = lmr_enabled = false;
+        nnue_audit.q_delta = nnue_audit.q_see = false;
+    }
+#endif
     evaluation_accumulators.clear();
     if (evaluation_network) {
         evaluation_accumulators.resize(MAX_PLY + 1);
@@ -769,6 +778,9 @@ void root_t::sort_moves(move_t * best_move) {
  * @return 1 for extending, 0 otherwise
  */
 int search_t::extension(move_t * move, int gives_check) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    if (nnue_audit.fixed_horizon || nnue_audit.aligned_quiescence) return 0;
+#endif
     if (gives_check > 1) {
         return 1;
     } else if (gives_check == 1 && brd.see(move) >= 0) {
@@ -936,7 +948,20 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
 
     if (depth < 1) {
-        const int score = qsearch(alpha, beta, 0);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        if (nnue_audit.fixed_horizon) {
+            ++nodes;
+            if (abort()) return alpha;
+            if (is_draw()) return draw_score();
+            if (!has_legal_move(brd)) return stack->in_check ? -score::MATE + brd.ply : draw_score();
+            return nnue::audit_evaluate(*this);
+        }
+#endif
+        const int score = qsearch(alpha, beta,
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            nnue_audit.aligned_quiescence ? -1 :
+#endif
+            0);
         return score;
     }
 
@@ -990,7 +1015,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const U64 context = tt_context();
     clock_range_t tt_clocks;
     int tt_move = 0, tt_flag = 0, tt_score;
-    if (trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag, context,
+    if (
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            !nnue_audit.fixed_horizon && !nnue_audit.aligned_quiescence &&
+#endif
+            trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag, context,
             brd.stack->fifty_count, &tt_clocks)) {
         if (pv && tt_flag == score::EXACT) {
             stack->tt_clocks.include_child(tt_clocks, 0);
@@ -1307,6 +1336,10 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        if (nnue_audit.aligned_quiescence && !in_check && !move->capture && !move->promotion)
+            continue;
+#endif
         bool dangerous = depth < 0 || move->capture || in_check || gives_check
                 || move->promotion || move->castle;
 

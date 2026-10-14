@@ -41,7 +41,11 @@ namespace options {
         const char * uci_option; 
     };
 
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    const int length = 24;
+#else
     const int length = 23;
+#endif
     extern option_t PARAM[length+1];
     
     option_t * get_option(const char * key);
