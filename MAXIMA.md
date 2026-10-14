@@ -464,6 +464,11 @@ restrictions. Changing it stops search and clears TT entries. Search-owned
 attempt/cutoff counters are reported as `info string audit_null ...` in that
 contract and in diagnostic probe output. The regression checks active null
 cutoffs, live inference equivalence and node-budget cancellation/restoration.
+`NNUEAuditBetaPruning` (default false, audit builds only) similarly enables
+Maxima's existing reverse-futility rule in `quiet`, independently of null move.
+Worker-owned candidate/cutoff counters appear in `info string audit_beta ...`
+and probe output. Candidates reflect each engine's own eligibility guards and
+must not be treated as identical populations across engines.
 
 Across 344 tactical roots at 50000 nodes and 33 WAC evaluator disagreements at
 200000 nodes, 17576241 live evaluations, including cached returns, passed fresh
@@ -586,6 +591,40 @@ a strength loss, and the depth does not exercise deeper null verification.
 Production policy remains unchanged. Scripts, source patches, frozen binaries,
 declared protocols, move-level counters, PGNs and audits are private under
 `.context/baselines/2026-10-13/nnue-null-control/`, reserved from training.
+
+The next isolated step tested reverse futility, with null move off throughout.
+Four fixed 100-game/50-pair runs retained depth three, common quiescence, the
+pinned network and the same reserved openings. Each engine retained its own
+reverse-futility rule: Maxima `eval - 50 * depth`, SF13's improving-dependent
+`234 * (depth - improving)` margin in SF units. Both binaries supported runtime
+toggles, so every configuration used the same pair of frozen executables.
+
+| Reverse futility enabled | Maxima W/D/L | Maxima score |
+| --- | ---: | ---: |
+| Neither engine | 24/54/22 | 51% |
+| Maxima only | 15/55/30 | 42.5% |
+| SF13 only | 24/61/15 | 54.5% |
+| Both engines | 22/55/23 | 49.5% |
+
+The baseline reproduced previous qsearch/null-off game records and core move
+traces exactly. Counters confirmed actual reverse-futility cutoffs: Maxima
+233902 alone/223009 with both enabled, SF13 283495 alone/282773 with both.
+Null attempts were zero in every run. Independent audits passed all 400 games,
+41500 legal PGN plies and 35100 searched moves, every reported depth three,
+no unfinished games or forfeits. The isolated-control, cancellation/restoration
+and lifecycle checks passed 3/3; ASan/UBSan with leak detection passed the updated
+audit regression. Production scoring and pruning remain unchanged.
+
+Maxima's one-sided point-score drop is larger than in the null-move experiment
+and supports investigating its margin, alongside the earlier bad-cutoff
+replays. SF13's rule also had a lower point score when enabled alone. These
+small diagnostics do not prove normal-search Elo losses: at fixed depth, saved
+work cannot buy deeper search, so pruning's accuracy cost receives no depth
+benefit. Test any proposed change at equal nodes and time before deployment.
+The SF control retains direct neural evaluation and disables TT score
+substitution; it is not unmodified SF13. Source patches, scripts, declared
+protocols, frozen binaries, counters, PGNs and audits are private under
+`.context/baselines/2026-10-13/nnue-beta-control/`, reserved from training.
 
 ## 5. Build and debugging
 

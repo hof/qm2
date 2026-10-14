@@ -451,6 +451,7 @@ namespace uci {
                                 && (name == "KingAttackShelter" || name == "KingAttackPieces" || name == "UseNNUE"
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                                     || name == "NNUEAuditNullMove"
+                                    || name == "NNUEAuditBetaPruning"
 #endif
                                     )) {
                             trans_table::clear();

@@ -186,6 +186,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         beta_pruning = ffp_enabled = null_enabled = lmr_enabled = false;
         nnue_audit.q_delta = nnue_audit.q_see = false;
         null_enabled = horizon == 2 && options::get_value("NNUEAuditNullMove");
+        beta_pruning = horizon == 2 && options::get_value("NNUEAuditBetaPruning");
     }
 #endif
     evaluation_accumulators.clear();
@@ -358,9 +359,12 @@ void search_t::go() {
         + " interrupted " + std::to_string(interrupted)
         + " pruned_moves " + std::to_string(pruned_nodes));
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    if (nnue_audit.aligned_quiescence)
+    if (nnue_audit.aligned_quiescence) {
         uci::out("info string audit_null attempts " + std::to_string(nnue_audit.counters.null_attempts)
             + " cutoffs " + std::to_string(nnue_audit.counters.null_cutoffs));
+        uci::out("info string audit_beta candidates " + std::to_string(nnue_audit.counters.beta_candidates)
+            + " cutoffs " + std::to_string(nnue_audit.counters.beta_cutoffs));
+    }
 #endif
     uci::send_pv(result_score, result_depth, sel_depth, nodes, game.tm.elapsed(),
         pv_to_string().c_str(), result_flag, tablebase_hits);
@@ -1058,6 +1062,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
     // turn an exact draw into a heuristic fail-high. Probe only when pruning
     // can run; the ordinary move loop handles the remaining terminal nodes.
     const bool beta_cutoff = depth < 4 && beta_pruning && eval - 50 * depth >= beta;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    if (do_prune_node && depth < 4 && beta_pruning) ++nnue_audit.counters.beta_candidates;
+#endif
     // At clock 99 a reversible move draws unless it mates; static evaluation and
     // an artificial pass can still claim a win. Search legal moves there.
     // Propagate this restriction so cached parents cannot bypass the guard.
@@ -1071,6 +1078,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     // beta pruning
     if (do_prune_node && beta_cutoff) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++nnue_audit.counters.beta_cutoffs;
         nnue::audit_beta_cutoff(*this, alpha, beta, depth, eval);
 #endif
         return eval - 50 * depth;
