@@ -101,6 +101,14 @@ int main(int argc, char ** argv) {
                 << ",\"q_check_rejected\":" << counts.q_check_rejected
                 << ",\"q_check_searched\":" << counts.q_check_searched
                 << ",\"q_castles\":" << counts.q_castles
+                << ",\"pvs_nodes\":" << counts.pvs_nodes
+                << ",\"q_nodes\":" << counts.q_nodes
+                << ",\"root_calls\":" << counts.root_calls
+                << ",\"move_visits\":" << counts.move_visits
+                << ",\"null_visits\":" << counts.null_visits
+                << ",\"researches\":" << counts.researches
+                << ",\"root_researches\":" << counts.root_researches
+                << ",\"research_fail_highs\":" << counts.research_fail_highs
                 << ",\"null_attempts\":" << counts.null_attempts
                 << ",\"null_cutoffs\":" << counts.null_cutoffs
                 << ",\"beta_candidates\":" << counts.beta_candidates

@@ -12,6 +12,9 @@ namespace nnue {
 enum class audit_mode_t { verify, full, off };
 
 struct audit_counters_t {
+    uint64_t pvs_nodes = 0, q_nodes = 0, root_calls = 0;
+    uint64_t move_visits = 0, null_visits = 0;
+    uint64_t researches = 0, root_researches = 0, research_fail_highs = 0;
     uint64_t calls = 0, cached_returns = 0;
     uint64_t reuses = 0, updates = 0;
     uint64_t root_refreshes = 0, king_refreshes = 0, parent_refreshes = 0;

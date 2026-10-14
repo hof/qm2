@@ -250,6 +250,9 @@ int main(int argc, char ** argv) {
         const int alpha = evaluate(probe.get()) + 5000;
         probe->qsearch(alpha, alpha + 1, 0);
         const auto & counts = probe->nnue_audit.counters;
+        if (counts.pvs_nodes || counts.q_nodes != probe->nodes
+                || counts.move_visits + 1 != counts.q_nodes || counts.null_visits
+                || counts.root_calls || counts.researches) return failure(__LINE__);
         if (counts.q_check_candidates != 4 || counts.q_check_rejected != 1
                 || counts.q_check_searched != 3 || counts.q_castles
                 || probe->brd.ply || probe->brd.to_string() != queen_fen) return failure(__LINE__);
@@ -289,6 +292,21 @@ int main(int argc, char ** argv) {
     if (search.nodes != 128 || !search.stop_all || search.brd.ply
             || search.brd.to_string() != fen || evaluate(&search) != expected) return failure(__LINE__);
     options::get_option("NNUEAuditQuietChecks")->value = 0;
+    const auto & work = search.nnue_audit.counters;
+    if (work.pvs_nodes + work.q_nodes != search.nodes || !work.root_calls
+            || work.move_visits + work.null_visits + work.researches != search.nodes
+            || work.root_researches > work.researches
+            || work.research_fail_highs > work.researches) return failure(__LINE__);
+    move_t played_move{};
+    played_move.set(&search.brd, "e2e4");
+    if (!search.brd.valid(&played_move) || !search.brd.legal(&played_move)) return failure(__LINE__);
+    search.forward(&played_move, search.brd.gives_check(&played_move));
+    const auto played_fen = search.brd.to_string();
+    search.reset_stack();
+    if (search.nodes || work.pvs_nodes || work.q_nodes || work.root_calls
+            || work.move_visits || work.null_visits || work.researches
+            || work.root_researches || work.research_fail_highs
+            || search.brd.to_string() != played_fen) return failure(__LINE__);
     options::get_option("NNUEAuditHorizon")->value = 0;
     std::cout << "Live lane/cache corruption detected; audited cancellation/restoration passed\n";
 }

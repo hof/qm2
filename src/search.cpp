@@ -372,6 +372,15 @@ void search_t::go() {
         + " pruned_moves " + std::to_string(pruned_nodes));
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     if (nnue_audit.aligned_quiescence) {
+        const auto & counts = nnue_audit.counters;
+        uci::out("info string audit_work pvs " + std::to_string(counts.pvs_nodes)
+            + " q " + std::to_string(counts.q_nodes)
+            + " roots " + std::to_string(counts.root_calls)
+            + " moves " + std::to_string(counts.move_visits)
+            + " nulls " + std::to_string(counts.null_visits)
+            + " researches " + std::to_string(counts.researches)
+            + " root_researches " + std::to_string(counts.root_researches)
+            + " research_fail_highs " + std::to_string(counts.research_fail_highs));
         uci::out("info string audit_null attempts " + std::to_string(nnue_audit.counters.null_attempts)
             + " cutoffs " + std::to_string(nnue_audit.counters.null_cutoffs));
         uci::out("info string audit_beta candidates " + std::to_string(nnue_audit.counters.beta_candidates)
@@ -570,6 +579,9 @@ bool search_t::abort(bool force_poll = false) {
  * Do a null move
  */
 void search_t::forward() {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.null_visits;
+#endif
     stack->current_move.clear();
     stack++;
     stack->in_check = false;
@@ -601,6 +613,9 @@ void search_t::backward() {
  * @param gives_check
  */
 void search_t::forward(move_t * move, bool gives_check) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.move_visits;
+#endif
     stack->current_move.set(move);
     (stack + 1)->repetition_start = stack->repetition_start;
     (stack + 1)->tt_history = stack->tt_history;
@@ -857,6 +872,9 @@ int search_t::ceiling_score() {
  * - Compatible with all supported wild variants
  */
 int search_t::pvs_root(int alpha, int beta, int depth) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.root_calls;
+#endif
 
     assert(root.move_count > 0);
     int best = -score::INF;
@@ -879,6 +897,10 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         } else {
             score = -pvs(-alpha - 1, -alpha, depth - 1);
             if (!stop_all && score > alpha) { //open window research w/o reductions
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                ++nnue_audit.counters.researches;
+                ++nnue_audit.counters.root_researches;
+#endif
                 score = -pvs(-beta, -alpha, depth - 1);
             }
         }
@@ -983,6 +1005,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     if (depth < 1) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         if (nnue_audit.fixed_horizon) {
+            ++nnue_audit.counters.q_nodes;
             ++nodes;
             if (abort()) return alpha;
             if (is_draw()) return draw_score();
@@ -1004,6 +1027,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     //time
     nodes++;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.pvs_nodes;
+#endif
     if (abort()) {
         return alpha;
     }
@@ -1232,6 +1258,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
         } else {
             score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
             if (!stop_all && score > alpha && (pv || reduce > 0)) { //open window research without reductions
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                ++nnue_audit.counters.researches;
+                nnue_audit.counters.research_fail_highs += score >= beta;
+#endif
                 const clock_range_t previous_clocks = stack->tt_clocks;
                 score = -pvs(-beta, -alpha, depth - 1 + extend);
                 stack->tt_clocks.include_child(previous_clocks, 0);
@@ -1304,6 +1334,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
  */
 
 int search_t::qsearch(int alpha, int beta, int depth) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.q_nodes;
+#endif
     stack->tt_clocks = {0, 101};
 
     assert(depth <= 0);
@@ -1544,6 +1577,12 @@ void search_t::reset_stack() {
     brd._stack[0].copy(brd.stack);
     brd.stack = &brd._stack[0];
     nodes = 0;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    auto & counts = nnue_audit.counters;
+    counts.pvs_nodes = counts.q_nodes = counts.root_calls = 0;
+    counts.move_visits = counts.null_visits = 0;
+    counts.researches = counts.root_researches = counts.research_fail_highs = 0;
+#endif
     pruned_nodes = 0;
     stack->pv_count = 0;
 }

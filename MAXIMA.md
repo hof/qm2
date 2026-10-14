@@ -592,8 +592,22 @@ a hanging queen check, safe checks, losing countercheck evasions, checking and
 nonchecking castles, below-entry exclusions and cancellation/restoration with
 both evaluators. Ordinary search retains its existing below-entry castling.
 
+Audit builds report `info string audit_work` in `quiet` mode: effective
+positive-depth PVS visits, quiescence visits, root-driver calls, made moves,
+null moves and full-window re-searches (with root and fail-high subsets).
+The depth-zero handoff counts once in quiescence; root-driver calls are
+reported separately. Null searches and re-searches count as visited work;
+rejected move candidates do not count as visited child positions. Fixed neural
+leaves use the quiescence/leaf counter. Work counters are worker-owned and
+restart with the node counter when resetting the self-play stack. Ordinary
+UCI node counting and search decisions are unchanged by this instrumentation.
+The standard-search visit count reconciles with `pvs_nodes + q_nodes`.
+
 The agreed comparison order is to finish the feature-by-feature depth-three
-iteration, then advance to depth four and five one step at a time. Record
+iteration, then advance to depth four, five, six and onward one step at a time.
+At each depth, repeat the established configuration before enabling another
+feature. Check actual activation counters and existing rules crossing depth
+thresholds; isolate any new gap before increasing depth again. Record
 actual feature activity; deeper-only features remain unexercised until their
 activation depth. Diagnose a new gap by disabling features selectively at the
 same horizon. Fixed nodes can then compare work efficiency; normal builds,
@@ -1058,6 +1072,46 @@ castling certificates retained their original expectations: an initial SEE
 filter lost drawing checks at that boundary, motivating the clock safeguard.
 All protocols, source patches, audits and paired-root data are preserved with
 the quiet-control artifacts above, reserved from training.
+
+The node-accounting follow-up searched the same 50 opening FENs at depth three
+under eight declared profiles, totaling 800 searches. In the baseline profiles,
+all 300 prior moves, PVs, depths and reported node counts were reproduced
+exactly. Both engines were instrumented for the same effective PVS/quiescence
+visits, excluding the root driver. Each controlled search reconciled
+`visits = made_moves + null_moves + full_window_researches`. Maxima's existing
+reported count equals those visits; the SF13 reported count equals made moves.
+These equations are for the present controls: other same-position helper
+searches, when restored, require their own accounting.
+
+| Settings in both engines | Visits Maxima/SF, summed over 50 FENs | Median per-FEN Maxima/SF visit ratio |
+| --- | ---: | ---: |
+| Prior baseline, no optional quiets | 108040 / 90524 | 1.3141 |
+| Add quiet checks | 112268 / 95903 | 1.3008 |
+| Add entry castles | 112284 / 104210 | 1.2683 |
+| Checks/castles, null move off | 120441 / 114636 | 1.2070 |
+| Checks/castles, reverse futility off | 118516 / 141046 | 0.9781 |
+| Checks/castles, null/RFP/frontier futility off | 139208 / 159266 | 1.0134 |
+| Checks/castles, delta/capture SEE off | 175373 / 355062 | 1.0399 |
+| Checks/castles, all five tested pruning rules off | 193832 / 467195 | 0.7788 |
+
+The quiet-check SEE filter stays active in these last profiles. Normalizing
+accounting changes the both-checks/castles median ratio from 1.2902 to 1.2683,
+so it explains only a small part of that difference. Turning reverse futility
+off changes the relative visited work substantially; this supports differing
+pruning as a cause rather than assuming uniformly worse move ordering.
+Actual RFP cutoffs in the both-enabled sample were 1119/3637. Re-searches were
+654/433, with zero measured fail-high PV re-searches in these shallow controls.
+Quiescence represented about 93% of visits. Aggregate ratios differ from median
+per-position ratios because some positions dominate the totals. These are
+reserved, fixed-depth diagnostics, not normalized CPU cost or timed Elo.
+Protocols, frozen binaries, source patches, per-root counters and independent
+audits are private under `.context/baselines/2026-10-14/node-accounting/`.
+
+The independent accounting audit passed all 800 searches and their counter
+equations. Focused NNUE audit and standard/neural lifecycle tests passed 3/3;
+the additional stack-reset accounting regression also passed. Ordinary node
+counting and playing behavior remain unchanged. ASan/UBSan with leak detection
+passed the final accounting and played-move stack-reset regression.
 
 ## 5. Build and debugging
 
