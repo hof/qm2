@@ -521,6 +521,20 @@ The updated audit Release suite passed 35/35 and ordinary Release passed 34/34.
 ASan/UBSan with leak detection passed the audit test, including an exhaustive
 one-ply neural-leaf comparison and matched-horizon initialization/restoration.
 
+The next controlled step enabled that common unpruned quiescence contract in
+both engines, retaining depth three, the same 50 opening pairs, model and Maxima
+binary, and all other diagnostic restrictions. Maxima scored 24W/54D/22L (51%)
+over 100 games, versus 54% in the exact-ply control. The independent audit passed
+10940 legal PGN plies and 9340 searched moves, with all reported depths three
+and no unfinished games or forfeits. The conservative 95% opening-pair score
+interval is 31.79%–70.21%; the small relative-score change does not establish a
+strength difference or measure the gain from quiescence itself. This matched
+quiescence step shows no large observed host deficit. Native quiet-check and
+castling choices, quiescence pruning and other selective features still need
+separate experiments. Scripts, fixed protocol, PGNs and audit are stored beside
+the prior controls as `games_quiet.py`, `quiet-games.json` and
+`quiet-games-audit.json`. Production behavior remains unchanged.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
