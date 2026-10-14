@@ -26,10 +26,10 @@ int main(int argc, char ** argv) {
     // Verify that the recorder captures a genuine eligible beta cutoff.
     trans_table::clear();
     search.nnue_audit.record_cutoffs = true;
-    const int lower = expected - 101, upper = expected - 100;
+    const int lower = expected - 201, upper = expected - 200;
     const int cutoff = search.pvs(lower, upper, 1);
     if (std::abs(upper) < score::TABLEBASE - MAX_PLY) {
-        if (cutoff != expected - 50 || search.nnue_audit.beta_cutoffs.size() != 1) return 1;
+        if (cutoff != expected || search.nnue_audit.beta_cutoffs.size() != 1) return 1;
         const auto & event = search.nnue_audit.beta_cutoffs.front();
         if (event.fen != fen || event.alpha != lower || event.beta != upper || event.eval != expected) return 1;
     }
@@ -101,8 +101,24 @@ int main(int argc, char ** argv) {
     search.game.max_depth = 3;
     search.go();
     if (search.completed_depth != 3 || search.brd.ply || search.brd.to_string() != fen
-            || !search.nnue_audit.counters.beta_candidates || !search.nnue_audit.counters.beta_cutoffs
+            || !search.nnue_audit.counters.beta_candidates
             || search.nnue_audit.counters.null_attempts) return 1;
+    // The former narrow margin admitted this 80-cp surplus. Search legal moves
+    // instead; no child main-search nodes exist at depth one to mask the result.
+    search.init(fen, nullptr);
+    search.pvs(expected - 81, expected - 80, 1);
+    if (search.nnue_audit.counters.beta_cutoffs || search.nodes <= 1) return 1;
+    search.init(fen, nullptr);
+    if (search.pvs(expected - 101, expected - 100, 1) != expected
+            || search.nnue_audit.counters.beta_cutoffs != 1 || search.nodes != 1) return 1;
+    for (int surplus : {49, 50}) {
+        search.init(fen, nullptr);
+        search.beta_pruning = false;
+        search.null_enabled = true;
+        search.pvs(expected - surplus - 1, expected - surplus, 1);
+        if (search.nnue_audit.counters.null_attempts != uint64_t(surplus == 50)
+                || search.brd.to_string() != fen || search.brd.ply) return 1;
+    }
     search.init(fen, nullptr);
     search.game.max_depth = 3;
     search.game.max_nodes = 128;

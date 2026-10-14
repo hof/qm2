@@ -124,6 +124,19 @@ run, so stalemate remains an exact draw with production pruning enabled. The
 probe uses a king escape first and fresh move generation when needed, without
 changing the active move picker.
 
+Standard search now uses a simple shared pruning baseline for HCE and NNUE,
+both expressed on the 100-cp pawn scale. Reverse futility is limited to depths
+one through three: require `eval - 100 * depth >= beta` and return `eval` on
+success. Null move requires `eval >= beta + 50`, a zero-window search and a
+fixed extra reduction of three (`depth - 1 - 3`). These round margins replace
+the earlier 50-cp-per-ply reverse-futility margin and zero null-move cushion.
+They have no improving/history/evaluator-specific adjustments; the constants
+are starting values, not claimed tuned optima. Existing legal-terminal,
+non-PV, check, non-pawn-material, clock and decisive-score guards remain active.
+Evaluation functions and other pruning features are unchanged. Earlier 112/40
+experiments below remain historical controls, not measured results for this
+new combined 100/50 policy. Confirm strength at equal nodes/time before tuning.
+
 Standard null-move pruning excludes consecutive artificial passes and runs
 endgame verification with null pruning disabled throughout its subtree. The
 setting and board/history state are restored before handling cancellation;

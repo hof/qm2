@@ -17,6 +17,7 @@ public:
     int verification_calls = 0;
     int consecutive_nulls = 0;
     int verification_nulls = 0;
+    int null_depth = 0, null_alpha = 0, null_beta = 0;
     int null_value = 100;
     int verification_value = 100;
     bool inject_null = true;
@@ -30,6 +31,9 @@ public:
         const bool artificial = brd.ply > 0 && !(stack - 1)->current_move.piece;
         if (artificial) {
             ++null_calls;
+            null_depth = depth;
+            null_alpha = alpha;
+            null_beta = beta;
             consecutive_nulls += brd.ply > 1 && !(stack - 2)->current_move.piece;
             verification_nulls += in_verification;
             if (inject_null) {
@@ -190,6 +194,29 @@ bool test_pawn_endgames() {
     return ok;
 }
 
+bool test_static_cushion() {
+    bool ok = true;
+    for (const char * fen : {"7k/7p/8/8/8/8/P7/KR6 w - - 0 1",
+                            "kr6/p7/8/8/8/8/7P/7K b - - 0 1"}) {
+        auto original = std::make_unique<search_t>(fen);
+        for (int surplus : {0, 49, 50, 51}) {
+            auto search = std::make_unique<null_probe_t>(fen);
+            prepare(*search);
+            const int beta = evaluate(search.get()) - surplus;
+            search->null_value = beta;
+            search->run(beta - 1, beta, 1);
+            const bool eligible = surplus >= 50;
+            ok &= check(search->null_calls == int(eligible), "null static cushion differs");
+            if (eligible) {
+                ok &= check(search->null_depth == -3 && search->null_alpha == -beta
+                    && search->null_beta == -beta + 1, "null depth or zero window differs");
+            }
+            ok &= restored(*search, *original);
+        }
+    }
+    return ok;
+}
+
 }
 
 int main() {
@@ -197,5 +224,6 @@ int main() {
     const bool cutoffs = test_cutoffs();
     const bool exclusions = test_exclusions();
     const bool pawn_endgames = test_pawn_endgames();
-    return cutoffs && exclusions && pawn_endgames ? EXIT_SUCCESS : EXIT_FAILURE;
+    const bool static_cushion = test_static_cushion();
+    return cutoffs && exclusions && pawn_endgames && static_cushion ? EXIT_SUCCESS : EXIT_FAILURE;
 }

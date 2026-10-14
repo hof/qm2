@@ -43,6 +43,10 @@ namespace {
 
 constexpr U64 game_history_salt = 0x9e3779b97f4a7c15ULL;
 constexpr U64 search_history_salt = 0xd1b54a32d192ed03ULL;
+// Conservative margins in the shared 100-cp pawn scale. Keep the baseline
+// independent of history, improving flags and evaluator-specific adjustments.
+constexpr int reverse_futility_margin_per_ply = 100;
+constexpr int null_move_margin = 50;
 
 U64 mix_context(U64 key) {
     key = (key ^ (key >> 30)) * 0xbf58476d1ce4e5b9ULL;
@@ -1056,12 +1060,13 @@ int search_t::pvs(int alpha, int beta, int depth) {
         && std::abs(beta) < decisive_score && brd.has_pieces(brd.us())
         && brd.stack->fifty_count < 99;
     const bool previous_null = brd.ply > 0 && !(stack - 1)->current_move.piece;
-    const bool do_null = null_enabled && !previous_null;
+    const bool do_null = null_enabled && !previous_null && eval >= beta + null_move_margin;
 
     // A static/null cutoff requires legal play: passing in stalemate would
     // turn an exact draw into a heuristic fail-high. Probe only when pruning
     // can run; the ordinary move loop handles the remaining terminal nodes.
-    const bool beta_cutoff = depth < 4 && beta_pruning && eval - 50 * depth >= beta;
+    const int beta_margin = reverse_futility_margin_per_ply * depth;
+    const bool beta_cutoff = depth < 4 && beta_pruning && eval - beta_margin >= beta;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     if (do_prune_node && depth < 4 && beta_pruning) ++nnue_audit.counters.beta_candidates;
 #endif
@@ -1081,7 +1086,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         ++nnue_audit.counters.beta_cutoffs;
         nnue::audit_beta_cutoff(*this, alpha, beta, depth, eval);
 #endif
-        return eval - 50 * depth;
+        return eval;
     }
 
     //null move pruning
@@ -1089,20 +1094,20 @@ int search_t::pvs(int alpha, int beta, int depth) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         ++nnue_audit.counters.null_attempts;
 #endif
-        int R = 3;
+        constexpr int null_reduction = 3;
         forward();
-        int null_score = -pvs(-beta, -alpha, depth - 1 - R);
+        int null_score = -pvs(-beta, -beta + 1, depth - 1 - null_reduction);
         backward();
         if (stop_all) {
             return alpha;
         } else if (null_score >= beta && std::abs(null_score) < decisive_score) {
-            const int RV = 5;
-            if (null_verify && depth > RV && material::is_eg(this)) {
+            constexpr int verification_reduction = 5;
+            if (null_verify && depth > verification_reduction && material::is_eg(this)) {
                 //verification
                 const clock_range_t previous_clocks = stack->tt_clocks;
                 // Exclude artificial passes throughout the verification subtree.
                 null_enabled = false;
-                int verified_score = pvs(alpha, beta, depth - 1 - RV);
+                int verified_score = pvs(beta - 1, beta, depth - 1 - verification_reduction);
                 null_enabled = true;
                 stack->tt_clocks.include_child(previous_clocks, 0);
                 if (stop_all) {
