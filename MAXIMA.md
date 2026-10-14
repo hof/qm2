@@ -626,6 +626,29 @@ substitution; it is not unmodified SF13. Source patches, scripts, declared
 protocols, frozen binaries, counters, PGNs and audits are private under
 `.context/baselines/2026-10-13/nnue-beta-control/`, reserved from training.
 
+
+The combined null-move plus reverse-futility check enabled both features in
+both engines, retaining the same depth-three/common-qsearch contract, pinned
+network, 50 paired openings and frozen Maxima binary. The SF13 control was
+rebuilt from the preceding beta-control source with only its null-move gate
+restored. Maxima scored **24 wins, 47 draws, 29 losses (47.5%)** in 100 games.
+For comparison, neither feature scored 51%, null move alone in both engines
+49%, and reverse futility alone in both 49.5%. No large relative gap appears
+in this combined depth-three sample; this does not establish normal-search
+strength or guarantee equal results at deeper horizons.
+
+Counters confirmed both features were active: null attempts/cutoffs were
+117808/66378 for Maxima and 37182/24902 for SF13; reverse-futility
+candidates/cutoffs were 338454/220646 and 530356/283176 respectively. The
+independent audit checked every searched move against the full PGN history,
+legal moves/PVs, paired openings, terminal results, reported depth three and
+frozen model/binary identities. All 100 games passed, with no unfinished games
+or forfeits. Other selective features remained disabled; this is the combined
+two-feature control, not full production search. Production code and defaults
+are unchanged. Source reconstruction, the added SF patch, declared protocol,
+frozen SF binary, PGNs, counters and audit are private under
+`.context/baselines/2026-10-13/nnue-combined-control/`, reserved from training.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
