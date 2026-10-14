@@ -1203,6 +1203,51 @@ checks passed 3/3. Protocols, binaries, source patches and comparison reports
 are private under `.context/baselines/2026-10-14/uncapped-extensions/`, reserved
 from training.
 
+The depth-four baseline retained every established control and enabled no
+additional feature. LMR, IID, other extensions/helpers and TT score cutoffs
+remained off. A depth-threshold review found that the opponent's native
+aspiration driver starts at iteration four and reduces retry depth after
+fail-highs, while Maxima starts aspiration at iteration six. The early trial
+was stopped and preserved. The final comparison uses full root windows in
+both engines and the nominal iteration depth on every root attempt. Native
+move ordering and existing depth-dependent history/context updates remain.
+
+| Controlled horizon | Maxima W/D/L | Maxima score | Median search visits Maxima/SF |
+| --- | ---: | ---: | ---: |
+| Depth three, preceding uncapped baseline | 27/57/16 | 55.5% | 1469 / 1094 |
+| Depth four, no additional features | 25/69/6 | 59.5% | 4644 / 3167 |
+
+The depth-four match used the same 50 paired opening endpoints, model, Maxima
+binary and preceding feature settings. Native SF reported-node median was
+3122.5; the visit figure includes null searches and re-searches in both engines.
+Total game visits were 32876565/27351502, but positions reached in the games
+differ from the depth-three run. On the same 50 opening positions, total visits
+rose from 120037/105801 to 442334/303072, about 3.69/2.86 times. The median
+paired Maxima/SF visit ratio rose from 1.338 to 1.485. Maxima retained a positive
+observed match score while searching more work; neither this score nor the
+change from depth three establishes timed Elo or a statistically proven gain.
+
+Both engines reached six accumulated check extensions and main-search ply
+nine in the games; quiescence peaks were 27/39. IID activity was zero, and the
+visit equations reconciled without unexplained helper searches. Every retained
+pruning/check/castling rule was exercised. Independent audits passed all 100
+games, 11232 legal PGN plies, 9632 game searches and 200 additional opening-root
+searches. All 100 depth-three opening traces exactly reproduced the preceding
+baseline after disabling the opponent's aspiration driver. No unfinished games,
+forfeits or engine errors occurred. Production engine code was unchanged.
+Protocols, binaries, source patch, threshold review, interrupted trial and
+reports are private under `.context/baselines/2026-10-14/depth-four-control/`,
+reserved from training.
+
+The next depth-four comparisons enable one feature at a time with simple,
+conservative settings, recording actual activation, work savings, re-searches
+and match outcomes before adding another feature. LMR and root aspiration are
+separate steps. IID can also be measured at fixed depth: its shallow ordering
+search costs nodes but may save more through earlier cutoffs. It was excluded
+to isolate features, not because fixed-depth experiments make it invalid.
+Distinguish an ordering search from internal depth reduction when comparing
+host mechanisms.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
