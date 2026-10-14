@@ -474,6 +474,20 @@ The diagnostic Release suite passed 35/35, the ordinary Release suite passed
 detection. Artifacts and ablation/replay scripts live privately in
 `.context/baselines/2026-10-13/nnue-search-audit/`; reserve them from training.
 
+A diagnostic original-SF13 host control returned only its raw neural core when
+`Use NNUE=true`, bypassing all classical switches and neural material/tempo/
+rule50 adjustments; `false` retained its classical evaluator. Same-binary,
+200-game/100-pair play at 2+0.02s and Hash64 scored 76W/102D/22L (63.5%) for
+neural-only. Its conservative 95% pair score interval was 49.92%–77.08%, narrowly
+including equality. Independent audit verified 34108 legal plies, paired
+openings, identities, options and all board-terminal outcomes; six clock
+forfeits remained included, with no engine errors or unfinished games. The
+openings were reused reserved diagnostic endpoints. This is evidence against
+assuming the raw net is useful only in a hybrid, not a clean Elo measurement,
+proof of a gain in Maxima or a reason to import classical switching. Source
+patch, protocol, binaries, PGNs and audit are private under
+`.context/baselines/2026-10-13/nnue-sf13-control/`, reserved from training.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
