@@ -649,6 +649,53 @@ are unchanged. Source reconstruction, the added SF patch, declared protocol,
 frozen SF binary, PGNs, counters and audit are private under
 `.context/baselines/2026-10-13/nnue-combined-control/`, reserved from training.
 
+
+A review before adding further features compared Maxima's null-move and
+reverse-futility implementations with the pinned SF13 source. The basic null
+window and pass/undo guards are equivalent; Maxima's total reduction of four
+matches SF13's base reduction at depths one through three. Both reach common
+qsearch there, and neither deep verification policy is exercised. SF13 adds
+static-evaluation, improving, prior history-score and TT-PV eligibility guards,
+uses dynamic reduction at larger depths and has a different verification
+policy. Maxima retains its own legal-terminal, clock and decisive-score guards.
+For reverse futility, SF13 returns `eval`, uses the improving-dependent margin
+`112.5 * (depth - improving)` in Maxima cp units and allows depths through eight;
+Maxima returns `eval - margin`, uses `50 * depth` and allows depths through three.
+SF13's depth-one improving margin is zero: it is not always more conservative.
+
+Four exploratory 100-game/50-pair controls changed only Maxima, with both
+features enabled in both engines and all other restrictions unchanged:
+
+| Maxima policy | W/D/L | Score | Median searched nodes per move |
+| --- | ---: | ---: | ---: |
+| Original | 24/47/29 | 47.5% | 1369 |
+| Reverse futility returns eval | 24/47/29 | 47.5% | 1369 |
+| Reverse-futility margin 112 * depth | 25/51/24 | 50.5% | 1514 |
+| Null eligibility requires eval >= beta + 40 cp | 23/54/23 | 50% | 1428 |
+
+The wider margin changes both eligibility and the returned `eval - margin`;
+the null cushion is a simple diagnostic, not an exact SF13 guard port. The
+original reproduced every previous combined-control game record and move row.
+The return-only variant also reproduced all move rows, scores, PVs, nodes and
+counters exactly. A static threshold screen of the earlier 264 irreversible
+cutoff records retained 162 at the wider margin and rejected five of six false
+fail-highs. This screen reuses conservative replay labels, not new searches
+under the common-qsearch horizon.
+
+All 400 games passed independent audits: 40216 legal PGN plies, 33816 searched
+moves, depth three, no unfinished games or forfeits. Each temporary build passed
+live NNUE/cancellation/restoration tests plus explicit witnesses of its return,
+margin and null-eligibility behavior; standard/NNUE lifecycle and audit checks
+passed 3/3. Changes were confined to temporary source snapshots and aligned
+audit mode. No tracked native source or production defaults changed. The two
+point improvements remain uncertain: exploratory paired-bootstrap 95% change
+intervals were -2.5 to +8.5 percentage points for the margin and -3 to +8.5 for
+the null guard. The additional median node cost was about 10.6% and 4.3%; equal
+node/time tests and fresh openings are required before selecting a production
+change. Do not tune toward an exact 50% score. Review protocols, source patches,
+policy witnesses, frozen binaries, PGNs, counters and audits are private under
+`.context/baselines/2026-10-13/nnue-pruning-review/`, reserved from training.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
