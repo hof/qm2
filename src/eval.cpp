@@ -82,6 +82,20 @@ int evaluate(search_t * s) {
         return s->stack->eval_result;
     }
 
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    if (s->wild == 0 && s->evaluation_network && s->nnue_audit.mode == nnue::audit_mode_t::off) {
+        ++s->nnue_audit.counters.calls;
+        if (s->stack->eval_result != score::INVALID) ++s->nnue_audit.counters.cached_returns;
+    }
+    if (s->wild == 0 && s->evaluation_network && s->nnue_audit.mode != nnue::audit_mode_t::off) {
+        const int result = nnue::audit_evaluate(*s);
+        if (s->stack->eval_result != score::INVALID) return result;
+        material::eval(s);
+        pawns::eval(s);
+        s->stack->eg_score = s->stack->eval_result = result;
+        return result;
+    }
+#endif
     if (s->stack->eval_result != score::INVALID) {
         return s->stack->eval_result;
     }
@@ -93,7 +107,11 @@ int evaluate(search_t * s) {
         pawns::eval(s);
         auto & accumulator = s->evaluation_accumulators[s->brd.ply];
         const auto * previous = s->brd.ply ? &s->evaluation_accumulators[s->brd.ply - 1] : nullptr;
-        const int result = nnue::to_centipawns(s->evaluation_network->evaluate(s->brd, accumulator, previous));
+        const int result = nnue::to_centipawns(s->evaluation_network->evaluate(s->brd, accumulator, previous
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            , &s->nnue_audit.counters
+#endif
+            ));
         s->stack->eg_score = s->stack->eval_result = result;
         return result;
     }

@@ -430,6 +430,50 @@ therefore contributes to the timed deficit but cannot by itself explain the
 fixed-node result. Match, raw reference, probe and audit artifacts live privately
 in `.context/baselines/2026-10-13/nnue-games/`, reserved from future training.
 
+Live search diagnostics are available in a separate build configured with
+`-Dmaxima_nnue_search_audit=ON` and a nonempty `maxima_nnue_test_network`.
+The option defaults off and adds no counters or verification to ordinary builds.
+The diagnostic evaluator compares live and fresh accumulators lane by lane,
+raw output, cached centipawn scores, material/pawn metadata keys and board state;
+the first mismatch reports the root, position, move path, model and differing
+lanes. Tests deliberately corrupt a lane and a cached score to verify detection.
+Search-owned counters distinguish incremental updates, king refreshes and
+refreshes caused by an unevaluated immediate parent.
+
+The audit-only `nnue_search_probe` accepts
+`MODEL POSITIONS.tsv hce|nnue off|verify|full|replay POLICY NODES DEPTH [CUTOFFS.jsonl]`.
+Each TSV row is `id<TAB>FEN`; every root starts with cleared caches. Policy bits
+enable beta pruning (1), forward futility (2), null move (4), LMR (8), quiescence
+delta (16) and quiescence SEE (32). Normal policy is 63; conservative is 0.
+`full` forces fresh inference; `replay` performs one full-window PVS at the
+requested depth. Optional beta-cutoff recording is capped at 128 events per
+root and restricted to irreversible nodes, allowing FEN replay without relevant
+earlier repetition history. These controls are diagnostics, not UCI options.
+
+Across 344 tactical roots at 50000 nodes and 33 WAC evaluator disagreements at
+200000 nodes, 17576241 live evaluations, including cached returns, passed fresh
+verification. Normal, verified and forced-fresh searches agreed exactly on
+move, score, PV, completed depth and nodes. On the 344-root run, 32.4% of computed
+perspective accumulators required a full refresh; 22.5% were caused by an
+unevaluated immediate parent. Walking back to an older ready accumulator is a
+performance lead, not an implemented or measured improvement.
+
+On the selected 33 disagreements at 200000 nodes, disabling both beta pruning
+and forward futility changed solved targets from 9 to 19 for NNUE and from 24
+to 27 for HCE. Fixed-depth ablations also exposed the considerable node cost of
+less selective search. Independent conservative depth-one replay found six
+false fail-highs among 264 recorded NNUE beta cutoffs. This identifies damaging
+heuristic bounds in tested positions, not an inference arithmetic bug or a
+proven playing-strength fix; production pruning remains unchanged. Original
+SF13's hybrid evaluator selected classical scores on those six diagnostic
+positions. That observation alone does not establish that its network requires
+a hybrid host.
+
+The diagnostic Release suite passed 35/35, the ordinary Release suite passed
+34/34, and the audit, reference and contract checks passed ASan/UBSan with leak
+detection. Artifacts and ablation/replay scripts live privately in
+`.context/baselines/2026-10-13/nnue-search-audit/`; reserve them from training.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode

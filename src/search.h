@@ -115,6 +115,9 @@ public:
     game_t game;
     std::shared_ptr<const nnue::network_t> evaluation_network;
     std::vector<nnue::accumulator_t> evaluation_accumulators;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    nnue::audit_state_t nnue_audit;
+#endif
     board_t brd;
     root_t root;
     search_stack_t * stack;

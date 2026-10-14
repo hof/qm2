@@ -85,8 +85,18 @@ target_link_libraries(test_search_review MAX2SRC)
 
 add_executable(test_nnue test_nnue.cpp)
 target_link_libraries(test_nnue MAX2SRC)
-
 set(maxima_nnue_test_network "" CACHE FILEPATH "Optional real HalfKP network for reference/lifecycle checks")
+if(maxima_nnue_search_audit)
+    if(NOT maxima_nnue_test_network)
+        message(FATAL_ERROR "NNUE search audit tests require maxima_nnue_test_network")
+    endif()
+    add_executable(nnue_search_probe nnue_search_probe.cpp)
+    target_link_libraries(nnue_search_probe MAX2SRC)
+    add_executable(test_nnue_search_audit test_nnue_search_audit.cpp)
+    target_link_libraries(test_nnue_search_audit MAX2SRC)
+    add_test(NAME test_nnue_search_audit COMMAND test_nnue_search_audit "${maxima_nnue_test_network}")
+endif()
+
 if(maxima_nnue_test_network)
     add_library(nnue_reference STATIC
         ../third_party/nnue_reference/nnue.cpp

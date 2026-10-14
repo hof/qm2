@@ -2,6 +2,7 @@
 #define MAXIMA_NNUE_H
 
 #include "board.h"
+#include "nnue_audit.h"
 #include <array>
 #include <memory>
 #include <string>
@@ -30,7 +31,11 @@ public:
     static std::shared_ptr<const network_t> load(const std::string & path, std::string & error);
     // Raw Stockfish 13 internal units. Convert before use by Maxima's search.
     int evaluate(const board_t & board, accumulator_t & accumulator,
-        const accumulator_t * previous = nullptr) const;
+        const accumulator_t * previous = nullptr
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        , audit_counters_t * counters = nullptr
+#endif
+        ) const;
     void prepare(const board_t & board, const move_t * move, accumulator_t & accumulator) const;
     U64 fingerprint() const { return _fingerprint; }
 

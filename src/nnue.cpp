@@ -171,13 +171,32 @@ void network_t::prepare(const board_t & board, const move_t * move, accumulator_
 }
 
 int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
-        const accumulator_t * previous) const {
+        const accumulator_t * previous
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        , audit_counters_t * counters
+#endif
+        ) const {
     for (bool color : {false, true}) {
-        if (accumulator.ready[color]) continue;
+        if (accumulator.ready[color]) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            if (counters) ++counters->reuses;
+#endif
+            continue;
+        }
         if (!previous || !previous->ready[color] || previous->kings[color] != accumulator.kings[color]) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            if (counters) {
+                if (!board.ply) ++counters->root_refreshes;
+                else if (previous && previous->kings[color] != accumulator.kings[color]) ++counters->king_refreshes;
+                else ++counters->parent_refreshes;
+            }
+#endif
             refresh(board, accumulator, color);
             continue;
         }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        if (counters) ++counters->updates;
+#endif
         accumulator.values[color] = previous->values[color];
         for (int i = 0; i < accumulator.change_count; ++i) {
             const auto & change = accumulator.changes[i];

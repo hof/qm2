@@ -150,6 +150,10 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     const auto started = std::chrono::steady_clock::now();
     PST::init();
     brd.init(fen);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    nnue_audit = {};
+    nnue_audit.root_fen = brd.to_string();
+#endif
     game = g ? *g : game_t();
     _control = control;
     _position_history = position_history;
@@ -1030,6 +1034,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     // beta pruning
     if (do_prune_node && beta_cutoff) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        nnue::audit_beta_cutoff(*this, alpha, beta, depth, eval);
+#endif
         return eval - 50 * depth;
     }
 
@@ -1312,10 +1319,21 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
         //prune if the capture or promotion can't raise alpha
         bool do_prune = !in_check && !gives_check && !is_eg;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        do_prune &= nnue_audit.q_delta || nnue_audit.q_see;
+#endif
         bool pruned = false;
         if (do_prune) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            const bool delta_prune = nnue_audit.q_delta && fbase + brd.max_gain(move) <= alpha;
+            const bool see_prune = nnue_audit.q_see && fbase + brd.see(move) <= alpha;
+            nnue_audit.counters.q_delta_prunes += delta_prune;
+            nnue_audit.counters.q_see_prunes += see_prune;
+            pruned = delta_prune || see_prune;
+#else
             pruned = fbase + brd.max_gain(move) <= alpha;
             pruned |= fbase + brd.see(move) <= alpha;
+#endif
             if (pruned) {
                 pruned_nodes++;
                 continue;
