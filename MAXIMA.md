@@ -37,6 +37,10 @@ search and evaluation, and experimental losers-chess support.
   throughput, and compilation tuned for the target CPU.
 - Explore a learned evaluator, such as NNUE, with correctness tests and measured
   playing-strength gains guiding integration into search.
+- Later, investigate play that exploits weaknesses in other engines' selective
+  search, including null-move assumptions in zugzwang and forced-move positions.
+  Use targeted positions and paired games against multiple engine opponents to
+  establish gains. This is deferred research after the basic NNUE/search work.
 - Strengthen endgame play with verified KPK integration and optional tablebases
   that respect draw rules and work with partial, user-selected coverage.
 - Add multithreaded search with explicit ownership of worker state, safe shared
