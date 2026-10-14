@@ -76,6 +76,9 @@ struct search_stack_t {
     move_t killer[2];
     move_t pv_moves[MAX_PLY + 1];
     bool in_check;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    int check_extensions;
+#endif
     int repetition_start;
     uint8_t pv_count;
     int16_t eval_result;

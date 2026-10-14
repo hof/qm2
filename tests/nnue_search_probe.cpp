@@ -109,6 +109,14 @@ int main(int argc, char ** argv) {
                 << ",\"researches\":" << counts.researches
                 << ",\"root_researches\":" << counts.root_researches
                 << ",\"research_fail_highs\":" << counts.research_fail_highs
+                << ",\"iid_calls\":" << counts.iid_calls
+                << ",\"extension_candidates\":" << counts.extension_candidates
+                << ",\"extension_see_rejected\":" << counts.extension_see_rejected
+                << ",\"extension_budget_rejected\":" << counts.extension_budget_rejected
+                << ",\"extensions_applied\":" << counts.extensions_applied
+                << ",\"max_check_extensions\":" << counts.max_check_extensions
+                << ",\"max_main_ply\":" << counts.max_main_ply
+                << ",\"max_q_ply\":" << counts.max_q_ply
                 << ",\"null_attempts\":" << counts.null_attempts
                 << ",\"null_cutoffs\":" << counts.null_cutoffs
                 << ",\"beta_candidates\":" << counts.beta_candidates

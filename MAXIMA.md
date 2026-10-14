@@ -603,6 +603,23 @@ restart with the node counter when resetting the self-play stack. Ordinary
 UCI node counting and search decisions are unchanged by this instrumentation.
 The standard-search visit count reconciles with `pvs_nodes + q_nodes`.
 
+`NNUEAuditCheckExtensions` (default false, audit builds only) adds a controlled
+check-extension rule in `quiet` mode: one extra main-search ply for a checking
+move with nonnegative SEE, including root moves. Each line can spend at most
+the nominal iteration depth in extra plies; at depth three this permits three
+extra plies and bounds main search to six plies. Child stack frames inherit
+the spent budget, including through null moves; siblings and re-searches
+retain the proper parent budget. Quiescence does not add these extensions and
+can continue beyond the main-search bound for captures and compulsory evasions.
+The `audit_extensions` report distinguishes candidates, SEE rejections, budget
+rejections and applied extensions, plus peak extensions per line and main/q
+ply. Changing the flag stops search and clears TT. Tests cover both colors and
+evaluators, safe/losing checks, budget exhaustion, inheritance and cancellation.
+This controlled rule does not change ordinary search's existing extensions.
+Internal iterative deepening is explicitly disabled in `fixed` and `quiet`:
+extensions must not silently activate a second feature. `audit_iid` reports
+its activity, and a direct depth-three/no-TT-move regression verifies exclusion.
+
 The agreed comparison order is to finish the feature-by-feature depth-three
 iteration, then advance to depth four, five, six and onward one step at a time.
 At each depth, repeat the established configuration before enabling another
@@ -1112,6 +1129,49 @@ equations. Focused NNUE audit and standard/neural lifecycle tests passed 3/3;
 the additional stack-reset accounting regression also passed. Ordinary node
 counting and playing behavior remain unchanged. ASan/UBSan with leak detection
 passed the final accounting and played-move stack-reset regression.
+
+The bounded check-extension step ran four fixed 100-game/50-pair depth-three
+profiles with all preceding pruning, quiet-check and entry-castling controls
+enabled. Both frozen binaries used one-ply nonnegative-SEE check extensions,
+including root checks, with a budget of the nominal iteration depth per line.
+Other extension/reduction/helper features and TT score cutoffs stayed disabled.
+
+| Check extensions enabled | Maxima W/D/L | Maxima score | Median search visits Maxima/SF |
+| --- | ---: | ---: | ---: |
+| Neither engine | 17/76/7 | 55% | 1117 / 854 |
+| Maxima only | 35/55/10 | 62.5% | 1425 / 965 |
+| SF13 control only | 19/61/20 | 49.5% | 1152 / 1080 |
+| Both engines | 27/57/16 | 55.5% | 1469 / 1094 |
+
+Visits use the same definition in both engines, including null searches and
+re-searches. Native SF reported-node medians were 838, 946, 1066 and 1075 in
+the corresponding profiles; Maxima's reported count already equals visits.
+The both-enabled match medians rose about 31.5%/28.1%. They include different
+positions reached during play and do not establish same-position work growth
+or timed strength. On the same 50 opening FENs, total visits changed from
+112284/104210 to 120037/105801, about 6.9%/1.5%. The control did not exhibit
+an unbounded main-search tree; it remains a provisional extension baseline.
+
+Both engines reached the three-extension line budget in the games. Applied
+extensions were 154991/79376, with 484/332 further checking candidates denied
+an extension by the exhausted budget. Those moves remain searchable at the
+ordinary remaining depth. Maximum positive-depth main-search ply was five
+(quiescence entry can be at ply six); maximum quiescence ply was 23/39, also
+observed in the extensions-off baseline. Compulsory check evasions remain
+searchable independently of the extension budget.
+
+The initial instrumented trial detected extra IID searches after a root check
+made depth-three interior nodes reachable. IID had been dormant in the earlier
+unextended depth-three controls. That trial was stopped and preserved; the
+final four profiles explicitly exclude IID and verify its counter is zero.
+The final baseline reproduced all prior castling-control game records and core
+move rows exactly. Independent audits passed all 400 games, 48440 legal PGN
+plies and 42040 searches, including legal PVs, depth three, counter equations,
+budget bounds and no unfinished games or forfeits. The additional 400 paired
+root searches also passed independent checks. Full Release checks passed 35/35
+and focused ASan/UBSan/leak checks passed 3/3. Protocols, frozen binaries,
+source patches, interrupted-trial evidence and all reports are private under
+`.context/baselines/2026-10-14/check-extensions/`, reserved from training.
 
 ## 5. Build and debugging
 

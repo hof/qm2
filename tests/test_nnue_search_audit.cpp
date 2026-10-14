@@ -65,6 +65,63 @@ int main(int argc, char ** argv) {
             || search.brd.ply || search.brd.to_string() != fen) return failure(__LINE__);
     options::get_option("NNUEAuditHorizon")->value = 2;
     search.init(fen, nullptr);
+    options::get_option("NNUEAuditQuietChecks")->value = 1;
+    options::get_option("NNUEAuditCastling")->value = 1;
+    options::get_option("NNUEAuditCheckExtensions")->value = 1;
+    for (bool neural : {false, true}) {
+        options::get_option("UseNNUE")->value = neural;
+        for (bool white : {false, true}) {
+            const char * check_fen = white ? "6k1/8/8/8/8/8/6r1/K2Q4 w - - 0 1"
+                : "k2q4/6R1/8/8/8/8/8/6K1 b - - 0 1";
+            auto probe = std::make_unique<search_t>(check_fen);
+            probe->nnue_audit.check_extension_limit = 3;
+            move_t safe{}, losing{};
+            safe.set(&probe->brd, white ? "d1b3" : "d8b6");
+            losing.set(&probe->brd, white ? "d1g4" : "d8g5");
+            if (!probe->brd.legal(&safe) || !probe->brd.legal(&losing)
+                    || !probe->brd.gives_check(&safe) || !probe->brd.gives_check(&losing)) return failure(__LINE__);
+            if (probe->extension(&safe, probe->brd.gives_check(&safe)) != 1
+                    || probe->extension(&losing, probe->brd.gives_check(&losing))) return failure(__LINE__);
+            probe->stack->check_extensions = 3;
+            if (probe->extension(&safe, probe->brd.gives_check(&safe))) return failure(__LINE__);
+            const auto & extension_counts = probe->nnue_audit.counters;
+            if (extension_counts.extension_candidates != 3 || extension_counts.extensions_applied != 1
+                    || extension_counts.extension_see_rejected != 1
+                    || extension_counts.extension_budget_rejected != 1) return failure(__LINE__);
+            probe->stack->check_extensions = 1;
+            probe->forward(&safe, probe->brd.gives_check(&safe));
+            if (probe->stack->check_extensions != 1) return failure(__LINE__);
+            probe->backward(&safe);
+            probe->forward();
+            if (probe->stack->check_extensions != 1) return failure(__LINE__);
+            probe->backward();
+            if (probe->stack->check_extensions != 1 || probe->brd.to_string() != check_fen) return failure(__LINE__);
+            // Depth three with no TT move would activate IID without the
+            // controlled-horizon guard. Exercise that entry directly.
+            probe->init(check_fen, nullptr);
+            probe->nnue_audit.check_extension_limit = 3;
+            probe->game.max_nodes = 2048;
+            probe->pvs(-score::INF, score::INF, 3);
+            if (probe->nnue_audit.counters.iid_calls || probe->brd.ply
+                    || probe->brd.to_string() != check_fen || probe->stack->check_extensions
+                    || !probe->nnue_audit.counters.extensions_applied
+                    || probe->nnue_audit.counters.max_check_extensions > 3) return failure(__LINE__);
+            probe->init(check_fen, nullptr);
+            probe->game.max_nodes = 512;
+            probe->game.max_depth = 3;
+            probe->go();
+            if (probe->nodes != 512 || !probe->stop_all || probe->brd.ply
+                    || probe->brd.to_string() != check_fen || probe->stack->check_extensions
+                    || !probe->nnue_audit.counters.extensions_applied
+                    || probe->nnue_audit.counters.iid_calls
+                    || probe->nnue_audit.counters.max_check_extensions > 3
+                    || probe->nnue_audit.counters.max_main_ply > 5) return failure(__LINE__);
+        }
+    }
+    options::get_option("UseNNUE")->value = 1;
+    options::get_option("NNUEAuditQuietChecks")->value = 0;
+    options::get_option("NNUEAuditCastling")->value = 0;
+    options::get_option("NNUEAuditCheckExtensions")->value = 0;
     options::get_option("NNUEAuditHorizon")->value = 0;
     if (!search.nnue_audit.aligned_quiescence || search.beta_pruning || search.ffp_enabled
             || search.null_enabled || search.lmr_enabled || search.extension(&search.root.moves[0].move, 2)) return failure(__LINE__);
