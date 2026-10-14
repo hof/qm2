@@ -311,6 +311,19 @@ core returns internal units: convert with `raw * 100 / 208`, matching its UCI
 conversion (`PawnValueEg=208`). Raw/full/incremental inference is checked before
 this conversion. Stockfish's separate material, tempo and rule50 scaling is not
 imported; any further calibration needs separate strength evidence.
+Future Maxima-native networks and offline converted exports should be trained
+or calibrated to the 100-cp pawn convention in the model artifact itself. Do
+not rely solely on an adapter to conceal a foreign score convention such as
+SF13's 208-unit pawn scale. Keep the format and inference clean, minimal and
+optimized. Internal weight/activation quantization may use powers of two for
+efficient arithmetic; quantization precision is separate from chess score
+units. Document the file's output calibration and quantization. Any departure
+from the preferred score convention needs a demonstrated performance or
+precision reason. Offline conversion of pretrained quantized weights must
+check output accuracy and strength rather than assume rescaling is lossless.
+The pinned upstream SF13 file is a legacy bootstrap/reference artifact; this
+preference governs future model/export work, not an unvalidated rewrite of it.
+
 Search retains checks, terminal/draw/tablebase decisions and material/pawn
 pruning metadata. HCE tempo, positional terms and endgame score adjustments
 must not be added to NNUE scores. Search captures an immutable model snapshot;
