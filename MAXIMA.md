@@ -726,6 +726,29 @@ change. Do not tune toward an exact 50% score. Review protocols, source patches,
 policy witnesses, frozen binaries, PGNs, counters and audits are private under
 `.context/baselines/2026-10-13/nnue-pruning-review/`, reserved from training.
 
+
+The requested 100-game repeat with the implemented round 100/50 policy scored
+**22 wins, 60 draws, 18 losses (52%)** against the same frozen SF13 combined
+control. It retained both null move and reverse futility in both engines,
+the pinned network, depth three/common qsearch and exactly the same 50 paired
+openings. The preceding aggressive combined baseline scored 47.5%. The new
+4.5-percentage-point improvement is an exploratory point result; its paired
+bootstrap interval includes zero, and these reused diagnostic openings do not
+establish normal-search Elo.
+
+All 100 games passed independent audits: 10561 legal PGN plies, 8961 searched
+moves, every reported depth three, no unfinished games or forfeits. Model and
+opening hashes, seeded selection, comparison settings and the exact SF binary
+identity were checked against the preceding control. Null attempts/cutoffs
+were 91287/63906 for Maxima and 37984/25982 for SF13; reverse-futility
+candidates/cutoffs were 349219/149530 and 553594/285132. Maxima's median
+searched nodes rose from 1369 to 1518, about 10.9%, at the fixed horizon.
+Live NNUE evaluation checks stayed active throughout. The new baseline remains
+close to even in this matched control; equal nodes/time and deeper horizons
+remain separate checks. Declared protocol, frozen Maxima binary, scripts,
+PGNs, counters, audit and comparison are private under
+`.context/baselines/2026-10-13/nnue-rounded-control/`, reserved from training.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
