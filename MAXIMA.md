@@ -175,8 +175,14 @@ Equal exchanges remain searchable regardless of alpha. This replaces the former
 `eval + 50 + see(move) <= alpha` rule; delta runs first and SEE is tested only
 for captures that survive it. SEE models material exchanges on one square,
 not positional compensation, so even a negative SEE is not a proof that a
-sacrifice is unsound. Maxima's existing exchange estimator and move ordering
-are unchanged. These conservative exclusions require their own strength tests.
+sacrifice is unsound. The exchange estimator checks recapturers against current
+temporary occupancy, excluding captures that expose their king and king captures
+onto attacked squares. It handles changing pins, en passant and promotion gains
+without modifying board or search state. Equal-value attackers are ordered by
+piece type and source square; recapturing pawns promote to queens. This remains
+a least-valuable-attacker material model, with either side allowed to decline;
+it does not search alternative move choices or positional compensation. These
+conservative exclusions require their own strength tests.
 
 Standard null-move pruning excludes consecutive artificial passes and runs
 endgame verification with null pruning disabled throughout its subtree. The
@@ -916,11 +922,45 @@ passed 3/3. The ordinary release engine was rebuilt and exercised with HCE/NNUE.
 The both-enabled result shows no large relative deficit in this reused sample;
 lower node counts do not establish a timed Elo gain. Maxima's existing SEE
 can count pinned recapturers: a legal witness labels a free pawn capture as a
-225-cp loss because the defending pawn cannot legally move. This estimator
-limitation remains open and its match impact has not been measured. Complete
+225-cp loss because the defending pawn cannot legally move. This witness
+motivated the subsequent legality correction below. Complete
 the remaining depth-three feature checks before advancing to depth four/five.
 Protocols, frozen binaries, PGNs, counters, audits and the witness are private
 under `.context/baselines/2026-10-13/nnue-see-control/`, reserved from training.
+
+The SEE legality correction replaces the approximate gain/pawn shortcuts and
+pseudo-legal exchange sequence with recaptures checked against each updated
+occupancy. The pinned-pawn witness now scores +100 cp and survives qsearch
+SEE pruning. No evaluation weights, pruning margins or eligibility guards
+changed; root ordering and check extensions can change because they use SEE.
+
+An independent legal-move/material reference supplies 1851 checked-in cases,
+including 36 targeted cases covering both colors, dynamic pins, captures along
+pin lines, king safety, en passant and promotions. Exhaustive same-square
+material minimax agreed on every case in this sample; that does not prove the
+least-valuable model universally exact. Native tests verify unchanged board,
+hash, clock and stack state, and live HCE/NNUE tests cover qsearch and cancellation.
+Full release-audit checks passed 35/35. Targeted ASan/UBSan/leak checks passed
+after correcting a historical SEE fixture that lacked a black king. Another
+historical exchange label was independently corrected from -600 to -500 cp.
+Regenerate certificates with `tests/data/see/generate_legality.py`; `--check`
+verifies them. Python-chess is needed only for regeneration.
+
+In an isolated small timing sample, five alternating repeats of 3702000 SEE
+calls had median times 0.1912 seconds before and 0.2739 after. Ordinary search
+over eight paired opening positions, 100000 nodes each and three balanced
+repeats, had median elapsed times 82.43/87.12 ms with HCE and 251.39/252.80 ms
+with NNUE (before/after). These include changed search trees and do not establish
+universal throughput costs or timed strength.
+
+A fixed 100-game/50-pair depth-three repeat against the same both-SEE control
+scored **19 wins, 64 draws, 17 losses (51%)**, versus 50.5% before. Model,
+opponent, settings and reused paired openings matched. Independent audits
+checked 10961 legal PGN plies and 9361 searched moves, every reported depth
+three, no unfinished games or forfeits. This is a correctness fix with no large
+observed depth-three deficit; the half-point change does not establish an Elo
+gain. Artifacts are private under
+`.context/baselines/2026-10-14/see-legality/`, reserved from training.
 
 ## 5. Build and debugging
 

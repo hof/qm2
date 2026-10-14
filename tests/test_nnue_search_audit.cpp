@@ -191,6 +191,17 @@ int main(int argc, char ** argv) {
                 || probe->nnue_audit.counters.q_see_prunes != 2
                 || probe->nnue_audit.counters.q_delta_candidates || probe->brd.ply
                 || probe->brd.to_string() != losing_fen) return 1;
+        // The e6 pawn is pinned to e8 by Re1. Nc3xd5 wins a pawn and
+        // must survive SEE pruning in the real qsearch with either evaluator.
+        const char * pinned_fen = "rnb1kbnr/ppp3pp/4p3/3p4/8/2N5/PPP2PPP/R3R1K1 w - - 0 1";
+        probe->init(pinned_fen, nullptr);
+        move_t pinned_move;
+        pinned_move.set(WKNIGHT, c3, d5, BPAWN);
+        if (!probe->brd.legal(&pinned_move) || probe->brd.see(&pinned_move) != 100) return 1;
+        const int pinned_alpha = evaluate(probe.get()) + 1;
+        probe->qsearch(pinned_alpha, pinned_alpha + 1, -1);
+        if (probe->nodes <= 1 || !probe->nnue_audit.counters.q_see_candidates
+                || probe->brd.ply || probe->brd.to_string() != pinned_fen) return 1;
         // c4xd5 is an equal exchange. A high alpha must not make SEE discard it.
         const char * equal_fen = "r3k2r/ppp2ppp/2n1bn2/3p4/2PPp3/4BN2/PPP2PPP/R2QK2R w KQkq - 0 1";
         probe->init(equal_fen, nullptr);

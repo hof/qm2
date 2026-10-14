@@ -693,25 +693,6 @@ int board_t::gives_check(const move_t * move) {
 }
 
 /**
- * Get the smallest attacking piece. This function is used in the SEE routine
- * @param attacks bitboard with attack information
- * @param wtm side to move, white(1) or black(0)
- * @param piece this will be set to the piece type 
- * @return bitboard with the location of the smallest attacker
- */
-U64 board_t::smallest_attacker(const U64 attacks, const bool wtm, int & piece) {
-    if (attacks & all(wtm)) {
-        for (piece = PAWN[wtm]; piece <= KING[wtm]; piece++) {
-            U64 subset = attacks & bb[piece];
-            if (subset) {
-                return subset & -subset;
-            }
-        }
-    }
-    return 0;
-}
-
-/**
  * Returns MVVLVA score 
  * @return 
  */
@@ -738,83 +719,63 @@ bool board_t::is_gain(const move_t * move) {
 }
 
 /**
- * SEE, Static Exchange Evaluator. Verify if a move or capture wins or looses material
- * @param move the move to verify
- * @return expected gain or loss by playing this move as a number in centipawns (e.g +300 when winning a knight)
+ * Material estimate for a legal move followed by least-valuable legal
+ * recaptures on its target square. Either side may decline an exchange.
+ * Temporary occupancy keeps x-rays and king safety current without mutating
+ * the board. This does not search positional compensation or other squares.
  */
 int board_t::see(const move_t * move) {
-    int captured_piece = move->capture;
-    int moving_piece = move->piece;
-    int captured_val = board::PVAL[captured_piece];
+    if (move->castle) return 0;
+    const int target = move->tsq;
+    const U64 target_bit = BIT(target);
+    U64 occupied = (bb[ALLPIECES] & ~BIT(move->ssq)) | target_bit;
+    if (move->en_passant)
+        occupied &= ~BIT(target + (move->piece == WPAWN ? -8 : 8));
 
-    /*
-     * 1. A capture by a king is always a gain
-     */
-
-    if (moving_piece == WKING || moving_piece == BKING) {
-        return captured_val;
-    }
-
-    /*
-     * 2. If a lower value piece captures a higher value piece, it's a gain
-     * (e.g. pawn x knight)
-     */
-
-    int piece_val = board::PVAL[moving_piece];
-    if (piece_val < captured_val) {
-        return captured_val - piece_val;
-    }
-
-    /*
-     * 3. If a piece captures a lower value piece that is defended by
-     * a pawn, it's a loss
-     * (e.g. rook captures knight that is defended by a pawn)
-     */
-
-    int tsq = move->tsq;
-    bool wtm = moving_piece > WKING;
-    if (captured_val && piece_val > captured_val && is_attacked_by_pawn(tsq, wtm)) {
-        return captured_val - piece_val;
-    }
-
-    /*
-     * 4. full static exchange evaluation using the swap algorithm
-     */
-
-    U64 attacks = attacks_to(tsq);
     int gain[32];
     int depth = 0;
-    U64 from_bit = BIT(move->ssq);
-    U64 occ = bb[ALLPIECES];
-    const U64 queens = bb[WQUEEN] | bb[BQUEEN];
-    const U64 diag_sliders = bb[WBISHOP] | bb[BBISHOP] | queens;
-    const U64 hor_ver_sliders = bb[WROOK] | bb[BROOK] | queens;
-    const U64 xrays = diag_sliders | hor_ver_sliders | bb[WPAWN] | bb[BPAWN];
-    gain[0] = captured_val;
+    gain[0] = max_gain(move);
+    int occupant = move->promotion ? move->promotion : move->piece;
+    if (occupant == WKING || occupant == BKING) return gain[0];
+    bool side = move->piece > WKING; // Opponent of the initial mover.
+    const int king_square[2] = {get_sq(BKING), get_sq(WKING)};
 
-    //set the non-capturing pawn move ssq bit in the attacks bitboard, so it
-    //will be removed again in the swap loop
-    if (!captured_piece && (moving_piece == WPAWN || moving_piece == BPAWN)) {
-        attacks ^= from_bit;
-    }
-
-    //swap loop
-    do {
-        depth++;
-        gain[depth] = board::PVAL[moving_piece] - gain[depth - 1];
-        attacks ^= from_bit;
-        occ ^= from_bit;
-        if (from_bit & xrays) {
-            attacks |= magic::bishop_moves(tsq, occ) & occ & diag_sliders;
-            attacks |= magic::rook_moves(tsq, occ) & occ & hor_ver_sliders;
+    while (depth < 31) {
+        // Original bitboards remain valid at every source still occupied.
+        // The target occupant is tracked separately and must be masked out.
+        const U64 attackers = attacks_to(target, occupied) & all(side) & ~target_bit;
+        U64 from_bit = 0;
+        int piece = PAWN[side];
+        for (; piece <= KING[side]; ++piece) {
+            U64 candidates = attackers & bb[piece];
+            while (candidates) {
+                const U64 candidate = candidates & -candidates;
+                candidates &= candidates - 1;
+                const U64 next_occupied = occupied & ~candidate;
+                const int king = piece == KING[side] ? target : king_square[side];
+                if (!(attacks_to(king, next_occupied) & all(!side) & ~target_bit)) {
+                    from_bit = candidate;
+                    break;
+                }
+            }
+            if (from_bit) break;
         }
-        from_bit = smallest_attacker(attacks, wtm, moving_piece);
-        wtm = !wtm;
-    } while (from_bit);
-
-    //calculate and return final material gain
-    while (--depth) {
+        if (!from_bit) break;
+        occupied &= ~from_bit;
+        const bool promotes = piece == PAWN[side]
+            && (side ? target >= a8 : target <= h1);
+        const int next_occupant = promotes ? QUEEN[side] : piece;
+        const int promotion_gain = promotes ? board::PVAL[next_occupant] - board::PVAL[piece] : 0;
+        ++depth;
+        gain[depth] = board::PVAL[occupant] + promotion_gain - gain[depth - 1];
+        occupant = next_occupant;
+        // A legal king capture ends the exchange: kings cannot be captured.
+        if (piece == KING[side]) break;
+        side = !side;
+    }
+    while (depth > 0) {
         gain[depth - 1] = -MAX(-gain[depth - 1], gain[depth]);
+        --depth;
     }
     return gain[0];
 }

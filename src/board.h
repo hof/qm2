@@ -138,7 +138,6 @@ public:
     void remove_piece(const int piece, const int sq, const bool hash);
     void move_piece(const int piece, const int ssq, const int tsq, const bool hash);
     bool is_eg(endgame_t eg, bool us);
-    U64 smallest_attacker(const U64 attacks, const bool wtm, int &piece);
     int see(const move_t * capture);
     bool is_gain(const move_t * move);
     int max_gain(const move_t * capture);
@@ -342,13 +341,18 @@ public:
      * @param sq the square to investigate
      * @return bitboard populated with all pieces attacking the square
      */
-    U64 attacks_to(const int sq) {
-        return (KNIGHT_MOVES[sq] & (bb[WKNIGHT] | bb[BKNIGHT]))
+    U64 attacks_to(const int sq) const {
+        return attacks_to(sq, bb[ALLPIECES]);
+    }
+
+    // Occupancy may remove original pieces, as in a simulated exchange.
+    U64 attacks_to(const int sq, const U64 occupied) const {
+        return ((KNIGHT_MOVES[sq] & (bb[WKNIGHT] | bb[BKNIGHT]))
                 | (PAWN_CAPTURES[BLACK][sq] & bb[WPAWN])
                 | (PAWN_CAPTURES[WHITE][sq] & bb[BPAWN])
                 | (KING_MOVES[sq] & (bb[WKING] | bb[BKING]))
-                | (magic::bishop_moves(sq, bb[ALLPIECES]) & (bb[WBISHOP] | bb[WQUEEN] | bb[BBISHOP] | bb[BQUEEN]))
-                | (magic::rook_moves(sq, bb[ALLPIECES]) & (bb[WROOK] | bb[WQUEEN] | bb[BROOK] | bb[BQUEEN]));
+                | (magic::bishop_moves(sq, occupied) & (bb[WBISHOP] | bb[WQUEEN] | bb[BBISHOP] | bb[BQUEEN]))
+                | (magic::rook_moves(sq, occupied) & (bb[WROOK] | bb[WQUEEN] | bb[BROOK] | bb[BQUEEN]))) & occupied;
     }
     
     /**

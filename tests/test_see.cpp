@@ -23,6 +23,57 @@
 
 #include "board.h"
 #include "move.h"
+#include <memory>
+#include <sstream>
+
+namespace {
+struct certificate_t {
+    const char * name;
+    const char * fen;
+    const char * move;
+    int expected;
+};
+const certificate_t certificates[] = {
+#include "data/see/legality.inc"
+};
+
+std::string state(const board_t & board) {
+    std::ostringstream out;
+    for (U64 value : board.bb) out << value << ' ';
+    for (int value : board.matrix) out << value << ' ';
+    out << board.ply << ' ' << board.root_ply << ' ' << board.stack;
+    for (int ply = 0; ply <= board.ply; ++ply) {
+        const auto & entry = board._stack[ply];
+        out << ' ' << entry.tt_key << ' ' << entry.material_hash << ' ' << entry.pawn_hash
+            << ' ' << entry.fifty_count << ' ' << entry.castling_flags
+            << ' ' << entry.enpassant_sq << ' ' << entry.wtm << ' ' << entry.legal_enpassant;
+    }
+    return out.str();
+}
+
+bool legal_exchange_certificates() {
+    auto board = std::make_unique<board_t>();
+    bool success = true;
+    for (const auto & certificate : certificates) {
+        board->init(certificate.fen);
+        move_t move;
+        move.set(board.get(), certificate.move);
+        if (!board->valid(&move) || !board->legal(&move)) {
+            std::cerr << "Invalid SEE certificate: " << certificate.name << '\n';
+            return false;
+        }
+        const auto before = state(*board);
+        const int result = board->see(&move);
+        if (result != certificate.expected || state(*board) != before) {
+            std::cerr << certificate.name << " SEE " << result << " expected "
+                << certificate.expected << ": " << certificate.fen << ' ' << certificate.move << '\n';
+            success = false;
+        }
+    }
+    std::cout << std::size(certificates) << " independent legal exchange certificates checked\n";
+    return success;
+}
+}
 
 /*
  * Simple C++ Test Suite
@@ -71,7 +122,8 @@ int main() {
     mv.set(WKNIGHT, e3, f5, BKNIGHT);
     success &= assert_see(&brd, &mv, vpawn);
     mv.set(WQUEEN, d3, f5, BKNIGHT);
-    success &= assert_see(&brd, &mv, -vrook-vpawn);
+    // Legal exchange oracle: ...exf5, Bxf5, declining the losing ...Rxf5.
+    success &= assert_see(&brd, &mv, -vrook);
     mv.set(BBISHOP, a4, c2, WPAWN);
     success &= assert_see(&brd, &mv, -vminor + vpawn);
     mv.set(BPAWN, c4, d3, WQUEEN);
@@ -85,7 +137,7 @@ int main() {
     mv.set(WBISHOP, c3, b2, BBISHOP);
     success &= assert_see(&brd, &mv, vpawn);
     
-    brd.init("1r6/1r1q4/1p6/8/8/1R6/KR6/1Q6 w - - 0 1");
+    brd.init("1r5k/1r1q4/1p6/8/8/1R6/KR6/1Q6 w - - 0 1");
     mv.set(WROOK, b3, b6, BPAWN);
     success &= assert_see(&brd, &mv, vpawn);
     
@@ -105,6 +157,7 @@ int main() {
     std::cout << "%TEST_FINISHED% time=0 testPolyglotKeys (test_polyglot)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=" << difftime(now, begin) << std::endl;
 
+    success &= legal_exchange_certificates();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
