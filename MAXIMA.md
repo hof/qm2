@@ -217,6 +217,17 @@ Playable positions, including checks with legal evasions, retain static
 evaluation when no further child stack is available. Cancellation retains its
 existing precedence; a ceiling evaluation is not a completed deeper search.
 
+Late-move reduction uses a conservative one-ply baseline. Standard PVS searches
+the first three legal moves at full depth and reduces later ordinary quiet
+moves only with at least three plies remaining. Check evasions, checking moves,
+captures, promotions, castling and advanced passed-pawn pushes are protected.
+The root driver does not reduce moves. A reduced trial that beats alpha is
+verified at full depth with the original alpha/beta window before accepting
+an improvement or cutoff; cancellation restores the parent state. Reductions
+at depths one/two and the former depth-scaled late-move reduction are removed.
+This simple policy applies to both HCE and NNUE when `LMR=true`; it remains a
+heuristic rather than a proof that reduced fail-low moves cannot improve.
+
 Standard quiescence retains castling at entry and below entry, alongside captures
 and promotions; entry also searches quiet checks, and checked nodes search all
 legal evasions. Ordinary quiet checks at entry require `see(move, 0)`; at
@@ -619,6 +630,17 @@ This controlled rule does not change ordinary search's existing extensions.
 Internal iterative deepening is explicitly disabled in `fixed` and `quiet`:
 extensions must not silently activate a second feature. `audit_iid` reports
 its activity, and a direct depth-three/no-TT-move regression verifies exclusion.
+
+`NNUEAuditLMR` (default false, audit builds only) enables this same conservative
+LMR rule in `quiet` mode; other controlled features remain independently
+selectable. It is ignored in `fixed` mode. Changing it stops search and clears
+TT. `audit_lmr` reports eligible candidates, reduced trials, full-depth
+verification attempts, refutations and verified cutoffs, plus minimum/maximum
+remaining depth and minimum reduced child depth. Candidates are counted even
+with LMR disabled; reduction/verification counts then remain zero. At nominal
+depth three no eligible nonroot nonchecking node retains three plies. Tests
+verify that boundary and activation at depth four with both evaluators/colors,
+certified tactical exclusions, full-depth re-searches and cancellation.
 
 The agreed comparison order is to finish the feature-by-feature depth-three
 iteration, then advance to depth four, five, six and onward one step at a time.
@@ -1278,6 +1300,65 @@ stepwise search comparisons. More aggressive reverse futility is a deferred
 strength experiment: compare candidate margins and guards against this
 baseline, then validate playing strength with managed-time games. Fewer nodes
 alone are not sufficient evidence to adopt a change.
+
+The conservative LMR step ran four 100-game/50-pair depth-four profiles using
+the same reserved opening endpoints, raw network and preceding feature flags.
+Both controls use the declared nonroot one-ply quiet reduction after the first
+three searched moves, with remaining depth at least three and full-depth
+verification above alpha. Native host PVS verification-window handling remains;
+the opponent's adaptive post-LMR history feedback is excluded. Reverse futility
+is unchanged, and IID, aspiration, other helpers and TT score cutoffs stay off.
+
+| LMR enabled | Maxima W/D/L | Maxima score | Median search visits Maxima/SF |
+| --- | ---: | ---: | ---: |
+| Neither engine | 25/69/6 | 59.5% | 4644 / 3167 |
+| Maxima only | 24/60/16 | 54% | 4035 / 3388 |
+| SF13 control only | 34/60/6 | 64% | 5062 / 2945 |
+| Both engines | 31/57/12 | 59.5% | 4080 / 2769 |
+
+Native SF reported-node medians were 3122.5, 3338, 2909 and 2724 respectively;
+visits use the common accounting definition including null searches and
+re-searches. Both-enabled median visits fell about 12.1%/12.6%; total game
+visits changed from 32876565/27351502 to 30565000/25717318. Game positions differ,
+so these are not same-position savings. On the same 50 opening FENs, total
+visits changed from 442334/303072 to 367160/232788, about 17.0%/23.2% fewer.
+The observed both-enabled score held up, while each one-sided profile scored
+less for the engine using LMR than its LMR-off baseline. This illustrates the
+fixed-depth work/coverage tradeoff, not a managed-time strength verdict.
+
+In the both-enabled games, Maxima/SF applied 282730/257714 reductions and
+started 15453/2827 full-depth verifications. Of those, 10540/1627 were refuted
+and 1559/485 produced verified beta cutoffs. Every reduction was at remaining
+depth three with a one-ply trial child. Maximum main-search ply was eight/nine
+and maximum quiescence ply was 27/42. An additional 100 depth-three opening
+searches with LMR enabled reproduced all prior traces and made no reductions.
+The LMR-off depth-four profile reproduced every previous game record and core
+move trace exactly. Independent audits passed all 400 games, 44321 legal PGN
+plies, 37921 game searches and 500 additional opening searches, with legal PVs,
+identities, depth, counter equations and LMR guards checked. No unfinished
+games, forfeits or engine errors occurred in the accepted runs.
+
+An independent move-trace check in the opponent control verified 45 reduced
+ordinary quiet moves and 61 protected advanced passed-pawn pushes across both
+colors. A preliminary guard-order error in that experimental control was
+corrected before accepting results; affected trials were stopped and preserved.
+Earlier runs exceeding the runner's 30-second response deadline were also
+excluded. The final fixed-depth protocol uses a 120-second response deadline.
+A slow-position replay reproduced the same 1278837 nodes and move with the
+previous control, the updated control with LMR off, and LMR on; LMR had no
+eligible candidates there, and almost all work was in quiescence. Such outliers
+explain the longer response allowance without changing the search horizon.
+
+Ordinary Release checks passed 34/34. All 35 audit checks passed across the
+suite and an isolated NNUE lifecycle timing recheck. ASan/UBSan with leak
+detection passed selectivity/search-contract checks and both lifecycle suites,
+with an isolated ponder-deadline timing recheck; strict wall-clock assertions
+initially failed under concurrent work, and sandbox restrictions required
+running LeakSanitizer outside it. Original failures and recheck logs remain
+preserved. Protocols, frozen binaries, source patches, interrupted trials,
+move traces and independent audits are private under
+`.context/baselines/2026-10-14/lmr-control/`, reserved from training. Timed games
+with ordinary optimized builds remain the strength gate.
 
 ## 5. Build and debugging
 

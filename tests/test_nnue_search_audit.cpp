@@ -115,6 +115,40 @@ int main(int argc, char ** argv) {
                     || probe->nnue_audit.counters.max_main_ply >= MAX_PLY) return failure(__LINE__);
         }
     }
+    options::get_option("NNUEAuditLMR")->value = 1;
+    for (bool neural : {false, true}) {
+        options::get_option("UseNNUE")->value = neural;
+        for (bool white : {false, true}) {
+            const char * start_fen = white
+                ? "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+                : "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
+            for (int depth : {3, 4}) {
+                auto probe = std::make_unique<search_t>(start_fen);
+                probe->game.max_depth = depth;
+                probe->game.max_nodes = 200000;
+                probe->go();
+                const auto & counts = probe->nnue_audit.counters;
+                if (!probe->lmr_enabled || probe->completed_depth != depth || probe->brd.ply
+                        || probe->brd.to_string() != start_fen || probe->stack->check_extensions
+                        || counts.iid_calls || counts.pvs_nodes + counts.q_nodes
+                            != counts.move_visits + counts.null_visits + counts.researches) return failure(__LINE__);
+                if (depth == 3) {
+                    if (counts.lmr_candidates || counts.lmr_reductions || counts.lmr_researches) return failure(__LINE__);
+                } else if (!counts.lmr_reductions || counts.lmr_reductions != counts.lmr_candidates
+                        || counts.min_lmr_depth != 3 || counts.max_lmr_depth != 3
+                        || counts.min_lmr_child_depth != 1
+                        || counts.lmr_researches > counts.lmr_reductions) return failure(__LINE__);
+            }
+            auto cancelled = std::make_unique<search_t>(start_fen);
+            cancelled->game.max_depth = 8;
+            cancelled->game.max_nodes = 4096;
+            cancelled->go();
+            if (cancelled->nodes != 4096 || cancelled->brd.ply
+                    || cancelled->brd.to_string() != start_fen || cancelled->stack->check_extensions
+                    || !cancelled->nnue_audit.counters.lmr_reductions) return failure(__LINE__);
+        }
+    }
+    options::get_option("NNUEAuditLMR")->value = 0;
     options::get_option("UseNNUE")->value = 1;
     options::get_option("NNUEAuditQuietChecks")->value = 0;
     options::get_option("NNUEAuditCastling")->value = 0;

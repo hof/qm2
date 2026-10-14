@@ -53,6 +53,7 @@ namespace options {
         , { "NNUEAuditNullMove", BOOL, 0, "type check default false" }
         , { "NNUEAuditBetaPruning", BOOL, 0, "type check default false" }
         , { "NNUEAuditFutility", BOOL, 0, "type check default false" }
+        , { "NNUEAuditLMR", BOOL, 0, "type check default false" }
         , { "NNUEAuditDelta", BOOL, 0, "type check default false" }
         , { "NNUEAuditSEE", BOOL, 0, "type check default false" }
         , { "NNUEAuditQuietChecks", BOOL, 0, "type check default false" }

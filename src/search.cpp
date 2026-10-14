@@ -198,6 +198,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         null_enabled = horizon == 2 && options::get_value("NNUEAuditNullMove");
         beta_pruning = horizon == 2 && options::get_value("NNUEAuditBetaPruning");
         ffp_enabled = horizon == 2 && options::get_value("NNUEAuditFutility");
+        lmr_enabled = horizon == 2 && options::get_value("NNUEAuditLMR");
         nnue_audit.q_delta = horizon == 2 && options::get_value("NNUEAuditDelta");
         nnue_audit.q_see = horizon == 2 && options::get_value("NNUEAuditSEE");
     }
@@ -397,6 +398,14 @@ void search_t::go() {
             + " rejected " + std::to_string(nnue_audit.counters.q_check_rejected)
             + " searched " + std::to_string(nnue_audit.counters.q_check_searched));
         uci::out("info string audit_castles searched " + std::to_string(nnue_audit.counters.q_castles));
+        uci::out("info string audit_lmr candidates " + std::to_string(counts.lmr_candidates)
+            + " reduced " + std::to_string(counts.lmr_reductions)
+            + " researches " + std::to_string(counts.lmr_researches)
+            + " refuted " + std::to_string(counts.lmr_refutations)
+            + " cutoffs " + std::to_string(counts.lmr_cutoffs)
+            + " min_depth " + std::to_string(counts.min_lmr_depth)
+            + " max_depth " + std::to_string(counts.max_lmr_depth)
+            + " min_child " + std::to_string(counts.min_lmr_child_depth));
         uci::out("info string audit_extensions candidates " + std::to_string(counts.extension_candidates)
             + " see_rejected " + std::to_string(counts.extension_see_rejected)
             + " applied " + std::to_string(counts.extensions_applied)
@@ -866,12 +875,9 @@ int search_t::extension(move_t * move, int gives_check) {
  * @return amount of plies to reduce
  */
 int search_t::reduction(int depth, int searched_moves, bool is_dangerous) {
-    if (is_dangerous || searched_moves < 3 || !lmr_enabled) {
-        return 0;
-    }
-    if (searched_moves >= 6) {
-        return depth / 3;
-    }
+    // Search the first three legal moves at full depth. A one-ply reduction
+    // must leave at least one positive-depth child ply for the trial search.
+    if (depth < 3 || is_dangerous || searched_moves < 3 || !lmr_enabled) return 0;
     return 1;
 }
 
@@ -1284,6 +1290,19 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
         int extend = extension(move, gives_check);
         int reduce = reduction(depth, searched_moves, is_dangerous);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        if (depth >= 3 && searched_moves >= 3 && !is_dangerous)
+            ++nnue_audit.counters.lmr_candidates;
+        if (reduce) {
+            auto & counts = nnue_audit.counters;
+            ++counts.lmr_reductions;
+            counts.min_lmr_depth = counts.min_lmr_depth ? std::min(counts.min_lmr_depth, uint64_t(depth)) : depth;
+            counts.max_lmr_depth = std::max(counts.max_lmr_depth, uint64_t(depth));
+            const uint64_t child_depth = depth - 1 - reduce + extend;
+            counts.min_lmr_child_depth = counts.min_lmr_child_depth
+                ? std::min(counts.min_lmr_child_depth, child_depth) : child_depth;
+        }
+#endif
 
         /*
          * Go forward and search next node
@@ -1304,9 +1323,16 @@ int search_t::pvs(int alpha, int beta, int depth) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                 ++nnue_audit.counters.researches;
                 nnue_audit.counters.research_fail_highs += score >= beta;
+                nnue_audit.counters.lmr_researches += reduce > 0;
 #endif
                 const clock_range_t previous_clocks = stack->tt_clocks;
                 score = -pvs(-beta, -alpha, depth - 1 + extend);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                if (reduce && !stop_all) {
+                    nnue_audit.counters.lmr_refutations += score <= alpha;
+                    nnue_audit.counters.lmr_cutoffs += score >= beta;
+                }
+#endif
                 stack->tt_clocks.include_child(previous_clocks, 0);
             }
         }

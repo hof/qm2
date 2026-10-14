@@ -453,6 +453,7 @@ namespace uci {
                                     || name == "NNUEAuditNullMove"
                                     || name == "NNUEAuditBetaPruning"
                                     || name == "NNUEAuditFutility"
+                                    || name == "NNUEAuditLMR"
                                     || name == "NNUEAuditDelta"
                                     || name == "NNUEAuditSEE"
                                     || name == "NNUEAuditQuietChecks"

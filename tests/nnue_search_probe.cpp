@@ -110,6 +110,14 @@ int main(int argc, char ** argv) {
                 << ",\"root_researches\":" << counts.root_researches
                 << ",\"research_fail_highs\":" << counts.research_fail_highs
                 << ",\"iid_calls\":" << counts.iid_calls
+                << ",\"lmr_candidates\":" << counts.lmr_candidates
+                << ",\"lmr_reductions\":" << counts.lmr_reductions
+                << ",\"lmr_researches\":" << counts.lmr_researches
+                << ",\"lmr_refutations\":" << counts.lmr_refutations
+                << ",\"lmr_cutoffs\":" << counts.lmr_cutoffs
+                << ",\"min_lmr_depth\":" << counts.min_lmr_depth
+                << ",\"max_lmr_depth\":" << counts.max_lmr_depth
+                << ",\"min_lmr_child_depth\":" << counts.min_lmr_child_depth
                 << ",\"extension_candidates\":" << counts.extension_candidates
                 << ",\"extension_see_rejected\":" << counts.extension_see_rejected
                 << ",\"extensions_applied\":" << counts.extensions_applied

@@ -165,7 +165,7 @@ bool test_futility(const fixture_t & fixture, int & probes, int & skipped, int &
 bool test_lmr(const fixture_t & fixture, int & probes, int & reductions, int & restarts) {
     bool ok = true;
     auto original = std::make_unique<search_t>(fixture.fen);
-    for (int depth : {1, 2, 3, 6, 9, 15}) {
+    for (int depth : {1, 2, 3, 4, 6, 9, 15}) {
         for (bool enabled : {false, true}) {
             for (bool pv : {false, true}) {
                 auto search = std::make_unique<selective_search_t>(fixture.fen);
@@ -181,8 +181,7 @@ bool test_lmr(const fixture_t & fixture, int & probes, int & reductions, int & r
                 for (size_t i = 0; i < search->calls.size(); ++i) {
                     auto & call = search->calls[i];
                     const auto info = moves.at(call.move);
-                    const int reduce = !enabled || fixture.in_check || info.flags || i < 3
-                        ? 0 : i < 6 ? 1 : depth / 3;
+                    const int reduce = enabled && depth >= 3 && !fixture.in_check && !info.flags && i >= 3 ? 1 : 0;
                     ok &= check(call.depth == depth - 1 + info.extend - reduce,
                         "LMR child depth differs", fixture.fen);
                     if (reduce) {
