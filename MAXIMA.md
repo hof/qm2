@@ -534,6 +534,35 @@ therefore contributes to the timed deficit but cannot by itself explain the
 fixed-node result. Match, raw reference, probe and audit artifacts live privately
 in `.context/baselines/2026-10-13/nnue-games/`, reserved from future training.
 
+A later manual Maxima NNUE–GNU Chess game exposed prolonged conversion
+shuffling. At its final seven-piece position, one-second normal searches chose
+`h6` with Maxima HCE and unrestricted SF13 using the same pure neural evaluator,
+but Maxima NNUE chose `Rd5+`. Maxima still maneuvered after eight million visited
+nodes. At completed depth eight, separately forced candidates scored `h6` +13.99
+versus `Rd5+` +14.25. Live/fresh accumulator, raw score, cached score and metadata
+verification passed four 500,000-node searches from this game, with exact
+normal/audit search-output agreement. Along one legal HCE variation, the static
+neural score dropped from about +13.8 before promotion to +10.4 after queening;
+SF13's neural-only evaluator reproduced the drop. This is evidence for a model
+response and a search/evaluation conversion weakness, not a decoder mismatch or
+a forced-line proof. No speculative scoring or repetition-policy change was made.
+The actual game contained no completed threefold repetition; White varied at
+eight opportunities to claim one by an intended move. Its final loss had no
+termination header; the GUI sent `quit` near clock exhaustion. The preserved
+PGN/log and diagnostic fixtures remain reserved from training.
+
+A fresh current-build NNUE–HCE confirmation is running independently: fixed
+200 games / 100 fresh color-swapped opening pairs, 5+0.05 seconds, Hash64,
+one worker, identical ordinary Release binary and production search defaults.
+Only the evaluator differs; books, pondering, contempt, experience and tables
+are disabled. Predeclared win adjudication requires both engines to agree at
+1000 cp for six consecutive plies from move 20. Results remain pending; the
+pipeline automatically checks identities, legal games, score evidence, node
+counts and paired statistics. Errors, unfinished games or clock forfeits
+invalidate acceptance. Adjudicated wins cannot establish conversion skill.
+Private artifacts: `.context/gui-tests/2026-10-15/` and
+`.context/baselines/2026-10-15/nnue-hce-current/`.
+
 Live search diagnostics are available in a separate build configured with
 `-Dmaxima_nnue_search_audit=ON` and a nonempty `maxima_nnue_test_network`.
 The option defaults off and adds no counters or verification to ordinary builds.
