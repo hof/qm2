@@ -1627,6 +1627,38 @@ repeat; it neither proves the original score was luck nor establishes Elo.
 No result-dependent extension or new feature experiment is added. Protocols,
 source archives, frozen inputs/binaries and audits are private under
 `.context/baselines/2026-10-15/depth-five-fresh-sample-fixed/`, reserved from training.
+The subsequent depth-six checkpoint retains the exact repaired Maxima and SF
+binaries, pure NNUE model, options and the fresh 50 FENs in the same order.
+Only both requested depths change from five to six. ProbCut and other deferred
+heuristics remain disabled. Null move remains Maxima's fixed three-ply reduction
+plus the pass, with its established 50 cp cushion and safety guards; SF retains
+its native adaptive null policy. At an ordinary remaining-depth-five node,
+Maxima's null trial now searches one positive-depth ply. Maxima's endgame null
+verification still cannot activate at nominal six under the existing root and
+check-extension rules. This is a sequential checkpoint, with no feature change.
+
+| Same starting sample | Depth | Maxima W/D/L | Score | Maxima search visits | SF search visits |
+| --- | --- | --- | --- | --- | --- |
+| All 100 | 5 | 15/75/10 | 52.5% | 57063295 | 53290471 |
+| All 100 | 6 | 24/73/3 | 60.5% | 218237855 | 152606533 |
+| Middlegames, 50 | 5 | 8/34/8 | 50.0% | 41047739 | 40104350 |
+| Middlegames, 50 | 6 | 13/35/2 | 61.0% | 135963286 | 90340539 |
+| Endings, 50 | 5 | 7/41/2 | 55.0% | 16015556 | 13186121 |
+| Endings, 50 | 6 | 11/38/1 | 60.0% | 82274569 | 62265994 |
+
+The automatic game/audit pipeline passes all 100 games, 9057 legal plies and
+9057 completed depth-six searches, including exact baseline identities/options,
+legal PVs and work equations. No errors, unfinished games or forfeits occur.
+LMR operates at remaining depths three through five; IID calls total 157/1770
+and helper visits 2258/198145 at parent depths four through six (Maxima/SF).
+Aspiration has 3466/5051 failed attempts at depths four through six, with no
+cancellation. No same-position null-verification accounting entries occur.
+Maxima uses 43.0% more total visits than SF in this sample. Aggregate game work
+covers diverging positions, so it does not isolate an ordering/pruning cause.
+This fixed-depth result is not an Elo estimate. Engine source is unchanged;
+prior native validation applies to the exact frozen binaries. Protocols,
+automation, frozen inputs/binaries and audits are private under
+`.context/baselines/2026-10-15/depth-six-baseline/`, reserved from training.
 Managed-time games remain the strength gate.
 
 ## 5. Build and debugging
