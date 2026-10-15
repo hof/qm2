@@ -627,9 +627,14 @@ ply. Changing the flag stops search and clears TT. Tests cover both colors and
 evaluators, safe/losing checks, extension beyond the former three-ply budget,
 inheritance and cancellation.
 This controlled rule does not change ordinary search's existing extensions.
-Internal iterative deepening is explicitly disabled in `fixed` and `quiet`:
-extensions must not silently activate a second feature. `audit_iid` reports
-its activity, and a direct depth-three/no-TT-move regression verifies exclusion.
+Internal iterative deepening stays disabled in `fixed`. In `quiet`, the
+independent `NNUEAuditIID` flag defaults false, so extensions cannot silently
+activate it. `audit_iid` reports calls; `audit_iid_work` adds eligible candidates,
+legal ordering hints, cancellations, helper visits and remaining/probe depths.
+A depth-four/no-TT-move regression verifies exclusion when the flag is off.
+Each same-position IID helper entry is included in visited work: with other
+same-position helpers disabled, visits equal moves + nulls + re-searches + IID
+calls.
 
 `NNUEAuditLMR` (default false, audit builds only) enables this same conservative
 LMR rule in `quiet` mode; other controlled features remain independently
@@ -1408,6 +1413,59 @@ traces and independent audits are private under
 `.context/baselines/2026-10-14/aspiration-control/`, reserved from training.
 Managed-time matches with ordinary optimized builds remain the strength gate.
 
+IID uses one ordering helper at nonroot PV nodes with no hash move and at
+least four plies remaining. It searches two plies shallower, without nested IID,
+and accepts a legal helper move only when the helper score exceeds alpha.
+The main search always retains its original depth; the helper score, including
+a mate score, cannot replace it. The search frame is restored before continuing,
+and cancellation returns immediately. `IID=false` disables it independently.
+The threshold keeps one-ply ordering probes out of shallow search. At nominal
+depth four it is eligible mainly after a root check extension preserves four
+plies; ordinary interior nodes become eligible at depth five.
+
+The IID step kept aspiration, LMR and all preceding controlled features on
+in both engines, with reverse futility unchanged. Four depth-four 100-game/
+50-pair profiles used the same reserved opening endpoints:
+
+| IID enabled | Maxima W/D/L | Maxima score | Median search visits Maxima/SF |
+| --- | ---: | ---: | ---: |
+| Neither engine | 28/58/14 | 57% | 4062 / 3028.5 |
+| Maxima only | 29/57/14 | 57.5% | 4076 / 3054 |
+| SF13 control only | 28/58/14 | 57% | 4062 / 3028.5 |
+| Both engines | 29/57/14 | 57.5% | 4076 / 3054 |
+
+One draw became a Maxima win when its IID was enabled. Both-enabled total
+visits were 28142027/24843078, versus 27634159/24356932 with IID off; game
+positions and lengths differ. Median visits increased only about 0.3%/0.8%,
+so this step did not produce a large tree expansion. On the same 50 opening
+FENs, visits changed from 355075/232234 to 353042/232234, about 0.6%/0% fewer,
+with no chosen-move changes. These shallow results do not establish timed Elo.
+
+In the both-enabled games, Maxima made 886 helpers, installed 768 legal hints
+and visited 94540 positions inside helpers, already included in its normal
+visit count. The opponent made 14 helpers with 14 visits and installed no hint.
+Existing host move ordering is retained: the quiet Maxima control excludes
+TT lookup, whereas the opponent retains hash-move ordering. The same IID
+eligibility rule therefore does not imply equal helper activity. Every helper
+used remaining depth four and probe depth two. The opening sample triggered
+two Maxima helpers and none in the opponent. A separate cold-table diagnostic
+searched those 50 openings without the first three root iterations and
+exercised four opponent helpers with independently legal hints; that diagnostic
+binary and its results are excluded from all games and paired-root comparisons.
+
+Independent audits passed all 400 games, 43630 legal PGN plies and 37230 game
+searches, with legal PVs, requested depths, identities, feature guards and
+work equations checked. The IID-off profile reproduced the preceding 100
+aspiration-baseline game records and core move traces exactly. Another 500
+opening searches passed, including 100 exact depth-four baseline traces and
+100 unchanged depth-three traces with IID enabled but inactive. No unfinished
+games, forfeits or engine errors occurred. Ordinary Release checks passed
+36/36, audit Release 37/37, and focused ASan/UBSan/leak checks passed 2/2.
+Protocols, frozen binaries, source patches, traces and independent audits are
+private under `.context/baselines/2026-10-14/iid-control/`, reserved from
+training. Next is a depth-five baseline with the established features retained;
+IID should gain broader eligibility there. Timed games remain the strength gate.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
@@ -1966,6 +2024,14 @@ restoration. These isolated guard probes disable node pruning and TT; they do
 not certify selective-search equality, evaluation or real quiescence. Verify
 data with `python tests/data/search/generate_selectivity.py --check`; native
 tests need no python-chess installation.
+
+`test_search_iid` controls only the shallow helper and child scores while
+running the production IID preparation and main PVS path. It checks both colors,
+remaining/probe depth, first-move ordering, hash/disabled/non-PV exclusions,
+suppression of nested IID, full-depth continuation after a shallow mate score,
+cancellation, absent hints and frame restoration after a helper exception.
+Live audit tests cover HCE and NNUE, depth-three inactivity, depth-four helper
+work accounting and cancellation inside a real helper.
 
 `test_search_aspiration` exercises the production root driver with controlled
 child scores for both colors. It checks fail-high, fail-low and alternating

@@ -153,6 +153,8 @@ public:
     bool beta_pruning;
     bool lmr_enabled;
     bool aspiration_enabled;
+    bool iid_enabled;
+    bool iid_active;
     bool ffp_enabled;
 
     search_t(const char * fen, const game_t * g = NULL,
@@ -172,6 +174,7 @@ public:
     void book_calc();
     void iterative_deepening();
     int aspiration(int depth, int last_score);
+    void prepare_iid_move(int alpha, int beta, int depth);
     bool book_lookup();
     bool tablebase_lookup();
     bool probe_tablebase(int alpha, int beta, int depth, int & value);

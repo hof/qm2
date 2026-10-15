@@ -182,6 +182,8 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     null_enabled = options::get_value("NullMove");
     lmr_enabled = options::get_value("LMR");
     aspiration_enabled = options::get_value("Aspiration");
+    iid_enabled = options::get_value("IID");
+    iid_active = false;
     ffp_enabled = options::get_value("FutilityPruning");
     draw_contempt = options::get_value("DrawContempt");
     evaluation_network = options::get_value("UseNNUE") ? nnue::snapshot() : nullptr;
@@ -194,13 +196,14 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.quiet_castling = horizon == 2 && options::get_value("NNUEAuditCastling");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
-        beta_pruning = ffp_enabled = null_enabled = lmr_enabled = aspiration_enabled = false;
+        beta_pruning = ffp_enabled = null_enabled = lmr_enabled = aspiration_enabled = iid_enabled = false;
         nnue_audit.q_delta = nnue_audit.q_see = false;
         null_enabled = horizon == 2 && options::get_value("NNUEAuditNullMove");
         beta_pruning = horizon == 2 && options::get_value("NNUEAuditBetaPruning");
         ffp_enabled = horizon == 2 && options::get_value("NNUEAuditFutility");
         lmr_enabled = horizon == 2 && options::get_value("NNUEAuditLMR");
         aspiration_enabled = horizon == 2 && options::get_value("NNUEAuditAspiration");
+        iid_enabled = horizon == 2 && options::get_value("NNUEAuditIID");
         nnue_audit.q_delta = horizon == 2 && options::get_value("NNUEAuditDelta");
         nnue_audit.q_see = horizon == 2 && options::get_value("NNUEAuditSEE");
     }
@@ -386,6 +389,14 @@ void search_t::go() {
             + " root_researches " + std::to_string(counts.root_researches)
             + " research_fail_highs " + std::to_string(counts.research_fail_highs));
         uci::out("info string audit_iid calls " + std::to_string(counts.iid_calls));
+        uci::out("info string audit_iid_work candidates " + std::to_string(counts.iid_candidates)
+            + " calls " + std::to_string(counts.iid_calls)
+            + " moves " + std::to_string(counts.iid_moves)
+            + " cancelled " + std::to_string(counts.iid_cancelled)
+            + " visits " + std::to_string(counts.iid_visits)
+            + " min_depth " + std::to_string(counts.min_iid_depth)
+            + " max_depth " + std::to_string(counts.max_iid_depth)
+            + " min_probe " + std::to_string(counts.min_iid_probe_depth));
         uci::out("info string audit_null attempts " + std::to_string(nnue_audit.counters.null_attempts)
             + " cutoffs " + std::to_string(nnue_audit.counters.null_cutoffs));
         uci::out("info string audit_beta candidates " + std::to_string(nnue_audit.counters.beta_candidates)
@@ -1056,6 +1067,55 @@ bool search_t::is_repetition() const {
     return false;
 }
 
+// A shallow PV search supplies only a move-ordering hint. Restore this
+// frame before searching the original depth, even when the helper is stopped.
+void search_t::prepare_iid_move(int alpha, int beta, int depth) {
+    if (iid_active || depth < 4 || alpha + 1 >= beta || stack->tt_move.piece) return;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.iid_candidates;
+#endif
+    if (!iid_enabled) return;
+    struct iid_scope_t {
+        search_t & search;
+        search_stack_t previous;
+        ~iid_scope_t() {
+            const clock_range_t clocks = search.stack->tt_clocks;
+            *search.stack = previous;
+            search.stack->tt_clocks.include_child(clocks, 0);
+            search.iid_active = false;
+        }
+    };
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    const U64 nodes_before = nodes;
+    auto & counts = nnue_audit.counters;
+    ++counts.iid_calls;
+    counts.min_iid_depth = counts.min_iid_depth
+        ? std::min(counts.min_iid_depth, uint64_t(depth)) : depth;
+    counts.max_iid_depth = std::max(counts.max_iid_depth, uint64_t(depth));
+    counts.min_iid_probe_depth = counts.min_iid_probe_depth
+        ? std::min(counts.min_iid_probe_depth, uint64_t(depth - 2)) : depth - 2;
+#endif
+    // Keep the helper subtree free of additional IID probes.
+    move_t hint{};
+    int hint_value;
+    {
+        iid_scope_t scope{*this, *stack};
+        iid_active = true;
+        hint_value = pvs(alpha, beta, depth - 2);
+        hint = stack->best_move;
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    counts.iid_visits += nodes - nodes_before;
+    counts.iid_cancelled += stop_all;
+#endif
+    if (!stop_all && hint_value > alpha && hint.piece && brd.valid(&hint) && brd.legal(&hint)) {
+        stack->tt_move.set(&hint);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++counts.iid_moves;
+#endif
+    }
+}
+
 /**
  * Principle Variation Search (fail-soft)
  * @param alpha lowerbound value
@@ -1250,27 +1310,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
         }
     }
 
-    /*
-     * Internal iterative deepening (IID)
-     */
-
-    if (
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            !nnue_audit.fixed_horizon && !nnue_audit.aligned_quiescence &&
-#endif
-            pv && depth > 2 && tt_move == 0) {
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        ++nnue_audit.counters.iid_calls;
-#endif
-        const clock_range_t previous_clocks = stack->tt_clocks;
-        int iid_score = pvs(alpha, beta, depth - 2);
-        stack->tt_clocks.include_child(previous_clocks, 0);
-        if (score::is_mate(iid_score)) {
-            return iid_score;
-        } else if (stack->best_move.piece) {
-            stack->tt_move.set(&stack->best_move);
-        }
-    }
+    prepare_iid_move(alpha, beta, depth);
+    if (stop_all) return alpha;
 
     /*
      * Moves loop
@@ -1693,7 +1734,9 @@ void search_t::reset_stack() {
     counts.pvs_nodes = counts.q_nodes = counts.root_calls = 0;
     counts.move_visits = counts.null_visits = 0;
     counts.researches = counts.root_researches = counts.research_fail_highs = 0;
-    counts.iid_calls = 0;
+    counts.iid_calls = counts.iid_candidates = counts.iid_moves = 0;
+    counts.iid_cancelled = counts.iid_visits = 0;
+    counts.min_iid_depth = counts.max_iid_depth = counts.min_iid_probe_depth = 0;
 #endif
     pruned_nodes = 0;
     stack->pv_count = 0;

@@ -48,13 +48,15 @@ namespace options {
         { "ExperienceDepth", INT, 16, "type spin default 16 min 1 max 128" },
         { "UseNNUE", BOOL, 0, "type check default false" },
         { "EvalFile", STRING, 0, "type string default <empty>" },
-        { "Aspiration", BOOL, 1, "type check default true" }
+        { "Aspiration", BOOL, 1, "type check default true" },
+        { "IID", BOOL, 1, "type check default true" }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         , { "NNUEAuditHorizon", STRING, 0, "type combo default normal var normal var fixed var quiet" }
         , { "NNUEAuditNullMove", BOOL, 0, "type check default false" }
         , { "NNUEAuditBetaPruning", BOOL, 0, "type check default false" }
         , { "NNUEAuditFutility", BOOL, 0, "type check default false" }
         , { "NNUEAuditLMR", BOOL, 0, "type check default false" }
+        , { "NNUEAuditIID", BOOL, 0, "type check default false" }
         , { "NNUEAuditAspiration", BOOL, 0, "type check default false" }
         , { "NNUEAuditDelta", BOOL, 0, "type check default false" }
         , { "NNUEAuditSEE", BOOL, 0, "type check default false" }

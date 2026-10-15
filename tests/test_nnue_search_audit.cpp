@@ -94,12 +94,12 @@ int main(int argc, char ** argv) {
             if (probe->stack->check_extensions != 1) return failure(__LINE__);
             probe->backward();
             if (probe->stack->check_extensions != 1 || probe->brd.to_string() != check_fen) return failure(__LINE__);
-            // Depth three with no TT move would activate IID without the
-            // controlled-horizon guard. Exercise that entry directly.
+            // Depth four with no TT move is IID eligible. The controlled
+            // flag is off here; exercise that entry directly.
             probe->init(check_fen, nullptr);
             probe->stack->check_extensions = 3;
             probe->game.max_nodes = 2048;
-            probe->pvs(-score::INF, score::INF, 3);
+            probe->pvs(-score::INF, score::INF, 4);
             if (probe->nnue_audit.counters.iid_calls || probe->brd.ply
                     || probe->brd.to_string() != check_fen || probe->stack->check_extensions != 3
                     || !probe->nnue_audit.counters.extensions_applied
@@ -186,7 +186,7 @@ int main(int argc, char ** argv) {
     search.init(fen, nullptr);
     if (search.evaluation_network || !search.nnue_audit.aligned_quiescence
             || search.beta_pruning || search.ffp_enabled || search.null_enabled || search.lmr_enabled
-            || search.nnue_audit.q_delta || search.nnue_audit.q_see
+            || search.iid_enabled || search.nnue_audit.q_delta || search.nnue_audit.q_see
             || search.extension(&search.root.moves[0].move, 2)) return failure(__LINE__);
     search.game.max_depth = 3;
     search.go();
@@ -420,6 +420,38 @@ int main(int argc, char ** argv) {
             || work.move_visits || work.null_visits || work.researches
             || work.root_researches || work.research_fail_highs
             || search.brd.to_string() != played_fen) return failure(__LINE__);
+    options::get_option("NNUEAuditIID")->value = 1;
+    for (bool neural : {false, true}) {
+        options::get_option("UseNNUE")->value = neural;
+        for (const char * start_fen : {fen,
+                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1"}) {
+            for (int depth : {3, 4}) {
+                auto probe = std::make_unique<search_t>(start_fen);
+                probe->game.max_nodes = 200000;
+                probe->pvs(-score::INF, score::INF, depth);
+                const auto & counts = probe->nnue_audit.counters;
+                if (probe->stop_all || probe->iid_active || !probe->iid_enabled
+                        || probe->brd.ply || probe->brd.to_string() != start_fen) return failure(__LINE__);
+                if (depth == 3) {
+                    if (counts.iid_calls) return failure(__LINE__);
+                } else if (counts.iid_calls != 1 || counts.iid_moves != 1
+                        || counts.iid_cancelled || counts.min_iid_depth != 4
+                        || counts.max_iid_depth != 4 || counts.min_iid_probe_depth != 2
+                        || !counts.iid_visits) return failure(__LINE__);
+                if (counts.pvs_nodes + counts.q_nodes != counts.move_visits
+                        + counts.null_visits + counts.researches + counts.iid_calls + 1)
+                    return failure(__LINE__);
+            }
+            auto cancelled = std::make_unique<search_t>(start_fen);
+            cancelled->game.max_nodes = 2;
+            cancelled->pvs(-score::INF, score::INF, 4);
+            if (!cancelled->stop_all || cancelled->nodes != 2 || cancelled->brd.ply
+                    || cancelled->iid_active || !cancelled->iid_enabled
+                    || cancelled->nnue_audit.counters.iid_cancelled != 1
+                    || cancelled->brd.to_string() != start_fen) return failure(__LINE__);
+        }
+    }
+    options::get_option("NNUEAuditIID")->value = 0;
     options::get_option("NNUEAuditHorizon")->value = 0;
     std::cout << "Live lane/cache corruption detected; audited cancellation/restoration passed\n";
 }

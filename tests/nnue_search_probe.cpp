@@ -67,7 +67,7 @@ int main(int argc, char ** argv) {
             search.nnue_audit.record_cutoffs = argc == 9;
             search.nnue_audit.fixed_horizon = mode == "fixed";
             search.nnue_audit.aligned_quiescence = mode == "quiet";
-            if (mode == "fixed" || mode == "quiet") search.aspiration_enabled = false;
+            if (mode == "fixed" || mode == "quiet") search.aspiration_enabled = search.iid_enabled = false;
             search.game.max_nodes = nodes;
             search.game.max_depth = depth;
             if (mode == "replay") {
@@ -111,6 +111,8 @@ int main(int argc, char ** argv) {
                 << ",\"root_researches\":" << counts.root_researches
                 << ",\"research_fail_highs\":" << counts.research_fail_highs
                 << ",\"iid_calls\":" << counts.iid_calls
+                << ",\"iid_candidates\":" << counts.iid_candidates
+                << ",\"iid_visits\":" << counts.iid_visits
                 << ",\"aspiration_searches\":" << counts.aspiration_searches
                 << ",\"aspiration_attempts\":" << counts.aspiration_attempts
                 << ",\"aspiration_fail_lows\":" << counts.aspiration_fail_lows
