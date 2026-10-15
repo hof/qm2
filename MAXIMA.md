@@ -1524,8 +1524,42 @@ cancellation coverage. HCE is covered only by shared-search correctness tests;
 all playing comparisons remain pure NNUE. Protocols, frozen binaries, source
 patches, logs and independent audits are private under
 `.context/baselines/2026-10-14/hash-aligned-iid/`, reserved from training.
-Next is a depth-five baseline with the established features retained. Timed
-games remain the strength gate.
+The subsequent depth-five baseline retains every established flag, the same
+frozen engines, pure NNUE model and 50 opening pairs. Only requested depth
+changes. Maxima scores 33 wins, 63 draws and 4 losses (64.5%), compared with
+26/61/13 (56.5%) at depth four. Both engines deepen, so this is a diagnostic
+comparison rather than an isolated feature gain or Elo result. Independent
+audits pass all 100 games, 12925 legal plies and 11325 searches at completed
+depth five; no unfinished games, forfeits or engine errors occur.
+
+On the same 50 opening FENs, total search visits rise from 315689/232234 at
+depth four to 809319/617296 at depth five (Maxima/SF). Each engine changes
+19 chosen moves. The median paired Maxima/SF visit ratio changes from 1.405
+to 1.365. Another 200 searches pass independent audits, including exact
+reproduction of all 100 preceding depth-four traces. Neither engine calls
+IID on these opening roots, despite broader depth eligibility. During the
+games IID makes 96/551 calls, supplies 15/404 legal hints and visits
+772/62869 positions in its helpers; remaining depths range from four to five.
+Equal feature settings do not imply equal TT hits, move ordering or trees.
+
+Game search visits total 78278264/82249420, with medians 8365/7331.5 over
+different game positions. LMR operates at remaining depths three and four,
+with 3176286/2935502 reductions and 33520/21690 full-depth re-searches.
+Aspiration has 3720/4339 failed attempts across depths four and five, all
+retried without cancellation. Decisive previous scores can bypass an
+aspiration window; auditors allow that full-window fallback while requiring
+completed depth five. Peak main-search plies are 13/12 and quiescence plies
+28/42. Legal hash hints remain enabled, and TT score cutoffs remain disabled.
+
+Maxima's existing endgame null-move verification requires more than five
+plies remaining and searches the original position at `depth - 6`, with null
+moves disabled in that subtree. Current one-ply check extensions preserve
+remaining depth, so this verifier remains inactive at nominal depth five.
+A review of basic verified-null alternatives is separate from this unchanged
+baseline. Frozen protocols, traces and successful audits are private under
+`.context/baselines/2026-10-15/depth-five-baseline/`, reserved from training.
+Engine source is unchanged; prior native checks apply to those exact frozen
+binaries. Managed-time games remain the strength gate.
 
 ## 5. Build and debugging
 
