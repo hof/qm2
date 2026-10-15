@@ -551,6 +551,20 @@ eight opportunities to claim one by an intended move. Its final loss had no
 termination header; the GUI sent `quit` near clock exhaustion. The preserved
 PGN/log and diagnostic fixtures remain reserved from training.
 
+Private progress-policy experiments are queued after that timed match finishes:
+baseline, first-repetition scoring, rule50 damping, and both changes together.
+The first-repetition candidate cuts a below-root match against either game or
+search history, while actual-root claims still require three occurrences.
+The rule50 candidate uses SF13's `(100 - halfmove_clock) / 100` static-score
+factor, clamped to the rule range; modern Stockfish uses milder damping, so the
+SF13 factor is a candidate, not a claimed optimum. The raw NNUE core remains
+unchanged. Because the candidate makes static scores clock-dependent, its
+prototype restricts TT clock validity on evaluation and cached returns.
+Queued checks cover actual-root versus search repetition, null boundaries,
+cached-value scaling, clock validity and warm/cold TT agreement before saved-game
+conversion probes. These experiments do not change production defaults or the
+frozen strength-match engine, and no strength benefit has been established.
+
 A fresh current-build NNUE–HCE confirmation is running independently: fixed
 200 games / 100 fresh color-swapped opening pairs, 5+0.05 seconds, Hash64,
 one worker, identical ordinary Release binary and production search defaults.
