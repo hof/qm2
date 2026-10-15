@@ -102,9 +102,10 @@ namespace material {
          */
 
         board_t * brd = &s->brd;
-        s->stack->mt = material_table::retrieve(brd->stack->material_hash);
-        material_table::entry_t * e = s->stack->mt;
+        s->stack->mt = &s->stack->material_entry;
+        material_table::entry_t * e = material_table::retrieve(brd->stack->material_hash);
         if (e->key == brd->stack->material_hash) {
+            s->stack->material_entry = *e;
             return e->score;
         }
         e->key = brd->stack->material_hash;
@@ -218,6 +219,7 @@ namespace material {
         }
 
         e->score = result;
+        s->stack->material_entry = *e;
         return e->score;
     }
 

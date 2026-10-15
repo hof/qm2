@@ -86,6 +86,9 @@ struct search_stack_t {
     score_t eval_score;
     score_t pc_score[BKING + 1];
     score_t passer_score[2];
+    // Cache slots can be replaced while descendants are searched.
+    pawn_table::entry_t pawn_entry;
+    material_table::entry_t material_entry;
     pawn_table::entry_t * pt;
     material_table::entry_t * mt;
     U64 tt_key;

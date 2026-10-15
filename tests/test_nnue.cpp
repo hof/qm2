@@ -1,5 +1,7 @@
 #include "engine.h"
 #include "nnue.h"
+#include "eval_material.h"
+#include "eval_pawns.h"
 #include "w17/w17_eval.h"
 #include "w17/w17_search.h"
 #include <filesystem>
@@ -63,6 +65,45 @@ int main() {
     auto & neural = *neural_storage;
     success &= check(evaluate(&neural) == 100 && neural.stack->mt && neural.stack->pt,
         "NNUE score must replace HCE while retaining material/pawn metadata");
+    // Eviction must not change metadata retained by an evaluated position.
+    // Both a populated cache and a cache hit must produce owned snapshots.
+    for (bool neural_mode : {false, true}) {
+        options::get_option("UseNNUE")->value = neural_mode;
+        material_table::clear();
+        pawn_table::clear();
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            auto probe = std::make_unique<search_t>(fen);
+            const int value = evaluate(probe.get());
+            const auto material_snapshot = *probe->stack->mt;
+            const auto pawn_snapshot = *probe->stack->pt;
+            auto * material_slot = material_table::retrieve(probe->brd.stack->material_hash);
+            auto * pawn_slot = pawn_table::retrieve(probe->brd.stack->pawn_hash);
+            success &= check(probe->stack->mt != material_slot && probe->stack->pt != pawn_slot,
+                "Search metadata must own snapshots rather than replaceable cache slots");
+            material_slot->key ^= 1;
+            material_slot->flags ^= 255;
+            pawn_slot->key ^= 1;
+            pawn_slot->passers ^= ~U64(0);
+            success &= check(evaluate(probe.get()) == value
+                && probe->stack->mt->key == material_snapshot.key
+                && probe->stack->mt->flags == material_snapshot.flags
+                && probe->stack->pt->key == pawn_snapshot.key
+                && probe->stack->pt->passers == pawn_snapshot.passers,
+                "Cached evaluation must retain correct metadata after cache eviction");
+            // Repopulate caches so the next iteration exercises a hit.
+            material::eval(probe.get());
+            pawns::eval(probe.get());
+        }
+    }
+    options::get_option("UseNNUE")->value = 0;
+    pawn_table::clear();
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        auto shelter = std::make_unique<search_t>(
+            "r1bq1rk1/p1p1bppp/2pp1n2/8/4PP2/2N5/PPP1B1PP/R1BQ1RK1 b - - 0 1");
+        success &= check(evaluate(shelter.get()) == 16,
+            "Pawn shelter must read current metadata while a cache miss is being built");
+    }
+    options::get_option("UseNNUE")->value = 1;
     // A constant-output network must remain constant across positions where
     // classical evaluation or hybrid selection would give different scores.
     for (const char * position : {

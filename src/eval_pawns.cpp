@@ -91,10 +91,12 @@ namespace pawns {
          */
 
         board_t * brd = &s->brd;
-        s->stack->pt = pawn_table::retrieve(brd->stack->pawn_hash);
-        pawn_table::entry_t * e = s->stack->pt;
+        pawn_table::entry_t * e = pawn_table::retrieve(brd->stack->pawn_hash);
+        s->stack->pt = e;
         if (e->key == brd->stack->pawn_hash) {
-            return &e->score;
+            s->stack->pawn_entry = *e;
+            s->stack->pt = &s->stack->pawn_entry;
+            return &s->stack->pawn_entry.score;
         }
 
         /*
@@ -301,7 +303,9 @@ namespace pawns {
         e->score.set(pawn_score[WHITE]);
         e->score.sub(pawn_score[BLACK]);
         e->key = brd->stack->pawn_hash;
-        return &e->score;
+        s->stack->pawn_entry = *e;
+        s->stack->pt = &s->stack->pawn_entry;
+        return &s->stack->pawn_entry.score;
     }
 
     /**

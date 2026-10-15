@@ -436,6 +436,10 @@ There is no network I/O or Python dependency in the engine or its build.
 
 `test_nnue` runs offline using synthetic weights for load validation, score bounds,
 metadata, model lifetime, evaluator/TT isolation and HCE/losers preservation.
+Each evaluated standard-chess search position owns snapshots of its pawn and
+material metadata. Descendant searches can replace the shared cache slots without
+changing metadata belonging to a cached parent evaluation. Regression checks
+force replacement after both cache misses and hits in HCE and NNUE modes.
 To add real-weight independent-probe and NNUE lifecycle checks, configure either
 preset with `-Dmaxima_nnue_test_network=/absolute/path/to/nn-62ef826d1a6d.nnue`.
 Those checks compare both accumulators and integer scores across special moves,
@@ -1555,11 +1559,75 @@ Maxima's existing endgame null-move verification requires more than five
 plies remaining and searches the original position at `depth - 6`, with null
 moves disabled in that subtree. Current one-ply check extensions preserve
 remaining depth, so this verifier remains inactive at nominal depth five.
-A review of basic verified-null alternatives is separate from this unchanged
-baseline. Frozen protocols, traces and successful audits are private under
+The matched feature switches do not imply identical pruning policies. The
+private SF control retains reverse futility through remaining depth eight,
+with a margin of `112.5 * (depth - improving)` cp; Maxima uses `100 * depth`
+cp only through remaining depth three. Ordinary non-PV nodes with four plies
+remaining become reachable at nominal depth five, allowing an additional SF
+pruning level. The control also retains its native null-move guards and
+adaptive reduction. ProbCut, native internal reductions, adaptive LMR,
+main-search history/SEE pruning and singular extensions are explicitly disabled.
+A source and runtime investigation of these differences is separate from the
+unchanged baseline. A review of basic verified-null alternatives is also
+separate. Frozen protocols, traces and successful audits are private under
 `.context/baselines/2026-10-15/depth-five-baseline/`, reserved from training.
-Engine source is unchanged; prior native checks apply to those exact frozen
-binaries. Managed-time games remain the strength gate.
+A subsequent fresh-position depth-five run exposed a material-cache collision:
+a descendant replaced the cache entry still referenced by a parent with a
+cached evaluation. The NNUE value and accumulators were correct, but retained
+material metadata belonged to another position. That entire partial match was
+invalidated. The repair stores completed pawn/material metadata in each search
+position, keeping the live pawn entry available until shelter evaluation has
+finished; both cache hits and misses publish an owned snapshot. Search rules,
+options and network weights are unchanged.
+
+The repaired engine reproduces all 43 Maxima searches preceding the abort,
+then completes the formerly failing root at depth five. More importantly,
+all 5673 recorded Maxima searches across the original 100 depth-five games
+reproduce exactly in move, score, PV and work counters; SF is unchanged.
+The original 64.5% result is therefore retained for that sample. This review
+covers depth five only; earlier depth results have not been revalidated for
+this defect. Final ordinary Release passes 36/36, Audit Release 38/38, and
+focused ASan/UBSan/leak checks 3/3. All printed HCE components match the original
+binary over 100 evaluations of the 50 new FENs. Forced cache replacement tests
+cover HCE/NNUE and cache misses/hits. A short sequential 30-pair 50k-node check
+per evaluator measures median repaired/original time per node of 0.900 for HCE
+and 0.949 for NNUE; this is a local speed check, not playing-strength evidence.
+Repair provenance, failed attempts and checks are retained privately under
+`.context/baselines/2026-10-15/depth-five-metadata-fix/`.
+
+The repaired depth-five pair then completes one fixed fresh sample of 100
+games from 50 positions, each with engine colors reversed: 25 middlegames and
+25 endings (10 rook, 10 minor and 5 queen endings). Starts come from the CC0
+official Stockfish development books pinned at
+`65815ccdbc7727cd4f6aee252ba8f67fb740e92f`. Selection seed 20261016, structural
+phase filters, exclusion of 40105 earlier played position keys and an independent
+SF19 cold 50k-node finite absolute-score screen of at most 150 cp were frozen
+before games. The repaired run reuses exactly the first attempt's starts and
+order; no input is replaced based on its outcome. Both engines request depth
+five with the original model, options and SF binary. Maxima contains only the
+metadata ownership repair.
+
+| Depth-five sample | Maxima W/D/L | Score | Maxima search visits | SF search visits |
+| --- | --- | --- | --- | --- |
+| Original opening sample | 33/63/4 | 64.5% | 78278264 | 82249420 |
+| Fresh sample, all 100 | 15/75/10 | 52.5% | 57063295 | 53290471 |
+| Fresh middlegames, 50 | 8/34/8 | 50.0% | 41047739 | 40104350 |
+| Fresh endings, 50 | 7/41/2 | 55.0% | 16015556 | 13186121 |
+
+Visits sum positive-depth and quiescence entries in both engines. Independent
+audits pass all 100 games, 9270 legal plies and 9270 completed depth-five searches,
+including input/source/binary/model/options identities, legal PVs, terminals,
+pairing and work equations. No crashes, unfinished games or forfeits occur.
+No SF same-position null-verification entries occur in this sample. Castling
+search counts are zero because every selected start has no castling rights.
+The original failed attempt and a superseded repair attempt are excluded entirely.
+The fresh sample does not reproduce the 60%+ score. Its deliberately different
+phase mix tests generalization, rather than an identical-distribution opening
+repeat; it neither proves the original score was luck nor establishes Elo.
+No result-dependent extension or new feature experiment is added. Protocols,
+source archives, frozen inputs/binaries and audits are private under
+`.context/baselines/2026-10-15/depth-five-fresh-sample-fixed/`, reserved from training.
+Managed-time games remain the strength gate.
 
 ## 5. Build and debugging
 
