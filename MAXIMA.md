@@ -1744,6 +1744,18 @@ UCI logging currently opens and flushes a file for each line, so filesystem
 and protocol latency still matter near clock exhaustion; the current clock
 manager reserves only 50 ms. No timing or logging behavior was changed here.
 
+Historical HCE figures around 7.6–7.8M NPS used the older reporting convention
+that added pruned moves to visited nodes, corrected in `05a3c4d`. Replaying the
+archived pre-correction binary and current HCE with a 500,000 visited-node
+budget, Hash16, three alternating trials per position, reproduced old reported
+NPS of 7.80M at the start and 5.06M in the middlegame. Its reported node totals
+were 3,074,301 and 2,383,642, including pruned moves. Median wall times were
+395/366 ms (old/current) at the start and 472/359 ms in the middlegame; current
+reported totals were 500,000 and NPS 1.37M/1.40M. The lower displayed NPS does
+not demonstrate a matching HCE throughput regression. Different search trees
+and depths prevent interpreting these fixed-visit timings as equal strength
+or equal time-to-depth. NNUE's separately measured inference/search cost remains.
+
 GNU Chess 6.3.0 is also bundled locally at `C:\dev\gnuchess`; add
 `C:\dev\gnuchess\gnuchess.exe` as a second UCI engine. It uses the same
 WSL `Ubuntu` launcher approach and includes its Linux engine, small opening
