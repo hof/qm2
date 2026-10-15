@@ -1707,6 +1707,51 @@ You can use [Visual Studio Code](https://code.visualstudio.com/) to develop and 
 
 ![Image of VS Code](vscode.png)
 
+### Windows GUI with the WSL build
+
+The local Windows GUI bundle lives at `C:\dev\maxima`. Add
+`C:\dev\maxima\maxima.exe` in En Croissant's Engines page. This executable
+is a Windows UCI bridge: it launches the bundled ordinary Linux Release engine
+through WSL distribution `Ubuntu`. WSL remains required; this is not a native
+standalone Windows engine. The bundle is tied to this directory and the CPU
+where the engine was built, but does not require the source checkout to run.
+
+The bundle includes the NNUE weights, opening book, immutable experience file,
+70 installed three/four-piece Syzygy WDL/DTZ tables, and GCC runtime libraries.
+The bridge translates single Windows drive paths for `EvalFile`, `BookFile`,
+`ExperienceFile` and `SyzygyPath` to Linux `/mnt/<drive>/...` paths. In the GUI,
+set `EvalFile` to `C:\dev\maxima\networks\nn-62ef826d1a6d.nnue` before
+enabling `UseNNUE`; use `C:\dev\maxima\syzygy` for `SyzygyPath`, with
+`SyzygyProbeLimit=5` and `SyzygyProbeDepth=1`. No five-piece tables are bundled.
+`BookFile` is `C:\dev\maxima\book.bin` and `ExperienceFile` is
+`C:\dev\maxima\experience\experience.bin`. HCE remains separately
+available by turning `UseNNUE` off. The bundle's README lists the configuration.
+
+Launcher source/build artifacts remain local under ignored `.tools/windows/`.
+Copied assets are SHA-256 verified in the bundle's `SHA256.json`. Checks through
+the copied Windows executable loaded NNUE/book/experience/Syzygy using Windows
+paths, completed a legal depth-three search, and reported a Syzygy root hit.
+GUI interaction itself requires the user's Windows desktop.
+
+The bundled engine was byte-identical to the ordinary Release executable:
+`-O3 -DNDEBUG -march=native`, search auditing off, with AVX2 NNUE instructions
+verified in the object file. A short diagnostic on one fixed middlegame,
+300,000 nodes and two trials per configuration, measured median reported NPS
+of 1.15M HCE / 0.391M NNUE with a Linux temporary working directory, versus
+1.05M / 0.388M with a Windows-mounted working directory. This is a small
+throughput diagnostic, not a playing-strength result or a general speed ratio.
+UCI logging currently opens and flushes a file for each line, so filesystem
+and protocol latency still matter near clock exhaustion; the current clock
+manager reserves only 50 ms. No timing or logging behavior was changed here.
+
+GNU Chess 6.3.0 is also bundled locally at `C:\dev\gnuchess`; add
+`C:\dev\gnuchess\gnuchess.exe` as a second UCI engine. It uses the same
+WSL `Ubuntu` launcher approach and includes its Linux engine, small opening
+book, GPL license and launcher source. The copied executable completed a legal
+depth-three UCI search. No measured Elo is claimed for this particular build.
+For comparisons, use equal time/hash settings and disable `OwnBook` on both
+engines unless supplying a controlled opening book.
+
 ### 5.1 Optional Release LTO and GCC PGO
 
 Ordinary builds keep their existing flags. Enable LTO explicitly with
