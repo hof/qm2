@@ -181,6 +181,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     null_verify = options::get_value("NullVerify");
     null_enabled = options::get_value("NullMove");
     lmr_enabled = options::get_value("LMR");
+    aspiration_enabled = options::get_value("Aspiration");
     ffp_enabled = options::get_value("FutilityPruning");
     draw_contempt = options::get_value("DrawContempt");
     evaluation_network = options::get_value("UseNNUE") ? nnue::snapshot() : nullptr;
@@ -193,12 +194,13 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.quiet_castling = horizon == 2 && options::get_value("NNUEAuditCastling");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
-        beta_pruning = ffp_enabled = null_enabled = lmr_enabled = false;
+        beta_pruning = ffp_enabled = null_enabled = lmr_enabled = aspiration_enabled = false;
         nnue_audit.q_delta = nnue_audit.q_see = false;
         null_enabled = horizon == 2 && options::get_value("NNUEAuditNullMove");
         beta_pruning = horizon == 2 && options::get_value("NNUEAuditBetaPruning");
         ffp_enabled = horizon == 2 && options::get_value("NNUEAuditFutility");
         lmr_enabled = horizon == 2 && options::get_value("NNUEAuditLMR");
+        aspiration_enabled = horizon == 2 && options::get_value("NNUEAuditAspiration");
         nnue_audit.q_delta = horizon == 2 && options::get_value("NNUEAuditDelta");
         nnue_audit.q_see = horizon == 2 && options::get_value("NNUEAuditSEE");
     }
@@ -398,6 +400,15 @@ void search_t::go() {
             + " rejected " + std::to_string(nnue_audit.counters.q_check_rejected)
             + " searched " + std::to_string(nnue_audit.counters.q_check_searched));
         uci::out("info string audit_castles searched " + std::to_string(nnue_audit.counters.q_castles));
+        uci::out("info string audit_aspiration searches " + std::to_string(counts.aspiration_searches)
+            + " attempts " + std::to_string(counts.aspiration_attempts)
+            + " fail_low " + std::to_string(counts.aspiration_fail_lows)
+            + " fail_high " + std::to_string(counts.aspiration_fail_highs)
+            + " successes " + std::to_string(counts.aspiration_successes)
+            + " cancelled " + std::to_string(counts.aspiration_cancelled)
+            + " full_windows " + std::to_string(counts.aspiration_full_windows)
+            + " min_depth " + std::to_string(counts.min_aspiration_depth)
+            + " max_depth " + std::to_string(counts.max_aspiration_depth));
         uci::out("info string audit_lmr candidates " + std::to_string(counts.lmr_candidates)
             + " reduced " + std::to_string(counts.lmr_reductions)
             + " researches " + std::to_string(counts.lmr_researches)
@@ -556,22 +567,52 @@ void search_t::iterative_deepening() {
  * @return search result score
  */
 int search_t::aspiration(int depth, int last_score) {
-    if (depth >= 6 && !score::is_win(last_score)) {
-        for (int window = 20; window < 900; window *= 2) {
-            int alpha = last_score - window;
-            int beta = last_score + window;
-            int score = pvs_root(alpha, beta, depth);
-            if (stop_all) {
-                return score;
-            } else if (score > alpha && score < beta) {
-                return score;
-            } else if (score::is_win(score)) {
-                break;
-            }
-            last_score = score;
+    if (!aspiration_enabled || depth < 4 || score::is_win(last_score))
+        return pvs_root(-score::INF, score::INF, depth);
+
+    int delta = 50;
+    int alpha = MAX(-score::INF, last_score - delta);
+    int beta = MIN(score::INF, last_score + delta);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    auto & counts = nnue_audit.counters;
+    ++counts.aspiration_searches;
+    counts.min_aspiration_depth = counts.min_aspiration_depth
+        ? std::min(counts.min_aspiration_depth, uint64_t(depth)) : depth;
+    counts.max_aspiration_depth = std::max(counts.max_aspiration_depth, uint64_t(depth));
+#endif
+    for (;;) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++counts.aspiration_attempts;
+        counts.aspiration_full_windows += alpha == -score::INF && beta == score::INF;
+#endif
+        const int value = pvs_root(alpha, beta, depth);
+        if (stop_all) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++counts.aspiration_cancelled;
+#endif
+            return value;
+        }
+        if (value > alpha && value < beta) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++counts.aspiration_successes;
+#endif
+            return value;
+        }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        counts.aspiration_fail_lows += value <= alpha;
+        counts.aspiration_fail_highs += value >= beta;
+#endif
+        if (score::is_win(value)) {
+            alpha = -score::INF;
+            beta = score::INF;
+        } else {
+            // Preserve the bound that did not fail. Widen monotonically, even
+            // when selective search changes from fail-high to fail-low.
+            delta = MIN(delta * 2, score::INF);
+            if (value <= alpha) alpha = MAX(-score::INF, alpha - delta);
+            else beta = MIN(score::INF, beta + delta);
         }
     }
-    return pvs_root(-score::INF, score::INF, depth);
 }
 
 /**
@@ -962,11 +1003,10 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             }
             uci::send_pv(best, depth, sel_depth, nodes, game.tm.elapsed(),
                     pv_to_string().c_str(), result_flag, tablebase_hits);
-            if (!exact) { //adjust asp. window
-                return score;
-            }
-            assert(alpha < best);
-            alpha = best;
+            // A fail-high bounds the root immediately. A fail-low requires
+            // searching every alternative before widening the root window.
+            if (score >= beta) return score;
+            if (best > alpha) alpha = best;
         }
     }
     return best;

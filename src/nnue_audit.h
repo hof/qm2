@@ -16,6 +16,10 @@ struct audit_counters_t {
     uint64_t move_visits = 0, null_visits = 0;
     uint64_t researches = 0, root_researches = 0, research_fail_highs = 0;
     uint64_t iid_calls = 0;
+    uint64_t aspiration_searches = 0, aspiration_attempts = 0;
+    uint64_t aspiration_fail_lows = 0, aspiration_fail_highs = 0;
+    uint64_t aspiration_successes = 0, aspiration_cancelled = 0, aspiration_full_windows = 0;
+    uint64_t min_aspiration_depth = 0, max_aspiration_depth = 0;
     uint64_t lmr_candidates = 0, lmr_reductions = 0, lmr_researches = 0;
     uint64_t lmr_refutations = 0, lmr_cutoffs = 0;
     uint64_t min_lmr_depth = 0, max_lmr_depth = 0, min_lmr_child_depth = 0;

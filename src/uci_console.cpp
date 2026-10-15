@@ -448,12 +448,13 @@ namespace uci {
                             return true;
                         }
                         if (candidate != opt->value
-                                && (name == "KingAttackShelter" || name == "KingAttackPieces" || name == "UseNNUE"
+                                && (name == "KingAttackShelter" || name == "KingAttackPieces" || name == "UseNNUE" || name == "Aspiration"
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                                     || name == "NNUEAuditNullMove"
                                     || name == "NNUEAuditBetaPruning"
                                     || name == "NNUEAuditFutility"
                                     || name == "NNUEAuditLMR"
+                                    || name == "NNUEAuditAspiration"
                                     || name == "NNUEAuditDelta"
                                     || name == "NNUEAuditSEE"
                                     || name == "NNUEAuditQuietChecks"

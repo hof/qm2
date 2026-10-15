@@ -148,6 +148,31 @@ int main(int argc, char ** argv) {
                     || !cancelled->nnue_audit.counters.lmr_reductions) return failure(__LINE__);
         }
     }
+    options::get_option("NNUEAuditAspiration")->value = 1;
+    for (bool neural : {false, true}) {
+        options::get_option("UseNNUE")->value = neural;
+        for (bool white : {false, true}) {
+            const char * start_fen = white
+                ? "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+                : "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
+            for (int depth : {3, 4}) {
+                auto probe = std::make_unique<search_t>(start_fen);
+                probe->game.max_depth = depth;
+                probe->game.max_nodes = 200000;
+                probe->go();
+                const auto & counts = probe->nnue_audit.counters;
+                if (!probe->aspiration_enabled || probe->completed_depth != depth || probe->brd.ply
+                        || probe->brd.to_string() != start_fen || counts.iid_calls) return failure(__LINE__);
+                if (depth == 3) {
+                    if (counts.aspiration_searches || counts.aspiration_attempts) return failure(__LINE__);
+                } else if (counts.aspiration_searches != 1 || counts.aspiration_successes != 1
+                        || counts.aspiration_cancelled || counts.min_aspiration_depth != 4
+                        || counts.max_aspiration_depth != 4 || counts.root_calls != depth
+                            + counts.aspiration_attempts - counts.aspiration_searches) return failure(__LINE__);
+            }
+        }
+    }
+    options::get_option("NNUEAuditAspiration")->value = 0;
     options::get_option("NNUEAuditLMR")->value = 0;
     options::get_option("UseNNUE")->value = 1;
     options::get_option("NNUEAuditQuietChecks")->value = 0;

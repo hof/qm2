@@ -152,6 +152,7 @@ public:
     bool null_enabled;
     bool beta_pruning;
     bool lmr_enabled;
+    bool aspiration_enabled;
     bool ffp_enabled;
 
     search_t(const char * fen, const game_t * g = NULL,

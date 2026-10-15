@@ -107,3 +107,7 @@ if(maxima_nnue_test_network)
     target_link_libraries(test_nnue_reference MAX2SRC nnue_reference)
     add_test(NAME test_nnue_reference COMMAND test_nnue_reference "${maxima_nnue_test_network}")
 endif()
+
+add_executable(test_search_aspiration test_search_aspiration.cpp)
+target_link_libraries(test_search_aspiration MAX2SRC)
+add_test(NAME test_search_aspiration COMMAND test_search_aspiration)

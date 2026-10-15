@@ -113,7 +113,12 @@ class search_lifecycle_tests(unittest.TestCase):
                         self.assertEqual(int(final[2]), 0)
                         self.assertNotIn("score", final)
                     elif status[3] == "partial":
-                        self.assertIn("lowerbound", final)
+                        # Interrupted fail-low work has a move, but no proven score.
+                        if "score" in final:
+                            self.assertIn("lowerbound", final)
+                        else:
+                            self.assertNotIn("lowerbound", final)
+                        self.assertNotIn("upperbound", final)
                     elif status[3] == "complete":
                         self.assertEqual(int(final[2]), completed)
                         self.assertNotIn("lowerbound", final)

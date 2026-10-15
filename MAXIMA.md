@@ -1360,6 +1360,54 @@ move traces and independent audits are private under
 `.context/baselines/2026-10-14/lmr-control/`, reserved from training. Timed games
 with ordinary optimized builds remain the strength gate.
 
+Root aspiration uses a 50 cp half-window around the previous completed
+iteration from depth four. Only the failed bound widens, with a doubling
+increment; every retry retains the requested depth. Decisive scores use a full
+window. `Aspiration=false` disables this driver independently of LMR. Root
+fail-low work searches every alternative before retrying; an interrupted
+fail-low reports a legal provisional move without an unsupported score.
+The controlled quiet-horizon option `NNUEAuditAspiration` enables the same
+policy independently, and its counters record attempts, failures, completed
+windows, cancellation and requested depths. Fixed-horizon controls keep it off.
+
+The aspiration step retained LMR and all preceding controlled features in
+both engines, with reverse futility unchanged and IID/TT score cutoffs off.
+Four depth-four 100-game/50-pair profiles used the same reserved openings:
+
+| Aspiration enabled | Maxima W/D/L | Maxima score | Median search visits Maxima/SF |
+| --- | ---: | ---: | ---: |
+| Neither engine | 31/57/12 | 59.5% | 4080 / 2769 |
+| Maxima only | 34/55/11 | 61.5% | 3804.5 / 2737 |
+| SF13 control only | 29/58/13 | 58% | 4137 / 2965 |
+| Both engines | 28/58/14 | 57% | 4062 / 3028.5 |
+
+Both-enabled total visits were 27634159/24356932, versus 30565000/25717318
+with aspiration off. These game totals include retries and different reached
+positions. On the same 50 opening FENs, visits changed from 367160/232788 to
+355075/232234, about 3.3%/0.2% fewer, with no chosen-move changes. The measured
+work savings are modest; the 57% both-enabled score remains above even, versus
+59.5% with aspiration off, without establishing managed-time strength.
+
+Both-enabled Maxima/SF made 1684/1814 retries across 4517/4528 narrow-window
+iterations. Counters verified every retry stayed at requested depth four.
+Maximum main-search ply was 10/9 and maximum quiescence ply was 27/42.
+Independent audits passed all 400 games, 44710 legal PGN plies and 38310 game
+searches. The aspiration-off run reproduced all 100 previous game records and
+core move traces exactly. Another 500 opening searches passed: 100 depth-four
+traces with aspiration off matched the preceding baseline, and 100 depth-three
+traces with it enabled matched the prior control with zero aspiration counters. Independent
+window traces verified the declared bounds and retry depths in 50 opening
+searches. No unfinished games, forfeits or engine errors occurred.
+
+All 35 ordinary Release checks passed across the suite and an isolated NNUE
+lifecycle recheck; an initial ordinary-time-budget assertion missed its
+one second deadline by 57 ms. The full audit Release suite passed 36/36. Focused
+ASan/UBSan/leak checks passed, including interrupted root fail-low restoration.
+Failure and recheck logs, frozen binaries, protocols, source patches, move
+traces and independent audits are private under
+`.context/baselines/2026-10-14/aspiration-control/`, reserved from training.
+Managed-time matches with ordinary optimized builds remain the strength gate.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
@@ -1918,6 +1966,14 @@ restoration. These isolated guard probes disable node pruning and TT; they do
 not certify selective-search equality, evaluation or real quiescence. Verify
 data with `python tests/data/search/generate_selectivity.py --check`; native
 tests need no python-chess installation.
+
+`test_search_aspiration` exercises the production root driver with controlled
+child scores for both colors. It checks fail-high, fail-low and alternating
+failures, unchanged nonfailed bounds, full-depth retries, decisive-score
+fallback, cancellation and board/hash/stack restoration. A first-move fail-low
+must still search an improving alternative. Interrupted fail-low work must omit
+an unproven root score. Live audit tests cover HCE and NNUE, depth-three
+inactivity and depth-four activation with LMR enabled.
 
 `test_search_horizon` exercises real quiescence at depths 0/-1/-2 and PVS at
 depths 0/1 on independently certified capture, recapture, promotion, en passant,
