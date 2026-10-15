@@ -16,7 +16,7 @@ import chess
 import chess.engine
 
 from maxima_runner.matches import (read_openings, paired_summary, play_game,
-                                   read_match_pgn, run_match, main)
+                                   read_match_pgn, run_match, main, win_adjudicator)
 from maxima_runner.variants import royal_losers_board
 
 
@@ -30,6 +30,18 @@ class scripted_engine:
         self.limits.append(limit)
         await asyncio.sleep(self.delay)
         return chess.engine.BestMove(chess.Move.from_uci(next(self.moves)), None), 0
+
+
+class scored_engine(scripted_engine):
+    def __init__(self, moves, scores):
+        super().__init__(moves)
+        self.scores = iter(scores)
+
+    async def search(self, board, limit, **kwargs):
+        score = next(self.scores)
+        if kwargs.get('on_info') is not None and score is not None:
+            kwargs['on_info']({'score': chess.engine.PovScore(chess.engine.Cp(score), board.turn)}, 0)
+        return await super().search(board, limit, **kwargs)
 
 
 class match_tests(unittest.IsolatedAsyncioTestCase):
@@ -91,6 +103,127 @@ class match_tests(unittest.IsolatedAsyncioTestCase):
     async def test_ply_cap_is_unfinished(self):
         _, record = await self.play([scripted_engine(['e2e4']), scripted_engine([])], max_plies=1)
         self.assertEqual(record['result'], '*')
+
+    async def test_win_adjudication_requires_both_engines_and_records_evidence(self):
+        for white_wins in (True, False):
+            sign = 1 if white_wins else -1
+            white = scored_engine(['e2e4', 'g1f3', 'f1c4'], [1200 * sign] * 3)
+            black = scored_engine(['e7e5', 'b8c6', 'g8f6'], [-1100 * sign] * 3)
+            game, record = await self.play([black, white], a_white=False, max_plies=10,
+                adjudicate_win_cp=1000, adjudicate_min_move=1)
+            self.assertEqual(record['result'], '1-0' if white_wins else '0-1')
+            self.assertEqual(record['termination'], 'win adjudication')
+            self.assertIsNone(record['error'])
+            self.assertEqual(record['plies'], 6)
+            evidence = record['adjudication']['evidence']
+            self.assertEqual([entry['engine_color'] for entry in evidence], ['white', 'black'] * 3)
+            self.assertTrue(all(entry['score_white_cp'] * sign >= 1000 for entry in evidence))
+            replay = read_match_pgn(io.StringIO(str(game)))
+            self.assertFalse(replay.errors)
+            self.assertEqual(replay.headers['Termination'], 'win adjudication')
+            self.assertFalse(replay.end().board().is_game_over(claim_draw=True))
+            self.assertIn('Win adjudication', replay.end().comment)
+
+    def test_win_adjudication_resets_on_missing_bounds_disagreement_and_small_scores(self):
+        def info(cp, **extra):
+            return {'score': chess.engine.PovScore(chess.engine.Cp(cp), chess.WHITE), **extra}
+
+        for interrupted in ({}, info(1200, lowerbound=True), info(1200, upperbound=True),
+                            info(-1200), info(999)):
+            judge = win_adjudicator(1000, 4, 20)
+            for ply in range(3):
+                self.assertIsNone(judge.observe(info(1200), ply % 2 == 0, 20, ply))
+            self.assertIsNone(judge.observe(interrupted, False, 20, 3))
+            for ply in range(3):
+                self.assertIsNone(judge.observe(info(1200), ply % 2 == 0, 21, ply + 4))
+            self.assertIsNotNone(judge.observe(info(1200), False, 21, 7))
+        judge = win_adjudicator(1000, 2, 20)
+        self.assertIsNone(judge.observe(info(1200), True, 19, 1))
+        self.assertIsNone(judge.observe(info(1200), False, 19, 2))
+        self.assertIsNone(judge.observe(info(1200), True, 20, 3))
+        self.assertIsNotNone(judge.observe(info(1200), False, 20, 4))
+        mate = {'score': chess.engine.PovScore(chess.engine.Mate(-3), chess.BLACK)}
+        judge = win_adjudicator(1000, 2, 1)
+        self.assertIsNone(judge.observe(mate, True, 1, 1))
+        self.assertEqual(judge.observe(mate, False, 1, 2)['winner'], 'white')
+
+    async def test_win_adjudication_preserves_draws_failures_and_missing_scores(self):
+        board = chess.Board()
+        for move in ['g1f3', 'g8f6', 'f3g1', 'f6g8', 'g1f3']:
+            board.push_uci(move)
+        white = scored_engine(['f3g1'], [1200])
+        black = scored_engine(['g8f6'], [-1200])
+        _, record = await self.play([white, black], board, adjudicate_win_cp=1000,
+            adjudicate_win_plies=2, adjudicate_min_move=1)
+        self.assertEqual(record['result'], '1/2-1/2')
+        self.assertEqual(record['termination'], 'threefold_repetition')
+        self.assertIsNone(record['adjudication'])
+        for black in (scored_engine(['e7e5'], [None]), scored_engine(['e7e6'], [1200])):
+            _, record = await self.play([scored_engine(['e2e4'], [1200]), black],
+                max_plies=2, adjudicate_win_cp=1000, adjudicate_win_plies=2, adjudicate_min_move=1)
+            self.assertEqual(record['result'], '*')
+        _, record = await self.play([scored_engine(['e2e4'], [1200]),
+                                     scored_engine(['e7e4'], [-1200])],
+            adjudicate_win_cp=1000, adjudicate_win_plies=2, adjudicate_min_move=1)
+        self.assertEqual(record['result'], '*')
+        self.assertEqual(record['termination'], 'engine failure')
+        self.assertIsNotNone(record['error'])
+        board = chess.Board()
+        board.push_uci('f2f3')
+        board.push_uci('e7e5')
+        _, record = await self.play([scored_engine(['g2g4'], [1200]),
+                                     scored_engine(['d8h4'], [-1200])], board,
+            adjudicate_win_cp=1000, adjudicate_win_plies=2, adjudicate_min_move=1)
+        self.assertEqual(record['result'], '0-1')
+        self.assertEqual(record['termination'], 'checkmate')
+
+        class crashing_engine:
+            async def search(self, *args, **kwargs):
+                raise chess.engine.EngineTerminatedError('fixture crash')
+
+        _, record = await self.play([scored_engine(['e2e4'], [1200]), crashing_engine()],
+            adjudicate_win_cp=1000, adjudicate_win_plies=2, adjudicate_min_move=1)
+        self.assertEqual(record['result'], '*')
+        self.assertEqual(record['termination'], 'engine failure')
+        self.assertIn('fixture crash', record['error'])
+
+    def test_invalid_adjudication_configuration(self):
+        for settings in ((0, 6, 20), (1000, 1, 20), (1000, 6, 0)):
+            with self.assertRaises(ValueError):
+                win_adjudicator(*settings)
+
+    async def test_win_adjudication_through_uci_stream(self):
+        from maxima_runner.uci import open_engine
+        script = Path(self.directory.name) / 'scored_uci.py'
+        script.write_text('''import sys
+moves = 'e2e4 e7e5 g1f3 b8c6 f1c4 g8f6'.split()
+ply = 0
+for line in sys.stdin:
+    if line.strip() == 'uci':
+        print('id name scored fixture\\nuciok', flush=True)
+    elif line.strip() == 'isready':
+        print('readyok', flush=True)
+    elif line.startswith('position '):
+        ply = len(line.split(' moves ', 1)[1].split()) if ' moves ' in line else 0
+    elif line.startswith('go '):
+        score = 1200 if ply % 2 == 0 else -1200
+        print(f'info depth 3 multipv 1 score cp {score} pv {moves[ply]}')
+        print(f'info depth 3 multipv 2 score cp {-score}')
+        print('info nodes 100 time 1')
+        print(f'bestmove {moves[ply]}', flush=True)
+    elif line.strip() == 'quit':
+        break
+''')
+        command = [sys.executable, str(script)]
+        async with open_engine(command, self.directory.name, 2) as a:
+            async with open_engine(command, self.directory.name, 2) as b:
+                _, record = await self.play([a, b], max_plies=10, adjudicate_win_cp=1000,
+                                             adjudicate_min_move=1)
+        self.assertEqual(record['result'], '1-0')
+        self.assertEqual(record['termination'], 'win adjudication')
+        self.assertEqual(record['plies'], 6)
+        self.assertTrue(all(entry['score_white_cp'] == 1200
+                            for entry in record['adjudication']['evidence']))
 
     async def test_clock_forfeit_rejects_late_move(self):
         game, record = await self.play([scripted_engine(['e2e4'], 0.02), scripted_engine([])],

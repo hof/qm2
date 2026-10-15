@@ -2049,9 +2049,22 @@ through its response is charged, including readiness and runner overhead;
 initial process startup/configuration is excluded. A late move loses on time,
 except when the opponent has insufficient material under the selected variant.
 Legal moves are verified before being pushed. Terminal outcomes and available
-threefold/fifty-move claims are adjudicated by the independent board. There is
-no evaluation-based adjudication. `--max-plies` (default 600 searched plies,
-excluding the opening) leaves a nonterminal game unfinished, with result `*`.
+threefold/fifty-move claims are adjudicated by the independent board. Optional
+standard-chess win adjudication is enabled with `--adjudicate-win-cp 1000`.
+Starting at full move 20, it requires six consecutive plies of exact main-line
+scores at or above that threshold for the same winning color: both engines
+must agree, after converting their scores to White's perspective. Missing,
+bounded, smaller, or disagreeing scores reset the sequence. Mate scores count
+with their winning sign. Configure the sequence and earliest full move with
+`--adjudicate-win-plies` (minimum 2, default 6) and `--adjudicate-min-move`
+(default 20). Natural terminal/claimable outcomes, clock forfeits and engine
+failures take precedence; errors remain unfinished and stop the match. Reports
+record the policy and deciding scores, and PGNs mark `Termination "win adjudication"`
+with the policy and a final comment. This is an estimated result and can conceal
+conversion weaknesses; retain unadjudicated conversion checks separately.
+Adjudication is disabled by default, preserving earlier baseline protocols.
+`--max-plies` (default 600 searched plies, excluding the opening) leaves a
+nonterminal game unfinished, with result `*`.
 `--timeout` bounds each protocol response (default 30 seconds); increase it for
 long clocks. Protocol/illegal-move failures preserve the current game's partial
 PGN and error record, stop the match, and return nonzero. Completed game records

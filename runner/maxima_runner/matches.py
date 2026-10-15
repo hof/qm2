@@ -154,10 +154,49 @@ def read_match_pgn(stream):
     return chess.pgn.read_game(stream, Visitor=match_builder)
 
 
+class win_adjudicator:
+    """Require consecutive, exact main-line scores from both players."""
+    def __init__(self, threshold_cp, plies, min_move):
+        if threshold_cp <= 0 or plies < 2 or min_move < 1:
+            raise ValueError('win adjudication requires positive cp/min-move and at least two plies')
+        self.threshold_cp = threshold_cp
+        self.plies = plies
+        self.min_move = min_move
+        self.winner = None
+        self.evidence = []
+
+    def observe(self, info, color, move_number, ply):
+        score = info.get('score')
+        value = (score.white().score(mate_score=100000) if score is not None
+                 and not info.get('lowerbound') and not info.get('upperbound') else None)
+        winner = (value > 0 if value is not None and abs(value) >= self.threshold_cp
+                  and move_number >= self.min_move else None)
+        if winner is None or winner != self.winner:
+            self.evidence = []
+        self.winner = winner
+        if winner is None:
+            return None
+        self.evidence.append({'ply': ply, 'engine_color': 'white' if color else 'black',
+                              'score_white_cp': score.white().score(),
+                              'mate_white': score.white().mate()})
+        if len(self.evidence) >= self.plies and len({entry['engine_color'] for entry in self.evidence}) == 2:
+            return {'winner': 'white' if winner else 'black', 'threshold_cp': self.threshold_cp,
+                    'required_plies': self.plies, 'min_move': self.min_move,
+                    'evidence': list(self.evidence)}
+        return None
+
+
 async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
-                    pair, opening, variant):
+                    pair, opening, variant, adjudicate_win_cp=None,
+                    adjudicate_win_plies=6, adjudicate_min_move=20):
     import chess
     import chess.engine
+    adjudicator = None
+    if adjudicate_win_cp is not None:
+        if variant != 'standard':
+            raise ValueError('win adjudication currently supports standard chess only')
+        adjudicator = win_adjudicator(adjudicate_win_cp, adjudicate_win_plies, adjudicate_min_move)
+    adjudication = None
     game = match_game_type()()
     initial = board.root()
     game.headers.update(Event='Maxima offline paired match', Site='offline',
@@ -180,6 +219,14 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
             result, reason = outcome.result(), outcome.termination.name.lower()
             break
         color = board.turn
+        move_number = board.fullmove_number
+        search_info = {}
+
+        def collect_info(info, elapsed_ms):
+            if 'score' in info:
+                search_info.clear()
+                search_info.update(info)
+
         engine = engines[0 if color == a_white else 1]
         limit = chess.engine.Limit(white_clock=clocks[chess.WHITE],
                                    black_clock=clocks[chess.BLACK],
@@ -187,7 +234,8 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
         # Charge protocol/readiness and runner overhead, not engine-reported time.
         started = asyncio.get_running_loop().time()
         try:
-            best, _ = await engine.search(board, limit, game=token)
+            best, _ = await engine.search(board, limit, game=token,
+                                          **({'on_info': collect_info} if adjudicator else {}))
         except (OSError, ValueError, RuntimeError, chess.engine.EngineError, asyncio.TimeoutError) as error:
             failure = str(error) or type(error).__name__
             reason = 'engine failure'
@@ -211,14 +259,31 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
         hours, rest = divmod(remaining, 3600)
         minutes, rest = divmod(rest, 60)
         node.comment = f'[%clk {int(hours)}:{int(minutes):02}:{rest:06.3f}]'
+        if adjudicator:
+            outcome = board.outcome(claim_draw=True)
+            if outcome is not None:
+                result, reason = outcome.result(), outcome.termination.name.lower()
+                break
+            adjudication = adjudicator.observe(search_info, color, move_number, len(board.move_stack))
+            if adjudication is not None:
+                result = '1-0' if adjudication['winner'] == 'white' else '0-1'
+                reason = 'win adjudication'
+                node.comment += (f' Win adjudication: both engines agreed for '
+                                 f'{adjudicate_win_plies} plies at >= {adjudicate_win_cp} cp.')
+                break
     else:
         outcome = board.outcome(claim_draw=True)
         if outcome is not None:
             result, reason = outcome.result(), outcome.termination.name.lower()
     game.headers.update(Result=result, Termination=reason)
-    return game, {'pair': pair, 'opening': opening, 'a_color': 'white' if a_white else 'black',
+    record = {'pair': pair, 'opening': opening, 'a_color': 'white' if a_white else 'black',
                   'result': result, 'termination': reason, 'error': failure, 'plies': len(board.move_stack),
                   'clocks': {'white': clocks[chess.WHITE], 'black': clocks[chess.BLACK]}}
+    if adjudicator:
+        game.headers['WinAdjudication'] = (f'cp={adjudicate_win_cp}; plies={adjudicate_win_plies}; '
+                                          f'min_move={adjudicate_min_move}')
+        record['adjudication'] = adjudication
+    return game, record
 
 
 async def run_match(commands, openings, args, report, pgn_stream):
@@ -257,7 +322,10 @@ async def run_match(commands, openings, args, report, pgn_stream):
                 game, record = await play_game(
                     engines, position.copy(), a_white=a_white, seconds=args.seconds,
                     increment=args.increment, max_plies=args.max_plies, pair=pair,
-                    opening=identifier, variant=args.variant)
+                    opening=identifier, variant=args.variant,
+                    adjudicate_win_cp=getattr(args, 'adjudicate_win_cp', None),
+                    adjudicate_win_plies=getattr(args, 'adjudicate_win_plies', 6),
+                    adjudicate_min_move=getattr(args, 'adjudicate_min_move', 20))
                 for label, engine in zip(('EngineA', 'EngineB'), engines):
                     game.headers[label] = '; '.join(engine.identity)
                 record['engines'] = metadata
@@ -338,6 +406,12 @@ def main():
     parser.add_argument('--seconds', type=positive_float, default=10)
     parser.add_argument('--increment', type=nonnegative_float, default=0.1)
     parser.add_argument('--max-plies', type=positive_int, default=600)
+    parser.add_argument('--adjudicate-win-cp', type=positive_int, metavar='CP',
+                        help='enable early wins when both engines consistently agree at this cp threshold')
+    parser.add_argument('--adjudicate-win-plies', type=positive_int, default=6,
+                        help='consecutive agreeing plies required (default 6, minimum 2)')
+    parser.add_argument('--adjudicate-min-move', type=positive_int, default=20,
+                        help='earliest full move eligible for win adjudication (default 20)')
     parser.add_argument('--timeout', type=positive_float, default=30)
     parser.add_argument('--hash', type=positive_int, default=64, dest='hash_mb')
     parser.add_argument('--pgn', required=True, type=Path)
@@ -345,6 +419,12 @@ def main():
     args = parser.parse_args()
     report = None
     try:
+        if args.adjudicate_win_cp is not None:
+            if args.variant != 'standard':
+                raise ValueError('win adjudication currently supports standard chess only')
+            win_adjudicator(args.adjudicate_win_cp, args.adjudicate_win_plies, args.adjudicate_min_move)
+        elif args.adjudicate_win_plies != 6 or args.adjudicate_min_move != 20:
+            raise ValueError('win adjudication settings require --adjudicate-win-cp')
         if args.sprt is not None:
             from .sprt import validate_sprt
             validate_sprt(*args.sprt, args.sprt_alpha, args.sprt_beta)
@@ -377,6 +457,10 @@ def main():
         report = {'variant': args.variant, 'seed': args.seed, 'pairs': args.pairs,
                   'seconds': args.seconds, 'increment': args.increment,
                   'max_plies': args.max_plies, 'timeout': args.timeout,
+                  'win_adjudication': {'threshold_cp': args.adjudicate_win_cp,
+                                       'plies': args.adjudicate_win_plies,
+                                       'min_move': args.adjudicate_min_move}
+                                      if args.adjudicate_win_cp is not None else None,
                   'engines': [{**file_identity(command[0]), **profile}
                               for command, profile in zip(commands, args.profiles)],
                   'openings_sha256': hashlib.sha256(args.openings.read_bytes()).hexdigest(),
