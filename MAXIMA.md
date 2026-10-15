@@ -2083,6 +2083,13 @@ PGN and error record, stop the match, and return nonzero. Completed game records
 are flushed as they finish; abrupt interruption may lose the active game.
 Output paths must be new and distinct from each other and inputs.
 
+Each game also records reported search nodes, search counts, reporting coverage,
+and charged wall time separately for White and Black in JSON `search_work`.
+Played-move PGN comments include `[%nodes N]` when the engine reports a count.
+Missing node reports are tracked through `reported_searches`, not treated as
+measured zero work. Counts include searched quiescence and exclude pruned moves
+for Maxima; external engines may use other counting conventions.
+
 PGNs preserve opening history, setup FEN, clock comments, result, termination,
 and `Variant "Royal losers"` for losers. Use
 `maxima_runner.matches.read_match_pgn(stream)` to replay these PGNs with the

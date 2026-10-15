@@ -224,6 +224,10 @@ for line in sys.stdin:
         self.assertEqual(record['plies'], 6)
         self.assertTrue(all(entry['score_white_cp'] == 1200
                             for entry in record['adjudication']['evidence']))
+        for color in ('white', 'black'):
+            self.assertEqual(record['search_work'][color]['nodes'], 300)
+            self.assertEqual(record['search_work'][color]['searches'], 3)
+            self.assertEqual(record['search_work'][color]['reported_searches'], 3)
 
     async def test_clock_forfeit_rejects_late_move(self):
         game, record = await self.play([scripted_engine(['e2e4'], 0.02), scripted_engine([])],

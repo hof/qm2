@@ -59,6 +59,10 @@ Read royal-losers match PGNs with `maxima_runner.matches.read_match_pgn`;
 ordinary readers may not recognize this variant. See MAXIMA.md for result and
 confidence-interval semantics.
 
+Match JSON includes per-color `search_work` totals for reported nodes, searches,
+reporting coverage and charged wall time; played-move PGN comments retain each
+reported node count. Use those fields to include node counts in result tables.
+
 For standard chess, add `--adjudicate-win-cp 1000` to stop a clearly decided
 game once both engines agree on the winning side for six consecutive plies,
 starting at full move 20. Scores must meet the threshold without bound flags;

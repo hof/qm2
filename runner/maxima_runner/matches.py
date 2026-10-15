@@ -211,6 +211,8 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
         node = node.add_variation(move)
     clocks = {chess.WHITE: seconds, chess.BLACK: seconds}
     token = object()
+    search_work = {color: {'nodes': 0, 'searches': 0, 'reported_searches': 0,
+                           'wall_seconds': 0.0} for color in (chess.WHITE, chess.BLACK)}
     result, reason = '*', 'ply limit'
     failure = None
     for _ in range(max_plies):
@@ -221,8 +223,12 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
         color = board.turn
         move_number = board.fullmove_number
         search_info = {}
+        search_nodes = None
 
         def collect_info(info, elapsed_ms):
+            nonlocal search_nodes
+            if 'nodes' in info:
+                search_nodes = info['nodes']
             if 'score' in info:
                 search_info.clear()
                 search_info.update(info)
@@ -234,13 +240,18 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
         # Charge protocol/readiness and runner overhead, not engine-reported time.
         started = asyncio.get_running_loop().time()
         try:
-            best, _ = await engine.search(board, limit, game=token,
-                                          **({'on_info': collect_info} if adjudicator else {}))
+            best, _ = await engine.search(board, limit, game=token, on_info=collect_info)
         except (OSError, ValueError, RuntimeError, chess.engine.EngineError, asyncio.TimeoutError) as error:
             failure = str(error) or type(error).__name__
             reason = 'engine failure'
             break
         elapsed = asyncio.get_running_loop().time() - started
+        work = search_work[color]
+        work['searches'] += 1
+        work['wall_seconds'] += elapsed
+        if search_nodes is not None:
+            work['nodes'] += search_nodes
+            work['reported_searches'] += 1
         clocks[color] -= elapsed
         if clocks[color] <= 0:
             winner = not color
@@ -259,6 +270,8 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
         hours, rest = divmod(remaining, 3600)
         minutes, rest = divmod(rest, 60)
         node.comment = f'[%clk {int(hours)}:{int(minutes):02}:{rest:06.3f}]'
+        if search_nodes is not None:
+            node.comment += f' [%nodes {search_nodes}]'
         if adjudicator:
             outcome = board.outcome(claim_draw=True)
             if outcome is not None:
@@ -279,6 +292,7 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
     record = {'pair': pair, 'opening': opening, 'a_color': 'white' if a_white else 'black',
                   'result': result, 'termination': reason, 'error': failure, 'plies': len(board.move_stack),
                   'clocks': {'white': clocks[chess.WHITE], 'black': clocks[chess.BLACK]}}
+    record['search_work'] = {'white': search_work[chess.WHITE], 'black': search_work[chess.BLACK]}
     if adjudicator:
         game.headers['WinAdjudication'] = (f'cp={adjudicate_win_cp}; plies={adjudicate_win_plies}; '
                                           f'min_move={adjudicate_min_move}')
