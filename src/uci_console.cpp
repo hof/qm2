@@ -454,7 +454,7 @@ namespace uci {
                                     || name == "NNUEAuditBetaPruning"
                                     || name == "NNUEAuditFutility"
                                     || name == "NNUEAuditLMR"
-                                    || name == "NNUEAuditAspiration" || name == "NNUEAuditIID"
+                                    || name == "NNUEAuditAspiration" || name == "NNUEAuditIID" || name == "NNUEAuditHashMoves"
                                     || name == "NNUEAuditDelta"
                                     || name == "NNUEAuditSEE"
                                     || name == "NNUEAuditQuietChecks"

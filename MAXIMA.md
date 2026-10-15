@@ -636,6 +636,16 @@ Each same-position IID helper entry is included in visited work: with other
 same-position helpers disabled, visits equal moves + nulls + re-searches + IID
 calls.
 
+`NNUEAuditHashMoves` (default false, audit builds only) enables legal TT move
+hints in nonroot positive-depth search in `quiet` mode, independently of cached
+score usability. Cached search scores never cut off these controlled searches
+or replace their static evaluation. Fixed neural leaves ignore the flag, and
+quiescence retains its existing no-hash-move policy. Changing it stops search
+and clears TT. `audit_hash` reports ordering probes, accepted hints, hints
+selected first, rejected hints and TT score cutoffs; the last must remain zero.
+Root drivers retain their existing PV and ordering behavior. Matched controls
+must explicitly enable main-search hash moves in both engines.
+
 `NNUEAuditLMR` (default false, audit builds only) enables this same conservative
 LMR rule in `quiet` mode; other controlled features remain independently
 selectable. It is ignored in `fixed` mode. Changing it stops search and clears
@@ -1423,6 +1433,13 @@ The threshold keeps one-ply ordering probes out of shallow search. At nominal
 depth four it is eligible mainly after a root check extension preserves four
 plies; ordinary interior nodes become eligible at depth five.
 
+The following IID comparison and earlier quiet-horizon cross-engine match
+tables used different main-search hash-move policies: Maxima excluded TT lookup,
+while the opponent retained hash-move ordering. They are historical diagnostics,
+superseded for comparisons claiming aligned hash-move settings. A new depth-four
+baseline and IID matrix with hash-move ordering enabled in both engines follow
+below. Neural-core equality checks remain unaffected.
+
 The IID step kept aspiration, LMR and all preceding controlled features on
 in both engines, with reverse futility unchanged. Four depth-four 100-game/
 50-pair profiles used the same reserved opening endpoints:
@@ -1463,8 +1480,52 @@ games, forfeits or engine errors occurred. Ordinary Release checks passed
 36/36, audit Release 37/37, and focused ASan/UBSan/leak checks passed 2/2.
 Protocols, frozen binaries, source patches, traces and independent audits are
 private under `.context/baselines/2026-10-14/iid-control/`, reserved from
-training. Next is a depth-five baseline with the established features retained;
-IID should gain broader eligibility there. Timed games remain the strength gate.
+training. These results retain the unequal hash policy described above.
+
+The replacement depth-four comparison enables legal main-search hash moves in
+both engines, while keeping TT score cutoffs and cached search-score
+substitution off in both. Qsearch hash moves remain off. All matches use the
+same pure NNUE model, reserved 50 paired openings and preceding search features;
+only IID varies. Native TT replacement and root ordering remain unchanged.
+
+| IID enabled | Maxima W/D/L | Maxima score | Median search visits Maxima/SF |
+| --- | ---: | ---: | ---: |
+| Neither engine | 26/61/13 | 56.5% | 3627 / 3026 |
+| Maxima only | 26/61/13 | 56.5% | 3627 / 3026 |
+| SF13 control only | 26/61/13 | 56.5% | 3627 / 3026 |
+| Both engines | 26/61/13 | 56.5% | 3627 / 3026 |
+
+All four profiles have identical game records and every searched move, score
+and PV. Both-enabled total visits are 28159143/29032517. Maxima installs
+1357526 legal hash hints and searches 1308660 first; the opponent installs
+996663 and searches 906605 first. Neither records a TT score cutoff. IID
+makes only 26/13 probes, each visiting one position and producing no hint,
+with remaining depth four and probe depth two. It has no playing effect in
+this sample; broader eligibility starts at depth five. The previous 886-to-14
+probe disparity was caused by unequal hash-ordering settings.
+
+On the same 50 opening FENs, enabling Maxima hash ordering reduces its visits
+from 353042 to 315689 (10.6%); the opponent remains at 232234. One Maxima
+chosen move changes. All four aligned IID profiles have identical opening
+traces and no IID calls. Median paired Maxima/SF visit ratio is 1.405; game
+medians describe different positions and must not be used as a same-position
+work ratio. The aligned control is the baseline for subsequent depth steps.
+
+Independent audits passed all 400 games, 47012 legal PGN plies and 40612 game
+searches, with identities, legal PVs, requested depths, hash/IID guards and work
+equations checked. Another 700 opening searches passed, including 100 exact
+legacy depth-four traces and 100 unchanged aligned depth-three traces with
+IID enabled but inactive. No unfinished games, forfeits or engine errors
+occurred. Ordinary Release passed 36/36. Audit Release passed 37/38 initially;
+one lifecycle timing check exceeded its one-second budget by 54 ms, then the
+entire lifecycle suite passed in isolation. All 38 checks passed across those
+runs. Focused ASan/UBSan/leak checks passed, including live hash-ordering and
+cancellation coverage. HCE is covered only by shared-search correctness tests;
+all playing comparisons remain pure NNUE. Protocols, frozen binaries, source
+patches, logs and independent audits are private under
+`.context/baselines/2026-10-14/hash-aligned-iid/`, reserved from training.
+Next is a depth-five baseline with the established features retained. Timed
+games remain the strength gate.
 
 ## 5. Build and debugging
 
@@ -2024,6 +2085,14 @@ restoration. These isolated guard probes disable node pruning and TT; they do
 not certify selective-search equality, evaluation or real quiescence. Verify
 data with `python tests/data/search/generate_selectivity.py --check`; native
 tests need no python-chess installation.
+
+`test_nnue_hash_ordering` seeds poisoned exact scores with legal ordering
+hints for both colors and evaluators. It verifies that deep, shallow, context-
+and clock-mismatched entries can order a move while their scores never cut off
+the controlled search, and that legal hash moves suppress IID. It also covers
+disabled ordering, invalid hints and fixed-mode exclusion. Real HCE and NNUE
+searches cover warmed ordering hints, unchanged root evaluation and restoration
+after node-budget cancellation.
 
 `test_search_iid` controls only the shallow helper and child scores while
 running the production IID preparation and main PVS path. It checks both colors,

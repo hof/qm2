@@ -194,6 +194,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.aligned_quiescence = horizon == 2;
     nnue_audit.quiet_checks = horizon == 2 && options::get_value("NNUEAuditQuietChecks");
     nnue_audit.quiet_castling = horizon == 2 && options::get_value("NNUEAuditCastling");
+    nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
         beta_pruning = ffp_enabled = null_enabled = lmr_enabled = aspiration_enabled = iid_enabled = false;
@@ -388,6 +389,11 @@ void search_t::go() {
             + " researches " + std::to_string(counts.researches)
             + " root_researches " + std::to_string(counts.root_researches)
             + " research_fail_highs " + std::to_string(counts.research_fail_highs));
+        uci::out("info string audit_hash probes " + std::to_string(counts.hash_probes)
+            + " moves " + std::to_string(counts.hash_moves)
+            + " first " + std::to_string(counts.hash_first)
+            + " rejected " + std::to_string(counts.hash_rejected)
+            + " score_cutoffs " + std::to_string(counts.hash_score_cutoffs));
         uci::out("info string audit_iid calls " + std::to_string(counts.iid_calls));
         uci::out("info string audit_iid_work candidates " + std::to_string(counts.iid_candidates)
             + " calls " + std::to_string(counts.iid_calls)
@@ -1211,24 +1217,49 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const U64 context = tt_context();
     clock_range_t tt_clocks;
     int tt_move = 0, tt_flag = 0, tt_score;
-    if (
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            !nnue_audit.fixed_horizon && !nnue_audit.aligned_quiescence &&
+    const bool use_tt_scores = !nnue_audit.fixed_horizon && !nnue_audit.aligned_quiescence;
+    const bool probe_tt = use_tt_scores || (nnue_audit.aligned_quiescence && nnue_audit.hash_moves);
+    if (nnue_audit.aligned_quiescence && probe_tt) ++nnue_audit.counters.hash_probes;
+#else
+    constexpr bool probe_tt = true, use_tt_scores = true;
 #endif
-            trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag, context,
-            brd.stack->fifty_count, &tt_clocks)) {
+    const bool usable_tt_score = probe_tt && trans_table::retrieve(stack->tt_key, brd.ply,
+        depth, tt_score, tt_move, tt_flag, context, brd.stack->fifty_count, &tt_clocks);
+    if (usable_tt_score && use_tt_scores) {
         if (pv && tt_flag == score::EXACT) {
             stack->tt_clocks.include_child(tt_clocks, 0);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++nnue_audit.counters.hash_score_cutoffs;
+#endif
             return tt_score;
         } else if (!pv && tt_score >= beta && tt_flag == score::LOWERBOUND) {
             stack->tt_clocks.include_child(tt_clocks, 0);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++nnue_audit.counters.hash_score_cutoffs;
+#endif
             return tt_score;
         } else if (!pv && tt_score <= alpha && tt_flag == score::UPPERBOUND) {
             stack->tt_clocks.include_child(tt_clocks, 0);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++nnue_audit.counters.hash_score_cutoffs;
+#endif
             return tt_score;
         }
     }
     stack->tt_move.set_compact(&brd, tt_move);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    bool audit_hash_hint = false;
+    if (nnue_audit.aligned_quiescence && nnue_audit.hash_moves && tt_move) {
+        if (stack->tt_move.piece && brd.valid(&stack->tt_move) && brd.legal(&stack->tt_move)) {
+            ++nnue_audit.counters.hash_moves;
+            audit_hash_hint = true;
+        } else {
+            ++nnue_audit.counters.hash_rejected;
+            stack->tt_move.clear();
+        }
+    }
+#endif
 
     /*
      * Node pruning
@@ -1319,6 +1350,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     //if there is no first move, it's checkmate or stalemate
     move_t * move = move::first(this, depth);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    if (audit_hash_hint && move && move->to_compact() == tt_move)
+        ++nnue_audit.counters.hash_first;
+#endif
     if (!move) {
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
@@ -1734,6 +1769,8 @@ void search_t::reset_stack() {
     counts.pvs_nodes = counts.q_nodes = counts.root_calls = 0;
     counts.move_visits = counts.null_visits = 0;
     counts.researches = counts.root_researches = counts.research_fail_highs = 0;
+    counts.hash_probes = counts.hash_moves = counts.hash_first = 0;
+    counts.hash_rejected = counts.hash_score_cutoffs = 0;
     counts.iid_calls = counts.iid_candidates = counts.iid_moves = 0;
     counts.iid_cancelled = counts.iid_visits = 0;
     counts.min_iid_depth = counts.max_iid_depth = counts.min_iid_probe_depth = 0;

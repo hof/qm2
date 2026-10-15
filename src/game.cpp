@@ -56,6 +56,7 @@ namespace options {
         , { "NNUEAuditBetaPruning", BOOL, 0, "type check default false" }
         , { "NNUEAuditFutility", BOOL, 0, "type check default false" }
         , { "NNUEAuditLMR", BOOL, 0, "type check default false" }
+        , { "NNUEAuditHashMoves", BOOL, 0, "type check default false" }
         , { "NNUEAuditIID", BOOL, 0, "type check default false" }
         , { "NNUEAuditAspiration", BOOL, 0, "type check default false" }
         , { "NNUEAuditDelta", BOOL, 0, "type check default false" }

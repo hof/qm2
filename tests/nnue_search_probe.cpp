@@ -110,6 +110,11 @@ int main(int argc, char ** argv) {
                 << ",\"researches\":" << counts.researches
                 << ",\"root_researches\":" << counts.root_researches
                 << ",\"research_fail_highs\":" << counts.research_fail_highs
+                << ",\"hash_probes\":" << counts.hash_probes
+                << ",\"hash_moves\":" << counts.hash_moves
+                << ",\"hash_first\":" << counts.hash_first
+                << ",\"hash_rejected\":" << counts.hash_rejected
+                << ",\"hash_score_cutoffs\":" << counts.hash_score_cutoffs
                 << ",\"iid_calls\":" << counts.iid_calls
                 << ",\"iid_candidates\":" << counts.iid_candidates
                 << ",\"iid_visits\":" << counts.iid_visits
