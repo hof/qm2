@@ -27,6 +27,7 @@ class search_t;
 namespace material {
 
     int eval(search_t * s);
+    void prepare_nnue(search_t * s);
     bool has_mating_power(search_t * s, bool us);
     bool has_imbalance(search_t * s, bool us);
     bool has_major_imbalance(search_t * s);

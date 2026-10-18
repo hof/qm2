@@ -42,9 +42,9 @@ namespace options {
     };
 
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    const int length = 38;
+    const int length = 39;
 #else
-    const int length = 25;
+    const int length = 26;
 #endif
     extern option_t PARAM[length+1];
     
@@ -56,6 +56,7 @@ namespace options {
 class game_t {
 public:
     time_manager_t tm;
+    std::chrono::steady_clock::time_point go_started;
     move_t target_move;
     U64 max_nodes;
     U64 max_time_per_move;

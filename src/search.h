@@ -102,6 +102,11 @@ enum class result_source_t { none, partial, complete, fallback, book, terminal, 
 
 class search_t {
 private:
+    struct neural_cache_entry_t {
+        U64 key = 0;
+        int value = score::INVALID;
+    };
+    std::vector<neural_cache_entry_t> _neural_cache;
     const search_control_t * _control;
     std::shared_ptr<const experience::book_t> _experience;
     std::mt19937_64 _book_random;
@@ -121,6 +126,7 @@ public:
     game_t game;
     std::shared_ptr<const nnue::network_t> evaluation_network;
     std::vector<nnue::accumulator_t> evaluation_accumulators;
+    int neural_static_score();
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     nnue::audit_state_t nnue_audit;
 #endif
@@ -180,7 +186,7 @@ public:
     void prepare_iid_move(int alpha, int beta, int depth);
     bool book_lookup();
     bool tablebase_lookup();
-    bool probe_tablebase(int alpha, int beta, int depth, int & value);
+    bool probe_tablebase(int depth, int & value);
     int pvs_root(int alpha, int beta, int depth);
     virtual int pvs(int alpha, int beta, int depth);
     int qsearch(int alpha, int beta, int depth);

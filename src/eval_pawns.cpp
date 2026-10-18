@@ -27,6 +27,21 @@
 
 namespace pawns {
 
+    // Exclude every pawn with a friendly pawn ahead on its file or an enemy
+    // pawn ahead on its own/adjacent files. This includes the classical
+    // evaluator's doubled-pawn exclusion, without calculating pawn scores.
+    void prepare_nnue(search_t * s) {
+        const U64 white = s->brd.bb[WPAWN];
+        const U64 black = s->brd.bb[BPAWN];
+        const U64 white_files = white | ((white & ~FILE_A) >> 1) | ((white & ~FILE_H) << 1);
+        const U64 black_files = black | ((black & ~FILE_A) >> 1) | ((black & ~FILE_H) << 1);
+        auto & entry = s->stack->pawn_entry;
+        entry.key = s->brd.stack->pawn_hash;
+        entry.passers = (white & ~(fill_south(white | black_files) >> 8))
+            | (black & ~(fill_north(black | white_files) << 8));
+        s->stack->pt = &entry;
+    }
+
 //#define ENABLE_PAWN_EVAL_TRACE
 
 #ifdef ENABLE_PAWN_EVAL_TRACE

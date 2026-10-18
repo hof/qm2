@@ -34,6 +34,7 @@
 #include "book.h"
 #include "uci_console.h"
 #include "eval.h"
+#include "progress.h"
 #include "timeman.h"
 #include "eval_material.h"
 #include "eval_endgame.h"
@@ -96,7 +97,11 @@ U64 search_t::tt_context() const {
     const U64 node_kind = brd.ply == 0 ? game_history_salt
         : brd.ply < stack->repetition_start ? 0 : search_history_salt;
     const int white_contempt = root_wtm ? draw_contempt : -draw_contempt;
+    // Share score bounds within a damping bucket, retaining move hints across
+    // buckets. Existing propagated clock ranges still guard terminal draws.
+    const int clock_bucket = wild == 0 ? rule50_bucket(brd.stack->fifty_count) : 0;
     return stack->tt_history ^ node_kind
+        ^ (clock_bucket ? mix_context(U64(clock_bucket) ^ 0x72756c6535303031ULL) : 0)
         ^ mix_context(static_cast<U64>(white_contempt) ^ 0xa0761d6478bd642fULL)
         ^ (wild == 0 && evaluation_network
             ? mix_context(evaluation_network->fingerprint() ^ 0x48414c464b503032ULL) : 0);
@@ -152,6 +157,26 @@ void root_move_t::add_nodes(U64 count) {
  * Initializes the object, preparing to start a new search
  * @param fen string representing the board position
  */
+// Static neural scores depend on board/side and the immutable model snapshot,
+// not repetition history or the halfmove clock. Apply rule50 damping separately.
+int search_t::neural_static_score() {
+    assert(evaluation_network);
+    constexpr size_t entries = 65536;
+    if (_neural_cache.empty()) _neural_cache.resize(entries);
+    auto & cached = _neural_cache[brd.stack->tt_key & (entries - 1)];
+    if (cached.key == brd.stack->tt_key && cached.value != score::INVALID)
+        return cached.value;
+    auto & accumulator = evaluation_accumulators[brd.ply];
+    const int value = nnue::to_centipawns(evaluation_network->evaluate(brd, accumulator,
+        std::span<const nnue::accumulator_t>(evaluation_accumulators.data(), brd.ply)
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        , &nnue_audit.counters
+#endif
+        ));
+    cached = {brd.stack->tt_key, value};
+    return value;
+}
+
 void search_t::init(const char * fen, const game_t * g, const search_control_t * control,
         const std::vector<U64> & position_history) {
     const auto started = std::chrono::steady_clock::now();
@@ -209,6 +234,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         nnue_audit.q_see = horizon == 2 && options::get_value("NNUEAuditSEE");
     }
 #endif
+    _neural_cache.clear();
     evaluation_accumulators.clear();
     if (evaluation_network) {
         evaluation_accumulators.resize(MAX_PLY + 1);
@@ -450,11 +476,17 @@ void search_t::go() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
-// Root DTZ results lack repetition history. Use the shortcut only when no
-// reversible game history is known; otherwise retain normal search.
+// DTZ guides direct play unless an existing repetition needs search adjudication.
 bool search_t::tablebase_lookup() {
     if (wild != 0 || tablebase_limit == 0 || root.move_count == 0
-            || !_position_history.empty() || abort(true)) return false;
+            || popcnt0(brd.all()) > tablebase_limit || abort(true)) return false;
+    // A DTZ-minimizing continuation cannot cycle before its next zeroing move.
+    // Unique past positions cannot turn that continuation into a threefold.
+    // Already repeated positions need history-aware search instead.
+    std::vector<U64> history = _position_history;
+    history.push_back(brd.stack->repetition_key());
+    std::sort(history.begin(), history.end());
+    if (std::adjacent_find(history.begin(), history.end()) != history.end()) return false;
     tablebase::root_result_t result;
     if (!tablebase::probe_root(brd, tablebase_limit, result)) return false;
     for (int i = 0; i < root.move_count; ++i) {
@@ -474,7 +506,7 @@ bool search_t::tablebase_lookup() {
     return false;
 }
 
-bool search_t::probe_tablebase(int alpha, int beta, int depth, int & value) {
+bool search_t::probe_tablebase(int depth, int & value) {
     if (wild != 0 || tablebase_limit == 0 || stack->in_check) return false;
     const int outcome = tablebase::probe_wdl(brd, tablebase_limit, depth, tablebase_probe_depth);
     if (outcome == -3) return false;
@@ -482,7 +514,9 @@ bool search_t::probe_tablebase(int alpha, int beta, int depth, int & value) {
     const int magnitude = score::TABLEBASE - brd.ply;
     const bool draw = outcome >= -1 && outcome <= 1;
     value = draw ? draw_score() : outcome > 0 ? magnitude : -magnitude;
-    if (!draw && !(outcome > 0 ? value >= beta : value <= alpha)) return false;
+    // At a zero clock the WDL outcome is solved, including full-window nodes.
+    // Re-searching a proven win with static evaluation would retract its
+    // reserved-range score when the window widens.
     stack->tt_clocks.include_child({0, 0}, 0);
     return true;
 }
@@ -643,7 +677,9 @@ bool search_t::abort(bool force_poll = false) {
     } else if (stop_all || (_control && _control->stop_requested.load())) {
         result = true;
     } else if (force_poll || --next_poll <= 0) {
-        next_poll = NODES_BETWEEN_POLLS;
+        const int remaining = game.tm.remaining();
+        // Tighten polling near the deadline without taxing the ordinary hot path.
+        next_poll = remaining <= 50 ? 64 : remaining <= 250 ? 512 : NODES_BETWEEN_POLLS;
         result = !pondering() && game.tm.time_is_up() && root_stack->best_move.piece > 0;
     }
     stop_all = result;
@@ -1034,8 +1070,8 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
  * a) lack of material
  * b) fifty quiet moves
  * c) repetition
- * Game history requires three occurrences; cycles strictly inside search
- * are cut off after one earlier match as a search heuristic.
+ * The actual root requires three occurrences; descendants score the first
+ * match against either game or search history as a draw heuristic.
  * @return true if search should score this node as drawn
  */
 bool search_t::is_draw() {
@@ -1065,8 +1101,8 @@ bool search_t::is_repetition() const {
     for (int ply = brd.ply - 4; ply >= stop_ply; ply -= 2) {
         const U64 key = ply >= 0 ? brd._stack[ply].repetition_key()
             : _position_history[static_cast<int>(_position_history.size()) + ply];
-        // The root belongs to game history, not to an internal search cycle.
-        if (key == repetition_key && (ply > 0 || ++matches == 2)) {
+        // Only the actual root requires an official threefold repetition.
+        if (key == repetition_key && (brd.ply > 0 || ++matches == 2)) {
             return true;
         }
     }
@@ -1204,7 +1240,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
         return draw_score();
     }
     int tablebase_score;
-    if (tablebase_limit && probe_tablebase(alpha, beta, depth, tablebase_score)) {
+    if (tablebase_limit && probe_tablebase(depth, tablebase_score)) {
         return tablebase_score;
     }
 
@@ -1564,7 +1600,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return draw_score();
     }
     int tablebase_score;
-    if (tablebase_limit && probe_tablebase(alpha, beta, depth, tablebase_score)) {
+    if (tablebase_limit && probe_tablebase(depth, tablebase_score)) {
         return tablebase_score;
     }
 

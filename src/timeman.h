@@ -42,7 +42,6 @@ namespace time_man {
     const int M_MIN_LOW_TIME = M*4;
     const int M_MAX_LOW_TIME = M;
     const int LOW_TIME = 60000; //one minute
-    const int LAG_TIME = 50; //interface + initialization lag time in ms per move
 };
 
 class time_manager_t {
@@ -55,7 +54,8 @@ private:
 public:
     time_manager_t();
     void clear();
-    void set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left);
+    void set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left,
+        const int move_overhead = 50);
     
     void set_start(std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now()) {
         start = started;
@@ -72,6 +72,13 @@ public:
 
     bool time_is_up() const {
         return std::chrono::steady_clock::now() >= max;
+    }
+
+    int remaining() const {
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            max - std::chrono::steady_clock::now()).count();
+        return static_cast<int>(std::clamp<int64_t>(ms,
+            std::numeric_limits<int>::min(), std::numeric_limits<int>::max()));
     }
 
     int elapsed() const {

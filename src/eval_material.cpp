@@ -91,6 +91,29 @@ namespace material {
         return (s->stack->mt->flags & MFLAG_EG) != 0;
     }
 
+    // NNUE search consumes only the endgame flag. Keep this node-owned and
+    // never publish an incomplete entry in the classical material cache.
+    void prepare_nnue(search_t * s) {
+        const auto & brd = s->brd;
+        bool endgame = max_1(brd.bb[WPAWN]) || max_1(brd.bb[BPAWN]);
+        if (!endgame) {
+            for (bool us : {false, true}) {
+                if (brd.bb[ROOK[us]] || brd.bb[QUEEN[us]]) {
+                    continue;
+                }
+                const int minors = popcnt0(brd.bb[KNIGHT[us]] | brd.bb[BISHOP[us]]);
+                if (minors < 2 || (minors == 2 && !brd.bb[BISHOP[us]])) {
+                    endgame = true;
+                    break;
+                }
+            }
+        }
+        auto & entry = s->stack->material_entry;
+        entry.key = brd.stack->material_hash;
+        entry.flags = endgame ? MFLAG_EG : 0;
+        s->stack->mt = &entry;
+    }
+
     /**
      * Evaluate material score and set the current game phase
      * @param sd search meta-data object

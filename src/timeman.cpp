@@ -23,7 +23,8 @@
 
 #include "timeman.h"
 
-void time_manager_t::set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left) {
+void time_manager_t::set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left,
+        const int move_overhead) {
 
     //determine M, the guessed amount of moves left
     int M_MAX, M_MIN;
@@ -64,8 +65,16 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         tot_max += max_inc_bonus;
     }
 
-    tot_min = MAX(0, tot_min - time_man::LAG_TIME);
-    tot_max = MAX(0, tot_max - time_man::LAG_TIME);
+    tot_min = MAX(0, tot_min - move_overhead);
+    tot_max = MAX(0, tot_max - move_overhead);
+    if (moves_left == 1) {
+        // Reach the next time control without gambling the whole clock on it.
+        // Keep useful thinking time when already in severe time trouble.
+        const int period_reserve = MAX(move_overhead, MIN(1000, my_time / 20));
+        const int period_budget = MAX(0, my_time - period_reserve);
+        tot_min = MIN(tot_min, period_budget);
+        tot_max = MIN(tot_max, period_budget);
+    }
     set_max(tot_max);
     set_min(tot_min);
 

@@ -29,6 +29,7 @@
 #include "movepicker.h"
 #include "search.h"
 #include <algorithm> 
+#include <limits>
 
 /**
  * Pops the move with highest score above a minimum from the move list
@@ -42,9 +43,25 @@ move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
         //pick move with the highest score
 
         move_t * best = list->first;
-        for (move_t * move = list->first + 1; move != list->last; move++) {
-            if (*move > *best) {
-                best = move;
+        if (list->stage == STOP && s->wild == 0) {
+            // The previously selected maximum bounds this unchanged quiet list.
+            // Stop at its first occurrence to preserve swap-removal tie order.
+            const int maximum_score = list->best->score;
+            if (best->score != maximum_score) {
+                for (move_t * move = list->first + 1; move != list->last; ++move) {
+                    if (*move > *best) {
+                        best = move;
+                        if (best->score == maximum_score) {
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            for (move_t * move = list->first + 1; move != list->last; move++) {
+                if (*move > *best) {
+                    best = move;
+                }
             }
         }
 
@@ -222,6 +239,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 for (move_t * move = list->current; move != list->last; move++) {
                     move->score = s->history[move->piece][move->tsq];
                 }
+                list->best->score = std::numeric_limits<int>::max();
                 list->stage = STOP;
                 result = pop(s, list);
                 return result;

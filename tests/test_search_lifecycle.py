@@ -427,9 +427,11 @@ class search_lifecycle_tests(unittest.TestCase):
             engine.wait_for_exit()
 
     def test_ordinary_time_budgets(self):
+        # Keep the clock-mode allocation below the one-second response check;
+        # 6000 ms with this increment can legitimately reserve 1050 ms.
         with running_engine() as engine:
             engine.send("setoption name OwnBook value false")
-            for command in ("go movetime 200", "go wtime 6000 btime 6000 winc 100 binc 100"):
+            for command in ("go movetime 200", "go wtime 4200 btime 4200 winc 100 binc 100"):
                 started = time.monotonic()
                 engine.start_search(command)
                 engine.wait_for_bestmove()

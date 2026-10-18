@@ -1,6 +1,7 @@
 #include "engine.h"
 #include "movegen.h"
 #include "nnue.h"
+#include "progress.h"
 #include <random>
 
 // Keep the independent reference's piece/color names out of the engine scope.
@@ -17,8 +18,8 @@ bool compare(search_t & search) {
     nnue::accumulator_t fresh;
     const int recomputed = search.evaluation_network->evaluate(search.brd, fresh);
     auto & accumulator = search.evaluation_accumulators[search.brd.ply];
-    const auto * previous = search.brd.ply ? &search.evaluation_accumulators[search.brd.ply - 1] : nullptr;
-    const int incremental = search.evaluation_network->evaluate(search.brd, accumulator, previous);
+    const int incremental = search.evaluation_network->evaluate(search.brd, accumulator,
+        std::span<const nnue::accumulator_t>(search.evaluation_accumulators.data(), search.brd.ply));
     ++comparisons;
     // Independently refreshed reference accumulators also check the feature map
     // and every loaded feature weight, rather than only the final score.
@@ -41,7 +42,8 @@ bool compare(search_t & search) {
     for (int color = 0; color < 2; ++color)
         for (int lane = 0; lane < 256; ++lane)
             success &= fresh.values[color][lane] == reference_data.accumulator.accumulation[!color][lane];
-    if (!search.brd.in_check()) success &= evaluate(&search) == reference_score * 100 / 208;
+    if (!search.brd.in_check()) success &= evaluate(&search)
+        == damp_rule50(reference_score * 100 / 208, search.brd.stack->fifty_count);
     if (!success) std::cerr << fen << ": reference=" << reference_score << " full=" << recomputed
         << " incremental=" << incremental << '\n';
     return success;
@@ -110,8 +112,8 @@ int main(int argc, char ** argv) {
         auto & search = *storage;
         std::vector<move_t> played;
         for (int ply = 0; ply < 100; ++ply) {
-            // Sometimes skip evaluation: child must refresh when parent isn't ready.
-            if (ply % 5 != 2) success &= compare(search);
+            // Skip several evaluations so inference must find a ready ancestor or refresh.
+            if (ply % 7 < 2) success &= compare(search);
             move::list_t moves;
             move::gen_captures(&search.brd, &moves);
             move::gen_promotions(&search.brd, &moves);
@@ -133,6 +135,39 @@ int main(int argc, char ** argv) {
         success &= compare(search);
         if (search.brd.to_string() != start) success = false;
     }
+    // Replay through deliberately unevaluated parents. These paths include
+    // promotion plus capture, en passant, castling, and king-perspective changes.
+    for (const auto & fixture : {
+            std::pair{"1r5k/Pppppppp/8/8/8/8/1PPPPPPP/K7 w - - 0 1",
+                std::vector<const char *>{"a7b8n", "b7b6", "b8c6"}},
+            std::pair{"7k/ppp2ppp/8/3pP3/8/8/PPP2PPP/K7 w - d6 0 1",
+                std::vector<const char *>{"e5d6", "a7a6", "a2a3"}},
+            std::pair{"r3k2r/ppp2ppp/8/8/8/8/PPP2PPP/R3K2R w KQkq - 0 1",
+                std::vector<const char *>{"a2a3", "a7a6", "e1g1", "h7h6"}}}) {
+        auto storage = std::make_unique<search_t>(fixture.first);
+        auto & search = *storage;
+        success &= compare(search);
+        const auto original_values = search.evaluation_accumulators[0].values;
+        std::vector<move_t> moves;
+        for (const char * text : fixture.second) {
+            move_t move;
+            move.set(&search.brd, text);
+            if (!search.brd.valid(&move) || !search.brd.legal(&move)) {
+                std::cerr << "Illegal skipped-accumulator fixture move: " << text << '\n';
+                return 1;
+            }
+            moves.push_back(move);
+            search.forward(&moves.back(), search.brd.gives_check(&moves.back()));
+        }
+        success &= compare(search);
+        success &= search.evaluation_accumulators[0].values == original_values;
+        while (!moves.empty()) {
+            search.backward(&moves.back());
+            moves.pop_back();
+            success &= compare(search);
+        }
+    }
+
     // Exercise the final allocated accumulator and restoration from that depth.
     // This is a storage-boundary fixture, not a legal sequence of chess moves.
     {

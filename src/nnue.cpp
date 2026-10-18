@@ -1,6 +1,7 @@
 // GPL-3.0-or-later. Legacy HalfKP format and integer arithmetic described by
 // Stockfish/CFish and the pinned nnue-probe reference; see its README for credit.
 #include "nnue.h"
+#include "nnue_affine.h"
 #include "score.h"
 #include <algorithm>
 #include <bit>
@@ -23,39 +24,6 @@ std::string configured_path;
 uint32_t read_u32(const std::vector<uint8_t> & bytes, size_t offset) {
     return uint32_t(bytes[offset]) | (uint32_t(bytes[offset + 1]) << 8)
         | (uint32_t(bytes[offset + 2]) << 16) | (uint32_t(bytes[offset + 3]) << 24);
-}
-
-template<size_t input_size>
-std::array<int16_t, 32> affine(const std::array<int16_t, input_size> & input,
-        const std::array<int8_t, input_size * 32> & weights,
-        const std::array<int32_t, 32> & biases) {
-    std::array<int16_t, 32> output;
-    for (size_t row = 0; row < 32; ++row) {
-        // Inputs are [0,127], weights [-128,127], at most 512 products:
-        // the dot product fits int32 even for extreme external weights.
-        int32_t dot = 0;
-#ifdef __AVX2__
-        auto sums = _mm256_setzero_si256();
-        for (size_t column = 0; column < input_size; column += 16) {
-            const auto values = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(input.data() + column));
-            const auto packed_weights = _mm_loadu_si128(
-                reinterpret_cast<const __m128i *>(weights.data() + row * input_size + column));
-            const auto wide_weights = _mm256_cvtepi8_epi16(packed_weights);
-            sums = _mm256_add_epi32(sums, _mm256_madd_epi16(values, wide_weights));
-        }
-        auto total = _mm_add_epi32(_mm256_castsi256_si128(sums), _mm256_extracti128_si256(sums, 1));
-        total = _mm_hadd_epi32(total, total);
-        total = _mm_hadd_epi32(total, total);
-        dot = _mm_cvtsi128_si32(total);
-#else
-        for (size_t column = 0; column < input_size; ++column)
-            dot += int(input[column]) * int(weights[row * input_size + column]);
-#endif
-        // Biases are unrestricted int32 in the file. Add them in wide arithmetic.
-        const int64_t sum = int64_t(biases[row]) + dot;
-        output[row] = static_cast<int16_t>(std::clamp(sum >> 6, int64_t(0), int64_t(127)));
-    }
-    return output;
 }
 }
 
@@ -176,6 +144,21 @@ int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
         , audit_counters_t * counters
 #endif
         ) const {
+    return evaluate(board, accumulator,
+        previous ? std::span<const accumulator_t>(previous, 1) : std::span<const accumulator_t>()
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        , counters
+#endif
+        );
+}
+
+int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
+        std::span<const accumulator_t> ancestors
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        , audit_counters_t * counters
+#endif
+        ) const {
+    const auto * previous = ancestors.empty() ? nullptr : &ancestors.back();
     for (bool color : {false, true}) {
         if (accumulator.ready[color]) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
@@ -183,7 +166,27 @@ int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
 #endif
             continue;
         }
-        if (!previous || !previous->ready[color] || previous->kings[color] != accumulator.kings[color]) {
+        const accumulator_t * base = previous;
+        size_t begin = ancestors.size();
+        int cost = 0;
+        auto change_cost = [](const accumulator_t & state) {
+            int result = 0;
+            for (int i = 0; i < state.change_count; ++i) {
+                result += state.changes[i].from >= 0;
+                result += state.changes[i].to >= 0;
+            }
+            return result;
+        };
+        const bool walk = base && base->kings[color] == accumulator.kings[color] && !base->ready[color];
+        if (walk) cost = change_cost(accumulator);
+        const int refresh_cost = walk ? popcnt0(board.bb[ALLPIECES]) - 2 : 0;
+        while (base && base->kings[color] == accumulator.kings[color] && !base->ready[color]) {
+            cost += change_cost(*base);
+            if (cost >= refresh_cost || begin <= 1) { base = nullptr; break; }
+            --begin;
+            base = &ancestors[begin - 1];
+        }
+        if (!base || !base->ready[color] || base->kings[color] != accumulator.kings[color]) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
             if (counters) {
                 if (!board.ply) ++counters->root_refreshes;
@@ -197,21 +200,23 @@ int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         if (counters) ++counters->updates;
 #endif
-        accumulator.values[color] = previous->values[color];
-        for (int i = 0; i < accumulator.change_count; ++i) {
-            const auto & change = accumulator.changes[i];
-            if (change.from >= 0)
-                add_feature(accumulator.values[color], color, accumulator.kings[color], change.piece, change.from, true);
-            if (change.to >= 0)
-                add_feature(accumulator.values[color], color, accumulator.kings[color], change.piece, change.to, false);
-        }
+        accumulator.values[color] = base->values[color];
+        auto apply = [&](const accumulator_t & state) {
+            for (int i = 0; i < state.change_count; ++i) {
+                const auto & change = state.changes[i];
+                if (change.from >= 0)
+                    add_feature(accumulator.values[color], color, accumulator.kings[color], change.piece, change.from, true);
+                if (change.to >= 0)
+                    add_feature(accumulator.values[color], color, accumulator.kings[color], change.piece, change.to, false);
+            }
+        };
+        for (size_t index = begin; index < ancestors.size(); ++index) apply(ancestors[index]);
+        apply(accumulator);
         accumulator.ready[color] = true;
     }
-    std::array<int16_t, 512> input;
-    for (size_t i = 0; i < 512; ++i)
-        input[i] = std::clamp<int>(accumulator.values[i < 256 ? board.us() : !board.us()][i % 256], 0, 127);
-    const auto hidden1 = affine(input, _hidden1_weights, _hidden1_biases);
-    const auto hidden2 = affine(hidden1, _hidden2_weights, _hidden2_biases);
+    const auto input = detail::clip_activations(accumulator.values, board.us());
+    const auto hidden1 = detail::affine(input, _hidden1_weights, _hidden1_biases);
+    const auto hidden2 = detail::affine(hidden1, _hidden2_weights, _hidden2_biases);
     int64_t sum = _output_bias;
     for (size_t i = 0; i < 32; ++i) sum += int(hidden2[i]) * int(_output_weights[i]);
     return static_cast<int>(sum / 16);

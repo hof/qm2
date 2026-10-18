@@ -30,7 +30,28 @@
 #include <charconv>
 #include <limits>
 
-#define DO_LOG
+namespace {
+
+// Buffer protocol diagnostics; disk flushes must not precede move delivery.
+class protocol_log_t {
+    std::mutex mutex;
+    std::ofstream file;
+public:
+    void write(const char * direction, const std::string & message, bool flush = false) {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!file.is_open()) file.open("maxima_uci.log", std::ios::app);
+        file << direction << message << '\n';
+        if (flush) file.flush();
+    }
+    void reset() {
+        std::lock_guard<std::mutex> lock(mutex);
+        file.close();
+        std::remove("maxima_uci.log");
+    }
+};
+protocol_log_t protocol_log;
+
+}
 
 namespace uci {
 
@@ -150,13 +171,8 @@ namespace uci {
         }
         static std::mutex output_mutex;
         std::lock_guard<std::mutex> lock(output_mutex);
-#ifdef DO_LOG
-        std::ofstream myfile;
-        myfile.open("maxima_uci.log", std::ios::app);
-        myfile << "< " << str << std::endl;
-        myfile.close();
-#endif
         std::cout << str << std::endl;
+        protocol_log.write("< ", str, str.starts_with("bestmove "));
     }
 
     /**
@@ -165,12 +181,8 @@ namespace uci {
      * @return true unless the input command requests an exit
      */
     bool in(std::string cmd) {
-#ifdef DO_LOG
-        std::ofstream myfile;
-        myfile.open("maxima_uci.log", std::ios::app);
-        myfile << "> " << cmd << std::endl;
-        myfile.close();
-#endif
+        const auto received = std::chrono::steady_clock::now();
+        protocol_log.write("> ", cmd);
         bool result = true;
         input_parser_t parser(cmd);
 
@@ -189,7 +201,7 @@ namespace uci {
             } else if (token == "ucinewgame") {
                 result = handle_ucinewgame();
             } else if (token == "go") {
-                result = handle_go(parser);
+                result = handle_go(parser, received);
             } else if (token == "position") {
                 result = handle_position(parser);
             } else if (token == "forward") {
@@ -223,10 +235,8 @@ namespace uci {
 
     bool handle_ucinewgame() {
 
-#ifdef DO_LOG
-        std::remove("maxima_uci.log");
-#endif     
-
+        engine::stop();
+        protocol_log.reset();
         fen = start_fen;
         position_history.clear();
         engine::new_game(fen);
@@ -238,10 +248,11 @@ namespace uci {
         return true;
     }
 
-    bool handle_go(input_parser_t &parser) {
+    bool handle_go(input_parser_t &parser, std::chrono::steady_clock::time_point received) {
         engine::stop();
         std::string token;
         game_t candidate;
+        candidate.go_started = received;
         bool depth_limit = false;
         while (parser >> token) {
             if (token == "mate") {

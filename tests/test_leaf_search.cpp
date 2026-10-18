@@ -396,6 +396,74 @@ bool test_fifty_move_boundary() {
     return success;
 }
 
+bool test_quiet_order() {
+    const char * positions[] = {
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+        "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
+        "1r5k/Pppppppp/8/8/8/8/1PPPPPPP/K7 w - - 0 1",
+        "4r1k1/8/8/8/8/8/3B4/4K3 w - - 0 1",
+        "7k/8/8/8/8/8/7B/K6R w - - 0 1",
+        "7k/5K2/6Q1/8/8/8/8/8 b - - 0 1",
+        "7k/8/5KQ1/8/8/8/8/8 w - - 99 1"
+    };
+    uint32_t seed = 20261017;
+    for (const char * fen : positions) {
+        for (int pattern = 0; pattern < 16; ++pattern) {
+            for (int hints = 0; hints < 2; ++hints) {
+                auto storage = std::make_unique<search_t>(fen);
+                auto & search = *storage;
+                search.stack->in_check = search.brd.in_check();
+                for (int piece = 1; piece <= BKING; ++piece) {
+                    for (int square = 0; square < 64; ++square) {
+                        seed = seed * 1664525u + 1013904223u;
+                        search.history[piece][square] = pattern == 0 ? 0
+                            : pattern == 1 ? 31 : (seed >> 16) % (pattern + 1);
+                    }
+                }
+                move::list_t quiets;
+                move::gen_quiet_moves(&search.brd, &quiets);
+                if (hints) {
+                    int count = 0;
+                    for (auto * move = quiets.first; move != quiets.last && count < 3; ++move) {
+                        if (!search.brd.legal(move)) continue;
+                        if (count == 0) search.stack->tt_move.set(move);
+                        else search.stack->killer[count - 1].set(move);
+                        ++count;
+                    }
+                }
+                std::vector<move_t> pending(quiets.first, quiets.last);
+                for (auto & move : pending) move.score = search.history[move.piece][move.tsq];
+                std::vector<int> expected;
+                // Independent original selection: first maximum, then swap-remove.
+                while (!pending.empty()) {
+                    size_t best = 0;
+                    for (size_t index = 1; index < pending.size(); ++index)
+                        if (pending[index].score > pending[best].score) best = index;
+                    auto move = pending[best];
+                    pending[best] = pending.back();
+                    pending.pop_back();
+                    if (!search.stack->tt_move.equals(&move) && !search.is_killer(&move)
+                            && search.brd.legal(&move)) expected.push_back(move.to_int());
+                }
+                for (int depth : {0, 3, -1}) {
+                    std::vector<int> actual;
+                    for (auto * move = move::first(&search, depth); move; move = move::next(&search, depth)) {
+                        if (search.stack->move_list.stage == STOP) actual.push_back(move->to_int());
+                    }
+                    const bool enabled = depth >= 0 || search.stack->in_check;
+                    if (actual != (enabled ? expected : std::vector<int>{})) {
+                        std::cerr << "quiet ordering changed at " << fen << " pattern " << pattern
+                            << " hints " << hints << " depth " << depth << '\n';
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
 }
 
 int main() {
@@ -417,6 +485,7 @@ int main() {
     for (const position_case_t & test : cases) {
         success &= test_position(test);
     }
+    success &= test_quiet_order();
     success &= test_pruning_terminals();
     success &= test_quiet_evasion();
     success &= test_capture();

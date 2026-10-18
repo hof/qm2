@@ -46,6 +46,36 @@ std::pair<int, U64> run_configured(const std::string & fen) {
     return {result, search->nodes};
 }
 
+bool test_rule50_buckets() {
+    const std::string prefix = "5B2/3k1K2/8/2R4P/5P2/8/8/7r w - - ";
+    auto first = std::make_unique<search_t>((prefix + "21 203").c_str());
+    auto same = std::make_unique<search_t>((prefix + "29 203").c_str());
+    auto next = std::make_unique<search_t>((prefix + "30 203").c_str());
+    for (auto * search : {first.get(), same.get(), next.get()}) prepare(*search);
+    bool success = check("clock buckets must not change board or repetition identity",
+        first->brd.stack->tt_key == next->brd.stack->tt_key
+        && first->brd.stack->repetition_key() == next->brd.stack->repetition_key());
+    success &= check("score context must share within a bucket and differ across buckets",
+        first->tt_context() == same->tt_context() && first->tt_context() != next->tt_context());
+    move_t hint;
+    hint.set(&first->brd, "h5h6");
+    const int compact = hint.to_compact();
+    trans_table::clear();
+    trans_table::store(first->brd.stack->tt_key, 0, 0, 1, 123, compact,
+        score::EXACT, first->tt_context(), {0, 99});
+    int value = 0, move = 0, flag = 0;
+    success &= check("different counts within a bucket must retain TT score reuse",
+        same->pvs(-score::INF, score::INF, 1) == 123 && same->nodes == 1);
+    success &= check("another bucket must reject the score while retaining the move",
+        !trans_table::retrieve(next->brd.stack->tt_key, 0, 1, value, move, flag,
+            next->tt_context(), 30) && move == compact);
+    const int warm = next->pvs(-score::INF, score::INF, 1);
+    trans_table::clear();
+    success &= check("cross-bucket warm search must match a fresh search",
+        warm == run(prefix + "30 203") && next->nodes > 1);
+    return success;
+}
+
 bool test_evaluation_options() {
     const std::string fen = "r4rk1/1p2ppbp/p2pbnp1/q7/3BPPP1/2N2B2/PPP4P/R2Q1RK1 b - - 0 1";
     const int saved_shelter = options::get_value("KingAttackShelter");
@@ -427,7 +457,8 @@ bool test_context_restoration() {
 int main() {
     magic::init();
     trans_table::set_size(4);
-    bool success = test_fifty_move_context();
+    bool success = test_rule50_buckets();
+    success &= test_fifty_move_context();
     success &= test_history_context();
     success &= test_matching_context_and_move_hint();
     success &= test_context_restoration();

@@ -50,7 +50,8 @@ namespace uci {
     bool handle_ucinewgame();
     bool handle_stop();
     bool handle_ponderhit();
-    bool handle_go(input_parser_t & p);
+    bool handle_go(input_parser_t & p,
+        std::chrono::steady_clock::time_point received = std::chrono::steady_clock::now());
     bool handle_position(input_parser_t & p);
     bool handle_forward(input_parser_t & p);
     bool handle_setoption(input_parser_t &parser);

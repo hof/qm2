@@ -55,12 +55,20 @@ bool test_search() {
     search_t win("7k/8/8/8/8/8/8/KR6 w - - 0 1");
     prepare(win);
     int value = 0;
-    bool success = check("A proven win is a lower bound, not an exact mate score",
-        !win.probe_tablebase(-score::INF, score::INF, 1, value)
+    bool success = check("A solved WDL outcome must survive a full window without inventing mate",
+        win.probe_tablebase(1, value)
         && value == score::TABLEBASE && !score::is_mate(value));
     success &= check("WDL win should cut off a narrow window",
         win.pvs(0, 1, 1) == score::TABLEBASE && win.nodes == 1
         && win.stack->tt_clocks.min == 0 && win.stack->tt_clocks.max == 0);
+    auto full_win = std::make_unique<search_t>("7k/8/8/8/8/8/8/KR6 w - - 0 1");
+    prepare(*full_win);
+    success &= check("Full-window search must retain the proven win",
+        full_win->pvs(-score::INF, score::INF, 1) == score::TABLEBASE && full_win->nodes == 1);
+    auto full_loss = std::make_unique<search_t>("7k/8/8/8/8/8/8/KR6 b - - 0 1");
+    prepare(*full_loss);
+    success &= check("Full-window search must retain the proven loss",
+        full_loss->pvs(-score::INF, score::INF, 1) == -score::TABLEBASE && full_loss->nodes == 1);
     search_t loss("7k/8/8/8/8/8/8/KR6 b - - 0 1");
     prepare(loss);
     success &= check("WDL loss should cut off a narrow window",
@@ -127,6 +135,16 @@ bool test_root() {
     prepare(repeated);
     repeated.init_root_moves();
     success &= check("Root shortcut must not ignore reversible game history", !repeated.tablebase_lookup());
+    const std::vector<U64> unique_history = {1, 2, 3, 4};
+    search_t unique("7k/8/8/8/8/8/8/KR6 w - - 8 1", nullptr, nullptr, unique_history);
+    prepare(unique);
+    unique.init_root_moves();
+    success &= check("Unique reversible history must retain direct DTZ play", unique.tablebase_lookup());
+    const std::vector<U64> duplicate_history = {1, 2, 1, 3};
+    search_t duplicate("7k/8/8/8/8/8/8/KR6 w - - 8 1", nullptr, nullptr, duplicate_history);
+    prepare(duplicate);
+    duplicate.init_root_moves();
+    success &= check("An earlier repeated position must retain history-aware search", !duplicate.tablebase_lookup());
     repeated.wild = 17;
     success &= check("Standard tables must not affect losers chess", !repeated.tablebase_lookup());
     return success;
@@ -135,8 +153,9 @@ bool test_root() {
 bool test_conversion() {
     std::string fen = "7k/8/8/8/8/8/8/KR6 w - - 0 1";
     std::unordered_set<U64> seen;
+    std::vector<U64> history;
     for (int ply = 0; ply < 100; ++ply) {
-        search_t search(fen.c_str());
+        search_t search(fen.c_str(), nullptr, nullptr, history);
         prepare(search);
         if (search.init_root_moves() == 0) {
             return check("DTZ play must end in a win rather than stalemate",
@@ -147,7 +166,9 @@ bool test_conversion() {
         if (!check("DTZ play must keep the winning outcome before the fifty-move limit",
                 search.tablebase_lookup() && std::abs(search.result_score) == score::TABLEBASE)) return false;
         move_t chosen = search.stack->best_move;
+        history.push_back(search.brd.stack->repetition_key());
         search.forward(&chosen, search.brd.gives_check(&chosen));
+        if (search.brd.stack->fifty_count == 0) history.clear();
         fen = search.brd.to_string();
     }
     return check("DTZ play failed to convert a rook win within fifty moves", false);

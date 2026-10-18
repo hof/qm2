@@ -37,6 +37,21 @@ search and evaluation, and experimental losers-chess support.
   throughput, and compilation tuned for the target CPU.
 - Explore a learned evaluator, such as NNUE, with correctness tests and measured
   playing-strength gains guiding integration into search.
+- Current NNUE priority: establish playing strength against HCE at equal time,
+  then remove unused classical evaluation machinery while preserving search
+  metadata, pruning guards, exact draw detection and tablebase integration.
+  Freeze an HCE comparison executable before deleting its implementation.
+  The agreed strength gate is NNUE at least as strong as pure HCE, rather than
+  a required positive Elo margin. Use the runner's `--min-elo 0` simultaneous
+  confidence rule: pass only when the lower score bound exceeds 50%; a cap
+  without a crossing is inconclusive. Exact equality cannot be established by
+  a finite match. After a pass, remove HCE in one coherent cleanup, preserving
+  independently required search metadata and exact endgame/draw handling;
+  incremental HCE removal stages are not requested.
+  Defer dual-network routing (cheap material-based selection or a small-network
+  screening pass followed by a larger network) and related inference experiments.
+  Accept some neural evaluation weaknesses in unusual endgame imbalances;
+  tablebases help only for covered material sets within the available piece limit.
 - Later, investigate play that exploits weaknesses in other engines' selective
   search, including null-move assumptions in zugzwang and forced-move positions.
   Use targeted positions and paired games against multiple engine opponents to
@@ -120,9 +135,9 @@ is ignored and unused.
 
 ## 4. Search correctness and caches
 
-Search owns its configuration and pre-root repetition history. Real game history
-requires three occurrences; cycles strictly inside search use one earlier match
-as a search heuristic. Repetition identity excludes en passant squares when no
+Search owns its configuration and pre-root repetition history. At the actual
+root, repetition requires three occurrences. Below the root, the first earlier
+match in either game or search history scores as a draw heuristic. Repetition identity excludes en passant squares when no
 legal capture is available. Irreversible moves and null moves bound history scans.
 Checkmate takes precedence over a fifty-move draw. Standard quiescence detects
 stalemate at every tactical depth, including before a stand-pat cutoff; absence
@@ -277,6 +292,29 @@ search settings and do not start a replacement search. As with other `go` and
 
 UCI output serializes complete lines from the command and search threads, so
 readiness responses and search reports cannot merge into a malformed line.
+Protocol logging is buffered and synchronized. Output reaches stdout before
+logging; `bestmove` then flushes the log, and a new game resets it after stopping
+the prior worker. Per-line file opens/flushes are avoided. Timed UCI searches
+start their monotonic budget when `go` enters the command handler, before
+logging, parsing, prior-worker joining, allocation, and search setup.
+The UCI `Move Overhead` option reserves 50 ms by default (range 0–5000 ms)
+from each allocated clock budget for interface and transport delays. Adjust it
+in the GUI engine options; for example, `setoption name Move Overhead value 100`.
+Budgets saturate at zero when the reserve exceeds the allocation. Explicit
+`go movetime` limits retain their requested duration. When UCI supplies
+`movestogo 1`, clock-based searches also cap both budgets to leave 5% of the
+remaining own clock, capped at 1000 ms, or `Move Overhead` if larger. This
+reserve replaces rather than adds to the interface reserve at that cap, and
+cannot grant time from an increment before the move is delivered. It scales
+with the remaining clock rather than assuming a particular period length:
+21363 ms leaves 1000 ms, 7338 ms leaves 366 ms and 5000 ms leaves 250 ms
+with a 50 ms interface reserve. Other period moves and sudden death retain
+their current allocation. The boundary follows UCI's remaining-move count,
+not the board's move number; no next-period time is available until the GUI
+credits it. Clock polling tightens
+from 5000 visits to 512 within
+250 ms of the deadline and to 64 within 50 ms; scheduling or blocking I/O can
+still exceed those intervals, so these counts are not a hard real-time guarantee.
 Both centipawn and mate scores retain lower/upper-bound qualifiers. NPS uses
 reported nodes per second with the reported monotonic elapsed milliseconds; a
 zero-millisecond sample uses a one-millisecond denominator. Rates retain unsigned
@@ -339,7 +377,13 @@ positions in check; checkmate does not become a draw at higher clock counts.
 The transposition table uses 24-byte entries: a full 64-bit position signature,
 a 64-bit context fingerprint, and packed move, score, depth, age, and halfmove
 clock-range metadata. Move hints can survive a context mismatch, but score
-cutoffs require compatible context and clock ranges. Royal-losers score context
+cutoffs require compatible context and clock ranges. Standard chess includes
+the ten-halfmove damping bucket in that context, so different counters within
+a bucket can reuse scores, while other buckets retain only move hints. This
+keeps repetition identity unchanged. It is an approximation: descendant bucket
+boundaries can differ with the initial clock, even when the initial bucket
+matches. Existing propagated terminal-clock ranges remain enforced.
+Royal-losers score context
 also includes the incoming mate-search mode (automatic, White, or Black), whose
 horizon rules differ. A node keeps that identity when it changes mode or reduces
 depth locally; incompatible modes retain move hints but cannot reuse scores.
@@ -356,6 +400,13 @@ NNUE development lives on `feat/nnue-bootstrap`. The target is standalone NNUE
 evaluation: no blending with HCE and no automatic classical-score fallbacks in
 NNUE mode. HCE remains separately selectable and the standard chess default
 until the strength gate passes; royal-losers remains material-only.
+Standard static evaluation now applies a separate progress policy to both HCE
+and NNUE: ten-halfmove buckets 0–9, 10–19, …, 90–99 retain 100%, 90%, …, 10%
+of the score. At 100 it reaches zero; actual draw detection and checkmate
+precedence remain search rules. Scaling occurs once before caching (and before
+HCE grain rounding). Raw neural output/accumulators and the separate unscaled
+endgame score are preserved; this introduces no classical blending.
+
 The initial target is pretrained CPU inference, without training or GPU hardware.
 
 Candidate assessment: the current local Stockfish architecture combines HalfKA,
@@ -432,14 +483,33 @@ perspectives without changing features. Unmake restores the parent accumulator.
 The loader checks exact size, version and architecture hashes before decoding;
 wide affine sums and score clamps keep external weights outside reserved scores.
 Native AVX2 feature accumulation and dense inference have scalar fallbacks.
+Dense activations are unsigned bytes in their original perspective/lane order.
+AVX2 processes 32 inputs with `vpmaddubsw`, immediately widening pair sums with
+`vpmaddwd` before int32 accumulation. Clipping to [0,127] bounds every pair to
+[-32512,32258], so the saturating instruction is exact even for extreme int8
+weights. A 512-product dot fits int32; bias addition remains int64, followed by
+the original arithmetic shift, clipping and output scaling. The network file,
+loaded weight layout and UCI interfaces are unchanged.
 There is no network I/O or Python dependency in the engine or its build.
 
 `test_nnue` runs offline using synthetic weights for load validation, score bounds,
 metadata, model lifetime, evaluator/TT isolation and HCE/losers preservation.
-Each evaluated standard-chess search position owns snapshots of its pawn and
-material metadata. Descendant searches can replace the shared cache slots without
-changing metadata belonging to a cached parent evaluation. Regression checks
-force replacement after both cache misses and hits in HCE and NNUE modes.
+Each evaluated standard-chess search position owns its required pawn and
+material metadata. HCE retains complete snapshots from its shared caches. NNUE
+uses `material::prepare_nnue` and `pawns::prepare_nnue` to populate only the
+node-owned keys, endgame flag and passed-pawn mask; other classical entry fields
+are not populated or consumed in this mode. Neither helper probes or fills the
+classical caches. The material flag keeps the original pawn-count/mating-power
+rule. Directional bitboard fills reproduce the original passer mask, including
+its exclusion of rear doubled pawns. No classical pawn weakness, king shelter,
+material score or other positional score is calculated by this NNUE path.
+Descendants cannot change a parent's owned values. Tests compare the required
+metadata with classical evaluation and an independent square scan, cover legal
+special-move children, null/undo, up to 24 games of 100 legal plies plus undo,
+and 20,000 synthetic pawn/material configurations, and verify that NNUE metadata
+preparation leaves classical cache entries intact. No additional cache or
+search-stack fields were introduced. Pruning, reductions and extensions remain
+unchanged.
 To add real-weight independent-probe and NNUE lifecycle checks, configure either
 preset with `-Dmaxima_nnue_test_network=/absolute/path/to/nn-62ef826d1a6d.nnue`.
 Those checks compare both accumulators and integer scores across special moves,
@@ -452,6 +522,330 @@ or fallback.
 The lifecycle suite also runs with NNUE enabled and tests reload/disable/unload.
 The pinned reference is compiled only for these optional tests. Configure with
 `-Dmaxima_nnue_test_network=` to return to the model-independent suite.
+
+The 2026-10-16 byte-dot optimization retained exact raw scores and every
+accumulator lane against the independent reference. New 32/512-input tests cover
+extreme signed weights, unsigned activation limits, unrestricted int32 biases,
+rounding/clipping boundaries and scalar/SIMD agreement; a separate build with
+AVX2 disabled also passed. The fused copy/update accumulator experiment was
+rejected: its median position throughput changed by -0.10%, 11/22 positions
+regressed, and depth-ten timings were slower, within roughly 10.7% median
+within-position timing variation. Production retains the existing lazy updates.
+
+Performance used the existing 22-position `modern_2026` corpus with its recorded
+move clocks, 500,000 visited nodes per position, three alternating frozen
+baseline/candidate trials, Hash 64, one worker, pinned network, and books,
+experience, pondering and tablebases disabled. Every final score, bound, PV,
+bestmove, depth and visited-node result matched. Median position throughput
+was 452,033 -> 566,334 NPS; median per-position gain was 26.21% (range
++6.18% to +42.17%, no position-median regressions). Aggregate nodes divided by
+total wall time improved 448,446 -> 543,890 NPS (+21.28%). Median within-position
+max/min variation was 5.66% / 7.92%, with worst outliers 52.29% / 90.98%; the
+large overall gain exceeds typical noise, but individual three-trial estimates
+remain imprecise. Three alternating completed-depth-ten trials took median
+1.5113 -> 1.2524 seconds at start and 7.0848 -> 5.2239 at Kiwipete, with identical
+search work/results. This is local i5-10210U/WSL2 speed evidence, not an Elo gain.
+A subsequent four-million-node CPU-clock profile still attributed approximately
+55% to NNUE evaluate (including inlined dense/update work) and 12.8% to refresh;
+raw sample addresses were mapped to frozen ELF symbol intervals. Baseline,
+candidates, exact settings, logs, per-position variations and rejected fused
+results are under `.context/baselines/2026-10-16/nnue-byte-dot/`.
+Full Debug and Release suites passed 36/36 each, including standard and neural
+search lifecycles. Focused ASan/UBSan checks passed 4/4 (NNUE, independent
+reference, leaf search and null search; leak detection disabled in this sandbox).
+The existing Windows bundle was refreshed with this byte-identical measured
+Release binary; all 94 manifest hashes verified. Its Windows launcher loaded
+NNUE with a Windows model path, completed depth three, hit a Syzygy root and
+exited cleanly. Restart existing GUI engine processes to load the new binary.
+
+A user-requested comparison built unmodified official Stockfish 13 commit
+`3597f1942ec6f2cfbd50b905683739b0900ff5dd` with upstream
+`profile-build ARCH=x86-64-bmi2 COMP=gcc`, GCC 11.4.0, `-O3`, AVX2/BMI2,
+LTO and PGO; all 69 archived upstream files remained byte-identical. Three
+alternating runs at five million requested nodes, Threads 1, Hash 64, contempt
+zero, pondering/tablebases disabled and the same network measured median
+1,188,769 NPS at start and 1,189,871 at Kiwipete with normal `Use NNUE=true`
+(the original hybrid policy). Classical mode measured 1,231,572 and 1,279,600.
+Hybrid ranges were 994,858–1,276,781 / 1,096,236–1,234,822 NPS; classical
+1,215,406–1,275,556 / 871,198–1,350,804. Different search trees, evaluation
+policies, compilers and build optimizations mean this comparison does not
+isolate NNUE inference cost or measure relative strength. Logs and identities
+are alongside the Maxima byte-dot results.
+
+A subsequent NNUE-only comparison used unmodified official Berserk 13 with its
+pinned `berserk-d43206fe90e4.nn` network. Source `Evaluate` uses neural
+`Propagate` with scaling and material-draw handling, with no classical positional
+evaluator switch; all 63 archived upstream files verified unchanged. Built with
+upstream `make pgo CC=gcc ARCH=native`, GCC 11.4.0, `-O3`, LTO, PGO and native
+AVX2/BMI2. Three alternating fresh-process five-million-node runs per engine,
+one worker, Hash 64, contempt zero, books/experience/pondering/tablebases off,
+measured median full-budget wall throughput as follows:
+
+| Position | Berserk 13 NNUE | Current Maxima NNUE | Ratio |
+|---|---:|---:|---:|
+| Start | 1,229,624 NPS | 514,164 NPS | 2.39x |
+| Kiwipete | 900,549 NPS | 521,371 NPS | 1.73x |
+
+Berserk polls node limits and does not necessarily print final nodes at bestmove;
+its budget/wall figure is approximate and conservatively excludes any small
+budget overshoot. Last displayed NPS is recorded separately. Maxima reports
+exactly five million visited nodes. Trial ranges were Berserk 1.170–1.231M /
+0.874–1.181M NPS and Maxima 0.428–0.530M / 0.503–0.523M (start/Kiwipete).
+All 12 best moves were independently checked legal. Different neural
+architectures, search/node mixes and compiler/PGO settings prevent attribution
+of the remaining gap to inference alone; this is not relative-strength evidence.
+Details, source verification, identities and logs are under
+`.context/baselines/2026-10-16/berserk-nnue/`. No engine changes were made for
+this comparison.
+
+The subsequent 2026-10-16 CPU-cost diagnosis verified that canonical Release and
+Windows bundle still share SHA `88ba9f671db821edf71efd172099ffa786261e7fdb54068b3e884accc16b360a`,
+with `-O3 -DNDEBUG -march=native`. CPU-clock samples land on actual AVX2 byte-dot
+instructions; a no-AVX2 NNUE-object microbenchmark is about 2.4x slower for warm
+inference. However, the then-current activation-clipping loop processed one value at
+a time. A five-million-node Kiwipete profile attributed approximately 28.17% of
+whole-process sampled CPU time to this loop, 21.73% to dense layers/output,
+12.66% to full accumulator refresh and 3.89% to incremental updates. Vector
+register instructions in the clipping loop handle individual scalar values;
+their presence alone does not demonstrate efficient vector packing.
+
+A local packing-only prototype clips/packs 32 lanes at a time with AVX2 while
+preserving all clipping, perspective/lane ordering and network arithmetic.
+Three rotated five-million-node trials per configuration measured median
+ordinary Release / same-source LTO / packing candidate throughput of
+526,929 / 542,727 / 764,922 NPS at start and
+531,073 / 533,104 / 723,892 at Kiwipete. Packing improved 45.17% / 36.31%; LTO
+changes of 3.00% / 0.38% were within local variation. All final search results
+and pruned totals matched. Independent reference comparisons passed 3426 cases;
+exhaustive int16 clipping/lane-order checks and focused ASan/UBSan passed.
+This identifies a specific generated-code bottleneck, not globally inactive
+SIMD. At that diagnostic stage, the packing candidate had not undergone full
+22-position or complete engine-suite acceptance and had not replaced production
+or the Windows bundle. It was subsequently validated and installed as recorded
+below. PGO was not tested in this diagnosis.
+
+Counter-only searches additionally found 1,436,003 missing-parent refreshes and
+970,943 king-change refreshes across 8,743,108 perspective states at Kiwipete;
+4,371,554 raw NNUE evaluations were requested over five million visited nodes.
+Search-stack evaluation caching returns before raw NNUE, so zero internal
+ready-perspective reuses here does not imply missing search evaluation caching.
+Berserk's source explicitly packs vector activations and skips zero first-layer
+chunks. Its actual release13 constants define 2x1024 accumulators and
+2048->16->32->1 dense layers; the upstream README architecture shorthand repeated
+in the earlier private comparison was stale and is now corrected there.
+Full diagnostic evidence and prototype source:
+`.context/baselines/2026-10-16/nnue-cost/`.
+
+The user subsequently authorized promotion of vector activation packing as the
+new baseline. Production `nnue::detail::clip_activations` clips and packs 32 lanes
+per AVX2 vector, restores lane order across 128-bit halves, preserves perspective
+order and retains the scalar fallback. Permanent tests exhaustively cover every
+signed int16 value, asymmetric lanes, both sides to move and scalar/SIMD equality.
+Release36/36, Debug36/36 and focused ASan/UBSan4/4 passed, including independent
+reference/lane checks and standard/neural search lifecycles. Separate no-AVX2
+compilation of the production helper tests also passed.
+
+The accepted three-alternating-trial 22-position/500k-visited-node corpus run
+measured median per-position throughput 571,096 -> 845,561 NPS and median gain
+48.36% (range +43.08% to +59.09%, no median regressions). Aggregate visits divided
+by wall seconds measured 561,149 -> 832,790 NPS (+48.41%). Median within-position
+max/min trial variation was 5.91% / 6.63%, worst 26.73% / 35.57%. All final
+scores/bounds/PVs/bestmoves/depths/visits and pruning totals matched. Three
+completed-depth-ten trials took median start 1.18985 -> 0.81518 seconds and
+Kiwipete 4.69869 -> 3.37439 seconds, with identical search work and results.
+Settings remained Hash64, one worker, pinned NNUE, contempt zero,
+books/experience/ponder/tablebases off; EPD clocks were preserved. No other
+task-owned CPU-heavy work ran during timing. These local speed results are not
+Elo evidence; do not multiply summaries from different benchmark runs.
+
+Canonical Release, measured candidate and installed Windows engine share SHA256
+`448cee5704bcac95b35d5a3980ed4cd60e9e4231e8da8ba64451d32b0f5ceb22`.
+All94 bundle manifest hashes verified, and its Windows launcher passed NNUE
+Windows-path load, legal depth-three search, direct Syzygy root and clean exit.
+Restart existing GUI engine processes to load this new baseline. Prior bundle
+files were backed up. Full evidence:
+`.context/baselines/2026-10-16/nnue-packed-base/`.
+
+Follow-up diagnostic counters on this baseline confirmed that leaves dominate:
+quiescence visits were 70.92% at start / 86.50% at Kiwipete; quiescence plus the
+last three main-search plies covered 98.62% / 99.27% of five million visited
+nodes. Non-check qsearch entry generated 13,045,793 / 2,291,221 quiet moves;
+12,832,864 / 2,202,498 legal non-checking quiet moves were subsequently discarded,
+approximately 99% of legal ordinary quiet returns. Those q0 buckets incurred
+199,792,445 / 42,428,362 move-selection comparisons across all stages. Deeper
+checked quiescence nodes at Kiwipete additionally generated 5,157,213 quiet moves
+and incurred 79,904,697 comparisons; quiet evasions must remain searchable.
+The exact wall-time gain from specialized checking/evasion generation is not yet
+measured. Any candidate must retain check discoveries, ordering, castling,
+promotions, evasions, rule50 and stalemate handling; disabling all quiets would
+change search behavior and can misclassify stalemate.
+
+An independent counter-only Berserk13 search made 3,078,377 / 2,551,521 raw
+neural evaluations over approximately five million visits (start/Kiwipete),
+compared with Maxima's 4,492,190 / 4,371,554. Berserk recorded 182,737 / 305,335
+quiescence TT score cutoffs and 263,125 / 363,774 cached q static evaluations.
+At that stage, Maxima qsearch did not probe TT scores or reuse static neural
+evaluations across transpositions; its per-position stack cache remained. Different trees and main/q
+node mixes mean these counters do not isolate a predicted NPS gain. Future TT
+work must preserve evaluator, history, clock and terminal-draw context. Both
+instrumented Maxima searches matched baseline results and pruning totals;
+no leaf-policy changes are included in the installed packing baseline. Evidence:
+`.context/baselines/2026-10-16/leaf-cost/`.
+
+The next quiet-leaf experiment retained one legal quiet witness when no generated
+ordinary quiet could give check, then skipped the remaining selection work.
+Checks/evasions and actual search results were preserved, but it still generated,
+scored and scanned all quiet moves. Three alternating 22-position trials showed
+median gain5.27% amid median max/min variation28.55%/27.84%; a longer five-pair
+CPU2-pinned five-million-node follow-up found only1.90% /0.81% process-CPU gains
+at start/Kiwipete, with mixed paired signs and larger variation. It was rejected
+and the original move picker restored. The narrower pruned-move counts in its
+logs reflect skipped unused quiet enumeration, not changed visited-node totals.
+Candidate and rejected evidence:
+`.context/baselines/2026-10-16/quiet-leaf/`.
+
+A subsequent accepted optimization adds a private cache of undamped neural
+static scores to each search. It lazily allocates65,536 entries (1MiB here),
+stores the full board/side key and Maxima-centipawn neural score before rule50
+damping, and clears on every search initialization. Its model identity is the
+search's immutable snapshot. Material/pawn metadata and current clock damping
+still run; terminal/draw checks remain before evaluation. HCE/royal-losers do
+not allocate this cache. This does not add searched-score cutoffs to qsearch.
+Permanent tests revisit the board through a legal knight cycle across clock8->12,
+verify cached100cp becomes90cp with current damping exactly once, verify metadata
+and skipped inference, and verify cache reset on reinit. Existing model lifetime,
+load/unload, score-bound and independent accumulator/reference checks pass.
+Release36/36, Debug36/36, focused ASan/UBSan4/4 and both lifecycle suites passed.
+
+Three alternating CPU2-pinned 22-position/500k-visited-node trials used the same
+NNUE, Hash64, contempt zero and disabled books/experience/ponder/tablebases, with
+EPD clocks preserved and no task-owned concurrent timing load. Final scores,
+bounds, PVs, bestmoves, depths, visits and pruning totals all matched. Aggregate
+wall throughput improved843,697->906,380 NPS (+7.43%); aggregate process-CPU
+throughput863,396->927,900 (+7.47%). Median per-position gains were5.45% wall /
+5.06% CPU; median trial max/min wall variation5.46%/3.54%. Four position medians
+regressed: corpus4 -3.90%,7 -1.27%,8 -4.40%,14 -3.76%. Keep these limitations
+visible rather than claiming universal improvement. Exploratory position-block
+bootstrap of paired CPU log ratios suggested geometric gain8.43% with an interval
+[4.39%,13.26%]; it was not a predeclared statistical guarantee or strength test.
+
+Three pinned five-million-node pairs measured start essentially flat (+1.22%
+CPU), Kiwipete +21.09% CPU (all paired gains19.3–22.8%). Completed depth10
+measured start .79270->.81826s with noise, Kiwipete3.25968->2.66846s (+22.16%
+throughput, trial ranges1.45%/.71%). Counter-only runs avoided830,219/4,492,190
+neural requests at start (18.48%) and1,719,794/4,371,554 at Kiwipete (39.34%).
+Score hits can leave accumulators unready: start missing-parent refreshes rose
+1,043,574->1,410,370, helping explain its small gain. Compatible-ancestor lazy
+updates or cheap accumulator maintenance remain further measured candidates.
+
+The accepted static-score cache is now installed in canonical Release and the
+Windows bundle, SHA256
+`22d100141fcc61ae01274aeca020c127d519679bc7e53cd1b3db869b98aca422`.
+All94 manifest hashes verified; Windows launcher NNUE load, depth-three legal
+move, Syzygy root and clean exit passed. Restart GUI engine processes. Full
+protocol, per-position results, regression ranges, source identities, diagnostics
+and prior bundle backups:
+`.context/baselines/2026-10-16/neural-static-cache/`.
+
+The next accepted optimization reuses a ready ancestor accumulator when neural
+score-cache hits left the immediate parent unready. Each perspective walks the
+active prepared states backward, stopping at a changed king anchor or when the
+feature-operation cost reaches a fresh rebuild. It copies the compatible ready
+base once and applies intervening feature changes in order. Ancestors remain
+read-only; immediate-parent and scalar paths, clipping, arithmetic, model and
+search policies are preserved.
+
+The final Release binary passed three alternating CPU2-pinned trials of the same
+22-position corpus at500,000 visited nodes per position, Hash64 and one worker,
+with books/experience/ponder/tablebases disabled and recorded clocks preserved.
+Aggregate wall throughput improved934,839->992,654 NPS (+6.18%); process-CPU
+throughput938,708->996,145 (+6.12%). Median per-position wall gain was6.44%,
+with no position-median regressions in this final run. Median within-position
+max/min variation was1.54%/2.38%. An earlier prototype run gained5.92% overall
+but had one position regression (corpus21 -2.46%); three-trial estimates retain
+noise. All final scores, bounds, PVs, bestmoves, depths, visits and search-result
+pruning/provenance totals matched exactly.
+
+Three alternating five-million-node pairs on the final binary measured median
+start796,455->883,009 NPS (+10.87%) and Kiwipete941,584->984,445 (+4.55%).
+Process-CPU gains were10.15%/5.39%, with maximum trial ranges below0.8%.
+Separate completed-depth-ten medians were start .81159->.71255 seconds and
+Kiwipete2.70321->2.55589 seconds. These are local speed measurements, not Elo.
+
+Full Release36/36 and Debug36/36 suites passed. Independent reference tests
+passed2642 score/accumulator comparisons, including skipped evaluations through
+captures, underpromotion, en passant, castling, king changes, null moves and undo;
+a forced no-AVX2 NNUE object passed the same checks. Production-path focused
+ASan/UBSan4/4 passed, including both lifecycle suites (sandbox leak detection off).
+Audit-mode native NNUE/reference/search-audit tests and search lifecycle passed;
+an audit neural-lifecycle run passed30/31 before correcting its timer fixture,
+and that isolated corrected case then passed. The fixture now gives a750ms
+hard budget under its one-second assertion; its previous1050ms budget could
+legitimately exceed that assertion. The cache fixture also explicitly disables
+audit verification when checking that a cache hit skips inference. Neither
+fixture correction changes production time management or evaluation.
+
+Canonical Release, frozen final candidate and installed Windows engine now share
+SHA256 `66675658291b42748ad05cd589ddb863f5c42f7dabb31d08e4bfacaa3e178643`.
+All94 bundle hashes verified after backup and installation. Windows launcher
+NNUE load, depth-three legal search, Syzygy root and clean-exit checks passed.
+Restart existing GUI engine processes to load it. Protocol, per-position results,
+source identities, validation logs and bundle backups are under
+`.context/baselines/2026-10-16/nnue-ancestor/`.
+
+The next accepted leaf-cost optimization shortens quiet-move selection while
+preserving the complete returned sequence. In the final quiet phase of standard
+chess, the previous maximum score bounds the remaining frozen scores. Scanning
+can stop at its first occurrence, preserving the original first-maximum and
+swap-removal tie order; if absent, a complete scan finds the next maximum.
+The existing returned-move slot stores this bound, initialized to INT_MAX for
+the first scan. No new search state, layout, allocation, generator, evaluation,
+legality or search-policy change is included. Other variants retain the original
+selection. Direct-only quiet-check generation remains unimplemented here:
+filtering unused moves can change the order of equally scored checks.
+
+Independent original-picker shadow checks compared every quiet return and the
+remaining list. Ordered SHA256 node traces matched3,715,559 root/PVS/quiescence
+entries per side over31fixtures, including all22corpus positions and special
+moves, checks/evasions, discovered checks, stalemate and clock99. Each entry
+records board key, window, depth, ply, fifty counter and node kind. Permanent
+checks compare the original max/swap algorithm across768combinations of history
+ties, hash/killer hints, positions and depths. Full Release36/36, Debug36/36 and
+focused ASan/UBSan4/4 passed, including both lifecycle suites; sandbox leak
+checking was disabled. No sanitizer diagnostics appeared in captured test logs.
+
+The final canonical Release passed three alternating CPU2-pinned runs on the
+same22-position modern_2026 corpus at500,000visits each, one worker, Hash64,
+unchanged NNUE, contempt0 and books/experience/ponder/tablebases disabled.
+Recorded EPD clocks were retained. All final scores, bounds, PVs, bestmoves,
+depths, visits and pruning/provenance totals matched. Aggregate wall throughput
+improved978,996->1,021,839NPS (+4.38%); process-CPU gain4.38%. Median position
+gain was5.00%, with no position-median regressions in this run. Median trial
+max/min variation was2.13%/1.57%. The private candidate independently measured
++4.83% aggregate with no median regressions and1.79%/1.75% typical variation.
+
+Longer timings were less stable. The first three five-million-node pairs showed
+only1.83%/1.00% wall gains at start/Kiwipete, amid CPU trial ranges8.7–19.1%.
+One predeclared five-pair retry measured median871,082->899,906NPS at start
+(+3.31%) and978,124->1,012,242 at Kiwipete (+3.49%). Nine of ten paired CPU
+comparisons favored the candidate, but one start pair regressed8.74%; within-side
+CPU ranges still reached19.7%. No samples were removed or further retries added.
+Retain this optimization on the two repeated corpus gains exceeding typical
+corpus variation; precise long-run per-position gains remain uncertain.
+Completed-depth-ten final medians were .86933->.71817s at start and
+2.70787->2.67240 at Kiwipete, but trial ranges14–42% prevent interpreting these
+as reliable depth-time gains. These are speed measurements, not Elo evidence.
+
+An earlier maximum/count-field prototype was rejected after matched-flags pilot
+CPU changes -1.81%/-1.50%. Initial private-build timings inherited extra conda
+flags and were invalidated before acceptance; all retained candidates use the
+canonical empty extra C/CXX flags. Original failed/confounded attempts remain
+archived. Canonical Release, frozen final and installed Windows bundle now share
+SHA256 `dd022848a5c613ccf0b117afcaa34dc618398bd6e75809b5f6d2d2eeac11b6b7`.
+All94 bundle hashes verified after backup/update. Windows launcher NNUE load,
+legal depth3, Syzygy root and clean exit checks passed. Restart GUI engine
+processes to load it. Full protocol, raw logs, profiles, test evidence, source
+backups and identities: `.context/baselines/2026-10-17/quiet-order/`.
 
 For paired A/B games, select `--model-a EvalFile=/absolute/path/to/network.nnue`
 and `--option-a UseNNUE=true`; engine B can use the same executable with HCE.
@@ -551,31 +945,120 @@ eight opportunities to claim one by an intended move. Its final loss had no
 termination header; the GUI sent `quit` near clock exhaustion. The preserved
 PGN/log and diagnostic fixtures remain reserved from training.
 
-Private progress-policy experiments are queued after that timed match finishes:
-baseline, first-repetition scoring, rule50 damping, and both changes together.
-The first-repetition candidate cuts a below-root match against either game or
-search history, while actual-root claims still require three occurrences.
-The rule50 candidate uses SF13's `(100 - halfmove_clock) / 100` static-score
-factor, clamped to the rule range; modern Stockfish uses milder damping, so the
-SF13 factor is a candidate, not a claimed optimum. The raw NNUE core remains
-unchanged. Because the candidate makes static scores clock-dependent, its
-prototype restricts TT clock validity on evaluation and cached returns.
-Queued checks cover actual-root versus search repetition, null boundaries,
-cached-value scaling, clock validity and warm/cold TT agreement before saved-game
-conversion probes. These experiments do not change production defaults or the
-frozen strength-match engine, and no strength benefit has been established.
+Earlier private progress-policy experiments completed: baseline, first-repetition
+scoring, rule50 damping, and both changes together. The first-repetition
+candidate cuts a below-root match against either game or search history, while
+actual-root claims still require three occurrences. The rule50 candidate uses
+SF13's clamped `(100 - halfmove_clock) / 100` static-score factor; modern
+Stockfish uses milder damping, so this is not a claimed optimum. The raw NNUE
+core remains unchanged. The prototype restricts TT clock validity on evaluation
+and cached returns, retaining move hints when scores are unusable.
+Exact-clock score reuse is a conservative private prototype policy, not the
+Stockfish baseline or an accepted production choice. SF13 reuses across clocks
+and guards main-search TT cutoffs at clock90; current upstream uses coarse
+clock buckets in its TT key (eight-ply groups starting at clock14), with a
+main-search cutoff guard at clock96. These are pragmatic history safeguards,
+not exact clock equivalence; quiescence has a separate TT path. The throughput/
+reuse cost of our exact-clock candidate has not been measured. Review and test
+this tradeoff before production integration.
+All four private contract checks passed, covering repetition/null boundaries,
+cached scaling, clock validity, ancestor propagation and warm/cold TT agreement.
+Twelve saved-game probes changed plans but none chose immediate h6 at the final
+position. Those exact-clock prototypes were not promoted. The subsequent
+user-requested implementation uses bucketed damping/context instead, integrates
+the first-repeat rule below the root, and updates live/fresh audit expectations.
+The Windows bundle was subsequently updated and smoke-tested through its
+Windows launcher; all 94 manifest-file hashes verified. No strength gain or complete conversion
+fix has been established for the new policy.
+On three full-history saved-game roots at a 500k visited-node cap, White50
+changed Rd3→Rd2, White178 Rh8→Rd8+, and White203 Rd5+→Re5, predicting
+`Re5 Rf1 f5 Kc7 f6 Rxf6+ Kxf6 Kb6`. Immediate h6 was still not selected.
+All 36 Release checks, two audit/reference checks and three focused ASan/UBSan
+checks passed. Audited searches from all three roots exactly matched production
+moves/PVs/scores/bounds/depth/work while verifying live/fresh neural state.
+A small isolated starting-position throughput check (500k visits, two trials)
+showed median HCE 0.3933/0.3935 seconds before/after and NNUE 1.0732/1.0772;
+this is not a general speed or strength result. Full replay/configuration/test
+artifacts: `.context/gui-tests/2026-10-15/progress-integrated/README.md`.
 
-A fresh current-build NNUE–HCE confirmation is running independently: fixed
+
+The fresh current-build NNUE–HCE confirmation completed and passed its audit:
 200 games / 100 fresh color-swapped opening pairs, 5+0.05 seconds, Hash64,
 one worker, identical ordinary Release binary and production search defaults.
-Only the evaluator differs; books, pondering, contempt, experience and tables
-are disabled. Predeclared win adjudication requires both engines to agree at
-1000 cp for six consecutive plies from move 20. Results remain pending; the
-pipeline automatically checks identities, legal games, score evidence, node
-counts and paired statistics. Errors, unfinished games or clock forfeits
-invalidate acceptance. Adjudicated wins cannot establish conversion skill.
+Only the evaluator differed; books, pondering, contempt, experience and tables
+were disabled. NNUE scored 73 wins, 89 draws and 38 losses (58.75%). Its
+conservative 95% opening-pair interval is 45.17–72.33%, including 50%; this
+encouraging result does not establish that NNUE is decisively stronger or
+justify deleting HCE. NNUE visited 544,642,560 nodes in 1327.916 charged seconds;
+HCE visited 1,770,504,141 in 1317.340 seconds. There were zero errors, unfinished
+games or clock forfeits. The audit checked identities, all 25,277 legal plies,
+score evidence, node counts and paired statistics. Of 200 games, 105 used the
+predeclared 1000 cp / six consecutive plies / move-20 win adjudication, 89 ended
+by threefold repetition and six by checkmate. Adjudicated wins cannot establish
+conversion skill. HCE remains available and defaults are unchanged.
 Private artifacts: `.context/gui-tests/2026-10-15/` and
 `.context/baselines/2026-10-15/nnue-hce-current/`.
+
+A new controlled NNUE-versus-HCE match was prepared on 2026-10-17 using the
+shared period-reserve Release binary (`2e17702095a9828bb936dbd3d26d6a2c6590270c20477582e31d1259357ba5ad`).
+The predeclared cap is 1000 fresh color-swapped opening pairs at 10+0.1 seconds,
+Hash64, one worker, Move Overhead100, contempt zero, no books/experience/ponder,
+and identical complete five-piece tables. Only NNUE loads the pinned network.
+`--min-elo 0` requires a simultaneous 95% lower score bound above 50% before
+acceptance; a cap without a crossing is inconclusive. Score adjudication needs
+both engines to agree for six plies at 800 cp or more from move20. Such wins
+do not establish conversion skill. Failures, time forfeits, illegal moves or
+unfinished games invalidate acceptance, rather than counting as strength evidence.
+The protocol, frozen runner/dependency/runtime files, openings, games and an
+automatic independent legal/statistical audit live under
+`.context/baselines/2026-10-17/nnue-hce-strength/`.
+`pipeline-status.json`, `results.json` and the eventual `audit.json` are the
+authoritative progress/result records. Preparing or starting this match is not
+evidence that NNUE has passed the gate. Keep HCE until it passes its audit.
+This match subsequently passed: it stopped at the first boundary crossing after
+33 pairs / 66 games, NNUE 56 wins, seven draws and three losses (90.15%). The
+simultaneous 95% lower score bound was 50.082%, above the predeclared 50% target.
+Independent audit passed all 8776 legal plies, configurations, identities,
+clock/node records, adjudication evidence and every prior stopping checkpoint.
+There were zero errors or time forfeits. Of 66 games, 59 ended by score
+adjudication, two by the fifty-move rule, four by repetition and one by stalemate.
+The automatic audit initially used the wrong PGN filename; changing only
+`games.pgn` to the actual `results.pgn` allowed the unchanged audit criteria to
+run successfully. Original logs/source and an explicit correction receipt are
+preserved. The protocol and scored games were unchanged. This passes the
+requested strength gate under these settings and authorizes the planned HCE
+cleanup; it does not establish a general Elo rating or conversion strength.
+HCE removal itself has not yet been implemented.
+At the user's request, a separate three-game 10+0.1 depth diagnostic then used
+the same frozen engines and settings on three unplayed reserved openings,
+alternating colors. NNUE won all three by the same score adjudication rule;
+these games do not extend the completed strength test. Across 217 searched
+moves per evaluator, mean completed depth was NNUE 9.14 and HCE 10.17 plies,
+with medians nine and ten. Through move40 the means were 8.91 and 9.39.
+All normal search options were explicitly enabled and both engines reported
+millions of pruned moves; individual feature invocation counters were not
+collected. The depth averages exclude book/direct-tablebase/terminal returns
+and unfinished zero-depth iterations (none occurred in this sample). HCE's
+late-game depths included 74- and 32-ply iterations with relatively few nodes,
+so maximum depth is not representative. Independent replay verified all 482
+legal plies, serialized depth comments, sampling coverage and configurations.
+Artifacts: `.context/baselines/2026-10-18/depth-three/`.
+
+The separate preliminary screen against the archived pre-counter-correction
+HCE executable completed: current NNUE scored 9 wins, five draws and six losses
+(57.5%) over 20 games / ten fresh color-swapped opening pairs, 5+0.05 seconds,
+Hash64 and each version's native search defaults. Audit passed all 2681 legal
+plies, provenance, configuration, clock/node records and adjudication evidence;
+zero errors, unfinished games or clock forfeits. Fifteen games used the agreed
+1000 cp / six plies / move-20 win adjudication, five ended by repetition.
+This shows competitiveness in the small screen, not a reliable strength/Elo
+advantage: the conservative paired 95% interval is 14.55–100%, including 50%.
+Current NNUE visited 59,770,256 nodes in 137.088 charged seconds; archived HCE
+reported 769,514,426 nodes in 135.196 seconds INCLUDING skipped moves. These
+node totals cannot be compared as equal counters. The matchup compares complete
+historical/current versions and does not isolate an evaluator or pruning gain.
+No extension beyond 20 games was started. Frozen protocol, games and audits:
+`.context/baselines/2026-10-15/nnue-versus-archived-screen/RESULT.md`.
 
 Live search diagnostics are available in a separate build configured with
 `-Dmaxima_nnue_search_audit=ON` and a nonempty `maxima_nnue_test_network`.
@@ -1704,6 +2187,29 @@ automation, frozen inputs/binaries and audits are private under
 `.context/baselines/2026-10-15/depth-six-baseline/`, reserved from training.
 Managed-time games remain the strength gate.
 
+The depth-seven continuation completed all100games on the same50FENs, color
+order, seed, model, options and exact frozen restricted controls as depth6.
+Only both requested depths changed6to7; the installed faster playing binary
+remains separate. Results were17wins/82draws/1loss (58.0%), compared with
+24/73/3 (60.5%) atdepth6. Middlegames scored9/41/0 (59.0%) and endings8/41/1
+(57.0%). White scored9/40/1, Black8/42/0. The lone loss was White in game7,
+rook_endgame-08, ending in checkmate after72plies.
+
+All8878legalplies and completed depth-seven searches passed independent
+PGN/PV/depth/identity/options/work audits, with zero unfinished games or forfeits.
+Maxima's existing endgame null verification became reachable:3535calls were
+proved by counter-only same-policy warm replay of3169Maxima searches, all
+matching move/PV/cp/mate/fullwork exactly. SF had zero accounting residual.
+LMR operated atremaining3..6, IID atparents4..7 and aspiration atdepths4..7,
+without cancellation. Total visits were479570393/408657742 (Maxima/SF), a17.35%
+excess versus43.01% atdepth6; diverging game paths prevent interpreting this as
+an isolated pruning improvement. The shared network, aligned features and
+endgame-heavy sample make frequent agreement plausible, but these factors were
+not separately ablated. This is not unrestricted Stockfish or Elo evidence.
+Protocols, immutable identities, games, audits and summaries are private under
+`.context/baselines/2026-10-17/depth-seven-baseline/`, reserved from training.
+No engine or GUI settings changed. Quiet-check generation remains next.
+
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
@@ -1760,12 +2266,12 @@ standalone Windows engine. The bundle is tied to this directory and the CPU
 where the engine was built, but does not require the source checkout to run.
 
 The bundle includes the NNUE weights, opening book, immutable experience file,
-70 installed three/four-piece Syzygy WDL/DTZ tables, and GCC runtime libraries.
+290 installed three/four/five-piece Syzygy WDL/DTZ tables (about 984 MB), and GCC runtime libraries.
 The bridge translates single Windows drive paths for `EvalFile`, `BookFile`,
 `ExperienceFile` and `SyzygyPath` to Linux `/mnt/<drive>/...` paths. In the GUI,
 set `EvalFile` to `C:\dev\maxima\networks\nn-62ef826d1a6d.nnue` before
 enabling `UseNNUE`; use `C:\dev\maxima\syzygy` for `SyzygyPath`, with
-`SyzygyProbeLimit=5` and `SyzygyProbeDepth=1`. No five-piece tables are bundled.
+`SyzygyProbeLimit=5` and `SyzygyProbeDepth=1`. The complete five-piece set is bundled.
 `BookFile` is `C:\dev\maxima\book.bin` and `ExperienceFile` is
 `C:\dev\maxima\experience\experience.bin`. HCE remains separately
 available by turning `UseNNUE` off. The bundle's README lists the configuration.
@@ -1775,6 +2281,64 @@ Copied assets are SHA-256 verified in the bundle's `SHA256.json`. Checks through
 the copied Windows executable loaded NNUE/book/experience/Syzygy using Windows
 paths, completed a legal depth-three search, and reported a Syzygy root hit.
 GUI interaction itself requires the user's Windows desktop.
+
+For Cute Chess, the user's engine folder is `C:\dev\uci-engines`. It contains
+`maxima.exe` and `gnuchess.exe` copies of the existing UCI launchers. These still
+start their bundles at `C:\dev\maxima` and `C:\dev\gnuchess`; keep those asset
+folders in place. A separate `maxima-hce.exe` launcher was added on 2026-10-17
+for a manual NNUE-versus-HCE game. It starts the same current bundled engine;
+the filename does not enforce an evaluator. Add it as UCI, name it Maxima 2 HCE
+and leave `UseNNUE=false`. Keep `UseNNUE=true` and the configured network in
+the existing NNUE entry. `MAXIMA-HCE.txt` in the engine folder lists matching
+Hash64, contempt zero, book/experience off and five-piece Syzygy settings.
+Both launchers passed concurrent depth-four legal searches with their respective
+evaluators; this is a launch check, not a playing-strength result. Artifacts:
+`.context/gui-tests/2026-10-17/nnue-hce-cute/`.
+The first manual HCE-white/NNUE-black game flagged Black at move 80. The observed
+last command supplied 7338 ms and `movestogo 1`; the engine reported 7251 ms,
+leaving only 87 ms before unmeasured bridge/GUI delivery. Cute's saved NNUE
+profile lacked `Move Overhead` entirely, while HCE retained 50 ms. Configure
+200 ms explicitly in both profiles; refresh/re-add a stale NNUE profile if the
+option is absent. Do not treat this time forfeit as evidence of evaluator
+strength. Full GUI transport timestamps were unavailable, so delivery latency
+is an inference rather than a measured cause. No engine change was made.
+The return game (NNUE White) also flagged before completing move 40. Its final
+command supplied 21363 ms and `movestogo 1`, and search stopped at 21313 ms,
+exactly the default 50 ms reserve. Saved Cute profiles had since been set to
+100 ms; saved values therefore do not establish what a running process used.
+Restart the engine processes after changing this setting and verify the UCI
+`setoption name Move Overhead value 200` command in Cute's debug output.
+Fresh Windows-launcher checks on that root with a scaled 2136 ms clock and an
+explicit 100 ms setting stopped at 2036 ms in both trials; end-to-end margins
+were about 73 and 78 ms. Four checks with explicit 100/200 ms settings returned
+legal moves before expiration. These checks do not guarantee margins under all
+Windows scheduling delays. Evidence is in
+`.context/gui-tests/2026-10-17/hce-nnue-time-loss/`.
+The user subsequently chose 100 ms interface overhead and requested a reserve
+specific to the replenishment boundary. The final clock policy described above
+uses 5% of the remaining clock, capped at one second, when `movestogo 1`;
+the earlier 200 ms GUI recommendation is superseded for this setup.
+The period-boundary update passed final Release 36/36 and Debug 36/36 checks,
+including both evaluator lifecycle suites, plus focused ASan/UBSan 2/2 checks
+for UCI clock allocation and search lifecycle. It was installed in the shared
+Windows engine with all 314 bundle manifest hashes verified. Both Cute launchers
+passed a replay of the return game's move-40 root with a scaled five-second
+clock and a separate five-piece root-draw probe. These searches stopped before
+their hard caps; they are not worst-case delivery-latency measurements or a
+strength result. Restart both GUI engine processes. Current installed SHA-256:
+`2e17702095a9828bb936dbd3d26d6a2c6590270c20477582e31d1259357ba5ad`.
+The previous frozen HCE/NNUE comparison binary is retained; a new shared-clock
+comparison executable is frozen separately before any automated strength test.
+Artifacts: `.context/baselines/2026-10-17/period-reserve/`.
+The Maxima bundle now contains the tested first-repeat and
+bucketed rule50 Release engine, SHA-256
+`3abd5b49db1564e23701de9bde92ee7787822546847f0aeaec4086a57c0f6f6f`.
+Its manifest/README were refreshed, prior replaced files backed up privately,
+and NNUE loading with Windows paths, depth-three search and a Syzygy root hit
+passed through both launcher locations. Restart existing GUI engine processes
+to load the replacement. Private update/verification artifacts:
+`.context/gui-tests/2026-10-15/windows-bundle-update/`.
+
 
 The bundled engine was byte-identical to the ordinary Release executable:
 `-O3 -DNDEBUG -march=native`, search auditing off, with AVX2 NNUE instructions
@@ -1786,6 +2350,108 @@ throughput diagnostic, not a playing-strength result or a general speed ratio.
 UCI logging currently opens and flushes a file for each line, so filesystem
 and protocol latency still matter near clock exhaustion; the current clock
 manager reserves only 50 ms. No timing or logging behavior was changed here.
+A later Cute Chess `40/300` game (2026-10-16) flagged Maxima before White's
+40th move. Its complete GUI handshake subsequently showed `UseNNUE=false`:
+that game used HCE despite being named “Maxima 2 NNUE”. Loading EvalFile alone
+does not select neural evaluation. The earlier automated NNUE matches explicitly
+enabled NNUE and are unaffected.
+ The GUI correctly supplied `movestogo 1`, `wtime 13683`; it sent
+`stop` at 13483 ms of reported search, followed by Maxima's `bestmove f2e4`.
+Across the preceding four moves the GUI charged 146–362 ms beyond reported
+search time, exceeding the 50 ms reserve. This is evidence of inadequate
+end-to-end margin; the individual latency source is not yet isolated and no
+timing fix has been applied. The candidate Ne4 was not played, and the next
+control had not been reached. Preserved evidence:
+`.context/gui-tests/2026-10-16/time-forfeit/`.
+
+A second Cute Chess game flagged before White80: the supplied clock was3804ms,
+and final engine elapsed3781ms left only23ms before delivery; the preceding
+two moves had89–90ms of GUI-charged time beyond engine elapsed. Its endgame
+was within installed coverage from White66 (KBPvK), then KPK from White72.
+The root shortcut's reversible-history exclusion caused normal searches after
+otherwise instant capture-reset probes. This is a concrete integration limitation;
+removing that exclusion requires repetition-aware move selection. Preserved log
+and clock analysis: `.context/gui-tests/2026-10-16/second-time-forfeit/`.
+
+The subsequent reliability repair accepts unique reversible histories for direct
+DTZ play, resolves zero-clock WDL outcomes consistently across search windows,
+and counts command handling/setup in the clock budget. Protocol logging is now
+buffered after stdout delivery and deadline polling tightens near expiry; the
+50 ms reserve is unchanged. All 15 covered White roots in the second game,
+in both HCE/NNUE modes, now use direct tablebase moves (30/30; previously4/30).
+White71 selects Kf3 rather than offering the bishop, and White80 selects g7.
+A DTZ continuation from actual White66, using both sides and checking each
+position independently, ended in checkmate after19plies without losing the
+bishop. This is one continuation, not a fastest-mate or longest-defence claim.
+
+Release36/36, focused ASan/UBSan3/3, and concurrent-output ThreadSanitizer1/1
+passed. Three forced300ms searches on the final position with tablebases disabled
+finished at312.36–314.60ms through the old Windows launcher versus300.61–300.69ms
+after repair. The real final position with tablebases enabled returned g7 in
+2.87ms through the updated launcher. The earlier89–90ms excess was not reproduced;
+a full GUI game remains necessary. The Windows bundle was updated and all94
+manifest entries verified. Evidence and frozen before/after binaries:
+`.context/gui-tests/2026-10-16/reliability-fixes/`.
+
+The next full Cute Chess NNUE game at40/300 ended with72.Qa5# (1–0), with
+all White moves49–72 selected directly from tablebases. For moves49–71,
+successive GUI clock readings minus engine elapsed times give0–2ms excess,
+median1ms. The last move has no following clock reading. Longer searches
+show negative differences between the two clocks, so this log does not
+establish exact interface latency throughout the game. The clock reserve is
+now configurable through `Move Overhead`, default50ms, range0–5000ms.
+Evidence: `.context/gui-tests/2026-10-16/move-overhead/`.
+
+
+A subsequent starting-position `go depth 14` test, one fresh process per mode
+with the same Hash64/options, completed in 1.810 seconds for archived HCE,
+11.330 seconds for current HCE, and 25.970 seconds for current NNUE. Current
+completed-depth metadata confirmed depth14 with no interruption; the old
+unlimited-depth14 command finished normally. Current HCE visited 13,943,212
+nodes; NNUE visited 10,297,207. Old output reported 10,892,953 including skipped
+moves, so it is not directly comparable to those visited totals. The 6.26x
+HCE time-to-depth increase is real on this workload and independent of NNUE or
+node reporting. Historical/current search selectivity and trees differ; one
+position/trial at equal nominal depth does not establish equal strength or a
+general regression. The policy causing the difference has not been isolated.
+Full logs/results: `.context/gui-tests/2026-10-15/post-reboot/depth14-results.json`.
+
+Controlled post-reboot follow-up (2026-10-15) supersedes the inference in the
+user-observation note below that low NNUE rates necessarily came from system
+sluggishness. Three fresh-process trials per mode/position, rotated order,
+Hash64 and one million visited-node budget, produced these medians:
+
+| Position | Evaluator/version | Reported nodes | Reported NPS | Wall seconds |
+|---|---|---:|---:|---:|
+| Start | Archived HCE | 5,940,819 | 7,325,300 | 0.812 |
+| Start | Current HCE | 1,000,000 | 1,272,264 | 0.787 |
+| Start | Current NNUE | 1,000,000 | 461,893 | 2.166 |
+| Kiwipete | Archived HCE | 4,641,576 | 4,506,384 | 1.032 |
+| Kiwipete | Current HCE | 1,000,000 | 1,302,083 | 0.769 |
+| Kiwipete | Current NNUE | 1,000,000 | 452,284 | 2.212 |
+
+NNUE was explicitly loaded and enabled; HCE explicitly disabled NNUE. All 18
+searches exited successfully. Books, pondering, contempt and tables were off;
+working directories were empty Linux temporary directories. Old totals include
+skipped moves; its stopping budget counts visits. Policies/search trees differ,
+so this is not equal-depth or strength evidence. Load averages were low and the
+old 7–8M starting-position rate reproduced. Nevertheless, current NNUE measured
+0.45–0.46M on these workloads, rather than the user's observed 1.3M. Their exact
+position/settings were not captured, so that discrepancy remains unresolved.
+Do not assume which evaluator they used, or interpret these two positions as a
+universal/optimal speed baseline. Protocol, hashes, logs and results:
+`.context/gui-tests/2026-10-15/post-reboot/`.
+
+Post-reboot correction (2026-10-15): the user observed the archived engine
+return to 7–8M reported NPS and current NNUE reach approximately 1.3M visited
+NPS. Before reboot, even the archived engine had fallen to 1.82M and typing was
+sluggish. The exact resource culprit was not identified. Earlier 0.4–0.5M NNUE
+measurements and the profile below came from that suspect pre-reboot environment;
+they must not be treated as healthy-machine absolute rates or evaluator speed
+ratios. Post-reboot figures are user observations, without a captured matching
+position/settings protocol. For future performance claims, check system health
+and repeat matched workloads. The different old/new node conventions still
+prevent directly comparing 7–8M with 1.3M.
 
 Historical HCE figures around 7.6–7.8M NPS used the older reporting convention
 that added pruned moves to visited nodes, corrected in `05a3c4d`. Replaying the
@@ -1798,6 +2464,20 @@ reported totals were 500,000 and NPS 1.37M/1.40M. The lower displayed NPS does
 not demonstrate a matching HCE throughput regression. Different search trees
 and depths prevent interpreting these fixed-visit timings as equal strength
 or equal time-to-depth. NNUE's separately measured inference/search cost remains.
+The old skip count included quiet moves discarded in quiescence; it was not a
+measurement of the fraction of a hypothetical full tree pruned away.
+
+A subsequent single-position CPU profile used four million visited nodes per
+evaluator on ordinary Release: HCE took 3.209 engine seconds (1.246M NPS),
+NNUE 9.006 seconds (0.444M NPS). Approximately 64% of NNUE user-space self
+samples mapped to neural evaluation, including the AVX2 affine loops, and 10%
+to accumulator refresh. Sampling offsets were mapped to the executable's text
+symbols; percentages are approximate, without callstack attribution. These are
+different search trees, not equal-depth or strength results. They locate
+neural work in that pre-reboot run; fresh measurements under healthy machine
+conditions are needed before drawing performance conclusions. Private profile data and symbol mapping:
+`.context/gui-tests/2026-10-15/cpu-profile-functions.json`.
+
 
 GNU Chess 6.3.0 is also bundled locally at `C:\dev\gnuchess`; add
 `C:\dev\gnuchess\gnuchess.exe` as a second UCI engine. It uses the same
@@ -1888,6 +2568,171 @@ neither a speedup nor an Elo gain. Keep these build modes opt-in until measured.
 See [GCC profiling](https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html)
 and [GCC optimization](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)
 for the underlying flags.
+
+Measured compiler experiment, 2026-10-17: all four configurations used the
+same frozen source, GCC 16, ordinary Release flags, and unchanged NNUE network.
+Each passed the full Release suite (36/36), including independent NNUE checks
+and search lifecycle tests. Each PGO configuration trained from fresh, separate
+profiles on 104 searches: 64 NNUE, 16 HCE, 16 royal-losers, and eight four-piece
+tablebase probes. Training covered eight game stages, both sides to move, and
+72 distinct roots; measurement roots were held out.
+
+The primary measurement used the existing 22-position NNUE corpus, 500,000
+visited nodes per position, three rotated rounds, one worker and Hash 64.
+Books, experience, pondering and tablebases were disabled for these searches.
+Results below compare wall throughput with ordinary Release; positive means
+faster. Trial variation is the median across positions of the three-run
+maximum/minimum timing spread, expressed as a percentage.
+
+| Build | Aggregate gain | Median position gain | Trial variation | Positions with slower medians |
+| --- | ---: | ---: | ---: | ---: |
+| Release | baseline | baseline | 24.22% | — |
+| LTO | +4.53% | +3.75% | 19.87% | 7/22 |
+| PGO | +1.07% | +3.95% | 24.26% | 7/22 |
+| PGO+LTO | -2.65% | +6.25% | 43.19% | 7/22 |
+
+A bounded confirmation on another pinned CPU repeated the complete NNUE corpus
+for Release, LTO and PGO+LTO. Aggregate gains were +1.46% and +1.94%, median
+position gains +2.94% and +3.40%, with trial variation 26.07%/34.05%/27.40%.
+Eight LTO and seven PGO+LTO position medians regressed. CPU-time measurements
+closely tracked wall measurements. No samples were discarded.
+
+Longer start-position/Kiwipete searches used five million visits, three rounds.
+Initial aggregate gains of +12.67%/+11.30%/+17.95% for LTO/PGO/PGO+LTO did not
+repeat: confirmation gave -0.56% for LTO and +2.19% for PGO+LTO, with both
+candidates slower at each position's median. Completed-depth-10 confirmation
+looked better (+4.72%/+5.04% aggregate), but the conflicting longer searches and
+large variation prevent accepting those numbers as a general speedup.
+
+Across 792 initial and 234 confirmation searches, all compared builds/repeats
+matched bestmove, scores, PVs, depth, visited nodes, pruning/result provenance,
+and every reported unbounded scored iteration. Bestmoves and reported PVs were
+independently replayed for legality. Initial coverage also included HCE,
+royal-losers and tablebase roots; tiny root-probe latencies do not establish a
+decoder speed improvement. No new Debug/sanitizer run was needed for this
+Release-flags-only experiment; the preceding source checks remain separate.
+
+Disassembly confirms AVX2 byte dot products in every configuration. Compiler
+reports show cross-module inlining with LTO and specialized copies/cold code
+partitions with PGO. PGO+LTO includes inlined SEE calls in search routines;
+these observations do not isolate a cause of speed improvement. Reporting-only
+relinks were byte-identical to the measured binaries. No source-level hints or
+manual inlining were introduced from these observations.
+
+Decision: no stable overall NNUE gain exceeded the observed noise. Keep LTO and
+PGO opt-in and retain the installed ordinary Release, SHA-256
+`dd022848a5c613ccf0b117afcaa34dc618398bd6e75809b5f6d2d2eeac11b6b7`.
+The Windows bundle remains unchanged; all 94 manifest hashes were verified.
+No playing-strength claim follows. Private commands, raw per-position results,
+regressions, profiles, compiler reports and hashes are retained under
+`.context/baselines/2026-10-17/compiler-nnue/`.
+
+Source efficiency review, 2026-10-17 (analysis, no implementation or speed
+claim): prioritize separating NNUE search metadata from classical scoring.
+`evaluate()` still calls material/pawn evaluation before NNUE: hash hits avoid
+full calculation, but misses calculate unused pawn weakness, king shelter and
+other classical scores. Normal search consumes the endgame flag and passed-pawn
+mask; a compact NNUE path must reproduce those exactly and retain owned parent
+metadata. HCE cache entries must remain complete. A passer-only cache can avoid
+invalidations from king/castling changes in the current classical pawn key.
+Other concrete candidates are exposing tiny move setters/copies for inlining
+(real generator calls remain in ordinary Release), lazily caching qsearch's
+repeated opponent-material count, a legal-move existence generator that stops
+at its first witness, precomputed immutable TT-context terms, and blocking a few
+NNUE output rows together to reuse activation loads. No speedup is established.
+
+The local i5 reports 32 KiB L1 data/instruction caches per core, 256 KiB L2 per
+core and 6 MiB shared L3. Compiler-derived search frames are 8,112 bytes and
+accumulators 1,088 bytes; unused portions are not automatically fetched. Evaluate
+cache lines actually accessed, instruction footprint, register spills and branch
+behavior before adopting layout/inlining changes. Allocated hash/model sizes
+alone do not prove cache misses. The private review, assembly evidence, layout
+probe and hardware report are in
+`.context/baselines/2026-10-17/code-efficiency-review/`.
+
+Current NNUE optimization scope (user decision, 2026-10-17): remove unused
+classical evaluation calculations, including pawn-weakness and king-shelter
+scoring, from the NNUE path. Preserve useful pruning, reductions, extensions,
+legal-terminal handling and their exact required metadata. This is a performance
+cleanup, not authorization to remove search guards or change the searched tree.
+Prioritize compact NNUE metadata preparation, then measure the other source
+candidates separately with CPU/cache effects and exact-result checks. Keep the
+classical evaluator available through the existing interface.
+
+Future research, explicitly deferred: learned search control. A small network
+could predict whether a move merits a check extension, full-depth search or a
+reduction, conditioned on the position, move, remaining depth and search window.
+Study decisions above the leaves, where inference cost might be amortized over
+a large saved subtree. Train against deeper searches, measure missed critical
+moves and inference cost, and start with reductions plus re-search safeguards
+before considering outright pruning. A current position-value NNUE does not
+provide a proven extension/pruning decision; feasibility and strength gains
+remain unestablished. This requires separate training/model/search experiments
+and is outside the present exact-tree optimization pass.
+Relevant precedents: [Giraffe, chapters 5–6](https://arxiv.org/pdf/1509.01549),
+[Leela policy-guided search](https://lczero.org/dev/lc0/search/alphazero/), and
+[Learning Control of Search Extensions](https://staff.ru.is/yngvi/pdf/BjornssonM02.pdf).
+These cover related learned search allocation, not a validated replacement for
+Maxima's current pruning/extension rules.
+
+NNUE metadata implementation accepted and installed, 2026-10-17. Ordinary
+GCC 16 Release, LTO/PGO off, unchanged model and search policy. Release and Debug
+each passed 36/36 tests. Focused ASan/UBSan checks passed 5/5 with leak detection
+disabled, including both lifecycle suites and the independent NNUE score/lane
+reference. Ordered traces matched 3,715,559 entries per binary across 31 fixtures.
+All 528 performance comparison searches matched bestmove, scores, PVs, visited
+nodes, depth, pruning/result provenance and reported unbounded scored iterations;
+bestmoves and PVs were independently replayed for legality.
+
+The initial run used 22 NNUE positions, 500,000 visits, three alternating pairs,
+one worker, Hash 64, and books/experience/ponder/tablebases off. A single bounded
+confirmation used the same positions at two million visits and reversed the
+starting order, giving three baseline-first and three candidate-first rounds
+over both passes. No samples were discarded. Initial coverage also included
+16 HCE, 16 royal-losers and eight four-piece tablebase roots, three pairs each.
+
+| NNUE corpus | Aggregate visited NPS, before → after | Aggregate gain | Median position gain | Median three-trial spread, before / after |
+| --- | ---: | ---: | ---: | ---: |
+| 500k visits | 950,354 → 988,332 | +4.00% | +4.86% | 10.66% / 18.24% |
+| 2M confirmation | 883,646 → 957,505 | +8.36% | +5.06% | 37.51% / 26.40% |
+
+Median complete-corpus throughput across the three rounds was 960,218 → 982,854
+NPS initially and 885,847 → 943,554 NPS in confirmation. CPU aggregate gains
+were +4.01%/+8.38%. Paired round gains were +4.35/+2.36/+5.23% initially and
++6.51/+3.68/+14.23% in confirmation. Both passes had 20/22 faster position medians
+and 54/66 positive paired CPU comparisons; paired CPU median gains were
++5.63%/+4.80%. An exploratory joint position/trial bootstrap for confirmation
+had a positive interval (+2.37% to +17.08%); initial data alone did not exclude
+zero (-1.86% to +9.09%). This supports retention on repeated paired results,
+while substantial host timing variability prevents a precise universal gain.
+Report roughly 5% typical position improvement, not a guaranteed 8% upgrade.
+
+Retain individual regressions: initial modern-12 -9.74%, modern-18 -22.31%;
+confirmation modern-13 -13.38%, modern-3 -1.10%. No position regressed in both
+passes. The larger regressions coincided with very wide timing spreads (up to
+85%); their isolated magnitudes remain uncertain. All raw results are retained.
+HCE/royal timing changes were small relative to variation; no fallback speed
+claim. Tablebase-root latencies do not establish decoder throughput.
+
+Five-million-visit start/Kiwipete searches, three alternating pairs, gained
++4.79% aggregate. Position medians were -2.01% for start and +5.19% for Kiwipete;
+trial spreads were 10.88/20.95% and 1.53/14.92%, respectively. Completed-depth-10
+median times were 0.8693 → 0.6560 s for start and 2.9095 → 2.6203 s for Kiwipete,
+with wide trial spreads (start 43.99/19.51%, Kiwipete 17.43/17.06%). These do not
+establish precise per-position or depth-time speedups. No playing-strength gain
+was measured.
+
+Installed SHA-256:
+`5616d5986ac21679b0b8e8313d23e8bfbff29a11c84a9db13950ef19aa63a300`.
+The previous installed baseline was
+`dd022848a5c613ccf0b117afcaa34dc618398bd6e75809b5f6d2d2eeac11b6b7`.
+The Windows bundle was backed up and refreshed; all 94 manifest hashes passed.
+The existing Windows launcher loaded the unchanged model through its Windows
+path, completed a legal depth-three search, hit root Syzygy and quit successfully.
+Restart any existing GUI engine process to load the new executable. Commands,
+focused source patch, validation, original fixture failure/correction, all
+per-position results, hashes and backups are under
+`.context/baselines/2026-10-17/nnue-metadata/`.
 
 ## 6. Testing and performance
 
@@ -2031,6 +2876,14 @@ as a build check.
     --seconds 10 --increment 0.1 --pgn games.pgn --json results.json
 ```
 
+Matches keep Syzygy disabled by default. `--syzygy-path /path/to/tables` enables
+the same standard-chess table directory for both engines, with probe limit five
+and probe depth one where supported. The directory must contain WDL tables,
+and both engines must advertise `SyzygyPath` and `SyzygyProbeLimit`. Unsupported
+engines or conflicting per-engine Syzygy overrides are rejected before either
+engine is configured. The report records the resolved path and applied options.
+This enables engine probing; it does not adjudicate games directly from tables.
+
 Use `--variant losers` with royal-losers openings and two engines advertising
 `Wild=losers`. Standard is the default. The opening file has this format:
 
@@ -2099,6 +2952,72 @@ Replay every PGN independently and inspect terminations, applied options and
 pair uncertainty before using the corrected binary to judge strength candidates.
 A completed small baseline match is not a strength promotion result.
 
+The 2026-10-16 local GNU Chess 6.3.0 rematch used the installed optimized
+NNUE binary (`22d100141fcc61ae01274aeca020c127d519679bc7e53cd1b3db869b98aca422`),
+the pinned `nn-62ef826d1a6d.nnue` network, 32 color-swapped opening pairs,
+10+0.1 seconds, Hash 64 MiB, and one worker. Books, experience, pondering,
+and both engines' tablebase assistance were disabled. Maxima scored
+52 wins, 6 draws, and 6 losses: 55/64 points (85.9375%), with identical
+26/3/3 results as White and Black. Independent replay verified 8,828 legal
+plies, all configurations and identities, with zero errors or forfeits.
+The descriptive opening-pair Hoeffding 95% score interval is 61.93–100%.
+This is a strong result for these local conditions, not an absolute Elo or
+an isolated measurement of the speed optimizations. The earlier GNU baseline
+used HCE and older search, so its 43.75% score is not a controlled speed ablation.
+
+The user amended termination rules during that rematch: the first 20 games
+used natural outcomes; the next 10 also allowed 800 cp agreement over six
+consecutive exact-score plies from both engines after full move 20; the final
+34 additionally used an external four-piece Syzygy referee. All completed
+games and the original opening order were preserved. Final terminations were
+19 checkmates, 36 score adjudications, four tablebase adjudications (three
+Maxima wins and one draw), and five other natural draws. The private referee
+is an isolated match adapter, not a new public runner option: it checks actual
+coverage, treats cursed wins/blessed losses as draws, and requires conservative
+DTZ/clock/history checks for decisive nonzero-clock positions. Missing tables
+and uncertain boundaries continue play. Ten focused referee cases and a
+runner integration check passed; every actual tablebase decision was independently
+reprobed. The three policies and their separate results are retained in the
+local match artifacts; do not compare their different opening subsets as an
+adjudication experiment. Reserve the opening corpus and games from NNUE training.
+
+The subsequent six-loss review surveyed all 240 Maxima moves after the forced
+openings, confirmed one selected turning point per loss with cold Stockfish 19
+searches at 200,000 and two million nodes, and replayed seven native profiles
+per case. More default search found reference-valued improvements in five
+selected cases; the Najdorf decision persisted. A focused Vienna regression
+lead survives equal completed depth: before Black12...bxa6, default depth7
+chooses the capture at192,913nodes, while disabling only LMR finds12...Qe6 at
+420,136nodes, with the same NNUE/history and other settings. This is selected
+reduction sensitivity, not a reason to disable LMR globally. Equal-depth8
+English/French checks did not reproduce their equal-node ablation improvements.
+White Vienna28.Qf5 was searched for19,351nodes in the game;200k-node and2M-node
+cold replays findRf3. Preserve actual clocks, budgets, completion metadata and
+warm-state limitations when interpreting these diagnostics. Independent audit
+checked625savedPVrecords/7,579legalPVplies and six annotated games; no engine,
+time-allocation, network, or Windows bundle changes were made. These derived
+positions remain reserved from training. The user-selected follow-up is the
+existing controlled Stockfish series at depth7 (last completed depth6), after
+search diagnosis and speed work, rather than a new opponent; it has not started.
+
+The follow-up Vienna trace qualified that LMR lead. A private instrumented
+binary reproduced the installed engine's move, score, PV, depth, visited/pruned
+counts and iterations exactly. After12...bxa6 13.Qxa6+ Nb7, White14.Nd4 is
+searched 38th and reduced from child depth4 to3. Its trial equals alpha and
+does not trigger a re-search; removing that single reduction still does not
+recover a queen defense. Deeper reductions also matter. All13,709recorded
+reductions satisfy the existing re-search predicate, with18unreduced retries
+when the trial improves alpha; no omitted successful re-search was found.
+Separate forced-root depth7 probes give bxa6 andQe6 identical Maxima scores:
+-47cp with LMR, or-82cp without. Disabling reductions only in the final iteration
+still choosesbxa6; changing only the earlier iteration5Qe6 subtree can select
+Qe6 at the unchanged-47cp score. Root ordering by accumulated work and a shallow
+tie therefore contribute to the apparent LMR-off recovery. Six trace graphs,
+1,641sampled board/history paths,35single-edge interventions and eight forced-root
+probes were audited. No safe general correction emerged; keep this as a
+diagnostic, without opening-specific guards or a global LMR disable. Production
+source, the installed binary and Windows bundle remain unchanged.
+
 Clocks use seconds plus a per-move increment. Wall time from the search request
 through its response is charged, including readiness and runner overhead;
 initial process startup/configuration is excluded. A late move loses on time,
@@ -2129,6 +3048,13 @@ Output paths must be new and distinct from each other and inputs.
 Each game also records reported search nodes, search counts, reporting coverage,
 and charged wall time separately for White and Black in JSON `search_work`.
 Played-move PGN comments include `[%nodes N]` when the engine reports a count.
+New match records also retain per-move `search_samples`: reported depth,
+selective depth, engine time, tablebase hits, nodes and charged wall time where
+reported, plus Maxima's raw `search_result` metadata. PGN comments include
+`[%depth D]`. The reported depth may describe an interrupted iteration; use
+`completed_depth` from `search_result` when measuring completed search depth,
+and count direct tablebase/book/terminal returns separately. Older reports,
+including the completed 66-game strength gate, do not contain these samples.
 Missing node reports are tracked through `reported_searches`, not treated as
 measured zero work. Counts include searched quiescence and exclude pruned moves
 for Maxima; external engines may use other counting conventions.
@@ -2472,8 +3398,37 @@ Download complete Syzygy WDL and DTZ sets through the project command:
 `--pieces` accepts 3, 4, 5, 6, or 7, including kings; each selection includes
 smaller tables needed for captures and promotions. The default is 4. The complete
 three- and four-piece set is 70 files, about 4.14 MiB. `--dry-run` lists total
-storage without downloading table files. `--directory /path/to/tables` selects
-another destination; the default `tablebases/syzygy/` is ignored by Git.
+storage without downloading table files. The complete up-to-five WDL/DTZ set
+listed by the mirror on 2026-10-17 contains 290 files, 983,957,920 bytes
+(938.38 MiB, about 984 MB), including the smaller prerequisites.
+`--directory /path/to/tables` selects another destination; the default
+`tablebases/syzygy/` is ignored by Git. To download separately while a game is
+running, use a staging directory such as `tablebases/syzygy-5-staging/` and leave
+the active engine's directory/settings untouched. Activate the verified set
+after the game; changing `SyzygyPath` stops the active search.
+The 2026-10-17 five-piece download is verified and staged in that directory:
+220 files fetched, 70 smaller files reused, all 290 checked against published
+SHA-256 values and three independent five-piece WDL/DTZ probes passed. The
+tables were left inactive during the game. After the user supplied its completed
+189-move PGN, all 220 additional files were installed in the Windows bundle at
+the existing path, with changed metadata backed up and all 314 manifest entries
+verified. The engine/model binaries are unchanged. Its Windows launcher detects
+five-piece coverage, loads NNUE, completes a legal depth-three search and directly
+returns the exact draw for the game's first five-piece position (zero searched
+nodes, one tablebase hit). Restart the GUI engine process before the next game.
+Download, activation and verification receipts are in
+`.context/baselines/2026-10-17/syzygy-five-download/`.
+
+The completed GUI game was GNU Chess–Maxima NNUE, 2026-10-17, 40/300, 377 legal
+plies, drawn on 189.Kd4 by the fifty-move rule. Both sides used book through move
+30. The last capture/pawn move was 139.Rxh2, also the first five-piece position;
+all 101 positions from there through the finish are exact WDL/DTZ draws under
+independent probing. This confirms preservation of the draw in that segment,
+not an evaluation of every earlier opportunity. Maxima's flat -0.10 annotations
+also match its default DrawContempt=-10; the PGN does not record the actual UCI
+option settings. A legal SAN transcription (evaluation/time comments omitted)
+and the per-position audit are in
+`.context/gui-tests/2026-10-17/gnu-black-draw/`.
 Downloads check the mirror's published SHA-256 hashes, replace files atomically,
 and verify/reuse completed files when rerun. The download command is part of
 the Python 3.8+ runner and uses only the standard library; see chapter 6.1.
@@ -2499,13 +3454,18 @@ stops the active search and clears cached search scores.
 
 ### 7.3 Probing policies
 
-WDL probing supplies proven draw results and win/loss cutoffs at zero halfmove
-clock. The depth setting limits probes at the highest available piece count;
+WDL probing resolves proven outcomes at zero halfmove clock, including full
+search windows; widening a window cannot replace a solved outcome with static
+evaluation. The depth setting limits probes at the highest available piece count;
 smaller covered positions may be probed at leaves. Checked nodes retain normal
 mate/evasion search. Root DTZ probing respects the current halfmove clock and
 selects moves that make progress; ambiguous rounded results at the fifty-move
-boundary fall back to search. With known reversible game history, the root also
-keeps normal search because tablebases do not encode repetition history.
+boundary fall back to search. Unique reversible game history permits direct DTZ play: minimizing DTZ prevents
+cycles before the next capture/pawn move, so previously unique positions cannot
+become a threefold repetition. If any position has already repeated in that
+history (including the current root), retain normal history-aware search.
+Missing DTZ files, ambiguous boundary results, and an excluded DTZ move under
+`searchmoves` also retain normal search.
 Tablebase wins/losses use large centipawn scores, not invented mate distances;
 `info` output reports successful probes as `tbhits`. A root tablebase result
 still waits for `stop` during infinite analysis or `ponderhit`/`stop` while
@@ -2524,7 +3484,7 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
   `docs:section`) using the stable chapters in this file. These commands are
   planned and are not implemented yet.
 - Measure tablebase probing cost and strength before adding more probe heuristics.
-- Extend root tablebase handling across reversible repetition history.
+- Extend direct root tablebase handling across histories that already contain repetitions.
 - Explore selective asynchronous online probes separately from local probing.
 - Prepare shared caches and worker state for safe multithreaded search.
 - Evaluate learned evaluation after the search and testing foundation is sound.

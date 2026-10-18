@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "nnue_audit.h"
+#include "progress.h"
 #include <sstream>
 #include <stdexcept>
 
@@ -23,11 +24,11 @@ int audit_evaluate(search_t & search) {
     accumulator_t fresh;
     const int fresh_raw = search.evaluation_network->evaluate(search.brd, fresh);
     auto & live = search.evaluation_accumulators[search.brd.ply];
-    const auto * parent = search.brd.ply ? &search.evaluation_accumulators[search.brd.ply - 1] : nullptr;
     const int live_raw = state.mode == audit_mode_t::full ? fresh_raw
-        : search.evaluation_network->evaluate(search.brd, live, parent, &state.counters);
+        : search.evaluation_network->evaluate(search.brd, live,
+            std::span<const accumulator_t>(search.evaluation_accumulators.data(), search.brd.ply), &state.counters);
     if (state.mode == audit_mode_t::full) live = fresh;
-    const int expected = to_centipawns(fresh_raw);
+    const int expected = damp_rule50(to_centipawns(fresh_raw), clock);
     const bool stale_metadata = cached && (!search.stack->mt || !search.stack->pt
         || search.stack->mt->key != search.brd.stack->material_hash
         || search.stack->pt->key != search.brd.stack->pawn_hash);
@@ -54,6 +55,7 @@ int audit_evaluate(search_t & search) {
                         << '/' << fresh.values[color][lane] << ' ';
         throw std::runtime_error(message.str());
     }
+    search.stack->eg_score = to_centipawns(fresh_raw);
     return expected;
 }
 }

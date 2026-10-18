@@ -23,6 +23,7 @@
 #include "search.h"
 #include "bits.h"
 #include "score.h"
+#include "progress.h"
 
 #include "eval_pst.h"
 #include "eval_material.h"
@@ -90,9 +91,9 @@ int evaluate(search_t * s) {
     if (s->wild == 0 && s->evaluation_network && s->nnue_audit.mode != nnue::audit_mode_t::off) {
         const int result = nnue::audit_evaluate(*s);
         if (s->stack->eval_result != score::INVALID) return result;
-        material::eval(s);
-        pawns::eval(s);
-        s->stack->eg_score = s->stack->eval_result = result;
+        material::prepare_nnue(s);
+        pawns::prepare_nnue(s);
+        s->stack->eval_result = result;
         return result;
     }
 #endif
@@ -101,19 +102,14 @@ int evaluate(search_t * s) {
     }
 
     if (s->wild == 0 && s->evaluation_network) {
-        // Search pruning still needs material flags and passed-pawn metadata.
-        // Neither classical score is blended into the network result.
-        material::eval(s);
-        pawns::eval(s);
-        auto & accumulator = s->evaluation_accumulators[s->brd.ply];
-        const auto * previous = s->brd.ply ? &s->evaluation_accumulators[s->brd.ply - 1] : nullptr;
-        const int result = nnue::to_centipawns(s->evaluation_network->evaluate(s->brd, accumulator, previous
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            , &s->nnue_audit.counters
-#endif
-            ));
-        s->stack->eg_score = s->stack->eval_result = result;
-        return result;
+        // Only the endgame flag and passer mask are used by NNUE search.
+        // Classical scores and other metadata fields are not populated.
+        material::prepare_nnue(s);
+        pawns::prepare_nnue(s);
+        const int result = s->neural_static_score();
+        s->stack->eg_score = result;
+        s->stack->eval_result = damp_rule50(result, s->brd.stack->fifty_count);
+        return s->stack->eval_result;
     }
 
     /*
@@ -151,6 +147,7 @@ int evaluate(search_t * s) {
         s->stack->eg_score = -s->stack->eg_score;
     }
 
+    result = damp_rule50(result, s->brd.stack->fifty_count);
     result = (result / GRAIN_SIZE) * GRAIN_SIZE;
     s->stack->eval_result = result;
     assert(result > -score::DEEPEST_MATE && result < score::DEEPEST_MATE);

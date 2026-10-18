@@ -71,8 +71,8 @@ bool test_search_path() {
         search.forward(&moves[i], search.brd.gives_check(&moves[i]));
     }
     // No PVS call populated search-stack keys: board history must be sufficient.
-    bool success = check("one return to the root is only twofold repetition",
-        !search.is_repetition());
+    bool success = check("first return to the root below root must score a draw",
+        search.is_repetition());
     for (int i = 3; i >= 0; --i) {
         search.backward(&moves[i]);
     }
@@ -112,7 +112,7 @@ bool test_null_moves_and_bounds() {
     for (const char * text : cycle) {
         play(search, text);
     }
-    success &= check("undoing null moves must restore the root boundary", !search.is_repetition());
+    success &= check("undoing null moves must restore first-repeat detection", search.is_repetition());
     for (const char * text : cycle) {
         play(search, text);
     }
@@ -187,10 +187,12 @@ bool test_pre_root_matches() {
         }
         search_t search(board.to_string().c_str(), nullptr, nullptr, history);
         play(search, cycle[3]);
-        success &= check(occurrence == 0
-            ? "one pre-root match must not draw a search descendant"
-            : "two pre-root matches must draw a search descendant",
-            search.is_repetition() == (occurrence == 1));
+        success &= check("first pre-root match must draw a search descendant",
+            search.is_repetition());
+        search.draw_contempt = 0;
+        success &= check("first pre-root repeat must score draw in quiescence and PVS",
+            search.qsearch(-score::INF, score::INF, 0) == 0
+            && search.pvs(-score::INF, score::INF, 1) == 0);
         history.push_back(board.stack->repetition_key());
         move_t move;
         move.set(&board, cycle[3]);

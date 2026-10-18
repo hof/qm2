@@ -27,6 +27,7 @@ namespace options {
         { "", INT, 0, ""}, //dummy value
         { "Revision", STRING, 1, "type string default " MAXIMA_REVISION },
         { "Hash", INT, 256, "type spin default 256 min 0 max 1024"},
+        { "Move Overhead", INT, 50, "type spin default 50 min 0 max 5000" },
         { "Ponder", BOOL, 1, "type check default true"},
         { "OwnBook", BOOL, 1, "type check default true" },
         { "UCI_AnalyseMode", BOOL, 0, "type check default false" },
@@ -87,6 +88,7 @@ namespace options {
 
 void game_t::clear() {
     tm.clear();
+    go_started = {};
     target_move.clear();
     max_depth = MAX_PLY;
     max_time_per_move = 0;
@@ -123,15 +125,17 @@ void game_t::copy(game_t* game) {
     search_moves = game->search_moves;
     learn_factor = game->learn_factor;
     tm = game->tm;
+    go_started = game->go_started;
 }
 
 void game_t::init_tm(bool us, std::chrono::steady_clock::time_point started) {
-    tm.set_start(started);
+    tm.set_start(go_started == std::chrono::steady_clock::time_point{} ? started : go_started);
     if (movetime_limit || max_time_per_move) {
         tm.set_min(max_time_per_move);
         tm.set_max(max_time_per_move);
     } else if (clock_limit || white_time || black_time) {
-        tm.set(time(us), time(!us), increment(us), increment(!us), moves_left);
+        tm.set(time(us), time(!us), increment(us), increment(!us), moves_left,
+            options::get_value("Move Overhead"));
     } else {
         tm.set_min(time_man::INFINITE_TIME);
         tm.set_max(time_man::INFINITE_TIME);
