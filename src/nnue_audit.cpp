@@ -29,9 +29,7 @@ int audit_evaluate(search_t & search) {
             std::span<const accumulator_t>(search.evaluation_accumulators.data(), search.brd.ply), &state.counters);
     if (state.mode == audit_mode_t::full) live = fresh;
     const int expected = damp_rule50(to_centipawns(fresh_raw), clock);
-    const bool stale_metadata = cached && (!search.stack->mt || !search.stack->pt
-        || search.stack->mt->key != search.brd.stack->material_hash
-        || search.stack->pt->key != search.brd.stack->pawn_hash);
+    const bool stale_metadata = cached && search.stack->metadata != search_metadata(search.brd);
     if (live_raw != fresh_raw || live.values != fresh.values || live.kings != fresh.kings
             || (cached && search.stack->eval_result != expected)
             || stale_metadata
@@ -55,7 +53,6 @@ int audit_evaluate(search_t & search) {
                         << '/' << fresh.values[color][lane] << ' ';
         throw std::runtime_error(message.str());
     }
-    search.stack->eg_score = to_centipawns(fresh_raw);
     return expected;
 }
 }

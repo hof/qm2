@@ -44,8 +44,7 @@ int main(int argc, char ** argv) {
     std::string error;
     if (!nnue::set_path(argv[1], error)) return 1;
     bool ok = true;
-    for (bool neural : {false, true}) {
-        options::get_option("UseNNUE")->value = neural;
+    {
         for (const char * fen : {
                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1"}) {
@@ -107,7 +106,7 @@ int main(int argc, char ** argv) {
             options::get_option("NNUEAuditHorizon")->value = 1;
             options::get_option("NNUEAuditHashMoves")->value = 1;
             auto fixed = std::make_unique<hash_probe_t>(fen);
-            if (neural) ok &= check(!fixed->nnue_audit.hash_moves && !fixed->iid_enabled,
+            ok &= check(!fixed->nnue_audit.hash_moves && !fixed->iid_enabled,
                 "fixed neural horizon enabled hash ordering or IID");
             options::get_option("NNUEAuditHorizon")->value = 2;
         }

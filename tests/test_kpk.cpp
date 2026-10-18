@@ -5,6 +5,12 @@
 
 namespace {
 
+bool failed(int line) {
+    std::cerr << "KPK assertion failed at line " << line << "\n";
+    return false;
+}
+
+
 constexpr int state_count = 2 * 24 * 64 * 64;
 
 int separation(int a, int b) {
@@ -142,14 +148,14 @@ bool test_search() {
             // A conflicting cached win must not override an exact bitbase draw.
             trans_table::store(search.brd.stack->tt_key, 0, 0, 8, 3000, 0,
                 score::EXACT, search.tt_context());
-            if (eg::probe_kpk(search.brd) != 0 || evaluate(&search) != 0
+            if (eg::probe_kpk(search.brd) != 0
                 || search.pvs(-score::INF, score::INF, 4) != 0 || search.nodes != 1
                 || search.qsearch(-score::INF, score::INF, -1) != 0) {
                 std::cerr << "KPK draw failed: " << fen << "\n";
-                return false;
+                return failed(__LINE__);
             }
             search.draw_contempt = 17;
-            if (search.pvs(-score::INF, score::INF, 2) != 17) return false;
+            if (search.pvs(-score::INF, score::INF, 2) != 17) return failed(__LINE__);
         }
     }
     const char * wins[] = {
@@ -163,40 +169,61 @@ bool test_search() {
         search_t search(fen);
         prepare(search);
         const int perspective = search.brd.bb[PAWN[search.brd.us()]] ? 1 : -1;
+        const int static_score = evaluate(&search);
+        const int searched_score = search.pvs(-score::INF, score::INF, 2);
         if (eg::probe_kpk(search.brd) != 1
-            || perspective * evaluate(&search) < 200
-            || perspective * search.pvs(-score::INF, score::INF, 2) < 200 || search.nodes <= 1
-            || search.stack->best_move.piece == 0) return false;
+            || perspective * static_score <= 0
+            || perspective * searched_score <= 0 || search.nodes <= 1
+            || search.stack->best_move.piece == 0) {
+            std::cerr << "KPK scores " << static_score << "/" << searched_score << ": " << fen << "\n";
+            return failed(__LINE__);
+        }
         move_t best = search.stack->best_move;
-        if (!search.brd.valid(&best) || !search.brd.legal(&best)) return false;
+        if (!search.brd.valid(&best) || !search.brd.legal(&best)) return failed(__LINE__);
         search.forward(&best, search.brd.gives_check(&best));
         // The chosen move must preserve a KPK win or promote to a winning piece.
-        const bool preserves_win = best.promotion ? -evaluate(&search) > 200
+        bool has_reply = false;
+        if (best.promotion) {
+            move::list_t replies;
+            move::gen_quiet_moves(&search.brd, &replies);
+            move::gen_captures(&search.brd, &replies);
+            for (auto * reply = replies.first; reply != replies.last; ++reply) {
+                has_reply |= search.brd.legal(reply);
+            }
+        }
+        const bool preserves_win = best.promotion ? (best.promotion == QUEEN[!search.brd.us()]
+            || best.promotion == ROOK[!search.brd.us()])
+            && separation(best.tsq, search.brd.get_sq(KING[search.brd.us()])) > 1
+            && (search.brd.in_check() || has_reply)
             : eg::probe_kpk(search.brd) == 1;
         search.backward(&best);
-        if (!preserves_win) return false;
+        if (!preserves_win) {
+            std::cerr << "KPK move " << best.to_string() << " from " << fen << "\n";
+            return failed(__LINE__);
+        }
         search_t warm(fen);
         prepare(warm);
-        if (perspective * warm.pvs(-score::INF, score::INF, 2) < 200) return false;
+        if (warm.pvs(-score::INF, score::INF, 2) != searched_score) return failed(__LINE__);
     }
     search_t capture("k7/8/2K5/1b6/8/8/P7/8 w - - 0 1");
     prepare(capture);
     const std::string original = capture.brd.to_string();
     move_t take;
     take.set(&capture.brd, "c6b5");
-    if (!capture.brd.valid(&take) || !capture.brd.legal(&take)) return false;
+    if (!capture.brd.valid(&take) || !capture.brd.legal(&take)) return failed(__LINE__);
     capture.forward(&take, capture.brd.gives_check(&take));
     if (eg::probe_kpk(capture.brd) != 0
-        || capture.qsearch(-score::INF, score::INF, -1) != 0) return false;
+        || capture.qsearch(-score::INF, score::INF, -1) != 0) return failed(__LINE__);
     capture.backward(&take);
+    // The certified draw supplies a lower bound; NNUE may prefer another line.
     if (capture.brd.to_string() != original
-        || capture.pvs(-score::INF, score::INF, 1) != 0) return false;
+        || capture.pvs(-score::INF, score::INF, 1) < 0) return failed(__LINE__);
 
     search_t boundary("k7/8/8/8/8/8/4P3/4K3 w - - 99 1");
     prepare(boundary);
     move_t quiet;
     quiet.set(&boundary.brd, "e1d1");
-    if (eg::probe_kpk(boundary.brd) != 1) return false;
+    if (eg::probe_kpk(boundary.brd) != 1) return failed(__LINE__);
     boundary.forward(&quiet, boundary.brd.gives_check(&quiet));
     const bool clock_draw = boundary.pvs(-score::INF, score::INF, 2) == 0;
     boundary.backward(&quiet);

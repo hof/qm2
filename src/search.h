@@ -38,6 +38,7 @@
 #include "nnue.h"
 #include "movepicker.h"
 #include "hashtable.h"
+#include "eval.h"
 
 
 class root_move_t {
@@ -82,20 +83,10 @@ struct search_stack_t {
     int repetition_start;
     uint8_t pv_count;
     int16_t eval_result;
-    int16_t eg_score;
-    score_t eval_score;
-    score_t pc_score[BKING + 1];
-    score_t passer_score[2];
-    // Cache slots can be replaced while descendants are searched.
-    pawn_table::entry_t pawn_entry;
-    material_table::entry_t material_entry;
-    pawn_table::entry_t * pt;
-    material_table::entry_t * mt;
+    search_metadata_t metadata;
     U64 tt_key;
     U64 tt_history;
     clock_range_t tt_clocks;
-    U64 attack[BKING + 1];
-    uint8_t king_attack[BKING+1];
 };
 
 enum class result_source_t { none, partial, complete, fallback, book, terminal, tablebase };
@@ -154,8 +145,6 @@ public:
     std::string book_name;
     bool root_wtm;
     int wild;
-    int king_attack_shelter;
-    int king_attack_pieces;
     int draw_contempt;
     bool null_verify;
     bool null_enabled;
@@ -168,8 +157,8 @@ public:
 
     search_t(const char * fen, const game_t * g = NULL,
             const search_control_t * control = NULL,
-            const std::vector<U64> & position_history = {}) {
-        init(fen, g, control, position_history);
+            const std::vector<U64> & position_history = {}, int variant = 0) {
+        init(fen, g, control, position_history, variant);
     }
 
     virtual ~search_t() {
@@ -178,7 +167,7 @@ public:
     search_t & operator=(const search_t &) = delete;
     void init(const char * fen, const game_t * g,
             const search_control_t * control = NULL,
-            const std::vector<U64> & position_history = {});
+            const std::vector<U64> & position_history = {}, int variant = 0);
     void go();
     void book_calc();
     void iterative_deepening();
@@ -233,7 +222,7 @@ public:
         if (move->capture || stack->in_check || stack->eval_result == score::INVALID) {
             return false;
         }
-        return BIT(move->ssq) & stack->pt->passers & SIDE[brd.them()];
+        return BIT(move->ssq) & stack->metadata.passed_pawns & SIDE[brd.them()];
     }
     
     bool is_advanced_passed_pawn(move_t * move) {

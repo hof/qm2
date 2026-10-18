@@ -21,102 +21,43 @@
  */
 
 #include "engine.h"
-#include "eval_material.h"
-
-namespace {
-
-struct evaluation_case_t {
-    const char * name;
-    const char * fen;
-    int min_score;
-    int max_score;
-};
-
-bool test_evaluation(const evaluation_case_t & test) {
-    pawn_table::clear();
-    material_table::clear();
-    search_t search(test.fen);
-    const int cold_score = evaluate(&search);
-    search_t cached_search(test.fen);
-    const int warm_score = evaluate(&cached_search);
-    search.brd.do_flip();
-    const std::string flipped_fen = search.brd.to_string();
-    search_t flipped_search(flipped_fen.c_str());
-    const int flipped_score = evaluate(&flipped_search);
-    const bool success = cold_score >= test.min_score && cold_score <= test.max_score
-        && warm_score == cold_score && flipped_score == cold_score;
-    if (!success) {
-        std::cerr << test.name << ": expected [" << test.min_score << ", "
-            << test.max_score << "], cold=" << cold_score << ", warm="
-            << warm_score << ", flipped=" << flipped_score << "\n";
-    }
-    return success;
-}
-
-bool test_incremental_evaluation() {
-    search_t search("7k/8/8/8/8/8/3R4/K7 w - - 0 1");
-    const int original_score = evaluate(&search);
-    move_t move;
-    move.set(&search.brd, "d2d3");
-    search.forward(&move, search.brd.gives_check(&move));
-    const int incremental_score = evaluate(&search);
-    const std::string child_fen = search.brd.to_string();
-    pawn_table::clear();
-    material_table::clear();
-    search_t fresh_search(child_fen.c_str());
-    const int fresh_score = evaluate(&fresh_search);
-    search.backward(&move);
-    const int restored_score = evaluate(&search);
-    const bool success = incremental_score == fresh_score && restored_score == original_score;
-    if (!success) {
-        std::cerr << "incremental evaluation: child=" << incremental_score
-            << ", fresh=" << fresh_score << ", restored=" << restored_score
-            << ", original=" << original_score << "\n";
-    }
-    return success;
-}
-
-bool test_material_pawn_bounds() {
-    // Internal callers can bypass UCI validation. Excess pawns must not index
-    // outside the adjustment table; the upper endpoint applies to such boards.
-    bool success = true;
-    for (const char * fen : {
-            "7k/pppppppp/8/8/8/N7/PPPPPPPP/K7 w - - 0 1",
-            "7k/pppppppp/p7/8/8/N7/PPPPPPPP/K7 w - - 0 1",
-            "7k/pppppppp/p7/8/8/NP6/PPPPPPPP/K7 w - - 0 1"}) {
-        material_table::clear();
-        search_t search(fen);
-        const int expected_score = 330
-            + 100 * (search.brd.count(WPAWN) - search.brd.count(BPAWN));
-        const int cold_score = material::eval(&search);
-        const int warm_score = material::eval(&search);
-        if (cold_score != expected_score || warm_score != cold_score) {
-            std::cerr << "material pawn bounds: " << fen << ": expected="
-                << expected_score << ", cold=" << cold_score << ", warm=" << warm_score << '\n';
-            success = false;
-        }
-    }
-    return success;
-}
-
-}
+#include "progress.h"
+#include <memory>
 
 int main() {
     magic::init();
-    // Broad bands check material advantage and score perspective without freezing tuning.
-    const evaluation_case_t cases[] = {
-        {"starting position", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 0, 30},
-        // Won endgames include the engine's WIN bonus as well as material.
-        {"white queen advantage", "7k/8/8/8/8/8/3Q4/K7 w - - 0 1", 500, 10000},
-        {"black facing queen advantage", "7k/8/8/8/8/8/3Q4/K7 b - - 0 1", -10000, -500},
-        {"white rook advantage", "7k/8/8/8/8/8/3R4/K7 w - - 0 1", 200, 10000},
-        {"black facing rook advantage", "7k/8/8/8/8/8/3R4/K7 b - - 0 1", -10000, -200},
-    };
     bool success = true;
-    for (const evaluation_case_t & test : cases) {
-        success &= test_evaluation(test);
+    for (const char * fen : {
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            "7k/8/8/8/8/8/3Q4/K7 w - - 0 1",
+            "7k/8/8/8/8/8/3Q4/K7 b - - 80 1",
+            "7k/8/8/8/8/8/3R4/K7 w - - 0 1"}) {
+        auto search = std::make_unique<search_t>(fen);
+        nnue::accumulator_t independent;
+        const int expected = damp_rule50(nnue::to_centipawns(
+            search->evaluation_network->evaluate(search->brd, independent)), search->brd.stack->fifty_count);
+        const int initial = evaluate(search.get());
+        success &= initial == expected && evaluate(search.get()) == expected;
+        search->brd.do_flip();
+        auto flipped = std::make_unique<search_t>(search->brd.to_string().c_str());
+        nnue::accumulator_t flipped_accumulator;
+        const int flipped_expected = damp_rule50(nnue::to_centipawns(
+            flipped->evaluation_network->evaluate(flipped->brd, flipped_accumulator)),
+            flipped->brd.stack->fifty_count);
+        success &= evaluate(flipped.get()) == flipped_expected;
     }
-    success &= test_incremental_evaluation();
-    success &= test_material_pawn_bounds();
+    auto search = std::make_unique<search_t>("7k/8/8/8/8/8/3R4/K7 w - - 0 1");
+    const int initial = evaluate(search.get());
+    move_t move;
+    move.set(&search->brd, "d2d3");
+    search->forward(&move, search->brd.gives_check(&move));
+    const int child = evaluate(search.get());
+    auto fresh = std::make_unique<search_t>(search->brd.to_string().c_str());
+    success &= evaluate(fresh.get()) == child;
+    search->backward(&move);
+    success &= evaluate(search.get()) == initial;
+    if (!success) {
+        std::cerr << "Neural score, perspective, cache or undo mismatch\n";
+    }
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

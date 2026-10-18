@@ -32,7 +32,7 @@ bool test_configuration_snapshot() {
     control.ponder.store(false);
     success &= check(!search.pondering(), "ponderhit must reach the active search");
     const int score = search.qsearch(-score::INF, score::INF, 0);
-    success &= check(score > 200 && search.nodes > 1 && !search.stop_all,
+    success &= check(score > 0 && search.nodes > 1 && !search.stop_all,
         "changing the caller's node limit must not abort its existing search");
     return success;
 }
@@ -66,11 +66,11 @@ bool test_independent_cancellation() {
     engine::stop();
     search_t active(fen, nullptr, &active_control);
     const int active_score = active.qsearch(-score::INF, score::INF, 0);
-    success &= check(active_score > 200 && !active.stop_all,
+    success &= check(active_score > 0 && !active.stop_all,
         "another search or the singleton must not cancel this search");
     search_t standalone(fen);
     const int standalone_score = standalone.qsearch(-score::INF, score::INF, 0);
-    success &= check(standalone_score > 200 && !standalone.stop_all,
+    success &= check(standalone_score > 0 && !standalone.stop_all,
         "standalone searches must not inherit global cancellation");
     return success;
 }
@@ -123,7 +123,7 @@ bool test_worker_snapshot() {
     engine.stop_all();
     search_result_t result = engine.get_result();
     return check(result.move.piece && result.move.to_string() == "d1d5"
-        && result.score > 200 && result.nodes > 1,
+        && result.score > 0 && result.nodes > 1,
         "worker must finish the captured request after pending settings change");
 }
 

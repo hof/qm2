@@ -21,6 +21,8 @@
 
 #include "engine.h"
 #include "w17/w17_search.h"
+#include "w17/w17_eval.h"
+#include <stdexcept>
 
 using namespace std;
 
@@ -33,9 +35,7 @@ namespace engine {
     }
 
     void go() {
-        if (!_engine.think()) {
-            uci::in("error could not create thread");
-        }
+        _engine.think();
     }
 
     void analyse() {
@@ -91,10 +91,15 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
     _control.stop_requested.store(false);
     _control.ponder.store(_game.ponder);
     // Capture the position, limits, and search options before starting the worker.
-    if (options::get_value("Wild") == 17) {
-        _search.reset(new w17_search_t(_root_fen.c_str(), &_game, &_control, _position_history));
-    } else {
-        _search.reset(new search_t(_root_fen.c_str(), &_game, &_control, _position_history));
+    try {
+        if (options::get_value("Wild") == 17) {
+            _search.reset(new w17_search_t(_root_fen.c_str(), &_game, &_control, _position_history));
+        } else {
+            _search.reset(new search_t(_root_fen.c_str(), &_game, &_control, _position_history));
+        }
+    } catch (const std::runtime_error & error) {
+        uci::out(std::string("info string ERROR: ") + error.what());
+        return false;
     }
     if (calculate_book) {
         _search->game.max_depth = _search->wild == 17
@@ -105,6 +110,7 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
         _result = search_result_t();
     }
     if (!create(function, this)) {
+        uci::out("info string ERROR: could not create search worker");
         _control.stop_requested.store(true);
         _search.reset();
         return false;
@@ -179,100 +185,22 @@ void * engine_t::_think(void * engine_p) {
  * move ordering by visual inspection of the output.
  */
 
-void print_row(std::string cap, short score) {
-    std::cout << std::setw(14);
-    std::cout << cap;
-    std::cout << " | ";
-    std::cout << std::setw(32);
-    std::cout << " | ";
-    std::cout << std::setw(20) << score;
-    std::cout << std::endl;
-}
-
-void print_row(std::string cap, score_t & total, int phase) {
-    std::cout << std::setw(14);
-    std::cout << cap;
-    std::cout << " | ";
-    std::cout << std::setw(32);
-    std::cout << " | ";
-    std::cout << std::setw(9) << total.mg;
-    std::cout << " ";
-    std::cout << std::setw(4) << total.eg;
-    std::cout << " ";
-    std::cout << std::setw(5) << total.get(phase);
-    std::cout << std::endl;
-}
-
-void print_row(std::string cap, score_t & w, score_t & b, int phase) {
-    score_t total;
-    total.clear();
-    total.add(w);
-    total.sub(b);
-    std::cout << std::setw(14);
-    std::cout << cap;
-    std::cout << " | ";
-    std::cout << std::setw(8) << w.mg;
-    std::cout << " ";
-    std::cout << std::setw(4) << w.eg;
-    std::cout << "  ";
-    std::cout << std::setw(9) << b.mg;
-    std::cout << " ";
-    std::cout << std::setw(4) << b.eg;
-    std::cout << " | ";
-    std::cout << std::setw(9) << total.mg;
-    std::cout << " ";
-    std::cout << std::setw(4) << total.eg;
-    std::cout << " ";
-    std::cout << std::setw(5) << total.get(phase);
-    std::cout << std::endl;
-}
-
 void engine_t::analyse() {
     stop();
-
-    search_t * s = new search_t(_root_fen.c_str());
-    if (options::get_value("Wild") != 0) s->evaluation_network.reset();
-    if (s->evaluation_network) {
-        s->stack->in_check = s->brd.in_check();
-        const int value = evaluate(s);
-        uci::out(s->stack->in_check ? "info string NNUE static evaluation unavailable in check"
+    try {
+        if (options::get_value("Wild") == 17) {
+            w17_search_t search(_root_fen.c_str());
+            uci::out("info string Royal losers evaluation cp " + std::to_string(w17_evaluate(&search)));
+            return;
+        }
+        search_t search(_root_fen.c_str());
+        search.stack->in_check = search.brd.in_check();
+        const int value = evaluate(&search);
+        uci::out(search.stack->in_check ? "info string NNUE static evaluation unavailable in check"
             : "info string NNUE evaluation cp " + std::to_string(value) + " (side to move)");
-        delete s;
-        return;
+    } catch (const std::runtime_error & error) {
+        uci::out(std::string("info string ERROR: ") + error.what());
     }
-    evaluate(s);
-    int phase = s->stack->mt->phase;
-    bool wtm = s->brd.us();
-    score_t tempo_score;
-    tempo_score.set(TEMPO[wtm]);
-    score_t w, b;
-    w.clear();
-    b.clear();
-    std::cout << s->brd.to_string().c_str() << std::endl;
-    std::cout << "Game Phase: " << phase << std::endl;
-    std::cout << "Eval Component | White MG   EG | Black MG   EG |  Total MG   EG   Tot  \n";
-    std::cout << "---------------+---------------+---------------+---------------------\n";
-    print_row("Tempo", tempo_score.get(phase));
-    print_row("Material", s->stack->mt->score);
-    print_row("Pawns & Kings", s->stack->pt->score, phase);
-    print_row("Knights", s->stack->pc_score[WKNIGHT], s->stack->pc_score[BKNIGHT], phase);
-    print_row("Bishops", s->stack->pc_score[WBISHOP], s->stack->pc_score[BBISHOP], phase);
-    print_row("Rooks", s->stack->pc_score[WROOK], s->stack->pc_score[BROOK], phase);
-    print_row("Queens", s->stack->pc_score[WQUEEN], s->stack->pc_score[BQUEEN], phase);
-    print_row("Passers", s->stack->passer_score[WHITE], s->stack->passer_score[BLACK], phase);
-    print_row("King Attack", s->stack->pc_score[WKING], s->stack->pc_score[BKING], phase);
-    if (s->brd.us() == false) {
-        std::cout << "---------------+---------------+---------------+---------------------\n";
-        print_row("Black to move", s->stack->eg_score);
-    }
-    if ((s->stack->mt->flags & 128) != 0) {
-        print_row("EG Adjustment", s->stack->eval_result - s->stack->eg_score);
-    }
-
-    std::cout << "---------------+---------------+---------------+---------------------\n";
-    print_row("Total", s->stack->eval_result);
-
-    delete s;
 }
 
 /**

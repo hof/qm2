@@ -93,7 +93,6 @@ int main(int argc, char ** argv) {
         return 1;
     }
     reference::nnue_init(argv[1]);
-    options::get_option("UseNNUE")->value = 1;
     options::get_option("OwnBook")->value = 0;
     bool success = true;
     const char * start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";

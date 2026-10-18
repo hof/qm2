@@ -55,10 +55,6 @@ enum castle_flag_t {
     CASTLE_WHITE = 3, CASTLE_BLACK = 12, CASTLE_ANY = 15, CASTLE_NONE = 0
 };
 
-enum endgame_t {
-    OPP_BISHOPS, KBBKN, KBPSK, KNPK, KRKP, KQKP, KRPKR, KQPSKQ, KQPSKQPS
-};
-
 const piece_t PAWN[2] = {BPAWN, WPAWN};
 const piece_t QUEEN[2] = {BQUEEN, WQUEEN};
 const piece_t ROOK[2] = {BROOK, WROOK};
@@ -80,8 +76,6 @@ public:
     bool wtm; //white to move
     bool legal_enpassant; //cached legality for repetition identity
     U64 tt_key; //transposition table (hash) key
-    U64 material_hash;
-    U64 pawn_hash;
 
     void do_flip();
 
@@ -137,7 +131,6 @@ public:
     void add_piece(const int piece, const int sq, const bool hash);
     void remove_piece(const int piece, const int sq, const bool hash);
     void move_piece(const int piece, const int ssq, const int tsq, const bool hash);
-    bool is_eg(endgame_t eg, bool us);
     int see(const move_t * move);
     bool see(const move_t * move, int threshold);
     bool is_gain(const move_t * move);
@@ -295,16 +288,6 @@ public:
     bool can_castle(const bool us) {
         static const int CC_FLAG[2] = { CASTLE_BLACK, CASTLE_WHITE };
         return stack->castling_flags & CC_FLAG[us];
-    }
-
-    /**
-     * Test if a side has the bishop pair
-     * @param us side to test
-     * @return true: side has bishop pair, false: side does not have the bishop pair
-     */
-    bool has_bishop_pair(const bool us) {
-        const int pc = BISHOP[us];
-        return (bb[pc] & WHITE_SQUARES) && (bb[pc] & BLACK_SQUARES);
     }
 
     /**

@@ -76,8 +76,6 @@ void prepare(search_t & search) {
 bool restored(search_t & search, search_t & original) {
     return check(search.brd.to_string() == original.brd.to_string()
         && search.brd.stack->tt_key == original.brd.stack->tt_key
-        && search.brd.stack->pawn_hash == original.brd.stack->pawn_hash
-        && search.brd.stack->material_hash == original.brd.stack->material_hash
         && search.stack->tt_history == original.stack->tt_history
         && search.stack->repetition_start == original.stack->repetition_start
         && search.brd.ply == original.brd.ply && search.stack == search.root_stack

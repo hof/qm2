@@ -23,7 +23,7 @@ std::string state(board_t & board) {
         const auto & entry = board._stack[i];
         out << ' ' << entry.enpassant_sq << ' ' << entry.castling_flags
             << ' ' << entry.fifty_count << ' ' << entry.wtm << ' ' << entry.legal_enpassant
-            << ' ' << entry.tt_key << ' ' << entry.material_hash << ' ' << entry.pawn_hash;
+            << ' ' << entry.tt_key;
     }
     return out.str();
 }
@@ -35,8 +35,6 @@ void check_rebuilt(board_t & board, bool losers) {
     for (int i = 0; i <= BPIECES; ++i) require(board.bb[i] == rebuilt->bb[i], "rebuilt bitboard");
     for (int i = 0; i < 64; ++i) require(board.matrix[i] == rebuilt->matrix[i], "rebuilt matrix");
     require(board.stack->tt_key == (rebuilt->stack->tt_key ^ variant_key), "rebuilt position hash");
-    require(board.stack->material_hash == (rebuilt->stack->material_hash ^ variant_key), "rebuilt material hash");
-    require(board.stack->pawn_hash == (rebuilt->stack->pawn_hash ^ variant_key), "rebuilt pawn hash");
     require(board.stack->repetition_key() == (rebuilt->stack->repetition_key() ^ variant_key), "rebuilt repetition hash");
     require(board.stack->legal_enpassant == rebuilt->stack->legal_enpassant, "rebuilt en passant legality");
 }

@@ -20,7 +20,7 @@ int main(int argc, char ** argv) {
         const U64 policy = number(argv[5]), nodes = number(argv[6]), depth = number(argv[7]);
         if (policy > 63 || depth < 1 || depth > MAX_PLY) throw std::runtime_error("invalid policy/depth");
         const std::string evaluator(argv[3]), mode(argv[4]);
-        if ((evaluator != "hce" && evaluator != "nnue")
+        if (evaluator != "nnue"
                 || (mode != "off" && mode != "verify" && mode != "full" && mode != "replay" && mode != "fixed" && mode != "quiet"))
             throw std::runtime_error("invalid evaluator/mode");
         if ((mode == "fixed" || mode == "quiet") && (policy || evaluator != "nnue"))
@@ -47,13 +47,10 @@ int main(int argc, char ** argv) {
         options::get_option("OwnBook")->value = 0;
         options::get_option("DrawContempt")->value = 0;
         options::get_option("SyzygyProbeLimit")->value = 0;
-        options::get_option("UseNNUE")->value = evaluator == "nnue";
         std::string error;
         if (!nnue::set_path(argv[1], error)) throw std::runtime_error(error);
         for (const auto & [id, fen] : positions) {
             trans_table::clear();
-            pawn_table::clear();
-            material_table::clear();
             auto storage = std::make_unique<search_t>(fen.c_str());
             auto & search = *storage;
             search.nnue_audit.mode = mode == "off" ? nnue::audit_mode_t::off

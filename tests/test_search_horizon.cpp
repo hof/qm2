@@ -1,5 +1,4 @@
 #include "engine.h"
-#include "eval_material.h"
 #include <map>
 #include <set>
 #include <sstream>
@@ -60,7 +59,7 @@ int reference(search_t & search, int mode) {
     const int eval = node.in_check ? -score::INF : evaluate(&search);
     if (mode <= 0 && !node.in_check) {
         ++quiescent_nodes;
-        valid &= check(material::is_eg(&search), "reference requires unpruned endgame qsearch", node.fen);
+        valid &= check(search.stack->metadata.endgame, "reference requires unpruned endgame qsearch", node.fen);
     }
     checked_nodes += node.in_check;
     int best = mode == 1 || node.in_check ? -score::INF : eval;
@@ -81,8 +80,6 @@ int reference(search_t & search, int mode) {
 bool restored(search_t & search, search_t & original, const char * fen) {
     return check(search.brd.to_string() == original.brd.to_string()
         && search.brd.stack->tt_key == original.brd.stack->tt_key
-        && search.brd.stack->pawn_hash == original.brd.stack->pawn_hash
-        && search.brd.stack->material_hash == original.brd.stack->material_hash
         && search.stack->tt_history == original.stack->tt_history
         && search.stack->repetition_start == original.stack->repetition_start
         && search.brd.ply == 0 && search.stack == search.root_stack,
@@ -158,8 +155,20 @@ bool test_root(const char * fen, int & probes, int & interrupted, int & exact_re
                                 ++exact_reuses;
                                 ok &= check(search->nodes == 1, "nonterminal exact TT was not reused", fen);
                             }
-                            ok &= check(valid_bound(result, value, window.first, window.second),
-                                "real horizon bound differs", fen);
+                            if (!valid_bound(result, value, window.first, window.second)) {
+                                // Reverse futility is an approximate bound. The old
+                                // material evaluator happened not to trigger it on
+                                // these fixtures; a neural static score can do so.
+                                const int eval = evaluate(search.get());
+                                const bool static_cutoff = selective && mode == 1 && !direct
+                                    && !search->stack->in_check && window.first + 1 == window.second
+                                    && std::abs(window.second) < score::TABLEBASE - MAX_PLY
+                                    && search->brd.has_pieces(search->brd.us())
+                                    && search->brd.stack->fifty_count < 99
+                                    && eval - 100 >= window.second;
+                                ok &= check(static_cutoff && result == eval && search->nodes == 1,
+                                    "real horizon bound differs without the expected static cutoff", fen);
+                            }
                             ok &= check(!search->stop_all, "unexpected horizon cancellation", fen);
                             ok &= restored(*search, *original, fen);
                         }

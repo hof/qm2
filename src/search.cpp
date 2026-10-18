@@ -35,8 +35,8 @@
 #include "uci_console.h"
 #include "eval.h"
 #include "progress.h"
+#include <stdexcept>
 #include "timeman.h"
-#include "eval_material.h"
 #include "eval_endgame.h"
 #include "tablebase.h"
 
@@ -178,9 +178,8 @@ int search_t::neural_static_score() {
 }
 
 void search_t::init(const char * fen, const game_t * g, const search_control_t * control,
-        const std::vector<U64> & position_history) {
+        const std::vector<U64> & position_history, int variant) {
     const auto started = std::chrono::steady_clock::now();
-    PST::init();
     brd.init(fen);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     nnue_audit = {};
@@ -194,14 +193,12 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
             _position_history.end() - brd.stack->fifty_count);
     }
     game.init_tm(brd.us(), started);
-    wild = 0;
+    wild = variant;
     book_name = book::path();
     _own_book = options::get_value("OwnBook") && !options::get_value("UCI_AnalyseMode");
     _experience_depth = options::get_value("ExperienceDepth");
     _experience = experience::snapshot();
     _book_seeded = false;
-    king_attack_shelter = options::get_value("KingAttackShelter");
-    king_attack_pieces = options::get_value("KingAttackPieces");
     beta_pruning = options::get_value("BetaPruning");
     null_verify = options::get_value("NullVerify");
     null_enabled = options::get_value("NullMove");
@@ -211,10 +208,17 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     iid_active = false;
     ffp_enabled = options::get_value("FutilityPruning");
     draw_contempt = options::get_value("DrawContempt");
-    evaluation_network = options::get_value("UseNNUE") ? nnue::snapshot() : nullptr;
+    evaluation_network.reset();
+    if (wild == 0) {
+        std::string error;
+        if (!nnue::load_default(error)) {
+            throw std::runtime_error("NNUE network required: " + error);
+        }
+        evaluation_network = nnue::snapshot();
+    }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     const int requested_horizon = options::get_value("NNUEAuditHorizon");
-    const int horizon = requested_horizon == 1 && !evaluation_network ? 0 : requested_horizon;
+    const int horizon = wild == 0 ? requested_horizon : 0;
     nnue_audit.fixed_horizon = horizon == 1;
     nnue_audit.aligned_quiescence = horizon == 2;
     nnue_audit.quiet_checks = horizon == 2 && options::get_value("NNUEAuditQuietChecks");
@@ -1350,7 +1354,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
             return alpha;
         } else if (null_score >= beta && std::abs(null_score) < decisive_score) {
             constexpr int verification_reduction = 5;
-            if (null_verify && depth > verification_reduction && material::is_eg(this)) {
+            if (null_verify && depth > verification_reduction && stack->metadata.endgame) {
                 //verification
                 const clock_range_t previous_clocks = stack->tt_clocks;
                 // Exclude artificial passes throughout the verification subtree.
@@ -1398,7 +1402,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     // heuristic, not a proven bound on the neural evaluation.
     const bool can_ffp = ffp_enabled && depth == 1 && !pv && !in_check
         && std::abs(alpha) < decisive_score && std::abs(beta) < decisive_score
-        && !material::is_eg(this);
+        && !stack->metadata.endgame;
 
     //prepare and do the loop
     int best = -score::INF;
@@ -1628,7 +1632,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      * Moves loop
      */
 
-    const bool is_eg = !in_check && material::is_eg(this);
+    const bool is_eg = !in_check && stack->metadata.endgame;
     do {
 
         /*

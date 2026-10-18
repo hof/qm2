@@ -1,6 +1,5 @@
 #include "engine.h"
 #include "w17/w17_search.h"
-#include "eval_material.h"
 #include <limits>
 #include <set>
 #include <sstream>
@@ -24,8 +23,6 @@ std::set<std::string> words(const std::string & text) {
 bool restored(search_t & search, search_t & original) {
     return check(search.brd.to_string() == original.brd.to_string()
         && search.brd.stack->tt_key == original.brd.stack->tt_key
-        && search.brd.stack->pawn_hash == original.brd.stack->pawn_hash
-        && search.brd.stack->material_hash == original.brd.stack->material_hash
         && search.stack->tt_history == original.stack->tt_history
         && search.stack->repetition_start == original.stack->repetition_start
         && search.brd.ply == 0 && search.stack == search.root_stack,
@@ -40,7 +37,7 @@ bool test_castling() {
         original.stack->in_check = original.brd.in_check();
         original.draw_contempt = original.tablebase_limit = 0;
         const int eval = evaluate(&original);
-        ok &= check(original.stack->in_check || material::is_eg(&original),
+        ok &= check(original.stack->in_check || original.stack->metadata.endgame,
             "castling oracle requires unpruned endgame or check evasions");
         original.init_root_moves();
         std::set<std::string> legal, castles;

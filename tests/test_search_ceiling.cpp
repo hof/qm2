@@ -37,8 +37,6 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
     place_at_ply(search, ply);
     const auto original_fen = search.brd.to_string();
     const auto key = search.brd.stack->tt_key;
-    const auto pawn = search.brd.stack->pawn_hash;
-    const auto material = search.brd.stack->material_hash;
     const auto context = search.tt_context();
     const auto history_start = search.stack->repetition_start;
     const bool repeated = search.is_repetition();
@@ -60,8 +58,8 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
         && search.brd.in_check() == test.checked && search.brd.to_string() == original_fen
         && search.brd.ply == ply && search.stack == &search._stack[ply]
         && search.brd.stack == &search.brd._stack[ply]
-        && search.brd.stack->tt_key == key && search.brd.stack->pawn_hash == pawn
-        && search.brd.stack->material_hash == material && search.tt_context() == context
+        && search.brd.stack->tt_key == key
+        && search.tt_context() == context
         && search.stack->repetition_start == history_start && search.is_repetition() == repeated;
     if (!success) std::cerr << "ceiling: " << fen << " losers=" << losers << " mode=" << mode
         << " depth=" << depth << " alpha=" << alpha << " TT=" << table_state

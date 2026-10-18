@@ -85,7 +85,6 @@ target_link_libraries(test_search_review MAX2SRC)
 
 add_executable(test_nnue test_nnue.cpp)
 target_link_libraries(test_nnue MAX2SRC)
-set(maxima_nnue_test_network "" CACHE FILEPATH "Optional real HalfKP network for reference/lifecycle checks")
 if(maxima_nnue_search_audit)
     if(NOT maxima_nnue_test_network)
         message(FATAL_ERROR "NNUE search audit tests require maxima_nnue_test_network")
@@ -118,3 +117,7 @@ add_test(NAME test_search_aspiration COMMAND test_search_aspiration)
 add_executable(test_search_iid test_search_iid.cpp)
 target_link_libraries(test_search_iid MAX2SRC)
 add_test(NAME test_search_iid COMMAND test_search_iid)
+
+get_property(maxima_subdirectory_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${maxima_subdirectory_tests} PROPERTIES
+    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

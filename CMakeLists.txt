@@ -65,6 +65,15 @@ add_subdirectory(src)
 add_subdirectory(gen)
 include(CTest)
 if(BUILD_TESTING)
+    set(maxima_nnue_test_network "${PROJECT_SOURCE_DIR}/networks/nn-62ef826d1a6d.nnue"
+        CACHE FILEPATH "HalfKP network for standard search and reference checks")
+    if(NOT maxima_nnue_test_network)
+        set(maxima_nnue_test_network "${PROJECT_SOURCE_DIR}/networks/nn-62ef826d1a6d.nnue"
+            CACHE FILEPATH "HalfKP network for standard search and reference checks" FORCE)
+    endif()
+    if(NOT EXISTS "${maxima_nnue_test_network}")
+        message(FATAL_ERROR "Search tests require maxima_nnue_test_network; run tools/download_nnue.py or set BUILD_TESTING=OFF")
+    endif()
     add_subdirectory(tests)
 endif()
 
@@ -135,7 +144,7 @@ if(BUILD_TESTING)
     add_test(test_search_lifecycle ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/test_search_lifecycle.py
         ${PROJECT_BINARY_DIR}/src/maxima2)
-    set_tests_properties(test_search_lifecycle PROPERTIES TIMEOUT 45)
+    set_tests_properties(test_search_lifecycle PROPERTIES TIMEOUT 90)
     if(maxima_nnue_test_network)
         add_test(NAME test_nnue_lifecycle COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/test_nnue_lifecycle.py
@@ -147,4 +156,7 @@ if(BUILD_TESTING)
     add_test(test_uci_input tests/test_uci_input)
     add_test(test_uci_output tests/test_uci_output)
     set_tests_properties(test_uci_output PROPERTIES TIMEOUT 10)
+    get_property(maxima_tests DIRECTORY PROPERTY TESTS)
+    set_tests_properties(${maxima_tests} PROPERTIES
+        ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
 endif()

@@ -68,6 +68,8 @@ int to_centipawns(int raw_score);
 // Configuration changes occur after stopping/joining the engine worker.
 // Snapshots also retain their weights across later reloads or unloads.
 bool set_path(const std::string & path, std::string & error);
+// Standard chess requires a network. Discover eval.nnue beside the book/engine.
+bool load_default(std::string & error);
 std::shared_ptr<const network_t> snapshot();
 std::string path();
 

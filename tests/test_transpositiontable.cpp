@@ -31,51 +31,7 @@
 bool test_tt() {
     std::cout << "test_transpositiontable test tt" << std::endl;
 
-    pawn_table::set_size(4);
-    material_table::set_size(4);
-
-    /*
-     * Test pawn table store and retrieve
-     */
-
     search_t * s = new search_t("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    evaluate(s);
-    pawn_table::entry_t * pe = pawn_table::retrieve(s->brd.stack->pawn_hash);
-
-    //pawn entry should contain valid information for the starting position
-    if (pe->key != s->brd.stack->pawn_hash
-            || pe->passers != 0
-            || pe->score.mg != 0
-            || pe->score.eg != 0
-            || pe->king_attack[WHITE] != pe->king_attack[BLACK]
-            || pe->flags != 0
-            ) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=pawn table store/retrieve error 2" << std::endl;
-        delete s;
-        return false;
-    }
-
-    /*
-     * Test material table store and retrieve
-     */
-
-    U64 key = s->brd.stack->material_hash;
-    material_table::entry_t * me = material_table::retrieve(key);   
-
-    //Starting attack force: queen (9), two rooks (10), four minors (12).
-    //check for valid entry
-    if (me->key != key
-            || me->score != 0
-            || me->phase != 0
-            || me->flags != 96
-            || me->attack_force[WHITE] != 31
-            || me->attack_force[BLACK] != 31
-            ) {
-        std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=material table store/retrieve error" << std::endl;
-        delete s;
-        return false;
-    }
-
     //transposition table - test storing and retrieving
     trans_table::set_size(1);
     int age = 1;

@@ -1,8 +1,6 @@
 #include "engine.h"
 #include "nnue.h"
 #include "nnue_affine.h"
-#include "eval_material.h"
-#include "eval_pawns.h"
 #include "w17/w17_eval.h"
 #include "w17/w17_search.h"
 #include <bit>
@@ -73,41 +71,25 @@ U64 reference_passers(const board_t & board) {
     return result;
 }
 
-bool check_search_metadata(search_t & search, bool classical_pawns = true) {
-    material::eval(&search);
-    const bool endgame = material::is_eg(&search);
-    const U64 passers = reference_passers(search.brd);
-    if (classical_pawns) {
-        pawns::eval(&search);
-        if (!check(search.stack->pt->passers == passers,
-                "Independent passer reference must match classical metadata")) {
-            return false;
-        }
+bool check_search_metadata(search_t & search) {
+    auto & board = search.brd;
+    bool endgame = false;
+    for (bool us : {false, true}) {
+        const int pawns = board.count(PAWN[us]);
+        const int knights = board.count(KNIGHT[us]);
+        const int bishops = board.count(BISHOP[us]);
+        endgame |= pawns <= 1 || (!board.count(ROOK[us]) && !board.count(QUEEN[us])
+            && (knights + bishops < 2 || (knights == 2 && bishops == 0)));
     }
-    const auto material_slot = *material_table::retrieve(search.brd.stack->material_hash);
-    const auto pawn_slot = *pawn_table::retrieve(search.brd.stack->pawn_hash);
-    material::prepare_nnue(&search);
-    pawns::prepare_nnue(&search);
-    const auto & retained_material = *material_table::retrieve(search.brd.stack->material_hash);
-    const auto & retained_pawns = *pawn_table::retrieve(search.brd.stack->pawn_hash);
-    return check(material::is_eg(&search) == endgame && search.stack->pt->passers == passers
-        && search.stack->mt == &search.stack->material_entry
-        && search.stack->pt == &search.stack->pawn_entry
-        && search.stack->mt->key == search.brd.stack->material_hash
-        && search.stack->pt->key == search.brd.stack->pawn_hash
-        && retained_material.key == material_slot.key
-        && retained_material.score == material_slot.score
-        && retained_material.flags == material_slot.flags
-        && retained_pawns.key == pawn_slot.key
-        && retained_pawns.passers == pawn_slot.passers
-        && retained_pawns.score.mg == pawn_slot.score.mg
-        && retained_pawns.score.eg == pawn_slot.score.eg,
-        "Lightweight NNUE metadata must match references, own its values and leave HCE caches intact");
+    search.stack->metadata = search_metadata(board);
+    return check(search.stack->metadata.endgame == endgame
+        && search.stack->metadata.passed_pawns == reference_passers(board),
+        "Search pruning metadata must match independent material and square-scan references");
 }
 
 bool check_metadata_positions() {
     std::mt19937_64 random(20261017);
-    // Compare full classical metadata on every legal child, null and undo.
+    // Compare independent search metadata on every legal child, null and undo.
     for (const char * fen : {
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
             "r3k2r/ppp2ppp/8/8/8/8/PPP2PPP/R3K2R w KQkq - 0 1",
@@ -119,8 +101,8 @@ bool check_metadata_positions() {
         if (!check_search_metadata(*search)) {
             return false;
         }
-        const U64 parent_passers = search->stack->pt->passers;
-        const bool parent_endgame = material::is_eg(search.get());
+        const U64 parent_passers = search->stack->metadata.passed_pawns;
+        const bool parent_endgame = search->stack->metadata.endgame;
         std::vector<move_t> moves;
         for (auto * move = move::first(search.get(), 1); move; move = move::next(search.get(), 1)) {
             moves.push_back(*move);
@@ -131,8 +113,8 @@ bool check_metadata_positions() {
                 return false;
             }
             search->backward(&move);
-            if (!check(search->stack->pt->passers == parent_passers
-                    && material::is_eg(search.get()) == parent_endgame,
+            if (!check(search->stack->metadata.passed_pawns == parent_passers
+                    && search->stack->metadata.endgame == parent_endgame,
                     "A child metadata update must not change its parent")) {
                 return false;
             }
@@ -148,7 +130,7 @@ bool check_metadata_positions() {
             return false;
         }
     }
-    // Actual legal play samples classical pawn-cache hits and misses with
+    // Actual legal play checks retained metadata with
     // evolving material, king moves and both sides to move.
     for (int game = 0; game < 24; ++game) {
         auto search = std::make_unique<search_t>(
@@ -178,7 +160,7 @@ bool check_metadata_positions() {
         }
     }
     // Arbitrary disjoint pawn sets stress edge files, doubled/tripled pawns
-    // and same-rank enemies. Avoid running the full HCE on synthetic boards.
+    // and same-rank enemies. No evaluation is needed for these synthetic boards.
     auto synthetic = std::make_unique<search_t>("7k/8/8/8/8/8/8/K7 w - - 0 1");
     for (int trial = 0; trial < 20000; ++trial) {
         for (int square = 8; square < 56; ++square) {
@@ -208,9 +190,7 @@ bool check_metadata_positions() {
                 }
             }
         }
-        synthetic->brd.stack->material_hash = 0x8765000000000000ULL + trial;
-        synthetic->brd.stack->pawn_hash = 0x1234000000000000ULL + trial;
-        if (!check_search_metadata(*synthetic, false)) {
+        if (!check_search_metadata(*synthetic)) {
             return false;
         }
     }
@@ -282,57 +262,12 @@ int main() {
     success &= check(nnue::set_path(path.string(), error), "Valid HalfKP model must load");
     auto first = nnue::snapshot();
     if (!first) return 1;
-    options::get_option("UseNNUE")->value = 0;
     const char * fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    auto hce_storage = std::make_unique<search_t>(fen);
-    auto & hce = *hce_storage;
-    const int hce_score = evaluate(&hce);
-    const U64 hce_context = hce.tt_context();
-    options::get_option("UseNNUE")->value = 1;
     success &= check_metadata_positions();
     auto neural_storage = std::make_unique<search_t>(fen);
     auto & neural = *neural_storage;
-    success &= check(evaluate(&neural) == 100 && neural.stack->mt && neural.stack->pt,
-        "NNUE score must replace HCE while retaining material/pawn metadata");
-    // Eviction must not change metadata retained by an evaluated position.
-    // Both a populated cache and a cache hit must produce owned snapshots.
-    for (bool neural_mode : {false, true}) {
-        options::get_option("UseNNUE")->value = neural_mode;
-        material_table::clear();
-        pawn_table::clear();
-        for (int attempt = 0; attempt < 2; ++attempt) {
-            auto probe = std::make_unique<search_t>(fen);
-            const int value = evaluate(probe.get());
-            const auto material_snapshot = *probe->stack->mt;
-            const auto pawn_snapshot = *probe->stack->pt;
-            auto * material_slot = material_table::retrieve(probe->brd.stack->material_hash);
-            auto * pawn_slot = pawn_table::retrieve(probe->brd.stack->pawn_hash);
-            success &= check(probe->stack->mt != material_slot && probe->stack->pt != pawn_slot,
-                "Search metadata must own snapshots rather than replaceable cache slots");
-            material_slot->key ^= 1;
-            material_slot->flags ^= 255;
-            pawn_slot->key ^= 1;
-            pawn_slot->passers ^= ~U64(0);
-            success &= check(evaluate(probe.get()) == value
-                && probe->stack->mt->key == material_snapshot.key
-                && probe->stack->mt->flags == material_snapshot.flags
-                && probe->stack->pt->key == pawn_snapshot.key
-                && probe->stack->pt->passers == pawn_snapshot.passers,
-                "Cached evaluation must retain correct metadata after cache eviction");
-            // Repopulate caches so the next iteration exercises a hit.
-            material::eval(probe.get());
-            pawns::eval(probe.get());
-        }
-    }
-    options::get_option("UseNNUE")->value = 0;
-    pawn_table::clear();
-    for (int attempt = 0; attempt < 2; ++attempt) {
-        auto shelter = std::make_unique<search_t>(
-            "r1bq1rk1/p1p1bppp/2pp1n2/8/4PP2/2N5/PPP1B1PP/R1BQ1RK1 b - - 0 1");
-        success &= check(evaluate(shelter.get()) == 16,
-            "Pawn shelter must read current metadata while a cache miss is being built");
-    }
-    options::get_option("UseNNUE")->value = 1;
+    success &= check(evaluate(&neural) == 100 && neural.stack->metadata == search_metadata(neural.brd),
+        "NNUE score must retain only the required search metadata");
     // Raw neural scores stay constant; only the separate rule50 policy scales
     // the result, without blending or falling back to classical evaluation.
     for (const char * position : {
@@ -344,7 +279,7 @@ int main() {
         const int expected = position_storage->brd.stack->fifty_count == 80 ? 20 : 100;
         success &= check(evaluate(position_storage.get()) == expected
             && evaluate(position_storage.get()) == expected
-            && position_storage->stack->eg_score == 100,
+            && position_storage->neural_static_score() == 100,
             "NNUE mode must not blend or fall back to classical scores");
     }
     for (const auto [clock, expected] : {std::pair{0, 100}, {9, 100}, {10, 90},
@@ -353,7 +288,7 @@ int main() {
             + std::to_string(clock) + " 1";
         auto probe = std::make_unique<search_t>(position.c_str());
         success &= check(evaluate(probe.get()) == expected
-            && evaluate(probe.get()) == expected && probe->stack->eg_score == 100,
+            && evaluate(probe.get()) == expected && probe->neural_static_score() == 100,
             "Rule50 bucket boundaries must scale once and preserve raw neural scores");
     }
     // A repeated board at another clock reuses the undamped static score.
@@ -378,8 +313,8 @@ int main() {
         }
         success &= check(cached->brd.stack->tt_key == key && cached->brd.stack->fifty_count == 12,
             "A reversible cycle must revisit the board across a rule50 bucket boundary");
-        success &= check(evaluate(cached.get()) == 90 && cached->stack->eg_score == 100
-            && cached->stack->mt && cached->stack->pt
+        success &= check(evaluate(cached.get()) == 90 && cached->neural_static_score() == 100
+            && cached->stack->metadata == search_metadata(cached->brd)
             && !cached->evaluation_accumulators[cached->brd.ply].ready[0]
             && !cached->evaluation_accumulators[cached->brd.ply].ready[1],
             "Neural cache hits must skip inference and preserve clock/metadata contracts");
@@ -393,9 +328,6 @@ int main() {
             && cached->evaluation_accumulators[0].ready[1],
             "Search reinitialization must discard its previous neural cache");
     }
-    success &= check(neural.tt_context() != hce_context, "HCE and NNUE must not share TT score context");
-    success &= check(evaluate(&hce) == hce_score && !hce.evaluation_network,
-        "Existing searches must retain their evaluator");
     success &= check(!nnue::set_path(path.string() + ".missing", error)
         && !error.empty() && nnue::snapshot() == first, "Failed reload must retain model");
     success &= check(nnue::path() == path.string(), "Failed reload must retain path");
@@ -433,10 +365,9 @@ int main() {
     neural.stack->eval_result = score::INVALID;
     success &= check(!nnue::snapshot() && evaluate(&neural) == 100,
         "Unload must not invalidate retained snapshots");
-    options::get_option("UseNNUE")->value = 0;
-    auto restored_storage = std::make_unique<search_t>(fen);
-    auto & restored = *restored_storage;
-    success &= check(evaluate(&restored) == hce_score && restored.tt_context() == hce_context,
-        "HCE behavior/context must be unchanged after NNUE unload");
+    success &= check(nnue::set_path(path.string(), error), "A valid network must reload after internal unload");
+    auto restored = std::make_unique<search_t>(fen);
+    success &= check(evaluate(restored.get()) == score::TABLEBASE - 1
+        && restored->tt_context() == extreme.tt_context(), "Reloaded model must retain its score/context identity");
     return success ? 0 : 1;
 }

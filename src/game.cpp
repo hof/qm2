@@ -39,16 +39,13 @@ namespace options {
         { "NullVerify", BOOL, 1, "type check default true" },
         { "Wild", STRING, 0, "type combo default standard var standard var losers" },
         { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100" },
-        { "KingAttackShelter", INT, 256, "type spin default 256 min 0 max 512" },
-        { "KingAttackPieces", INT, 256, "type spin default 256 min 0 max 512" },
         { "SyzygyPath", STRING, 0, "type string default <empty>" },
         { "SyzygyProbeLimit", INT, 5, "type spin default 5 min 0 max 5" },
         { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64" },
         { "BookFile", STRING, 0, "type string default book.bin" },
         { "ExperienceFile", STRING, 0, "type string default <empty>" },
         { "ExperienceDepth", INT, 16, "type spin default 16 min 1 max 128" },
-        { "UseNNUE", BOOL, 0, "type check default false" },
-        { "EvalFile", STRING, 0, "type string default <empty>" },
+        { "EvalFile", STRING, 0, "type string default eval.nnue" },
         { "Aspiration", BOOL, 1, "type check default true" },
         { "IID", BOOL, 1, "type check default true" }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT

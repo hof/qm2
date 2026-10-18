@@ -45,7 +45,7 @@ std::string state(const board_t & board) {
     out << board.ply << ' ' << board.root_ply << ' ' << board.stack;
     for (int ply = 0; ply <= board.ply; ++ply) {
         const auto & entry = board._stack[ply];
-        out << ' ' << entry.tt_key << ' ' << entry.material_hash << ' ' << entry.pawn_hash
+        out << ' ' << entry.tt_key
             << ' ' << entry.fifty_count << ' ' << entry.castling_flags
             << ' ' << entry.enpassant_sq << ' ' << entry.wtm << ' ' << entry.legal_enpassant;
     }

@@ -1,5 +1,4 @@
 #include "engine.h"
-#include "eval_material.h"
 #include <map>
 #include <sstream>
 #include <vector>
@@ -58,8 +57,6 @@ public:
 bool restored(search_t & search, search_t & original, const char * fen) {
     return check(search.brd.to_string() == original.brd.to_string()
         && search.brd.stack->tt_key == original.brd.stack->tt_key
-        && search.brd.stack->pawn_hash == original.brd.stack->pawn_hash
-        && search.brd.stack->material_hash == original.brd.stack->material_hash
         && search.stack->tt_history == original.stack->tt_history
         && search.stack->repetition_start == original.stack->repetition_start
         && search.brd.ply == 0 && search.stack == search.root_stack,
@@ -111,7 +108,7 @@ bool test_futility(const fixture_t & fixture, int & probes, int & skipped, int &
                 std::map<std::string, int> observed;
                 for (auto & call : search->calls) ++observed[call.move];
                 const bool active = enabled && depth == 1 && !fixture.in_check
-                    && !material::is_eg(search.get()) && margin >= 0;
+                    && !search->stack->metadata.endgame && margin >= 0;
                 ok &= check(!search->calls.empty(), "first legal move pruned", fixture.fen);
                 const std::string first = search->calls.empty() ? "" : search->calls.front().move;
                 int expected_skips = 0;

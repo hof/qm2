@@ -73,11 +73,7 @@ void board_t::clear() {
  */
 void board_t::add_piece(const int piece, const int sq, const bool hash = false) {
     if (hash) {
-        HASH_ADD_PIECE(stack->material_hash, piece, count(piece));
         HASH_ADD_PIECE(stack->tt_key, piece, sq);
-        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
-            HASH_ADD_PIECE(stack->pawn_hash, piece, sq);
-        }
     }
     U64 bit = BIT(sq);
     bb[piece] ^= bit;
@@ -99,11 +95,7 @@ void board_t::remove_piece(const int piece, const int sq, const bool hash = fals
     bb[ALLPIECES] ^= bit;
     matrix[sq] = EMPTY;
     if (hash) {
-        HASH_REMOVE_PIECE(stack->material_hash, piece, count(piece));
         HASH_REMOVE_PIECE(stack->tt_key, piece, sq);
-        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
-            HASH_REMOVE_PIECE(stack->pawn_hash, piece, sq);
-        }
     }
 }
 
@@ -123,9 +115,6 @@ void board_t::move_piece(const int piece, const int ssq, int tsq, const bool has
     matrix[tsq] = piece;
     if (hash) {
         HASH_MOVE_PIECE(stack->tt_key, piece, ssq, tsq);
-        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
-            HASH_MOVE_PIECE(stack->pawn_hash, piece, ssq, tsq);
-        }
     }
 }
 
@@ -223,22 +212,18 @@ void board_t::forward(const move_t * move) {
         if (has_castle_right(CASTLE_K) && (ssq == h1 || ssq == e1 || tsq == h1)) {
             stack->castling_flags ^= CASTLE_K;
             HASH_CASTLE_K(stack->tt_key);
-            HASH_CASTLE_K(stack->pawn_hash);
         }
         if (has_castle_right(CASTLE_Q) && (ssq == a1 || ssq == e1 || tsq == a1)) {
             stack->castling_flags ^= CASTLE_Q;
             HASH_CASTLE_Q(stack->tt_key);
-            HASH_CASTLE_Q(stack->pawn_hash);
         }
         if (has_castle_right(CASTLE_k) && (ssq == h8 || ssq == e8 || tsq == h8)) {
             stack->castling_flags ^= CASTLE_k;
             HASH_CASTLE_k(stack->tt_key);
-            HASH_CASTLE_k(stack->pawn_hash);
         }
         if (has_castle_right(CASTLE_q) && (ssq == a8 || ssq == e8 || tsq == a8)) {
             stack->castling_flags ^= CASTLE_q;
             HASH_CASTLE_q(stack->tt_key);
-            HASH_CASTLE_q(stack->pawn_hash);
         }
 
     }
@@ -872,68 +857,6 @@ bool board_t::has_legal_enpassant() {
     return false;
 }
 
-bool board_t::is_eg(endgame_t eg, bool us) {
-    const bool them = !us;
-    switch (eg) {
-        case OPP_BISHOPS:
-            return bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && is_1(bb[WBISHOP]) && is_1(bb[BBISHOP])
-                    && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0
-                    && bool(bb[WBISHOP] & WHITE_SQUARES) == bool(bb[BBISHOP] & BLACK_SQUARES);
-        case KBBKN:
-            return bb[WPAWN] == 0 && bb[BPAWN] == 0
-                    && bb[KNIGHT[us]] == 0 && is_1(bb[KNIGHT[them]])
-                    && has_bishop_pair(us) && bb[BISHOP[them]] == 0
-                    && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
-        case KBPSK:
-            return bb[PAWN[them]] == 0 && bb[PAWN[us]] != 0
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && is_1(bb[BISHOP[us]]) && bb[BISHOP[them]] == 0
-                    && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
-        case KNPK:
-            return bb[PAWN[them]] == 0 && is_1(bb[PAWN[us]])
-                    && is_1(bb[KNIGHT[us]]) && bb[KNIGHT[them]] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
-        case KRKP:
-            return bb[PAWN[us]] == 0 && is_1(bb[PAWN[them]])
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && is_1(bb[ROOK[us]]) && bb[ROOK[them]] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
-        case KQKP:
-            return bb[PAWN[us]] == 0 && is_1(bb[PAWN[them]])
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && is_1(bb[QUEEN[us]]) && bb[QUEEN[them]] == 0;
-        case KRPKR:
-            return is_1(bb[PAWN[us]]) && bb[PAWN[them]] == 0
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && is_1(bb[ROOK[us]]) && is_1(bb[ROOK[them]])
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
-        case KQPSKQ:
-            return bb[PAWN[us]] != 0 && bb[PAWN[them]] == 0
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && bb[ROOK[us]] == 0 && bb[ROOK[them]] == 0
-                    && is_1(bb[WQUEEN]) && is_1(bb[BQUEEN]);
-        case KQPSKQPS:
-            return bb[PAWN[us]] != 0 && bb[PAWN[them]] != 0
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && bb[ROOK[us]] == 0 && bb[ROOK[them]] == 0
-                    && is_1(bb[WQUEEN]) && is_1(bb[BQUEEN]);
-        default:
-            return false;
-    }
-}
-
 /**
  * Initializes / resets the board structure from a FEN string
  * @param fen the FEN string
@@ -1052,25 +975,21 @@ void board_t::init(const char* fen) {
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_k;
                 HASH_CASTLE_k(stack->tt_key);
-                HASH_CASTLE_k(stack->pawn_hash);
                 break;
             case 'q':
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_q;
                 HASH_CASTLE_q(stack->tt_key);
-                HASH_CASTLE_q(stack->pawn_hash);
                 break;
             case 'K':
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_K;
                 HASH_CASTLE_K(stack->tt_key);
-                HASH_CASTLE_K(stack->pawn_hash);
                 break;
             case 'Q':
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_Q;
                 HASH_CASTLE_Q(stack->tt_key);
-                HASH_CASTLE_Q(stack->pawn_hash);
                 break;
             case ' ':
                 break;

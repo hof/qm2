@@ -28,7 +28,7 @@ from seeded legal games and include captures and quiet moves.
 
 The native test verifies scores and unchanged piece bitboards, matrix, stack
 pointer, ply, clocks and hashes. A separate live-search regression verifies
-that the pinned-pawn witness survives qsearch SEE pruning with HCE and NNUE.
+that the pinned-pawn witness survives qsearch SEE pruning with neural evaluation.
 
 Each certificate also checks the threshold overload against its independent
 score: below/at/above equality, zero/one, both integer extremes, and thresholds

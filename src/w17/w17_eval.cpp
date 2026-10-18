@@ -35,20 +35,7 @@ int w17_evaluate(w17_search_t * s) {
 
 int w17_eval_material(w17_search_t * s) {
 
-    /*
-     * 1. Probe the material table
-     */
-
     board_t * brd = &s->brd;
-    s->stack->mt = material_table::retrieve(brd->stack->material_hash);
-    if (s->stack->mt->key == brd->stack->material_hash) {
-        return s->stack->mt->score;
-    }
-
-    /*
-     * 2. Calculate game phase and flags
-     */
-
     int result = 0;
     int wpawns = brd->count(WPAWN);
     int bpawns = brd->count(BPAWN);
@@ -62,7 +49,6 @@ int w17_eval_material(w17_search_t * s) {
     int bqueens = brd->count(BQUEEN);
     int wpieces = wknights + wbishops + wrooks + wqueens;
     int bpieces = bknights + bbishops + brooks + bqueens;
-    int phase = MAX(0, score::MAX_PHASE - wpieces - bpieces - wqueens - bqueens);
     int flags = 1 * (wpawns > 0) + 2 * (bpawns > 0) + 4 * (wpieces > 0) + 8 * (bpieces > 0);
 
     /*
@@ -136,13 +122,5 @@ int w17_eval_material(w17_search_t * s) {
             break;
     }
 
-    /*
-     * 5. Store results in material table and on the stack
-     */
-
-    s->stack->mt->key = brd->stack->material_hash;
-    s->stack->mt->phase = phase;
-    s->stack->mt->flags = flags;
-    s->stack->mt->score = result;
     return result;
 }

@@ -35,7 +35,7 @@ public:
 
     w17_search_t(const char * fen, const game_t * g = NULL,
             const search_control_t * control = NULL,
-            const std::vector<U64> & position_history = {}) : search_t(fen, g, control, position_history) {
+            const std::vector<U64> & position_history = {}) : search_t(fen, g, control, position_history, 17) {
         wild = 17;
         evaluation_network.reset();
         evaluation_accumulators.clear();
@@ -47,8 +47,6 @@ public:
             key ^= hash::codes[13][17];
         }
         init_tt_history();
-        brd.stack->material_hash ^= hash::codes[13][17];
-        brd.stack->pawn_hash ^= hash::codes[13][17];
     }
     
     int w17_pvs(int alpha, int beta, int in_mate_search, int depth);

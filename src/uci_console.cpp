@@ -441,25 +441,23 @@ namespace uci {
                             trans_table::clear();
                         }
 #endif
-                        if (name == "UseNNUE" && candidate && !nnue::snapshot()) {
-                            out("info string NNUE enable failed: load EvalFile first; HCE retained");
-                            return true;
-                        }
                         if (name == "EvalFile") {
                             std::string error;
                             const std::string path = value == "<empty>" ? "" : value;
+                            if (path.empty()) {
+                                out("info string NNUE load failed: a network is required; previous model retained");
+                                return true;
+                            }
                             if (!nnue::set_path(path, error)) {
                                 out("info string NNUE load failed: " + error + "; previous model retained");
                                 return true;
                             }
-                            if (path.empty()) options::get_option("UseNNUE")->value = 0;
                             trans_table::clear();
-                            out(path.empty() ? "info string NNUE unloaded; HCE selected"
-                                : "info string NNUE loaded; UseNNUE selects evaluation");
+                            out("info string NNUE loaded");
                             return true;
                         }
                         if (candidate != opt->value
-                                && (name == "KingAttackShelter" || name == "KingAttackPieces" || name == "UseNNUE" || name == "Aspiration" || name == "IID"
+                                && (name == "Aspiration" || name == "IID"
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                                     || name == "NNUEAuditNullMove"
                                     || name == "NNUEAuditBetaPruning"
@@ -588,6 +586,14 @@ namespace uci {
     }
 
     void send_ready() {
+        if (options::get_value("Wild") == 0 && !nnue::snapshot()) {
+            std::string error;
+            if (!nnue::load_default(error)) {
+                out("info string ERROR: NNUE network required: " + error);
+            } else {
+                out("info string NNUE loaded " + nnue::path());
+            }
+        }
         out("readyok");
     }
 

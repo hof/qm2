@@ -12,7 +12,6 @@ int main(int argc, char ** argv) {
     if (argc != 2) return failure(__LINE__);
     magic::init();
     uci::silent(true);
-    options::get_option("UseNNUE")->value = 1;
     options::get_option("OwnBook")->value = 0;
     std::string error;
     if (!nnue::set_path(argv[1], error)) return failure(__LINE__);
@@ -68,8 +67,7 @@ int main(int argc, char ** argv) {
     options::get_option("NNUEAuditQuietChecks")->value = 1;
     options::get_option("NNUEAuditCastling")->value = 1;
     options::get_option("NNUEAuditCheckExtensions")->value = 1;
-    for (bool neural : {false, true}) {
-        options::get_option("UseNNUE")->value = neural;
+    {
         for (bool white : {false, true}) {
             const char * check_fen = white ? "6k1/8/8/8/8/8/6r1/K2Q4 w - - 0 1"
                 : "k2q4/6R1/8/8/8/8/8/6K1 b - - 0 1";
@@ -116,8 +114,7 @@ int main(int argc, char ** argv) {
         }
     }
     options::get_option("NNUEAuditLMR")->value = 1;
-    for (bool neural : {false, true}) {
-        options::get_option("UseNNUE")->value = neural;
+    {
         for (bool white : {false, true}) {
             const char * start_fen = white
                 ? "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -149,8 +146,7 @@ int main(int argc, char ** argv) {
         }
     }
     options::get_option("NNUEAuditAspiration")->value = 1;
-    for (bool neural : {false, true}) {
-        options::get_option("UseNNUE")->value = neural;
+    {
         for (bool white : {false, true}) {
             const char * start_fen = white
                 ? "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -174,7 +170,6 @@ int main(int argc, char ** argv) {
     }
     options::get_option("NNUEAuditAspiration")->value = 0;
     options::get_option("NNUEAuditLMR")->value = 0;
-    options::get_option("UseNNUE")->value = 1;
     options::get_option("NNUEAuditQuietChecks")->value = 0;
     options::get_option("NNUEAuditCastling")->value = 0;
     options::get_option("NNUEAuditCheckExtensions")->value = 0;
@@ -182,9 +177,8 @@ int main(int argc, char ** argv) {
     if (!search.nnue_audit.aligned_quiescence || search.beta_pruning || search.ffp_enabled
             || search.null_enabled || search.lmr_enabled || search.extension(&search.root.moves[0].move, 2)) return failure(__LINE__);
     options::get_option("NNUEAuditHorizon")->value = 2;
-    options::get_option("UseNNUE")->value = 0;
     search.init(fen, nullptr);
-    if (search.evaluation_network || !search.nnue_audit.aligned_quiescence
+    if (!search.evaluation_network || !search.nnue_audit.aligned_quiescence
             || search.beta_pruning || search.ffp_enabled || search.null_enabled || search.lmr_enabled
             || search.iid_enabled || search.nnue_audit.q_delta || search.nnue_audit.q_see
             || search.extension(&search.root.moves[0].move, 2)) return failure(__LINE__);
@@ -193,9 +187,8 @@ int main(int argc, char ** argv) {
     if (search.completed_depth != 3 || search.brd.ply || search.brd.to_string() != fen) return failure(__LINE__);
     options::get_option("NNUEAuditHorizon")->value = 1;
     search.init(fen, nullptr);
-    if (search.nnue_audit.fixed_horizon || search.nnue_audit.aligned_quiescence) return failure(__LINE__);
+    if (!search.nnue_audit.fixed_horizon || search.nnue_audit.aligned_quiescence) return failure(__LINE__);
     options::get_option("NNUEAuditHorizon")->value = 0;
-    options::get_option("UseNNUE")->value = 1;
     options::get_option("NNUEAuditHorizon")->value = 2;
     options::get_option("NNUEAuditNullMove")->value = 1;
     search.init(fen, nullptr);
@@ -262,8 +255,7 @@ int main(int argc, char ** argv) {
             || search.brd.to_string() != fen || evaluate(&search) != expected) return failure(__LINE__);
     options::get_option("NNUEAuditFutility")->value = 0;
     options::get_option("NNUEAuditDelta")->value = 1;
-    for (bool neural : {false, true}) {
-        options::get_option("UseNNUE")->value = neural;
+    {
         for (const char * capture_fen : {
                 "r3k2r/ppp2ppp/2n1bn2/3p4/3Pp3/2N1BN2/PPP2PPP/R2QK2R w KQkq - 0 1",
                 "r2qk2r/ppp2ppp/2n1bn2/3pP3/3P4/2N1BN2/PPP2PPP/R3K2R b KQkq - 0 1"}) {
@@ -289,7 +281,6 @@ int main(int argc, char ** argv) {
         probe->qsearch(alpha, alpha + 1, -1);
         if (probe->nodes != 2 || probe->brd.ply || probe->brd.to_string() != protected_fen) return failure(__LINE__);
     }
-    options::get_option("UseNNUE")->value = 1;
     search.init(fen, nullptr);
     if (!search.nnue_audit.q_delta || search.nnue_audit.q_see) return failure(__LINE__);
     search.game.max_nodes = 128;
@@ -299,8 +290,7 @@ int main(int argc, char ** argv) {
             || search.brd.to_string() != fen || evaluate(&search) != expected) return failure(__LINE__);
     options::get_option("NNUEAuditDelta")->value = 0;
     options::get_option("NNUEAuditSEE")->value = 1;
-    for (bool neural : {false, true}) {
-        options::get_option("UseNNUE")->value = neural;
+    {
         // Both knight captures lose 225 cp. SEE alone must reject them even
         // when alpha is too close to stand pat for capture-gain delta pruning.
         const char * losing_fen = "r3k2r/ppp2ppp/2n1bn2/3p4/3Pp3/2N1BN2/PPP2PPP/R2QK2R w KQkq - 0 1";
@@ -344,7 +334,6 @@ int main(int argc, char ** argv) {
                     || probe->brd.ply || probe->brd.to_string() != protected_fen) return failure(__LINE__);
         }
     }
-    options::get_option("UseNNUE")->value = 1;
     search.init(fen, nullptr);
     if (search.nnue_audit.q_delta || !search.nnue_audit.q_see) return failure(__LINE__);
     search.game.max_nodes = 128;
@@ -354,8 +343,7 @@ int main(int argc, char ** argv) {
             || search.brd.to_string() != fen || evaluate(&search) != expected) return failure(__LINE__);
     options::get_option("NNUEAuditSEE")->value = 0;
     options::get_option("NNUEAuditQuietChecks")->value = 1;
-    for (bool neural : {false, true}) {
-        options::get_option("UseNNUE")->value = neural;
+    {
         const char * queen_fen = "6k1/8/8/8/8/8/6r1/K2Q4 w - - 0 1";
         auto probe = std::make_unique<search_t>(queen_fen);
         // Independent legal-move census: Qb3+, Qd5+, Qd8+ are safe;
@@ -397,7 +385,6 @@ int main(int argc, char ** argv) {
         }
         options::get_option("NNUEAuditCastling")->value = 0;
     }
-    options::get_option("UseNNUE")->value = 1;
     search.init(fen, nullptr);
     search.game.max_nodes = 128;
     search.game.max_depth = 3;
@@ -421,8 +408,7 @@ int main(int argc, char ** argv) {
             || work.root_researches || work.research_fail_highs
             || search.brd.to_string() != played_fen) return failure(__LINE__);
     options::get_option("NNUEAuditIID")->value = 1;
-    for (bool neural : {false, true}) {
-        options::get_option("UseNNUE")->value = neural;
+    {
         for (const char * start_fen : {fen,
                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1"}) {
             for (int depth : {3, 4}) {

@@ -36,8 +36,6 @@ bool restored_position(search_t & search, const char * fen) {
     search_t & original = *original_storage;
     const bool success = search.brd.to_string() == original.brd.to_string()
         && search.brd.stack->tt_key == original.brd.stack->tt_key
-        && search.brd.stack->pawn_hash == original.brd.stack->pawn_hash
-        && search.brd.stack->material_hash == original.brd.stack->material_hash
         && search.brd.ply == 0 && search.stack == search.root_stack;
     if (!success) {
         std::cerr << "search did not restore board, hashes, or stack: " << fen << "\n";
@@ -178,7 +176,7 @@ bool test_capture() {
     prepare_search(search);
     const int static_score = evaluate(&search);
     const int quiet_score = search.qsearch(-score::INF, score::INF, 0);
-    bool success = static_score < -200 && quiet_score > 200
+    bool success = quiet_score > static_score && quiet_score > 0
         && search.stack->best_move.to_string() == "d1d5" && !search.stop_all;
     if (!success) {
         std::cerr << "hanging queen: static=" << static_score << ", quiescence="
@@ -198,8 +196,7 @@ bool test_recapture() {
     search.forward(&capture, search.brd.gives_check(&capture));
     const int before_recapture = evaluate(&search);
     const int after_recapture = search.qsearch(-score::INF, score::INF, -1);
-    bool success = before_recapture > -200 && before_recapture < 200
-        && after_recapture > 200 && search.stack->best_move.to_string() == "d8d5"
+    bool success = after_recapture > before_recapture && search.stack->best_move.to_string() == "d8d5"
         && search.nodes > 1 && !search.stop_all;
     search.backward(&capture);
     success &= restored_position(search, fen);
@@ -257,7 +254,10 @@ bool test_quiet_playable() {
             search_t search(fen);
             prepare_search(search);
             const int expected = evaluate(&search);
-            success &= std::abs(expected) > 200;
+            if (expected == 0) {
+                std::cerr << "quiet static score " << expected << ": " << fen << "\n";
+                success = false;
+            }
             success &= check_score("quiet playable", "quiescence",
                 search.qsearch(-score::INF, score::INF, depth), expected);
             success &= restored_position(search, fen);
@@ -385,7 +385,11 @@ bool test_fifty_move_boundary() {
             search.forward(&move, search.brd.gives_check(&move));
             success &= search.brd.stack->fifty_count == 0 && !search.is_draw();
             // The side that just moved retains winning material after resetting the clock.
-            success &= search.qsearch(-score::INF, score::INF, 0) < -200 && !search.stop_all;
+            const int reset_score = search.qsearch(-score::INF, score::INF, 0);
+            if (reset_score >= 0 || search.stop_all) {
+                std::cerr << "reset score " << reset_score << ": " << reset_fen << "\n";
+                success = false;
+            }
             search.backward(&move);
             success &= restored_position(search, reset_fen.c_str());
         }

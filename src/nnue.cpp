@@ -7,6 +7,8 @@
 #include <bit>
 #include <fstream>
 #include <mutex>
+#include <cstdlib>
+#include <filesystem>
 
 #ifdef __AVX2__
 #include <immintrin.h>
@@ -242,6 +244,33 @@ bool set_path(const std::string & path, std::string & error) {
 std::shared_ptr<const network_t> snapshot() {
     std::lock_guard lock(configuration_mutex);
     return configured_network;
+}
+
+bool load_default(std::string & error) {
+    if (snapshot()) {
+        error.clear();
+        return true;
+    }
+    if (const char * configured = std::getenv("MAXIMA_EVAL_FILE")) {
+        if (*configured) {
+            return set_path(configured, error);
+        }
+    }
+    std::vector<std::filesystem::path> candidates{"eval.nnue"};
+    std::error_code filesystem_error;
+    const auto executable = std::filesystem::read_symlink("/proc/self/exe", filesystem_error);
+    if (!filesystem_error) {
+        candidates.push_back(executable.parent_path() / "eval.nnue");
+        candidates.push_back(executable.parent_path().parent_path() / "eval.nnue");
+    }
+    for (const auto & candidate : candidates) {
+        if (std::filesystem::is_regular_file(candidate, filesystem_error)) {
+            const auto absolute = std::filesystem::absolute(candidate, filesystem_error);
+            return set_path(filesystem_error ? candidate.string() : absolute.string(), error);
+        }
+    }
+    error = "cannot find eval.nnue; place it beside book.bin or set EvalFile";
+    return false;
 }
 
 std::string path() {

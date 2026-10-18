@@ -16,140 +16,63 @@
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  *  
  * File: evaluate.cpp
- * Evalution functions for traditional chess
+ * Neural evaluation and search metadata for standard chess
  */
 
 #include "eval.h"
 #include "search.h"
-#include "bits.h"
-#include "score.h"
 #include "progress.h"
 
-#include "eval_pst.h"
-#include "eval_material.h"
-#include "eval_pieces.h"
-#include "eval_endgame.h"
-#include "eval_pawns.h"
-#include "eval_king_attack.h"
-
-/**
- * Initialize the global Piece Square Tables (PST)
- */
-
-
-namespace PST {
-
-    pst_t table;
-    
-    bool init_done = false;
-    
-    void init() {
-        if (!init_done) {
-            for (int sq = a1; sq <= h8; sq++) {
-                table[EMPTY][sq].clear();
-                table[BPAWN][sq].set(PST_PAWN_MG[sq], PST_PAWN_EG[sq]);
-                table[BKNIGHT][sq].set(PST_KNIGHT_MG[sq], PST_KNIGHT_EG[sq]);
-                table[BBISHOP][sq].set(PST_BISHOP_MG[sq], PST_BISHOP_EG[sq]);
-                table[BROOK][sq].set(PST_ROOK_MG[sq], PST_ROOK_EG[sq]);
-                table[BQUEEN][sq].set(PST_QUEEN_MG[sq], PST_QUEEN_EG[sq]);
-                table[BKING][sq].set(PST_KING_MG[sq], PST_KING_EG[sq]);
-                int fsq = FLIP_SQUARE(sq);
-                for (int pc = WPAWN; pc <= WKING; pc++) {
-                    table[pc][fsq].set(table[pc + 6][sq]);
-                }
+search_metadata_t search_metadata(const board_t & board) {
+    search_metadata_t result{};
+    const U64 white = board.bb[WPAWN];
+    const U64 black = board.bb[BPAWN];
+    const U64 white_files = white | ((white & ~FILE_A) >> 1) | ((white & ~FILE_H) << 1);
+    const U64 black_files = black | ((black & ~FILE_A) >> 1) | ((black & ~FILE_H) << 1);
+    result.passed_pawns = (white & ~(fill_south(white | black_files) >> 8))
+        | (black & ~(fill_north(black | white_files) << 8));
+    result.endgame = max_1(white) || max_1(black);
+    if (!result.endgame) {
+        for (bool us : {false, true}) {
+            if (board.bb[ROOK[us]] || board.bb[QUEEN[us]]) {
+                continue;
             }
-            init_done = true;
+            const int minors = popcnt0(board.bb[KNIGHT[us]] | board.bb[BISHOP[us]]);
+            if (minors < 2 || (minors == 2 && !board.bb[BISHOP[us]])) {
+                result.endgame = true;
+                break;
+            }
         }
-        assert(table[WKING][a1].equals(table[BKING][a8]));
     }
+    return result;
 }
 
-const score_t TEMPO[2] = {S(-10, 0), S(10, 0)};
-
-/**
- * Main evaluation function (normal chess variant)
- * @param s search object
- * @return total evaluation score rounded to GRAIN_SIZE 
- */
-int evaluate(search_t * s) {
-
-    /*
-     * Return immediately if in check or if a valid evaluation score is
-     * available on the stack
-     */
-
-    if (s->stack->in_check && s->brd.ply < (MAX_PLY - 1)) {
-        s->stack->eval_result = score::INVALID;
-        return s->stack->eval_result;
+int evaluate(search_t * search) {
+    if (search->stack->in_check && search->brd.ply < (MAX_PLY - 1)) {
+        search->stack->eval_result = score::INVALID;
+        return search->stack->eval_result;
     }
-
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    if (s->wild == 0 && s->evaluation_network && s->nnue_audit.mode == nnue::audit_mode_t::off) {
-        ++s->nnue_audit.counters.calls;
-        if (s->stack->eval_result != score::INVALID) ++s->nnue_audit.counters.cached_returns;
-    }
-    if (s->wild == 0 && s->evaluation_network && s->nnue_audit.mode != nnue::audit_mode_t::off) {
-        const int result = nnue::audit_evaluate(*s);
-        if (s->stack->eval_result != score::INVALID) return result;
-        material::prepare_nnue(s);
-        pawns::prepare_nnue(s);
-        s->stack->eval_result = result;
+    if (search->nnue_audit.mode == nnue::audit_mode_t::off) {
+        ++search->nnue_audit.counters.calls;
+        if (search->stack->eval_result != score::INVALID) {
+            ++search->nnue_audit.counters.cached_returns;
+        }
+    } else {
+        const int result = nnue::audit_evaluate(*search);
+        if (search->stack->eval_result == score::INVALID) {
+            search->stack->metadata = search_metadata(search->brd);
+            search->stack->eval_result = result;
+        }
         return result;
     }
 #endif
-    if (s->stack->eval_result != score::INVALID) {
-        return s->stack->eval_result;
+    if (search->stack->eval_result != score::INVALID) {
+        return search->stack->eval_result;
     }
-
-    if (s->wild == 0 && s->evaluation_network) {
-        // Only the endgame flag and passer mask are used by NNUE search.
-        // Classical scores and other metadata fields are not populated.
-        material::prepare_nnue(s);
-        pawns::prepare_nnue(s);
-        const int result = s->neural_static_score();
-        s->stack->eg_score = result;
-        s->stack->eval_result = damp_rule50(result, s->brd.stack->fifty_count);
-        return s->stack->eval_result;
-    }
-
-    /*
-     * Calculate evaluation score. This needs to be done in the following order:
-     * 1) Material balance. This also sets the game phase and material flags.
-     * 2) Pawn structure. Sets pawns flags, mobility masks and passers.
-     * 3) Piece evaluation. Stores king attack / defend information.
-     * 4) Passed pawn, king attack and endgame evaluation. 
-     * 
-     * The score is interpolated between midgame and endgame value.
-     */
-
-    const bool wtm = s->brd.us();
-    int result = material::eval(s); //sets stack->mt->phase and material flags
-    score_t * score = &s->stack->eval_score;
-    score->set(TEMPO[wtm]);
-    score->add(pawns::eval(s));
-    score->add(pieces::eval(s));
-    score->add(pawns::eval_passed_pawns(s, WHITE));
-    score->sub(pawns::eval_passed_pawns(s, BLACK));
-    score->add(king_attack::eval(s, WHITE));
-    score->sub(king_attack::eval(s, BLACK));
-    result += score->get(s->stack->mt->phase);
-    s->stack->eg_score = result;
-    if (material::is_eg(s)) {
-        result = eg::eval(s, result);
-    }
-
-    /*
-     * Return score for current side to move and rounded to grain size
-     */
-
-    if (!wtm) {
-        result = -result;
-        s->stack->eg_score = -s->stack->eg_score;
-    }
-
-    result = damp_rule50(result, s->brd.stack->fifty_count);
-    result = (result / GRAIN_SIZE) * GRAIN_SIZE;
-    s->stack->eval_result = result;
-    assert(result > -score::DEEPEST_MATE && result < score::DEEPEST_MATE);
+    assert(search->evaluation_network);
+    search->stack->metadata = search_metadata(search->brd);
+    const int result = damp_rule50(search->neural_static_score(), search->brd.stack->fifty_count);
+    search->stack->eval_result = result;
     return result;
 }

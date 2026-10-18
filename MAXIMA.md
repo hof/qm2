@@ -24,8 +24,8 @@ Until a dedicated documentation reader exists, list chapters with
 
 ## 1. Engine and goals
 
-Maxima2 is a C++26 UCI chess engine with bitboard move generation, classical
-search and evaluation, and experimental losers-chess support.
+Maxima2 is a C++26 UCI chess engine with bitboard move generation, alpha-beta
+search, NNUE evaluation, and experimental royal-losers support.
 
 ### Goals
 
@@ -35,12 +35,12 @@ search and evaluation, and experimental losers-chess support.
   gains capabilities.
 - Preserve the engine's focus on speed: efficient chess algorithms, high search
   throughput, and compilation tuned for the target CPU.
-- Explore a learned evaluator, such as NNUE, with correctness tests and measured
-  playing-strength gains guiding integration into search.
-- Current NNUE priority: establish playing strength against HCE at equal time,
-  then remove unused classical evaluation machinery while preserving search
-  metadata, pruning guards, exact draw detection and tablebase integration.
-  Freeze an HCE comparison executable before deleting its implementation.
+- Improve NNUE evaluation with correctness tests and measured playing-strength
+  gains guiding model and inference changes.
+- Standard chess uses NNUE exclusively after passing the equal-time HCE
+  comparison gate. The classical evaluator and its caches are removed; retain
+  required search metadata, pruning guards, exact draws and tablebase integration.
+  Keep a frozen HCE executable for historical comparisons.
   The agreed strength gate is NNUE at least as strong as pure HCE, rather than
   a required positive Elo margin. Use the runner's `--min-elo 0` simultaneous
   confidence rule: pass only when the lower score bound exceeds 50%; a cap
@@ -147,8 +147,8 @@ run, so stalemate remains an exact draw with production pruning enabled. The
 probe uses a king escape first and fresh move generation when needed, without
 changing the active move picker.
 
-Standard search now uses a simple shared pruning baseline for HCE and NNUE,
-both expressed on the 100-cp pawn scale. Reverse futility is limited to depths
+Standard NNUE search retains the simple pruning baseline established during
+the HCE comparison, expressed on the 100-cp pawn scale. Reverse futility is limited to depths
 one through three: require `eval - 100 * depth >= beta` and return `eval` on
 success. Null move requires `eval >= beta + 50`, a zero-window search and a
 fixed extra reduction of three (`depth - 1 - 3`). These round margins replace
@@ -396,16 +396,13 @@ information. Tests independently verify all legal normalized KPK states.
 
 ### Standard NNUE bootstrap
 
-NNUE development lives on `feat/nnue-bootstrap`. The target is standalone NNUE
-evaluation: no blending with HCE and no automatic classical-score fallbacks in
-NNUE mode. HCE remains separately selectable and the standard chess default
-until the strength gate passes; royal-losers remains material-only.
-Standard static evaluation now applies a separate progress policy to both HCE
-and NNUE: ten-halfmove buckets 0–9, 10–19, …, 90–99 retain 100%, 90%, …, 10%
+Standard chess uses standalone NNUE evaluation, without classical blending or
+fallback. Royal-losers retains its separate material-only evaluator. The HCE
+strength gate passed on 2026-10-18; the comparison executable is frozen.
+Standard static evaluation applies a separate progress policy to NNUE: ten-halfmove buckets 0–9, 10–19, …, 90–99 retain 100%, 90%, …, 10%
 of the score. At 100 it reaches zero; actual draw detection and checkmate
-precedence remain search rules. Scaling occurs once before caching (and before
-HCE grain rounding). Raw neural output/accumulators and the separate unscaled
-endgame score are preserved; this introduces no classical blending.
+precedence remain search rules. Scaling occurs once before caching. Raw neural output and accumulators remain
+unchanged; this introduces no classical blending.
 
 The initial target is pretrained CPU inference, without training or GPU hardware.
 
@@ -426,7 +423,8 @@ target.
 Official CC0 bootstrap weights: `nn-62ef826d1a6d.nnue`, full SHA-256
 `62ef826d1a6d11b9e814188025aa02a60815c037292e0ef9bbb9bf4f724e5e63`.
 Run `python3 tools/download_nnue.py` to fetch and verify them into ignored
-`networks/`. The downloader does not change engine defaults. Weight provenance:
+`networks/`. Copy or link the downloaded file to `eval.nnue` beside `book.bin` for automatic
+loading, or select it explicitly with `EvalFile`. Weight provenance:
 https://github.com/official-stockfish/networks. The GPL reference probe revision
 and source ownership are recorded in `third_party/nnue_reference/README.md`.
 
@@ -456,24 +454,28 @@ mutable accumulators belong to that search. Evaluator/model changes must prevent
 reuse of incompatible TT scores. Invalid loads must retain the previous model.
 Correctness gates include full/reference/incremental equivalence, special moves,
 null moves, restoration and cancellation. Measure CPU throughput and paired
-playing strength before changing the default. Parallel-cache work is separate.
+playing strength before changing the model. Parallel-cache work is separate.
 
-The engine now supports `EvalFile` and `UseNNUE` (default false). Load the model
-first, then enable NNUE:
+The default model is `eval.nnue`, beside `book.bin`. Initial `isready` loads it
+before the chess clock starts. If a client skips readiness, search initialization
+still requires a valid model. `MAXIMA_EVAL_FILE` overrides automatic discovery;
+otherwise lookup checks the working directory, the executable directory, and its
+parent (for the bundled `engine/maxima2` layout). An existing invalid file fails
+explicitly. Missing models reject standard searches; there is no HCE fallback.
+To select another compatible model:
 
 ```text
-setoption name EvalFile value /absolute/path/to/nn-62ef826d1a6d.nnue
-setoption name UseNNUE value true
+setoption name EvalFile value /absolute/path/to/network.nnue
+isready
 ```
 
-Missing/unsupported files report a load failure and retain the previous model.
-Enabling without a loaded model is rejected. `EvalFile value <empty>` unloads
-and selects HCE; `UseNNUE value false` retains the loaded model while selecting
-HCE. Changes stop/join active search and clear incompatible TT entries. Search
-score context also fingerprints the model and adapter version, so separately
-retained search snapshots cannot reuse another evaluator's score bounds. The
-fingerprint is a cache identity, not a cryptographic integrity check; the model
-downloader verifies the full pinned SHA-256. Royal-losers ignores standard NNUE.
+`UseNNUE`, `KingAttackShelter` and `KingAttackPieces` are removed. Empty or
+unsupported `EvalFile` loads report a failure and retain the previous model.
+Successful model changes stop/join active search and clear incompatible TT
+entries. Search score context fingerprints the model and adapter version, so
+retained snapshots cannot reuse another model's score bounds. The fingerprint
+is a cache identity, not a cryptographic integrity check; the downloader verifies
+the full pinned SHA-256. Royal-losers requires no standard NNUE model.
 
 `src/nnue.cpp` owns the isolated HalfKP loader/inference implementation. Weights
 are immutable, accumulators are allocated per search/ply, and updates are lazy.
@@ -493,16 +495,15 @@ loaded weight layout and UCI interfaces are unchanged.
 There is no network I/O or Python dependency in the engine or its build.
 
 `test_nnue` runs offline using synthetic weights for load validation, score bounds,
-metadata, model lifetime, evaluator/TT isolation and HCE/losers preservation.
-Each evaluated standard-chess search position owns its required pawn and
-material metadata. HCE retains complete snapshots from its shared caches. NNUE
-uses `material::prepare_nnue` and `pawns::prepare_nnue` to populate only the
-node-owned keys, endgame flag and passed-pawn mask; other classical entry fields
-are not populated or consumed in this mode. Neither helper probes or fills the
-classical caches. The material flag keeps the original pawn-count/mating-power
-rule. Directional bitboard fills reproduce the original passer mask, including
-its exclusion of rear doubled pawns. No classical pawn weakness, king shelter,
-material score or other positional score is calculated by this NNUE path.
+metadata, model lifetime, TT isolation and royal-losers preservation. Standard
+search nodes own only the passed-pawn mask and the endgame pruning guard.
+Directional bitboard fills reproduce the original passer mask, including its
+exclusion of rear doubled pawns; the guard retains the pawn-count/mating-power
+predicate. The classical material/pawn caches, their incremental keys, tapered
+scores, PSTs, pawn weaknesses, king shelter and positional endgame adjustments
+are removed. TT/repetition keys, exact KPK draws, Syzygy decisions and pruning
+policies remain. Royal-losers computes its existing material formula directly.
+
 Descendants cannot change a parent's owned values. Tests compare the required
 metadata with classical evaluation and an independent square scan, cover legal
 special-move children, null/undo, up to 24 games of 100 legal plies plus undo,
@@ -1028,7 +1029,8 @@ run successfully. Original logs/source and an explicit correction receipt are
 preserved. The protocol and scored games were unchanged. This passes the
 requested strength gate under these settings and authorizes the planned HCE
 cleanup; it does not establish a general Elo rating or conversion strength.
-HCE removal itself has not yet been implemented.
+The subsequent HCE cleanup is described in the current NNUE architecture above;
+older experiment sections below retain their historical evaluator settings.
 At the user's request, a separate three-game 10+0.1 depth diagnostic then used
 the same frozen engines and settings on three unplayed reserved openings,
 alternating colors. NNUE won all three by the same score adjudication rule;
@@ -2216,7 +2218,10 @@ The default build uses C++26 and requires a compiler that supports that mode
 (tested with GCC 16), CMake 3.30 or newer, and Ninja. Engine lifecycle tests need
 Python 3.7+ with its standard library. Configure with `-DBUILD_TESTING=OFF`
 to build the engine without Python or test targets. The separately packaged
-runner needs Python 3.8+; see chapters 6.1 and 10.
+runner needs Python 3.8+; see chapters 6.1 and 10. Standard-chess tests require
+the pinned network (download with `python3 tools/download_nnue.py`), or an
+explicit `-Dmaxima_nnue_test_network=/absolute/path/to/network.nnue`. CTest
+supplies `MAXIMA_EVAL_FILE` to isolate model discovery from its working directory.
 Release builds retain `-O3 -DNDEBUG -march=native`; Debug builds retain assertions
 and debug symbols. Fathom is compiled separately as C11; a C compiler is also required.
 Native CPU tuning means the binary targets the build machine.
@@ -2268,13 +2273,12 @@ where the engine was built, but does not require the source checkout to run.
 The bundle includes the NNUE weights, opening book, immutable experience file,
 290 installed three/four/five-piece Syzygy WDL/DTZ tables (about 984 MB), and GCC runtime libraries.
 The bridge translates single Windows drive paths for `EvalFile`, `BookFile`,
-`ExperienceFile` and `SyzygyPath` to Linux `/mnt/<drive>/...` paths. In the GUI,
-set `EvalFile` to `C:\dev\maxima\networks\nn-62ef826d1a6d.nnue` before
-enabling `UseNNUE`; use `C:\dev\maxima\syzygy` for `SyzygyPath`, with
+`ExperienceFile` and `SyzygyPath` to Linux `/mnt/<drive>/...` paths.
+`eval.nnue` beside `book.bin` loads automatically; `EvalFile` selects alternative
+networks. Use `C:\\dev\\maxima\\syzygy` for `SyzygyPath`, with
 `SyzygyProbeLimit=5` and `SyzygyProbeDepth=1`. The complete five-piece set is bundled.
 `BookFile` is `C:\dev\maxima\book.bin` and `ExperienceFile` is
-`C:\dev\maxima\experience\experience.bin`. HCE remains separately
-available by turning `UseNNUE` off. The bundle's README lists the configuration.
+`C:\dev\maxima\experience\experience.bin`. The frozen HCE baseline remains available through its separate launcher. The bundle's README lists the configuration.
 
 Launcher source/build artifacts remain local under ignored `.tools/windows/`.
 Copied assets are SHA-256 verified in the bundle's `SHA256.json`. Checks through
@@ -2286,10 +2290,10 @@ For Cute Chess, the user's engine folder is `C:\dev\uci-engines`. It contains
 `maxima.exe` and `gnuchess.exe` copies of the existing UCI launchers. These still
 start their bundles at `C:\dev\maxima` and `C:\dev\gnuchess`; keep those asset
 folders in place. A separate `maxima-hce.exe` launcher was added on 2026-10-17
-for a manual NNUE-versus-HCE game. It starts the same current bundled engine;
-the filename does not enforce an evaluator. Add it as UCI, name it Maxima 2 HCE
-and leave `UseNNUE=false`. Keep `UseNNUE=true` and the configured network in
-the existing NNUE entry. `MAXIMA-HCE.txt` in the engine folder lists matching
+for a manual NNUE-versus-HCE game. It now starts the preserved `engine/maxima-hce2` comparison executable,
+independent of updates to the NNUE engine. Add it as UCI, name it Maxima 2 HCE
+and leave its legacy `UseNNUE=false`. The current NNUE entry needs no evaluator
+switch; refresh saved engine options after the cleanup. `MAXIMA-HCE.txt` in the engine folder lists matching
 Hash64, contempt zero, book/experience off and five-piece Syzygy settings.
 Both launchers passed concurrent depth-four legal searches with their respective
 evaluators; this is a launch check, not a playing-strength result. Artifacts:
@@ -2734,6 +2738,198 @@ focused source patch, validation, original fixture failure/correction, all
 per-position results, hashes and backups are under
 `.context/baselines/2026-10-17/nnue-metadata/`.
 
+### NNUE-only cleanup — 2026-10-18
+
+After the completed strength gate, standard HCE and its caches are removed in
+one cleanup. The network, raw inference, score damping, pruning policies and
+TT/repetition identities remain unchanged. The frozen HCE comparison binary is
+preserved separately. The automatic model is `eval.nnue`, beside `book.bin`;
+`EvalFile` selects alternatives. Initial readiness loads the model outside the
+chess clock. Missing models reject standard search; invalid replacement loads
+retain the previous network. Royal-losers retains its material-only formula.
+
+Removed material/pawn tables free 72 MiB: at Hash64 after model readiness,
+baseline/candidate RSS was 166064/92360 KiB (one process each). Board frames
+shrink from 40 to 24 bytes and search frames from 8112 to 7848 bytes. Search
+metadata consists only of the passed-pawn mask and endgame pruning guard.
+
+Release and Debug checks pass 36/36 each, after replacing obsolete HCE score
+thresholds and color-flip symmetry assertions with neural reference/restoration
+checks. Exact KPK draws and promotion certificates remain. The horizon test
+separates an existing approximate reverse-futility cutoff from its exhaustive
+oracle; frozen/current NNUE search agrees on that fixture. Focused audit checks
+pass 7/7, ASan/UBSan checks 6/6 (leak detection disabled), and runner checks
+87 pass with nine skips. No new race-detector run. An auxiliary trace comparison
+matches all 3,715,559 ordered root/PVS/q entries over 31 fixtures against the
+earlier validated NNUE trace executable, whose search source matches the frozen
+pre-cleanup source; node budgets omit clock allocation. The current frozen binary
+is independently compared below.
+
+Performance protocol: ordinary Release, pinned CPU2, one worker, Hash64, pinned
+unchanged model, books/experience/ponder/tablebases off except explicit tablebase
+roots. Three alternating baseline/candidate rounds, 22 modern positions at
+500,000 visited nodes each, 16 royal-losers positions at 100,000 nodes and eight
+five-piece root probes. Start/Kiwipete also use 5M nodes and completed depth10.
+All score/PV/nodes/completed-iteration/provenance signatures match exactly and
+all reported PVs replay legally. No builds/tests ran alongside the benchmark.
+
+| Workload | Baseline median round NPS | Candidate median round NPS | Aggregate time gain | Round NPS range, baseline/candidate |
+| --- | ---: | ---: | ---: | ---: |
+| 22 NNUE positions | 1,086,329 | 1,095,742 | +0.75% | 5.13% / 3.59% |
+| 16 royal-losers positions | 4,068,370 | 4,091,977 | -0.17% | 2.84% / 1.19% |
+| Start/Kiwipete, 5M nodes | 1,062,764 | 1,018,795 | +0.12% | 13.82% / 1.91% |
+
+Repeat range is `100 * (max/min - 1)` across three runs. Aggregate gain compares
+summed times; medians can differ when a repeat is noisy. Positive gain means
+less elapsed time for the same work. These measurements
+support the cleanup and memory reduction; small timing differences within the
+observed variation do not establish an additional NPS improvement. No extra
+inference optimization is promoted from these measurements. Per-position medians
+and full min/max repeat ranges follow; negative gains identify regressions.
+
+| NNUE position | Baseline/candidate median seconds | Gain | Repeat range, baseline/candidate |
+| --- | ---: | ---: | ---: |
+| modern-1 | 0.4725 / 0.4720 | +0.11% | 5.65% / 1.16% |
+| modern-2 | 0.5098 / 0.4970 | +2.57% | 6.63% / 3.53% |
+| modern-3 | 0.4848 / 0.4794 | +1.13% | 3.01% / 2.93% |
+| modern-4 | 0.4616 / 0.4630 | -0.31% | 7.86% / 8.03% |
+| modern-5 | 0.5034 / 0.4886 | +3.02% | 11.25% / 5.17% |
+| modern-6 | 0.4696 / 0.4664 | +0.68% | 11.64% / 10.31% |
+| modern-7 | 0.5102 / 0.4975 | +2.55% | 0.93% / 10.31% |
+| modern-8 | 0.5409 / 0.5461 | -0.96% | 8.93% / 8.06% |
+| modern-9 | 0.4866 / 0.4746 | +2.54% | 3.88% / 17.50% |
+| modern-10 | 0.4380 / 0.4338 | +0.97% | 2.16% / 4.92% |
+| modern-11 | 0.4423 / 0.4385 | +0.86% | 13.94% / 4.30% |
+| modern-12 | 0.5089 / 0.4939 | +3.03% | 1.88% / 4.34% |
+| modern-13 | 0.4934 / 0.4833 | +2.09% | 6.50% / 6.88% |
+| modern-14 | 0.4707 / 0.4709 | -0.05% | 6.52% / 6.21% |
+| modern-15 | 0.3516 / 0.3577 | -1.71% | 4.48% / 16.93% |
+| modern-16 | 0.4567 / 0.4630 | -1.36% | 5.29% / 2.69% |
+| modern-17 | 0.4735 / 0.4721 | +0.30% | 7.18% / 4.77% |
+| modern-18 | 0.4438 / 0.4284 | +3.60% | 1.85% / 9.19% |
+| modern-19 | 0.4742 / 0.5028 | -5.69% | 8.31% / 5.73% |
+| modern-20 | 0.3980 / 0.3859 | +3.12% | 11.12% / 6.44% |
+| modern-21 | 0.3509 / 0.3371 | +4.11% | 5.39% / 17.94% |
+| modern-22 | 0.3551 / 0.3531 | +0.58% | 29.24% / 5.21% |
+
+| Completed depth10 | Baseline median seconds | Candidate median seconds | Gain |
+| --- | ---: | ---: | ---: |
+| kiwipete-long | 2.2956 | 2.2657 | +1.32% |
+| start-long | 0.6055 | 0.6069 | -0.23% |
+
+corpus-losers negative median cases: losers-late_middle-8 -1.58%, losers-minor_endgame-8 -0.96%, losers-minor_endgame-9 -3.71%, losers-pawn_endgame-8 -4.75%, losers-promotion_endgame-9 -2.31%, losers-queen_endgame-8 -0.08%, losers-rook_endgame-8 -2.36%.
+
+long-nnue negative median cases: kiwipete-long -1.58%, start-long -3.36%.
+
+depth-nnue negative median cases: start-long -0.23%.
+
+Tablebase root correctness matches; zero searched nodes make root-probe NPS
+inappropriate as a throughput metric. Full results, per-position variation,
+CPU times, logs, source snapshots and initial/final test reports are retained at
+`.context/baselines/2026-10-18/hce-removal/`. Benchmark executable SHA-256:
+baseline `2e17702095a9828bb936dbd3d26d6a2c6590270c20477582e31d1259357ba5ad`,
+candidate `f1734529fd7561b772d926bba13f9285479e950e5400cf08f7284c5c5feab889`. Model SHA-256:
+`62ef826d1a6d11b9e814188025aa02a60815c037292e0ef9bbb9bf4f724e5e63`.
+
+The Windows bundle uses the candidate as `engine/maxima2`, the frozen baseline
+as `engine/maxima-hce2`, separate NNUE/HCE launchers, and `eval.nnue` at bundle
+root. Refresh saved NNUE options and restart engine processes. The frozen HCE
+entry retains its legacy `UseNNUE=false` setting. The bundle manifest and both
+launchers passed independent smoke checks: legal depth-three searches, automatic
+NNUE loading only for the current engine, five-piece Syzygy root probes and clean
+exit. All 318 bundle hashes verify. The GUI desktop itself was not driven.
+
+### Final search audit and depth-eight checkpoint — 2026-10-18
+
+A second source/symbol audit after HCE removal found unused board endgame
+classifiers and their bishop-pair helper/enum, plus stale tapered-score comments.
+These are now removed. Standard static scores come from NNUE centipawn conversion
+and rule50 damping, without classical positional scoring or a fallback. Passed-
+pawn masks and the existing material-based endgame pruning guard remain.
+Piece values still support SEE, capture ordering and delta limits; exact dead-
+position certificates, KPK draws, Syzygy and royal-losers material evaluation
+also remain. This is neural positional evaluation with heuristic search, not a
+claim of heuristic-free search.
+
+After this final deletion, Debug and Release each pass all36 checks, including
+both search lifecycles and independent neural reference checks. A46-fixture
+before/after comparison (22 NNUE,16royal-losers,eight tablebase roots) matches
+scores/PVs/depth/nodes/completed iterations/result provenance, with legal PV
+replay. No new speed gain is claimed. Prior focused ASan/UBSan6/6 and audit7/7
+covered the same active paths before this unused-code deletion; they were not
+rerun for the deletion. Artifacts: `.context/baselines/2026-10-18/search-clean-d8/`.
+
+The D7 loss review reproduces Maxima's first eight decisions in game7,
+`rook_endgame-08`, with exact warm moves/scores/PVs/work. At139, the frozen
+restricted Maxima control chooses `f6+` at cold depths7/8 (-156/-166cp), and
+`Rh7+` at depths10/12 (-154/-141cp). An independent SF19 cold two-root search
+with a2M-node budget retains `Rh7+` -24cp versus `f6+` -519cp at its deepest
+common completed MultiPV iteration, depth19. The preceding500k-node comparison
+was -25/-520cp atdepth15. These are search estimates from different models,
+not a certified draw or proof of the first mistake. Greater depth changes the
+choice; no pruning bug or causal mechanism is established, and no search policy
+was changed to repair this game. Raw searches, legal PVs and limits are retained
+under `search-clean-d8/loss-review/`.
+
+The final depth-eight controlled checkpoint completed100games/50pairs on the
+same D7 starts/order/model/options and frozen restricted controls:22wins,
+72draws,6losses, scoring58.0% (D7 also58.0%). Independent lightweight audits
+passed all8335legal PGN plies and recorded searches, legal PVs, completed depth,
+input/binary/model/options identities and recorded work totals. No unfinished
+games or forfeits occurred. Recorded visits (main plus quiescence entries) were
+1,843,446,272 for Maxima and1,204,039,061 for SF13:53.1% more for Maxima.
+Positions diverge during play, so this is aggregate workload, not isolated
+same-position efficiency or a causal feature comparison. No NPS/Elo inference.
+
+Only nominal search depth7->8 changed; the external response bound rose120->600s
+as an administrative failure limit. The natural terminal/draw policy remained,
+without books, engine tablebases or experience. These frozen restricted controls
+are separate from the current NNUE-only source and unrestricted managed-time
+strength. Artifacts are under
+`.context/baselines/2026-10-18/depth-eight-baseline/`.
+
+The original full accounting pipeline was stopped at the user's request during
+its expensive exact counter-only null-verification replay. Its interrupted status
+and logs remain preserved; that replay did not pass and is not required for the
+user's intended approximate total-node comparison. The separate completed
+`both/node-count-audit.json` and `node-count-summary.json` record the lightweight
+acceptance scope explicitly, without claiming completed instrumented replay.
+No additional feature-on/off matches are requested for this comparison.
+
+The requested D1 and D2 backfills also completed100games/50pairs each on the
+exact D8 binaries/model/options/starts/color order and natural terminal policy.
+Only nominal depth changed. Legal PGN/PV/depth/options/identity and recorded-total
+checks passed all6185/5792plies respectively, without unfinished games or forfeits.
+IID, aspiration and positive-depth LMR remained inactive, as required. An initial
+D1 auditor inherited a requirement for frontier-futility activity from deeper
+runs; its zero candidates are legitimate at D1. That activity-only assertion was
+removed, preserving the failure log and all games; no engine or game was rerun.
+
+| Controlled depth | Maxima W/D/L | Score | Maxima visits | SF13 visits |
+| --- | --- | --- | --- | --- |
+| D1 backfill | 6/87/7 | 49.5% | 279833 | 700275 |
+| D2 backfill | 9/82/9 | 50.0% | 967926 | 1010332 |
+| D8 final | 22/72/6 | 58.0% | 1843446272 | 1204039061 |
+
+These totals include main-search and quiescence visits; games reach different
+positions, so they do not isolate search efficiency. Results/scripts/PGNs are in
+`depth-one-backfill/` and `depth-two-backfill/` beside D8; acceptance files are
+`both/node-count-audit.json` and `node-count-summary.json`. Instrumented replay
+was omitted per user request. Queue `shallow-depth-backfill/node-count-status.json`
+passed both stages. No D9 continuation is scheduled. Review and commit the
+validated baseline; no push is implied.
+
+Next, the user authorizes a paired managed-time match of current production
+Maxima against unrestricted SF13 with its default search and evaluation. Hold
+threads, Hash, time control, openings/color swaps, book and tablebase policies
+constant and record all effective settings and binary/model identities. This
+tests practical strength, not equal-depth work. Do not assume a loss or infer
+a tuning cause from WDL alone. If a gap appears, use targeted feature ablations
+with evaluation held fixed to distinguish search effects from SF13's default
+evaluation policy; account for feature interactions and sampling uncertainty.
+Specify the concrete match protocol before starting; finish D8, its audits and
+the reviewed baseline delivery first.
+
 ## 6. Testing and performance
 
 Tests must return a nonzero exit code when a check fails, so both direct execution
@@ -2770,14 +2966,16 @@ exercise the executable. No suite-specific UCI command or search hook is needed.
 ./maxima suite:run --suite /path/to/positions.epd --engine /path/to/engine
 ./maxima suite:run --suite /path/to/positions.epd --syzygy-path tablebases/syzygy
 ./maxima suite:run --suite bratko-kopec --nodes 200000 \
-  --model EvalFile=networks/nn-62ef826d1a6d.nnue --option UseNNUE=true
+  --model EvalFile=networks/nn-62ef826d1a6d.nnue
 ```
 
 Repeatable `--option NAME=VALUE` and `--model OPTION=PATH` select the evaluator
 or search settings. Models are loaded before enabling evaluator options, hashed
 in the report, and checked for changes before and after each search. Requested
 options must be advertised by the engine. Use identical budgets and settings
-for HCE/NNUE comparisons; `--option UseNNUE=false` explicitly selects HCE.
+for comparisons; use the frozen HCE executable with its legacy `UseNNUE=false`
+option when comparing against HCE. Pass `--model EvalFile=...` explicitly so
+the runner records the model hash, including when using the default network.
 
 The default is `modern_2026`: 22 positions sampled from the 2026 Tata Steel
 Masters broadcasts, one second per position and 64 MiB hash. Stockfish 19
@@ -3267,10 +3465,10 @@ data with `python tests/data/search/generate_selectivity.py --check`; native
 tests need no python-chess installation.
 
 `test_nnue_hash_ordering` seeds poisoned exact scores with legal ordering
-hints for both colors and evaluators. It verifies that deep, shallow, context-
+hints for both colors. It verifies that deep, shallow, context-
 and clock-mismatched entries can order a move while their scores never cut off
 the controlled search, and that legal hash moves suppress IID. It also covers
-disabled ordering, invalid hints and fixed-mode exclusion. Real HCE and NNUE
+disabled ordering, invalid hints and fixed-mode exclusion. Real NNUE
 searches cover warmed ordering hints, unchanged root evaluation and restoration
 after node-budget cancellation.
 
@@ -3279,7 +3477,7 @@ running the production IID preparation and main PVS path. It checks both colors,
 remaining/probe depth, first-move ordering, hash/disabled/non-PV exclusions,
 suppression of nested IID, full-depth continuation after a shallow mate score,
 cancellation, absent hints and frame restoration after a helper exception.
-Live audit tests cover HCE and NNUE, depth-three inactivity, depth-four helper
+Live audit tests cover NNUE, depth-three inactivity, depth-four helper
 work accounting and cancellation inside a real helper.
 
 `test_search_aspiration` exercises the production root driver with controlled
@@ -3287,7 +3485,7 @@ child scores for both colors. It checks fail-high, fail-low and alternating
 failures, unchanged nonfailed bounds, full-depth retries, decisive-score
 fallback, cancellation and board/hash/stack restoration. A first-move fail-low
 must still search an improving alternative. Interrupted fail-low work must omit
-an unproven root score. Live audit tests cover HCE and NNUE, depth-three
+an unproven root score. Live audit tests cover NNUE, depth-three
 inactivity and depth-four activation with LMR enabled.
 
 `test_search_horizon` exercises real quiescence at depths 0/-1/-2 and PVS at
@@ -3300,8 +3498,11 @@ evaluation or SEE. The sparse fixtures assert the endgame exclusion from
 quiescence capture pruning. Full/null windows, selective options enabled and
 disabled, cold/warm/disabled TT, incompatible deep entries at quiescence entry,
 real repetition histories, node-budget restart and state restoration are
-checked. This is bounded search-integration coverage, not a general proof of
-selective search. Verify certificates with
+checked. With selective search enabled, a one-node reverse-futility cutoff is
+checked against its documented static margin rather than the unpruned oracle;
+the neural evaluator triggers this existing approximate policy on a fixture
+where HCE did not. This is bounded search-integration coverage, not a general
+proof of selective search. Verify certificates with
 `python tests/data/search/generate_horizon.py --check` in the runner environment.
 Native checks require no python-chess installation.
 
@@ -3487,7 +3688,13 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 - Extend direct root tablebase handling across histories that already contain repetitions.
 - Explore selective asynchronous online probes separately from local probing.
 - Prepare shared caches and worker state for safe multithreaded search.
-- Evaluate learned evaluation after the search and testing foundation is sound.
+- After the final equal-depth checkpoint and baseline commit, select a new
+  development focus with measured goals. Candidate directions recorded from the
+  user: online play/operator integration; profiling and tuning under real time
+  controls; a dedicated bullet setup; a more advanced supported NNUE family;
+  and training our own royal-losers evaluator. These are alternatives for the
+  next phase, not approved simultaneous implementation tasks. Preserve the
+  single-worker NNUE baseline and use held-out strength tests for changes.
 
 No speed or Elo gain should be claimed without the corresponding measurements.
 
