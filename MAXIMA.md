@@ -2930,6 +2930,46 @@ evaluation policy; account for feature interactions and sampling uncertainty.
 Specify the concrete match protocol before starting; finish D8, its audits and
 the reviewed baseline delivery first.
 
+The baseline is committed locally (no push): runner1091cf0, preserved HCE-capable
+source0398037, final NNUE-only cleanup65bac1a. The latter's generated version
+identifies65bac1a; CMake rebuilt it without editing generated headers. After the
+previous complete Debug/Release36/36 and46exact fixture checks, the committed
+Release passed all four search/NNUE lifecycle and UCI smoke checks. The focused
+runner match tests passed27with1skip. Windows engine/maxima2 was atomically
+refreshed to SHA256f7a5d64d22e21c7d6fc3c4322dd3d6eeb2d80fbc6a5794fd5d7f4eb978af8a8f;
+all318bundle manifest hashes and both Windows launchers' legal depth3/five-piece
+root/clean-exit checks passed. Frozen HCE2, model, launchers and100ms overhead
+were preserved. Restart existing GUI engine processes to use the update.
+
+The unrestricted match is now RUNNING under
+`.context/baselines/2026-10-18/unrestricted-sf13/`:100games/50paired starts,
+same D8 endpoints/order/seed20261016,10+0.1seconds, Hash64,oneworker,100ms overhead
+and zero contempt on both sides. Both probe the complete shared five-piece set;
+books, experience and pondering are off. Both use their native production search
+with all default pruning/reductions/extensions/TT score cutoffs. There are no
+fixed depth/node limits or audit modes. SF13 is the unmodified optimized official
+sf_13 commit3597f1942ec6f2cfbd50b905683739b0900ff5dd, profile-build BMI2 GCC11.4,
+binary SHA256fd2a5fa7e21518e4897efbc47b88d17848e145f7ed97b92b483610d025b3f294;
+all pinned upstream source-file hashes and the previously measured binary hash
+were checked. Its default Use NNUE=true hybrid evaluator uses unchanged62ef
+weights; Maxima uses its production NNUE-only evaluator with those same weights.
+Neutral contempt/resources/clock overhead are explicit shared overrides rather
+than claims that every UCI setting equals its factory default.
+
+The fixed sample ends naturally or under the earlier user-authorized800cp
+agreement for6consecutive exact-score plies afterfullmove20; no external TB
+referee is used. Keep all forfeits/outcomes, with a600-new-ply safety limit and
+no optional extension. Record actual settings/defaults, binary/model/input/TB
+identities, reported depths and approximate UCI node totals. Use lightweight
+legal PGN/result/configuration/identity checks, with no expensive feature replay.
+Native reported-node conventions and interrupted depth reports can differ.
+This practical test includes speed, time management, evaluation-policy and TB
+effects; its outcome cannot isolate a search feature's contribution or establish
+absolute Elo. The initial launch failed the runner's required standard-variant
+input label before any game; that format and the empty-option spelling were
+corrected with initial logs preserved. Production preflight passed and games
+have started. Final status/results remain pending in status.json/games.json.
+
 ## 6. Testing and performance
 
 Tests must return a nonzero exit code when a check fails, so both direct execution
