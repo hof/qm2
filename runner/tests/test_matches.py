@@ -210,6 +210,7 @@ for line in sys.stdin:
         print(f'info depth 3 multipv 1 score cp {score} pv {moves[ply]}')
         print(f'info depth 3 multipv 2 score cp {-score}')
         print('info nodes 100 time 1')
+        print('info string search_result partial completed_depth 2 attempted_depth 3 interrupted 1 pruned_moves 5')
         print(f'bestmove {moves[ply]}', flush=True)
     elif line.strip() == 'quit':
         break
@@ -228,6 +229,13 @@ for line in sys.stdin:
             self.assertEqual(record['search_work'][color]['nodes'], 300)
             self.assertEqual(record['search_work'][color]['searches'], 3)
             self.assertEqual(record['search_work'][color]['reported_searches'], 3)
+        self.assertEqual(len(record['search_samples']), 6)
+        self.assertEqual([sample['engine'] for sample in record['search_samples']], ['A', 'B'] * 3)
+        for sample in record['search_samples']:
+            self.assertEqual(sample['depth'], 3)
+            self.assertEqual(sample['nodes'], 100)
+            self.assertEqual(sample['time'], .001)
+            self.assertIn('completed_depth 2 attempted_depth 3', sample['search_result'])
 
     async def test_clock_forfeit_rejects_late_move(self):
         game, record = await self.play([scripted_engine(['e2e4'], 0.02), scripted_engine([])],
@@ -295,6 +303,11 @@ for line in sys.stdin:
         self.assertEqual(pgn.read_text(), 'preserve me')
         self.assertFalse(report.exists())
         pgn.unlink()
+        with patch.object(sys, 'argv', arguments + ['--syzygy-path', self.directory.name]), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(main(), 1)
+        self.assertFalse(pgn.exists())
+        self.assertFalse(report.exists())
         self.path.write_text('{"variant": "losers", "openings": []}')
         with patch.object(sys, 'argv', arguments), contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(main(), 1)

@@ -213,6 +213,7 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
     token = object()
     search_work = {color: {'nodes': 0, 'searches': 0, 'reported_searches': 0,
                            'wall_seconds': 0.0} for color in (chess.WHITE, chess.BLACK)}
+    search_samples = []
     result, reason = '*', 'ply limit'
     failure = None
     for _ in range(max_plies):
@@ -224,9 +225,15 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
         move_number = board.fullmove_number
         search_info = {}
         search_nodes = None
+        search_data = {}
 
         def collect_info(info, elapsed_ms):
             nonlocal search_nodes
+            for name in ('depth', 'seldepth', 'tbhits', 'time'):
+                if name in info:
+                    search_data[name] = info[name]
+            if info.get('string', '').startswith('search_result '):
+                search_data['search_result'] = info['string']
             if 'nodes' in info:
                 search_nodes = info['nodes']
             if 'score' in info:
@@ -249,6 +256,10 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
         work = search_work[color]
         work['searches'] += 1
         work['wall_seconds'] += elapsed
+        search_samples.append(dict(search_data, ply=len(board.move_stack) + 1,
+                                   engine='A' if color == a_white else 'B',
+                                   color='white' if color else 'black',
+                                   nodes=search_nodes, wall_seconds=elapsed))
         if search_nodes is not None:
             work['nodes'] += search_nodes
             work['reported_searches'] += 1
@@ -272,6 +283,8 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
         node.comment = f'[%clk {int(hours)}:{int(minutes):02}:{rest:06.3f}]'
         if search_nodes is not None:
             node.comment += f' [%nodes {search_nodes}]'
+        if 'depth' in search_data:
+            node.comment += f" [%depth {search_data['depth']}]"
         if adjudicator:
             outcome = board.outcome(claim_draw=True)
             if outcome is not None:
@@ -293,6 +306,7 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
                   'result': result, 'termination': reason, 'error': failure, 'plies': len(board.move_stack),
                   'clocks': {'white': clocks[chess.WHITE], 'black': clocks[chess.BLACK]}}
     record['search_work'] = {'white': search_work[chess.WHITE], 'black': search_work[chess.BLACK]}
+    record['search_samples'] = search_samples
     if adjudicator:
         game.headers['WinAdjudication'] = (f'cp={adjudicate_win_cp}; plies={adjudicate_win_plies}; '
                                           f'min_move={adjudicate_min_move}')
@@ -321,6 +335,14 @@ async def run_match(commands, openings, args, report, pgn_stream):
                                 'UCI_AnalyseMode': False, 'SyzygyProbeLimit': 0,
                                 'UseExperience': False,
                                 'Wild': 'losers' if args.variant == 'losers' else 'standard'}
+                    if getattr(args, 'syzygy_path', None) is not None:
+                        if any(name.lower() in ('syzygypath', 'syzygyprobelimit', 'syzygyprobedepth')
+                               for name in profile['requested_options']):
+                            raise ValueError('Syzygy options are controlled by --syzygy-path')
+                        if not all(name in engine.protocol.options for name in ('SyzygyPath', 'SyzygyProbeLimit')):
+                            raise ValueError('engine does not advertise SyzygyPath and SyzygyProbeLimit')
+                        settings.update(SyzygyPath=str(args.syzygy_path),
+                                        SyzygyProbeLimit=5, SyzygyProbeDepth=1)
                     if args.variant == 'losers':
                         option = engine.protocol.options.get('Wild')
                         if option is None or option.type != 'combo' or 'losers' not in option.var:
@@ -428,11 +450,19 @@ def main():
                         help='earliest full move eligible for win adjudication (default 20)')
     parser.add_argument('--timeout', type=positive_float, default=30)
     parser.add_argument('--hash', type=positive_int, default=64, dest='hash_mb')
+    parser.add_argument('--syzygy-path', type=Path,
+                        help='shared directory of standard WDL tables; enables up to five-piece engine probing')
     parser.add_argument('--pgn', required=True, type=Path)
     parser.add_argument('--json', required=True, type=Path)
     args = parser.parse_args()
     report = None
     try:
+        if args.syzygy_path is not None:
+            args.syzygy_path = args.syzygy_path.resolve()
+            if args.variant != 'standard':
+                raise ValueError('Syzygy tables require standard chess')
+            if not args.syzygy_path.is_dir() or not any(args.syzygy_path.glob('*.rtbw')):
+                raise ValueError('Syzygy path must be a directory containing WDL (.rtbw) tables')
         if args.adjudicate_win_cp is not None:
             if args.variant != 'standard':
                 raise ValueError('win adjudication currently supports standard chess only')
@@ -469,6 +499,7 @@ def main():
         if args.pgn.exists() or args.json.exists():
             raise ValueError('output files already exist; choose new paths')
         report = {'variant': args.variant, 'seed': args.seed, 'pairs': args.pairs,
+                  'syzygy_path': str(args.syzygy_path) if args.syzygy_path is not None else None,
                   'seconds': args.seconds, 'increment': args.increment,
                   'max_plies': args.max_plies, 'timeout': args.timeout,
                   'win_adjudication': {'threshold_cp': args.adjudicate_win_cp,
