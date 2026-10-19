@@ -252,6 +252,112 @@ bool test_clock_range_propagation() {
     return success;
 }
 
+bool test_non_pv_tt_bounds() {
+    const char * fen = "7k/8/8/8/8/8/8/KR6 w - - 4 1";
+    bool success = true;
+    for (int bound : {score::EXACT, score::LOWERBOUND, score::UPPERBOUND}) {
+        for (int value : {-123, 123}) {
+            // Include equality at alpha and beta as well as values beyond them.
+            for (int alpha : {value - 2, value - 1, value, value + 1}) {
+                trans_table::clear();
+                search_t search(fen);
+                prepare(search);
+                const U64 key = search.brd.stack->tt_key;
+                const U64 context = search.tt_context();
+                const auto * board_stack = search.brd.stack;
+                search.stack->pv_count = 1;
+                trans_table::store(key, 0, 0, 1, value, 0, bound, context, {3, 8});
+                const int result = search.pvs(alpha, alpha + 1, 1);
+                const bool cutoff = bound == score::EXACT
+                    || (bound == score::LOWERBOUND && value >= alpha + 1)
+                    || (bound == score::UPPERBOUND && value <= alpha);
+                success &= check("non-PV TT cutoffs must respect bound direction and equality",
+                    cutoff ? search.nodes == 1 && result == value : search.nodes > 1);
+                success &= check("non-PV TT probes must restore board, hash and search state",
+                    !search.stop_all && search.brd.to_string() == fen
+                    && search.brd.ply == 0 && search.brd.stack == board_stack
+                    && search.brd.stack->tt_key == key && search.stack == search.root_stack
+                    && search.tt_context() == context);
+                if (cutoff) {
+                    success &= check("non-PV TT reuse must clear stale PV and retain clock constraints",
+                        search.stack->pv_count == 0 && search.stack->tt_clocks.min == 3
+                        && search.stack->tt_clocks.max == 8);
+                }
+            }
+        }
+    }
+    return success;
+}
+
+bool test_non_pv_tt_compatibility() {
+    const char * fen = "7k/8/8/8/8/8/8/KR6 w - - 4 1";
+    bool success = true;
+    for (int mismatch = 0; mismatch < 4; ++mismatch) {
+        trans_table::clear();
+        search_t search(fen);
+        prepare(search);
+        move_t hint;
+        hint.set(&search.brd, "a1a2");
+        const U64 key = search.brd.stack->tt_key;
+        const U64 context = search.tt_context();
+        trans_table::store(key ^ (mismatch == 3 ? U64(1) : 0), 0, 0,
+            mismatch == 0 ? 1 : 2, -123, hint.to_compact(), score::EXACT,
+            context ^ (mismatch == 1 ? U64(1) : 0), mismatch == 2
+                ? clock_range_t{5, 8} : clock_range_t{3, 8});
+        int value = 0, move = 0, bound = 0;
+        success &= check("incompatible TT scores must retain only matching-key move hints",
+            !trans_table::retrieve(key, 0, 2, value, move, bound, context, 4)
+            && move == (mismatch == 3 ? 0 : hint.to_compact()));
+        const int warm = search.pvs(0, 1, 2);
+        const U64 warm_nodes = search.nodes;
+        trans_table::clear();
+        search_t cold(fen);
+        prepare(cold);
+        const int fresh = cold.pvs(0, 1, 2);
+        success &= check("non-PV search must reject incompatible exact scores",
+            warm_nodes > 1 && warm != -123 && (warm >= 1) == (fresh >= 1));
+    }
+    return success;
+}
+
+bool test_non_pv_tt_mates_and_clocks() {
+    bool success = true;
+    for (int value : {score::MATE - 10, -score::MATE + 10, int(score::TABLEBASE), -int(score::TABLEBASE)}) {
+        trans_table::clear();
+        search_t search("7k/8/8/8/8/8/8/KR6 w - - 4 1");
+        prepare(search);
+        move_t quiet;
+        quiet.set(&search.brd, "a1a2");
+        const U64 parent_context = search.tt_context();
+        search.forward(&quiet, false);
+        // Store at another ply to exercise mate-distance decoding at this node.
+        trans_table::store(search.brd.stack->tt_key, 0, 3, 1, value, 0,
+            score::EXACT, search.tt_context(), {3, 8});
+        const int expected = value >= score::TABLEBASE - MAX_PLY ? value + 2
+            : value <= -score::TABLEBASE + MAX_PLY ? value - 2 : value;
+        success &= check("non-PV exact reuse must decode mate distance at the probing ply",
+            search.pvs(0, 1, 1) == expected && search.nodes == 1);
+        search.backward(&quiet);
+        success &= check("non-PV exact clock restrictions must reach the parent",
+            search.stack->tt_clocks.min == 2 && search.stack->tt_clocks.max == 7
+            && search.brd.ply == 0 && search.stack == search.root_stack
+            && search.tt_context() == parent_context);
+    }
+    // Draw adjudication precedes cached bounds, including mate at clock 100.
+    for (const char * fen : {"7k/8/8/8/8/8/8/KR6 w - - 100 1",
+            "7k/6Q1/5K2/8/8/8/8/8 b - - 100 1"}) {
+        trans_table::clear();
+        search_t search(fen);
+        prepare(search);
+        trans_table::store(search.brd.stack->tt_key, 0, 0, 1,
+            search.stack->in_check ? -score::MATE : 123, 0,
+            score::EXACT, search.tt_context(), {0, 101});
+        success &= check("non-PV exact reuse must not bypass draw or checkmate adjudication",
+            search.pvs(0, 1, 1) == (search.stack->in_check ? -score::MATE : 0));
+    }
+    return success;
+}
+
 bool test_compact_moves() {
     const char * positions[] = {
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
@@ -407,6 +513,9 @@ int main() {
     success &= test_context_restoration();
     success &= test_clock_range_reuse();
     success &= test_clock_range_propagation();
+    success &= test_non_pv_tt_bounds();
+    success &= test_non_pv_tt_compatibility();
+    success &= test_non_pv_tt_mates_and_clocks();
     success &= test_compact_moves();
     success &= test_table_boundaries();
     success &= test_draw_contempt();

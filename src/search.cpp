@@ -1327,7 +1327,8 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const bool usable_tt_score = probe_tt && trans_table::retrieve(stack->tt_key, brd.ply,
         depth, tt_score, tt_move, tt_flag, context, brd.stack->fifty_count, &tt_clocks);
     if (usable_tt_score && use_tt_scores) {
-        if (pv && tt_flag == score::EXACT) {
+        // A compatible exact score resolves either side of a non-PV window too.
+        if (tt_flag == score::EXACT) {
             stack->tt_clocks.include_child(tt_clocks, 0);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
             ++nnue_audit.counters.hash_score_cutoffs;

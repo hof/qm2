@@ -252,6 +252,16 @@ Capture delta/SEE preserves castling; castles have zero material SEE and their
 positional effect is evaluated after the move.
 This is an existing bounded quiet extension, not a certified strength gain.
 
+Main-search TT lookup accepts compatible exact scores in both PV and non-PV
+windows. Non-PV lower bounds require `value >= beta`; upper bounds require
+`value <= alpha`. All score reuse requires sufficient stored depth, matching
+board and search context, and a clock inside the propagated validity interval.
+Reused clock constraints enter the current stack and propagate on undo, while
+mate/tablebase scores are decoded for the probing ply. Draw adjudication and
+tablebase probing precede TT lookup. Incompatible scores may still supply a
+matching-board move hint. Exact reuse at non-PV nodes avoids redundant search;
+its integration alone is not a measured playing-strength gain.
+
 An exact TT return can shorten the searched PV because an entry stores a score
 and move rather than a complete continuation. Search clears the stale PV before
 reuse. UCI text may append TT move hints to a short searched prefix; those hints
