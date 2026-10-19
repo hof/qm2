@@ -105,6 +105,9 @@ bool check_metadata_positions() {
         const bool parent_endgame = search->stack->metadata.endgame;
         std::vector<move_t> moves;
         for (auto * move = move::first(search.get(), 1); move; move = move::next(search.get(), 1)) {
+            if (!search->brd.legal(move)) {
+                continue;
+            }
             moves.push_back(*move);
         }
         for (auto & move : moves) {
@@ -142,6 +145,9 @@ bool check_metadata_positions() {
             }
             std::vector<move_t> moves;
             for (auto * move = move::first(search.get(), 1); move; move = move::next(search.get(), 1)) {
+                if (!search->brd.legal(move)) {
+                    continue;
+                }
                 moves.push_back(*move);
             }
             if (moves.empty()) {

@@ -305,6 +305,9 @@ bool search_t::book_lookup() {
     for (move_t * move = move::first(this, 1); move; move = move::next(this, 1)) {
         if (!game.search_moves.empty() && std::find(game.search_moves.begin(),
                 game.search_moves.end(), move->to_string()) == game.search_moves.end()) continue;
+        if (wild == 0 && !brd.legal(move)) {
+            continue;
+        }
         double weight = 0;
         for (auto entry = book_moves.first; entry != book_moves.last; ++entry)
             if (move->equals(entry)) weight += entry->score;
@@ -752,6 +755,27 @@ void search_t::forward(move_t * move, bool gives_check) {
     assert(stack == &_stack[brd.ply]);
 }
 
+// Search accepts a candidate only after making it. Castling additionally
+// requires safe origin/transit squares, which the final position cannot prove.
+bool search_t::try_forward(move_t * move, bool gives_check) {
+    if (move->castle && !brd.legal(move)) {
+        return false;
+    }
+    const move_t previous = stack->current_move;
+    forward(move, gives_check);
+    if (brd.legal()) {
+        return true;
+    }
+    // A rejected candidate has no searched result or clock constraints to merge.
+    brd.backward(move);
+    --stack;
+    stack->current_move = previous;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    --nnue_audit.counters.move_visits;
+#endif
+    return false;
+}
+
 /**
  * Undo a move
  * @param move
@@ -883,6 +907,9 @@ int search_t::init_root_moves() {
             move; move = move::next(this, 1)) {
         if (!game.search_moves.empty() && std::find(game.search_moves.begin(),
                 game.search_moves.end(), move->to_string()) == game.search_moves.end()) continue;
+        if (wild == 0 && !brd.legal(move)) {
+            continue;
+        }
         int gives_check = brd.gives_check(move);
         bool is_dangerous = root.in_check || gives_check || move->capture || move->promotion || is_passed_pawn(move);
         root_move_t * rmove = &root.moves[root.move_count++];
@@ -1085,7 +1112,7 @@ bool search_t::is_draw() {
     if (brd.stack->fifty_count >= 100) {
         // Checkmate takes precedence. Probe fresh legal evasions, including quiet moves.
         stack->tt_move.clear();
-        if (!stack->in_check || move::first(this, 1) != nullptr) {
+        if (!stack->in_check || has_legal_move(brd)) {
             stack->tt_clocks = {100, 101};
             return true;
         }
@@ -1411,7 +1438,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
     stack->best_move.clear();
     do {
 
-        assert(brd.valid(move) && brd.legal(move));
+        assert(brd.valid(move));
         assert(stack->best_move.equals(move) == false);
         assert(in_searched(move, searched_moves) == false);
 
@@ -1464,7 +1491,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
          * Go forward and search next node
          */
 
-        forward(move, gives_check);
+        if (!try_forward(move, gives_check)) {
+            continue;
+        }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         stack->check_extensions += extend;
         nnue_audit.counters.max_check_extensions = std::max(nnue_audit.counters.max_check_extensions,
@@ -1535,6 +1564,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
      */
 
     assert(!stop_all);
+    if (best == -score::INF) {
+        return in_check ? -score::MATE + brd.ply : draw_score();
+    }
     assert(best > -score::INF);
     assert(best < beta);
     assert(brd.valid(&stack->best_move));
@@ -1632,6 +1664,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      * Moves loop
      */
 
+    int searched_moves = 0;
     const bool is_eg = !in_check && stack->metadata.endgame;
     do {
 
@@ -1736,7 +1769,10 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         if (quiet_check) ++nnue_audit.counters.q_check_searched;
         if (!in_check && depth == 0 && move->castle) ++nnue_audit.counters.q_castles;
 #endif
-        forward(move, gives_check);
+        if (!try_forward(move, gives_check)) {
+            continue;
+        }
+        ++searched_moves;
         int score = -qsearch(-beta, -alpha, depth - 1);
         backward(move);
 
@@ -1754,6 +1790,9 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             alpha = score;
         }
     } while ((move = move::next(this, depth)));
+    if (searched_moves == 0 && (in_check || !has_legal_move(brd))) {
+        return in_check ? -score::MATE + brd.ply : draw_score();
+    }
     return alpha;
 }
 

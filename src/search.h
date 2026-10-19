@@ -193,6 +193,7 @@ public:
     void backward();
     void forward(move_t * move, bool givesCheck);
     void backward(move_t * move);
+    bool try_forward(move_t * move, bool gives_check);
     void update_history(move_t * move);
     void update_killers(move_t * move);
     bool is_killer(move_t * const move);

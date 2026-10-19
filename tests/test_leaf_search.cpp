@@ -453,6 +453,9 @@ bool test_quiet_order() {
                 for (int depth : {0, 3, -1}) {
                     std::vector<int> actual;
                     for (auto * move = move::first(&search, depth); move; move = move::next(&search, depth)) {
+                        if (!search.brd.legal(move)) {
+                            continue;
+                        }
                         if (search.stack->move_list.stage == STOP) actual.push_back(move->to_int());
                     }
                     const bool enabled = depth >= 0 || search.stack->in_check;

@@ -22,8 +22,8 @@
  * - Killer Moves
  * - Captures
  * - Quiet Moves
- * All moves returned are legal. If the move picker does not return any move, 
- * it's a (stale)mate.
+ * Standard chess returns pseudo-legal candidates; callers own king safety.
+ * No candidates does not by itself establish a legal terminal position.
  */
 
 #include "movepicker.h"
@@ -89,7 +89,7 @@ move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
         }
         if (!s->stack->tt_move.equals(result)
                 && !s->is_killer(result)
-                && s->brd.legal(result)) {
+                && (s->wild != 17 || s->brd.legal(result))) {
             return result;
         }
 
@@ -139,9 +139,8 @@ move_t * move_picker_t::next(search_t * s, int depth) {
     switch (list->stage) {
         case HASH:
             result = &s->stack->tt_move;
-            if (result->piece) {
-                assert(brd->valid(result));
-                assert(brd->legal(result));
+            if (result->piece && brd->valid(result)
+                    && (s->wild != 17 || brd->legal(result))) {
                 list->stage = CAPTURES;
                 return result;
             }
@@ -194,7 +193,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 if (result->piece
                         && !s->stack->tt_move.equals(result)
                         && brd->valid(result)
-                        && brd->legal(result)) {
+                        && (s->wild != 17 || brd->legal(result))) {
                     list->stage = KILLER2;
                     assert(result->capture == EMPTY && result->promotion == EMPTY);
                     return result;
@@ -206,7 +205,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 if (result->piece
                         && !s->stack->tt_move.equals(result)
                         && brd->valid(result)
-                        && brd->legal(result)) {
+                        && (s->wild != 17 || brd->legal(result))) {
                     assert(s->stack->killer[0].equals(result) == false);
                     assert(result->capture == EMPTY && result->promotion == EMPTY);
                     list->stage = MINORPROMOTIONS;

@@ -339,17 +339,13 @@ bool board_t::valid(const move_t * move) {
             case EMPTY:
                 break;
             case CASTLE_K:
-                return matrix[h1] == WROOK && matrix[f1] == EMPTY && matrix[g1] == EMPTY
-                        && !is_attacked(f1, BLACK) && !is_attacked(g1, BLACK) && !is_attacked(e1, BLACK);
+                return matrix[h1] == WROOK && matrix[f1] == EMPTY && matrix[g1] == EMPTY;
             case CASTLE_Q:
-                return matrix[a1] == WROOK && matrix[b1] == EMPTY && matrix[c1] == EMPTY && matrix[d1] == EMPTY
-                        && !is_attacked(e1, BLACK) && !is_attacked(d1, BLACK) && !is_attacked(c1, BLACK);
+                return matrix[a1] == WROOK && matrix[b1] == EMPTY && matrix[c1] == EMPTY && matrix[d1] == EMPTY;
             case CASTLE_k:
-                return matrix[h8] == BROOK && matrix[f8] == EMPTY && matrix[g8] == EMPTY
-                        && !is_attacked(f8, WHITE) && !is_attacked(g8, WHITE) && !is_attacked(e8, WHITE);
+                return matrix[h8] == BROOK && matrix[f8] == EMPTY && matrix[g8] == EMPTY;
             case CASTLE_q:
-                return matrix[a8] == BROOK && matrix[b8] == EMPTY && matrix[c8] == EMPTY && matrix[d8] == EMPTY
-                        && !is_attacked(e8, WHITE) && !is_attacked(d8, WHITE) && !is_attacked(c8, WHITE);
+                return matrix[a8] == BROOK && matrix[b8] == EMPTY && matrix[c8] == EMPTY && matrix[d8] == EMPTY;
             default:
                 assert(false);
         }

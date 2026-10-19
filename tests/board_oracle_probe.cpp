@@ -45,8 +45,12 @@ std::vector<move_t> legal_moves(search_t & search) {
     search.stack->killer[0].clear();
     search.stack->killer[1].clear();
     std::vector<move_t> moves;
-    for (move_t * move = move::first(&search, 1); move; move = move::next(&search, 1))
+    for (move_t * move = move::first(&search, 1); move; move = move::next(&search, 1)) {
+        if (search.wild == 0 && !search.brd.legal(move)) {
+            continue;
+        }
         moves.push_back(*move);
+    }
     return moves;
 }
 

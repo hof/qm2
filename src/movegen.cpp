@@ -70,7 +70,8 @@ namespace move {
             while (moves) {
                 ssq = pop(moves);
                 if (tsq == board->stack->enpassant_sq && tsq > 0) {
-                    (current++)->set(pc, ssq, tsq, PAWN[them]);
+                    current->set(pc, ssq, tsq, PAWN[them]);
+                    (current++)->en_passant = true;
                 } else if ((BIT(tsq) & RANK[us][8]) == 0) {
                     (current++)->set(pc, ssq, tsq, board->matrix[tsq]);
                 } else {
@@ -173,27 +174,39 @@ namespace move {
         if (board->has_castle_right(CASTLE_ANY)) {
             if (board->us()) {
                 if (board->has_castle_right(CASTLE_K)
+                        && board->matrix[e1] == WKING
+                        && board->matrix[h1] == WROOK
                         && board->matrix[f1] == EMPTY
                         && board->matrix[g1] == EMPTY) {
-                    (current++)->set(WKING, e1, g1);
+                    current->set(WKING, e1, g1);
+                    (current++)->castle = CASTLE_K;
                 }
                 if (board->has_castle_right(CASTLE_Q)
+                        && board->matrix[e1] == WKING
+                        && board->matrix[a1] == WROOK
                         && board->matrix[d1] == EMPTY
                         && board->matrix[c1] == EMPTY
                         && board->matrix[b1] == EMPTY) {
-                    (current++)->set(WKING, e1, c1);
+                    current->set(WKING, e1, c1);
+                    (current++)->castle = CASTLE_Q;
                 }
             } else {
                 if (board->has_castle_right(CASTLE_k)
+                        && board->matrix[e8] == BKING
+                        && board->matrix[h8] == BROOK
                         && board->matrix[f8] == EMPTY
                         && board->matrix[g8] == EMPTY) {
-                    (current++)->set(BKING, e8, g8);
+                    current->set(BKING, e8, g8);
+                    (current++)->castle = CASTLE_k;
                 }
                 if (board->has_castle_right(CASTLE_q)
+                        && board->matrix[e8] == BKING
+                        && board->matrix[a8] == BROOK
                         && board->matrix[d8] == EMPTY
                         && board->matrix[c8] == EMPTY
                         && board->matrix[b8] == EMPTY) {
-                    (current++)->set(BKING, e8, c8);
+                    current->set(BKING, e8, c8);
+                    (current++)->castle = CASTLE_q;
                 }
             }
         }

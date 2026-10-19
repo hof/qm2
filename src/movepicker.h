@@ -19,8 +19,7 @@
  * Move Picker class to use by the search. The move picker handles ordered move 
  * generation in phases, typically following this order:
  
- * All moves returned are legal. If the move picker does not return any move, 
- * it's a (stale)mate.
+ * Standard chess returns pseudo-legal candidates. Callers own king safety.
  *
  * Created on 11 mei 2011, 19:25
  */
