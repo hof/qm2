@@ -51,11 +51,59 @@ bool legality_contract() {
     return rejected > 0;
 }
 
+bool staging_contract() {
+    auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
+    search->stack->tt_move.set(&search->brd, "d2c2");
+    search->stack->killer[0].set(&search->brd, "d2e2");
+    search->stack->killer[1].set(&search->brd, "d2f2");
+    search->history[WKING][g1] = 100;
+    int previous_rank = -1;
+    bool phases[6] = {};
+    std::set<uint16_t> seen;
+    for (auto * move = move::first(search.get(), 2); move; move = move::next(search.get(), 2)) {
+        const bool noisy = move->capture || move->promotion;
+        const int rank = move->equals(&search->stack->tt_move) ? 0
+            : noisy && search->brd.see(move, 0) ? 1
+            : search->is_killer(move) ? 2
+            : !noisy && move->score > 0 ? 3 : noisy ? 4 : 5;
+        if (rank < previous_rank || !seen.insert(move->to_compact()).second) {
+            return false;
+        }
+        previous_rank = rank;
+        phases[rank] = true;
+    }
+    if (!std::all_of(std::begin(phases), std::end(phases), [](bool value) { return value; })) {
+        return false;
+    }
+    move_t parent_move = search->stack->tt_move;
+    search->forward(&parent_move, search->brd.gives_check(&parent_move));
+    for (bool valid : {false, true}) {
+        move_t counter;
+        counter.set(valid ? BQUEEN : BKING, valid ? d8 : h8, valid ? e8 : h6);
+        search->countermoves[WQUEEN][c2] = counter.to_compact();
+        int found = 0;
+        for (auto * move = move::first(search.get(), 2); move;
+                move = move::next(search.get(), 2)) {
+            if (move->to_compact() == counter.to_compact()) {
+                ++found;
+                if (search->stack->move_list.stage != quiet_init) {
+                    return false;
+                }
+            }
+        }
+        if (found != int(valid)) {
+            return false;
+        }
+    }
+    search->backward(&parent_move);
+    return true;
+}
+
 }
 
 int main() {
     magic::init();
-    if (!legality_contract()) {
+    if (!legality_contract() || !staging_contract()) {
         std::cerr << "pseudo-legal picker / lazy legality contract failed\n";
         return EXIT_FAILURE;
     }

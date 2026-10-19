@@ -456,10 +456,25 @@ bool test_quiet_order() {
                         if (!search.brd.legal(move)) {
                             continue;
                         }
-                        if (search.stack->move_list.stage == STOP) actual.push_back(move->to_int());
+                        if (!move->capture && !move->promotion && !move->castle
+                                && !search.stack->tt_move.equals(move) && !search.is_killer(move)) {
+                            actual.push_back(move->to_int());
+                        }
                     }
                     const bool enabled = depth >= 0 || search.stack->in_check;
-                    if (actual != (enabled ? expected : std::vector<int>{})) {
+                    bool ordered = true;
+                    int previous_score = std::numeric_limits<int>::max();
+                    for (int code : actual) {
+                        move_t move;
+                        move.set(code);
+                        const int value = search.history[move.piece][move.tsq];
+                        ordered &= value <= previous_score;
+                        previous_score = value;
+                    }
+                    auto sorted_expected = enabled ? expected : std::vector<int>{};
+                    std::sort(actual.begin(), actual.end());
+                    std::sort(sorted_expected.begin(), sorted_expected.end());
+                    if (!ordered || actual != sorted_expected) {
                         std::cerr << "quiet ordering changed at " << fen << " pattern " << pattern
                             << " hints " << hints << " depth " << depth << '\n';
                         return false;

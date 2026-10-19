@@ -21,3 +21,13 @@ Pseudo-legal generation with make/test/unmake is a design choice, not a proven
 speed improvement. Validate special moves, terminal scores, make/unmake, hashes,
 repetition, search counters and lifecycle; compare Release performance and
 playing strength separately.
+
+The standard picker stages are TT, SEE-nonnegative captures/promotions, two
+killers, countermove, positive-history quiets, deferred negative-SEE noisy
+moves, then remaining quiets. Quiet castling candidates share quiet ordering;
+qsearch retains its existing castling policy. Positive means strictly greater
+than zero. Stage separation does not assert tactical correctness of SEE or
+promise a cutoff. Scores are cached when each batch is generated. Returned
+hint codes suppress duplicates without making generated king-safety tests.
+Countermoves are keyed by the previous colored piece and destination; no
+continuation/countermove context is used after a null move or at a cold root.

@@ -18,10 +18,12 @@
  * File: movepicker.cpp
  * Move Picker class to use by the search. The move picker handles move 
  * generation in phases, typically following this order:
- * - Hash moves
- * - Killer Moves
- * - Captures
- * - Quiet Moves
+ * - TT move
+ * - Good noisy moves
+ * - Killers and countermove
+ * - Positive-history quiets
+ * - Bad noisy moves
+ * - Remaining quiets
  * Standard chess returns pseudo-legal candidates; callers own king safety.
  * No candidates does not by itself establish a legal terminal position.
  */
@@ -119,6 +121,9 @@ move_t * move_picker_t::first(search_t * s, int depth) {
  * @return 
  */
 move_t * move_picker_t::next(search_t * s, int depth) {
+    if (s->wild == 0) {
+        return next_standard(s, depth);
+    }
 
     /*
      * 1. Pop the best move from the list. If a move is found, a just-in-time 
@@ -248,6 +253,151 @@ move_t * move_picker_t::next(search_t * s, int depth) {
             return NULL;
     }
     return result;
+}
+
+// Standard chess returns candidates; only search decides king safety.
+move_t * move_picker_t::pop_standard(search_t * s, int phase) {
+    auto * list = &s->stack->move_list;
+    while (list->first != list->last) {
+        move_t * best = nullptr;
+        const int maximum = phase == bad_quiets ? list->best->score
+            : std::numeric_limits<int>::max();
+        for (auto * move = list->first; move != list->last; ++move) {
+            const bool noisy = move->capture || move->promotion;
+            const bool eligible = phase == PROMOTIONS ? noisy && move->score >= 0
+                : phase == good_quiets ? !noisy && move->score > 0
+                : phase == bad_noisy ? noisy : !noisy;
+            if (eligible && (!best || move->score > best->score)) {
+                best = move;
+                if (phase == bad_quiets && best->score == maximum) {
+                    break;
+                }
+            }
+        }
+        if (!best) {
+            return nullptr;
+        }
+        if (phase == PROMOTIONS && !s->brd.see(best, 0)) {
+            best->score = s->brd.see(best);
+            continue;
+        }
+        *list->best = *best;
+        *best = *--list->last;
+        const auto code = list->best->to_compact();
+        bool duplicate = false;
+        for (auto hint : list->returned_hints) {
+            duplicate |= hint == code;
+        }
+        if (!duplicate) {
+            return list->best;
+        }
+    }
+    return nullptr;
+}
+
+move_t * move_picker_t::next_standard(search_t * s, int depth) {
+    auto * list = &s->stack->move_list;
+    auto * board = &s->brd;
+    const bool do_quiets = depth >= 0 || s->stack->in_check;
+    for (;;) {
+        move_t * result = nullptr;
+        switch (list->stage) {
+            case HASH:
+                list->stage = CAPTURES;
+                result = &s->stack->tt_move;
+                if (result->piece && board->valid(result)) {
+                    list->returned_hints[0] = result->to_compact();
+                    return result;
+                }
+                break;
+            case CAPTURES:
+                move::gen_captures(board, list);
+                move::gen_promotions(board, list);
+                for (auto * move = list->first; move != list->last; ++move) {
+                    move->score = board->mvvlva(move);
+                }
+                list->stage = PROMOTIONS;
+                break;
+            case PROMOTIONS:
+                result = pop_standard(s, PROMOTIONS);
+                if (result) {
+                    return result;
+                }
+                list->stage = KILLER1;
+                break;
+            case KILLER1:
+            case KILLER2: {
+                const int index = list->stage == KILLER1 ? 0 : 1;
+                list->stage = index == 0 ? KILLER2 : countermove;
+                result = &s->stack->killer[index];
+                if (do_quiets && result->piece && !result->capture && !result->promotion
+                        && !result->castle && board->valid(result)
+                        && result->to_compact() != list->returned_hints[0]
+                        && (index == 0 || result->to_compact() != list->returned_hints[1])) {
+                    list->returned_hints[index + 1] = result->to_compact();
+                    return result;
+                }
+                break;
+            }
+            case countermove:
+                list->stage = quiet_init;
+                if (do_quiets && board->ply > 0) {
+                    const auto & previous = (s->stack - 1)->current_move;
+                    if (previous.piece) {
+                        list->counter_candidate.set_compact(board,
+                            s->countermoves[previous.piece][previous.tsq]);
+                        result = &list->counter_candidate;
+                        if (result->piece && !result->capture && !result->promotion
+                                && !result->castle && board->valid(result)
+                                && result->to_compact() != list->returned_hints[0]
+                                && result->to_compact() != list->returned_hints[1]
+                                && result->to_compact() != list->returned_hints[2]) {
+                            list->returned_hints[3] = result->to_compact();
+                            return result;
+                        }
+                    }
+                }
+                break;
+            case quiet_init: {
+                auto * begin = list->last;
+                move::gen_castles(board, list);
+                if (do_quiets) {
+                    move::gen_quiet_moves(board, list);
+                }
+                for (auto * move = begin; move != list->last; ++move) {
+                    move->score = s->history[move->piece][move->tsq];
+                }
+                list->stage = good_quiets;
+                break;
+            }
+            case good_quiets:
+                result = pop_standard(s, good_quiets);
+                if (result) {
+                    return result;
+                }
+                list->stage = bad_noisy;
+                break;
+            case bad_noisy:
+                result = pop_standard(s, bad_noisy);
+                if (result) {
+                    return result;
+                }
+                // Only quiets remain. The preceding maximum bounds subsequent
+                // selections, preserving the cheap all-equal-history path.
+                list->best->score = std::numeric_limits<int>::max();
+                list->stage = bad_quiets;
+                break;
+            case bad_quiets:
+                result = pop_standard(s, bad_quiets);
+                if (result) {
+                    return result;
+                }
+                list->stage = STOP;
+                break;
+            default:
+                return nullptr;
+        }
+    }
 }
 
 namespace move {

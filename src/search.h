@@ -141,6 +141,7 @@ public:
     bool interrupted;
     result_source_t result_source;
     int history[BKING + 1][64];
+    uint16_t countermoves[BKING + 1][64];
     move_t ponder_move;
     std::string book_name;
     bool root_wtm;

@@ -44,6 +44,8 @@ namespace move {
         move_t * first;
         move_t * last;
         move_t * best;
+        uint16_t returned_hints[4];
+        move_t counter_candidate;
 
         list_t();
         void clear();

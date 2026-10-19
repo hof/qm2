@@ -262,6 +262,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     result_source = result_source_t::none;
     memset(_stack, 0, sizeof (_stack));
     memset(history, 0, sizeof (history));
+    memset(countermoves, 0, sizeof(countermoves));
     stack->eval_result = score::INVALID;
     stack->repetition_start = -static_cast<int>(_position_history.size());
     init_tt_history();
@@ -1535,6 +1536,10 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
                 if (!move->capture && !move->promotion && !move->castle) {
                     update_killers(move);
+                    if (brd.ply > 0 && (stack - 1)->current_move.piece) {
+                        const auto & previous = (stack - 1)->current_move;
+                        countermoves[previous.piece][previous.tsq] = move->to_compact();
+                    }
                     update_history(move);
                     // History is nonnegative; saturate penalties before the shift becomes invalid.
                     const int history_shift = MIN(searched_moves, std::numeric_limits<int>::digits);

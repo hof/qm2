@@ -319,6 +319,10 @@ void board_t::backward() {
  */
 bool board_t::valid(const move_t * move) {
     int piece = move->piece;
+    if (piece < WPAWN || piece > BKING || move->ssq >= 64 || move->tsq >= 64
+            || move->ssq == move->tsq || move->capture == WKING || move->capture == BKING) {
+        return false;
+    }
     if (stack->wtm != (piece <= WKING)) {
         return false;
     }
@@ -327,7 +331,27 @@ bool board_t::valid(const move_t * move) {
         return false;
     }
     int tsq = move->tsq;
+    const bool pawn = piece == WPAWN || piece == BPAWN;
+    const bool us = stack->wtm;
+    if (move->promotion) {
+        if (!pawn || !(BIT(tsq) & RANK[us][8])
+                || move->promotion < KNIGHT[us] || move->promotion > QUEEN[us]) {
+            return false;
+        }
+    } else if (pawn && (BIT(tsq) & RANK[us][8])) {
+        return false;
+    }
+    if (move->castle && (piece != KING[us] || ssq != (us ? e1 : e8)
+            || move->castle != (us ? (tsq == g1 ? CASTLE_K : tsq == c1 ? CASTLE_Q : 0)
+                : (tsq == g8 ? CASTLE_k : tsq == c8 ? CASTLE_q : 0)))) {
+        return false;
+    }
     if (move->en_passant) {
+        if (!pawn || move->promotion || move->castle
+                || !(PAWN_CAPTURES[us][ssq] & BIT(tsq))) {
+            return false;
+        }
+
         return tsq == stack->enpassant_sq && matrix[tsq] == EMPTY && ((stack->wtm && piece == WPAWN && matrix[tsq - 8] == BPAWN)
                 || (!stack->wtm && piece == BPAWN && matrix[tsq + 8] == WPAWN));
     } else if (move->castle) {
@@ -351,7 +375,7 @@ bool board_t::valid(const move_t * move) {
         }
     }
     int captured = move->capture; //empty for non-captures
-    if (matrix[tsq] != captured) {
+    if (matrix[tsq] != captured || (captured && (captured <= WKING) == us)) {
         return false;
     }
 
@@ -364,9 +388,11 @@ bool board_t::valid(const move_t * move) {
             assert(false);
             return false;
         case WPAWN:
-            return captured || tsq - ssq == 8 || matrix[ssq + 8] == EMPTY;
+            return captured ? bool(PAWN_CAPTURES[WHITE][ssq] & BIT(tsq))
+                : tsq - ssq == 8 || (ssq >= a2 && ssq <= h2 && tsq - ssq == 16
+                    && matrix[ssq + 8] == EMPTY);
         case WKNIGHT:
-            return true;
+            return KNIGHT_MOVES[ssq] & BIT(tsq);
         case WBISHOP:
             return magic::bishop_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case WROOK:
@@ -374,11 +400,11 @@ bool board_t::valid(const move_t * move) {
         case WQUEEN:
             return magic::queen_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case WKING:
-            return true;
+            return KING_MOVES[ssq] & BIT(tsq);
         case BPAWN:
             return captured || ssq - tsq == 8 || matrix[tsq + 8] == EMPTY;
         case BKNIGHT:
-            return true;
+            return KNIGHT_MOVES[ssq] & BIT(tsq);
         case BBISHOP:
             return magic::bishop_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case BROOK:
@@ -386,7 +412,7 @@ bool board_t::valid(const move_t * move) {
         case BQUEEN:
             return magic::queen_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case BKING:
-            return true;
+            return KING_MOVES[ssq] & BIT(tsq);
         default:
             assert(false);
             return false;

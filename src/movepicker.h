@@ -40,12 +40,19 @@ enum move_stage_t {
     MINORPROMOTIONS,
     CASTLING,
     QUIET_MOVES,
-    STOP
+    STOP,
+    countermove,
+    quiet_init,
+    good_quiets,
+    bad_noisy,
+    bad_quiets
 };
 
 class move_picker_t {
 private:
     move_t * pop(search_t * s, move::list_t * list);
+    move_t * pop_standard(search_t * s, int phase);
+    move_t * next_standard(search_t * s, int depth);
 
 public:
     move_t * first(search_t * s, int depth);
