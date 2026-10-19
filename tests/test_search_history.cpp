@@ -15,7 +15,7 @@ public:
         iid_enabled = false;
         stack->in_check = brd.in_check();
     }
-    int pvs(int, int, int) override {
+    int pvs(int, int, int, bool = false) override {
         ++child_calls;
         auto & move = (stack - 1)->current_move;
         if (!brd.legal()) {

@@ -35,14 +35,14 @@ public:
         stack->in_check = brd.in_check();
     }
 
-    int pvs(int alpha, int beta, int depth) override {
+    int pvs(int alpha, int beta, int depth, bool cut_node = false) override {
         if (brd.ply == 0) {
             // Isolate LMR from the parent's PV internal iterative deepening.
             if (entry_active) {
                 return parent_value;
             }
             entry_active = true;
-            const int result = search_t::pvs(alpha, beta, depth);
+            const int result = search_t::pvs(alpha, beta, depth, cut_node);
             entry_active = false;
             return result;
         }

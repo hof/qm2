@@ -84,6 +84,7 @@ struct search_stack_t {
     int repetition_start;
     uint8_t pv_count;
     int16_t eval_result;
+    bool improving;
     search_metadata_t metadata;
     U64 tt_key;
     U64 tt_history;
@@ -181,12 +182,13 @@ public:
     bool tablebase_lookup();
     bool probe_tablebase(int depth, int & value);
     int pvs_root(int alpha, int beta, int depth);
-    virtual int pvs(int alpha, int beta, int depth);
+    virtual int pvs(int alpha, int beta, int depth, bool cut_node = false);
     int qsearch(int alpha, int beta, int depth);
     int qstatic(int beta, int gain);
     std::string pv_to_string();
     bool is_draw();
     bool is_repetition() const;
+    bool is_improving() const;
     bool abort(bool force_poll);
     bool pondering();
     int init_root_moves();

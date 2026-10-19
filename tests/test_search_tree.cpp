@@ -42,7 +42,7 @@ public:
         stack->in_check = brd.in_check();
     }
 
-    int pvs(int alpha, int beta, int depth) override {
+    int pvs(int alpha, int beta, int depth, bool cut_node = false) override {
         const auto fen = brd.to_string();
         if (brd.ply > 0 && beta - alpha > 1 && narrow.erase(fen)) {
             ++researches;
@@ -68,7 +68,7 @@ public:
             return found == oracle.end() ? 0 : found->second->value;
         }
         valid &= check(depth > 0, "unexpected early horizon", fen.c_str());
-        return search_t::pvs(alpha, beta, depth);
+        return search_t::pvs(alpha, beta, depth, cut_node);
     }
 };
 

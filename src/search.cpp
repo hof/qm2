@@ -274,6 +274,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     memset(countermoves, 0, sizeof(countermoves));
     quiet_history = wild == 0 ? std::make_unique<quiet_history_t>() : nullptr;
     stack->eval_result = score::INVALID;
+    stack->improving = false;
     stack->repetition_start = -static_cast<int>(_position_history.size());
     init_tt_history();
     stack->tt_clocks = {0, 101};
@@ -587,7 +588,7 @@ void search_t::book_calc() {
         int score = 0;
         U64 nodes_before = nodes;
         for (int depth = 1; depth <= game.max_depth; depth++) {
-            score = -pvs(-score::INF, score::INF, depth - 1);
+            score = -pvs(-score::INF, score::INF, depth - 1, false);
         }
         backward(move);
         uci::out("book_calc fen " + fen + " move " + move->to_string() + " depth " 
@@ -754,6 +755,7 @@ void search_t::forward() {
     stack++;
     stack->in_check = false;
     stack->eval_result = score::INVALID;
+    stack->improving = false;
     brd.forward();
     if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, nullptr, evaluation_accumulators[brd.ply]);
@@ -793,6 +795,7 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->in_check = gives_check;
     stack->tt_clocks = {0, 101};
     stack->eval_result = score::INVALID;
+    stack->improving = false;
     brd.forward(move);
     if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, move, evaluation_accumulators[brd.ply]);
@@ -1114,6 +1117,7 @@ int search_t::ceiling_score() {
  * - Compatible with all supported wild variants
  */
 int search_t::pvs_root(int alpha, int beta, int depth) {
+    stack->improving = false;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     ++nnue_audit.counters.root_calls;
 #endif
@@ -1146,15 +1150,15 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             uint64_t(stack->check_extensions));
 #endif
         if (i == 0) {
-            score = -pvs(-beta, -alpha, depth - 1 + extend);
+            score = -pvs(-beta, -alpha, depth - 1 + extend, false);
         } else {
-            score = -pvs(-alpha - 1, -alpha, depth - 1 + extend);
+            score = -pvs(-alpha - 1, -alpha, depth - 1 + extend, true);
             if (!stop_all && score > alpha) { //open window research w/o reductions
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                 ++nnue_audit.counters.researches;
                 ++nnue_audit.counters.root_researches;
 #endif
-                score = -pvs(-beta, -alpha, depth - 1 + extend);
+                score = -pvs(-beta, -alpha, depth - 1 + extend, false);
             }
         }
         backward(move);
@@ -1236,6 +1240,24 @@ bool search_t::is_repetition() const {
     return false;
 }
 
+// Compare real same-side positions only. A missing two-ply evaluation (for
+// example, check) may fall back to four plies; an artificial pass is a barrier.
+bool search_t::is_improving() const {
+    if (stack->in_check || stack->eval_result == score::INVALID) {
+        return false;
+    }
+    for (int distance = 1; distance <= 4 && distance <= brd.ply; ++distance) {
+        const auto & previous = *(stack - distance);
+        if (!previous.current_move.piece) {
+            return false;
+        }
+        if ((distance == 2 || distance == 4) && previous.eval_result != score::INVALID) {
+            return stack->eval_result > previous.eval_result;
+        }
+    }
+    return false;
+}
+
 // A shallow PV search supplies only a move-ordering hint. Restore this
 // frame before searching the original depth, even when the helper is stopped.
 void search_t::prepare_iid_move(int alpha, int beta, int depth) {
@@ -1274,7 +1296,7 @@ void search_t::prepare_iid_move(int alpha, int beta, int depth) {
     {
         iid_scope_t scope{*this, *stack};
         iid_active = true;
-        hint_value = pvs(alpha, beta, depth - 2);
+        hint_value = pvs(alpha, beta, depth - 2, false);
         hint = stack->best_move;
     }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
@@ -1294,10 +1316,13 @@ void search_t::prepare_iid_move(int alpha, int beta, int depth) {
  * @param alpha lowerbound value
  * @param beta upperbound value
  * @param depth remaining search depth
+ * @param cut_node expected non-PV cutoff, not a proven score bound
  * @return score for the current node
  */
-int search_t::pvs(int alpha, int beta, int depth) {
+int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     stack->tt_clocks = {0, 101};
+    stack->improving = false;
+    assert(!cut_node || alpha + 1 == beta);
 
     assert(alpha < beta);
     assert(alpha >= -score::INF);
@@ -1443,6 +1468,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
+    stack->improving = is_improving();
     const int decisive_score = score::TABLEBASE - MAX_PLY;
     const bool do_prune_node = eval >= beta && !in_check && !pv
         && std::abs(beta) < decisive_score && brd.has_pieces(brd.us())
@@ -1486,7 +1512,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
 #endif
         constexpr int null_reduction = 3;
         forward();
-        int null_score = -pvs(-beta, -beta + 1, depth - 1 - null_reduction);
+        int null_score = -pvs(-beta, -beta + 1, depth - 1 - null_reduction, !cut_node);
         backward();
         if (stop_all) {
             return alpha;
@@ -1496,9 +1522,11 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 //verification
                 const clock_range_t previous_clocks = stack->tt_clocks;
                 // Exclude artificial passes throughout the verification subtree.
+                const bool previous_improving = stack->improving;
                 null_enabled = false;
-                int verified_score = pvs(beta - 1, beta, depth - 1 - verification_reduction);
+                int verified_score = pvs(beta - 1, beta, depth - 1 - verification_reduction, cut_node);
                 null_enabled = true;
+                stack->improving = previous_improving;
                 stack->tt_clocks.include_child(previous_clocks, 0);
                 if (stop_all) {
                     return alpha;
@@ -1616,9 +1644,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
 #endif
         int score;
         if (searched_moves == 0) {
-            score = -pvs(-beta, -alpha, depth - 1 + extend);
+            score = -pvs(-beta, -alpha, depth - 1 + extend, !pv && !cut_node);
         } else {
-            score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend);
+            score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend, reduce > 0 || !cut_node);
             if (!stop_all && score > alpha && (pv || reduce > 0)) { //open window research without reductions
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                 ++nnue_audit.counters.researches;
@@ -1626,7 +1654,7 @@ int search_t::pvs(int alpha, int beta, int depth) {
                 nnue_audit.counters.lmr_researches += reduce > 0;
 #endif
                 const clock_range_t previous_clocks = stack->tt_clocks;
-                score = -pvs(-beta, -alpha, depth - 1 + extend);
+                score = -pvs(-beta, -alpha, depth - 1 + extend, !pv && !cut_node);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                 if (reduce && !stop_all) {
                     nnue_audit.counters.lmr_refutations += score <= alpha;
@@ -1711,6 +1739,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     stack->pv_count = 0;
     stack->best_move.clear();
     stack->tt_move.clear();
+    stack->improving = false;
 
     assert(depth <= 0);
     assert(alpha < beta);
@@ -1996,6 +2025,7 @@ void search_t::reset_stack() {
     brd.ply = 0;
     stack = root_stack;
     stack->eval_result = score::INVALID;
+    stack->improving = false;
     stack->repetition_start = -static_cast<int>(_position_history.size());
     init_tt_history();
     stack->tt_clocks = {0, 101};

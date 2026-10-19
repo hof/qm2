@@ -10,7 +10,7 @@ public:
         beta_pruning = null_enabled = ffp_enabled = lmr_enabled = false;
         tablebase_limit = draw_contempt = 0;
     }
-    int pvs(int alpha, int beta, int depth) override {
+    int pvs(int alpha, int beta, int depth, bool cut_node = false) override {
         if (brd.ply == 0 && iid_active) {
             ++helpers;
             ++nodes;
@@ -26,7 +26,7 @@ public:
             stack->pv_count = 0;
             return 0;
         }
-        return search_t::pvs(alpha, beta, depth);
+        return search_t::pvs(alpha, beta, depth, cut_node);
     }
 };
 bool check(bool ok, const char * message) {

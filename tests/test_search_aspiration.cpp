@@ -19,7 +19,7 @@ public:
         init_root_moves();
     }
 
-    int pvs(int alpha, int beta, int depth) override {
+    int pvs(int alpha, int beta, int depth, bool = false) override {
         ++calls;
         ++nodes;
         stack->pv_count = 0;

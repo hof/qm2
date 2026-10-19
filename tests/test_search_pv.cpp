@@ -74,7 +74,7 @@ public:
         interrupt_depth(depth), completed_children(count) {
         game.max_depth = 2;
     }
-    int pvs(int, int, int depth) override {
+    int pvs(int, int, int depth, bool = false) override {
         nodes += 10;
         pruned_nodes += 7;
         stack->pv_count = 0;
@@ -119,7 +119,7 @@ class bounded_search_t : public search_t {
     int child_score;
 public:
     explicit bounded_search_t(int value) : search_t(start_fen), child_score(value) {}
-    int pvs(int, int, int) override {
+    int pvs(int, int, int, bool = false) override {
         ++nodes;
         stack->pv_count = 0;
         return -child_score;

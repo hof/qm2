@@ -148,6 +148,21 @@ run, so stalemate remains an exact draw with production pruning enabled. The
 probe uses a king escape first and fresh move generation when needed, without
 changing the active move picker.
 
+Standard PVS carries an explicit expected-cut-node flag separately from the
+window and returned TT bound. PV children and open-window re-searches are not
+expected cut nodes; non-PV children alternate expectations, while reduced scout
+searches predict a cutoff. Null children alternate and same-position verification
+retains its caller's expectation. Royal losers ignores this standard-only context.
+
+Each standard search frame also tracks whether its static evaluation improved
+since the nearest valid same-side position two plies earlier, falling back to
+four plies when needed. Equality, missing evaluations and checked positions do
+not count as improvement. Artificial null passes block comparisons across their
+boundary. Tracking reuses cached static evaluations without extra evaluation
+calls; it never uses TT search scores. Child entry and root reset clear stale
+trends, and same-position helpers restore their caller's state. These fields
+prepare later pruning work; existing pruning and reduction decisions are unchanged.
+
 Standard NNUE search retains the simple pruning baseline established during
 the HCE comparison, expressed on the 100-cp pawn scale. Reverse futility is limited to depths
 one through three: require `eval - 100 * depth >= beta` and return `eval` on

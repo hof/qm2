@@ -28,11 +28,13 @@ public:
     bool verification_excluded = true;
     bool interrupt_null = false;
     bool interrupt_verification = false;
+    bool null_cut_node = false, verification_cut_node = false;
 
-    int pvs(int alpha, int beta, int depth) override {
+    int pvs(int alpha, int beta, int depth, bool cut_node = false) override {
         const bool artificial = brd.ply > 0 && !(stack - 1)->current_move.piece;
         if (artificial) {
             ++null_calls;
+            null_cut_node = cut_node;
             null_depth = depth;
             null_alpha = alpha;
             null_beta = beta;
@@ -46,22 +48,24 @@ public:
         const bool verification = brd.ply == entry_ply;
         if (verification) {
             ++verification_calls;
+            verification_cut_node = cut_node;
             verification_excluded &= !null_enabled;
             if (inject_verification) {
+                stack->improving = true; // Same-position helpers must not leak their trend.
                 stop_all = interrupt_verification;
                 return verification_value;
             }
         }
         const bool previous = in_verification;
         in_verification |= verification;
-        const int result = search_t::pvs(alpha, beta, depth);
+        const int result = search_t::pvs(alpha, beta, depth, cut_node);
         in_verification = previous;
         return result;
     }
 
-    int run(int alpha, int beta, int depth) {
+    int run(int alpha, int beta, int depth, bool cut_node = false) {
         entry_ply = brd.ply;
-        return search_t::pvs(alpha, beta, depth);
+        return search_t::pvs(alpha, beta, depth, cut_node);
     }
 };
 
@@ -129,6 +133,25 @@ bool test_cutoffs() {
             "failed verification did not resume legal search");
         ok &= check(failed->verification_excluded, "failed verification did not exclude null");
         ok &= restored(*failed, *original);
+    }
+    return ok;
+}
+
+bool test_node_context() {
+    bool ok = true;
+    for (bool cut_node : {false, true}) {
+        for (bool cancel : {false, true}) {
+            auto search = std::make_unique<null_probe_t>("7k/7p/8/8/8/8/P7/KR6 w - - 0 1");
+            prepare(*search);
+            search->interrupt_verification = cancel;
+            search->run(-1, 0, 7, cut_node);
+            ok &= check(search->null_calls == 1 && search->null_cut_node == !cut_node
+                && search->verification_calls == 1 && search->verification_cut_node == cut_node,
+                "null and same-position verification cut-node contexts differ");
+            ok &= check(search->stop_all == cancel && !search->stack->improving
+                && search->null_enabled && search->stack == search->root_stack && search->brd.ply == 0,
+                "null verification leaked its trend or failed cancellation restoration");
+        }
     }
     return ok;
 }
@@ -223,9 +246,10 @@ bool test_static_cushion() {
 
 int main() {
     magic::init();
+    const bool context = test_node_context();
     const bool cutoffs = test_cutoffs();
     const bool exclusions = test_exclusions();
     const bool pawn_endgames = test_pawn_endgames();
     const bool static_cushion = test_static_cushion();
-    return cutoffs && exclusions && pawn_endgames && static_cushion ? EXIT_SUCCESS : EXIT_FAILURE;
+    return context && cutoffs && exclusions && pawn_endgames && static_cushion ? EXIT_SUCCESS : EXIT_FAILURE;
 }

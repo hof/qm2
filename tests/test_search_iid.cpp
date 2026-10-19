@@ -13,7 +13,7 @@ public:
         tablebase_limit = 0;
         hint = brd.us() ? "g1f3" : "g8f6";
     }
-    int pvs(int alpha, int beta, int depth) override {
+    int pvs(int alpha, int beta, int depth, bool cut_node = false) override {
         if (brd.ply == 0 && iid_active) {
             ++helpers;
             ++nodes;
@@ -26,6 +26,7 @@ public:
             stack->pv_count = 1;
             stack->current_move = stack->best_move;
             stack->eval_result = 777;
+            stack->improving = false;
             // Helper subtrees must not start nested IID.
             prepare_iid_move(alpha, beta, 7);
             if (throw_helper) {
@@ -44,7 +45,7 @@ public:
             stack->pv_count = 0;
             return 0;
         }
-        return search_t::pvs(alpha, beta, depth);
+        return search_t::pvs(alpha, beta, depth, cut_node);
     }
 };
 bool check(bool ok, const char * message) {
@@ -93,11 +94,12 @@ int main() {
             auto probe = std::make_unique<iid_probe_t>(fen);
             probe->cancel = cancel;
             probe->stack->eval_result = 12;
+            probe->stack->improving = true;
             probe->stack->pv_count = 0;
             const U64 key = probe->brd.stack->tt_key;
             probe->prepare_iid_move(-100, 100, 4);
             ok &= check(probe->helpers == 1 && probe->iid_enabled && probe->stop_all == cancel
-                && probe->stack->eval_result == 12 && probe->stack->pv_count == 0
+                && probe->stack->eval_result == 12 && probe->stack->improving && probe->stack->pv_count == 0
                 && !probe->stack->current_move.piece && probe->brd.stack->tt_key == key,
                 "IID helper frame/cancellation restoration differs");
             ok &= check(bool(probe->stack->tt_move.piece) == !cancel,

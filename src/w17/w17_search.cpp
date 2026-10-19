@@ -73,7 +73,7 @@ U64 w17_search_t::w17_tt_context(int in_mate_search) const {
     return tt_context() ^ mode_salts[in_mate_search + 1];
 }
 
-int w17_search_t::pvs(int alpha, int beta, int depth) {
+int w17_search_t::pvs(int alpha, int beta, int depth, bool) {
     return w17_pvs(alpha, beta, -1, depth);
 }
 

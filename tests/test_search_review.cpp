@@ -211,7 +211,7 @@ bool test_production_integration() {
 class large_root_search_t : public search_t {
 public:
     explicit large_root_search_t(const char * fen) : search_t(fen) {}
-    int pvs(int, int, int) override {
+    int pvs(int, int, int, bool = false) override {
         nodes += U64{1} << 32;
         stack->pv_count = 0;
         return 0;

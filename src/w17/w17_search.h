@@ -30,7 +30,7 @@
 class w17_search_t : public search_t {
 public:
 
-    virtual int pvs(int alpha, int beta, int depth);
+    int pvs(int alpha, int beta, int depth, bool cut_node = false) override;
     bool w17_is_draw();
 
     w17_search_t(const char * fen, const game_t * g = NULL,
