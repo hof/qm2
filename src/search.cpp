@@ -58,6 +58,40 @@ U64 mix_context(U64 key) {
     return key ^ (key >> 31);
 }
 
+// Same-position helpers may replace the picker, PV, evaluation and repetition
+// frame. Restore all of it before the caller resumes, retaining clock limits.
+struct search_frame_scope_t {
+    search_t & search;
+    search_stack_t * frame;
+    search_stack_t previous;
+    bool null_enabled, iid_active;
+    verification_mode_t mode;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    U64 nodes_before = search.nodes;
+#endif
+
+    explicit search_frame_scope_t(search_t & search)
+        : search(search), frame(search.stack), previous(*search.stack),
+          null_enabled(search.null_enabled), iid_active(search.iid_active),
+          mode(search.verification_mode) {}
+
+    ~search_frame_scope_t() {
+        assert(search.stack == frame);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        if (search.verification_mode != verification_mode_t::none) {
+            search.nnue_audit.counters.verification_visits += search.nodes - nodes_before;
+            search.nnue_audit.counters.verification_cancelled += search.stop_all;
+        }
+#endif
+        const auto clocks = frame->tt_clocks;
+        *frame = previous;
+        frame->tt_clocks.include_child(clocks, 0);
+        search.null_enabled = null_enabled;
+        search.iid_active = iid_active;
+        search.verification_mode = mode;
+    }
+};
+
 }
 
 // Most playable positions have a king escape. Fall back to fresh generation
@@ -214,6 +248,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     iid_enabled = options::get_value("IID");
     q_tt_enabled = wild == 0 && options::get_value("QsearchTT");
     iid_active = false;
+    verification_mode = verification_mode_t::none;
     ffp_enabled = options::get_value("FutilityPruning");
     draw_contempt = options::get_value("DrawContempt");
     evaluation_network.reset();
@@ -275,6 +310,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     quiet_history = wild == 0 ? std::make_unique<quiet_history_t>() : nullptr;
     stack->eval_result = score::INVALID;
     stack->improving = false;
+    stack->excluded_move = 0;
     stack->repetition_start = -static_cast<int>(_position_history.size());
     init_tt_history();
     stack->tt_clocks = {0, 101};
@@ -468,6 +504,10 @@ void search_t::go() {
             + " min_depth " + std::to_string(counts.min_iid_depth)
             + " max_depth " + std::to_string(counts.max_iid_depth)
             + " min_probe " + std::to_string(counts.min_iid_probe_depth));
+        uci::out("info string audit_verification calls " + std::to_string(counts.verification_calls)
+            + " excluded " + std::to_string(counts.excluded_calls)
+            + " cancelled " + std::to_string(counts.verification_cancelled)
+            + " visits " + std::to_string(counts.verification_visits));
         uci::out("info string audit_null attempts " + std::to_string(nnue_audit.counters.null_attempts)
             + " cutoffs " + std::to_string(nnue_audit.counters.null_cutoffs));
         uci::out("info string audit_beta candidates " + std::to_string(nnue_audit.counters.beta_candidates)
@@ -756,6 +796,7 @@ void search_t::forward() {
     stack->in_check = false;
     stack->eval_result = score::INVALID;
     stack->improving = false;
+    stack->excluded_move = 0;
     brd.forward();
     if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, nullptr, evaluation_accumulators[brd.ply]);
@@ -796,6 +837,7 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->tt_clocks = {0, 101};
     stack->eval_result = score::INVALID;
     stack->improving = false;
+    stack->excluded_move = 0;
     brd.forward(move);
     if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, move, evaluation_accumulators[brd.ply]);
@@ -1261,7 +1303,8 @@ bool search_t::is_improving() const {
 // A shallow PV search supplies only a move-ordering hint. Restore this
 // frame before searching the original depth, even when the helper is stopped.
 void search_t::prepare_iid_move(int alpha, int beta, int depth) {
-    if (iid_active || depth < 4 || alpha + 1 >= beta || stack->tt_move.piece) {
+    if (iid_active || verification_mode != verification_mode_t::none
+            || depth < 4 || alpha + 1 >= beta || stack->tt_move.piece) {
         return;
     }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
@@ -1270,16 +1313,6 @@ void search_t::prepare_iid_move(int alpha, int beta, int depth) {
     if (!iid_enabled) {
         return;
     }
-    struct iid_scope_t {
-        search_t & search;
-        search_stack_t previous;
-        ~iid_scope_t() {
-            const clock_range_t clocks = search.stack->tt_clocks;
-            *search.stack = previous;
-            search.stack->tt_clocks.include_child(clocks, 0);
-            search.iid_active = false;
-        }
-    };
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     const U64 nodes_before = nodes;
     auto & counts = nnue_audit.counters;
@@ -1294,7 +1327,7 @@ void search_t::prepare_iid_move(int alpha, int beta, int depth) {
     move_t hint{};
     int hint_value;
     {
-        iid_scope_t scope{*this, *stack};
+        search_frame_scope_t scope(*this);
         iid_active = true;
         hint_value = pvs(alpha, beta, depth - 2, false);
         hint = stack->best_move;
@@ -1311,6 +1344,35 @@ void search_t::prepare_iid_move(int alpha, int beta, int depth) {
     }
 }
 
+// Verification searches cannot establish normal TT bounds or train ordinary
+// ordering history. Only this frame excludes a move; children remain legal chess.
+int search_t::verification_search(int alpha, int beta, int depth, bool cut_node,
+        verification_mode_t mode, uint16_t excluded_move) {
+    assert(wild == 0 && verification_mode == verification_mode_t::none);
+    assert(mode == verification_mode_t::null_move || mode == verification_mode_t::excluded_move);
+    assert((mode == verification_mode_t::excluded_move) == (excluded_move != 0));
+    assert(!excluded_move || (depth > 0 && brd.ply < MAX_PLY - 1));
+    assert(alpha < beta && (!cut_node || alpha + 1 == beta));
+    if (excluded_move) {
+        move_t move{};
+        move.set_compact(&brd, excluded_move);
+        assert(brd.valid(&move) && brd.legal(&move));
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.verification_calls;
+    nnue_audit.counters.excluded_calls += mode == verification_mode_t::excluded_move;
+#endif
+    int value;
+    {
+        search_frame_scope_t scope(*this);
+        verification_mode = mode;
+        null_enabled = false;
+        stack->excluded_move = excluded_move;
+        value = pvs(alpha, beta, depth, cut_node);
+    }
+    return stop_all ? alpha : value;
+}
+
 /**
  * Principle Variation Search (fail-soft)
  * @param alpha lowerbound value
@@ -1323,6 +1385,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     stack->tt_clocks = {0, 101};
     stack->improving = false;
     assert(!cut_node || alpha + 1 == beta);
+    assert(!stack->excluded_move || verification_mode == verification_mode_t::excluded_move);
 
     assert(alpha < beta);
     assert(alpha >= -score::INF);
@@ -1402,7 +1465,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         return draw_score();
     }
     int tablebase_score;
-    if (tablebase_limit && probe_tablebase(depth, tablebase_score)) {
+    if (!stack->excluded_move && tablebase_limit && probe_tablebase(depth, tablebase_score)) {
         return tablebase_score;
     }
 
@@ -1411,18 +1474,21 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
      */
 
     const bool pv = alpha + 1 < beta;
+    const bool normal_search = verification_mode == verification_mode_t::none;
+    const auto excluded_move = stack->excluded_move;
     stack->tt_key = brd.stack->tt_key;
-    const U64 context = tt_context();
+    const U64 context = normal_search ? tt_context() : 0;
     clock_range_t tt_clocks;
     int tt_move = 0, tt_flag = 0, tt_score;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    const bool use_tt_scores = !nnue_audit.fixed_horizon && !nnue_audit.aligned_quiescence;
-    const bool probe_tt = use_tt_scores || (nnue_audit.aligned_quiescence && nnue_audit.hash_moves);
+    const bool use_tt_scores = normal_search && !nnue_audit.fixed_horizon && !nnue_audit.aligned_quiescence;
+    const bool probe_tt = normal_search
+        && (use_tt_scores || (nnue_audit.aligned_quiescence && nnue_audit.hash_moves));
     if (nnue_audit.aligned_quiescence && probe_tt) {
         ++nnue_audit.counters.hash_probes;
     }
 #else
-    constexpr bool probe_tt = true, use_tt_scores = true;
+    const bool probe_tt = normal_search, use_tt_scores = normal_search;
 #endif
     const bool usable_tt_score = probe_tt && trans_table::retrieve(stack->tt_key, brd.ply,
         depth, tt_score, tt_move, tt_flag, context, brd.stack->fifty_count, &tt_clocks);
@@ -1470,7 +1536,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     const int eval = evaluate(this);
     stack->improving = is_improving();
     const int decisive_score = score::TABLEBASE - MAX_PLY;
-    const bool do_prune_node = eval >= beta && !in_check && !pv
+    const bool do_prune_node = !excluded_move && eval >= beta && !in_check && !pv
         && std::abs(beta) < decisive_score && brd.has_pieces(brd.us())
         && brd.stack->fifty_count < 99;
     const bool previous_null = brd.ply > 0 && !(stack - 1)->current_move.piece;
@@ -1519,15 +1585,8 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         } else if (null_score >= beta && std::abs(null_score) < decisive_score) {
             constexpr int verification_reduction = 5;
             if (null_verify && depth > verification_reduction && stack->metadata.endgame) {
-                //verification
-                const clock_range_t previous_clocks = stack->tt_clocks;
-                // Exclude artificial passes throughout the verification subtree.
-                const bool previous_improving = stack->improving;
-                null_enabled = false;
-                int verified_score = pvs(beta - 1, beta, depth - 1 - verification_reduction, cut_node);
-                null_enabled = true;
-                stack->improving = previous_improving;
-                stack->tt_clocks.include_child(previous_clocks, 0);
+                int verified_score = verification_search(beta - 1, beta,
+                    depth - 1 - verification_reduction, cut_node, verification_mode_t::null_move);
                 if (stop_all) {
                     return alpha;
                 }
@@ -1564,12 +1623,15 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     }
 #endif
     if (!move) {
+        if (excluded_move) {
+            return alpha;
+        }
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
 
     // Frontier-only quiet-move futility. The positional allowance is a
     // heuristic, not a proven bound on the neural evaluation.
-    const bool can_ffp = ffp_enabled && depth == 1 && !pv && !in_check
+    const bool can_ffp = !excluded_move && ffp_enabled && depth == 1 && !pv && !in_check
         && std::abs(alpha) < decisive_score && std::abs(beta) < decisive_score
         && !stack->metadata.endgame;
 
@@ -1579,6 +1641,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     const int score_max = score::MATE - brd.ply - 1;
     stack->best_move.clear();
     do {
+        if (excluded_move && move->to_compact() == excluded_move) {
+            continue;
+        }
 
         assert(brd.valid(move));
         assert(stack->best_move.equals(move) == false);
@@ -1614,9 +1679,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
          */
 
         int extend = extension(move, gives_check);
-        int reduce = reduction(depth, searched_moves, is_dangerous);
+        int reduce = excluded_move ? 0 : reduction(depth, searched_moves, is_dangerous);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        if (depth >= 3 && searched_moves >= 3 && !is_dangerous) {
+        if (!excluded_move && depth >= 3 && searched_moves >= 3 && !is_dangerous) {
             ++nnue_audit.counters.lmr_candidates;
         }
         if (reduce) {
@@ -1675,8 +1740,10 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         } else if (score > best) {
             stack->best_move.set(move);
             if (score >= beta) {
-                trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
-                if (!move->capture && !move->promotion && !move->castle) {
+                if (normal_search) {
+                    trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
+                }
+                if (normal_search && !move->capture && !move->promotion && !move->castle) {
                     if (brd.ply > 0 && (stack - 1)->current_move.piece) {
                         const auto & previous = (stack - 1)->current_move;
                         countermoves[previous.piece][previous.tsq] = move->to_compact();
@@ -1705,6 +1772,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 
     assert(!stop_all);
     if (best == -score::INF) {
+        if (excluded_move) {
+            return alpha;
+        }
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
     assert(best > -score::INF);
@@ -1713,7 +1783,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     assert(brd.legal(&stack->best_move));
 
     int flag = score::flags(best, alpha1, beta);
-    trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_compact(), flag, context, stack->tt_clocks);
+    if (normal_search) {
+        trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_compact(), flag, context, stack->tt_clocks);
+    }
     return best;
 }
 
@@ -1742,6 +1814,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     stack->improving = false;
 
     assert(depth <= 0);
+    assert(!stack->excluded_move);
     assert(alpha < beta);
     assert(alpha >= -score::INF);
     assert(beta <= score::INF);
@@ -1787,9 +1860,10 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     const bool in_check = stack->in_check;
     const auto mode = depth == 0 ? tt_mode_t::quiescence_entry : tt_mode_t::quiescence_tactical;
     const U64 key = brd.stack->tt_key;
-    const U64 context = q_tt_enabled ? tt_context() : 0;
+    const bool use_q_tt = q_tt_enabled && verification_mode == verification_mode_t::none;
+    const U64 context = use_q_tt ? tt_context() : 0;
     stack->tt_key = key;
-    if (q_tt_enabled) {
+    if (use_q_tt) {
         int tt_score = 0, tt_move = 0, tt_flag = 0;
         clock_range_t clocks;
         const bool usable = trans_table::retrieve(key, brd.ply, 1, tt_score, tt_move,
@@ -1811,7 +1885,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     // Only completed results reach this helper. A q depth marker is never a
     // main-search depth; the packed mode gates score reuse and replacement.
     const auto finish = [&](int value, int flag) {
-        if (q_tt_enabled) {
+        if (use_q_tt) {
             trans_table::store(key, brd.root_ply, brd.ply, 1, value,
                 stack->best_move.to_compact(), flag, context, stack->tt_clocks, mode);
         }
@@ -2026,6 +2100,7 @@ void search_t::reset_stack() {
     stack = root_stack;
     stack->eval_result = score::INVALID;
     stack->improving = false;
+    stack->excluded_move = 0;
     stack->repetition_start = -static_cast<int>(_position_history.size());
     init_tt_history();
     stack->tt_clocks = {0, 101};
@@ -2041,6 +2116,7 @@ void search_t::reset_stack() {
     counts.hash_probes = counts.hash_moves = counts.hash_first = 0;
     counts.hash_rejected = counts.hash_score_cutoffs = 0;
     counts.iid_calls = counts.iid_candidates = counts.iid_moves = 0;
+    counts.verification_calls = counts.excluded_calls = counts.verification_cancelled = counts.verification_visits = 0;
     counts.iid_cancelled = counts.iid_visits = 0;
     counts.min_iid_depth = counts.max_iid_depth = counts.min_iid_probe_depth = 0;
 #endif

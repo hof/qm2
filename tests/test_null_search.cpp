@@ -29,6 +29,8 @@ public:
     bool interrupt_null = false;
     bool interrupt_verification = false;
     bool null_cut_node = false, verification_cut_node = false;
+    bool dirty_verification_frame = false;
+    search_stack_t verification_parent{};
 
     int pvs(int alpha, int beta, int depth, bool cut_node = false) override {
         const bool artificial = brd.ply > 0 && !(stack - 1)->current_move.piece;
@@ -51,6 +53,18 @@ public:
             verification_cut_node = cut_node;
             verification_excluded &= !null_enabled;
             if (inject_verification) {
+                if (dirty_verification_frame) {
+                    verification_parent = *stack;
+                    stack->tt_history ^= U64(123);
+                    stack->tt_key ^= U64(456);
+                    stack->repetition_start = 77;
+                    stack->current_move.set(KING[brd.us()], a1, a2);
+                    stack->best_move = stack->current_move;
+                    stack->killer[0] = stack->current_move;
+                    stack->pv_count = 1;
+                    stack->eval_result = 777;
+                    stack->tt_clocks = {0, 80};
+                }
                 stack->improving = true; // Same-position helpers must not leak their trend.
                 stop_all = interrupt_verification;
                 return verification_value;
@@ -156,6 +170,29 @@ bool test_node_context() {
     return ok;
 }
 
+bool test_verification_frame_restore() {
+    bool ok = true;
+    for (bool cancel : {false, true}) {
+        auto search = std::make_unique<null_probe_t>("7k/7p/8/8/8/8/P7/KR6 w - - 0 1");
+        prepare(*search);
+        search->dirty_verification_frame = true;
+        search->interrupt_verification = cancel;
+        search->run(-1, 0, 7);
+        const auto & before = search->verification_parent;
+        const auto & after = *search->stack;
+        ok &= check(search->verification_calls == 1 && search->stop_all == cancel
+            && after.tt_history == before.tt_history && after.tt_key == before.tt_key
+            && after.repetition_start == before.repetition_start
+            && after.current_move.piece == before.current_move.piece
+            && after.best_move.piece == before.best_move.piece
+            && after.killer[0].piece == before.killer[0].piece
+            && after.pv_count == before.pv_count && after.eval_result == before.eval_result
+            && after.tt_clocks.min == 0 && after.tt_clocks.max == 80,
+            "null verification must restore the entire caller frame and merge clock restrictions");
+    }
+    return ok;
+}
+
 bool test_exclusions() {
     bool ok = true;
     const char * fen = "7k/7p/8/8/8/8/P7/KR6 w - - 0 1";
@@ -246,10 +283,11 @@ bool test_static_cushion() {
 
 int main() {
     magic::init();
+    const bool restoration = test_verification_frame_restore();
     const bool context = test_node_context();
     const bool cutoffs = test_cutoffs();
     const bool exclusions = test_exclusions();
     const bool pawn_endgames = test_pawn_endgames();
     const bool static_cushion = test_static_cushion();
-    return context && cutoffs && exclusions && pawn_endgames && static_cushion ? EXIT_SUCCESS : EXIT_FAILURE;
+    return restoration && context && cutoffs && exclusions && pawn_endgames && static_cushion ? EXIT_SUCCESS : EXIT_FAILURE;
 }

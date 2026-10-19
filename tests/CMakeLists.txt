@@ -130,6 +130,10 @@ add_executable(test_search_node_context test_search_node_context.cpp)
 target_link_libraries(test_search_node_context MAX2SRC)
 add_test(NAME test_search_node_context COMMAND test_search_node_context)
 
+add_executable(test_search_verification test_search_verification.cpp)
+target_link_libraries(test_search_verification MAX2SRC)
+add_test(NAME test_search_verification COMMAND test_search_verification)
+
 get_property(maxima_subdirectory_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${maxima_subdirectory_tests} PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

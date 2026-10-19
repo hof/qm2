@@ -85,11 +85,14 @@ struct search_stack_t {
     uint8_t pv_count;
     int16_t eval_result;
     bool improving;
+    uint16_t excluded_move;
     search_metadata_t metadata;
     U64 tt_key;
     U64 tt_history;
     clock_range_t tt_clocks;
 };
+
+enum class verification_mode_t { none, null_move, excluded_move };
 
 enum class result_source_t { none, partial, complete, fallback, book, terminal, tablebase };
 
@@ -158,6 +161,7 @@ public:
     bool iid_enabled;
     bool q_tt_enabled;
     bool iid_active;
+    verification_mode_t verification_mode;
     bool ffp_enabled;
 
     search_t(const char * fen, const game_t * g = NULL,
@@ -178,6 +182,8 @@ public:
     void iterative_deepening();
     int aspiration(int depth, int last_score);
     void prepare_iid_move(int alpha, int beta, int depth);
+    int verification_search(int alpha, int beta, int depth, bool cut_node,
+        verification_mode_t mode, uint16_t excluded_move = 0);
     bool book_lookup();
     bool tablebase_lookup();
     bool probe_tablebase(int depth, int & value);

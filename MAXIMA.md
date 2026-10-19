@@ -235,6 +235,24 @@ mate/tablebase score windows, and artificial null lines cannot supply reserved
 mate/tablebase scores as cutoffs. Pawn-only positions retain the non-pawn-material
 exclusion. These safeguards do not make selective search an exhaustive oracle.
 
+Same-position IID and verification helpers restore the complete caller frame,
+including its picker, PV, evaluation, repetition state, killers and local move
+exclusion. Clock restrictions merge back conservatively; work and cancellation
+remain visible. Verification also restores its caller's null-pruning, IID and
+verification-mode settings on return, cancellation or an exception at the helper
+boundary. Null verification disables artificial passes and IID throughout its
+subtree. Verification subtrees neither probe/store ordinary main/q TT entries
+nor train ordinary history, countermoves or killers.
+
+Move-excluded verification filters one compact move only at its current node;
+real and null child entry clear local exclusions. Its root skips whole-position
+tablebase results and static/null/quiet-futility pruning and LMR. If no legal
+alternative remains, it returns the search alpha as a fail-low result, without
+inventing mate or stalemate. Actual draw adjudication retains precedence. The
+helper currently provides infrastructure for later extensions; no singular
+extension or ProbCut policy is enabled by this change. Audit builds expose
+`audit_verification` calls, excluded calls, cancelled calls and helper visits.
+
 Static beta and null-move node pruning also stop at reversible clock 99: the
 next legal reversible move draws unless it checkmates, while static evaluation
 or an artificial pass can incorrectly claim a winning cutoff. Earlier node
