@@ -4459,9 +4459,12 @@ separate requirement for concurrency changes.
 
 Private audit records and benchmark artifacts live under `.context/baselines/`.
 Record the revision, dirty-tree status, binary hashes, positions, limits, build
-configuration, and commands. A short benchmark does not establish a performance
-or playing-strength gain. The 2026-10-10 audit adds zero-time, root-restriction,
-book-shortcut, tiny-node, and losers terminal/draw regression cases.
+configuration, and commands. Complete option/model setup with an `isready` /
+`readyok` barrier before starting search CPU measurements; sending `setoption`
+alone does not wait for configuration to finish. A short benchmark does not
+establish a performance or playing-strength gain. The 2026-10-10 audit adds
+zero-time, root-restriction, book-shortcut, tiny-node, and losers terminal/draw
+regression cases.
 
 Independent rule/state checks use `maxima_runner.variants.royal_losers_board`,
 a python-chess subclass for [FICS royal losers](https://www.freechess.org/Help/HelpFiles/losers.html).
@@ -5317,8 +5320,12 @@ trees. These are local development changes, not an installed-engine promotion.
 Final validation: 37/37 Debug, 37/37 Release, 3/3 ASan/UBSan (leak detection
 disabled), independent oracle 4,348 positions/95,618 legal children, UCI
 cold/newgame exactness and 72 paired D7 signatures matching nodes/scores/best/PV.
-A 12-root cold D7 diagnostic with three alternating trials measured +22.8%
-median process CPU and +4.1% nodes versus the frozen original; positive quiets
-before bad noisy moves used +1.1% nodes versus late quiets with the same history
-implementation. Trial timing spread limits finer conclusions. Duty-throttled
-wall times are not ordinary NPS measurements. No strength gain is established. No new match or installation was performed for this experiment.
+A 12-root cold D7 diagnostic with three alternating trials measured +4.1%
+nodes versus the frozen original; positive quiets before bad noisy moves used
++1.1% nodes versus late quiets with the same history implementation. Its original
++22.8% median CPU estimate included pending option/model configuration because
+the timing wrapper lacked a readiness barrier. That estimate does not isolate
+search cost and must be remeasured before attributing a CPU regression. Node
+counts and paired tree-equivalence results remain valid. Duty-throttled wall
+times are not ordinary NPS measurements. No strength gain is established. No new
+match or installation was performed for this experiment.
