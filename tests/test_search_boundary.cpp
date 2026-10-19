@@ -23,7 +23,9 @@ std::set<std::string> words(const char * text) {
 }
 
 bool check(bool ok, const char * message, const char * fen) {
-    if (!ok) std::cerr << message << ": " << fen << '\n';
+    if (!ok) {
+        std::cerr << message << ": " << fen << '\n';
+    }
     return ok;
 }
 
@@ -75,8 +77,12 @@ bool validate_certificate(const certificate_t & test) {
 }
 
 bool valid_bound(int result, int expected, int alpha, int beta) {
-    if (result <= alpha) return expected <= result;
-    if (result >= beta) return expected >= result;
+    if (result <= alpha) {
+        return expected <= result;
+    }
+    if (result >= beta) {
+        return expected >= result;
+    }
     return result == expected;
 }
 
@@ -90,8 +96,11 @@ bool test_windows(const certificate_t & test, int & probes) {
                     std::pair{-1, 0}, std::pair{0, 1}}) {
                 for (int cache = 0; cache < 3; ++cache) {
                     trans_table::clear();
-                    if (cache == 2) trans_table::disable();
-                    else trans_table::enable();
+                    if (cache == 2) {
+                        trans_table::disable();
+                    } else {
+                        trans_table::enable();
+                    }
                     // Warm with each bound direction as well as an exact score.
                     if (cache == 1) {
                         auto writer = std::make_unique<search_t>(test.fen);
@@ -155,7 +164,9 @@ bool test_parent_clock_ranges() {
 bool test_interruption() {
     bool ok = true;
     for (const auto & test : certificates) {
-        if (!*test.legal_moves) continue;
+        if (!*test.legal_moves) {
+            continue;
+        }
         for (U64 budget : {1, 2}) {
             trans_table::clear();
             auto search = std::make_unique<search_t>(test.fen);

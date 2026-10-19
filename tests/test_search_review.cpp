@@ -11,7 +11,9 @@ const fixture_t fixtures[] = {
 #include "data/search/review.inc"
 };
 bool check(bool ok, const char * message) {
-    if (!ok) std::cerr << message << '\n';
+    if (!ok) {
+        std::cerr << message << '\n';
+    }
     return ok;
 }
 std::set<std::string> words(const std::string & text) {
@@ -44,7 +46,9 @@ bool test_castling() {
         for (int i = 0; i < original.root.move_count; ++i) {
             auto & move = original.root.moves[i].move;
             legal.insert(move.to_string());
-            if (move.castle) castles.insert(move.to_string());
+            if (move.castle) {
+                castles.insert(move.to_string());
+            }
         }
         ok &= check(legal == words(fixture.legal) && castles == words(fixture.castles),
             "independent castling legal set differs");
@@ -84,7 +88,9 @@ bool legal_pv(search_t & search) {
     for (std::string name; pv >> name;) {
         move_t move;
         move.set(&board, name.c_str());
-        if (!board.valid(&move) || !board.legal(&move)) return false;
+        if (!board.valid(&move) || !board.legal(&move)) {
+            return false;
+        }
         board.forward(&move);
     }
     return true;
@@ -96,8 +102,11 @@ bool test_exact_pv() {
     for (int wild : {0, 17}) {
         trans_table::clear();
         std::unique_ptr<search_t> search;
-        if (wild == 0) search = std::make_unique<search_t>(fen);
-        else search = std::make_unique<w17_search_t>(fen);
+        if (wild == 0) {
+            search = std::make_unique<search_t>(fen);
+        } else {
+            search = std::make_unique<w17_search_t>(fen);
+        }
         search->stack->in_check = search->brd.in_check();
         search->draw_contempt = search->tablebase_limit = 0;
         const int cold = search->pvs(-score::INF, score::INF, 3);
@@ -157,8 +166,11 @@ bool test_production_integration() {
                 "production exact warm result differs");
             ok &= check(legal_pv(original), "production TT PV invalid");
             for (bool tt : {false, true}) {
-                if (tt) trans_table::enable();
-                else trans_table::disable();
+                if (tt) {
+                    trans_table::enable();
+                } else {
+                    trans_table::disable();
+                }
                 trans_table::clear();
                 search_t baseline(fixture.fen);
                 baseline.stack->in_check = baseline.brd.in_check();

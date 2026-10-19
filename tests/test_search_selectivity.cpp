@@ -12,7 +12,9 @@ struct move_info_t { int flags, gain, extend; };
 struct call_t { std::string move; int depth, alpha, beta; };
 
 bool check(bool ok, const char * message, const char * fen) {
-    if (!ok) std::cerr << message << ": " << fen << '\n';
+    if (!ok) {
+        std::cerr << message << ": " << fen << '\n';
+    }
     return ok;
 }
 
@@ -36,7 +38,9 @@ public:
     int pvs(int alpha, int beta, int depth) override {
         if (brd.ply == 0) {
             // Isolate LMR from the parent's PV internal iterative deepening.
-            if (entry_active) return parent_value;
+            if (entry_active) {
+                return parent_value;
+            }
             entry_active = true;
             const int result = search_t::pvs(alpha, beta, depth);
             entry_active = false;
@@ -47,7 +51,9 @@ public:
         ++nodes;
         stack->pv_count = 0;
         stack->tt_clocks = {0, 101};
-        if (cancel_call == static_cast<int>(calls.size())) stop_all = true;
+        if (cancel_call == static_cast<int>(calls.size())) {
+            stop_all = true;
+        }
         // A reduced improvement is deliberately refuted by the full-depth pass.
         const bool first_target = calls.size() < 2 || calls[calls.size() - 2].move != name;
         return -(parent_value + (improve && name == target && first_target ? 1 : 0));
@@ -117,7 +123,9 @@ bool test_futility(const fixture_t & fixture, int & probes, int & skipped, int &
                     const bool prune = active && name != first && !dangerous;
                     expected_skips += prune;
                     ok &= check(observed[name] == (prune ? 0 : 1), "futility guard differs", fixture.fen);
-                    if (active && name != first && !prune) protected_flags |= info.flags;
+                    if (active && name != first && !prune) {
+                        protected_flags |= info.flags;
+                    }
                     if (active && margin == 0 && name != first && !prune && info.flags) {
                         auto tactic = std::make_unique<selective_search_t>(fixture.fen);
                         tactic->ffp_enabled = true;
@@ -191,7 +199,9 @@ bool test_lmr(const fixture_t & fixture, int & probes, int & reductions, int & r
                 }
                 ++probes;
                 ok &= restored(*search, *original, fixture.fen);
-                if (target.empty()) continue;
+                if (target.empty()) {
+                    continue;
+                }
                 for (int cancel : {0, target_call, target_call + 1}) {
                     auto retry = std::make_unique<selective_search_t>(fixture.fen);
                     retry->ffp_enabled = false;

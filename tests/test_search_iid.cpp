@@ -18,14 +18,19 @@ public:
             ++helpers;
             ++nodes;
             helper_depth = depth;
-            if (!invalid_hint) stack->best_move.set(&brd, hint.c_str());
-            else stack->best_move.clear();
+            if (!invalid_hint) {
+                stack->best_move.set(&brd, hint.c_str());
+            } else {
+                stack->best_move.clear();
+            }
             stack->pv_count = 1;
             stack->current_move = stack->best_move;
             stack->eval_result = 777;
             // Helper subtrees must not start nested IID.
             prepare_iid_move(alpha, beta, 7);
-            if (throw_helper) throw std::runtime_error("helper failure");
+            if (throw_helper) {
+                throw std::runtime_error("helper failure");
+            }
             stop_all = cancel;
             return score::MATE - 1;
         }
@@ -33,7 +38,9 @@ public:
             ++nodes;
             ++children;
             child_depth = depth;
-            if (first_move.empty()) first_move = (stack - 1)->current_move.to_string();
+            if (first_move.empty()) {
+                first_move = (stack - 1)->current_move.to_string();
+            }
             stack->pv_count = 0;
             return 0;
         }
@@ -41,7 +48,9 @@ public:
     }
 };
 bool check(bool ok, const char * message) {
-    if (!ok) std::cerr << message << '\n';
+    if (!ok) {
+        std::cerr << message << '\n';
+    }
     return ok;
 }
 }
@@ -71,8 +80,12 @@ int main() {
         }
         for (int exclusion : {0, 1, 2}) {
             auto probe = std::make_unique<iid_probe_t>(fen);
-            if (exclusion == 0) probe->iid_enabled = false;
-            if (exclusion == 1) probe->stack->tt_move.set(&probe->brd, probe->hint.c_str());
+            if (exclusion == 0) {
+                probe->iid_enabled = false;
+            }
+            if (exclusion == 1) {
+                probe->stack->tt_move.set(&probe->brd, probe->hint.c_str());
+            }
             probe->prepare_iid_move(0, exclusion == 2 ? 1 : 100, 4);
             ok &= check(!probe->helpers, "IID ignored disabled, hash-move or non-PV exclusion");
         }

@@ -29,7 +29,9 @@ bool compare(search_t & search) {
     int count = 2;
     for (int square = 0; square < 64; ++square) {
         const int piece = search.brd.matrix[square];
-        if (!piece || piece == WKING || piece == BKING) continue;
+        if (!piece || piece == WKING || piece == BKING) {
+            continue;
+        }
         pieces[count] = piece_map[piece];
         squares[count++] = square;
     }
@@ -42,10 +44,14 @@ bool compare(search_t & search) {
     for (int color = 0; color < 2; ++color)
         for (int lane = 0; lane < 256; ++lane)
             success &= fresh.values[color][lane] == reference_data.accumulator.accumulation[!color][lane];
-    if (!search.brd.in_check()) success &= evaluate(&search)
-        == damp_rule50(reference_score * 100 / 208, search.brd.stack->fifty_count);
-    if (!success) std::cerr << fen << ": reference=" << reference_score << " full=" << recomputed
-        << " incremental=" << incremental << '\n';
+    if (!search.brd.in_check()) {
+        success &= evaluate(&search)
+            == damp_rule50(reference_score * 100 / 208, search.brd.stack->fifty_count);
+    }
+    if (!success) {
+        std::cerr << fen << ": reference=" << reference_score << " full=" << recomputed
+            << " incremental=" << incremental << '\n';
+    }
     return success;
 }
 
@@ -62,7 +68,9 @@ bool test_moves(const char * fen) {
     move::gen_quiet_moves(&search.brd, &moves);
     move::gen_castles(&search.brd, &moves);
     for (auto move = moves.first; move != moves.last; ++move) {
-        if (!search.brd.legal(move)) continue;
+        if (!search.brd.legal(move)) {
+            continue;
+        }
         search.forward(move, search.brd.gives_check(move));
         success &= compare(search);
         search.backward(move);
@@ -84,7 +92,9 @@ bool test_moves(const char * fen) {
 }
 
 int main(int argc, char ** argv) {
-    if (argc != 2) return 1;
+    if (argc != 2) {
+        return 1;
+    }
     magic::init();
     uci::silent(true);
     std::string error;
@@ -112,7 +122,9 @@ int main(int argc, char ** argv) {
         std::vector<move_t> played;
         for (int ply = 0; ply < 100; ++ply) {
             // Skip several evaluations so inference must find a ready ancestor or refresh.
-            if (ply % 7 < 2) success &= compare(search);
+            if (ply % 7 < 2) {
+                success &= compare(search);
+            }
             move::list_t moves;
             move::gen_captures(&search.brd, &moves);
             move::gen_promotions(&search.brd, &moves);
@@ -120,8 +132,12 @@ int main(int argc, char ** argv) {
             move::gen_castles(&search.brd, &moves);
             std::vector<move_t> legal;
             for (auto move = moves.first; move != moves.last; ++move)
-                if (search.brd.legal(move)) legal.push_back(*move);
-            if (legal.empty()) break;
+                if (search.brd.legal(move)) {
+                    legal.push_back(*move);
+                }
+            if (legal.empty()) {
+                break;
+            }
             played.push_back(legal[random() % legal.size()]);
             auto & move = played.back();
             search.forward(&move, search.brd.gives_check(&move));
@@ -132,7 +148,9 @@ int main(int argc, char ** argv) {
             played.pop_back();
         }
         success &= compare(search);
-        if (search.brd.to_string() != start) success = false;
+        if (search.brd.to_string() != start) {
+            success = false;
+        }
     }
     // Replay through deliberately unevaluated parents. These paths include
     // promotion plus capture, en passant, castling, and king-perspective changes.

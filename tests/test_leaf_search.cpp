@@ -123,7 +123,9 @@ bool test_pruning_terminals() {
                         success &= check_score("trapped-bishop stalemate", "pruning PVS",
                             search.pvs(alpha, beta, depth), 0);
                         success &= !search.stop_all;
-                        if (transition) search.backward(&move);
+                        if (transition) {
+                            search.backward(&move);
+                        }
                         success &= restored_position(search, fen);
                     }
                 }
@@ -446,9 +448,14 @@ bool test_quiet_order() {
                 if (hints) {
                     int count = 0;
                     for (auto * move = quiets.first; move != quiets.last && count < 3; ++move) {
-                        if (!search.brd.legal(move)) continue;
-                        if (count == 0) search.stack->tt_move.set(move);
-                        else search.stack->killer[count - 1].set(move);
+                        if (!search.brd.legal(move)) {
+                            continue;
+                        }
+                        if (count == 0) {
+                            search.stack->tt_move.set(move);
+                        } else {
+                            search.stack->killer[count - 1].set(move);
+                        }
                         ++count;
                     }
                 }
@@ -459,12 +466,16 @@ bool test_quiet_order() {
                 while (!pending.empty()) {
                     size_t best = 0;
                     for (size_t index = 1; index < pending.size(); ++index)
-                        if (pending[index].score > pending[best].score) best = index;
+                        if (pending[index].score > pending[best].score) {
+                            best = index;
+                        }
                     auto move = pending[best];
                     pending[best] = pending.back();
                     pending.pop_back();
                     if (!search.stack->tt_move.equals(&move) && !search.is_killer(&move)
-                            && search.brd.legal(&move)) expected.push_back(move.to_int());
+                            && search.brd.legal(&move)) {
+                        expected.push_back(move.to_int());
+                    }
                 }
                 for (int depth : {0, 3, -1}) {
                     std::vector<int> actual;

@@ -11,7 +11,9 @@
 
 namespace {
 bool check(bool condition, const char * message) {
-    if (!condition) std::cerr << message << '\n';
+    if (!condition) {
+        std::cerr << message << '\n';
+    }
     return condition;
 }
 
@@ -22,7 +24,9 @@ void put_u32(std::vector<uint8_t> & bytes, size_t offset, uint32_t value) {
 void write_file(const std::filesystem::path & path, const std::vector<uint8_t> & bytes) {
     std::ofstream output(path, std::ios::binary);
     output.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
-    if (!output) throw std::runtime_error("Cannot write test network");
+    if (!output) {
+        throw std::runtime_error("Cannot write test network");
+    }
 }
 
 bool check_activation_clipping() {
@@ -38,8 +42,9 @@ bool check_activation_clipping() {
             const auto simd = nnue::detail::clip_activations(values, us);
             for (size_t i = 0; i < 512; ++i) {
                 const int expected = std::clamp<int>(values[i < 256 ? us : !us][i % 256], 0, 127);
-                if (scalar[i] != expected || simd[i] != expected)
+                if (scalar[i] != expected || simd[i] != expected) {
                     return check(false, "Activation clipping changed a value, lane or perspective");
+                }
             }
         }
     }
@@ -230,8 +235,9 @@ bool check_affine() {
             for (size_t column = 0; column < input_size; ++column)
                 sum += int64_t(input[column]) * weights[row * input_size + column];
             const int expected = sum <= 0 ? 0 : sum >= 127 * 64 ? 127 : sum / 64;
-            if (scalar[row] != expected || simd[row] != expected)
+            if (scalar[row] != expected || simd[row] != expected) {
                 return check(false, "Dense scalar/SIMD mismatch at an arithmetic boundary");
+            }
         }
     }
     return true;
@@ -267,7 +273,9 @@ int main() {
     bool success = unit_checks;
     success &= check(nnue::set_path(path.string(), error), "Valid HalfKP model must load");
     auto first = nnue::snapshot();
-    if (!first) return 1;
+    if (!first) {
+        return 1;
+    }
     const char * fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     success &= check_metadata_positions();
     auto neural_storage = std::make_unique<search_t>(fen);

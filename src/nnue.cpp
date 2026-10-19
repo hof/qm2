@@ -108,8 +108,9 @@ void network_t::refresh(const board_t & board, accumulator_t & accumulator, bool
     accumulator.kings[color] = board.get_sq(KING[color]);
     for (int square = 0; square < 64; ++square) {
         const int piece = board.matrix[square];
-        if (piece && piece != WKING && piece != BKING)
+        if (piece && piece != WKING && piece != BKING) {
             add_feature(accumulator.values[color], color, accumulator.kings[color], piece, square, false);
+        }
     }
     accumulator.ready[color] = true;
 }
@@ -118,10 +119,13 @@ void network_t::prepare(const board_t & board, const move_t * move, accumulator_
     accumulator.ready = {false, false};
     accumulator.kings = {board.get_sq(BKING), board.get_sq(WKING)};
     accumulator.change_count = 0;
-    if (!move) return; // Null move: unchanged features, exchanged perspectives.
+    if (!move) {
+        return; // Null move: unchanged features, exchanged perspectives.
+    }
     auto add = [&](int piece, int from, int to) {
-        if (piece && piece != WKING && piece != BKING)
+        if (piece && piece != WKING && piece != BKING) {
             accumulator.changes[accumulator.change_count++] = {piece, from, to};
+        }
     };
     if (move->promotion) {
         add(move->piece, move->ssq, -1);
@@ -164,7 +168,9 @@ int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
     for (bool color : {false, true}) {
         if (accumulator.ready[color]) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            if (counters) ++counters->reuses;
+            if (counters) {
+                ++counters->reuses;
+            }
 #endif
             continue;
         }
@@ -180,7 +186,9 @@ int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
             return result;
         };
         const bool walk = base && base->kings[color] == accumulator.kings[color] && !base->ready[color];
-        if (walk) cost = change_cost(accumulator);
+        if (walk) {
+            cost = change_cost(accumulator);
+        }
         const int refresh_cost = walk ? popcnt0(board.bb[ALLPIECES]) - 2 : 0;
         while (base && base->kings[color] == accumulator.kings[color] && !base->ready[color]) {
             cost += change_cost(*base);
@@ -191,25 +199,33 @@ int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
         if (!base || !base->ready[color] || base->kings[color] != accumulator.kings[color]) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
             if (counters) {
-                if (!board.ply) ++counters->root_refreshes;
-                else if (previous && previous->kings[color] != accumulator.kings[color]) ++counters->king_refreshes;
-                else ++counters->parent_refreshes;
+                if (!board.ply) {
+                    ++counters->root_refreshes;
+                } else if (previous && previous->kings[color] != accumulator.kings[color]) {
+                    ++counters->king_refreshes;
+                } else {
+                    ++counters->parent_refreshes;
+                }
             }
 #endif
             refresh(board, accumulator, color);
             continue;
         }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        if (counters) ++counters->updates;
+        if (counters) {
+            ++counters->updates;
+        }
 #endif
         accumulator.values[color] = base->values[color];
         auto apply = [&](const accumulator_t & state) {
             for (int i = 0; i < state.change_count; ++i) {
                 const auto & change = state.changes[i];
-                if (change.from >= 0)
+                if (change.from >= 0) {
                     add_feature(accumulator.values[color], color, accumulator.kings[color], change.piece, change.from, true);
-                if (change.to >= 0)
+                }
+                if (change.to >= 0) {
                     add_feature(accumulator.values[color], color, accumulator.kings[color], change.piece, change.to, false);
+                }
             }
         };
         for (size_t index = begin; index < ancestors.size(); ++index) apply(ancestors[index]);
@@ -233,7 +249,9 @@ int to_centipawns(int raw_score) {
 
 bool set_path(const std::string & path, std::string & error) {
     auto candidate = path.empty() ? nullptr : network_t::load(path, error);
-    if (!path.empty() && !candidate) return false;
+    if (!path.empty() && !candidate) {
+        return false;
+    }
     std::lock_guard lock(configuration_mutex);
     configured_network = std::move(candidate);
     configured_path = path;

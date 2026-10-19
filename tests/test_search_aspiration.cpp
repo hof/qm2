@@ -23,8 +23,12 @@ public:
         ++calls;
         ++nodes;
         stack->pv_count = 0;
-        if (beta - alpha > 1) windows.push_back({-beta, -alpha, depth + 1});
-        if (calls == cancel_call) stop_all = true;
+        if (beta - alpha > 1) {
+            windows.push_back({-beta, -alpha, depth + 1});
+        }
+        if (calls == cancel_call) {
+            stop_all = true;
+        }
         const auto move = (stack - 1)->current_move.to_string();
         const size_t index = std::min(windows.size() - 1, scores.size() - 1);
         const int value = move == bad_first_move ? -100 : scores[index];
@@ -33,7 +37,9 @@ public:
 };
 
 bool check(bool ok, const char * message) {
-    if (!ok) std::cerr << message << '\n';
+    if (!ok) {
+        std::cerr << message << '\n';
+    }
     return ok;
 }
 

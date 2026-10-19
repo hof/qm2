@@ -39,9 +39,13 @@ class protocol_log_t {
 public:
     void write(const char * direction, const std::string & message, bool flush = false) {
         std::lock_guard<std::mutex> lock(mutex);
-        if (!file.is_open()) file.open("maxima_uci.log", std::ios::app);
+        if (!file.is_open()) {
+            file.open("maxima_uci.log", std::ios::app);
+        }
         file << direction << message << '\n';
-        if (flush) file.flush();
+        if (flush) {
+            file.flush();
+        }
     }
     void reset() {
         std::lock_guard<std::mutex> lock(mutex);
@@ -85,45 +89,65 @@ namespace uci {
         char squares[64] = {};
         for (char symbol : placement) {
             if (symbol == '/') {
-                if (file != 8 || rank == 0) return false;
+                if (file != 8 || rank == 0) {
+                    return false;
+                }
                 --rank;
                 file = 0;
             } else if (symbol >= '1' && symbol <= '8') {
                 file += symbol - '0';
             } else {
-                if (std::string("PNBRQKpnbrqk").find(symbol) == std::string::npos || file >= 8) return false;
-                if ((symbol == 'P' || symbol == 'p') && (rank == 0 || rank == 7)) return false;
+                if (std::string("PNBRQKpnbrqk").find(symbol) == std::string::npos || file >= 8) {
+                    return false;
+                }
+                if ((symbol == 'P' || symbol == 'p') && (rank == 0 || rank == 7)) {
+                    return false;
+                }
                 white_kings += symbol == 'K';
                 black_kings += symbol == 'k';
                 ++pieces[symbol >= 'a'];
-                if (symbol == 'P' || symbol == 'p') ++pawns[symbol >= 'a'];
+                if (symbol == 'P' || symbol == 'p') {
+                    ++pawns[symbol >= 'a'];
+                }
                 squares[rank * 8 + file] = symbol;
                 ++file;
             }
-            if (file > 8) return false;
+            if (file > 8) {
+                return false;
+            }
         }
         if (rank != 0 || file != 8 || white_kings != 1 || black_kings != 1
                 || pieces[0] > 16 || pieces[1] > 16
-                || pawns[0] > 8 || pawns[1] > 8) return false;
+                || pawns[0] > 8 || pawns[1] > 8) {
+            return false;
+        }
         if (castles != "-") {
             std::string seen;
             for (char symbol : castles) {
                 if (std::string("KQkq").find(symbol) == std::string::npos
-                        || seen.find(symbol) != std::string::npos) return false;
+                        || seen.find(symbol) != std::string::npos) {
+                    return false;
+                }
                 if ((symbol == 'K' && (squares[e1] != 'K' || squares[h1] != 'R'))
                         || (symbol == 'Q' && (squares[e1] != 'K' || squares[a1] != 'R'))
                         || (symbol == 'k' && (squares[e8] != 'k' || squares[h8] != 'r'))
-                        || (symbol == 'q' && (squares[e8] != 'k' || squares[a8] != 'r'))) return false;
+                        || (symbol == 'q' && (squares[e8] != 'k' || squares[a8] != 'r'))) {
+                    return false;
+                }
                 seen += symbol;
             }
         }
         if (ep != "-" && (ep.size() != 2 || ep[0] < 'a' || ep[0] > 'h'
-                || ep[1] != (side == "w" ? '6' : '3'))) return false;
+                || ep[1] != (side == "w" ? '6' : '3'))) {
+            return false;
+        }
         if (ep != "-") {
             const int target = (ep[1] - '1') * 8 + ep[0] - 'a';
             const int direction = side == "w" ? -8 : 8;
             if (squares[target] || squares[target + direction] != (side == "w" ? 'p' : 'P')
-                    || squares[target - direction]) return false;
+                    || squares[target - direction]) {
+                return false;
+            }
         }
         int halfmove_count, fullmove_count;
         return parse_integer(halfmove, halfmove_count) && halfmove_count >= 0
@@ -144,9 +168,13 @@ namespace uci {
             move_t * selected = nullptr;
             bool capture_available = false;
             for (move_t * move = moves.first; move != moves.last; ++move) {
-                if (!board.legal(move)) continue;
+                if (!board.legal(move)) {
+                    continue;
+                }
                 capture_available |= move->capture != 0;
-                if (move->to_string() == token) selected = move;
+                if (move->to_string() == token) {
+                    selected = move;
+                }
             }
             if (!selected || (options::get_value("Wild") == 17
                     && capture_available && !selected->capture)) {
@@ -155,8 +183,12 @@ namespace uci {
             }
             history.push_back(board.stack->repetition_key());
             board.forward(selected);
-            if (board.stack->fifty_count == 0) history.clear();
-            if (board.ply > MAX_PLY - 2) board.init(board.to_string().c_str());
+            if (board.stack->fifty_count == 0) {
+                history.clear();
+            }
+            if (board.ply > MAX_PLY - 2) {
+                board.init(board.to_string().c_str());
+            }
         }
         return true;
     }
@@ -274,25 +306,45 @@ namespace uci {
                     out("info string Invalid go value: " + token);
                     return true;
                 }
-                if (token == "wtime") candidate.white_time = static_cast<int>(number);
-                if (token == "btime") candidate.black_time = static_cast<int>(number);
-                if (token == "wtime" || token == "btime") candidate.clock_limit = true;
-                if (token == "winc") candidate.white_increment = static_cast<int>(number);
-                if (token == "binc") candidate.black_increment = static_cast<int>(number);
-                if (token == "movestogo") candidate.moves_left = static_cast<int>(number);
+                if (token == "wtime") {
+                    candidate.white_time = static_cast<int>(number);
+                }
+                if (token == "btime") {
+                    candidate.black_time = static_cast<int>(number);
+                }
+                if (token == "wtime" || token == "btime") {
+                    candidate.clock_limit = true;
+                }
+                if (token == "winc") {
+                    candidate.white_increment = static_cast<int>(number);
+                }
+                if (token == "binc") {
+                    candidate.black_increment = static_cast<int>(number);
+                }
+                if (token == "movestogo") {
+                    candidate.moves_left = static_cast<int>(number);
+                }
                 if (token == "depth") {
                     candidate.max_depth = static_cast<int>(number);
                     depth_limit = true;
                 }
-                if (token == "nodes") candidate.max_nodes = number;
-                if (token == "movetime") candidate.max_time_per_move = number;
-                if (token == "movetime") candidate.movetime_limit = true;
+                if (token == "nodes") {
+                    candidate.max_nodes = number;
+                }
+                if (token == "movetime") {
+                    candidate.max_time_per_move = number;
+                }
+                if (token == "movetime") {
+                    candidate.movetime_limit = true;
+                }
             } else if (token == "searchmoves") {
                 const size_t count = candidate.search_moves.size();
                 while (true) {
                     const auto position = parser.tellg();
                     std::string text;
-                    if (!(parser >> text)) break;
+                    if (!(parser >> text)) {
+                        break;
+                    }
                     if (text == "depth" || text == "nodes" || text == "movetime"
                             || text == "wtime" || text == "btime" || text == "winc"
                             || text == "binc" || text == "movestogo"
@@ -305,7 +357,9 @@ namespace uci {
                     board.init(fen.c_str());
                     std::vector<U64> history;
                     input_parser_t move_input(text);
-                    if (!apply_moves(board, move_input, history)) return true;
+                    if (!apply_moves(board, move_input, history)) {
+                        return true;
+                    }
                     candidate.search_moves.push_back(text);
                 }
                 if (candidate.search_moves.size() == count) {
@@ -355,7 +409,9 @@ namespace uci {
             return true;
         }
         std::vector<U64> history;
-        if (token == "moves" && !apply_moves(board, parser, history)) return true;
+        if (token == "moves" && !apply_moves(board, parser, history)) {
+            return true;
+        }
         fen = board.to_string();
         position_history = std::move(history);
         return true;
@@ -366,7 +422,9 @@ namespace uci {
         brd.init(fen.c_str());
         engine::stop();
         auto history = position_history;
-        if (!apply_moves(brd, parser, history)) return true;
+        if (!apply_moves(brd, parser, history)) {
+            return true;
+        }
         fen = brd.to_string();
         position_history = std::move(history);
         return true;
@@ -412,8 +470,12 @@ namespace uci {
                             int minimum = 0, maximum = 0;
                             std::istringstream specification(opt->uci_option);
                             while (specification >> token) {
-                                if (token == "min") specification >> minimum;
-                                if (token == "max") specification >> maximum;
+                                if (token == "min") {
+                                    specification >> minimum;
+                                }
+                                if (token == "max") {
+                                    specification >> maximum;
+                                }
                             }
                             if (!parse_integer(value, candidate) || candidate < minimum || candidate > maximum) {
                                 out("info string Invalid option value: " + name);
@@ -431,10 +493,13 @@ namespace uci {
                         }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                         if (name == "NNUEAuditHorizon") {
-                            if (value == "normal") candidate = 0;
-                            else if (value == "fixed") candidate = 1;
-                            else if (value == "quiet") candidate = 2;
-                            else {
+                            if (value == "normal") {
+                                candidate = 0;
+                            } else if (value == "fixed") {
+                                candidate = 1;
+                            } else if (value == "quiet") {
+                                candidate = 2;
+                            } else {
                                 out("info string Invalid option value: " + name);
                                 return true;
                             }
@@ -631,7 +696,9 @@ namespace uci {
             ? maximum : whole * 1000 + fraction;
         msg += " nodes " + std::to_string(nodes) + " time " + itoa(time) + " nps ";
         msg += std::to_string(nps);
-        if (tablebase_hits) msg += " tbhits " + itoa(tablebase_hits);
+        if (tablebase_hits) {
+            msg += " tbhits " + itoa(tablebase_hits);
+        }
         msg += " pv ";
         msg += pv;
         out(msg);

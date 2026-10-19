@@ -30,8 +30,11 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
         int depth, int alpha, int table_state) {
     const std::string fen = std::string(test.position) + " " + std::to_string(clock) + " 1";
     std::unique_ptr<search_t> storage;
-    if (losers) storage = std::make_unique<w17_search_t>(fen.c_str());
-    else storage = std::make_unique<search_t>(fen.c_str());
+    if (losers) {
+        storage = std::make_unique<w17_search_t>(fen.c_str());
+    } else {
+        storage = std::make_unique<search_t>(fen.c_str());
+    }
     search_t & search = *storage;
     const int ply = losers ? MAX_PLY : MAX_PLY - 1;
     place_at_ply(search, ply);
@@ -49,7 +52,9 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
         // A stale cached evaluation must not hide the ceiling's terminal result.
         trans_table::store(key, 0, ply, 6, 1234, 0, score::EXACT, tt_context);
     }
-    if (table_state == 2) trans_table::disable();
+    if (table_state == 2) {
+        trans_table::disable();
+    }
     const int beta = alpha == -score::INF ? score::INF : alpha + 1;
     const int actual = losers ? static_cast<w17_search_t &>(search).w17_pvs(alpha, beta, mode, depth)
         : depth <= 0 ? search.qsearch(alpha, beta, depth) : search.pvs(alpha, beta, depth);
@@ -61,9 +66,11 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
         && search.brd.stack->tt_key == key
         && search.tt_context() == context
         && search.stack->repetition_start == history_start && search.is_repetition() == repeated;
-    if (!success) std::cerr << "ceiling: " << fen << " losers=" << losers << " mode=" << mode
-        << " depth=" << depth << " alpha=" << alpha << " TT=" << table_state
-        << " expected=" << expected << " actual=" << actual << "\n";
+    if (!success) {
+        std::cerr << "ceiling: " << fen << " losers=" << losers << " mode=" << mode
+            << " depth=" << depth << " alpha=" << alpha << " TT=" << table_state
+            << " expected=" << expected << " actual=" << actual << "\n";
+    }
     return success;
 }
 
@@ -71,8 +78,11 @@ bool test_transition(bool losers) {
     // A real legal move reaches mate exactly on the last usable stack slot.
     const char * fen = "7k/8/5KQ1/8/8/8/p7/8 w - - 99 1";
     std::unique_ptr<search_t> storage;
-    if (losers) storage = std::make_unique<w17_search_t>(fen);
-    else storage = std::make_unique<search_t>(fen);
+    if (losers) {
+        storage = std::make_unique<w17_search_t>(fen);
+    } else {
+        storage = std::make_unique<search_t>(fen);
+    }
     search_t & search = *storage;
     const int ply = losers ? MAX_PLY - 1 : MAX_PLY - 2;
     place_at_ply(search, ply);
@@ -81,7 +91,9 @@ bool test_transition(bool losers) {
     const auto context = search.tt_context();
     move_t move;
     move.set(&search.brd, "g6g7");
-    if (!search.brd.valid(&move) || !search.brd.legal(&move)) return false;
+    if (!search.brd.valid(&move) || !search.brd.legal(&move)) {
+        return false;
+    }
     search.forward(&move, search.brd.gives_check(&move));
     const int expected = (losers ? 1 : -1) * (score::MATE - ply - 1);
     const int actual = search.pvs(-score::INF, score::INF, 1);
@@ -90,16 +102,21 @@ bool test_transition(bool losers) {
         && search.brd.to_string() == original_fen && search.brd.stack->tt_key == key
         && search.tt_context() == context && search.brd.ply == ply
         && search.stack == &search._stack[ply] && search.brd.stack == &search.brd._stack[ply];
-    if (!success) std::cerr << "ceiling transition losers=" << losers
-        << " expected=" << expected << " actual=" << actual << "\n";
+    if (!success) {
+        std::cerr << "ceiling transition losers=" << losers
+            << " expected=" << expected << " actual=" << actual << "\n";
+    }
     return success;
 }
 
 bool test_interruption(bool losers) {
     const char * fen = "7k/7p/8/8/8/8/P7/KR6 w - - 0 1";
     std::unique_ptr<search_t> storage;
-    if (losers) storage = std::make_unique<w17_search_t>(fen);
-    else storage = std::make_unique<search_t>(fen);
+    if (losers) {
+        storage = std::make_unique<w17_search_t>(fen);
+    } else {
+        storage = std::make_unique<search_t>(fen);
+    }
     search_t & search = *storage;
     place_at_ply(search, losers ? MAX_PLY : MAX_PLY - 1);
     const auto original_fen = search.brd.to_string();
@@ -113,15 +130,20 @@ bool test_interruption(bool losers) {
     success &= search.pvs(-score::INF, score::INF, 1) == expected && !search.stop_all
         && search.nodes == 2 && search.brd.to_string() == original_fen
         && search.brd.stack->tt_key == key;
-    if (!success) std::cerr << "interrupted ceiling restart losers=" << losers << "\n";
+    if (!success) {
+        std::cerr << "interrupted ceiling restart losers=" << losers << "\n";
+    }
     return success;
 }
 
 bool test_repetition(bool losers) {
     const char * fen = "6nk/7p/8/8/8/8/P7/KN1R4 w - - 0 1";
     std::unique_ptr<search_t> storage;
-    if (losers) storage = std::make_unique<w17_search_t>(fen);
-    else storage = std::make_unique<search_t>(fen);
+    if (losers) {
+        storage = std::make_unique<w17_search_t>(fen);
+    } else {
+        storage = std::make_unique<search_t>(fen);
+    }
     search_t & search = *storage;
     const int ply = (losers ? MAX_PLY : MAX_PLY - 1) - 4;
     place_at_ply(search, ply);
@@ -132,17 +154,23 @@ bool test_repetition(bool losers) {
     move_t moves[4];
     for (int i = 0; i < 4; ++i) {
         moves[i].set(&search.brd, cycle[i]);
-        if (!search.brd.valid(&moves[i]) || !search.brd.legal(&moves[i])) return false;
+        if (!search.brd.valid(&moves[i]) || !search.brd.legal(&moves[i])) {
+            return false;
+        }
         search.forward(&moves[i], search.brd.gives_check(&moves[i]));
     }
     bool success = search.is_repetition()
         && search.pvs(-score::INF, score::INF, 1) == 0 && !search.stop_all;
-    if (!losers) success &= search.qsearch(-score::INF, score::INF, -1) == 0;
+    if (!losers) {
+        success &= search.qsearch(-score::INF, score::INF, -1) == 0;
+    }
     for (int i = 3; i >= 0; --i) search.backward(&moves[i]);
     success &= search.brd.to_string() == original_fen && search.brd.stack->tt_key == key
         && search.tt_context() == context && !search.is_repetition()
         && search.brd.ply == ply && search.stack == &search._stack[ply];
-    if (!success) std::cerr << "ceiling repetition losers=" << losers << "\n";
+    if (!success) {
+        std::cerr << "ceiling repetition losers=" << losers << "\n";
+    }
     return success;
 }
 

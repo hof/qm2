@@ -20,7 +20,9 @@ public:
         if (brd.ply > 0) {
             ++nodes;
             ++children;
-            if (first_move.empty()) first_move = (stack - 1)->current_move.to_string();
+            if (first_move.empty()) {
+                first_move = (stack - 1)->current_move.to_string();
+            }
             stack->pv_count = 0;
             return 0;
         }
@@ -28,13 +30,17 @@ public:
     }
 };
 bool check(bool ok, const char * message) {
-    if (!ok) std::cerr << message << '\n';
+    if (!ok) {
+        std::cerr << message << '\n';
+    }
     return ok;
 }
 }
 
 int main(int argc, char ** argv) {
-    if (argc != 2) return 1;
+    if (argc != 2) {
+        return 1;
+    }
     magic::init();
     uci::silent(true);
     trans_table::set_size(4);
@@ -42,7 +48,9 @@ int main(int argc, char ** argv) {
     options::get_option("NNUEAuditHorizon")->value = 2;
     options::get_option("NNUEAuditIID")->value = 1;
     std::string error;
-    if (!nnue::set_path(argv[1], error)) return 1;
+    if (!nnue::set_path(argv[1], error)) {
+        return 1;
+    }
     bool ok = true;
     {
         for (const char * fen : {

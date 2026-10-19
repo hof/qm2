@@ -70,7 +70,9 @@ bool search_t::has_legal_move(board_t & brd) {
         const int to = pop(targets);
         move_t move{};
         move.set(king, from, to, brd.matrix[to]);
-        if (brd.legal(&move)) return true;
+        if (brd.legal(&move)) {
+            return true;
+        }
     }
     move::list_t moves;
     for (auto generate : {move::gen_quiet_moves, move::gen_captures,
@@ -78,7 +80,9 @@ bool search_t::has_legal_move(board_t & brd) {
         moves.clear();
         generate(&brd, &moves);
         for (move_t * move = moves.first; move != moves.last; ++move) {
-            if (brd.legal(move)) return true;
+            if (brd.legal(move)) {
+                return true;
+            }
         }
     }
     return false;
@@ -162,10 +166,13 @@ void root_move_t::add_nodes(U64 count) {
 int search_t::neural_static_score() {
     assert(evaluation_network);
     constexpr size_t entries = 65536;
-    if (_neural_cache.empty()) _neural_cache.resize(entries);
+    if (_neural_cache.empty()) {
+        _neural_cache.resize(entries);
+    }
     auto & cached = _neural_cache[brd.stack->tt_key & (entries - 1)];
-    if (cached.key == brd.stack->tt_key && cached.value != score::INVALID)
+    if (cached.key == brd.stack->tt_key && cached.value != score::INVALID) {
         return cached.value;
+    }
     auto & accumulator = evaluation_accumulators[brd.ply];
     const int value = nnue::to_centipawns(evaluation_network->evaluate(brd, accumulator,
         std::span<const nnue::accumulator_t>(evaluation_accumulators.data(), brd.ply)
@@ -274,16 +281,24 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
  * Lookup current position in polyglot book database (file book.bin)
  */
 bool search_t::book_lookup() {
-    if (!_own_book || brd.stack->fifty_count >= 90 || is_draw()) return false;
+    if (!_own_book || brd.stack->fifty_count >= 90 || is_draw()) {
+        return false;
+    }
     if (std::find(_position_history.begin(), _position_history.end(),
-                  brd.stack->repetition_key()) != _position_history.end()) return false;
+                  brd.stack->repetition_key()) != _position_history.end()) {
+        return false;
+    }
     // Let perfect endgame results take precedence over remembered book moves.
-    if (wild == 0 && tablebase_limit && popcnt0(brd.all()) <= tablebase_limit) return false;
+    if (wild == 0 && tablebase_limit && popcnt0(brd.all()) <= tablebase_limit) {
+        return false;
+    }
     book_t reader;
     move::list_t book_moves;
     reader.open(book_name);
     reader.find(&brd, &book_moves);
-    if (book_moves.first == book_moves.last && (wild != 0 || !_experience)) return false;
+    if (book_moves.first == book_moves.last && (wild != 0 || !_experience)) {
+        return false;
+    }
     const U64 key = book_t::polyglot_key(&brd);
     double mean_weight = 100;
     if (book_moves.first != book_moves.last) {
@@ -306,13 +321,17 @@ bool search_t::book_lookup() {
     stack->in_check = brd.in_check();
     for (move_t * move = move::first(this, 1); move; move = move::next(this, 1)) {
         if (!game.search_moves.empty() && std::find(game.search_moves.begin(),
-                game.search_moves.end(), move->to_string()) == game.search_moves.end()) continue;
+                game.search_moves.end(), move->to_string()) == game.search_moves.end()) {
+            continue;
+        }
         if (wild == 0 && !brd.legal(move)) {
             continue;
         }
         double weight = 0;
         for (auto entry = book_moves.first; entry != book_moves.last; ++entry)
-            if (move->equals(entry)) weight += entry->score;
+            if (move->equals(entry)) {
+                weight += entry->score;
+            }
         has_reference |= weight > 0;
         const unsigned promotion = move->promotion ? (move->promotion - 1) % 6 : 0;
         const unsigned code = move->ssq | (move->tsq << 6) | (promotion << 12);
@@ -345,16 +364,22 @@ bool search_t::book_lookup() {
             weights.push_back(weight);
         }
     }
-    if (candidates.empty()) return false;
+    if (candidates.empty()) {
+        return false;
+    }
     if (!_book_seeded) {
         _book_random.seed(std::random_device{}());
         _book_seeded = true;
     }
     // Sparse unanalysed experience competes with doing a fresh search.
-    if (!has_reference && !has_analysis) weights.push_back(mean_weight);
+    if (!has_reference && !has_analysis) {
+        weights.push_back(mean_weight);
+    }
     std::discrete_distribution<size_t> choose(weights.begin(), weights.end());
     const size_t selected = choose(_book_random);
-    if (selected == candidates.size()) return false;
+    if (selected == candidates.size()) {
+        return false;
+    }
     stack->best_move = candidates[selected];
     stack->pv_moves[0] = stack->best_move;
     stack->pv_count = 1;
@@ -384,7 +409,9 @@ void search_t::go() {
         // Book selection has no searched depth, nodes or evaluated score.
     } else if (init_root_moves() > 0) {
         solved = tablebase_lookup();
-        if (!solved) iterative_deepening();
+        if (!solved) {
+            iterative_deepening();
+        }
         // A tiny node budget or early stop can interrupt the first root move.
         // Still return a legal move from the permitted root set.
         if (!stack->best_move.piece) {
@@ -488,21 +515,31 @@ void search_t::go() {
 // DTZ guides direct play unless an existing repetition needs search adjudication.
 bool search_t::tablebase_lookup() {
     if (wild != 0 || tablebase_limit == 0 || root.move_count == 0
-            || popcnt0(brd.all()) > tablebase_limit || abort(true)) return false;
+            || popcnt0(brd.all()) > tablebase_limit || abort(true)) {
+        return false;
+    }
     // A DTZ-minimizing continuation cannot cycle before its next zeroing move.
     // Unique past positions cannot turn that continuation into a threefold.
     // Already repeated positions need history-aware search instead.
     std::vector<U64> history = _position_history;
     history.push_back(brd.stack->repetition_key());
     std::sort(history.begin(), history.end());
-    if (std::adjacent_find(history.begin(), history.end()) != history.end()) return false;
+    if (std::adjacent_find(history.begin(), history.end()) != history.end()) {
+        return false;
+    }
     tablebase::root_result_t result;
-    if (!tablebase::probe_root(brd, tablebase_limit, result)) return false;
+    if (!tablebase::probe_root(brd, tablebase_limit, result)) {
+        return false;
+    }
     for (int i = 0; i < root.move_count; ++i) {
         move_t & move = root.moves[i].move;
         if (move.ssq != result.from || move.tsq != result.to
-                || move.promotion != result.promotion) continue;
-        if (abort(true)) return false;
+                || move.promotion != result.promotion) {
+            continue;
+        }
+        if (abort(true)) {
+            return false;
+        }
         stack->best_move = move;
         stack->pv_moves[0] = move;
         stack->pv_count = 1;
@@ -516,9 +553,13 @@ bool search_t::tablebase_lookup() {
 }
 
 bool search_t::probe_tablebase(int depth, int & value) {
-    if (wild != 0 || tablebase_limit == 0 || stack->in_check) return false;
+    if (wild != 0 || tablebase_limit == 0 || stack->in_check) {
+        return false;
+    }
     const int outcome = tablebase::probe_wdl(brd, tablebase_limit, depth, tablebase_probe_depth);
-    if (outcome == -3) return false;
+    if (outcome == -3) {
+        return false;
+    }
     ++tablebase_hits;
     const int magnitude = score::TABLEBASE - brd.ply;
     const bool draw = outcome >= -1 && outcome <= 1;
@@ -627,8 +668,9 @@ void search_t::iterative_deepening() {
  * @return search result score
  */
 int search_t::aspiration(int depth, int last_score) {
-    if (!aspiration_enabled || depth < 4 || score::is_win(last_score))
+    if (!aspiration_enabled || depth < 4 || score::is_win(last_score)) {
         return pvs_root(-score::INF, score::INF, depth);
+    }
 
     int delta = 50;
     int alpha = MAX(-score::INF, last_score - delta);
@@ -669,8 +711,11 @@ int search_t::aspiration(int depth, int last_score) {
             // Preserve the bound that did not fail. Widen monotonically, even
             // when selective search changes from fail-high to fail-low.
             delta = MIN(delta * 2, score::INF);
-            if (value <= alpha) alpha = MAX(-score::INF, alpha - delta);
-            else beta = MIN(score::INF, beta + delta);
+            if (value <= alpha) {
+                alpha = MAX(-score::INF, alpha - delta);
+            } else {
+                beta = MIN(score::INF, beta + delta);
+            }
         }
     }
 }
@@ -708,8 +753,9 @@ void search_t::forward() {
     stack->in_check = false;
     stack->eval_result = score::INVALID;
     brd.forward();
-    if (wild == 0 && evaluation_network)
+    if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, nullptr, evaluation_accumulators[brd.ply]);
+    }
     // A null move is not part of legal game history.
     stack->repetition_start = brd.ply + 1;
     stack->tt_history = 0;
@@ -746,8 +792,9 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->tt_clocks = {0, 101};
     stack->eval_result = score::INVALID;
     brd.forward(move);
-    if (wild == 0 && evaluation_network)
+    if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, move, evaluation_accumulators[brd.ply]);
+    }
     if (brd.stack->fifty_count == 0) {
         stack->tt_history = 0;
     } else if (brd.ply - 1 >= stack->repetition_start) {
@@ -939,7 +986,9 @@ int search_t::init_root_moves() {
     for (move_t * move = move::first(this, 1);
             move; move = move::next(this, 1)) {
         if (!game.search_moves.empty() && std::find(game.search_moves.begin(),
-                game.search_moves.end(), move->to_string()) == game.search_moves.end()) continue;
+                game.search_moves.end(), move->to_string()) == game.search_moves.end()) {
+            continue;
+        }
         if (wild == 0 && !brd.legal(move)) {
             continue;
         }
@@ -1004,9 +1053,13 @@ void root_t::sort_moves(move_t * best_move) {
  */
 int search_t::extension(move_t * move, int gives_check) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    if (nnue_audit.fixed_horizon) return 0;
+    if (nnue_audit.fixed_horizon) {
+        return 0;
+    }
     if (nnue_audit.aligned_quiescence) {
-        if (!nnue_audit.check_extensions || !gives_check) return 0;
+        if (!nnue_audit.check_extensions || !gives_check) {
+            return 0;
+        }
         auto & counts = nnue_audit.counters;
         ++counts.extension_candidates;
         if (!brd.see(move, 0)) {
@@ -1035,7 +1088,9 @@ int search_t::extension(move_t * move, int gives_check) {
 int search_t::reduction(int depth, int searched_moves, bool is_dangerous) {
     // Search the first three legal moves at full depth. A one-ply reduction
     // must leave at least one positive-depth child ply for the trial search.
-    if (depth < 3 || is_dangerous || searched_moves < 3 || !lmr_enabled) return 0;
+    if (depth < 3 || is_dangerous || searched_moves < 3 || !lmr_enabled) {
+        return 0;
+    }
     return 1;
 }
 
@@ -1076,7 +1131,9 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         int score = 0;
         int extend = 0;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        if (nnue_audit.aligned_quiescence) extend = extension(move, rmove->gives_check);
+        if (nnue_audit.aligned_quiescence) {
+            extend = extension(move, rmove->gives_check);
+        }
 #endif
 
         //go forward and search one level deeper
@@ -1122,8 +1179,12 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
                     pv_to_string().c_str(), result_flag, tablebase_hits);
             // A fail-high bounds the root immediately. A fail-low requires
             // searching every alternative before widening the root window.
-            if (score >= beta) return score;
-            if (best > alpha) alpha = best;
+            if (score >= beta) {
+                return score;
+            }
+            if (best > alpha) {
+                alpha = best;
+            }
         }
     }
     return best;
@@ -1176,11 +1237,15 @@ bool search_t::is_repetition() const {
 // A shallow PV search supplies only a move-ordering hint. Restore this
 // frame before searching the original depth, even when the helper is stopped.
 void search_t::prepare_iid_move(int alpha, int beta, int depth) {
-    if (iid_active || depth < 4 || alpha + 1 >= beta || stack->tt_move.piece) return;
+    if (iid_active || depth < 4 || alpha + 1 >= beta || stack->tt_move.piece) {
+        return;
+    }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     ++nnue_audit.counters.iid_candidates;
 #endif
-    if (!iid_enabled) return;
+    if (!iid_enabled) {
+        return;
+    }
     struct iid_scope_t {
         search_t & search;
         search_stack_t previous;
@@ -1249,9 +1314,15 @@ int search_t::pvs(int alpha, int beta, int depth) {
         if (nnue_audit.fixed_horizon) {
             ++nnue_audit.counters.q_nodes;
             ++nodes;
-            if (abort()) return alpha;
-            if (is_draw()) return draw_score();
-            if (!has_legal_move(brd)) return stack->in_check ? -score::MATE + brd.ply : draw_score();
+            if (abort()) {
+                return alpha;
+            }
+            if (is_draw()) {
+                return draw_score();
+            }
+            if (!has_legal_move(brd)) {
+                return stack->in_check ? -score::MATE + brd.ply : draw_score();
+            }
             return nnue::audit_evaluate(*this);
         }
 #endif
@@ -1320,7 +1391,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     const bool use_tt_scores = !nnue_audit.fixed_horizon && !nnue_audit.aligned_quiescence;
     const bool probe_tt = use_tt_scores || (nnue_audit.aligned_quiescence && nnue_audit.hash_moves);
-    if (nnue_audit.aligned_quiescence && probe_tt) ++nnue_audit.counters.hash_probes;
+    if (nnue_audit.aligned_quiescence && probe_tt) {
+        ++nnue_audit.counters.hash_probes;
+    }
 #else
     constexpr bool probe_tt = true, use_tt_scores = true;
 #endif
@@ -1381,7 +1454,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
     const int beta_margin = reverse_futility_margin_per_ply * depth;
     const bool beta_cutoff = depth < 4 && beta_pruning && eval - beta_margin >= beta;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    if (do_prune_node && depth < 4 && beta_pruning) ++nnue_audit.counters.beta_candidates;
+    if (do_prune_node && depth < 4 && beta_pruning) {
+        ++nnue_audit.counters.beta_candidates;
+    }
 #endif
     // At clock 99 a reversible move draws unless it mates; static evaluation and
     // an artificial pass can still claim a win. Search legal moves there.
@@ -1443,7 +1518,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
     }
 
     prepare_iid_move(alpha, beta, depth);
-    if (stop_all) return alpha;
+    if (stop_all) {
+        return alpha;
+    }
 
     /*
      * Moves loop
@@ -1452,8 +1529,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
     //if there is no first move, it's checkmate or stalemate
     move_t * move = move::first(this, depth);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    if (audit_hash_hint && move && move->to_compact() == tt_move)
+    if (audit_hash_hint && move && move->to_compact() == tt_move) {
         ++nnue_audit.counters.hash_first;
+    }
 #endif
     if (!move) {
         return in_check ? -score::MATE + brd.ply : draw_score();
@@ -1508,8 +1586,9 @@ int search_t::pvs(int alpha, int beta, int depth) {
         int extend = extension(move, gives_check);
         int reduce = reduction(depth, searched_moves, is_dangerous);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        if (depth >= 3 && searched_moves >= 3 && !is_dangerous)
+        if (depth >= 3 && searched_moves >= 3 && !is_dangerous) {
             ++nnue_audit.counters.lmr_candidates;
+        }
         if (reduce) {
             auto & counts = nnue_audit.counters;
             ++counts.lmr_reductions;
@@ -1709,9 +1788,12 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         const bool quiet_check = !in_check && depth == 0 && gives_check
             && !move->capture && !move->promotion && !move->castle;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        if (nnue_audit.aligned_quiescence && !in_check && !move->capture && !move->promotion)
+        if (nnue_audit.aligned_quiescence && !in_check && !move->capture && !move->promotion) {
             if (!(nnue_audit.quiet_checks && quiet_check)
-                    && !(nnue_audit.quiet_castling && depth == 0 && move->castle)) continue;
+                    && !(nnue_audit.quiet_castling && depth == 0 && move->castle)) {
+                continue;
+            }
+        }
 #endif
         // Optional quiet checks are limited to qsearch entry. Checked nodes
         // always search evasions, including materially losing counterchecks.
@@ -1765,7 +1847,9 @@ int search_t::qsearch(int alpha, int beta, int depth) {
                 int remaining = 0;
                 for (int piece : {KNIGHT[them], BISHOP[them], ROOK[them], QUEEN[them]})
                     remaining += popcnt0(brd.bb[piece]) * board::PVAL[piece];
-                if (move->capture != PAWN[them]) remaining -= board::PVAL[move->capture];
+                if (move->capture != PAWN[them]) {
+                    remaining -= board::PVAL[move->capture];
+                }
                 if (remaining > delta_endgame_material) {
                     if (use_delta) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
@@ -1799,8 +1883,12 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        if (quiet_check) ++nnue_audit.counters.q_check_searched;
-        if (!in_check && depth == 0 && move->castle) ++nnue_audit.counters.q_castles;
+        if (quiet_check) {
+            ++nnue_audit.counters.q_check_searched;
+        }
+        if (!in_check && depth == 0 && move->castle) {
+            ++nnue_audit.counters.q_castles;
+        }
 #endif
         if (!try_forward(move, gives_check)) {
             continue;

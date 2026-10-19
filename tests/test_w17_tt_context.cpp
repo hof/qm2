@@ -4,7 +4,9 @@
 namespace {
 
 bool check(const char * name, bool success) {
-    if (!success) std::cerr << name << "\n";
+    if (!success) {
+        std::cerr << name << "\n";
+    }
     return success;
 }
 
@@ -107,7 +109,9 @@ bool test_bound_compatibility() {
     auto writer = std::make_unique<w17_search_t>(fen);
     writer->draw_contempt = 0;
     const int count = writer->init_root_moves();
-    if (!check("bound fixture must have legal moves", count > 0)) return false;
+    if (!check("bound fixture must have legal moves", count > 0)) {
+        return false;
+    }
     const int hint = writer->root.moves[0].move.to_compact();
     for (int writer_mode = -1; writer_mode <= 1; ++writer_mode) {
         for (int reader_mode = -1; reader_mode <= 1; ++reader_mode) {

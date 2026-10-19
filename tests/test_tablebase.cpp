@@ -6,7 +6,9 @@
 namespace {
 
 bool check(const char * message, bool success) {
-    if (!success) std::cerr << message << "\n";
+    if (!success) {
+        std::cerr << message << "\n";
+    }
     return success;
 }
 
@@ -162,13 +164,19 @@ bool test_conversion() {
                 search.brd.in_check() && search.brd.us() == BLACK);
         }
         if (!check("DTZ play must not repeat a position",
-                seen.insert(search.brd.stack->repetition_key()).second)) return false;
+                seen.insert(search.brd.stack->repetition_key()).second)) {
+            return false;
+        }
         if (!check("DTZ play must keep the winning outcome before the fifty-move limit",
-                search.tablebase_lookup() && std::abs(search.result_score) == score::TABLEBASE)) return false;
+                search.tablebase_lookup() && std::abs(search.result_score) == score::TABLEBASE)) {
+            return false;
+        }
         move_t chosen = search.stack->best_move;
         history.push_back(search.brd.stack->repetition_key());
         search.forward(&chosen, search.brd.gives_check(&chosen));
-        if (search.brd.stack->fifty_count == 0) history.clear();
+        if (search.brd.stack->fifty_count == 0) {
+            history.clear();
+        }
         fen = search.brd.to_string();
     }
     return check("DTZ play failed to convert a rook win within fifty moves", false);
@@ -177,7 +185,9 @@ bool test_conversion() {
 bool test_missing_files() {
     std::string pattern = (std::filesystem::temp_directory_path() / "maxima-syzygy-XXXXXX").string();
     const char * temporary = mkdtemp(pattern.data());
-    if (!temporary) return check("Could not create tablebase test directory", false);
+    if (!temporary) {
+        return check("Could not create tablebase test directory", false);
+    }
     const std::filesystem::path directory(temporary);
     std::filesystem::copy_file(std::filesystem::path(TABLEBASE_FIXTURE_PATH) / "KRvK.rtbw",
         directory / "KRvK.rtbw", std::filesystem::copy_options::overwrite_existing);

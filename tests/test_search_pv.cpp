@@ -94,14 +94,21 @@ bool test_root_reporting(int interrupt_depth, int children, int expected_depth,
     std::string line, final_report;
     bool success = search.stack->best_move.piece != 0;
     while (std::getline(lines, line)) {
-        if (line.starts_with("info depth ")) final_report = line;
+        if (line.starts_with("info depth ")) {
+            final_report = line;
+        }
     }
     success &= final_report.starts_with("info depth " + std::to_string(expected_depth) + " ");
     success &= final_report.find(" nodes " + std::to_string(search.nodes) + " ") != std::string::npos;
     success &= output.str().find(std::string("info string search_result ") + provenance) != std::string::npos;
-    if (expected_score) success &= final_report.find(expected_score) != std::string::npos;
-    else success &= final_report.find(" score ") == std::string::npos;
-    if (!success) std::cerr << "incorrect root reporting:\n" << output.str();
+    if (expected_score) {
+        success &= final_report.find(expected_score) != std::string::npos;
+    } else {
+        success &= final_report.find(" score ") == std::string::npos;
+    }
+    if (!success) {
+        std::cerr << "incorrect root reporting:\n" << output.str();
+    }
     return success;
 }
 
@@ -126,7 +133,9 @@ bool test_partial_bounds(int value, bool fail_low) {
     // A fail-low result for just the first move says nothing about other moves.
     const bool success = fail_low ? output.str().find(" score ") == std::string::npos
         : output.str().find(" lowerbound ") != std::string::npos;
-    if (!success) std::cerr << "incorrect partial aspiration bound:\n" << output.str();
+    if (!success) {
+        std::cerr << "incorrect partial aspiration bound:\n" << output.str();
+    }
     return success;
 }
 

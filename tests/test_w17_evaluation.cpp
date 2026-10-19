@@ -5,7 +5,9 @@
 namespace {
 
 bool check(const char * name, bool success) {
-    if (!success) std::cerr << name << '\n';
+    if (!success) {
+        std::cerr << name << '\n';
+    }
     return success;
 }
 

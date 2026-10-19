@@ -98,6 +98,7 @@ or require every task to advance every goal.
   to guide hot-path changes and compiler choices. Compare Release builds with
   identical positions, limits, and compiler flags, checking NPS, time to depth,
   and playing strength rather than assuming any one metric proves improvement.
+- Always use curly braces for `if` and `else` bodies, including single returns.
 - Prefer incremental changes with clear ownership and explicit dependencies.
 - Commit each completed, tested increment with its regressions and relevant
   documentation before moving on. Use a one-line Conventional Commit message

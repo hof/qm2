@@ -45,7 +45,9 @@ bool test_bitbase() {
                     for (int defender = 0; defender < 64; ++defender) {
                         for (bool pawn_turn : {false, true}) {
                             const int current = index(pawn_turn, king, defender, pawn);
-                            if (won[current] || !legal(pawn_turn, king, defender, pawn)) continue;
+                            if (won[current] || !legal(pawn_turn, king, defender, pawn)) {
+                                continue;
+                            }
                             bool any = false, all = true, has_move = false;
                             const auto child = [&](bool winning) {
                                 any |= winning;
@@ -55,10 +57,13 @@ bool test_bitbase() {
                             const int moving_king = pawn_turn ? king : defender;
                             for (int step : {-9, -8, -7, -1, 1, 7, 8, 9}) {
                                 const int target = moving_king + step;
-                                if (target < 0 || target >= 64 || separation(moving_king, target) != 1) continue;
+                                if (target < 0 || target >= 64 || separation(moving_king, target) != 1) {
+                                    continue;
+                                }
                                 if (pawn_turn) {
-                                    if (target != pawn && separation(target, defender) > 1)
+                                    if (target != pawn && separation(target, defender) > 1) {
                                         child(won[index(false, target, defender, pawn)]);
+                                    }
                                 } else if (separation(target, king) > 1 && !pawn_attacks(pawn, target)) {
                                     child(target != pawn && won[index(true, king, target, pawn)]);
                                 }
@@ -71,8 +76,9 @@ bool test_bitbase() {
                                         || separation(pawn + 8, king) == 1);
                                 } else {
                                     child(won[index(false, king, defender, pawn + 8)]);
-                                    if (rank == 1 && pawn + 16 != king && pawn + 16 != defender)
+                                    if (rank == 1 && pawn + 16 != king && pawn + 16 != defender) {
                                         child(won[index(false, king, defender, pawn + 16)]);
+                                    }
                                 }
                             }
                             if (pawn_turn ? any : has_move && all) {
@@ -95,7 +101,9 @@ bool test_bitbase() {
             for (int king = 0; king < 64; ++king) {
                 for (int defender = 0; defender < 64; ++defender) {
                     for (bool pawn_turn : {false, true}) {
-                        if (!legal(pawn_turn, king, defender, pawn)) continue;
+                        if (!legal(pawn_turn, king, defender, pawn)) {
+                            continue;
+                        }
                         const int expected = won[index(pawn_turn, king, defender, pawn)];
                         for (bool black_pawn : {false, true}) {
                             for (bool mirror : {false, true}) {
@@ -155,7 +163,9 @@ bool test_search() {
                 return failed(__LINE__);
             }
             search.draw_contempt = 17;
-            if (search.pvs(-score::INF, score::INF, 2) != 17) return failed(__LINE__);
+            if (search.pvs(-score::INF, score::INF, 2) != 17) {
+                return failed(__LINE__);
+            }
         }
     }
     const char * wins[] = {
@@ -179,7 +189,9 @@ bool test_search() {
             return failed(__LINE__);
         }
         move_t best = search.stack->best_move;
-        if (!search.brd.valid(&best) || !search.brd.legal(&best)) return failed(__LINE__);
+        if (!search.brd.valid(&best) || !search.brd.legal(&best)) {
+            return failed(__LINE__);
+        }
         search.forward(&best, search.brd.gives_check(&best));
         // The chosen move must preserve a KPK win or promote to a winning piece.
         bool has_reply = false;
@@ -203,27 +215,37 @@ bool test_search() {
         }
         search_t warm(fen);
         prepare(warm);
-        if (warm.pvs(-score::INF, score::INF, 2) != searched_score) return failed(__LINE__);
+        if (warm.pvs(-score::INF, score::INF, 2) != searched_score) {
+            return failed(__LINE__);
+        }
     }
     search_t capture("k7/8/2K5/1b6/8/8/P7/8 w - - 0 1");
     prepare(capture);
     const std::string original = capture.brd.to_string();
     move_t take;
     take.set(&capture.brd, "c6b5");
-    if (!capture.brd.valid(&take) || !capture.brd.legal(&take)) return failed(__LINE__);
+    if (!capture.brd.valid(&take) || !capture.brd.legal(&take)) {
+        return failed(__LINE__);
+    }
     capture.forward(&take, capture.brd.gives_check(&take));
     if (eg::probe_kpk(capture.brd) != 0
-        || capture.qsearch(-score::INF, score::INF, -1) != 0) return failed(__LINE__);
+        || capture.qsearch(-score::INF, score::INF, -1) != 0) {
+        return failed(__LINE__);
+    }
     capture.backward(&take);
     // The certified draw supplies a lower bound; NNUE may prefer another line.
     if (capture.brd.to_string() != original
-        || capture.pvs(-score::INF, score::INF, 1) < 0) return failed(__LINE__);
+        || capture.pvs(-score::INF, score::INF, 1) < 0) {
+        return failed(__LINE__);
+    }
 
     search_t boundary("k7/8/8/8/8/8/4P3/4K3 w - - 99 1");
     prepare(boundary);
     move_t quiet;
     quiet.set(&boundary.brd, "e1d1");
-    if (eg::probe_kpk(boundary.brd) != 1) return failed(__LINE__);
+    if (eg::probe_kpk(boundary.brd) != 1) {
+        return failed(__LINE__);
+    }
     boundary.forward(&quiet, boundary.brd.gives_check(&quiet));
     const bool clock_draw = boundary.pvs(-score::INF, score::INF, 2) == 0;
     boundary.backward(&quiet);
@@ -235,7 +257,9 @@ bool test_search() {
 
 int main() {
     magic::init();
-    if (!test_bitbase()) return EXIT_FAILURE;
+    if (!test_bitbase()) {
+        return EXIT_FAILURE;
+    }
     if (!test_search()) {
         std::cerr << "KPK search integration failed\n";
         return EXIT_FAILURE;

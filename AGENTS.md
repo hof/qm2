@@ -10,12 +10,14 @@ Read `.context/agents.md` when present for additional private local context;
 
 - Improve playing strength, search correctness, speed, and reliability.
 - Keep code clean and minimal; use snake_case for new project identifiers.
+- Always use curly braces for `if` and `else` bodies, including single statements.
 - Prioritize missing fundamentals and measured strength gains. Preserve useful
   chess optimizations, intrinsics, and assembly; measure hot-path changes.
 - Keep worker state owned and shared caches synchronized. `volatile` is not
   thread synchronization.
 - Preserve board, hash, repetition, clock, and search-stack invariants.
 - Validate external input before changing engine state.
+- Commit each completed, tested increment before starting the next.
 - Keep commits focused. Every commit message is exactly one line using
   Conventional Commits: `type(scope): description`, with optional scope and
   no body or footer.

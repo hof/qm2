@@ -48,17 +48,25 @@ bool set_path(const std::string & path) {
         std::ifstream input(path, std::ios::binary);
         unsigned char header[16];
         if (!input.read(reinterpret_cast<char *>(header), 16)
-            || std::string(reinterpret_cast<char *>(header), 8) != "MXEXP001") return false;
+            || std::string(reinterpret_cast<char *>(header), 8) != "MXEXP001") {
+            return false;
+        }
         const uint64_t count = read_le(header + 8, 8);
-        if (count > 2000000) return false;
+        if (count > 2000000) {
+            return false;
+        }
         input.seekg(0, std::ios::end);
-        if (input.tellg() != std::streamoff(16 + 80 * count)) return false;
+        if (input.tellg() != std::streamoff(16 + 80 * count)) {
+            return false;
+        }
         input.seekg(16);
         std::vector<entry_t> entries;
         entries.reserve(count);
         for (uint64_t i = 0; i < count; ++i) {
             unsigned char bytes[80];
-            if (!input.read(reinterpret_cast<char *>(bytes), 80)) return false;
+            if (!input.read(reinterpret_cast<char *>(bytes), 80)) {
+                return false;
+            }
             entry_t entry{};
             entry.key = read_le(bytes, 8);
             entry.move = read_le(bytes + 8, 4);
@@ -80,10 +88,14 @@ bool set_path(const std::string & path) {
                 || entry.move >> 12 > 4 || (entry.move & 63) == ((entry.move >> 6) & 63)
                 || entry.depth < 0 || entry.depth > 128 || entry.score_type > 1
                 || (!entries.empty() && std::make_pair(entries.back().key, entries.back().move)
-                    >= std::make_pair(entry.key, entry.move))) return false;
+                    >= std::make_pair(entry.key, entry.move))) {
+                return false;
+            }
             entries.push_back(entry);
         }
-        if (input.peek() != std::char_traits<char>::eof()) return false;
+        if (input.peek() != std::char_traits<char>::eof()) {
+            return false;
+        }
         next = std::make_shared<const book_t>(std::move(entries));
     }
     std::lock_guard<std::mutex> lock(mutex);

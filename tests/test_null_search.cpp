@@ -3,7 +3,9 @@
 namespace {
 
 bool check(bool ok, const char * message) {
-    if (!ok) std::cerr << message << '\n';
+    if (!ok) {
+        std::cerr << message << '\n';
+    }
     return ok;
 }
 
@@ -102,7 +104,9 @@ bool test_cutoffs() {
                     "unexpected verification of reserved/failed null score");
                 ok &= check(!score::is_mate(result) && std::abs(result) < score::TABLEBASE - MAX_PLY,
                     "artificial decisive score escaped null pruning");
-                if (ordinary) ok &= check(result == 100 || (!verify && result == value), "ordinary null cutoff lost");
+                if (ordinary) {
+                    ok &= check(result == 100 || (!verify && result == value), "ordinary null cutoff lost");
+                }
                 ok &= check(search->verification_excluded, "verification leaves null pruning enabled");
                 ok &= check(!search->stop_all, "unexpected interruption");
                 ok &= restored(*search, *original);

@@ -748,22 +748,31 @@ std::conditional_t<threshold_test, bool, int>
 see_exchange(board_t & board, const move_t * move, int threshold) {
     const int initial_gain = move->castle ? 0 : board.max_gain(move);
     if (move->castle || move->piece == WKING || move->piece == BKING) {
-        if constexpr (threshold_test) return initial_gain >= threshold;
-        else return initial_gain;
+        if constexpr (threshold_test) {
+            return initial_gain >= threshold;
+        } else {
+            return initial_gain;
+        }
     }
     // The opponent can decline, so the initial gain is an upper bound.
-    if constexpr (threshold_test)
-        if (initial_gain < threshold) return false;
+    if constexpr (threshold_test) {
+        if (initial_gain < threshold) {
+            return false;
+        }
+    }
 
     const int target = move->tsq;
     const U64 target_bit = BIT(target);
     U64 occupied = (board.bb[ALLPIECES] & ~BIT(move->ssq)) | target_bit;
-    if (move->en_passant)
+    if (move->en_passant) {
         occupied &= ~BIT(target + (move->piece == WPAWN ? -8 : 8));
+    }
 
     int gain[32];
     int depth = 0;
-    if constexpr (!threshold_test) gain[0] = initial_gain;
+    if constexpr (!threshold_test) {
+        gain[0] = initial_gain;
+    }
     int occupant = move->promotion ? move->promotion : move->piece;
     bool side = move->piece > WKING; // Opponent of the initial mover.
     const int king_square[2] = {board.get_sq(BKING), board.get_sq(WKING)};
@@ -775,12 +784,20 @@ see_exchange(board_t & board, const move_t * move, int threshold) {
     while (depth < 31) {
         const bool promotion_rank = side ? target >= a8 : target <= h1;
         if constexpr (threshold_test) {
-            if (at_least && limit <= 0) return true;
-            if (!at_least && limit < 0) return false;
+            if (at_least && limit <= 0) {
+                return true;
+            }
+            if (!at_least && limit < 0) {
+                return false;
+            }
             const int upper = board::PVAL[occupant]
                 + (promotion_rank ? board::PVAL[WQUEEN] - board::PVAL[WPAWN] : 0);
-            if (at_least && upper < limit) return false;
-            if (!at_least && upper <= limit) return true;
+            if (at_least && upper < limit) {
+                return false;
+            }
+            if (!at_least && upper <= limit) {
+                return true;
+            }
         }
         // Original bitboards remain valid at every source still occupied.
         // The target occupant is tracked separately and must be masked out.
@@ -799,9 +816,13 @@ see_exchange(board_t & board, const move_t * move, int threshold) {
                     break;
                 }
             }
-            if (from_bit) break;
+            if (from_bit) {
+                break;
+            }
         }
-        if (!from_bit) break;
+        if (!from_bit) {
+            break;
+        }
         occupied &= ~from_bit;
         const bool promotes = piece == PAWN[side] && promotion_rank;
         const int next_occupant = promotes ? QUEEN[side] : piece;
@@ -810,10 +831,15 @@ see_exchange(board_t & board, const move_t * move, int threshold) {
         if constexpr (threshold_test) {
             // A legal king capture ends the exchange; otherwise declining
             // bounds W between zero and this actual capture's gain.
-            if (piece == KING[side])
+            if (piece == KING[side]) {
                 return at_least ? capture_gain >= limit : capture_gain <= limit;
-            if (at_least && capture_gain < limit) return false;
-            if (!at_least && capture_gain <= limit) return true;
+            }
+            if (at_least && capture_gain < limit) {
+                return false;
+            }
+            if (!at_least && capture_gain <= limit) {
+                return true;
+            }
             limit = capture_gain - limit;
             at_least = !at_least;
         } else {
@@ -821,7 +847,9 @@ see_exchange(board_t & board, const move_t * move, int threshold) {
         }
         ++depth;
         occupant = next_occupant;
-        if (piece == KING[side]) break;
+        if (piece == KING[side]) {
+            break;
+        }
         side = !side;
     }
     if constexpr (threshold_test) {

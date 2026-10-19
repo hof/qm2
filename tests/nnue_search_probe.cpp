@@ -8,38 +8,52 @@ namespace uci { bool valid_fen(const std::string & text); }
 
 int main(int argc, char ** argv) {
     try {
-        if (argc != 8 && argc != 9) throw std::runtime_error("network positions evaluator mode policy nodes depth [cutoffs] required");
+        if (argc != 8 && argc != 9) {
+            throw std::runtime_error("network positions evaluator mode policy nodes depth [cutoffs] required");
+        }
         auto number = [](const char * text) {
             U64 value;
             const std::string input(text);
             const auto result = std::from_chars(input.data(), input.data() + input.size(), value);
-            if (result.ec != std::errc() || result.ptr != input.data() + input.size())
+            if (result.ec != std::errc() || result.ptr != input.data() + input.size()) {
                 throw std::runtime_error("invalid integer argument");
+            }
             return value;
         };
         const U64 policy = number(argv[5]), nodes = number(argv[6]), depth = number(argv[7]);
-        if (policy > 63 || depth < 1 || depth > MAX_PLY) throw std::runtime_error("invalid policy/depth");
+        if (policy > 63 || depth < 1 || depth > MAX_PLY) {
+            throw std::runtime_error("invalid policy/depth");
+        }
         const std::string evaluator(argv[3]), mode(argv[4]);
         if (evaluator != "nnue"
-                || (mode != "off" && mode != "verify" && mode != "full" && mode != "replay" && mode != "fixed" && mode != "quiet"))
+                || (mode != "off" && mode != "verify" && mode != "full" && mode != "replay" && mode != "fixed" && mode != "quiet")) {
             throw std::runtime_error("invalid evaluator/mode");
-        if ((mode == "fixed" || mode == "quiet") && (policy || evaluator != "nnue"))
+        }
+        if ((mode == "fixed" || mode == "quiet") && (policy || evaluator != "nnue")) {
             throw std::runtime_error("matched horizon requires NNUE and policy zero");
+        }
         std::ifstream input(argv[2]);
-        if (!input) throw std::runtime_error("cannot read positions");
+        if (!input) {
+            throw std::runtime_error("cannot read positions");
+        }
         std::vector<std::pair<std::string, std::string>> positions;
         std::string line;
         while (std::getline(input, line)) {
             const auto split = line.find('\t');
-            if (split == std::string::npos || !uci::valid_fen(line.substr(split + 1)))
+            if (split == std::string::npos || !uci::valid_fen(line.substr(split + 1))) {
                 throw std::runtime_error("invalid position line");
+            }
             positions.emplace_back(line.substr(0, split), line.substr(split + 1));
         }
-        if (positions.empty()) throw std::runtime_error("empty positions");
+        if (positions.empty()) {
+            throw std::runtime_error("empty positions");
+        }
         std::ofstream cutoffs;
         if (argc == 9) {
             cutoffs.open(argv[8]);
-            if (!cutoffs) throw std::runtime_error("cannot write cutoffs");
+            if (!cutoffs) {
+                throw std::runtime_error("cannot write cutoffs");
+            }
         }
         magic::init();
         uci::silent(true);
@@ -48,7 +62,9 @@ int main(int argc, char ** argv) {
         options::get_option("DrawContempt")->value = 0;
         options::get_option("SyzygyProbeLimit")->value = 0;
         std::string error;
-        if (!nnue::set_path(argv[1], error)) throw std::runtime_error(error);
+        if (!nnue::set_path(argv[1], error)) {
+            throw std::runtime_error(error);
+        }
         for (const auto & [id, fen] : positions) {
             trans_table::clear();
             auto storage = std::make_unique<search_t>(fen.c_str());
@@ -64,16 +80,21 @@ int main(int argc, char ** argv) {
             search.nnue_audit.record_cutoffs = argc == 9;
             search.nnue_audit.fixed_horizon = mode == "fixed";
             search.nnue_audit.aligned_quiescence = mode == "quiet";
-            if (mode == "fixed" || mode == "quiet") search.aspiration_enabled = search.iid_enabled = false;
+            if (mode == "fixed" || mode == "quiet") {
+                search.aspiration_enabled = search.iid_enabled = false;
+            }
             search.game.max_nodes = nodes;
             search.game.max_depth = depth;
             if (mode == "replay") {
                 search.stack->in_check = search.brd.in_check();
                 search.result_score = search.pvs(-score::INF, score::INF, depth);
                 search.completed_depth = search.stop_all ? 0 : depth;
-            } else search.go();
-            if (search.brd.ply != 0 || search.brd.to_string() != fen)
+            } else {
+                search.go();
+            }
+            if (search.brd.ply != 0 || search.brd.to_string() != fen) {
                 throw std::runtime_error("search failed to restore root");
+            }
             const auto & counts = search.nnue_audit.counters;
             for (const auto & cutoff : search.nnue_audit.beta_cutoffs)
                 cutoffs << "{\"id\":" << std::quoted(id) << ",\"fen\":" << std::quoted(cutoff.fen)

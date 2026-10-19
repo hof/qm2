@@ -16,7 +16,9 @@ const node_t certificates[] = {
 std::map<std::string, const node_t *> oracle;
 
 bool check(bool ok, const char * message, const char * fen) {
-    if (!ok) std::cerr << message << ": " << fen << '\n';
+    if (!ok) {
+        std::cerr << message << ": " << fen << '\n';
+    }
     return ok;
 }
 
@@ -57,7 +59,9 @@ public:
             ++nodes;
             stack->pv_count = 0;
             stack->best_move.clear();
-            if (abort(false)) return alpha;
+            if (abort(false)) {
+                return alpha;
+            }
             auto found = oracle.find(fen);
             valid &= check(found != oracle.end() && found->second->ply == 2,
                 "uncertified leaf", fen.c_str());
@@ -78,8 +82,12 @@ bool restored(tree_search_t & search, search_t & original, const char * fen) {
 }
 
 bool valid_bound(int result, int value, int alpha, int beta) {
-    if (result <= alpha) return value <= result;
-    if (result >= beta) return value >= result;
+    if (result <= alpha) {
+        return value <= result;
+    }
+    if (result >= beta) {
+        return value >= result;
+    }
     return result == value;
 }
 
@@ -106,8 +114,11 @@ bool test_root(const node_t & node, int & probes, int & interruptions, int & res
         for (auto warm : windows) {
             for (auto window : windows) {
                 trans_table::clear();
-                if (cache == 2) trans_table::disable();
-                else trans_table::enable();
+                if (cache == 2) {
+                    trans_table::disable();
+                } else {
+                    trans_table::enable();
+                }
                 if (cache == 1) {
                     auto writer = std::make_unique<tree_search_t>(node.fen);
                     writer->pvs(warm.first, warm.second, 2);
@@ -131,7 +142,9 @@ bool test_root(const node_t & node, int & probes, int & interruptions, int & res
     }
     trans_table::enable();
     for (U64 budget : {1, 2, 5, 10}) {
-        if (!*node.legal) continue;
+        if (!*node.legal) {
+            continue;
+        }
         trans_table::clear();
         auto search = std::make_unique<tree_search_t>(node.fen);
         search->game.max_nodes = budget;
@@ -172,7 +185,9 @@ int main() {
     bool ok = validate_nodes();
     int probes = 0, interruptions = 0, researches = 0, cancelled_researches = 0;
     for (const auto & node : certificates) {
-        if (node.ply == 0) ok &= test_root(node, probes, interruptions, researches, cancelled_researches);
+        if (node.ply == 0) {
+            ok &= test_root(node, probes, interruptions, researches, cancelled_researches);
+        }
     }
     ok &= check(researches > 0 && interruptions > 0 && cancelled_researches > 0,
         "missing re-search/interruption coverage", "all fixtures");

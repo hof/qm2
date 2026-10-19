@@ -9,7 +9,9 @@ extern std::vector<U64> position_history;
 
 namespace {
 bool check(const char * message, bool success) {
-    if (!success) std::cerr << message << '\n';
+    if (!success) {
+        std::cerr << message << '\n';
+    }
     return success;
 }
 }

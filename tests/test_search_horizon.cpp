@@ -27,7 +27,9 @@ bool valid = true;
 int checked_nodes = 0, quiescent_nodes = 0;
 
 bool check(bool ok, const char * message, const char * fen) {
-    if (!ok) std::cerr << message << ": " << fen << '\n';
+    if (!ok) {
+        std::cerr << message << ": " << fen << '\n';
+    }
     return ok;
 }
 
@@ -51,10 +53,13 @@ int reference(search_t & search, int mode) {
     const auto fen = search.brd.to_string();
     auto found = oracle.find(fen);
     valid &= check(found != oracle.end(), "uncertified reference node", fen.c_str());
-    if (found == oracle.end()) return 0;
+    if (found == oracle.end()) {
+        return 0;
+    }
     const auto & node = *found->second;
-    if (node.terminal != score::INVALID)
+    if (node.terminal != score::INVALID) {
         return node.terminal == -score::MATE ? -score::MATE + search.brd.ply : node.terminal;
+    }
     valid &= check(search.stack->in_check == node.in_check, "reference check differs", node.fen);
     const int eval = node.in_check ? -score::INF : evaluate(&search);
     if (mode <= 0 && !node.in_check) {
@@ -87,8 +92,12 @@ bool restored(search_t & search, search_t & original, const char * fen) {
 }
 
 bool valid_bound(int result, int value, int alpha, int beta) {
-    if (result <= alpha) return value <= result;
-    if (result >= beta) return value >= result;
+    if (result <= alpha) {
+        return value <= result;
+    }
+    if (result >= beta) {
+        return value >= result;
+    }
     return result == value;
 }
 
@@ -130,14 +139,21 @@ bool test_root(const char * fen, int & probes, int & interrupted, int & exact_re
             {value - 1, value}, {value, value + 1}, {value - 17, value + 17}};
         for (bool selective : {false, true}) {
             for (bool direct : {false, true}) {
-                if (direct && mode > 0) continue;
-                if (!direct && mode < 0) continue; // PVS always enters qsearch at depth zero.
+                if (direct && mode > 0) {
+                    continue;
+                }
+                if (!direct && mode < 0) {
+                    continue; // PVS always enters qsearch at depth zero.
+                }
                 for (int cache = 0; cache < 3; ++cache) {
                     for (auto warm : windows) {
                         for (auto window : windows) {
                             trans_table::clear();
-                            if (cache == 2) trans_table::disable();
-                            else trans_table::enable();
+                            if (cache == 2) {
+                                trans_table::disable();
+                            } else {
+                                trans_table::enable();
+                            }
                             if (cache == 1) {
                                 auto writer = std::make_unique<search_t>(fen);
                                 prepare(*writer, selective);
@@ -196,7 +212,9 @@ bool test_root(const char * fen, int & probes, int & interrupted, int & exact_re
             prepare(*search, true);
             search->game.max_nodes = budget;
             run(*search, -score::INF, score::INF, mode, mode < 0);
-            if (!search->stop_all) continue;
+            if (!search->stop_all) {
+                continue;
+            }
             ++interrupted;
             ok &= check(search->nodes == budget, "horizon node budget overrun", fen);
             ok &= restored(*search, *original, fen);
@@ -242,7 +260,9 @@ bool test_histories(int & probes) {
                         prepare(*writer, true);
                         writer->pvs(-score::INF, score::INF, 1);
                     }
-                    if (cache == 2) trans_table::disable();
+                    if (cache == 2) {
+                        trans_table::disable();
+                    }
                     auto search = std::make_unique<search_t>(fixture.fen, nullptr, nullptr, history);
                     prepare(*search, true);
                     ok &= check(search->is_repetition() == fixture.repeated,
@@ -251,8 +271,9 @@ bool test_histories(int & probes) {
                     ok &= check(valid_bound(result, value, window.first, window.second),
                         "history horizon bound differs", fixture.fen);
                     if (mode == 1 && cache == 1 && !fixture.repeated
-                            && window.first == -score::INF && window.second == score::INF)
+                            && window.first == -score::INF && window.second == score::INF) {
                         ok &= check(search->nodes > 1, "history-incompatible exact TT reused", fixture.fen);
+                    }
                     ok &= restored(*search, *original, fixture.fen);
                     ++probes;
                 }
