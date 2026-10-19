@@ -263,6 +263,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     memset(_stack, 0, sizeof (_stack));
     memset(history, 0, sizeof (history));
     memset(countermoves, 0, sizeof(countermoves));
+    quiet_history = wild == 0 ? std::make_unique<quiet_history_t>() : nullptr;
     stack->eval_result = score::INVALID;
     stack->repetition_start = -static_cast<int>(_position_history.size());
     init_tt_history();
@@ -870,6 +871,37 @@ void search_t::update_history(move_t * move) {
     *record += (HISTORY_MAX - *record) / HISTORY_DIV;
     assert(*record > 0);
     assert(*record < 2 * HISTORY_MAX);
+}
+
+void search_t::take_quiet_history(search_t & previous) {
+    if (wild != 0 || previous.wild != 0 || !previous.quiet_history) {
+        return;
+    }
+    quiet_history = std::move(previous.quiet_history);
+    for (int piece = 0; piece <= BKING; ++piece) {
+        std::copy(std::begin(previous.countermoves[piece]),
+            std::end(previous.countermoves[piece]), std::begin(countermoves[piece]));
+    }
+}
+
+int search_t::quiet_score(const move_t & move) const {
+    const auto * previous = brd.ply > 0 ? &(stack - 1)->current_move : nullptr;
+    return quiet_history->score(brd.us(), move, previous, brd.stack->pawn_key);
+}
+
+void search_t::update_quiet_cutoff(move_t * move, int depth, int searched_moves) {
+    const auto * previous = brd.ply > 0 ? &(stack - 1)->current_move : nullptr;
+    // Retain the provisional depth-weighted gravity rule; no tuning sweep.
+    const int d = std::clamp(depth, 1, 8);
+    const int bonus = 32 * d * d;
+    for (int i = 0; i < searched_moves; ++i) {
+        const auto & failed = stack->searched[i];
+        if (!failed.capture && !failed.promotion && !failed.castle) {
+            quiet_history->update(brd.us(), failed, previous, brd.stack->pawn_key,
+                -bonus, move);
+        }
+    }
+    quiet_history->update(brd.us(), *move, previous, brd.stack->pawn_key, bonus);
 }
 
 /**
@@ -1535,20 +1567,13 @@ int search_t::pvs(int alpha, int beta, int depth) {
             if (score >= beta) {
                 trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
                 if (!move->capture && !move->promotion && !move->castle) {
-                    update_killers(move);
                     if (brd.ply > 0 && (stack - 1)->current_move.piece) {
                         const auto & previous = (stack - 1)->current_move;
                         countermoves[previous.piece][previous.tsq] = move->to_compact();
                     }
-                    update_history(move);
-                    // History is nonnegative; saturate penalties before the shift becomes invalid.
-                    const int history_shift = MIN(searched_moves, std::numeric_limits<int>::digits);
-                    for (int i = 0; i < searched_moves; i++) {
-                        move_t * m = &stack->searched[i];
-                        if (!m->capture && !m->promotion && !m->castle) {
-                            history[m->piece][m->tsq] >>= history_shift;
-                        }
-                    }
+                    update_quiet_cutoff(move, depth, searched_moves);
+                    // A returned move can alias killer[1]; update killers last.
+                    update_killers(move);
                 }
                 return score;
             }

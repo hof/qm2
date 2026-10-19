@@ -17,6 +17,7 @@ bool legality_contract() {
         search->stack->in_check = search->brd.in_check();
         const std::string original = search->brd.to_string();
         const U64 key = search->brd.stack->tt_key;
+        const U64 pawn_key = search->brd.stack->pawn_key;
         const U64 context = search->tt_context();
         std::set<int> seen;
         for (auto * candidate = move::first(search.get(), 1); candidate;
@@ -34,6 +35,21 @@ bool legality_contract() {
                 return false;
             }
             if (accepted) {
+                U64 expected_key = 0;
+                for (int piece : {WPAWN, BPAWN}) {
+                    U64 pawns = search->brd.bb[piece];
+                    while (pawns) {
+                        HASH_ADD_PIECE(expected_key, piece, pop(pawns));
+                    }
+                }
+                if (search->brd.stack->pawn_key != expected_key) {
+                    return false;
+                }
+                search->forward();
+                if (search->brd.stack->pawn_key != expected_key) {
+                    return false;
+                }
+                search->backward();
                 search->backward(candidate);
             } else {
                 ++rejected;
@@ -43,6 +59,7 @@ bool legality_contract() {
                 }
             }
             if (search->brd.to_string() != original || search->brd.stack->tt_key != key
+                    || search->brd.stack->pawn_key != pawn_key
                     || search->tt_context() != context || search->stack != search->root_stack) {
                 return false;
             }
@@ -77,7 +94,7 @@ bool staging_contract() {
     search->stack->tt_move.set(&search->brd, "d2c2");
     search->stack->killer[0].set(&search->brd, "d2e2");
     search->stack->killer[1].set(&search->brd, "d2f2");
-    search->history[WKING][g1] = 100;
+    search->quiet_history->main[WHITE][h1][g1] = 100;
     int previous_rank = -1;
     bool phases[6] = {};
     std::set<uint16_t> seen;

@@ -434,10 +434,10 @@ bool test_quiet_order() {
                 auto storage = std::make_unique<search_t>(fen);
                 auto & search = *storage;
                 search.stack->in_check = search.brd.in_check();
-                for (int piece = 1; piece <= BKING; ++piece) {
+                for (int from = 0; from < 64; ++from) {
                     for (int square = 0; square < 64; ++square) {
                         seed = seed * 1664525u + 1013904223u;
-                        search.history[piece][square] = pattern == 0 ? 0
+                        search.quiet_history->main[search.brd.us()][from][square] = pattern == 0 ? 0
                             : pattern == 1 ? 31 : (seed >> 16) % (pattern + 1);
                     }
                 }
@@ -453,7 +453,7 @@ bool test_quiet_order() {
                     }
                 }
                 std::vector<move_t> pending(quiets.first, quiets.last);
-                for (auto & move : pending) move.score = search.history[move.piece][move.tsq];
+                for (auto & move : pending) move.score = search.quiet_score(move);
                 std::vector<int> expected;
                 // Independent original selection: first maximum, then swap-remove.
                 while (!pending.empty()) {
@@ -483,7 +483,7 @@ bool test_quiet_order() {
                     for (int code : actual) {
                         move_t move;
                         move.set(code);
-                        const int value = search.history[move.piece][move.tsq];
+                        const int value = search.quiet_score(move);
                         ordered &= value <= previous_score;
                         previous_score = value;
                     }

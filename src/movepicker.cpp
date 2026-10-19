@@ -365,7 +365,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                     move::gen_quiet_moves(board, list);
                 }
                 for (auto * move = begin; move != list->last; ++move) {
-                    move->score = s->history[move->piece][move->tsq];
+                    move->score = s->quiet_score(*move);
                 }
                 list->stage = good_quiets;
                 break;

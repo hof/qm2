@@ -75,6 +75,7 @@ public:
     int fifty_count;
     bool wtm; //white to move
     bool legal_enpassant; //cached legality for repetition identity
+    U64 pawn_key; //colored-pawn structure, independent of side and rights
     U64 tt_key; //transposition table (hash) key
 
     void do_flip();

@@ -92,11 +92,17 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
     _control.ponder.store(_game.ponder);
     // Capture the position, limits, and search options before starting the worker.
     try {
+        std::unique_ptr<search_t> next_search;
         if (options::get_value("Wild") == 17) {
-            _search.reset(new w17_search_t(_root_fen.c_str(), &_game, &_control, _position_history));
+            next_search.reset(new w17_search_t(_root_fen.c_str(), &_game, &_control, _position_history));
         } else {
-            _search.reset(new search_t(_root_fen.c_str(), &_game, &_control, _position_history));
+            next_search.reset(new search_t(_root_fen.c_str(), &_game, &_control, _position_history));
+            if (_search && _search->wild == 0) {
+                // stop() joined the old worker before ownership transfer.
+                next_search->take_quiet_history(*_search);
+            }
         }
+        _search = std::move(next_search);
     } catch (const std::runtime_error & error) {
         uci::out(std::string("info string ERROR: ") + error.what());
         return false;
@@ -124,6 +130,7 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
  */
 void engine_t::new_game(std::string fen) {
     stop();
+    _search.reset();
     {
         std::lock_guard<std::mutex> lock(_result_mutex);
         _result = search_result_t();

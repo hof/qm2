@@ -74,6 +74,9 @@ void board_t::clear() {
 void board_t::add_piece(const int piece, const int sq, const bool hash = false) {
     if (hash) {
         HASH_ADD_PIECE(stack->tt_key, piece, sq);
+        if (piece == WPAWN || piece == BPAWN) {
+            HASH_ADD_PIECE(stack->pawn_key, piece, sq);
+        }
     }
     U64 bit = BIT(sq);
     bb[piece] ^= bit;
@@ -96,6 +99,9 @@ void board_t::remove_piece(const int piece, const int sq, const bool hash = fals
     matrix[sq] = EMPTY;
     if (hash) {
         HASH_REMOVE_PIECE(stack->tt_key, piece, sq);
+        if (piece == WPAWN || piece == BPAWN) {
+            HASH_REMOVE_PIECE(stack->pawn_key, piece, sq);
+        }
     }
 }
 
@@ -115,6 +121,9 @@ void board_t::move_piece(const int piece, const int ssq, int tsq, const bool has
     matrix[tsq] = piece;
     if (hash) {
         HASH_MOVE_PIECE(stack->tt_key, piece, ssq, tsq);
+        if (piece == WPAWN || piece == BPAWN) {
+            HASH_MOVE_PIECE(stack->pawn_key, piece, ssq, tsq);
+        }
     }
 }
 
@@ -1165,4 +1174,11 @@ void board_t::do_flip() {
         }
     }
     stack->do_flip();
+    stack->pawn_key = 0;
+    for (int piece : {WPAWN, BPAWN}) {
+        U64 pawns = bb[piece];
+        while (pawns) {
+            HASH_ADD_PIECE(stack->pawn_key, piece, pop(pawns));
+        }
+    }
 }

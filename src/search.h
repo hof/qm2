@@ -36,6 +36,7 @@
 #include <random>
 #include "search_control.h"
 #include "nnue.h"
+#include "quiet_history.h"
 #include "movepicker.h"
 #include "hashtable.h"
 #include "eval.h"
@@ -140,7 +141,8 @@ public:
     int attempted_depth;
     bool interrupted;
     result_source_t result_source;
-    int history[BKING + 1][64];
+    int history[BKING + 1][64]; //legacy royal-losers ordering
+    std::unique_ptr<quiet_history_t> quiet_history;
     uint16_t countermoves[BKING + 1][64];
     move_t ponder_move;
     std::string book_name;
@@ -196,6 +198,9 @@ public:
     void backward(move_t * move);
     bool try_forward(move_t * move, bool gives_check);
     void update_history(move_t * move);
+    int quiet_score(const move_t & move) const;
+    void take_quiet_history(search_t & previous);
+    void update_quiet_cutoff(move_t * move, int depth, int searched_moves);
     void update_killers(move_t * move);
     bool is_killer(move_t * const move);
     bool in_searched(move_t * move, int searched_moves);

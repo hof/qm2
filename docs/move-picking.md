@@ -31,3 +31,42 @@ promise a cutoff. Scores are cached when each batch is generated. Returned
 hint codes suppress duplicates without making generated king-safety tests.
 Countermoves are keyed by the previous colored piece and destination; no
 continuation/countermove context is used after a null move or at a cold root.
+
+Quiet scores sum three signed, bounded history entries:
+
+- Main: side, source square, destination square.
+- One-ply continuation: previous colored piece/destination and current colored
+  piece/destination. Root and null predecessors provide no continuation entry.
+- Pawn: an incremental colored-pawn hash modulo 512, then current colored
+  piece/destination. Collisions deliberately share heuristic scores.
+
+The worker owns approximately 2.2 MiB of 16-bit history entries. On a quiet
+cutoff, reward the winner and penalize previously searched ordinary quiets with
+bounded gravity. Keep the provisional bonus `32 * clamp(depth, 1, 8)^2` and
+bound 16384; these are not claimed tuned. Protect winner slots from aliasing
+penalties and update history/countermoves before mutating killer slots.
+The legacy piece/destination history remains only for royal-losers.
+
+After joining the previous standard worker, transfer table ownership and copy
+countermoves into its successor. Normal `position`/`go` requests retain learning;
+`ucinewgame` releases the old worker and starts cold. No mutable tables are
+shared between running workers. Per-entry gravity provides aging; no full-table
+per-search clearing or scaling is added. Strength remains unmeasured.
+
+The empty-tactical qsearch path returns the same fail-low bound as a loop
+that rejects all illegal candidates. Exact mate/stalemate scores take priority.
+A regression and before/after-legality paired searches cover this contract.
+
+Validation on 2026-10-19: 37 Debug and 37 Release checks, three focused
+ASan/UBSan checks, independent oracle comparisons for 4,348 positions and
+95,618 legal children, UCI history lifetime/reset checks, and 72 paired D7
+legality-placement signatures matching scores, best moves, full PVs and nodes.
+Leak detection was disabled for the sanitizer checks.
+
+A small cold diagnostic (12 reserved D7 roots, three alternating trials) found
+that the combined candidate used 22.8% more median process CPU and searched
+4.1% more nodes than the frozen original. Positive quiets before bad noisy
+moves searched 1.1% more nodes than late quiets with the same history code;
+their timing differences were small relative to trial variation. These are
+CPU-clock observations under a duty throttle, not unthrottled wall NPS or an
+Elo result. The refactor remains an experiment with no established strength gain.
