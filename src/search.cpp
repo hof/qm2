@@ -1659,7 +1659,9 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         if (in_check) {
             return -score::MATE + brd.ply;
         }
-        return depth == 0 || !has_legal_move(brd) ? draw_score() : eval;
+        // Match the normal fail-low path even when the picker is empty.
+        // Merely having an illegal tactical candidate must not change the bound.
+        return !has_legal_move(brd) ? draw_score() : std::max(alpha, eval);
     }
     if (eval > alpha && !in_check) {
         alpha = eval;

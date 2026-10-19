@@ -400,6 +400,22 @@ bool test_fifty_move_boundary() {
     return success;
 }
 
+bool test_empty_tactical_bounds() {
+    for (const char * fen : {"k3r3/8/8/8/8/3b4/4P3/4K3 w - - 0 1",
+            "k3r3/8/8/8/8/8/4P3/4K3 w - - 0 1"}) {
+        auto search = std::make_unique<search_t>(fen);
+        prepare_search(*search);
+        const int alpha = evaluate(search.get()) + 50;
+        const int actual = search->qsearch(alpha, alpha + 100, -1);
+        if (actual != alpha || !restored_position(*search, fen)) {
+            std::cerr << "empty tactical fail-low bound: expected " << alpha
+                << ", got " << actual << ": " << fen << '\n';
+            return false;
+        }
+    }
+    return true;
+}
+
 bool test_quiet_order() {
     const char * positions[] = {
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
@@ -490,6 +506,9 @@ bool test_quiet_order() {
 
 int main() {
     magic::init();
+    if (!test_empty_tactical_bounds()) {
+        return EXIT_FAILURE;
+    }
     // Terminal results are exact; heuristic evaluation is never the mate/draw oracle.
     const position_case_t cases[] = {
         {"black checkmated", "7k/6Q1/5K2/8/8/8/8/8 b - - 0 1", true, 0, -score::MATE},
