@@ -150,7 +150,7 @@ class search_lifecycle_tests(unittest.TestCase):
                 engine.wait_for_exit()
 
     def test_search_option_changes_stop_active_search(self):
-        for name in ("Aspiration", "IID"):
+        for name in ("Aspiration", "IID", "QsearchTT"):
             with self.subTest(option=name), running_engine() as engine:
                 engine.send("setoption name OwnBook value false")
                 engine.start_search()

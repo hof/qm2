@@ -63,14 +63,14 @@ int trans_table_t::unmake_score(int score, int ply) {
     return score;
 }
 
-void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int flags, U64 context, clock_range_t clocks) {
+void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int flags, U64 context, clock_range_t clocks, tt_mode_t mode) {
     assert(depth > 0);
     entry_t * best_entry = nullptr;
     entry_t * empty_entry = nullptr;
     int best_score = -score::INF;
     age %= 64;
     score = make_score(score, ply);
-    U64 value = encode(age, depth, score, move, flags, clocks);
+    U64 value = encode(age, depth, score, move, flags, clocks, mode);
     const int ix = index(key);
     for (int i = 0; i < BUCKETS; ++i) {
         entry_t & entry = table[ix + i];
@@ -90,8 +90,12 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
             const clock_range_t stored_clocks = decode_clocks(entry.value);
             const bool same_domain = entry.context == context
                 && stored_clocks.min == clocks.min && stored_clocks.max == clocks.max;
-            const bool replace_score = flags != 0 && (!decode_flag(entry.value)
-                || flags == score::EXACT || !same_domain
+            const auto stored_mode = decode_mode(entry.value);
+            const bool keep_main_score = decode_flag(entry.value)
+                && stored_mode == tt_mode_t::main_search && mode != tt_mode_t::main_search
+                && same_domain && age == decode_age(entry.value);
+            const bool replace_score = flags != 0 && !keep_main_score && (!decode_flag(entry.value)
+                || flags == score::EXACT || !same_domain || mode != stored_mode
                 || age != decode_age(entry.value) || depth >= stored_depth);
             if (replace_score) {
                 entry.context = context;
@@ -122,7 +126,7 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
     best_entry->key = value ^ key;
 }
 
-bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks) {
+bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode) {
     assert(depth >= 0);
     move = 0;
     if (enabled) {
@@ -137,7 +141,9 @@ bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & mov
                 flags = decode_flag(entry.value);
                 int entry_depth = decode_depth(entry.value);
                 const clock_range_t stored_clocks = decode_clocks(entry.value);
-                const bool usable = entry_depth >= depth && entry.context == context
+                const auto stored_mode = decode_mode(entry.value);
+                const bool compatible_mode = stored_mode == mode;
+                const bool usable = compatible_mode && entry_depth >= depth && entry.context == context
                     && stored_clocks.contains(clock);
                 if (usable && clocks) {
                     *clocks = stored_clocks;
@@ -153,12 +159,12 @@ namespace trans_table {
 
     trans_table_t _global_table(TABLE_SIZE);
 
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context, clock_range_t clocks) {
-        _global_table.store(key, age, ply, depth, score, move, flag, context, clocks);
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context, clock_range_t clocks, tt_mode_t mode) {
+        _global_table.store(key, age, ply, depth, score, move, flag, context, clocks, mode);
     }
 
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks) {
-        return _global_table.retrieve(key, ply, depth, score, move, flags, context, clock, clocks);
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode) {
+        return _global_table.retrieve(key, ply, depth, score, move, flags, context, clock, clocks, mode);
     }
 
     void clear() {

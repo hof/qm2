@@ -275,6 +275,25 @@ shallower scored entries. Packed ages wrap modulo 64. These policies share the
 existing storage between standard chess and royal losers without changing the
 score-compatibility rules or entry layout.
 
+Quiescence TT entries distinguish entry searches (which can include quiet
+checks) from deeper tactical searches. Both retain captures, promotions,
+castling and all legal check evasions. The mode uses the two spare packed bits;
+entries remain 24 bytes. Scores are reused only within the same mode: main
+results do not substitute for qsearch bounds, and neither qsearch mode satisfies
+a main-search probe or the other qsearch mode. Move hints cross modes after
+validation and filtering to the requested move domain. Valid current main entries retain priority over
+q writes in the same score domain; incompatible or aged domains may refresh.
+
+`QsearchTT` is a UCI checkbox, enabled by default and snapshotted by each standard
+worker. Disabled means no qsearch probes, move hints or stores; changing it
+stops the worker and clears cached results. Fixed and aligned diagnostic horizons
+disable it to retain their independent search contracts. Royal losers retains
+its existing search behavior. Reuse follows cancellation, ceiling, draw and
+tablebase handling and propagates clock constraints. Completed beta cutoffs
+store lower bounds, other nonterminal completions store upper bounds, and
+certified mate/stalemate results may be exact. Interrupted searches store no
+unfinished result. Qsearch clears stale PV/best-move state before probing.
+
 An exact TT return can shorten the searched PV because an entry stores a score
 and move rather than a complete continuation. Search clears the stale PV before
 reuse. UCI text may append TT move hints to a short searched prefix; those hints

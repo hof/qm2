@@ -46,6 +46,8 @@ struct clock_range_t {
     }
 };
 
+enum class tt_mode_t : uint8_t { main_search, quiescence_entry, quiescence_tactical };
+
 class trans_table_t {
 private:
 
@@ -67,17 +69,19 @@ private:
         return int((static_cast<__uint128_t>(hash_code) * cluster_count) >> 64) * BUCKETS;
     }
 
-    // Move 16, bound 2, score 16, depth 8, age 6, clock limits 7 each.
-    U64 encode(int age, int depth, int score, int move, int flag, clock_range_t clocks) {
+    // Move 16, bound 2, score 16, depth 8, age 6, clock limits 7 each, mode 2.
+    U64 encode(int age, int depth, int score, int move, int flag, clock_range_t clocks, tt_mode_t mode) {
         assert(age >= 0 && age <= 63);
         assert(depth > 0 && depth <= 255);
         assert(score < score::INF && score > -score::INF);
         assert(move >= 0 && move <= 65535);
         assert(flag >= 0 && flag <= 3);
         assert(clocks.min <= clocks.max && clocks.max <= 101);
+        assert(static_cast<unsigned>(mode) <= 2);
         return U64(move) | (U64(flag) << 16) | (U64(uint16_t(score)) << 18)
             | (U64(depth) << 34) | (U64(age) << 42)
-            | (U64(clocks.min) << 48) | (U64(clocks.max) << 55);
+            | (U64(clocks.min) << 48) | (U64(clocks.max) << 55)
+            | (U64(mode) << 62);
     }
 
     uint16_t decode_move(U64 value) {
@@ -104,6 +108,10 @@ private:
         return {uint8_t((value >> 48) & 127), uint8_t((value >> 55) & 127)};
     }
 
+    tt_mode_t decode_mode(U64 value) {
+        return static_cast<tt_mode_t>(value >> 62);
+    }
+
     int make_score(int score, int ply);
 
     int unmake_score(int score, int ply);
@@ -115,8 +123,8 @@ public:
     void set_size(int size_in_MB);
 
     // Moves use move_t::to_compact(); score validation retains both full keys.
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101});
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr);
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101}, tt_mode_t mode = tt_mode_t::main_search);
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search);
 
     ~trans_table_t() {
         delete [] table;
@@ -129,8 +137,8 @@ public:
 
 namespace trans_table {
     const int TABLE_SIZE = options::get_value("Hash");
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101});
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr);
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101}, tt_mode_t mode = tt_mode_t::main_search);
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search);
     void clear();
     void set_size(int size_in_MB);
     void enable();

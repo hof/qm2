@@ -212,6 +212,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     lmr_enabled = options::get_value("LMR");
     aspiration_enabled = options::get_value("Aspiration");
     iid_enabled = options::get_value("IID");
+    q_tt_enabled = wild == 0 && options::get_value("QsearchTT");
     iid_active = false;
     ffp_enabled = options::get_value("FutilityPruning");
     draw_contempt = options::get_value("DrawContempt");
@@ -233,6 +234,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
+        q_tt_enabled = false;
         beta_pruning = ffp_enabled = null_enabled = lmr_enabled = aspiration_enabled = iid_enabled = false;
         nnue_audit.q_delta = nnue_audit.q_see = false;
         null_enabled = horizon == 2 && options::get_value("NNUEAuditNullMove");
@@ -1706,6 +1708,9 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     nnue_audit.counters.max_q_ply = std::max(nnue_audit.counters.max_q_ply, uint64_t(brd.ply));
 #endif
     stack->tt_clocks = {0, 101};
+    stack->pv_count = 0;
+    stack->best_move.clear();
+    stack->tt_move.clear();
 
     assert(depth <= 0);
     assert(alpha < beta);
@@ -1750,23 +1755,57 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return tablebase_score;
     }
 
+    const bool in_check = stack->in_check;
+    const auto mode = depth == 0 ? tt_mode_t::quiescence_entry : tt_mode_t::quiescence_tactical;
+    const U64 key = brd.stack->tt_key;
+    const U64 context = q_tt_enabled ? tt_context() : 0;
+    stack->tt_key = key;
+    if (q_tt_enabled) {
+        int tt_score = 0, tt_move = 0, tt_flag = 0;
+        clock_range_t clocks;
+        const bool usable = trans_table::retrieve(key, brd.ply, 1, tt_score, tt_move,
+            tt_flag, context, brd.stack->fifty_count, &clocks, mode);
+        if (usable && alpha + 1 == beta && (tt_flag == score::EXACT
+                || (tt_flag == score::LOWERBOUND && tt_score >= beta)
+                || (tt_flag == score::UPPERBOUND && tt_score <= alpha))) {
+            stack->tt_clocks.include_child(clocks, 0);
+            return tt_score;
+        }
+        stack->tt_move.set_compact(&brd, tt_move);
+        const auto & hint = stack->tt_move;
+        if (hint.piece && (!brd.valid(&hint)
+                || !(in_check || hint.capture || hint.promotion || hint.castle
+                    || (depth == 0 && brd.gives_check(&hint))))) {
+            stack->tt_move.clear();
+        }
+    }
+    // Only completed results reach this helper. A q depth marker is never a
+    // main-search depth; the packed mode gates score reuse and replacement.
+    const auto finish = [&](int value, int flag) {
+        if (q_tt_enabled) {
+            trans_table::store(key, brd.root_ply, brd.ply, 1, value,
+                stack->best_move.to_compact(), flag, context, stack->tt_clocks, mode);
+        }
+        return value;
+    };
+
     //stand-pat: return if eval is already good enough
     const int eval = evaluate(this);
-    const bool in_check = stack->in_check;
     if (eval >= beta && !in_check) {
-        return has_legal_move(brd) ? eval : draw_score();
+        return has_legal_move(brd) ? finish(eval, score::LOWERBOUND)
+            : finish(draw_score(), score::EXACT);
     }
 
     //get first move; if there's none it's mate, stalemate, or there are no captures/promotions
-    stack->tt_move.clear();
     move_t * move = move::first(this, depth);
     if (!move) {
         if (in_check) {
-            return -score::MATE + brd.ply;
+            return finish(-score::MATE + brd.ply, score::EXACT);
         }
         // Match the normal fail-low path even when the picker is empty.
         // Merely having an illegal tactical candidate must not change the bound.
-        return !has_legal_move(brd) ? draw_score() : std::max(alpha, eval);
+        return !has_legal_move(brd) ? finish(draw_score(), score::EXACT)
+            : finish(std::max(alpha, eval), score::UPPERBOUND);
     }
     if (eval > alpha && !in_check) {
         alpha = eval;
@@ -1906,15 +1945,15 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         } else if (score > alpha) {
             stack->best_move.set(move);
             if (score >= beta) {
-                return score;
+                return finish(score, score::LOWERBOUND);
             }
             alpha = score;
         }
     } while ((move = move::next(this, depth)));
     if (searched_moves == 0 && (in_check || !has_legal_move(brd))) {
-        return in_check ? -score::MATE + brd.ply : draw_score();
+        return finish(in_check ? -score::MATE + brd.ply : draw_score(), score::EXACT);
     }
-    return alpha;
+    return finish(alpha, score::UPPERBOUND);
 }
 
 /**

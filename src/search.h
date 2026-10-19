@@ -155,6 +155,7 @@ public:
     bool lmr_enabled;
     bool aspiration_enabled;
     bool iid_enabled;
+    bool q_tt_enabled;
     bool iid_active;
     bool ffp_enabled;
 

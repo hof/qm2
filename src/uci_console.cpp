@@ -522,7 +522,7 @@ namespace uci {
                             return true;
                         }
                         if (candidate != opt->value
-                                && (name == "Aspiration" || name == "IID"
+                                && (name == "Aspiration" || name == "IID" || name == "QsearchTT"
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                                     || name == "NNUEAuditNullMove"
                                     || name == "NNUEAuditBetaPruning"
