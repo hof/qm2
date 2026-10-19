@@ -347,7 +347,8 @@ bool board_t::valid(const move_t * move) {
         return false;
     }
     if (move->en_passant) {
-        if (!pawn || move->promotion || move->castle
+        if (!pawn || move->promotion || move->castle || move->capture != PAWN[!us]
+                || !(BIT(tsq) & RANK[us][6])
                 || !(PAWN_CAPTURES[us][ssq] & BIT(tsq))) {
             return false;
         }
@@ -402,7 +403,9 @@ bool board_t::valid(const move_t * move) {
         case WKING:
             return KING_MOVES[ssq] & BIT(tsq);
         case BPAWN:
-            return captured || ssq - tsq == 8 || matrix[tsq + 8] == EMPTY;
+            return captured ? bool(PAWN_CAPTURES[BLACK][ssq] & BIT(tsq))
+                : ssq - tsq == 8 || (ssq >= a7 && ssq <= h7 && ssq - tsq == 16
+                    && matrix[ssq - 8] == EMPTY);
         case BKNIGHT:
             return KNIGHT_MOVES[ssq] & BIT(tsq);
         case BBISHOP:

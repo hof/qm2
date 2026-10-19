@@ -51,6 +51,27 @@ bool legality_contract() {
     return rejected > 0;
 }
 
+bool pawn_hint_geometry() {
+    for (bool us : {false, true}) {
+        board_t board;
+        board.init(us ? "4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1"
+            : "4k3/8/8/3p4/4P3/8/8/4K3 b - - 0 1");
+        move_t move;
+        for (const char * text : us ? std::initializer_list<const char *>{"e4e6", "e4f4"}
+                : std::initializer_list<const char *>{"d5d3", "d5e5"}) {
+            move.set(&board, text);
+            if (board.valid(&move)) {
+                return false;
+            }
+        }
+        move.set(&board, us ? "e4d5" : "d5e4");
+        if (!board.valid(&move)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool staging_contract() {
     auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
     search->stack->tt_move.set(&search->brd, "d2c2");
@@ -103,7 +124,7 @@ bool staging_contract() {
 
 int main() {
     magic::init();
-    if (!legality_contract() || !staging_contract()) {
+    if (!legality_contract() || !pawn_hint_geometry() || !staging_contract()) {
         std::cerr << "pseudo-legal picker / lazy legality contract failed\n";
         return EXIT_FAILURE;
     }
