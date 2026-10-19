@@ -2951,7 +2951,7 @@ all318bundle manifest hashes and both Windows launchers' legal depth3/five-piece
 root/clean-exit checks passed. Frozen HCE2, model, launchers and100ms overhead
 were preserved. Restart existing GUI engine processes to use the update.
 
-The unrestricted match is now RUNNING under
+The unrestricted timed pilot was started under
 `.context/baselines/2026-10-18/unrestricted-sf13/`:100games/50paired starts,
 same D8 endpoints/order/seed20261016,10+0.1seconds, Hash64,oneworker,100ms overhead
 and zero contempt on both sides. Both probe the complete shared five-piece set;
@@ -2978,7 +2978,806 @@ effects; its outcome cannot isolate a search feature's contribution or establish
 absolute Elo. The initial launch failed the runner's required standard-variant
 input label before any game; that format and the empty-option spelling were
 corrected with initial logs preserved. Production preflight passed and games
-have started. Final status/results remain pending in status.json/games.json.
+have started. The user then requested a native fixed-depth comparison before
+managed-time games. The timed pilot was stopped after16completed games
+(0wins/8draws/8losses for Maxima); all games/logs remain preserved and status.json
+records the interruption. This incomplete pilot is not a completed fixed-sample
+result. No continuation or replacement openings have been selected by outcome.
+
+The replacement completed under
+`.context/baselines/2026-10-18/production-depth-seven/`:100games/50pairs at requested
+D7 on exactly the controlled D7 starts/order/seed/model file. The user explicitly
+chose D7 as the cheaper diagnostic, instead of D8 or a proposed D16. There is no
+D16 run. Both use their native production search, including TT score cutoffs,
+reductions/extensions/pruning; no audit restrictions or matching search rules.
+opponent retains its default hybrid evaluation, Maxima production NNUE-only, so this
+compares joint native search/evaluation policies and does not isolate pruning.
+Hash64/oneworker/zero contempt and books/experience/ponder/tablebases off match
+the controlled D7 resource/terminal policy. Natural outcomes/claimable draws,
+600-new-ply safety bound, no score or TB adjudication. The600s response bound is
+an administrative limit, not thinking time. Requested D7 is nominal: native
+reductions/extensions differ; legal mate/terminal shortcuts are separately
+recorded rather than presented as full D7 searches. Not every deeper feature
+can activate at this horizon. Record per-move reported depth/seldepth/PV/nodes,
+source/result metadata and approximate total UCI nodes, followed by lightweight
+legal PGN/PV/result/identity checks; no feature accounting replay. Only after
+reviewing this comparison should managed-time testing resume.
+
+Production D7 completed76wins/21draws/3losses (86.5%). All9334legal plies/searches
+passed lightweight checks, with both engines reporting7throughout. Maxima's4687
+searches reported757799218nodes (median37943); opponent's4647reported8298094
+(median1380). Controlled D7 had Maxima479570393reported nodes (median47029)
+and controlled opponent 405742751reported nodes (median37461.5); normalized controlled opponent visits were
+408657742. Use native reported figures consistently when presenting all four.
+These separate matches reached different positions. Their totals do NOT compare
+the two Maxima builds on identical work or establish a TT effect. Nominal D7
+also does not imply equal effective horizons under native reductions/extensions.
+
+At the user's request to resolve that ambiguity, a bounded same-position test
+searched the exact50D7starting FENs at D7 with both Maxima binaries. Each root
+had fresh newgame/TT, empty prior history, identical Hash64/network and no
+books/experience/ponder/tablebases; execution order alternated. Both completed
+D7 and every returned move/PV was legal. Controlled Maxima visited4541362nodes;
+production3996518, a12.0%reduction. Production used fewer nodes on45/50roots and
+more on5; median paired production/control ratio0.8945;46/50best moves matched.
+Artifacts: `.context/baselines/2026-10-18/maxima-same-position-d7/` (protocol,
+per-root rows, identities and results). This answers the workload question for
+these starts, not strength or a causal TT-only attribution.
+
+The builds differ beyond TT score cutoffs. Both include production quiet-check
+SEE filtering, guarded capture SEE/delta, frontier/reverse futility, null move,
+one-ply LMR, IID and aspiration. Production enables TT score cutoffs; controlled
+turns those off. Controlled additionally extends eligible root checking moves,
+requires nonnegative SEE even for discovered-check extensions, and restricts qsearch
+castling to entry; native production does not extend at root, always permits
+its discovered-check extension, and allows qsearch castling below entry. The frozen
+control predates production's rule50 score damping and removal of classical
+metadata calculations (neither blends HCE into NNUE). These distinctions were
+not communicated clearly when the match totals were initially compared. No
+engine code changed during this clarification. User requests one step at a
+time; do not resume timed games or start further matches until this distinction
+and the same-position result are reviewed.
+
+The user then requested decisions one rule at a time before establishing the
+production baseline and resuming matches. TT score cutoffs must remain ON;
+rule50 damping stays and HCE-only calculations stay removed. Root-check
+extensions remain unchanged pending review. Correction to the earlier table:
+`board_t::gives_check()` returns2for an exposed/discovered check, not a count of
+checking pieces. The native unconditional extension branch concerns discovered
+checks, not double checks. Direct checks already require SEE. opponent itself allows
+qualifying root-check extensions and separately exempts discovered checks from
+the SEE requirement; this is an implementation example, not an industry mandate
+or proof of the appropriate policy for Maxima. See official sf_13 search.cpp.
+
+An isolated10-position D7 TT test used one private binary with only the existing
+TT score-cutoff return block toggled; TT probes/stores/move ordering remained
+unchanged. ON exactly reproduced production scores/PVs/depth/nodes and complete
+iteration signatures on every root. OFF visited820469nodes; ON754584 (-8.03%).
+ON used fewer nodes on9/10roots, more on1; all10best moves matched (one ponder
+move differed). Keep TT cutoffs ON. Artifacts: `tt-score-cutoff-only/` beside D8.
+
+Private single-rule probes next held TT cutoffs ON. Requiring SEE for discovered
+extensions saved28nodes from754584 (-0.0037%) on the same10roots:63discovered
+extension candidates included5negative-SEE candidates; all10scores/best moves
+matched. This is NOT a speed gain: the extra SEE calls cost work, and the private
+coverage probe deliberately evaluates SEE even in its baseline, so its timings
+cannot measure the net production cost. Current discovered-check policy stays
+unchanged while broader evidence is collected. On10roots with castling rights,
+entry-only qsearch castling used992860vs1088066nodes (-8.75%);9/10best moves and
+7/10scores matched. The changed best move had equal reported score; one other
+ponder move changed. These are node diagnostics, not strength verdicts.
+Artifacts: `selective-rule-probes/`. All baseline signatures exactly matched
+production; no installed engine/source policy was changed by these probes.
+
+At the user's request for variety, `search-rule-variety/` completed a fixed
+61-unique-position D7 diagnostic: all22filtered BK and22modern roots, ten endings
+(3rook/3minor/4queen), plus ten castling-rights roots with duplicates removed.
+BK03/09remain excluded and BK07uncertainty remains annotated. Expected targets
+are diagnostics, not mandatory correctness assertions. Each root compares
+production against the exact-equivalent private baseline, then toggles only one
+of TT cutoffs OFF, discovered-check SEE ON or qcastling entry-only ON, with fresh
+process/TT, Hash64, same62efnetwork, books/experience/ponder/TBoff. Record legal
+moves/PVs, completed D7, nodes/scores/bestmoves/target hits and actual rule
+coverage. No expensive replay or strength claim. Production stays unchanged;
+review full results before deciding remaining rules or starting another match.
+
+The61-root variety diagnostic passed: every private baseline exactly reproduced
+production's full score/PV/depth/node/iteration signature, all searches completed
+D7, all returned moves/PVs were legal and all frozen input hashes remained exact.
+Current production visited3444556nodes. Isolated alternatives were:
+
+| Single changed rule | Nodes | Change vs current | Same best move / score |
+| --- | --- | --- | --- |
+| TT score cutoffs OFF | 3828113 | +11.135% | 60/61 /56/61 |
+| Require SEE for discovered-check extensions | 3444789 | +0.0068% | 61/61 /61/61 |
+| Castling only at qsearch entry | 3345649 | -2.871% | 60/61 /58/61 |
+
+The unchanged baseline encountered629discovered extension candidates,55with
+negative SEE. Requiring SEE saved no total work here and adds SEE cost; retain
+the production unfiltered discovered-check extension rather than promote this
+candidate as an optimization. This does not prove its strength superiority.
+TT score cutoffs remain ON (about10.0%fewer nodes relative to OFF). All modes hit
+35/44diagnostic target moves, with the known target-label limits above. Entry-only
+castling is a separate candidate: it saved nodes primarily where castling was
+available; its one changed best move was tied at the reported score, but three
+scores changed. Node savings/unchanged target count are not a strength test.
+No production code or installed binary was changed; root extensions remain off,
+rule50 damping stays and HCE-only routines remain removed. No new match is
+scheduled while the user resolves remaining baseline rules one at a time.
+
+User decision after reviewing the variety test: retain native qsearch castling
+at entry and below; do not add SEE filtering to discovered-check extensions;
+retain TT score cutoffs ON. "SEE goes" refers only to the proposed discovered-
+check extension filter. Existing capture/quiet-check/direct-check SEE filters
+remain. These decisions match the current installed production behaviour, so
+no source or binary change is required. Rule50 damping remains enabled and HCE-
+only calculations remain removed. Root extensions remain at their current OFF
+setting; any further change requires its own explicit decision, not inference
+from the discarded filter proposal.
+
+The user next requested a source-backed review and isolated test of root-check
+extensions, including why checks should be extended rather than recaptures.
+CPW describes check and recapture extensions as neutral forcing-sequence/horizon
+heuristics, not evaluation bonuses. Check extensions may be applied when giving
+or evading check, and SEE/depth/node-type/budget guards differ between engines.
+Recapture extensions are documented, often restricted to the same square or PV
+nodes; qsearch already resolves many exchanges but does not make all main-search
+recapture extensions equivalent or redundant. There is no demonstrated universal
+root policy from this review.
+
+Maxima keeps root check extensions disabled. Giving-check and evasion-based
+extensions are different policies; a root guard alone does not establish an
+equivalent effective horizon. Algorithm reading and pinned source comparisons
+are retained in the private development records.
+
+The private root-check-extension probe uses the same61FENs at D7, changing only
+root application of the already-decided native extension rule (unfiltered
+discovered checks, SEE-filtered direct checks). All prior production decisions
+remain fixed. An initial probe read root_move_t::gives_check, which is boolean
+and loses discovered/direct classification. Its preliminary artifacts are
+preserved in `root-check-extension/initial-boolean-root-flag/`; the corrected
+probe recomputes brd.gives_check(move) before calling extension. Production root
+extensions are off, so this was a private probe issue, not a production change.
+Require exact production OFF signatures and completed-depth/legal-PV/input-hash
+checks before accepting corrected results. The corrected61-position D7test
+passed: OFF3444556nodes vsON3456132 (+0.3361%), same best move61/61, same score
+59/61, diagnostic target hits35/44in both. The root extension actually fired on
+9positions (67applications across iterative deepening/retries). OFF exactly
+reproduced every previously verified production baseline signature; legal
+moves/PVs/completed D7/input hashes passed. The discovered/direct classification
+correction changed no final result on this particular sample; its superseded
+preliminary run remains preserved. No playing-strength conclusion is established.
+
+The source review did not establish a universal root-extension policy or a
+measured benefit for Maxima. Root check extensions remain off in this baseline.
+
+The user explicitly decided to leave root-check extensions OFF and confirmed
+that these decisions establish the production "all-in" baseline. Settled policy:
+TT score cutoffs ON; root check extensions OFF; discovered-check extensions
+without a new SEE filter (other existing SEE filters retained); qsearch castling
+at entry and below; rule50 damping ON; HCE-only routines removed while active
+search metadata remains. All decisions match current production code, so no
+experimental source change or replacement binary is needed. Source identities
+remained exact during diagnostics. Current Release, installed Windows engine
+and the production D7 match binary are byte-identical SHA256f7a5d64d22e21c7d6fc3c4322dd3d6eeb2d80fbc6a5794fd5d7f4eb978af8a8f,
+built from engine-source commit65bac1a. Therefore the already audited production
+D7 result76W21D3L applies to this settled baseline. It does not establish equal-
+time strength against opponent. Receipt: `search-clean-d8/all-in-baseline.json`.
+No further match was started by recording this decision; no push is implied.
+
+Production same-position D5 node diagnostic (2026-10-18): on the exact same50
+starting FENs/order as the same-position D7 diagnostic, current all-in Maxima
+and unmodified optimized opponent searched requested depth5 with native policies.
+Fresh ucinewgame/TT per position, empty history, alternating engine order,
+one worker/Hash64, same62ef network file, books/experience/ponder/tablebases off.
+opponent retains default hybrid evaluation; Maxima is NNUE-only. All100 searches
+completed D5; independent hash, FEN/order, legal bestmove/PV and node-total checks
+passed. No engine source, options baseline or installed binary was changed.
+
+| Position group | Positions | Maxima nodes | opponent nodes | Maxima/opponent |
+| --- | --- | --- | --- | --- |
+| Middlegame | 25 | 444739 | 14807 | 30.04x |
+| Queen endings | 5 | 28595 | 3011 | 9.50x |
+| Minor-piece endings | 10 | 68011 | 7118 | 9.55x |
+| Rook endings | 10 | 46362 | 4771 | 9.72x |
+| Total | 50 | 587707 | 29707 | 19.78x |
+
+Maxima used more nodes at all50 roots; median paired ratio15.69x, same bestmove
+29/50. Native UCI totals use each engine's counting convention; nominal depth
+is not equal effective horizon. This is a node diagnostic, not a played match,
+strength test or isolated attribution of the gap to pruning. Artifacts:
+`.context/baselines/2026-10-18/production-same-position-d5/` protocol/results/audit.
+Source inspection against byte-exact official opponent search.cpp (3597f1942ec6)
+identifies candidates: adaptive depth/move-count/history-based LMR versus
+Maxima's fixed one-ply reduction, late quiet-move count pruning, continuation-
+history pruning, shallow main-search SEE pruning and broader futility rules.
+These rules exist in opponent; their contribution to this measured gap remains
+unisolated. opponent's no-TT-move PV depth reduction requires remaining depth>=6,
+so it cannot run in an unextended D5 tree (extensions may make it reachable).
+Next investigation should isolate one candidate at a time; no ablation or new
+match was started automatically.
+
+D5 causal node diagnostics (2026-10-18): private opponent copies at official revision
+3597f1942ec6 add process-fixed switches for individual pruning rules. Same50FENs,
+order, fresh ucinewgame/TT, empty history, Hash64/one worker/model/resource policy
+as the production D5 diagnostic. Two private builds with every switch OFF each
+reproduced all50 original opponent signatures exactly (nodes/depth/bestmove/score/PV).
+The source archive is unchanged except declared private search.cpp/evaluate.cpp
+patches. Production Maxima source, frozen executables/model/inputs are unchanged.
+All1350 D5 searches passed independent FEN/order, legal bestmove/full-PV, totals,
+summary and identity checks. These are node experiments, not throughput/strength
+measurements; build optimization/PGO differences are controlled by exact baseline
+node signatures, with no timing conclusion. No deployed search change follows.
+
+| Single opponent change from native default | Total nodes | Relative to default |
+| --- | --- | --- |
+| None (original-equivalent baseline) | 29707 | 1.000x |
+| Disable main quiet-move count pruning | 51994 | 1.750x |
+| Disable main capture/continuation-history pruning | 33505 | 1.128x |
+| Disable main SEE pruning | 36192 | 1.218x |
+| Disable parent-node futility | 31068 | 1.046x |
+| Disable reverse futility | 41244 | 1.388x |
+| Fixed one-ply LMR trial reduction | 30417 | 1.024x |
+| Zero LMR trial reduction | 39120 | 1.317x |
+| Disable null-move pruning | 34225 | 1.152x |
+| Disable ProbCut | 29707 | 1.000x |
+| Disable PV no-TT-move depth reduction | 29707 | 1.000x |
+| Disable qsearch TT score cutoffs | 28595 | 0.963x |
+| Disable qsearch move-count pruning | 31539 | 1.062x |
+| Disable qsearch delta/futility bounds | 31582 | 1.063x |
+| Disable qsearch generic SEE pruning | 38405 | 1.293x |
+| Disable qsearch continuation-history pruning | 29067 | 0.978x |
+| Remove HCE fallback (keep opponent NNUE scaling/tempo/rule50) | 28461 | 0.958x |
+
+Interactions are substantial, so individual effects cannot be added or multiplied
+as independent contributions. Removing the three additional main-search
+mechanisms (quiet-move count, capture/continuation-history and SEE pruning)
+together gives159103nodes (5.356x), with more nodes on all50 roots. Also removing
+parent and reverse futility gives289988 (9.762x), again more on all50. Compare
+unchanged Maxima587707: this experiment finds a large causal effect of opponent's
+main-search selectivity, but does not fully explain the remaining difference
+or isolate a unique fraction of the original gap attributable to each rule.
+Maxima already has narrower futility rules, so the five-rule bundle removes
+more than just mechanisms absent from Maxima. Other mechanisms remain native.
+
+With that five-rule bundle disabled, fixed-one LMR gives217606nodes; zero LMR
+gives464662; disabling null instead gives475100. With just the three additional
+rules disabled, fixed-one LMR gives128371 and disabling qsearch TT cutoffs instead
+gives156984. Five-rule bundle plus disabled qsearch TT cutoffs gives306827.
+Thus LMR effects depend on pruning context; neither fixed-one LMR nor missing
+qsearch TT score cutoffs explains the original20x gap by itself on this sample.
+Disabling a rule can reduce nodes by changing ordering/scores/other cutoffs.
+
+The hybrid control retains all original NNUE material/clock scaling, tempo,
+rule50 damping and clamping but always selects NNUE instead of HCE. It gives
+28461nodes alone; removing the five main-pruning mechanisms in that same NNUE-
+always mode gives292439 (10.275x relative to its own NNUE-always baseline).
+The large main-search pruning effect therefore persists without HCE fallback.
+This is not identical evaluation to Maxima, which has its own output scaling
+and rule50 policy. Unchanged totals for ProbCut/PV depth reduction are measured
+no-effects here, not proof of their general irrelevance or non-execution.
+
+The quiet-count switch disables only the move picker's quiet-skipping argument;
+its moveCountPruning hint remains available to LMR. History switch covers both
+capture-history and quiet continuation-history pruning in the main move loop.
+LMR switches change only trial depth, preserving reduction-block guards/history
+updates; fixed-one is not a complete port of Maxima's eligibility rules. Qsearch
+TT switch disables direct score cutoffs, retaining probes/eval reuse/order/stores.
+Qsearch delta switch retains move-count pruning; generic SEE is a separate switch.
+Default qsearch SEE removal alone is1.293x, not sufficient to explain the gap.
+Bestmoves/scores often change: main quiet-count OFF preserves26/50bestmoves and
+1/50scores; the five-rule bundle preserves31/50bestmoves and1/50scores. Node
+savings do not establish preserved strength or correctness. The first candidate
+for a separate Maxima experiment is conservative late quiet-move count pruning;
+no production implementation or match has been started as part of this study.
+Private diagnostic records retain sources, patches, protocols, per-root results,
+build/run logs and the independent combined audit.
+
+D1-D5 same-position follow-up (2026-10-18): the user requests finding the search
+work difference, accepting that selective search changes shallow scores/moves
+and may buy deeper search. No candidate strength match or production pruning
+change is requested in this study. Before the proposed detailed opponent/Maxima
+limit alignment was started, the user asked whether the gap already exists at
+D1 and suggested qsearch as a possible cause. Ran D1-D4 with the unchanged
+production binaries on exactly the same50FENs/order/settings/empty history/fresh
+TT as D5; only the requested depth changed.
+
+| Requested depth | Maxima nodes | opponent nodes | Maxima/opponent |
+| --- | --- | --- | --- |
+| D1 | 2656 | 2046 | 1.30x |
+| D2 | 16653 | 4155 | 4.01x |
+| D3 | 75753 | 7463 | 10.15x |
+| D4 | 227866 | 14427 | 15.79x |
+| D5 | 587707 | 29707 | 19.78x |
+
+D1 is only29.8% more aggregate work, median paired ratio1.182x (36rootsmore,
+11less,3equal). It is not a pure isolated qsearch comparison: root ordering,
+root check extensions, re-searches, evaluation and the positions reached differ.
+The much larger gap emerges above D1; the depth ladder alone does not attribute
+all of it, since qsearch tree size and frequency also change with main search.
+
+Reused the preserved private opponent diagnostic binary to isolate rules at the
+first large jump, D2. Native4155nodes; main quiet-count OFF7019; history OFF4273;
+main SEE OFF4530; parent futility OFF4175; reverse futility OFF5914; qsearch
+SEE OFF5848; direct qsearch TT score cutoffs OFF4103. Disabling the main quiet-
+count/history/SEE trio together gives8932; additionally disabling parent and
+reverse futility gives13453, compared with Maxima16653. These are the exact
+switch semantics documented above. No qsearch rule changes in the five-rule
+bundle, so the main-search pruning effect is already substantial at D2.
+It changes how many branches reach the leaves. Maxima itself retains narrower
+futility rules, so the bundle is diagnostic, not an exact Maxima policy replica.
+
+All900 new searches plus the100 existing D5 records passed independent identity,
+FEN/order/config, complete-depth, legal bestmove/full-PV and total checks.
+Private D2 baseline reproduces all50 original D2 opponent signatures exactly.
+No public source changes, new opponent build, candidate deployment or strength/time
+match. Receipts: `production-depth-ladder/results.json` and private diagnostic records
+under `.context/baselines/2026-10-18/`, plus per-depth production-same-position
+folders. The earlier proposed limit alignment remains unstarted, superseded by
+this shallow-depth diagnostic; future work remains focused on explaining the
+search difference rather than requiring altered candidates to keep exact scores.
+
+D1 leaf-work isolation (2026-10-18): user paused the move to D2 and requested
+settling the D1 cause first. Scope remains D1; accepts a modest30-50% work gap
+and prioritizes explaining larger gaps rather than preserving shallow candidate
+scores. Optional short5+.1(or shorter) clock match is authorized later, not
+required to identify D1 work; no timed match was started during this study.
+
+Private counters in otherwise unchanged Maxima and official opponent reproduced
+all100 original D1 signatures exactly (nodes/depth/bestmove/score/fullPV) on the
+same50FENs, fresh TT/history, one worker/Hash64 and existing evaluation settings.
+Worker-owned thread_local counters measure qsearch calls, entries from main
+search, recursive qsearch moves, root re-searches and extension/main work.
+
+| D1 work across50 positions | Maxima | opponent |
+| --- | --- | --- |
+| Native reported nodes | 2656 | 2046 |
+| Actual qsearch calls, including repeated calls | 2656 | 2144 |
+| Entries into qsearch from main/root search | 1441 | 1473 |
+| Recursive moves inside qsearch | 1215 | 671 |
+| Of those, evasions | 261 | 215 |
+| Of those, non-evasion quiet checks | 38 | 76 |
+| Of those, non-evasion captures/promotions | 916 | 380 |
+| Root moves tried | 1338 | 1338 |
+| Root re-searches | 103 | 109 |
+| Nonroot positive-depth main-search calls | 0 | 15 |
+| Checking-root-move extensions applied | 0 | 11 |
+
+All50 starting FENs have no castling rights, so no qsearch castling contaminates
+this decomposition. Maxima enters qsearch32 fewer times but recursively searches
+544more moves: +536 non-evasion captures/promotions,+46evasions,-38quiet checks.
+This yields512more actual qsearch calls. It is extra continuation work rather
+than more initial qsearch entries or more quiet checks. Native UCI counting
+conventions differ: actual qsearch calls differ23.9%, versus29.8% native reported
+nodes; opponent's qsearch call count must not be equated to its native node count.
+D1 here still includes root policy/order/evaluation differences and opponent check-
+extended main work, rather than being identical qsearch input trees.
+
+Isolated opponent D1 qsearch switches using the already validated private binary:
+native2046; generic SEE OFF3221; move-count OFF2098; delta/futility OFF2108;
+continuation-history OFF2046; direct TT score cutoffs OFF2041; HCE fallback OFF
+(with native NNUE scale/tempo/rule50)2022. Move-count+SEE OFF3350; move-count+
+delta+SEE OFF4078. Broad SEE is therefore a concrete large contributor in opponent,
+whereas move-count/delta independently are only~3% here; interactions remain.
+
+Direct private Maxima diagnostic leaves all existing qsearch rules in place,
+adding an optional earlier SEE filter only for non-evasion captures, excluding
+promotions and decisive negative evals. Two independent switches cover
+nonchecking captures (ignoring the original endgame/material/advanced-pawn
+eligibility restrictions) and checking captures (normally exempt). Default OFF
+reproduces all50 original Maxima signatures exactly. Results:
+
+| Private Maxima D1 diagnostic | Nodes | Same bestmove as Maxima default |
+| --- | --- | --- |
+| Unchanged capture SEE eligibility | 2656 | 50/50 |
+| Broader SEE on nonchecking captures only | 2403 | 50/50 |
+| SEE on checking captures only | 2464 | 49/50 |
+| Both additional capture SEE filters | 2243 | 49/50 |
+
+The two filters together remove413nodes (15.55% of Maxima's total), narrowing
+the native node ratio from1.298 to1.096 against unchanged opponent. They explain a
+substantial part of D1's excess via Maxima's more protective SEE eligibility;
+this is a diagnostic, not a complete opponent qsearch port. Evasions, quiet checks,
+promotions, existing delta/SEE and ordering remain governed by Maxima's rules.
+The nonchecking probe removes several guard conditions together, so it does not
+identify a unique independent contribution for each endgame/material/pawn guard.
+No production candidate or installed binary was changed. Altered shallow
+scores/moves are observations, not an equality requirement on experimental rules.
+
+All750 new D1 searches passed independent legal PV/depth/total/identity checks,
+including200 exact original baseline signatures and q_calls=q_entries+q_moves
+per root. Unmodified public source guards pass. Private diagnostic Maxima search
+object was compiled with its counter build's flags and placed in a copied archive;
+original source/archive/binary inputs remain unchanged. Artifacts:
+`.context/baselines/2026-10-18/d1-leaf-work/` counters, sources, patches, build/run
+logs and combined audit; sibling private diagnostic records and `d1-maxima-see/` preserve
+all individual/private-candidate results and build commands. No new D2 work was
+started after the user's D1-only correction.
+
+D1 residual follow-up (2026-10-18): the user explicitly rejects dismissing the
+remaining~10% reported-node gap. Replayed unchanged original opponent counters and
+the broader-capture-SEE Maxima diagnostic, requiring all100 saved signatures
+exactly. Filtered Maxima has2243qsearch calls,1442entries,801recursiveqmoves,
+176evasions,38quietchecks,104root re-searches and zero nonroot main calls.
+opponent remains2144qsearch calls plus15nonroot main calls,109root re-searches.
+Both try1338root moves across50roots; root-call totals50each are omitted from
+both comparable totals. Maxima therefore has2243comparable visits versus opponent
+2159:84extra(+3.89%). Of197extra native reported nodes (2243-2046),113are the
+net counting-convention difference; opponent increments its native nodes in
+Position::do_move rather than every re-entry into search. Do not interpret the
+previous9.6% reported-node ratio as9.6% additional search calls. This does not
+measure the relative execution cost of calls or erase per-position differences.
+
+The residual is not uniform: comparable visits by group are Maxima/opponent middlegame
+1284/1068, minor endings419/429, rook endings325/348, queen endings215/314.
+Three middlegame roots with large differences (07,11,22) were traced in private
+copies. All6 full trace signatures match recorded filtered-Max/original-SF
+results. Logged qsearch FEN/windows/evals, candidate SEE decisions, searched
+moves and opponent count/SEE pruning. Traces show opponent rejects concrete bishop-for-
+knight captures that Maxima accepts on identical boards: Bxf6 (b2f6) in07,
+Bxf6 (d4f6) in11, Bxd4 (e3d4) in22. Source confirms Maxima's SEE uses equal325
+bishop/knight values; opponent Position::see_ge uses PieceValue[MG], bishop825 and
+knight781, making simple defended bishop-for-knight exchanges slightly losing.
+These are exchange material values, separate from neural position evaluation.
+opponent's qsearch move-count rule also rejects nonlosing captures Maxima searches,
+e.g. e2c4 and b3c4 in the traced07 lines. Traces demonstrate rules and matching
+positions, not an additive attribution of every residual visit.
+
+A further private Maxima control keeps the two broader capture-SEE switches
+ON and changes only their bishop-captures-knight threshold from0 to1 when a
+third flag is ON. This rejects previously SEE-neutral BxN captures without
+changing global piece values, neural evaluation or other move types. It is a
+proxy to isolate the equal-minor-value tie, not full opponent SEE/value equivalence.
+Default-OFF again matches all50 broader-SEE signatures exactly. D1 result:
+2243->2016nodes (-227/-10.12%), against unchanged opponent's2046reported nodes.
+Worst traced roots07/11/22 reduce119/87/84->63/44/45 respectively. Bestmove and
+score each match49/50broader-SEE roots; equal shallow scores are not an
+acceptance requirement on the experimental rule.
+
+This removes the remaining aggregate reported-node excess in this diagnostic,
+but does not make the trees equivalent: against native opponent,28roots still use
+more nodes,18less,4equal (median paired ratio1.027); against comparable opponent
+visits,20roots use more. Root order, evaluation policy, extension policy and
+other qsearch rules still differ. The tie result demonstrates another material
+source of search work; it does not identify a unique exhaustive causal split or
+validate a production piece-value/SEE change. Original production remains2656
+D1nodes: all capture-SEE/tie modifications are private diagnostics, not deployed.
+
+All206 new searches passed independent D1/identity/legal-PV/counter/total checks,
+including156 exact prior signatures (100counter replays,6traces,50tie-OFF).
+Public source and installed/frozen engine inputs are unchanged. Sources, patches,
+trace events and build/run commands are preserved in
+`.context/baselines/2026-10-18/d1-residual/` and `d1-minor-tie/`; combined receipt
+`d1-residual/audit.json`. No D2 or timed match was started in this follow-up.
+
+Deferred timed-test queue from D1 (user confirmed2026-10-18): preserve current
+production as the comparison baseline. Separately test broader SEE eligibility
+for nonchecking captures, SEE filtering of checking captures, then the
+bishop/knight SEE-value distinction (including interactions only after isolated
+results). The current threshold-one BxN probe is a diagnostic, not the proposed
+final piece-value implementation. Qsearch move-count pruning is also a recorded
+follow-up idea. Evaluate completed depth, actual time/node throughput and paired
+game outcomes under common clocks; shallow score/move equality is not required
+for experimental pruning rules. Short5+.1or cheaper matched clocks are authorized
+when a timed test is useful; no timed test is started by adding this queue.
+User now explicitly resumes D2-only diagnosis of the larger first-main-ply gap;
+do not proceed to D3 or promote a D1 candidate as part of that investigation.
+
+D2-only resumed diagnosis (2026-10-18): after recording the D1 ideas in the
+future timed-test queue, the user explicitly requested the next depth because
+the native node ratio grows from1.298atD1 to4.008atD2. Kept production unchanged,
+the same50positions/order/model/settings/fresh TT/empty history and requested D2.
+Reused private counters to distinguish frontier entry frequency from the D1
+capture-continuation rules; the D1 diagnostics remain experimental controls.
+
+| D2 profile | Native reported nodes | Nonroot main calls | Qsearch entries | Qsearch calls | Comparable visits |
+| --- | --- | --- | --- | --- | --- |
+| Native opponent | 4155 | 1416 | 1848 | 2942 | 4358 |
+| Native Maxima | 16653 | 1414 | 7081 | 15239 | 16653 |
+| Maxima broader capture SEE | 14196 | 1413 | 6985 | 12783 | 14196 |
+| Maxima broader capture SEE + minor tie control | 12755 | 1406 | 6925 | 11349 | 12755 |
+
+All totals include iterative deepening through D2;100root calls/2676root moves
+occur in every profile. Comparable visits count nonroot positive-depth main
+calls plus qsearch calls. opponent has203more comparable visits than its native
+reported move count. The native gap is3.821x comparable visits rather than4.008x
+reported nodes. Native main-call totals are almost equal; the much larger
+frontier-entry difference (7081vs1848) shows more branches entering qsearch,
+in addition to more continuations per entry. Applying the D1 capture controls
+lowers qsearch work but leaves6925entries and a2.927x comparable-visit ratio.
+These are diagnostic controls, not perfectly matched evaluation/order/horizons.
+
+Reused prior isolated opponent D2 rules and added a same-binary two-rule control.
+Native4155; main quiet-count OFF7019 (+68.9%); reverse futility OFF5914 (+42.3%);
+both OFF10052 (+141.9%). These are interventions within opponent with native qsearch
+unchanged, not an additive fraction of Maxima's excess. Prior main history OFF
+4273, main SEE OFF4530 and parent futility OFF4175 still record other effects;
+the prior five-main-rule OFF bundle13453 remains a broader diagnostic than the
+rules absent from Maxima. No such bundle is treated as an exact Maxima replica.
+
+A new private opponent source control isolates reverse-futility margin shape:
+original margin234*(depth-improving) in internal units; improving atdepth1 can
+make it zero. Maxima's native margin is100cp*depth at remaining depths1..3.
+The control uses208*depth internal units (100UCIcp*depth) while preserving all
+other opponent reverse-futility eligibility, evaluation and search rules. This is
+margin-only alignment, not a complete Maxima policy port. A second control
+uses234*depth (removes only the improving discount). All private default-OFF
+signatures reproduce the original D2 opponent results exactly.
+
+| opponent D2 reverse-futility/quiet-count control | Nodes | RFP tests | RFP cutoffs |
+| --- | --- | --- | --- |
+| Native-equivalent | 4155 | 1289 | 1166 |
+| Fixed100cp margin per ply | 5175 | 1297 | 780 |
+| Remove improving margin discount | 5281 | 1297 | 738 |
+| Quiet-count OFF + fixed100cp margin | 9349 | 1401 | 430 |
+
+Every recorded reverse-futility test/cutoff here is at one remaining ply.
+Native1090tests/1074cutoffs have improving=true;199tests/92cutoffs have it false.
+The fixed100cp control raises nodes24.55% while reducing actual cutoffs386;
+removing the improving discount raises nodes27.10%. Because the tree changes,
+these are measured totals rather than paired identical-position cutoff counts.
+The two strongest identified D2 contributors are therefore opponent's quiet-move
+count pruning and its more aggressive improving-dependent frontier cutoff.
+Other pruning, evaluation, ordering, check extension and D1 qsearch differences
+remain; this study does not claim exhaustive attribution or a measured depth/
+strength gain from changing Maxima. No candidate is deployed or promoted.
+
+All500 new searches passed independent FEN/order/depth/legal-full-PV/hash/total/
+counter checks, including200 exact original signatures. Public source guards
+pass; original private/production sources/binaries/models remain unchanged.
+Artifacts: `.context/baselines/2026-10-18/d2-cause/` (combinedaudit),
+`d2-sf-pair/`, `d2-rfp-margin/` (private source patch/build commands/per-root
+counters). No D3 or timed game was started. The D1 future timed-test queue is
+recorded separately above; D2 findings are diagnostic inputs to later choices.
+
+Timed-test opponent and D3 scope (user steering2026-10-18): record D2 quiet-move
+count pruning and reverse-futility margin/improving policy as later timed-game
+candidates, alongside the D1 SEE ideas. First timed comparisons should be frozen
+production Maxima versus a single-change private Maxima candidate, with paired
+openings/colors and common clock/resources. This targets marginal improvements;
+opponent remains an external reference. The user expects opponent to be too strong for
+a useful initial comparison, but no completed unrestricted match here proves
+opponent would win every game. No timed match, candidate code or deployment is
+requested by this note; the user now asks which ideas come into scope at D3.
+
+D3 source inspection identifies root LMR as the first new eligibility difference:
+opponent's shared root/interior search permits reduced trial searches when remaining
+depth>=3 and moveCount>1+2*rootNode, subject to its additional capture/history/
+PV adjustments. Thus later root moves (after the first3) can become reduction
+candidates at nominal D3. Eligibility is not proof of a positive actual reduction;
+that must be measured. opponent's adaptive reduction can be clamped back to full depth.
+Maxima's separate pvs_root applies no LMR. Its interior reduction() requires
+remaining depth>=3, searched_moves>=3 and a nondangerous move, then returns1.
+With production root check extensions OFF, ordinary nominalD3 starts children
+at remaining2; interior check extensions add at most1 while making a move, so
+remaining depth cannot grow above2. Therefore Maxima's interior LMR cannot run
+in this standard D3 setting. Do not describe both engines as actually applying
+LMR at D3 just because their interior threshold is3. The D3 idea for later
+experiments is selective root LMR with a full-depth re-search on a promising
+reduced result; eligibility/actual use/node effect remain to measure.
+
+Existing D2 rules also become relevant at two remaining plies: quiet-count
+thresholds and reverse/forward futility now affect another main-search level.
+These are extensions of already identified policies, not newly activated
+algorithms. Maxima and opponent aspiration first begin at nominal iteration4;
+Maxima IID needs nonroot remaining depth4; opponent ProbCut requires remaining>4
+at non-PV nodes and singular extensions remaining>=7. They are not ordinary
+new D3 mechanisms, though extensions can make remaining-depth thresholds
+reachable earlier than nominal-depth labels suggest in later experiments.
+No new D3 searches were run for this source-only scope review. Existing D3
+same-position totals remain75753Maxima/7463 opponent , a joint-policy observation
+rather than an attribution to root LMR. Next D3 diagnostic should first measure
+actual root LMR use/effect, then keep earlier pruning-policy effects separate.
+
+Active time-control baseline and later feature audit (2026-10-18): the user asks
+first for unchanged Maxima versus full unmodified opponent at managed time, then
+single-change Maxima-versus-frozen-Maxima timed tests, keeping demonstrated
+improvements and periodically retesting against opponent. The first external score
+target is40%; it is an objective for future tests, not a current measured score
+or guarantee. Prioritizes this baseline before new D3 experiments/self-play.
+Prepared/started fixed20games10pairs5+.1, one worker/Hash64,100ms overhead each,
+shared full5piece Syzygy, no books/experience/ponder, contempt0. Ten starts are
+stratified5middlegame/2minor/2rook/1queen, reused diagnostic positions, seed20261018,
+colors swapped. Same unchanged Maxima f7a5d64 and official opponent fd2a5fa binaries,
+shared62efweights; opponent default hybrid/Maxima NNUE-only; all native search rules.
+Prior user-agreed800cp/6consecutive exact-score plies aftermove20 adjudication,
+natural/claimable draws otherwise,600newply cap. Retain all failures/forfeits;
+fixed sample regardless interim results. Small reused sample is not an absolute
+Elo or causal feature test. Folder private diagnostic records.
+Private runner copy adds telemetry only (completed/attempted/interrupted Maxima
+fields and latest exact-score PV depth for opponent); no public runner or engine
+changes. opponent proxy is explicitly not an internal completed-depth counter.
+All engine/model/TB/private-runner hashes frozen. D3 private SF counter build
+completed before games; no further builds/benchmarks run concurrently.
+
+Feature catalogue status: D1/D2 have measured interventions. D3 source review
+and a built private root/interior LMR counter probe exist, but D3 measurements
+are deferred until after this timed baseline. Higher-depth entries below are
+source-based leads, not measured gains or a completed exhaustive activation audit.
+The user initially caps the first catalogue atD7; D8+ are future entries only.
+Ordinary nominal thresholds below assume no extensions; check extensions may
+make remaining-depth gates reachable earlier, and TT/PV/material guards may
+prevent activation even when a depth threshold is met.
+
+| Ordinary nominal iteration | Source-based lead for later controlled/timed tests |
+| --- | --- |
+| D3 | opponent root LMR eligibility, positive trial reductions/re-search cost to measure; Maxima root remains full depth. Earlier pruning acts at remaining2. |
+| D4 | Maxima interior LMR becomes eligible at remaining3; adaptive/history-based reductions versus fixed-one. Both engines already start aspiration at iteration4, so window/retry tuning is a separate idea, not a missing Maxima feature. |
+| D5 | Maxima PV/no-TT-move IID becomes eligible in ordinary nonroot remaining4; test ordering benefit versus helper-search cost. |
+| D6 | opponent capture ProbCut becomes eligible in ordinary non-PV remaining5; capture confirmation versus additional search cost. |
+| D7 | opponent PV/no-TT-move depth reduction at nonroot remaining6; Maxima endgame null verification at remaining6. Candidate policy/gating tests, not assertions of useful activation. |
+| D8 (future) | opponent nonroot singular extension/associated multicut logic needs remaining>=7, lower-bound TT data and other guards. |
+| Higher (future) | Wider-depth LMR/pruning interactions, low-ply history updates at remaining>12; opponent null verification normally at remaining>=14, with a decisive-beta exception. |
+
+opponent's PV no-TT-move reduction condition itself lacks an explicit root exclusion,
+but its root ttMove comes from the current root PV move, so the missing-move gate
+ordinarily fails at root. Do not call nominalD6 guaranteed activation of that
+rule. Existing Maxima check/root/castling/TT decisions remain settled; this list
+is not authorization to reopen them or replace the model. No fixed depth alone
+proves every feature runs. Actual counters, then one-change Maxima-versus-Maxima
+managed-clock tests, are required before claiming a benefit.
+
+Completed timed opponent baseline and D3 measurements (2026-10-18): the unchanged
+5+.1/Hash64/one-worker/shared-five-piece-TB match finished all20games/10pairs.
+Maxima1W5D14L=17.5%; zero engine errors, time forfeits or unfinished games.
+Audited1759legalplies:15win adjudications,3insufficient-material draws,
+1threefold,1stalemate. Engine/model/TB/options/openings/colors/clock/node and
+adjudication evidence passed. Small reused diagnostic sample, not an Elo
+estimate or reliable point-strength boundary. Native reported nodes were
+159438029Maxima/211601011 opponent  across880/879searches. The conservative10-pair
+95% Hoeffding interval is0..60.45%, so do not interpret17.5% as a precise strength
+estimate or statistical proof of a particular40% gap.
+
+Depths with at least10pieces (562Maxima/561 opponent searches): authoritative Maxima
+completed-depth median9, mean8.918, p10/p90=7/11, range4..17; opponent latest exact-
+score PV depth proxy median17, mean17.537, p10/p90=15/21, range12..32. These are
+nominal depths under different selective searches, not equivalent horizons.
+Maxima completed>=7 on523/562such searches. Across all positions,75Maxima
+searches had depth0/direct returns and are separated from positive-depth means;
+positive-depth median9/18Maxima/opponent. See the private depth-summary.json for all
+piece-count groups and sources. An initial audit assumed a nonexistent top-level
+hash_mb report field and failed before game validation; corrected to the frozen
+protocol field while retaining every per-engine Hash64 assertion. Initial audit
+code/log preserved; no games rerun. Final status/audit/depth summaries passed.
+
+D3 opponent root-LMR hypothesis was then measured in a private counter/flag build.
+Default mode reproduced all50 original opponent nodes/depth/bestmove/score/PV
+signatures exactly. Across50D3searches,1168root LMR-block trials produced894
+positive reductions (897total plies subtracted),274full-depth trials and10LMR
+full-depth re-searches;48/50positions had positive root reductions. Interior
+LMR had12trials/9positive reductions/1re-search, due extension context. Same-
+binary trial-depth controls preserve block gates/history updates:
+
+| D3 opponent control | Nodes | Versus native |
+| --- | --- | --- |
+| Native-equivalent | 7463 | baseline |
+| Root trial reductions disabled | 8302 | +11.24% |
+| Interior trial reductions disabled | 7482 | +0.255% |
+| Both disabled | 8320 | +11.48% |
+
+Root-OFF increased nodes on30roots, unchanged20, fewer0;43/50bestmoves and44/50
+scores match. Root LMR saves10.106% relative to its disabled control, not11.24%
+(the latter is the increase on disabling). These are node effects in opponent,
+not a measured Maxima speed/strength gain. All200D3searches passed legal-PV,
+depth/identity/totals/counter checks with50exact baseline comparisons;
+`.context/baselines/2026-10-18/d3-lmr/audit.json`. Maxima source still has no root
+LMR and cannot reach its interior LMR threshold in ordinary D3 with root check
+extensions OFF. Root LMR is now a measured lead for later Maxima timed tests.
+
+D4-D7 investigation completed before candidate strength games (user request):
+private Maxima normal-policy audit build exposes existing counters with expensive
+live-reference NNUE checks disabled; public engine remains unchanged. Added only
+a null-verification counter. Private opponent counter/flag copy measures existing
+root/interior LMR, aspiration, ProbCut, PV/no-TT depth reduction, singular/multicut
+and null verification. Every default probe reproduces native production results
+exactly at each depth; no instrumented throughput claim. Same50FENs, order,
+fresh TT/empty history, shared62efmodel, Hash64,one worker,noTBbookexperienceponder.
+Counts below are cumulative iterative-deepening searches through the requested
+nominal depth, not only that final iteration.
+
+| Requested depth | Native Maxima nodes | Native opponent nodes | Maxima positive LMR trials | Maxima IID calls | Maxima null-verification calls |
+| --- | --- | --- | --- | --- | --- |
+| D4 | 227866 | 14427 | 2698 | 0 | 0 |
+| D5 | 587707 | 29707 | 31830 | 0 | 0 |
+| D6 | 1727978 | 53796 | 80615 | 0 | 0 |
+| D7 | 3996518 | 100401 | 239160 | 0 | 13 |
+
+Maxima LMR-OFF totals292205/1005358/3495353/10233239, respectively+28.235%,
++71.064%,+102.280%,+156.054%: preserve this useful existing optimization.
+Aspiration-OFF totals224522/585678/1736869/4080398 (-1.468%,-0.345%,+0.515%,
++2.099%). Native aspiration attempts56/109/159/209 over50/100/150/200narrow-window
+searches; byD7only5fail-lows/4fail-highs. IID candidates and actual calls were
+zero throughout this sample despite source eligibility from remaining4; skipped
+its OFF runs rather than reporting a guessed benefit. This is absence of use on
+these50cold roots, not proof IID is universally unreachable or irrelevant to
+actual games/deeper searches. D7 NullVerify-OFF3996505 removes only13nodes here;
+no recommendation to discard the endgame protection follows.
+
+| opponent actual use through requested depth | D4 | D5 | D6 | D7 |
+| --- | --- | --- | --- | --- |
+| Positive root LMR trials | 2584 | 5122 | 7638 | 10200 |
+| Positive interior LMR trials | 230 | 1734 | 5100 | 14542 |
+| Aspiration retries (fail-low + fail-high) | 84 | 187 | 291 | 418 |
+| ProbCut tests / cutoffs | 0/0 | 0/0 | 71/61 | 371/223 |
+| PV/no-TT depth reductions | 0 | 0 | 0 | 7 |
+| Singular tests / extensions / multicuts | 0/0/0 | 0/0/0 | 0/0/0 | 31/28/2 |
+| Null verifications | 0 | 0 | 0 | 0 |
+
+ProbCut cutoffs include its TT-only fast return:61cuts with9captures/8regular
+confirmation searches byD6;223cuts with62captures/56regular searches byD7.
+Singular activity at requestedD7 confirms that ordinary nominalD8 eligibility
+estimates are not sufficient when extensions reach the remaining-depth gate.
+The intended first-pass D7 catalogue therefore includes this measured activity;
+D8+ remains deferred, not assumed to introduce all these mechanisms for the
+first time. A zero actual-use counter skips only that intervention on that
+sample; it is explicitly recorded rather than represented as a positive test.
+
+Selected opponent single-switch node changes (all modes/roots retained privately):
+
+| opponent switch | D4 | D5 | D6 | D7 |
+| --- | --- | --- | --- | --- |
+| Root LMR OFF | +15.894% | +20.322% | +21.516% | +16.032% |
+| Interior LMR OFF | +4.845% | +6.059% | +5.802% | +26.507% |
+| All eligible LMR trial depths fixed to one-ply reduction | -3.084% | +2.390% | -4.067% | -2.409% |
+| Aspiration narrow windows OFF | -0.166% | -4.514% | -1.060% | -0.053% |
+| ProbCut OFF | inactive | inactive | -0.522% | -0.693% |
+| PV/no-TT depth reduction OFF | inactive | inactive | inactive | +2.327% |
+| Singular/multicut bundle OFF | inactive | inactive | inactive | -2.799% |
+
+The fixed-one LMR control preserves eligibility block/history updates but forces
+reductions even where native PV/history adjustments would choose full depth;
+it is not a complete Maxima LMR port or isolated proof of a better reduction
+formula. Disabling ProbCut gives slightly fewer nodes here despite actual cuts;
+do not infer a speed gain from its cutoff count. Singular extensions normally
+add work for selective depth, so their OFF node saving is not strength evidence.
+Some standard mechanisms have opposing or small net effects in this sample;
+none is adopted simply because opponent has it.
+
+Aspiration retry-depth follow-up isolates an additional implementation difference
+starting at iteration4. opponent subtracts failedHighCnt from root retry depth;
+Maxima retries at the full requested iteration depth. A private switch removes
+only that subtraction, retaining narrow windows, dynamic contempt, failedHighCnt
+for other adjustments and searchAgainCounter. Native mode matches all200
+original D4-D7 opponent signatures. Measured results:
+
+| Requested depth | Native nodes | Full fail-high retry-depth nodes | Increase | Native reduced retries | Total plies subtracted | Maximum single retry drop |
+| --- | --- | --- | --- | --- | --- | --- |
+| D4 | 14427 | 16634 | +15.298% | 38 | 51 | 3 |
+| D5 | 29707 | 31272 | +5.268% | 77 | 111 | 4 |
+| D6 | 53796 | 59080 | +9.822% | 120 | 182 | 4 |
+| D7 | 100401 | 108017 | +7.586% | 174 | 265 | 4 |
+
+Every counted native reduced retry corresponds to a fail-high; the full-depth
+control records zero retry-depth reductions on these fixed-depth searches.
+Disabling whole aspiration windows and disabling only retry depth subtraction
+are distinct interventions, with different effects. opponent's narrow initial window
+is17internal units (~8.17UCIcp) versus Maxima's50cp, and Maxima records only4
+fail-highs byD7 versus174 opponent . The imported retry policy's saving in the opponent therefore
+cannot be assumed for Maxima; window policy and retry-depth interaction must be
+measured in its own candidates. Root nominal depth is not an identical horizon
+when these retry-depth/LMR/extension policies differ.
+
+D4-D7 matrix audit passed2250searches,400exact native/probe comparisons and250
+additional prior baseline comparisons; retry-depth follow-up passed400searches
+and200exact native comparisons. All legal full-PVs/depths/input/source hashes,
+node totals/counter invariants passed. Public source and installed baseline
+remain unchanged. Artifacts:
+`.context/baselines/2026-10-18/depth-four-seven/` and `aspiration-retry-depth/`,
+with independent audit.json receipts, sources/patches, build commands and per-root
+results. First-pass measured catalogue is now complete throughD7 on this sample;
+it is not an exhaustive all-position/all-feature audit or evidence of gains yet.
+
+Recorded later timed-game priorities: late quiet-move count pruning and reverse-
+futility margin/improving policy (large D2 effects); root LMR (D3 measured); D1
+capture-SEE eligibility/minor-value distinctions; aspiration window/retry-depth
+interaction; selective PV depth reductions. Adaptive interior LMR is a separate
+candidate while preserving the existing useful reductions. ProbCut/singular
+ideas remain lower-priority strength experiments, not demonstrated node-saving
+ports. IID tuning is deferred until actual use is observed. First timed opponent
+remains frozen Maxima, one change at a time, with paired colors and fresh test
+openings; only supported changes are kept, then periodically compare against
+opponent toward the user's40% external-score target. No candidate engine or feature
+strength match was started during this D4-D7 investigation.
 
 ## 6. Testing and performance
 
@@ -3999,3 +4798,480 @@ guidance. Output must remain readable when redirected; any styling is limited to
 terminals and respects `NO_COLOR`: the crown is gold, separators cyan, and titles
 bold. Native UCI streams remain free of banners and styling. Detailed examples
 for every data command remain a planned documentation improvement.
+
+#### First isolated timed-strength candidate: frontier quiet-move pruning
+
+A private candidate in `.context/baselines/2026-10-18/lmp-frontier/` adds
+one rule only. At remaining depth exactly one, non-PV nodes outside check
+may skip a later non-dangerous quiet move after four legal moves have actually
+been searched. Both window endpoints must be below the decisive-score range,
+the best searched score must be above the negative decisive threshold, and
+existing endgame metadata must be false. Existing dangerous-move classification
+protects captures, checks, promotions, castling and advanced passed pawns.
+Existing score-based futility, SEE, LMR, extensions and evaluation are unchanged.
+The four-move threshold was fixed before collecting candidate results.
+
+The experiment starts with correctness and node diagnostics: candidate OFF must
+exactly reproduce frozen production scores, moves, PVs and node counts across
+the 50 diagnostic roots at D1–D7. Separate enabled-rule guard checks verify its
+move protections and state restoration. These reused roots are diagnostic data,
+not a fresh strength sample. Disabled mode uses the private startup environment
+`MAXIMA_TEST_NO_FRONTIER_LMP=1`; no public UCI option is added.
+
+Node savings alone do not establish faster execution or stronger play. A timed
+protocol must be frozen separately before any paired candidate-versus-baseline
+games. Production and the Windows bundle remain unchanged during this screen.
+
+The first node screen completed 1,050 searches. Candidate OFF exactly reproduced
+all 350 frozen comparisons (50 roots at each D1–D7). An independent audit checked
+legal PVs, completed requested depths, input identities and that `src/search.cpp`
+is the only changed engine source. Candidate ON results:
+
+| Depth | Frozen nodes | Candidate nodes | Change | Changed best moves / 50 |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 2,656 | 2,656 | +0.00% | 0 |
+| 2 | 16,653 | 18,077 | +8.55% | 0 |
+| 3 | 75,753 | 49,694 | -34.40% | 13 |
+| 4 | 227,866 | 216,961 | -4.79% | 9 |
+| 5 | 587,707 | 430,249 | -26.79% | 15 |
+| 6 | 1,727,978 | 1,397,165 | -19.14% | 13 |
+| 7 | 3,996,518 | 3,211,491 | -19.64% | 15 |
+
+At D7, 39 roots used fewer nodes, nine used more and two were unchanged. The
+median per-root candidate/baseline node ratio was 0.8165; the worst increase was
+1.7945. This is selective search with changed results, not a tree-preserving
+implementation speedup. The D2 increase and per-position regressions are retained.
+
+Release and Debug each passed 33 existing enabled-candidate checks, including
+search and NNUE lifecycle checks. Three existing tests (`test_search_history`,
+`test_search_tree`, `test_search_selectivity`) intentionally require isolated or
+exhaustive child contracts; each passed with the new pruning rule disabled.
+Their initial enabled-rule failures are preserved in the private logs and are
+not counted as enabled passes. A separate enabled-rule test passed 60 probes,
+skipping 167 eligible quiet moves while covering all five protected categories,
+PV/depth/window/best-score guards and board/hash/search-state restoration in
+both builds. Its first Debug invocation lacked the network environment property;
+regenerating the private build configuration fixed the harness, without changing
+the engine or rule. That failed invocation is also retained.
+
+The next screen is predeclared in `lmp-frontier/timed-screen/protocol.json`:
+20 games / ten fresh paired eight-move openings, 5+0.1, Hash 64, one worker,
+100 ms overhead each, identical network and full five-piece tablebases. All
+other search settings remain native; books, experience and pondering are off.
+The fixed sample runs to completion regardless of interim score. It is a screen,
+not a sufficient strength-confirmation or deployment gate. Both engines retain
+authoritative completed-depth telemetry, with direct tablebase returns separated.
+
+The fixed timed screen completed all 20 games: **5 wins, 12 draws, 3 losses
+(55%)** for the candidate. All ten opening pairs, 2,712 legal plies (including
+320 prescribed opening plies), input identities, configurations and outcomes
+passed audit. There were no engine failures, illegal moves, time forfeits or
+unfinished games. Terminations were ten threefold repetitions, eight agreement
+win adjudications, one fifty-move draw and one insufficient-material draw.
+The conservative opening-pair Hoeffding 95% score interval is 12.05–97.95%;
+this small screen does **not** establish an improvement or non-inferiority.
+
+Both engines had median completed depth 8 in positions with at least ten pieces.
+Raw mean depths include cheap ceiling-depth iterations: one candidate sample and
+five baseline samples reported depth 128 using only 128–6,287 nodes. These are
+retained in the raw telemetry and explicitly separated in `paired-depths.json`.
+For positive completed depths below that ceiling in positions with at least ten
+pieces, means were 7.9115 (836 candidate searches) and 7.8523 (833 baseline
+searches). Those samples come from different game positions and do not establish
+a depth advantage. At the ten matched starting roots, mean completed depths were
+7.4 and 7.2 respectively, with identical initial clocks but independently chosen
+per-move thinking times; that small sample also proves no depth advantage.
+
+Reported node totals were 145,666,883 candidate and 157,691,725 baseline across
+their different game trajectories. Neither these totals nor the fixed-depth node
+savings establish an NPS improvement. Protocol and analysis-script identities
+were rechecked after the match. Installed, frozen and public Release binaries
+still share the original `f7a5d64d…` identity. No candidate was promoted or shipped.
+The next decision requires a separately predeclared larger paired confirmation
+of this exact rule; do not combine another search change with it or tune the
+threshold using these screening outcomes.
+
+The user selected a practical improvement gate rather than merely preserving
+strength: independent paired SPRT **H0 = 0, H1 = +5 logistic Elo**, nominal
+alpha = beta = 0.05, at **10+0.1**, capped at 1,000 fresh opening pairs / 2,000
+games. This is recorded before play in `lmp-frontier/confirmation/protocol.json`.
+A positive model-based SPRT decision supports improvement against zero; it does
+not certify a minimum +5 Elo gain. Equal or inconclusive results do not qualify
+for adoption. A stricter +5-versus-+10 comparison was discussed but never run.
+The original pilot is not pooled into confirmation. The exact candidate binary,
+four-searched-move threshold, baseline, network, resources, adjudication and all
+other search rules remain unchanged. Confirming games run with twice the pilot's
+initial clock; the increment remains 0.1 seconds. No new engine build is involved.
+
+The fresh sample excludes all earlier reserved opening/corpus/position endpoints,
+including the pilot. Protocol, analysis scripts, binaries, network, copied runner
+and shared tablebase identities are pinned. Automatic final audits check legal
+replay, matching configurations, adjudications, whole-pair statistical stopping
+and that no earlier pair already crossed a boundary. Source changes or time
+forfeits prevent promotion pending investigation. SPRT tests passed six checks
+with one optional integration check skipped; no statistics implementation changed.
+
+For scheduling only, the pilot's pentanomial counts `[1, 1, 4, 3, 1]` produce an
+LLR of 0.042461 after ten pairs for 0/+5. Scaling those same proportions to the
+upper boundary 2.944439 suggests about 694 pairs / 1,388 games. Pilot search wall
+time averaged 17.94 seconds per game at 5+0.1. Allowing roughly ten additional
+seconds per game for the longer initial clocks suggests approximately 10–12 hours.
+This is a fragile planning extrapolation from twenty games and assumes the same
+55% score and paired outcome pattern; it is not a confidence interval, stopping
+rule or promised completion time. The test may stop sooner or reach the cap
+inconclusively. Confirmation was started with the frozen 0/+5 protocol; production
+remains unchanged pending completion and review.
+
+#### Pragmatic feature-screening workflow and runtime limit
+
+The user stopped the long 10+0.1 confirmation before a decision. Its original
+protocol, raw outputs and incomplete report are preserved in `lmp-frontier/confirmation/`
+and the verified archive `lmp-frontier/archives/confirmation-10plus01-stopped-2026-10-18.tar.gz`.
+The archive manifest verifies 45 members. There were 67 recorded games: 16 wins,
+35 draws and 16 losses for the candidate, including 33 complete opening pairs
+and one unpaired game. The run is marked `stopped_by_user`, not completed or
+accepted. The unrecorded interrupted game remains unscored. These data are not
+pooled into the new screen, and no hypothesis is accepted from this interruption.
+
+For future feature work, start with lean, pragmatic sanity screens to identify
+likely useful changes before spending hours on a small-Elo statistical gate.
+Keep one change per candidate, paired colours, frozen inputs and settings, and
+report all outcomes, actual depths and runtime. A screening score is a direction
+for further work, not proof of a small gain. Estimate the time before starting
+an expensive run. **Eight hours is the user's maximum runtime for a long test**;
+long confirmation runs are intended for overnight use, not the default first step.
+
+The replacement screen is fixed at **100 games / 50 unplayed paired openings,
+5+0.1**, unchanged candidate and baseline binaries, shared network and five-piece
+tablebases, one worker, Hash 64 and 100 ms overhead each. Books, experience and
+pondering remain off. Its protocol and scripts were frozen before play in
+`lmp-frontier/sanity-5plus01/`. Starts are sampled without replacement from the
+unused independent reserve, excluding all 34 opening endpoints with recorded
+long-run games. The original pilot is also disjoint. There is no score-dependent
+stopping; explicit user interruption or a hard eight-hour total wall limit
+leaves an incomplete screen. The driver terminates its active process group on
+interruption or deadline, preserving already recorded results. The expected
+runtime from the pilot is roughly 30–45 minutes, not a promised deadline.
+
+D7 is useful coverage for this frontier pruning and many established search
+mechanisms, but nominal depth is not evidence that every feature fired. Earlier
+D4–D7 diagnostics, for example, recorded zero actual IID calls in this corpus.
+The short screen records authoritative completed depths for both engines and
+reports the fraction reaching D7+ in positions with at least ten pieces, keeping
+direct depth-zero tablebase returns and cheap depth-128 ceiling samples separate.
+Source-level and guard-test evidence establish that the candidate rule can run;
+reaching D7 alone does not establish exhaustive search-feature coverage.
+Production remains frozen while this pragmatic screen runs.
+
+The replacement 5+0.1 sanity screen completed all 100 games / 50 pairs and passed
+its game/configuration/identity/adjudication audits: **28 wins, 48 draws, 24 losses
+(52%)** for the candidate, with no errors, time forfeits or unfinished games.
+There were 13,674 legal plies including 1,600 prescribed opening plies. The
+conservative fixed-sample opening-pair Hoeffding 95% score interval is
+32.79–71.21%; the small positive raw score is not an established playing gain.
+
+For positions with at least ten pieces and positive completed depth below the
+128 ceiling, candidate and baseline both had median depth **8**. Candidate
+reached D7+ on 3,841/4,180 searches (91.89%); baseline on 3,830/4,178 (91.67%).
+Means were 8.4294 and 8.4064 respectively, across different game trajectories.
+At the 50 identical starting roots, mean completed depths were 7.70 and 7.72
+(medians 8 each), with equal initial clocks but engine-selected per-move thinking
+times. There is no demonstrated depth advantage. Direct depth-zero returns and
+ceiling-depth samples are kept separate. The descriptive ceiling-node range in
+the inherited `coverage.json` limits sentence was pilot-specific; the corrected
+range for this screen is recorded in `coverage-note.json` without rewriting any
+frozen script or raw game data.
+
+This passes the pragmatic reliability/depth sanity screen, but neither proves
+non-inferiority nor a small strength gain. Retain the candidate privately as
+unconfirmed; do not promote it based on 52% or node savings alone. Production
+remains unchanged. The long confirmation stays stopped and archived, and no
+further match was automatically started.
+
+#### Current two-stage screening protocol
+
+| Stage | Pure SPRT (logistic Elo) | Alpha / beta | Clock | Hash per engine |
+| --- | --- | --- | --- | --- |
+| 1: screen candidates | 0 / +10 | 0.10 / 0.10 | 5+0.05 | 32 MB |
+| 2: later verification | 0 / +5 | 0.05 / 0.05 | 10+0.1 | 64 MB for now |
+
+Both stages use one search worker per engine. Future parallel verification means
+independent simultaneous games; this is not implemented by the current serial
+runner and does not imply engine search threading. Stage 2 must not start
+automatically. The user's planning ranges of 150-400 and 1,500-3,000 games are
+not guaranteed stopping counts.
+
+Stage 1 uses pure SPRT only: no hybrid/custom confidence-bound stop and no
+100-game stopping condition. Whole-pair likelihood boundary crossing stops play;
+the eight-hour hard wall limit or finite opening-input exhaustion without a
+decision means inconclusive. H0 rejects the candidate for this screening round,
+with code/results archived, not proof of regression. H1 shortlists a candidate,
+not a certified minimum +10 gain or automatic production adoption.
+
+The user requested retrying ORIGINAL depth-1 quiet pruning first. The initial
+UHO/pure-SPRT retry used the old Hash64 setting, then was stopped for the user's
+Hash32 preference after 22 games: 3 wins, 5 draws, 14 losses, LLR -0.321116
+against boundaries about +/-2.197225, no decision. All results and protocol are
+retained in lmp-frontier/stage1-sprt/ and its verified archive
+archives/stage1-sprt-hash64-stopped-2026-10-18.tar.gz. No data were pooled or
+discarded based on score. The Hash32 restart in stage1-sprt-hash32/ uses the
+remaining 9,989 unplayed endpoints from the UHO reserve, excluding all eleven
+previously played endpoints, and the exact original LMP candidate binary.
+All other resources, model, native search settings and baseline remain pinned.
+
+The interrupted UHO retry used UHO_Lichess_4852_v1.epd, not a verified book named
+UHO_LMR_2022. The selected book and its provenance were checked directly.
+Official download SHA384 matches books.json SRI; provenance is retained in
+rfp-improving/book-provenance.json. This 2,632,036-position FEN book supplies
+original clocks and either side to move, without reconstructed pre-FEN history
+or a quiet-only filter. Analysis and audits handle generic FEN roots accordingly.
+
+The new improving-RFP candidate remains PARKED, with no match games. Its only
+change is remaining-depth-1 margin100cp->0 for improving cached same-side eval,
+comparing two plies earlier, falling back four plies, unavailable history=true
+as opponent, equality=false. All existing guards and other depths remain unchanged.
+Disabled mode exactly matched 350 frozen D1-D7 comparisons; independent audit
+passed all 1,050 completed legal searches. Enabled nodes at D1-D7:
+2,656 / 12,244 / 62,562 / 146,610 / 410,970 / 1,187,815 / 2,652,462.
+D7 saved 33.63% nodes with eight changed best moves and 25 changed scores.
+These are not strength/NPS claims. Its new guard test passed 1,874 probes.
+Debug/Release each passed 36/37 initial checks, with the policy-aware horizon
+test then updated privately for the explicit zero-margin rule and exact-history
+isolation from approximate RFP; corrected horizon checks passed both builds.
+Initial failures remain in logs. No public source/test files or production
+binaries changed. This RFP rule is NOT included in the active original-LMP test.
+
+#### Current opening policy: 8moves_v3
+
+The user explicitly stopped and rejected UHO_Lichess for the present testing
+phase and selected 8moves_v3. Use 8moves_v3 for subsequent smoke/verification
+work unless the user requests a change. UHO is deferred until the user revisits
+it after establishing higher engine strength; do not infer a rating threshold
+from self-play screening or treat 3200 as an experimentally established cutoff.
+
+The Hash32 UHO retry was stopped without a statistical decision after 29 recorded
+games (13 wins, 9 draws, 7 losses; 14 complete pairs plus one unpaired game).
+All raw data, frozen inputs and status are preserved in stage1-sprt-hash32/
+and archives/stage1-sprt-uho-hash32-stopped-2026-10-18.tar.gz. No UHO results are
+pooled into the replacement 8moves test.
+
+The active original-LMP retry is now lmp-frontier/stage1-sprt-8moves/. Settings
+remain pure SPRT 0/+10 with alpha=beta0.10, 5+0.05, Hash32MB per engine, one
+search worker, shared model/five-piece tablebases, books/experience/pondering off,
+100ms Move Overhead each. No custom confidence-bound stop or100-game cap is
+enabled. SPRT decides after complete pairs; eight-hour wall timeout or natural
+input exhaustion without crossing means inconclusive. Stage2 remains deferred.
+
+The original8moves_v3 archive SHA256 remains
+7e1e9dd118b4bb97d8a8b5b8a790c86e21f8509d59a27d2883767d94477be02e.
+A fresh10,000-pair input reserve excludes previous reserved opening/corpus roots.
+An independent preflight audit checked all10,000 lines for16 legal prescribed
+plies, unique nonterminal endpoints and no repeated positions using effective
+en-passant repetition keys. No custom quietness/evaluation filter was added.
+Opening histories are preserved in PGN/UCI searches; depth analysis accounts for
+the16 prescribed plies. Inputs/scripts were frozen before any replacement games.
+Production remains unchanged. No UHO run or improving-RFP match remains active.
+
+
+The 8moves_v3 fixed-four LMP SPRT is now retired at the user's request. It
+stopped earlier on a technical response timeout, with 159 finished games
+(candidate 42 wins, 49 draws, 68 losses) and one unfinished game. The 79
+complete pairs scored 41.772%; LLR was -1.281849 against boundaries
+-2.197225/+2.197225. Neither boundary was reached: this is an unfavorable
+interrupted screen, not an SPRT rejection. All original failed outputs are
+preserved, with a verified archive; no continuation games were launched.
+The user authorized a separate diagnostic of skipped quiet moves, including
+whether they would cause a frontier beta cutoff and whether existing futility
+pruning would independently skip them. No new match or production change is
+authorized by that diagnostic.
+
+
+#### Skipped quiet-move diagnostic after retiring the LMP screen
+
+A separate private instrumented copy in `lmp-order-audit/` tested every LMP
+skip on the same fifty diagnostic roots at D5, including all iterative-deepening
+passes. Settings were cold TT/history, Hash64, shared NNUE, tablebases/books/
+experience off. These are diagnostic searches, not the timed match's Hash32,
+tablebase-enabled, warm game states. Each skipped move was probed through the
+original depth-zero PVS/quiescence path in a separate owned worker, preserving
+board-stack history, repetition boundaries, killers/history, draw perspective
+and NNUE state. No probe reached its 200,000-node cap.
+
+All 100 comparisons (50 without probes, 50 with probes) exactly reproduced the
+frozen candidate's scores, best moves, full PVs and node counts. Independent
+audit passed all 132,977 legal nonchecking quiet-move records and input hashes.
+The probes found 8,282 cutoff-producing alternatives. Existing score-based
+forward futility independently skips 1,744 of the logged moves, including 37 of
+those alternatives. Excluding these redundancies leaves 8,245 missed local
+cutoffs among 131,233 additional LMP skips (6.283%). They occur at 1,644 of
+4,693 node visits with LMP skips (35.031%), across 47 of the fifty roots. Several
+alternatives at one node are not independent losses or additive errors.
+
+Of all logged skips, 129,747 (97.571%) had zero history scores. At 88.678% of
+skips, fewer than four noncapturing/nonpromoting/noncastling/nonchecking moves
+had actually been searched: tactical moves also consume the four-move budget.
+There were 7,465 additional missed cutoffs in that group. Even after four such
+quiet moves, the probes found another 779 additional missed cutoffs (and one
+after five). Thus counting tactical moves is not the whole explanation.
+
+Source inspection also confirms that Maxima clears history on every new search
+worker, whereas opponent normally retains history across moves until a new-game
+clear. This diagnostic supports investigating ordering and context-sensitive
+pruning; it does not establish that continuation history fixes the misses or
+that these shallow local misses caused the interrupted SPRT's unfavorable score.
+Local frontier bounds are not objective best moves or deeper tactical truth.
+
+The initial check run retained five failures: three isolated search-contract
+tests require LMP disabled (all three then passed, matching the original
+candidate's documented isolation); two lifecycle pause tests were disturbed by
+the diagnostic CPU throttle's SIGCONT (both full suites passed when rerun on a
+single low-priority CPU without external pause signals). The other 32 checks
+passed initially. A separate shadow-versus-direct-search test also passed; its
+root and non-root/repetition/null-history probes are recorded privately. No
+production source, frozen candidate, installed engine or match results changed.
+The user retired the SPRT; no new match was started.
+
+#### Quiet-count and history-guard LMP follow-up diagnostic
+
+The user authorized a separate private candidate requiring four completed quiet
+move searches before frontier LMP, and protecting positive-history moves from
+LMP. Here quiet means noncapturing, nonpromoting, noncastling and nonchecking;
+advanced passed-pawn quiet moves count when searched but remain protected from
+pruning. The counter advances after a completed search, never for an LMP- or
+forward-futility-pruned move. Other safety guards and existing score-based
+forward futility remain unchanged. The original rule deliberately counted all
+searched moves; this is a policy experiment rather than a miscount correction.
+Positive history protection applies to LMP specifically.
+
+On the same fifty reused cold D5 roots and original diagnostic settings, the
+independent audit passed 115,478 skipped-move probes with no aborts. It found
+6,471 local cutoff-producing alternatives, or 5.604%, versus the original
+8,245/131,233 additional skips (6.283%). No revised skips overlapped existing
+forward futility, occurred before four completed quiet searches, or had positive
+history. Misses occurred at 1,391/4,355 node visits with skips (31.940%), across
+47/50 roots. Multiple alternatives at a node are not independent errors.
+
+The two new guards therefore hold, but the conditional local miss fraction
+fell only 0.679 percentage points, not below 1%. Revised searches visit different
+nodes: these fractions are not a matched counterfactual on one unchanged tree.
+Ordinary search nodes rose from 430,249 to 447,748 across the fifty roots
+(+4.067%); the unpruned control used 587,707. Seven best moves and eleven scores
+changed relative to the retired candidate. These work counts and shallow
+selective bounds do not establish tactical truth, NPS or playing strength.
+Zero history also does not establish random ordering: hash, killer and generated
+move order still matter. This result does not attribute the interrupted match's
+unfavorable score to a specific mechanism or establish a 58-Elo strength loss.
+
+All fifty LMP-disabled signatures matched the frozen production control. All
+fifty revised plain-versus-shadow signatures matched exactly in score, best
+move, full PV and nodes, and all PVs replayed legally. The independent audit
+reconstructs previously searched quiet moves from the searched-move list,
+separately from the new loop counter. The policy guard test passed 120 cases
+covering zero/positive history and safety exclusions, and the unchanged shadow
+versus direct-search harness passed 724 root/history/null probes. Artifacts are
+kept separately in the private `lmp-quiet-four-audit/` experiment; original audit
+and match artifacts, production source and production binaries are preserved.
+No strength match, installation or continuation of the retired SPRT is part of
+this task. Diagnostic resource limits remain one low-priority CPU at 50% duty,
+with lifecycle checks exempt from external pause signals.
+
+Required algorithm reading revisited:
+[CPW Futility Pruning](https://chessprogramming.org/Futility_Pruning), including
+move-count pruning. Source comparisons are retained in private development
+records; they do not establish a gain or safe miss-rate threshold in Maxima.
+
+The revised private Release candidate passed all 37 existing CTest checks
+(35 non-lifecycle plus both full lifecycle suites), with the three previously
+documented unrelated search-contract fixtures isolating LMP. The shadow harness
+also passed all 724 probes. No new Debug, sanitizer, race or timed-strength run
+was performed; no shared-state or ownership changes were introduced. Original
+and production identities were rechecked after completion.
+
+
+Quiet-rank analysis of the revised audit found a broad distribution, not a
+pile-up just beyond the gate. Ranks exclude captures/checks/promotions/castles
+and include searched protected advanced-pawn quiets. For every record, full
+encounter rank equals searched moves plus earlier logged skips plus one,
+verifying no unlogged pruning gaps before reconstructing quiet occurrence rank.
+The 6,471 cutoff alternatives break down as quiet ranks5-7:700(10.817%),
+8-10:731(11.297%),11-15:1282(19.811%),16-20:1083(16.736%),
+21-30:1698(26.240%),31+:977(15.098%). Median missed rank18;90th percentile33;
+maximum51. Per-skipped-move cutoff fractions stay roughly5.2-6.1% across these
+rank buckets, with no sharp decline after the first few skipped quiets.
+The first missed cutoff per affected node has median rank11;470/1391 affected
+node visits(33.789%) have their first miss at5-7, and724/1391(52.049%) first
+miss at11+. Several alternative cutoff moves at one node are not independent
+losses. This describes the recorded tree, not the effect of changing the gate;
+raising the threshold would require a new experiment. The rank analysis preserves the original log and does not run new searches.
+
+#### History lifetime review and isolated normalization candidate
+
+The history review separates persistence, bounded signed reward/penalty updates
+and explicit new-game resets from the choice of continuation context. Source
+comparisons and pinned revisions are retained privately.
+
+Maxima production instead starts history empty at every new worker/go and uses
+positive rewards plus a penalty shift by the total previous searched-move
+count. It retains history within iterative deepening during one go. A first
+reward31 can be erased by a five-bit shift. opponent's ordinary depth-one bonus is
+also31, so its raw magnitude alone is not evidence of failure; lifetime, update
+scale and context matter. No measured causal share of the97.57% skipped-move
+sample or Elo loss follows from this source comparison.
+
+The user prioritized normalizing history and SPRT-testing it before LMP. A
+private standard-only candidate preserves the existing piece/destination key,
+copies history only after joining the old worker, and clears it on newgame.
+Its signed gravity update uses limit16384 and a provisional bonus
+min(32*clamp(depth,1,8)^2,2048), with equal negative updates for earlier searched
+quiets. It protects the winning key from penalties when two moves alias that
+entry. Royal-losers evaluation/history behavior and all other search policies
+remain unchanged. LMP and continuation history are absent from both match
+engines. This is a heuristic candidate, not a proven strength fix.
+
+Release37/37 checks passed, including both lifecycle suites and60 independent
+controlled parent-history cases. The existing shift-specific regression selects
+the retained legacy-update control; the added test verifies the signed policy.
+UCI persistence/new-game reset checks and50 exact frozen-baseline coldD5 controls
+passed. No new Debug/sanitizer/race run was performed. The next authorized
+strength screen uses fresh8moves_v3, pure paired0/+10SPRTalpha=beta.10,
+5+.05seconds,Hash32,shared model/five-manTB and an8h hard wall limit. No automatic
+installation, stage2 or LMP retest follows. Production source/binaries remain
+unchanged while this candidate is evaluated.
+
+The history-only stage-one screen has now started after all validation gates.
+Preflight passed and the driver reached timed games. The fresh reserve contains
+10,000 independently checked legal16-ply8moves_v3 histories (160,000 opening
+plies), excluding90,822 previously reserved position keys. Seed2026101901;
+input identities/scripts/options were frozen before launch. The eight-hour
+budget includes preflight. Both engines run on one low-priority CPU without
+external pause throttling during timed play. A symmetric180s technical UCI
+response deadline does not relax chess-clock forfeits. There is no result yet;
+completion requires the subsequent independent PGN/options/hash/all-prefix-SPRT
+and telemetry audits. No new strength claim or production adoption follows
+merely from launching this screen.
+
+### Structural move-picker refactor (2026-10-19)
+
+See [move-picking contracts](docs/move-picking.md). Standard-chess picker output
+is now pseudo-legal; PVS and qsearch own make/test/unmake legality. Root/book
+consumers explicitly filter legality, and terminal decisions count legal play.
+Castling retains origin/transit safety checks in search. No speed or strength
+gain is established by this architectural change. The history-only SPRT was
+cancelled by the user without a statistical verdict; its candidate is unpromoted.
+
+The structural experiment now also separates positive quiets from deferred
+negative-SEE noisy moves, adds countermoves and worker-owned signed main,
+one-ply continuation and pawn-structure history, and transfers history between
+standard searches until newgame. Cached pawn hints receive structural geometry
+checks. A qsearch empty-tactical fail-low inconsistency found by the legality
+ablation has a regression; before/after legality now produces identical paired
+trees. These are local development changes, not an installed-engine promotion.
+
+Final validation: 37/37 Debug, 37/37 Release, 3/3 ASan/UBSan (leak detection
+disabled), independent oracle 4,348 positions/95,618 legal children, UCI
+cold/newgame exactness and 72 paired D7 signatures matching nodes/scores/best/PV.
+A 12-root cold D7 diagnostic with three alternating trials measured +22.8%
+median process CPU and +4.1% nodes versus the frozen original; positive quiets
+before bad noisy moves used +1.1% nodes versus late quiets with the same history
+implementation. Trial timing spread limits finer conclusions. Duty-throttled
+wall times are not ordinary NPS measurements. No strength gain is established. No new match or installation was performed for this experiment.
