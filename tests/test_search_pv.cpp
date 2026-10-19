@@ -40,9 +40,9 @@ bool test_store_pv(table_state_t state) {
             int score = 0, move = 0, flag = 0;
             const bool found = trans_table::retrieve(board.stack->tt_key, 0, 1, score, move, flag);
             const bool correct_move = found && move == search.stack->pv_moves[i].to_compact();
-            // Matching entries retain their real search bounds. New/replaced moves
-            // are ordering hints and must not masquerade as exact evaluations.
-            const bool correct_bound = state == table_state_t::matching
+            // A changed hint does not invalidate an existing score for this board.
+            // A new hint alone must not invent a scored result.
+            const bool correct_bound = state != table_state_t::empty
                 ? score == 123 + i && flag == score::EXACT
                 : score == 0 && flag == 0;
             success &= correct_move && correct_bound;
@@ -52,8 +52,11 @@ bool test_store_pv(table_state_t state) {
                     << ", stored move=" << move << ", score=" << score
                     << ", flag=" << flag << "\n";
             }
-            if (state == table_state_t::matching) {
+            if (state != table_state_t::empty) {
                 success &= trans_table::retrieve(board.stack->tt_key, 0, 7, score, move, flag);
+            } else {
+                success &= !trans_table::retrieve(board.stack->tt_key, 0, 7, score, move, flag)
+                    && move == search.stack->pv_moves[i].to_compact();
             }
         }
         board.forward(&search.stack->pv_moves[i]);

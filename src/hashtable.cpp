@@ -65,36 +65,58 @@ int trans_table_t::unmake_score(int score, int ply) {
 
 void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int flags, U64 context, clock_range_t clocks) {
     assert(depth > 0);
-    entry_t * best_entry = NULL;
+    entry_t * best_entry = nullptr;
+    entry_t * empty_entry = nullptr;
     int best_score = -score::INF;
-    age = age % 64;
+    age %= 64;
     score = make_score(score, ply);
     U64 value = encode(age, depth, score, move, flags, clocks);
-    int ix = index(key);
-    int bix = ix;
-    for (int i = 0; i < BUCKETS; i++) {
-        bix = ix + i;
-        entry_t & entry = table[bix];
-        if (decode_depth(entry.value) && (entry.key ^ entry.value) == key) {
-            entry.context = context;
-            entry.value = value;
-            entry.key = value ^ key;
+    const int ix = index(key);
+    for (int i = 0; i < BUCKETS; ++i) {
+        entry_t & entry = table[ix + i];
+        const int stored_depth = decode_depth(entry.value);
+        if (!stored_depth) {
+            if (!empty_entry) {
+                empty_entry = &entry;
+            }
+            continue;
+        }
+        if ((entry.key ^ entry.value) == key) {
+            if (!move) {
+                value |= decode_move(entry.value);
+            }
+            // Scores from different contexts or clock domains are not competing
+            // bounds. Keep the current search's result rather than stranding it.
+            const clock_range_t stored_clocks = decode_clocks(entry.value);
+            const bool same_domain = entry.context == context
+                && stored_clocks.min == clocks.min && stored_clocks.max == clocks.max;
+            const bool replace_score = flags != 0 && (!decode_flag(entry.value)
+                || flags == score::EXACT || !same_domain
+                || age != decode_age(entry.value) || depth >= stored_depth);
+            if (replace_score) {
+                entry.context = context;
+                entry.value = value;
+            } else {
+                // A useful move does not require replacing the deeper score.
+                entry.value = (entry.value & ~U64(65535)) | decode_move(value);
+            }
+            entry.key = entry.value ^ key;
             return;
         }
-        int s = 256 - decode_depth(entry.value);
-        int age_diff = age - decode_age(entry.value);
-        if (age_diff > 0) {
-            s += age_diff * 256;
-        } else if (age_diff < 0) {
-            s += (63 + age_diff) * 256;
-        }
-        if (s > best_score) {
-            best_score = s;
+        const int age_diff = (age + 64 - decode_age(entry.value)) % 64;
+        const int replacement_score = decode_flag(entry.value)
+            ? age_diff * 256 + 256 - stored_depth : score::INF;
+        if (replacement_score > best_score) {
+            best_score = replacement_score;
             best_entry = &entry;
         }
     }
-    //no match; store in bucket with 1) oldest age and 2) lowest depth
-    assert(best_entry != NULL);
+    // Finish checking the cluster for a matching key before using an empty slot.
+    best_entry = empty_entry ? empty_entry : best_entry;
+    assert(best_entry != nullptr);
+    if (!flags && decode_flag(best_entry->value)) {
+        return;
+    }
     best_entry->context = context;
     best_entry->value = value;
     best_entry->key = value ^ key;

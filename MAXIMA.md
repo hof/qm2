@@ -263,6 +263,18 @@ tablebase probing precede TT lookup. Incompatible scores may still supply a
 matching-board move hint. Exact reuse at non-PV nodes avoids redundant search;
 its integration alone is not a measured playing-strength gain.
 
+TT storage keeps matching-board move hints when a new result has no move.
+A supplied move can update the hint without replacing a protected score; score
+context, clock range and mate-distance encoding remain attached to that score.
+Move-only writes cannot overwrite scored entries or evict scored collisions.
+Within the same context, clock range and age, a deeper entry survives a shallower
+non-exact write. Exact results, new ages, changed score domains and equal/deeper
+searches may replace the score. This is a provisional cache-retention policy.
+Collisions use empty slots first, then move-only entries, then older and
+shallower scored entries. Packed ages wrap modulo 64. These policies share the
+existing storage between standard chess and royal losers without changing the
+score-compatibility rules or entry layout.
+
 An exact TT return can shorten the searched PV because an entry stores a score
 and move rather than a complete continuation. Search clears the stale PV before
 reuse. UCI text may append TT move hints to a short searched prefix; those hints

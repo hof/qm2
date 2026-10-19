@@ -433,6 +433,120 @@ bool test_table_boundaries() {
     return success;
 }
 
+bool test_tt_score_and_hint_retention() {
+    trans_table_t table(0);
+    const U64 key = 123, context = 456;
+    const int original = score::MATE - 12;
+    table.store(key, 7, 2, 12, original, 100, score::EXACT, context, {3, 9});
+    table.store(key, 7, 0, 1, -500, 101, score::UPPERBOUND, context, {3, 9});
+    int value = 0, move = 0, bound = 0;
+    clock_range_t clocks{};
+    bool success = check("a shallow bound must update the hint without erasing a deeper score",
+        table.retrieve(key, 2, 12, value, move, bound, context, 5, &clocks)
+        && value == original && move == 101 && bound == score::EXACT
+        && clocks.min == 3 && clocks.max == 9);
+    // PV hint stores have no score context and must not replace score metadata.
+    for (int hint : {0, 102}) {
+        table.store(key, 8, 0, 1, 0, hint, 0);
+        success &= check("move-only stores must preserve scored depth, context and clocks",
+            table.retrieve(key, 2, 12, value, move, bound, context, 5, &clocks)
+            && value == original && move == (hint ? hint : 101)
+            && bound == score::EXACT && clocks.min == 3 && clocks.max == 9);
+    }
+    success &= check("retained mate scores must still decode at the probing ply",
+        table.retrieve(key, 5, 12, value, move, bound, context, 5)
+        && value == original - 3 && move == 102);
+    success &= check("hint updates must not expose a score to an incompatible context",
+        !table.retrieve(key, 2, 1, value, move, bound, 0, 5) && move == 102);
+    table.store(key, 7, 2, 13, 77, 0, score::LOWERBOUND, context, {3, 9});
+    success &= check("a deeper score store without a move must retain the matching-board hint",
+        table.retrieve(key, 2, 13, value, move, bound, context, 5)
+        && value == 77 && move == 102 && bound == score::LOWERBOUND);
+    return success;
+}
+
+bool test_tt_replacement_domains() {
+    bool success = true;
+    for (int change = 0; change < 5; ++change) {
+        trans_table_t table(0);
+        table.store(123, 63, 0, 12, 321, 100, score::EXACT, 456, {3, 9});
+        const int age = change == 1 ? 64 : 63;
+        const U64 context = change == 2 ? 789 : 456;
+        const clock_range_t clocks = change == 3 ? clock_range_t{4, 8} : clock_range_t{3, 9};
+        const int depth = change == 4 ? 12 : 1;
+        const int flag = change == 0 ? score::EXACT : score::LOWERBOUND;
+        table.store(123, age, 0, depth, 77, 0, flag, context, clocks);
+        int value = 0, move = 0, bound = 0;
+        clock_range_t stored_clocks{};
+        success &= check("exact, stale, changed-domain and equal-depth stores must accept fresh scores",
+            table.retrieve(123, 0, depth, value, move, bound, context, 5, &stored_clocks)
+            && value == 77 && move == 100 && bound == flag
+            && stored_clocks.min == clocks.min && stored_clocks.max == clocks.max);
+        if (change == 2) {
+            success &= check("replacing a score context must not retain the old score domain",
+                !table.retrieve(123, 0, 1, value, move, bound, 456, 5) && move == 100);
+        }
+        if (change == 3) {
+            success &= check("replacement must not widen the incoming score's clock range",
+                !table.retrieve(123, 0, 1, value, move, bound, context, 3) && move == 100);
+        }
+    }
+    return success;
+}
+
+bool test_tt_empty_slots_and_age_wrap() {
+    trans_table_t table(0); // All keys share the same four-entry cluster.
+    table.store(1, 62, 0, 255, 101, 11, score::EXACT);
+    table.store(2, 0, 0, 1, 102, 12, score::EXACT);
+    int value = 0, move = 0, bound = 0;
+    bool success = check("an empty slot must be used before evicting an aged entry",
+        table.retrieve(1, 0, 255, value, move, bound) && value == 101 && move == 11);
+    table.clear();
+    for (int key = 1; key <= 4; ++key) {
+        table.store(key, key == 1 ? 63 : 0, 0, key == 1 ? 255 : key - 1,
+            100 + key, 10 + key, score::EXACT);
+    }
+    table.store(5, 64, 0, 2, 105, 15, score::EXACT);
+    success &= check("age 63 must be one generation old at age 0",
+        !table.retrieve(1, 0, 1, value, move, bound) && move == 0);
+    for (int key = 2; key <= 5; ++key) {
+        success &= check("age wrap must preserve current-generation collision entries",
+            table.retrieve(key, 0, 1, value, move, bound)
+            && value == 100 + key && move == 10 + key);
+    }
+    return success;
+}
+
+bool test_tt_move_only_collisions() {
+    trans_table_t table(0);
+    for (int key = 1; key <= 4; ++key) {
+        table.store(key, 0, 0, 8, 100 + key, 10 + key, score::EXACT);
+    }
+    table.store(5, 0, 0, 1, 0, 15, 0);
+    int value = 0, move = 0, bound = 0;
+    bool success = check("a move-only insertion must not evict a scored collision",
+        !table.retrieve(5, 0, 1, value, move, bound) && move == 0);
+    for (int key = 1; key <= 4; ++key) {
+        success &= check("all scored collision entries must survive a move-only insertion",
+            table.retrieve(key, 0, 8, value, move, bound)
+            && value == 100 + key && move == 10 + key);
+    }
+    table.clear();
+    table.store(1, 0, 0, 255, 0, 11, 0);
+    for (int key = 2; key <= 4; ++key) {
+        table.store(key, 63, 0, 1, 100 + key, 10 + key, score::EXACT);
+    }
+    table.store(5, 0, 0, 1, 105, 0, score::EXACT);
+    success &= check("a scored collision must replace a move-only entry before another score",
+        !table.retrieve(1, 0, 1, value, move, bound)
+        && table.retrieve(5, 0, 1, value, move, bound) && value == 105 && move == 0);
+    for (int key = 2; key <= 4; ++key) {
+        success &= check("replacing a move-only collision must preserve unrelated scored entries",
+            table.retrieve(key, 0, 1, value, move, bound) && value == 100 + key);
+    }
+    return success;
+}
+
 bool test_context_restoration() {
     const char * fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     search_t search(fen);
@@ -518,6 +632,10 @@ int main() {
     success &= test_non_pv_tt_mates_and_clocks();
     success &= test_compact_moves();
     success &= test_table_boundaries();
+    success &= test_tt_score_and_hint_retention();
+    success &= test_tt_replacement_domains();
+    success &= test_tt_empty_slots_and_age_wrap();
+    success &= test_tt_move_only_collisions();
     success &= test_draw_contempt();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
