@@ -254,6 +254,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     long_continuation_enabled = wild == 0 && options::get_value("LongContinuationHistory");
     threat_ordering_enabled = wild == 0 && options::get_value("ThreatOrdering");
     check_ordering_enabled = wild == 0 && options::get_value("CheckOrdering");
+    correction_history_enabled = wild == 0 && options::get_value("CorrectionHistory");
     countermoves_enabled = options::get_value("Countermoves");
     killers_enabled = options::get_value("Killers");
     upcoming_repetition_enabled = wild == 0 && options::get_value("UpcomingRepetition");
@@ -280,6 +281,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
+        correction_history_enabled = false;
         upcoming_repetition_enabled = false;
         q_tt_enabled = false;
         beta_pruning = ffp_enabled = null_enabled = lmr_enabled = aspiration_enabled = iid_enabled = false;
@@ -321,6 +323,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     memset(countermoves, 0, sizeof(countermoves));
     quiet_history = wild == 0 ? std::make_unique<quiet_history_t>() : nullptr;
     capture_history = wild == 0 ? std::make_unique<capture_history_t>() : nullptr;
+    correction_history = wild == 0 ? std::make_unique<correction_history_t>() : nullptr;
     stack->eval_result = score::INVALID;
     stack->improving = false;
     stack->excluded_move = 0;
@@ -517,6 +520,12 @@ void search_t::go() {
             + " min_depth " + std::to_string(counts.min_iid_depth)
             + " max_depth " + std::to_string(counts.max_iid_depth)
             + " min_probe " + std::to_string(counts.min_iid_probe_depth));
+        uci::out("info string audit_correction lookups " + std::to_string(counts.correction_lookups)
+            + " hits " + std::to_string(counts.correction_hits)
+            + " updates " + std::to_string(counts.correction_updates)
+            + " lower " + std::to_string(counts.correction_lower)
+            + " upper " + std::to_string(counts.correction_upper)
+            + " exact " + std::to_string(counts.correction_exact));
         uci::out("info string audit_capture_history scores " + std::to_string(counts.capture_history_scores)
             + " hits " + std::to_string(counts.capture_history_hits)
             + " rewards " + std::to_string(counts.capture_history_rewards)
@@ -1012,12 +1021,71 @@ void search_t::update_history(move_t * move) {
     assert(*record < 2 * HISTORY_MAX);
 }
 
+int search_t::corrected_static_eval(int raw) {
+    if (!correction_history_enabled) {
+        return raw;
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    if (nnue_audit.fixed_horizon || nnue_audit.aligned_quiescence) {
+        return raw;
+    }
+#endif
+    const int correction = correction_history->correction(brd.us(), brd.stack->pawn_key);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.correction_lookups;
+    nnue_audit.counters.correction_hits += correction != 0;
+#endif
+    // Preserve the existing reversible-clock decay, including zero at 100.
+    constexpr int limit = score::TABLEBASE - MAX_PLY - 1;
+    return std::clamp(raw + damp_rule50(correction, brd.stack->fifty_count), -limit, limit);
+}
+
+void search_t::update_correction_history(int value, int bound, int depth) {
+    constexpr int decisive = score::TABLEBASE - MAX_PLY;
+    const auto & move = stack->best_move;
+    if (!correction_history_enabled || stop_all || stack->in_check
+            || iid_active || verification_mode != verification_mode_t::none
+            || stack->excluded_move || stack->repetition_start > 0 || depth < 1 || !move.piece
+            || move.capture || move.promotion || stack->eval_result == score::INVALID
+            || std::abs(value) >= decisive || std::abs(stack->eval_result) >= decisive
+            || brd.stack->fifty_count >= 90) {
+        return;
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    if (nnue_audit.fixed_horizon || nnue_audit.aligned_quiescence) {
+        return;
+    }
+#endif
+    // Descendants can update the same pawn bucket. Compare with a fresh
+    // correction of the cached raw evaluation, rather than a stale entry value.
+    const int eval = corrected_static_eval(stack->eval_result);
+    if ((bound == score::LOWERBOUND && value <= eval)
+            || (bound == score::UPPERBOUND && value >= eval)) {
+        return;
+    }
+    const bool changed = correction_history->update(brd.us(), brd.stack->pawn_key, depth, value - eval);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    if (changed) {
+        ++nnue_audit.counters.correction_updates;
+        nnue_audit.counters.correction_lower += bound == score::LOWERBOUND;
+        nnue_audit.counters.correction_upper += bound == score::UPPERBOUND;
+        nnue_audit.counters.correction_exact += bound == score::EXACT;
+    }
+#else
+    (void) changed;
+#endif
+}
+
 void search_t::take_history(search_t & previous) {
     if (wild != 0 || previous.wild != 0 || !previous.quiet_history) {
         return;
     }
     quiet_history = std::move(previous.quiet_history);
     capture_history = std::move(previous.capture_history);
+    // Learned evaluation errors belong to the immutable model that produced them.
+    if (evaluation_network == previous.evaluation_network) {
+        correction_history = std::move(previous.correction_history);
+    }
     for (int piece = 0; piece <= BKING; ++piece) {
         std::copy(std::begin(previous.countermoves[piece]),
             std::end(previous.countermoves[piece]), std::begin(countermoves[piece]));
@@ -1962,6 +2030,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
                 if (normal_search) {
                     trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
                 }
+                if (!repetition_floor) {
+                    update_correction_history(score, score::LOWERBOUND, depth);
+                }
                 if (normal_search && !iid_active) {
                     update_capture_cutoff(*move, depth, searched_moves);
                 }
@@ -2014,6 +2085,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     assert(brd.legal(&stack->best_move));
 
     int flag = score::flags(best, alpha1, beta);
+    if (!repetition_floor) {
+        update_correction_history(best, flag, depth);
+    }
     if (normal_search) {
         trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_compact(), flag, context, stack->tt_clocks);
     }

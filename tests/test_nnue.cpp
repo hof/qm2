@@ -361,8 +361,13 @@ int main() {
     success &= check(nnue::set_path(path.string(), error), "Extreme valid-format bias must load safely");
     auto extreme_storage = std::make_unique<search_t>(fen);
     auto & extreme = *extreme_storage;
+    success &= check(evaluate(&extreme) == score::TABLEBASE - MAX_PLY - 1
+        && extreme.neural_static_score() == score::TABLEBASE - 1,
+        "Corrected evaluation must stay below the decisive band without changing raw NNUE");
+    extreme.correction_history_enabled = false;
     success &= check(evaluate(&extreme) == score::TABLEBASE - 1,
-        "NNUE must never synthesize tablebase/mate scores");
+        "Disabled correction must preserve the original NNUE limit");
+    extreme.correction_history_enabled = true;
     success &= check(extreme.tt_context() != neural.tt_context(), "Different models need different TT contexts");
     neural.stack->eval_result = score::INVALID;
     success &= check(evaluate(&neural) == 100, "Search must own immutable model across reloads");
@@ -381,7 +386,8 @@ int main() {
         "Unload must not invalidate retained snapshots");
     success &= check(nnue::set_path(path.string(), error), "A valid network must reload after internal unload");
     auto restored = std::make_unique<search_t>(fen);
-    success &= check(evaluate(restored.get()) == score::TABLEBASE - 1
+    success &= check(evaluate(restored.get()) == score::TABLEBASE - MAX_PLY - 1
+        && restored->neural_static_score() == score::TABLEBASE - 1
         && restored->tt_context() == extreme.tt_context(), "Reloaded model must retain its score/context identity");
     return success ? 0 : 1;
 }

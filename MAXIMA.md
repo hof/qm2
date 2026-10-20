@@ -600,8 +600,9 @@ fallback. Royal-losers retains its separate material-only evaluator. The HCE
 strength gate passed on 2026-10-18; the comparison executable is frozen.
 Standard static evaluation applies a separate progress policy to NNUE: ten-halfmove buckets 0–9, 10–19, …, 90–99 retain 100%, 90%, …, 10%
 of the score. At 100 it reaches zero; actual draw detection and checkmate
-precedence remain search rules. Scaling occurs once before caching. Raw neural output and accumulators remain
-unchanged; this introduces no classical blending.
+precedence remain search rules. The uncorrected frame value is scaled once before
+caching; correction history applies the same decay to its separate adjustment
+on each read. Raw neural output and accumulators remain unchanged.
 
 The initial target is pretrained CPU inference, without training or GPU hardware.
 
@@ -5651,3 +5652,79 @@ cutoffs; helper searches are excluded. Disabled context counters were zero.
 Constants remain provisional; no parameter tuning, timed match or installation
 accompanied this increment. Integrated baseline and strength acceptance remain
 pending.
+
+### Evaluation correction history (2026-10-20)
+
+`CorrectionHistory` is a default-on standard-chess checkbox. A worker-owned
+64 KiB table indexed by side to move and pawn hash learns a bounded estimate
+of static-evaluation error. It adjusts main-search and quiescence static
+scores; it changes neither legal moves nor draw, mate or tablebase adjudication.
+The independent switch skips both correction lookups and learning when disabled.
+Changing it stops the worker and clears incompatible main and quiescence TT
+results. Royal losers retains its existing evaluator and allocates no table.
+
+The table has 16,384 signed entries per side, bounded at 16,384 units with
+128 units per centipawn. Updates use history gravity with a bonus equal to
+`error * clamp(depth, 1, 16) / 8`, capped at one quarter of the table bound.
+These are provisional constants awaiting integrated validation and tuning.
+Pawn-hash collisions intentionally share a heuristic estimate, not an exact
+score. Other feature-indexed correction tables are outside this increment.
+
+Raw NNUE cache entries stay unadjusted. Search-frame `eval_result` retains its
+existing uncorrected, reversible-clock-damped value, metadata and improving
+comparison contract. Every evaluation read applies the current table correction,
+including reads of an already evaluated frame. The correction receives the same
+clock decay and the result stays below the decisive tablebase score band. This
+keeps raw inference checks independent of learning and avoids stale or repeatedly
+applied corrections. Fixed and aligned audit horizons bypass correction and
+learning. Normal audit modes still verify raw incremental/full evaluation parity.
+
+Only completed ordinary main-search move results can train the table. Require
+a position where the side to move is not in check, a quiet best move, valid
+nondecisive evaluation/result,
+and a reversible clock below 90. Captures and promotions cannot train; castling
+can. A lower bound trains upward only when it exceeds the current corrected
+static evaluation; an upper bound trains downward only when it falls below it.
+Exact results can train in either direction. Descendants may update the same
+bucket, so compare against a fresh correction of the parent's cached raw value.
+Terminal, repetition-floor, TT, static-pruning, null-cutoff, quiescence and ceiling
+returns do not train. Aborted nodes, IID and verification helpers, excluded-move
+searches and null-move subtrees cannot train either. Updates precede killer
+mutation, preserving the best-move classification when picker storage aliases.
+
+History ownership transfers after joining the old worker. Correction transfers
+only when both workers share the same immutable network snapshot. A successful
+model replacement starts correction cold; a failed replacement retains the
+previous model. `ucinewgame` discards the worker and its learned state. Existing
+searched TT scores remain reusable while online learning evolves, as with move
+ordering histories; correction updates do not clear the table or cache adjusted
+static scores. This is selective-search reuse, not a claim of history-independent
+minimax results.
+
+Audit builds expose `audit_correction` lookup, nonzero-hit and changed-update
+counts, with lower/upper/exact update counts. Native regressions cover table
+arithmetic and aliases, raw-cache stability, fresh corrected reads, clock and
+score limits, update eligibility and direction, controlled PVS outcomes and
+restoration, nonlearning returns, worker controls and model ownership.
+
+Validation passed 45/45 Debug and 45/45 Release checks, including both lifecycle
+suites, 11 focused ASan/UBSan checks with leak detection disabled, and 11 focused
+audit checks. The independent board oracle covered 4,372 positions and 95,734
+legal children across both variants. The existing synthetic extreme-output NNUE
+regression now verifies the corrected decisive-band limit alongside the original
+disabled/raw limit and model/context identity.
+
+All 288 depth-eight diagnostic searches completed with legal PVs; 216 cold
+searches repeated deterministically and 96 disabled-control signatures matched
+the frozen parent exactly. The matrix used 12 reserved roots, parent/off/on
+controls with LMR on/off, three cold trials and one retained-history trial after
+a depth-six warmup and fixed legal two-ply continuation. Configuration completed
+before CPU timing; all work ran sequentially on one low-priority CPU.
+
+Enabling correction increased cold nodes by 18.25%/6.14% and median CPU by
+16.73%/5.74% with LMR on/off. Retained nodes changed by +7.38%/-0.79%, with CPU
++7.69%/+7.95%. CPU samples were short and retained timing used one trial. These
+results show added cost on this sample; efficiency and playing-strength
+acceptance remain pending. A real depth-six audit recorded 231,628 lookups,
+11,203 nonzero hits and 2,297 changed updates: 1,693 lower, 457 upper and 147
+exact. All correction counters were zero with the feature disabled.

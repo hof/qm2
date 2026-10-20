@@ -39,6 +39,7 @@
 #include <array>
 #include "quiet_history.h"
 #include "capture_history.h"
+#include "correction_history.h"
 #include "movepicker.h"
 #include "hashtable.h"
 #include "eval.h"
@@ -151,6 +152,10 @@ public:
     int history[BKING + 1][64]; //legacy royal-losers ordering
     std::unique_ptr<quiet_history_t> quiet_history;
     std::unique_ptr<capture_history_t> capture_history;
+    std::unique_ptr<correction_history_t> correction_history;
+    bool correction_history_enabled;
+    int corrected_static_eval(int raw);
+    void update_correction_history(int value, int bound, int depth);
     bool capture_history_enabled;
     bool long_continuation_enabled;
     bool threat_ordering_enabled;

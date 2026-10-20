@@ -151,6 +151,10 @@ add_executable(test_capture_history test_capture_history.cpp)
 target_link_libraries(test_capture_history MAX2SRC)
 add_test(NAME test_capture_history COMMAND test_capture_history)
 
+add_executable(test_correction_history test_correction_history.cpp)
+target_link_libraries(test_correction_history MAX2SRC)
+add_test(NAME test_correction_history COMMAND test_correction_history)
+
 get_property(maxima_subdirectory_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${maxima_subdirectory_tests} PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

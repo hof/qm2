@@ -64,15 +64,15 @@ int evaluate(search_t * search) {
             search->stack->metadata = search_metadata(search->brd);
             search->stack->eval_result = result;
         }
-        return result;
+        return search->corrected_static_eval(result);
     }
 #endif
     if (search->stack->eval_result != score::INVALID) {
-        return search->stack->eval_result;
+        return search->corrected_static_eval(search->stack->eval_result);
     }
     assert(search->evaluation_network);
     search->stack->metadata = search_metadata(search->brd);
     const int result = damp_rule50(search->neural_static_score(), search->brd.stack->fifty_count);
     search->stack->eval_result = result;
-    return result;
+    return search->corrected_static_eval(result);
 }
