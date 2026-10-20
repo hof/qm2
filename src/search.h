@@ -116,6 +116,7 @@ protected:
     void init_tt_history();
     static bool has_legal_move(board_t & brd);
     int ceiling_score();
+    bool raise_repetition_alpha(int & alpha, int beta, move_t & witness);
 
 public:
     search_stack_t _stack[MAX_PLY + 1];
@@ -150,6 +151,7 @@ public:
     quiet_history_policy_t quiet_history_policy;
     bool countermoves_enabled;
     bool killers_enabled;
+    bool upcoming_repetition_enabled;
     uint16_t countermoves[BKING + 1][64];
     move_t ponder_move;
     std::string book_name;
@@ -197,6 +199,7 @@ public:
     std::string pv_to_string();
     bool is_draw();
     bool is_repetition() const;
+    int upcoming_repetition(move_t & witness);
     bool is_improving() const;
     bool abort(bool force_poll);
     bool pondering();

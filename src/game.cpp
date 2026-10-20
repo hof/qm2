@@ -53,7 +53,8 @@ namespace options {
         { "ContinuationHistory", BOOL, 1, "type check default true", true },
         { "PawnHistory", BOOL, 1, "type check default true", true },
         { "Countermoves", BOOL, 1, "type check default true", true },
-        { "Killers", BOOL, 1, "type check default true", true }
+        { "Killers", BOOL, 1, "type check default true", true },
+        { "UpcomingRepetition", BOOL, 1, "type check default true", true }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         , { "NNUEAuditHorizon", STRING, 0, "type combo default normal var normal var fixed var quiet", true }
         , { "NNUEAuditNullMove", BOOL, 0, "type check default false", true }

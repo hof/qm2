@@ -14,6 +14,7 @@ add_library(MAX2SRC
         nnue.cpp
 	eval.cpp
 	search.cpp
+        repetition.cpp
         game.cpp      
         engine.cpp
         uci_console.cpp

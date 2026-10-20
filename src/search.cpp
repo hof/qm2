@@ -27,6 +27,7 @@
  */
 
 #include "search.h"
+#include "repetition.h"
 #include <limits>
 #include <algorithm>
 #include <chrono>
@@ -251,6 +252,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         options::get_value("ContinuationHistory") != 0, options::get_value("PawnHistory") != 0};
     countermoves_enabled = options::get_value("Countermoves");
     killers_enabled = options::get_value("Killers");
+    upcoming_repetition_enabled = wild == 0 && options::get_value("UpcomingRepetition");
     iid_active = false;
     verification_mode = verification_mode_t::none;
     ffp_enabled = options::get_value("FutilityPruning");
@@ -273,6 +275,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
+        upcoming_repetition_enabled = false;
         q_tt_enabled = false;
         beta_pruning = ffp_enabled = null_enabled = lmr_enabled = aspiration_enabled = iid_enabled = false;
         nnue_audit.q_delta = nnue_audit.q_see = false;
@@ -508,6 +511,11 @@ void search_t::go() {
             + " min_depth " + std::to_string(counts.min_iid_depth)
             + " max_depth " + std::to_string(counts.max_iid_depth)
             + " min_probe " + std::to_string(counts.min_iid_probe_depth));
+        uci::out("info string audit_repetition attempts " + std::to_string(counts.repetition_attempts)
+            + " hits " + std::to_string(counts.repetition_hits)
+            + " cutoffs " + std::to_string(counts.repetition_cutoffs)
+            + " q_hits " + std::to_string(counts.q_repetition_hits)
+            + " q_cutoffs " + std::to_string(counts.q_repetition_cutoffs));
         uci::out("info string audit_verification calls " + std::to_string(counts.verification_calls)
             + " excluded " + std::to_string(counts.excluded_calls)
             + " cancelled " + std::to_string(counts.verification_cancelled)
@@ -1286,6 +1294,64 @@ bool search_t::is_repetition() const {
     return false;
 }
 
+// Return the history distance proving that one legal reversible move can reach
+// an earlier position. A descendant already scores the first such match as draw.
+int search_t::upcoming_repetition(move_t & witness) {
+    witness.clear();
+    const int stop_ply = std::max(brd.ply - brd.stack->fifty_count, stack->repetition_start);
+    if (wild != 0 || brd.ply >= MAX_PLY - 1 || brd.ply - stop_ply < 3) {
+        return 0;
+    }
+    const U64 key = brd.stack->repetition_key();
+    for (int ply = brd.ply - 3; ply >= stop_ply; ply -= 2) {
+        const U64 target = ply >= 0 ? brd._stack[ply].repetition_key()
+            : _position_history[static_cast<int>(_position_history.size()) + ply];
+        move_t move{};
+        if (!repetition::find_move(brd, key ^ target, move)) {
+            continue;
+        }
+        // Full resulting identity also checks lost castling rights and expired
+        // en passant. Board-only make/unmake leaves the search frame untouched.
+        brd.forward(&move);
+        const bool matches = brd.stack->repetition_key() == target;
+        brd.backward(&move);
+        if (matches) {
+            witness = move;
+            return brd.ply - ply;
+        }
+    }
+    return 0;
+}
+
+bool search_t::raise_repetition_alpha(int & alpha, int beta, move_t & witness) {
+    if (!upcoming_repetition_enabled || brd.ply == 0
+            || verification_mode != verification_mode_t::none || alpha >= draw_score()) {
+        return false;
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    if (nnue_audit.fixed_horizon || nnue_audit.aligned_quiescence) {
+        return false;
+    }
+    ++nnue_audit.counters.repetition_attempts;
+#endif
+    const int distance = upcoming_repetition(witness);
+    if (!distance) {
+        return false;
+    }
+    stack->tt_clocks.min = std::max(int(stack->tt_clocks.min), distance);
+    alpha = draw_score();
+    if (alpha >= beta) {
+        stack->best_move = witness;
+        stack->pv_moves[0] = witness;
+        stack->pv_count = 1;
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.repetition_hits;
+    nnue_audit.counters.repetition_cutoffs += alpha >= beta;
+#endif
+    return true;
+}
+
 // Compare real same-side positions only. A missing two-ply evaluation (for
 // example, check) may fall back to four plies; an artificial pass is a barrier.
 bool search_t::is_improving() const {
@@ -1473,11 +1539,16 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         return tablebase_score;
     }
 
+    const bool pv = alpha + 1 < beta;
+    move_t repetition_move{};
+    const bool repetition_floor = raise_repetition_alpha(alpha, beta, repetition_move);
+    if (repetition_floor && alpha >= beta) {
+        return alpha;
+    }
+
     /*
      * Transposition table lookup
      */
-
-    const bool pv = alpha + 1 < beta;
     const bool normal_search = verification_mode == verification_mode_t::none;
     const auto excluded_move = stack->excluded_move;
     stack->tt_key = brd.stack->tt_key;
@@ -1496,7 +1567,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 #endif
     const bool usable_tt_score = probe_tt && trans_table::retrieve(stack->tt_key, brd.ply,
         depth, tt_score, tt_move, tt_flag, context, brd.stack->fifty_count, &tt_clocks);
-    if (usable_tt_score && use_tt_scores) {
+    // A cached score below a legal draw escape cannot resolve this node.
+    // Retain its move hint, but continue searching for something better.
+    if (usable_tt_score && use_tt_scores && (!repetition_floor || tt_score >= draw_score())) {
         // A compatible exact score resolves either side of a non-PV window too.
         if (tt_flag == score::EXACT) {
             stack->tt_clocks.include_child(tt_clocks, 0);
@@ -1640,17 +1713,23 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         && !stack->metadata.endgame;
 
     //prepare and do the loop
-    int best = -score::INF;
+    int best = repetition_floor ? draw_score() : -score::INF;
     int searched_moves = 0;
     const int score_max = score::MATE - brd.ply - 1;
-    stack->best_move.clear();
+    if (repetition_floor) {
+        stack->best_move = repetition_move;
+        stack->pv_moves[0] = repetition_move;
+        stack->pv_count = 1;
+    } else {
+        stack->best_move.clear();
+    }
     do {
         if (excluded_move && move->to_compact() == excluded_move) {
             continue;
         }
 
         assert(brd.valid(move));
-        assert(stack->best_move.equals(move) == false);
+        assert(!stack->best_move.equals(move) || (repetition_floor && repetition_move.equals(move)));
         assert(in_searched(move, searched_moves) == false);
 
         const int gives_check = brd.gives_check(move);
@@ -1863,6 +1942,16 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return tablebase_score;
     }
 
+    move_t repetition_move{};
+    const bool repetition_floor = raise_repetition_alpha(alpha, beta, repetition_move);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    nnue_audit.counters.q_repetition_hits += repetition_floor;
+    nnue_audit.counters.q_repetition_cutoffs += repetition_floor && alpha >= beta;
+#endif
+    if (repetition_floor && alpha >= beta) {
+        return alpha;
+    }
+
     const bool in_check = stack->in_check;
     const auto mode = depth == 0 ? tt_mode_t::quiescence_entry : tt_mode_t::quiescence_tactical;
     const U64 key = brd.stack->tt_key;
@@ -1874,7 +1963,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         clock_range_t clocks;
         const bool usable = trans_table::retrieve(key, brd.ply, 1, tt_score, tt_move,
             tt_flag, context, brd.stack->fifty_count, &clocks, mode);
-        if (usable && alpha + 1 == beta && (tt_flag == score::EXACT
+        if (usable && (!repetition_floor || tt_score >= draw_score())
+                && alpha + 1 == beta && (tt_flag == score::EXACT
                 || (tt_flag == score::LOWERBOUND && tt_score >= beta)
                 || (tt_flag == score::UPPERBOUND && tt_score <= alpha))) {
             stack->tt_clocks.include_child(clocks, 0);
@@ -1891,6 +1981,11 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     // Only completed results reach this helper. A q depth marker is never a
     // main-search depth; the packed mode gates score reuse and replacement.
     const auto finish = [&](int value, int flag) {
+        if (repetition_floor && value == draw_score() && !stack->best_move.piece) {
+            stack->best_move = repetition_move;
+            stack->pv_moves[0] = repetition_move;
+            stack->pv_count = 1;
+        }
         if (use_q_tt) {
             trans_table::store(key, brd.root_ply, brd.ply, 1, value,
                 stack->best_move.to_compact(), flag, context, stack->tt_clocks, mode);
@@ -2117,6 +2212,8 @@ void search_t::reset_stack() {
     auto & counts = nnue_audit.counters;
     stack->check_extensions = 0;
     counts.pvs_nodes = counts.q_nodes = counts.root_calls = 0;
+    counts.repetition_attempts = counts.repetition_hits = counts.repetition_cutoffs = 0;
+    counts.q_repetition_hits = counts.q_repetition_cutoffs = 0;
     counts.move_visits = counts.null_visits = 0;
     counts.researches = counts.root_researches = counts.research_fail_highs = 0;
     counts.hash_probes = counts.hash_moves = counts.hash_first = 0;

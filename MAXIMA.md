@@ -148,6 +148,38 @@ run, so stalemate remains an exact draw with production pruning enabled. The
 probe uses a king escape first and fresh move generation when needed, without
 changing the active move picker.
 
+`UpcomingRepetition` is a default-on standard-search checkbox. At descendants,
+when `alpha < draw_score()`, search checks whether one legal reversible non-pawn
+move reaches an earlier position. An immutable two-choice hash table maps key
+differences to possible moves; full legality and the resulting repetition key
+confirm each candidate. Scans respect available game/search history, the reversible
+clock and null-move boundaries. The existing first-match descendant draw policy
+applies to both pre-root and in-search matches; the actual root still uses its
+normal move search and three-occurrence adjudication.
+
+A confirmed move establishes a draw lower bound before TT lookup and selective
+search: raise alpha, cut off if it reaches beta, otherwise continue for a better
+score. Preserve that floor through fail-soft returns and reject TT scores below it. A selected draw can
+supply a one-move PV; a higher cached score or stand pat cannot use that drawing
+move as its PV. Propagate the minimum clock required by the historical match.
+Early proof cutoffs do not train ordinary history or store ordinary TT results.
+Verification helpers and fixed/aligned audit horizons disable this mechanism.
+Ordinary repetition, fifty-move and terminal adjudication remain mandatory with
+the checkbox off and at every alpha. Royal losers retains its existing behavior.
+Each worker snapshots the option; changing it stops the worker and clears both
+TT modes. Audit builds expose `audit_repetition` attempts, hits and cutoffs, with
+separate quiescence hit/cutoff counts.
+
+Upcoming-repetition validation passed 41/41 Debug and 41/41 Release checks,
+six focused ASan/UBSan checks (leak detection disabled), and six audit checks.
+Tests cover all 3,668 lookup edges in both directions and agreement with an
+exhaustive legal-move repetition oracle over 320 positions. A quiet-escape
+qsearch control changes from -233 cp with detection off to draw with it on.
+All 288 depth-eight comparison searches completed with legal PVs; 96 paired
+disabled-control signatures matched the parent exactly, with LMR on/off and
+cold/retained history. Enabled detection changes nodes in different directions
+across these controls; variable CPU samples establish no speed or strength gain.
+
 Standard PVS carries an explicit expected-cut-node flag separately from the
 window and returned TT bound. PV children and open-window re-searches are not
 expected cut nodes; non-PV children alternate expectations, while reduced scout
