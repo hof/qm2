@@ -404,7 +404,8 @@ cache. Successful network loads and tablebase-path changes clear it separately.
 Clock overhead and other non-search-policy settings retain cached results.
 
 Standard search exposes independent `MainHistory`, `ContinuationHistory`,
-`PawnHistory`, `CaptureHistory`, `Countermoves` and `Killers` checkboxes, all
+`LongContinuationHistory`, `PawnHistory`, `CaptureHistory`, `Countermoves` and
+`Killers` checkboxes, all
 defaulting to true.
 Each worker snapshots them before search. A disabled history table contributes
 zero to ordering and receives neither rewards nor penalties. Disabled
@@ -5496,3 +5497,67 @@ throttling. These short, variable samples show no efficiency benefit; they do
 not establish playing strength or isolate the cause of the LMR-dependent tree
 changes. Baseline acceptance remains pending. No parameter tuning, timed match
 or Windows installation accompanied this increment.
+
+
+### Longer continuation ordering history (2026-10-20)
+
+Standard quiet ordering now includes move pairs from two and four plies back.
+The original `ContinuationHistory` option still controls the immediate preceding
+move; the independent `LongContinuationHistory` checkbox controls both scoring
+and learning for the longer contexts. Both default to true. Each worker snapshots
+these settings; a policy change stops and joins the worker and clears main and
+quiescence TT data. Dormant history remains available when re-enabled, and
+`ucinewgame` clears it together with the other retained history.
+
+The existing colored-piece/destination pair table serves all three distances,
+without allocating another table. Immediate pairs use opposing colors; two- and
+four-ply pairs use the same color. Both longer distances contribute equally and
+receive the existing bounded gravity bonus `32 * clamp(depth, 1, 8)^2` and matching
+penalties for previously searched quiet alternatives. These weights are provisional.
+Failed alternatives sharing the winner's piece/destination do not penalize its
+slot. One accessor supplies the same contexts to scoring and learning. It reads
+only actual search-stack moves, stops at the root and never crosses a null pass.
+Captures, promotions and castling may supply prior context using the recorded
+original mover; current quiet eligibility remains unchanged.
+
+Longer contexts learn only at completed ordinary PVS quiet beta cutoffs.
+IID and verification helpers, cancelled nodes and unsearched TT/static/null
+cutoffs do not train them; quiescence can read quiet history without learning it.
+Existing immediate-history behavior and royal-losers search remain unchanged.
+Audit builds count lookups, nonzero scores, rewards and penalties separately for
+two/four plies, plus participating quiet cutoff ranks and first-move cutoffs.
+Implementation and correctness validation remain separate from efficiency and
+playing-strength acceptance of the combined baseline.
+
+Validation passed 43/43 Debug and 43/43 Release checks, including both lifecycle
+suites, eight focused ASan/UBSan checks (leak detection disabled), eight audit
+checks, and the independent oracle's 4,372 positions/95,734 legal children.
+Native tests cover root/null boundaries, independent one-ply/longer switches,
+worker snapshots, cutoff rewards/penalties, protected winner aliases, special
+prior moves, helper isolation, retained ownership and fresh-history clearing.
+A real-search audit across 12 depth-six roots recorded 793,447 two-ply lookups
+and 672,886 four-ply lookups, with nonzero scores and both rewards and penalties;
+all longer-history counters were zero when disabled.
+
+The frozen-parent comparison completed 432 legal depth-eight searches: three
+cold trials and one retained-history trial across nine profiles. Retained trials
+warm each root at depth six before searching a fixed legal two-ply continuation.
+All 144 disabled comparisons matched parent nodes, scores, best moves and full
+PVs exactly, including LMR on/off and capture-history-off controls. With LMR on,
+the capture/longer-history interaction produced these total nodes over 12 roots:
+
+| Capture history | Longer continuation | Cold nodes | Retained nodes |
+|---|---|---:|---:|
+| Off | Off | 2,095,218 | 1,480,071 |
+| On | Off | 2,386,835 | 1,569,792 |
+| Off | On | 2,267,725 | 1,546,675 |
+| On | On | 1,983,516 | 1,600,988 |
+
+Relative to capture history alone, longer continuation changed cold nodes by
+-16.90% with LMR and -1.57% without it; retained nodes changed by +1.99% and
+-3.32%. Corresponding process-CPU changes were -11.78%/+6.29% for cold medians
+and +3.03%/-1.84% in the single retained trial. Cold CPU ranges overlapped and
+varied substantially. Both histories together searched fewer cold nodes than
+neither, while retained searches grew. This small corpus demonstrates interactions
+and mixed costs; it establishes neither a general speed gain nor playing strength.
+The combined baseline still requires integration and strength acceptance.

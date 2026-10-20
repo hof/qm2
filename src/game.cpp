@@ -56,7 +56,8 @@ namespace options {
         { "Killers", BOOL, 1, "type check default true", true },
         { "UpcomingRepetition", BOOL, 1, "type check default true", true },
         { "CheckEvasions", BOOL, 1, "type check default true", true },
-        { "CaptureHistory", BOOL, 1, "type check default true", true }
+        { "CaptureHistory", BOOL, 1, "type check default true", true },
+        { "LongContinuationHistory", BOOL, 1, "type check default true", true }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         , { "NNUEAuditHorizon", STRING, 0, "type combo default normal var normal var fixed var quiet", true }
         , { "NNUEAuditNullMove", BOOL, 0, "type check default false", true }

@@ -18,6 +18,9 @@ struct audit_counters_t {
     uint64_t capture_history_scores = 0, capture_history_hits = 0;
     uint64_t capture_history_rewards = 0, capture_history_penalties = 0;
     uint64_t capture_history_cutoffs = 0, capture_cutoff_rank_sum = 0, capture_first_cutoffs = 0;
+    uint64_t long_history_scores[2] = {}, long_history_hits[2] = {};
+    uint64_t long_history_rewards[2] = {}, long_history_penalties[2] = {};
+    uint64_t long_history_cutoffs = 0, long_history_rank_sum = 0, long_history_first = 0;
     uint64_t repetition_attempts = 0, repetition_hits = 0, repetition_cutoffs = 0;
     uint64_t q_repetition_hits = 0, q_repetition_cutoffs = 0;
     uint64_t researches = 0, root_researches = 0, research_fail_highs = 0;

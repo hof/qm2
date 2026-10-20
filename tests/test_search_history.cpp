@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "w17/w17_search.h"
 
 namespace {
 
@@ -8,8 +9,9 @@ public:
     move_t target{};
     int quiet_calls = 0;
     int child_calls = 0;
-    explicit cutoff_search_t(int quiet_before)
-        : search_t("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"),
+    explicit cutoff_search_t(int quiet_before, const char * fen =
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")
+        : search_t(fen),
           _quiet_before(quiet_before) {
         null_enabled = beta_pruning = lmr_enabled = ffp_enabled = false;
         iid_enabled = false;
@@ -174,6 +176,193 @@ bool component_controls() {
     return true;
 }
 
+void play(search_t & search, const char * text) {
+    move_t move;
+    move.set(&search.brd, text);
+    search.forward(&move, search.brd.gives_check(&move));
+    if (!search.brd.legal()) {
+        std::abort();
+    }
+}
+
+bool long_contexts() {
+    auto search = std::make_unique<search_t>("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    const char * moves[] = {"g1f3", "g8f6", "b1c3", "b8c6", "e2e3", "e7e6"};
+    for (int ply = 0; ply <= 6; ++ply) {
+        const auto contexts = search->long_continuation_contexts();
+        for (int i = 0; i < 2; ++i) {
+            const int distance = 2 + i * 2;
+            if (contexts[i] != (ply >= distance ? &(search->stack - distance)->current_move : nullptr)) {
+                return false;
+            }
+        }
+        // Every intervening null pass bounds both lookup and learning context.
+        for (int distance = 1; distance <= 4 && distance <= ply; ++distance) {
+            auto & move = (search->stack - distance)->current_move;
+            const auto saved = move;
+            move.clear();
+            const auto bounded = search->long_continuation_contexts();
+            move = saved;
+            if (bool(bounded[0]) != (ply >= 2 && distance > 2)
+                    || bool(bounded[1]) != (ply >= 4 && distance > 4)) {
+                return false;
+            }
+        }
+        if (ply < 6) {
+            play(*search, moves[ply]);
+        }
+    }
+    const auto fen = search->brd.to_string();
+    const auto key = search->brd.stack->tt_key;
+    search->forward();
+    if (search->long_continuation_contexts()[0] || search->long_continuation_contexts()[1]) {
+        return false;
+    }
+    play(*search, "a7a6");
+    if (search->long_continuation_contexts()[0] || search->long_continuation_contexts()[1]) {
+        return false;
+    }
+    auto move = (search->stack - 1)->current_move;
+    search->backward(&move);
+    search->backward();
+    return search->brd.to_string() == fen && search->brd.stack->tt_key == key
+        && search->long_continuation_contexts()[1];
+}
+
+bool long_controls_and_learning() {
+    for (int immediate : {0, 1}) {
+        for (int enabled : {0, 1}) {
+            options::get_option("ContinuationHistory")->value = immediate;
+            options::get_option("LongContinuationHistory")->value = enabled;
+            trans_table::clear();
+            auto search = std::make_unique<cutoff_search_t>(1, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+            options::get_option("ContinuationHistory")->value = 1;
+            options::get_option("LongContinuationHistory")->value = 1;
+            for (const char * text : {"g1f3", "g8f6", "b1c3", "b8c6"}) {
+                play(*search, text);
+            }
+            const auto fen = search->brd.to_string();
+            const auto key = search->brd.stack->tt_key;
+            const auto * frame = search->stack;
+            search->stack->in_check = search->brd.in_check();
+            if (search->long_continuation_enabled != bool(enabled)
+                    || search->search_t::pvs(0, 1, 1) != 1) {
+                return false;
+            }
+            const auto winner = search->stack->best_move;
+            const auto failed = search->stack->searched[0];
+            const auto & previous = (search->stack - 1)->current_move;
+            if (search->quiet_history->continuation_score(winner, previous) != 32 * immediate) {
+                return false;
+            }
+            for (int distance : {2, 4}) {
+                const auto & context = (search->stack - distance)->current_move;
+                if (search->quiet_history->continuation_score(winner, context) != 32 * enabled
+                        || search->quiet_history->continuation_score(failed, context) != -32 * enabled) {
+                    return false;
+                }
+            }
+            if (search->quiet_score(winner) != 64 + 32 * immediate + 64 * enabled
+                    || search->brd.to_string() != fen || search->brd.stack->tt_key != key
+                    || search->stack != frame) {
+                return false;
+            }
+            // Even-color follow-up entries are disjoint from immediate contexts.
+            // Dormant values survive disabling, ownership transfer and re-enabling.
+            const auto context = (search->stack - 2)->current_move;
+            search->quiet_history->update_continuation(winner, context, 500);
+            const int retained = search->quiet_history->continuation_score(winner, context);
+            const int original = search->quiet_score(winner);
+            search->long_continuation_enabled = false;
+            const int disabled = search->quiet_score(winner);
+            search->update_quiet_cutoff(&search->stack->best_move, 1, 0);
+            if (search->quiet_history->continuation_score(winner, context) != retained
+                    || (enabled && original - disabled != retained + 32)) {
+                return false;
+            }
+            auto next = std::make_unique<search_t>("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+            next->take_history(*search);
+            auto fresh = std::make_unique<search_t>("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+            if (next->quiet_history->continuation_score(winner, context) != retained
+                    || fresh->quiet_history->continuation_score(winner, context) != 0) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool long_special_contexts() {
+    struct fixture_t { const char * fen; const char * first; const char * reply; const char * quiet; };
+    const fixture_t fixtures[] = {
+        {"r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1", "e1g1", "e8c8", "a1a2"},
+        {"r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1", "e8g8", "e1c1", "a8a7"},
+        {"7k/P7/8/8/8/8/8/4K3 w - - 0 1", "a7a8q", "h8h7", "e1e2"},
+        {"7k/8/8/3pP3/8/8/8/4K3 w - d6 0 1", "e5d6", "h8h7", "e1e2"},
+        {"7k/8/8/8/3Pp3/8/8/4K3 b - d3 0 1", "e4d3", "e1f1", "h8h7"},
+        {"7k/8/3p4/4P3/8/8/8/4K3 w - - 0 1", "e5d6", "h8h7", "e1e2"}
+    };
+    for (const auto & fixture : fixtures) {
+        for (int seed : {-quiet_history_t::limit, 0, quiet_history_t::limit}) {
+            auto search = std::make_unique<search_t>(fixture.fen);
+            play(*search, fixture.first);
+            const auto context = (search->stack - 1)->current_move;
+            play(*search, fixture.reply);
+            if (search->long_continuation_contexts()[0] != &(search->stack - 2)->current_move
+                    || search->long_continuation_contexts()[1]) {
+                return false;
+            }
+            move_t winner;
+            winner.set(&search->brd, fixture.quiet);
+            auto alias = winner;
+            alias.ssq = (winner.ssq + 1) % 64;
+            search->stack->searched[0] = alias;
+            search->quiet_history->update_continuation(winner, context, seed);
+            search->update_quiet_cutoff(&winner, 1, 1);
+            const int expected = seed + 32 - seed * 32 / quiet_history_t::limit;
+            if (search->quiet_history->continuation_score(winner, context) != expected) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool long_helper_isolation() {
+    for (int mode = 0; mode < 4; ++mode) {
+        trans_table::clear();
+        auto search = std::make_unique<cutoff_search_t>(1, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        for (const char * text : {"g1f3", "g8f6", "b1c3", "b8c6"}) {
+            play(*search, text);
+        }
+        search->stack->in_check = search->brd.in_check();
+        search->iid_active = mode == 0;
+        search->verification_mode = mode == 1 ? verification_mode_t::null_move
+            : mode == 2 ? verification_mode_t::excluded_move : verification_mode_t::none;
+        if (mode == 3) {
+            search->stop_all = true;
+        }
+        search->search_t::pvs(0, 1, 1);
+        for (const auto & context : {(search->stack - 2)->current_move, (search->stack - 4)->current_move}) {
+            for (int piece = WPAWN; piece <= BKING; ++piece) {
+                for (int square = 0; square < 64; ++square) {
+                    if (search->quiet_history->continuation[context.piece][context.tsq][piece][square]) {
+                        return false;
+                    }
+                }
+            }
+        }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        if (search->nnue_audit.counters.long_history_rewards[0]
+                || search->nnue_audit.counters.long_history_penalties[0]) {
+            return false;
+        }
+#endif
+    }
+    auto losers = std::make_unique<w17_search_t>("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    return !losers->long_continuation_enabled && !losers->quiet_history;
+}
+
 bool history_ownership() {
     const char * fen = "7k/8/8/8/8/8/8/K7 w - - 0 1";
     auto old = std::make_unique<search_t>(fen);
@@ -202,5 +391,5 @@ bool history_ownership() {
 
 int main() {
     magic::init();
-    return cutoff_updates() && killer_alias() && context_and_bounds() && component_controls() && history_ownership() ? EXIT_SUCCESS : EXIT_FAILURE;
+    return cutoff_updates() && killer_alias() && context_and_bounds() && component_controls() && long_contexts() && long_controls_and_learning() && long_helper_isolation() && long_special_contexts() && history_ownership() ? EXIT_SUCCESS : EXIT_FAILURE;
 }

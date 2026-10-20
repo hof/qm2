@@ -36,6 +36,7 @@
 #include <random>
 #include "search_control.h"
 #include "nnue.h"
+#include <array>
 #include "quiet_history.h"
 #include "capture_history.h"
 #include "movepicker.h"
@@ -151,6 +152,7 @@ public:
     std::unique_ptr<quiet_history_t> quiet_history;
     std::unique_ptr<capture_history_t> capture_history;
     bool capture_history_enabled;
+    bool long_continuation_enabled;
     quiet_history_policy_t quiet_history_policy;
     bool countermoves_enabled;
     bool killers_enabled;
@@ -217,7 +219,8 @@ public:
     void backward(move_t * move);
     bool try_forward(move_t * move, bool gives_check);
     void update_history(move_t * move);
-    int quiet_score(const move_t & move) const;
+    std::array<const move_t *, 2> long_continuation_contexts() const;
+    int quiet_score(const move_t & move);
     int capture_score(const move_t & move);
     void update_capture_cutoff(const move_t & move, int depth, int searched_moves);
     void take_history(search_t & previous);

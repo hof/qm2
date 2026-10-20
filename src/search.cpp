@@ -251,6 +251,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     quiet_history_policy = {options::get_value("MainHistory") != 0,
         options::get_value("ContinuationHistory") != 0, options::get_value("PawnHistory") != 0};
     capture_history_enabled = wild == 0 && options::get_value("CaptureHistory");
+    long_continuation_enabled = wild == 0 && options::get_value("LongContinuationHistory");
     countermoves_enabled = options::get_value("Countermoves");
     killers_enabled = options::get_value("Killers");
     upcoming_repetition_enabled = wild == 0 && options::get_value("UpcomingRepetition");
@@ -521,6 +522,16 @@ void search_t::go() {
             + " cutoffs " + std::to_string(counts.capture_history_cutoffs)
             + " rank_sum " + std::to_string(counts.capture_cutoff_rank_sum)
             + " first " + std::to_string(counts.capture_first_cutoffs));
+        for (int i = 0; i < 2; ++i) {
+            uci::out("info string audit_long_history distance " + std::to_string(2 + 2 * i)
+                + " scores " + std::to_string(counts.long_history_scores[i])
+                + " hits " + std::to_string(counts.long_history_hits[i])
+                + " rewards " + std::to_string(counts.long_history_rewards[i])
+                + " penalties " + std::to_string(counts.long_history_penalties[i]));
+        }
+        uci::out("info string audit_long_history_cutoffs count " + std::to_string(counts.long_history_cutoffs)
+            + " rank_sum " + std::to_string(counts.long_history_rank_sum)
+            + " first " + std::to_string(counts.long_history_first));
         uci::out("info string audit_evasions nodes " + std::to_string(counts.evasion_nodes)
             + " double_check " + std::to_string(counts.double_check_nodes));
         uci::out("info string audit_repetition attempts " + std::to_string(counts.repetition_attempts)
@@ -1044,12 +1055,46 @@ void search_t::update_capture_cutoff(const move_t & move, int depth, int searche
     }
 }
 
-int search_t::quiet_score(const move_t & move) const {
+std::array<const move_t *, 2> search_t::long_continuation_contexts() const {
+    std::array<const move_t *, 2> contexts{};
+    if (!long_continuation_enabled) {
+        return contexts;
+    }
+    // Search-stack moves only: never read before the root or across a null pass.
+    for (int distance = 1; distance <= 4 && distance <= brd.ply; ++distance) {
+        const auto & previous = (stack - distance)->current_move;
+        if (!previous.piece) {
+            break;
+        }
+        if (distance == 2 || distance == 4) {
+            contexts[distance / 2 - 1] = &previous;
+        }
+    }
+    return contexts;
+}
+
+int search_t::quiet_score(const move_t & move) {
     const auto * previous = brd.ply > 0 ? &(stack - 1)->current_move : nullptr;
-    return quiet_history->score(brd.us(), move, previous, brd.stack->pawn_key, quiet_history_policy);
+    int value = quiet_history->score(brd.us(), move, previous, brd.stack->pawn_key, quiet_history_policy);
+    const auto contexts = long_continuation_contexts();
+    for (int i = 0; i < 2; ++i) {
+        if (contexts[i]) {
+            const int score = quiet_history->continuation_score(move, *contexts[i]);
+            value += score;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++nnue_audit.counters.long_history_scores[i];
+            nnue_audit.counters.long_history_hits[i] += score != 0;
+#endif
+        }
+    }
+    return value;
 }
 
 void search_t::update_quiet_cutoff(move_t * move, int depth, int searched_moves) {
+    // Existing immediate-history learning is unchanged; longer contexts learn
+    // only from completed ordinary searches, never same-position helpers.
+    const auto contexts = !iid_active && verification_mode == verification_mode_t::none
+        ? long_continuation_contexts() : std::array<const move_t *, 2>{};
     const auto * previous = brd.ply > 0 ? &(stack - 1)->current_move : nullptr;
     // Retain the provisional depth-weighted gravity rule; no tuning sweep.
     const int d = std::clamp(depth, 1, 8);
@@ -1059,9 +1104,35 @@ void search_t::update_quiet_cutoff(move_t * move, int depth, int searched_moves)
         if (!failed.capture && !failed.promotion && !failed.castle) {
             quiet_history->update(brd.us(), failed, previous, brd.stack->pawn_key,
                 -bonus, move, quiet_history_policy);
+            // Piece/to aliases share every continuation slot with the winner.
+            if (failed.piece != move->piece || failed.tsq != move->tsq) {
+                for (int j = 0; j < 2; ++j) {
+                    if (contexts[j]) {
+                        quiet_history->update_continuation(failed, *contexts[j], -bonus);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                        ++nnue_audit.counters.long_history_penalties[j];
+#endif
+                    }
+                }
+            }
         }
     }
     quiet_history->update(brd.us(), *move, previous, brd.stack->pawn_key, bonus, nullptr, quiet_history_policy);
+    for (int i = 0; i < 2; ++i) {
+        if (contexts[i]) {
+            quiet_history->update_continuation(*move, *contexts[i], bonus);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++nnue_audit.counters.long_history_rewards[i];
+#endif
+        }
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    if (contexts[0]) {
+        ++nnue_audit.counters.long_history_cutoffs;
+        nnue_audit.counters.long_history_rank_sum += searched_moves + 1;
+        nnue_audit.counters.long_history_first += searched_moves == 0;
+    }
+#endif
 }
 
 /**

@@ -24,6 +24,14 @@ struct quiet_history_t {
         entry += bonus - int(entry) * std::abs(bonus) / limit;
     }
 
+    int continuation_score(const move_t & move, const move_t & previous) const {
+        return continuation[previous.piece][previous.tsq][move.piece][move.tsq];
+    }
+
+    void update_continuation(const move_t & move, const move_t & previous, int bonus) {
+        update_entry(continuation[previous.piece][previous.tsq][move.piece][move.tsq], bonus);
+    }
+
     int score(bool us, const move_t & move, const move_t * previous, U64 pawn_key,
             const quiet_history_policy_t & policy = {}) const {
         int value = 0;
@@ -34,7 +42,7 @@ struct quiet_history_t {
             value += pawn[pawn_key % pawn_buckets][move.piece][move.tsq];
         }
         if (policy.continuation && previous && previous->piece) {
-            value += continuation[previous->piece][previous->tsq][move.piece][move.tsq];
+            value += continuation_score(move, *previous);
         }
         return value;
     }
@@ -52,7 +60,7 @@ struct quiet_history_t {
             update_entry(pawn[pawn_key % pawn_buckets][move.piece][move.tsq], bonus);
         }
         if (policy.continuation && previous && previous->piece) {
-            update_entry(continuation[previous->piece][previous->tsq][move.piece][move.tsq], bonus);
+            update_continuation(move, *previous, bonus);
         }
     }
 };
