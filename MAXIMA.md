@@ -2452,6 +2452,14 @@ networks. Use `C:\\dev\\maxima\\syzygy` for `SyzygyPath`, with
 `BookFile` is `C:\dev\maxima\book.bin` and `ExperienceFile` is
 `C:\dev\maxima\experience\experience.bin`. The frozen HCE baseline remains available through its separate launcher. The bundle's README lists the configuration.
 
+The separate development launcher `C:\dev\uci-engines\maxima-new.exe` (also
+available at `C:\dev\maxima\maxima-new.exe`) runs `engine/maxima-new` from the
+same bundle. The 2026-10-20 package contains engine revision `c80df3d`, including
+the completed cache, history-control, upcoming-repetition and evasion increments.
+It shares the existing model and chess data; the original standard and frozen HCE
+launchers retain their existing backends. See `README-new.txt` in the bundle.
+The remaining baseline features and playing-strength acceptance are still pending.
+
 Launcher source/build artifacts remain local under ignored `.tools/windows/`.
 Copied assets are SHA-256 verified in the bundle's `SHA256.json`. Checks through
 the copied Windows executable loaded NNUE/book/experience/Syzygy using Windows
