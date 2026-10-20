@@ -37,6 +37,7 @@
 #include "search_control.h"
 #include "nnue.h"
 #include "quiet_history.h"
+#include "capture_history.h"
 #include "movepicker.h"
 #include "hashtable.h"
 #include "eval.h"
@@ -148,6 +149,8 @@ public:
     result_source_t result_source;
     int history[BKING + 1][64]; //legacy royal-losers ordering
     std::unique_ptr<quiet_history_t> quiet_history;
+    std::unique_ptr<capture_history_t> capture_history;
+    bool capture_history_enabled;
     quiet_history_policy_t quiet_history_policy;
     bool countermoves_enabled;
     bool killers_enabled;
@@ -215,7 +218,9 @@ public:
     bool try_forward(move_t * move, bool gives_check);
     void update_history(move_t * move);
     int quiet_score(const move_t & move) const;
-    void take_quiet_history(search_t & previous);
+    int capture_score(const move_t & move);
+    void update_capture_cutoff(const move_t & move, int depth, int searched_moves);
+    void take_history(search_t & previous);
     void update_quiet_cutoff(move_t * move, int depth, int searched_moves);
     void update_killers(move_t * move);
     bool is_killer(move_t * const move);

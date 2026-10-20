@@ -250,6 +250,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     q_tt_enabled = wild == 0 && options::get_value("QsearchTT");
     quiet_history_policy = {options::get_value("MainHistory") != 0,
         options::get_value("ContinuationHistory") != 0, options::get_value("PawnHistory") != 0};
+    capture_history_enabled = wild == 0 && options::get_value("CaptureHistory");
     countermoves_enabled = options::get_value("Countermoves");
     killers_enabled = options::get_value("Killers");
     upcoming_repetition_enabled = wild == 0 && options::get_value("UpcomingRepetition");
@@ -316,6 +317,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     memset(history, 0, sizeof (history));
     memset(countermoves, 0, sizeof(countermoves));
     quiet_history = wild == 0 ? std::make_unique<quiet_history_t>() : nullptr;
+    capture_history = wild == 0 ? std::make_unique<capture_history_t>() : nullptr;
     stack->eval_result = score::INVALID;
     stack->improving = false;
     stack->excluded_move = 0;
@@ -512,6 +514,13 @@ void search_t::go() {
             + " min_depth " + std::to_string(counts.min_iid_depth)
             + " max_depth " + std::to_string(counts.max_iid_depth)
             + " min_probe " + std::to_string(counts.min_iid_probe_depth));
+        uci::out("info string audit_capture_history scores " + std::to_string(counts.capture_history_scores)
+            + " hits " + std::to_string(counts.capture_history_hits)
+            + " rewards " + std::to_string(counts.capture_history_rewards)
+            + " penalties " + std::to_string(counts.capture_history_penalties)
+            + " cutoffs " + std::to_string(counts.capture_history_cutoffs)
+            + " rank_sum " + std::to_string(counts.capture_cutoff_rank_sum)
+            + " first " + std::to_string(counts.capture_first_cutoffs));
         uci::out("info string audit_evasions nodes " + std::to_string(counts.evasion_nodes)
             + " double_check " + std::to_string(counts.double_check_nodes));
         uci::out("info string audit_repetition attempts " + std::to_string(counts.repetition_attempts)
@@ -982,14 +991,56 @@ void search_t::update_history(move_t * move) {
     assert(*record < 2 * HISTORY_MAX);
 }
 
-void search_t::take_quiet_history(search_t & previous) {
+void search_t::take_history(search_t & previous) {
     if (wild != 0 || previous.wild != 0 || !previous.quiet_history) {
         return;
     }
     quiet_history = std::move(previous.quiet_history);
+    capture_history = std::move(previous.capture_history);
     for (int piece = 0; piece <= BKING; ++piece) {
         std::copy(std::begin(previous.countermoves[piece]),
             std::end(previous.countermoves[piece]), std::begin(countermoves[piece]));
+    }
+}
+
+int search_t::capture_score(const move_t & move) {
+    if (!capture_history_enabled) {
+        return 0;
+    }
+    const int value = capture_history->score(move);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.capture_history_scores;
+    nnue_audit.counters.capture_history_hits += value != 0;
+#endif
+    return value;
+}
+
+void search_t::update_capture_cutoff(const move_t & move, int depth, int searched_moves) {
+    if (!capture_history_enabled) {
+        return;
+    }
+    const int d = std::clamp(depth, 1, 8);
+    const int bonus = 32 * d * d;
+    const bool noisy = move.capture || move.promotion;
+    for (int i = 0; i < searched_moves; ++i) {
+        const auto & failed = stack->searched[i];
+        // Different sources and promotion choices may share the winner's slot.
+        if ((failed.capture || failed.promotion)
+                && !(noisy && capture_history_t::same_entry(failed, move))) {
+            capture_history->update(failed, -bonus);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++nnue_audit.counters.capture_history_penalties;
+#endif
+        }
+    }
+    if (noisy) {
+        capture_history->update(move, bonus);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++nnue_audit.counters.capture_history_rewards;
+        ++nnue_audit.counters.capture_history_cutoffs;
+        nnue_audit.counters.capture_cutoff_rank_sum += searched_moves + 1;
+        nnue_audit.counters.capture_first_cutoffs += searched_moves == 0;
+#endif
     }
 }
 
@@ -1828,6 +1879,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             if (score >= beta) {
                 if (normal_search) {
                     trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
+                }
+                if (normal_search && !iid_active) {
+                    update_capture_cutoff(*move, depth, searched_moves);
                 }
                 if (normal_search && !move->capture && !move->promotion && !move->castle) {
                     if (countermoves_enabled && brd.ply > 0 && (stack - 1)->current_move.piece) {

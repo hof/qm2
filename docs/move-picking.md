@@ -47,6 +47,26 @@ bound 16384; these are not claimed tuned. Protect winner slots from aliasing
 penalties and update history/countermoves before mutating killer slots.
 The legacy piece/destination history remains only for royal-losers.
 
+Capture history adds 11,648 bytes of worker-owned signed entries, indexed by
+colored moving piece, destination and captured-piece type. En passant uses the
+victim recorded in the move; non-capturing promotions use the empty-victim slot.
+Promotion choices share their original pawn context. On a completed normal PVS
+beta cutoff, reward a noisy winner and penalize previously searched legal noisy
+alternatives, including when a quiet move wins. A winner's shared table slot is
+protected from penalties. Use the same provisional gravity bound and depth bonus
+as quiet history. TT, static/null, qsearch and helper-search cutoffs do not train
+this table; cancellation and rejected/pruned moves supply no parent update.
+
+With `CaptureHistory` enabled, noisy ordering combines 16 times the existing
+material score with capture history. Positive/negative stage offsets preserve
+lazy SEE classification: a negative-SEE move stays deferred irrespective of its
+history. Deferred moves combine 16 times SEE with history. Quiescence uses the
+same ordering without learning. These scales are provisional, not tuned.
+`CaptureHistory=false` skips scoring and learning and retains the previous noisy
+ordering, including for already nonzero retained entries. The setting is captured
+by each worker, and a policy change stops search and clears both TT modes.
+Royal-losers keeps its existing ordering and does not allocate this table.
+
 After joining the previous standard worker, transfer table ownership and copy
 countermoves into its successor. Normal `position`/`go` requests retain learning;
 `ucinewgame` releases the old worker and starts cold. No mutable tables are
@@ -70,3 +90,16 @@ moves searched 1.1% more nodes than late quiets with the same history code;
 their timing differences were small relative to trial variation. These are
 CPU-clock observations under a duty throttle, not unthrottled wall NPS or an
 Elo result. The refactor remains an experiment with no established strength gain.
+
+
+Capture-history validation (2026-10-20): 43 Debug and 43 Release checks, eight
+focused ASan/UBSan checks with leak detection disabled, eight audit checks, and
+an independent oracle covering 4,372 positions/95,734 legal children. A 12-root
+D8 matrix completed 288 legal searches; all 96 disabled signatures exactly
+matched the frozen parent. Enabled cold nodes increased 13.92% with LMR and
+1.20% without it; retained-history nodes increased 6.06%/0.95%. Initial cold
+median CPU increased 58.89%/1.18%; an additional three-pair LMR-on confirmation
+measured +23.77% (2.65 to 3.28 seconds). Samples are short and variable and show
+no efficiency benefit. The different node effects with LMR on/off require
+integrated validation; no strength gain or tuned constants are established.
+See MAXIMA.md for the full protocol and remaining acceptance limits.

@@ -404,11 +404,12 @@ cache. Successful network loads and tablebase-path changes clear it separately.
 Clock overhead and other non-search-policy settings retain cached results.
 
 Standard search exposes independent `MainHistory`, `ContinuationHistory`,
-`PawnHistory`, `Countermoves` and `Killers` checkboxes, all defaulting to true.
+`PawnHistory`, `CaptureHistory`, `Countermoves` and `Killers` checkboxes, all
+defaulting to true.
 Each worker snapshots them before search. A disabled history table contributes
 zero to ordering and receives neither rewards nor penalties. Disabled
 countermoves and killers skip hint selection and learning; their moves remain
-available through ordinary generation. Standard quiet history and countermoves
+available through ordinary generation. Standard quiet/capture history and countermoves
 remain worker-owned and persist across moves, including dormant entries while
 a component is disabled. Re-enabling can reuse those entries; use `ucinewgame`
 for a fresh-history comparison. Killers retain their existing search lifetime.
@@ -5452,3 +5453,46 @@ search cost and must be remeasured before attributing a CPU regression. Node
 counts and paired tree-equivalence results remain valid. Duty-throttled wall
 times are not ordinary NPS measurements. No strength gain is established. No new
 match or installation was performed for this experiment.
+
+
+### Capture ordering history (2026-10-20)
+
+`CaptureHistory` defaults true for standard chess. A worker-owned bounded table
+learns which captures/promotions cause completed main-search beta cutoffs;
+previously searched noisy alternatives receive penalties even when a quiet move
+wins. Context includes moving piece/color, target and victim type, with explicit
+en passant and promotion handling. History changes ordering within the existing
+SEE stages; it does not change legality or the SEE threshold. Quiescence reads
+history without training it. Verification/IID probes, aborted nodes and unsearched
+cutoffs do not train capture history.
+
+Normal searches retain capture and quiet history by transferring ownership after
+joining the previous worker; `ucinewgame` resets both. Disabling `CaptureHistory`
+skips scoring and learning and restores the previous noisy ordering. Changing
+the option stops active search and clears main/qsearch TT entries. Royal-losers
+keeps its existing policy. Constants remain provisional; playing-strength
+acceptance and parameter tuning are pending. See [move-picking.md](docs/move-picking.md).
+
+Capture-history validation passed 43/43 Debug and 43/43 Release checks, eight
+focused ASan/UBSan checks (leak detection disabled), eight audit checks, and the
+independent oracle's 4,372 positions/95,734 legal children. Audit builds count
+lookups/nonzero hits, rewards/penalties, noisy cutoffs and searched cutoff ranks.
+A real-search D6 audit recorded 274,620 lookups, 141,158 nonzero hits, 8,866
+rewards and 1,253 penalties; all capture-history counters were zero when off.
+
+A fixed-depth diagnostic used 12 reserved D8 roots, three alternating cold
+trials and one retained-history trial per profile, with LMR on/off, a frozen
+parent, and capture history on/off. Retained trials warmed each root at D6 then
+searched its fixed legal two-ply continuation at D8. All 288 searches completed
+legally; all 96 disabled-control signatures matched the parent exactly in
+nodes, score, best move and PV. Cold enabled nodes increased 13.92% with LMR
+and 1.20% without it; retained nodes increased 6.06% and 0.95%, respectively.
+Initial median cold CPU increased 58.89%/1.18%; retained CPU increased
+1.59%/16.19% in its single trial. A bounded three-pair LMR-on confirmation
+reproduced all 72 per-variant signatures and measured median CPU 2.65 seconds
+off versus 3.28 seconds on (+23.77%). The original results remain recorded.
+Timing used a readiness barrier and one low-priority CPU without pause
+throttling. These short, variable samples show no efficiency benefit; they do
+not establish playing strength or isolate the cause of the LMR-dependent tree
+changes. Baseline acceptance remains pending. No parameter tuning, timed match
+or Windows installation accompanied this increment.

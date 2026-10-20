@@ -15,6 +15,9 @@ struct audit_counters_t {
     uint64_t pvs_nodes = 0, q_nodes = 0, root_calls = 0;
     uint64_t move_visits = 0, null_visits = 0;
     uint64_t evasion_nodes = 0, double_check_nodes = 0;
+    uint64_t capture_history_scores = 0, capture_history_hits = 0;
+    uint64_t capture_history_rewards = 0, capture_history_penalties = 0;
+    uint64_t capture_history_cutoffs = 0, capture_cutoff_rank_sum = 0, capture_first_cutoffs = 0;
     uint64_t repetition_attempts = 0, repetition_hits = 0, repetition_cutoffs = 0;
     uint64_t q_repetition_hits = 0, q_repetition_cutoffs = 0;
     uint64_t researches = 0, root_researches = 0, research_fail_highs = 0;

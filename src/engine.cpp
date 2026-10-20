@@ -99,7 +99,7 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
             next_search.reset(new search_t(_root_fen.c_str(), &_game, &_control, _position_history));
             if (_search && _search->wild == 0) {
                 // stop() joined the old worker before ownership transfer.
-                next_search->take_quiet_history(*_search);
+                next_search->take_history(*_search);
             }
         }
         _search = std::move(next_search);

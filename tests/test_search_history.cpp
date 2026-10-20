@@ -183,7 +183,7 @@ bool history_ownership() {
     old->countermoves[BKING][h7] = 123;
     auto * address = old->quiet_history.get();
     auto next = std::make_unique<search_t>(fen);
-    next->take_quiet_history(*old);
+    next->take_history(*old);
     if (old->quiet_history || next->quiet_history.get() != address
             || next->quiet_history->main[WHITE][a1][a2] != -500
             || next->quiet_history->continuation[BKING][h7][WKING][a2] != 900
