@@ -220,8 +220,8 @@ public:
     bool try_forward(move_t * move, bool gives_check);
     void update_history(move_t * move);
     std::array<const move_t *, 2> long_continuation_contexts() const;
-    int quiet_score(const move_t & move);
-    int capture_score(const move_t & move);
+    // Standard search: learned history only, queried before making the move.
+    int move_history_score(const move_t & move);
     void update_capture_cutoff(const move_t & move, int depth, int searched_moves);
     void take_history(search_t & previous);
     void update_quiet_cutoff(move_t * move, int depth, int searched_moves);

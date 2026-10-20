@@ -460,7 +460,7 @@ bool test_quiet_order() {
                     }
                 }
                 std::vector<move_t> pending(quiets.first, quiets.last);
-                for (auto & move : pending) move.score = search.quiet_score(move);
+                for (auto & move : pending) move.score = search.move_history_score(move);
                 std::vector<int> expected;
                 // Independent original selection: first maximum, then swap-remove.
                 while (!pending.empty()) {
@@ -494,7 +494,7 @@ bool test_quiet_order() {
                     for (int code : actual) {
                         move_t move;
                         move.set(code);
-                        const int value = search.quiet_score(move);
+                        const int value = search.move_history_score(move);
                         ordered &= value <= previous_score;
                         previous_score = value;
                     }

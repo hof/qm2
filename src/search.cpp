@@ -1014,18 +1014,6 @@ void search_t::take_history(search_t & previous) {
     }
 }
 
-int search_t::capture_score(const move_t & move) {
-    if (!capture_history_enabled) {
-        return 0;
-    }
-    const int value = capture_history->score(move);
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    ++nnue_audit.counters.capture_history_scores;
-    nnue_audit.counters.capture_history_hits += value != 0;
-#endif
-    return value;
-}
-
 void search_t::update_capture_cutoff(const move_t & move, int depth, int searched_moves) {
     if (!capture_history_enabled) {
         return;
@@ -1073,7 +1061,20 @@ std::array<const move_t *, 2> search_t::long_continuation_contexts() const {
     return contexts;
 }
 
-int search_t::quiet_score(const move_t & move) {
+int search_t::move_history_score(const move_t & move) {
+    // Read learned history in the parent position. Picker scores also contain
+    // material/SEE stage offsets and must never become search history input.
+    if (move.capture || move.promotion) {
+        if (!capture_history_enabled) {
+            return 0;
+        }
+        const int value = capture_history->score(move);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++nnue_audit.counters.capture_history_scores;
+        nnue_audit.counters.capture_history_hits += value != 0;
+#endif
+        return value;
+    }
     const auto * previous = brd.ply > 0 ? &(stack - 1)->current_move : nullptr;
     int value = quiet_history->score(brd.us(), move, previous, brd.stack->pawn_key, quiet_history_policy);
     const auto contexts = long_continuation_contexts();

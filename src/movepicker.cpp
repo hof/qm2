@@ -287,7 +287,7 @@ move_t * move_picker_t::pop_standard(search_t * s, int phase) {
         if (phase == promotions && !s->brd.see(best, 0)) {
             const int see = s->brd.see(best);
             best->score = s->capture_history_enabled
-                ? -2 * capture_history_t::limit + 16 * see + s->capture_score(*best) : see;
+                ? -2 * capture_history_t::limit + 16 * see + s->move_history_score(*best) : see;
             continue;
         }
         *list->best = *best;
@@ -327,7 +327,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                     const int material = board->mvvlva(move);
                     // Keep candidates positive until lazy SEE classifies them.
                     move->score = s->capture_history_enabled
-                        ? 2 * capture_history_t::limit + 16 * material + s->capture_score(*move)
+                        ? 2 * capture_history_t::limit + 16 * material + s->move_history_score(*move)
                         : material;
                 }
                 list->stage = promotions;
@@ -381,7 +381,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                     move::gen_quiet_moves(board, list);
                 }
                 for (auto * move = begin; move != list->last; ++move) {
-                    move->score = s->quiet_score(*move);
+                    move->score = s->move_history_score(*move);
                 }
                 list->stage = good_quiets;
                 break;

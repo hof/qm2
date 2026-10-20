@@ -279,7 +279,7 @@ bool ordering_and_controls() {
         ok &= check(search->capture_history_enabled == bool(enabled), "worker must snapshot capture policy");
         auto move = parsed(*search, "e5d7");
         search->capture_history->update(move, 1024);
-        ok &= check(search->capture_score(move) == (enabled ? 1024 : 0), "disabled history must skip scoring");
+        ok &= check(search->move_history_score(move) == (enabled ? 1024 : 0), "disabled history must skip scoring");
         const auto before = *search->capture_history;
         trans_table::clear();
         search->search_t::pvs(0, 1, 1);

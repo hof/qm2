@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "w17/w17_search.h"
+#include <cstring>
 
 namespace {
 
@@ -153,7 +154,7 @@ bool component_controls() {
                 || history.pawn[bucket][best.piece][best.tsq] != ((mask & 4) ? 32 : 0)
                 || search->countermoves[previous.piece][previous.tsq] != ((mask & 8) ? best.to_compact() : 0)
                 || bool(search->stack->killer[0].piece) != bool(mask & 16)
-                || search->quiet_score(best) != 32 * ((bool(mask & 1)) + bool(mask & 2) + bool(mask & 4))) {
+                || search->move_history_score(best) != 32 * ((bool(mask & 1)) + bool(mask & 2) + bool(mask & 4))) {
             std::cerr << "component cutoff/snapshot failed: " << mask << '\n';
             return false;
         }
@@ -162,7 +163,7 @@ bool component_controls() {
         mutable_history.main[BLACK][best.ssq][best.tsq] = 101;
         mutable_history.continuation[previous.piece][previous.tsq][best.piece][best.tsq] = 202;
         mutable_history.pawn[bucket][best.piece][best.tsq] = 303;
-        if (search->quiet_score(best) != ((mask & 1) ? 101 : 0)
+        if (search->move_history_score(best) != ((mask & 1) ? 101 : 0)
                 + ((mask & 2) ? 202 : 0) + ((mask & 4) ? 303 : 0)) {
             return false;
         }
@@ -262,7 +263,7 @@ bool long_controls_and_learning() {
                     return false;
                 }
             }
-            if (search->quiet_score(winner) != 64 + 32 * immediate + 64 * enabled
+            if (search->move_history_score(winner) != 64 + 32 * immediate + 64 * enabled
                     || search->brd.to_string() != fen || search->brd.stack->tt_key != key
                     || search->stack != frame) {
                 return false;
@@ -272,9 +273,9 @@ bool long_controls_and_learning() {
             const auto context = (search->stack - 2)->current_move;
             search->quiet_history->update_continuation(winner, context, 500);
             const int retained = search->quiet_history->continuation_score(winner, context);
-            const int original = search->quiet_score(winner);
+            const int original = search->move_history_score(winner);
             search->long_continuation_enabled = false;
-            const int disabled = search->quiet_score(winner);
+            const int disabled = search->move_history_score(winner);
             search->update_quiet_cutoff(&search->stack->best_move, 1, 0);
             if (search->quiet_history->continuation_score(winner, context) != retained
                     || (enabled && original - disabled != retained + 32)) {
@@ -363,6 +364,59 @@ bool long_helper_isolation() {
     return !losers->long_continuation_enabled && !losers->quiet_history;
 }
 
+// A caller can query a TT/killer move before the picker assigns any score.
+// Exercise all independent policies and special-move history classifications.
+bool shared_history_access() {
+    auto search = std::make_unique<search_t>("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    for (const char * text : {"g1f3", "g8f6", "b1c3", "b8c6"}) {
+        play(*search, text);
+    }
+    std::array<move_t, 6> moves{};
+    moves[0].set(WKNIGHT, f3, g5);
+    moves[1].set(WKNIGHT, f3, e5, BPAWN);
+    moves[2].set(WPAWN, a7, a8, EMPTY, WQUEEN);
+    moves[3].set(WPAWN, a7, b8, BROOK, WKNIGHT);
+    moves[4].set(WPAWN, e5, d6, BPAWN);
+    moves[4].en_passant = true;
+    moves[5].set(WKING, e1, g1);
+    moves[5].castle = 1;
+    const auto pawn_bucket = search->brd.stack->pawn_key % quiet_history_t::pawn_buckets;
+    for (const auto & move : moves) {
+        search->quiet_history->main[WHITE][move.ssq][move.tsq] = 11;
+        search->quiet_history->pawn[pawn_bucket][move.piece][move.tsq] = -13;
+        for (int distance : {1, 2, 4}) {
+            const auto & previous = (search->stack - distance)->current_move;
+            search->quiet_history->continuation[previous.piece][previous.tsq][move.piece][move.tsq]
+                = distance == 1 ? 17 : distance == 2 ? 19 : 23;
+        }
+        search->capture_history->entries[move.piece][move.tsq][capture_history_t::victim(move)] = -29;
+    }
+    const auto quiet_before = std::make_unique<quiet_history_t>(*search->quiet_history);
+    const auto capture_before = *search->capture_history;
+    const auto fen = search->brd.to_string();
+    const auto key = search->brd.stack->tt_key;
+    for (int mask = 0; mask < 32; ++mask) {
+        search->quiet_history_policy = {bool(mask & 1), bool(mask & 2), bool(mask & 4)};
+        search->long_continuation_enabled = mask & 8;
+        search->capture_history_enabled = mask & 16;
+        for (auto & move : moves) {
+            const int expected = move.capture || move.promotion ? ((mask & 16) ? -29 : 0)
+                : ((mask & 1) ? 11 : 0) + ((mask & 2) ? 17 : 0)
+                    - ((mask & 4) ? 13 : 0) + ((mask & 8) ? 42 : 0);
+            for (int picker_score : {-1000000, 0, 1000000}) {
+                move.score = picker_score;
+                if (search->move_history_score(move) != expected || move.score != picker_score) {
+                    std::cerr << "shared history classification/policy failed\n";
+                    return false;
+                }
+            }
+        }
+    }
+    return std::memcmp(quiet_before.get(), search->quiet_history.get(), sizeof(quiet_history_t)) == 0
+        && std::memcmp(&capture_before, search->capture_history.get(), sizeof(capture_before)) == 0
+        && search->brd.to_string() == fen && search->brd.stack->tt_key == key;
+}
+
 bool history_ownership() {
     const char * fen = "7k/8/8/8/8/8/8/K7 w - - 0 1";
     auto old = std::make_unique<search_t>(fen);
@@ -391,5 +445,5 @@ bool history_ownership() {
 
 int main() {
     magic::init();
-    return cutoff_updates() && killer_alias() && context_and_bounds() && component_controls() && long_contexts() && long_controls_and_learning() && long_helper_isolation() && long_special_contexts() && history_ownership() ? EXIT_SUCCESS : EXIT_FAILURE;
+    return cutoff_updates() && killer_alias() && context_and_bounds() && component_controls() && long_contexts() && long_controls_and_learning() && long_helper_isolation() && long_special_contexts() && shared_history_access() && history_ownership() ? EXIT_SUCCESS : EXIT_FAILURE;
 }

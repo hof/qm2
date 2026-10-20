@@ -5561,3 +5561,35 @@ varied substantially. Both histories together searched fewer cold nodes than
 neither, while retained searches grew. This small corpus demonstrates interactions
 and mixed costs; it establishes neither a general speed gain nor playing strength.
 The combined baseline still requires integration and strength acceptance.
+
+### Shared move-history access (2026-10-20)
+
+Standard search exposes `move_history_score(move)` as the common learned-history
+query for ordering and search policies. Query it in the parent position before
+making the move. Captures and all promotions use capture history; ordinary
+quiets and castling use main, pawn and enabled one/two/four-ply continuation
+history. En passant uses its recorded victim, and a non-capturing promotion uses
+the empty-victim capture-history slot. Disabled components contribute zero.
+Root/null boundaries, worker snapshots, ownership and learning rules are unchanged.
+
+The query ignores `move.score`: the picker adds material and SEE stage offsets
+separately. TT, killer and countermove candidates can therefore be queried without
+first passing through batch scoring. Reads do not train history or change board
+state; audit builds retain their existing lookup/hit counters. The current fixed
+LMR and pruning policies do not yet consume learned scores. Their later changes
+will use this interface with separately validated eligibility and scaling.
+This consolidation adds no option or search heuristic and keeps the existing
+component controls and royal-losers ordering.
+
+Validation passed 43/43 Debug and 43/43 Release checks, both lifecycle suites,
+eight focused ASan/UBSan checks (leak detection disabled), eight audit checks,
+and the independent oracle's 4,372 positions/95,734 legal children. A native
+regression covers all 32 history-policy combinations, special-move dispatch,
+independence from picker scores, and unchanged tables/board state. All 144 paired
+cold/retained comparisons at depth eight matched parent nodes, scores, best moves
+and full PVs exactly, with LMR on/off and learned histories off. Default cold CPU
+median changed +0.36%; LMR-off cold changed +10.25%, then +4.26% in one bounded
+confirmation with 36 further exact pairs and overlapping CPU ranges. Retained
+CPU changed +2.21%/-1.23% with LMR on/off. These short, variable samples establish
+neither a general speed gain nor playing strength; combined baseline acceptance
+remains pending.
