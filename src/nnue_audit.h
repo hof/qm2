@@ -21,6 +21,9 @@ struct audit_counters_t {
     uint64_t long_history_scores[2] = {}, long_history_hits[2] = {};
     uint64_t long_history_rewards[2] = {}, long_history_penalties[2] = {};
     uint64_t long_history_cutoffs = 0, long_history_rank_sum = 0, long_history_first = 0;
+    uint64_t quiet_ordering_cutoffs = 0, quiet_ordering_rank_sum = 0, quiet_ordering_first = 0;
+    uint64_t threat_ordering_scores = 0, threat_escapes = 0, threat_entries = 0;
+    uint64_t check_ordering_candidates = 0, check_ordering_bonuses = 0;
     uint64_t repetition_attempts = 0, repetition_hits = 0, repetition_cutoffs = 0;
     uint64_t q_repetition_hits = 0, q_repetition_cutoffs = 0;
     uint64_t researches = 0, root_researches = 0, research_fail_highs = 0;

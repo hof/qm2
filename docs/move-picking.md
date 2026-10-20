@@ -23,7 +23,7 @@ repetition, search counters and lifecycle; compare Release performance and
 playing strength separately.
 
 The standard picker stages are TT, SEE-nonnegative captures/promotions, two
-killers, countermove, positive-history quiets, deferred negative-SEE noisy
+killers, countermove, positive-score quiets, deferred negative-SEE noisy
 moves, then remaining quiets. Quiet castling candidates share quiet ordering;
 qsearch retains its existing castling policy. Positive means strictly greater
 than zero. Stage separation does not assert tactical correctness of SEE or
@@ -32,13 +32,29 @@ hint codes suppress duplicates without making generated king-safety tests.
 Countermoves are keyed by the previous colored piece and destination; no
 continuation/countermove context is used after a null move or at a cold root.
 
-Quiet scores sum three signed, bounded history entries:
+Learned quiet scores sum signed, bounded history entries:
 
 - Main: side, source square, destination square.
-- One-ply continuation: previous colored piece/destination and current colored
-  piece/destination. Root and null predecessors provide no continuation entry.
+- Continuation: colored piece/destination pairs from one, two and four plies
+  back and the current move. Contexts stop at the root or any intervening null.
+  Immediate and longer contexts have independent controls.
 - Pawn: an incremental colored-pawn hash modulo 512, then current colored
   piece/destination. Collisions deliberately share heuristic scores.
+
+The deferred quiet batch adds optional ordering context to that learned score.
+`ThreatOrdering` rewards escaping attacks by lesser pieces and penalizes entering
+them: pawn attacks for minors (4000 units), pawn/minor attacks for rooks (8000),
+and pawn/minor/rook attacks for queens (12000). Equal threatened status cancels.
+Batch-local unions use parent occupancy and include pinned attackers; these are
+heuristic priorities, not safety certificates. Pawns/kings have no threat offset.
+`CheckOrdering` adds 10000 for a quiet check, including a discovered check, when
+`see(move, 0)` passes. Castling receives neither context offset. Constants remain
+provisional. Both switches default true, are snapshotted by workers, and clear
+TT results on change. Disabling both restores learned-only scoring. Good noisy
+stages, early hints and final legality retain their contracts. Quiescence scores
+its existing quiet candidate domain without generating additional move classes.
+The shared `move_history_score` accessor returns learned history only; contextual
+bonuses are neither learned nor passed to history-based search decisions.
 
 The worker owns approximately 2.2 MiB of 16-bit history entries. On a quiet
 cutoff, reward the winner and penalize previously searched ordinary quiets with
@@ -103,3 +119,13 @@ measured +23.77% (2.65 to 3.28 seconds). Samples are short and variable and show
 no efficiency benefit. The different node effects with LMR on/off require
 integrated validation; no strength gain or tuned constants are established.
 See MAXIMA.md for the full protocol and remaining acceptance limits.
+
+
+Threat/check ordering validation (2026-10-20): 44 Debug and 44 Release checks,
+nine focused ASan/UBSan checks (leak detection disabled), nine audit checks,
+and the independent 4,372-position oracle passed. All 480 D8 searches completed
+legally; 96 disabled signatures matched the frozen parent exactly. With LMR,
+the combined policy reduced nodes 9.20% cold and 5.14% retained versus the
+disabled candidate. Without LMR, node changes were -1.04%/+1.92%. CPU results
+were mixed across cold/retained and LMR settings; no general speed or strength
+gain is established. See MAXIMA.md for timing, controls and audit results.

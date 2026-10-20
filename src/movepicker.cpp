@@ -304,6 +304,61 @@ move_t * move_picker_t::pop_standard(search_t * s, int phase) {
     return nullptr;
 }
 
+void move_picker_t::score_quiets(search_t * s, move_t * begin, move_t * end) {
+    auto & board = s->brd;
+    const bool us = board.stack->wtm;
+    U64 lesser[WKING + 1] = {};
+    if (s->threat_ordering_enabled && begin != end) {
+        // Parent-position pseudo-attacks are ordering hints, not safety proofs.
+        // Build once, only after earlier picker stages failed to cut off.
+        lesser[WKNIGHT] = lesser[WBISHOP] = board.pawn_attacks(!us);
+        U64 attacks = lesser[WKNIGHT];
+        U64 pieces = board.bb[KNIGHT[!us]];
+        while (pieces) {
+            attacks |= KNIGHT_MOVES[::pop(pieces)];
+        }
+        pieces = board.bb[BISHOP[!us]];
+        while (pieces) {
+            attacks |= magic::bishop_moves(::pop(pieces), board.all());
+        }
+        lesser[WROOK] = attacks;
+        pieces = board.bb[ROOK[!us]];
+        while (pieces) {
+            attacks |= magic::rook_moves(::pop(pieces), board.all());
+        }
+        lesser[WQUEEN] = attacks;
+    }
+    for (auto * move = begin; move != end; ++move) {
+        int score = s->move_history_score(*move);
+        // Castling moves two pieces; the ordinary from/to hints do not apply.
+        if (!move->castle) {
+            const int type = (move->piece - 1) % 6 + 1;
+            const int weight = type == WQUEEN ? 12000 : type == WROOK ? 8000 : 4000;
+            const bool escaping = lesser[type] & BIT(move->ssq);
+            const bool entering = lesser[type] & BIT(move->tsq);
+            score += weight * (int(escaping) - int(entering));
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            if (s->threat_ordering_enabled) {
+                ++s->nnue_audit.counters.threat_ordering_scores;
+                s->nnue_audit.counters.threat_escapes += escaping && !entering;
+                s->nnue_audit.counters.threat_entries += entering && !escaping;
+            }
+#endif
+            if (s->check_ordering_enabled && board.gives_check(move)) {
+                const bool safe = board.see(move, 0);
+                if (safe) {
+                    score += 10000;
+                }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                ++s->nnue_audit.counters.check_ordering_candidates;
+                s->nnue_audit.counters.check_ordering_bonuses += safe;
+#endif
+            }
+        }
+        move->score = score;
+    }
+}
+
 move_t * move_picker_t::next_standard(search_t * s, int depth) {
     auto * list = &s->stack->move_list;
     auto * board = &s->brd;
@@ -380,9 +435,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 if (do_quiets) {
                     move::gen_quiet_moves(board, list);
                 }
-                for (auto * move = begin; move != list->last; ++move) {
-                    move->score = s->move_history_score(*move);
-                }
+                score_quiets(s, begin, list->last);
                 list->stage = good_quiets;
                 break;
             }

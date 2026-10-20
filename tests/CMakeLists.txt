@@ -122,6 +122,10 @@ add_executable(test_move_picker test_move_picker.cpp)
 target_link_libraries(test_move_picker MAX2SRC)
 add_test(NAME test_move_picker COMMAND test_move_picker)
 
+add_executable(test_quiet_ordering test_quiet_ordering.cpp)
+target_link_libraries(test_quiet_ordering MAX2SRC)
+add_test(NAME test_quiet_ordering COMMAND test_quiet_ordering)
+
 add_executable(test_qsearch_tt test_qsearch_tt.cpp)
 target_link_libraries(test_qsearch_tt MAX2SRC)
 add_test(NAME test_qsearch_tt COMMAND test_qsearch_tt)

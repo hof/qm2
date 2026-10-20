@@ -426,6 +426,31 @@ medians (6.25% cold, 9.82% retained), mixed paired directions and substantial
 variation; they establish neither a speed benefit nor a reliable isolated cost.
 Playing-strength acceptance remains outstanding.
 
+Standard quiet ordering adds parent-position threat context after the earlier
+TT, good noisy, killer and countermove stages. A minor uses enemy pawn attacks;
+a rook also includes enemy minor attacks; a queen also includes enemy rook
+attacks. Escaping earns 4000/8000/12000 ordering units respectively; entering
+loses the same amount, and remaining threatened cancels. Pawns and kings have
+no such adjustment. These are pseudo-attacks with current occupancy, including
+pinned attackers; they guide ordering and do not certify destination safety.
+The unions are local to the deferred quiet batch, with no persistent board cache.
+
+Quiet checks, including discovered checks, earn 10000 ordering units only when
+`see(move, 0)` passes. Castling retains its learned score without either context
+adjustment because it moves two pieces. These provisional constants are not
+tuned strength claims. Context scores affect the existing positive-quiet stage
+and selection within quiets; they do not change good-noisy SEE classification,
+move generation, final legality, pruning, or check extensions. Available
+qsearch quiet checks/evasions use the same scoring without expanding their domain.
+`move_history_score` remains learned history only, so contextual bonuses do not
+leak into history-based search decisions or get learned as rewards.
+
+`ThreatOrdering` and `CheckOrdering` are independent UCI checkboxes, default true.
+Workers snapshot them; changed settings stop/join search and clear incompatible
+TT results. Disabling both restores the prior learned-only quiet scoring.
+They allocate no tables and leave learned-history persistence/reset unchanged.
+Royal losers retains its own picker and both worker flags are false.
+
 An exact TT return can shorten the searched PV because an entry stores a score
 and move rather than a complete continuation. Search clears the stale PV before
 reuse. UCI text may append TT move hints to a short searched prefix; those hints
@@ -5593,3 +5618,36 @@ confirmation with 36 further exact pairs and overlapping CPU ranges. Retained
 CPU changed +2.21%/-1.23% with LMR on/off. These short, variable samples establish
 neither a general speed gain nor playing strength; combined baseline acceptance
 remains pending.
+
+
+### Threat and checking-move ordering validation (2026-10-20)
+
+Validation passed 44/44 Debug and 44/44 Release checks, including both lifecycle
+suites; nine focused ASan/UBSan checks (leak detection disabled), nine audit
+checks, and an independent oracle covering 4,372 positions/95,734 legal children.
+The new scoring regression compares batch scoring against a per-square attack
+oracle for all four policies and preserves candidate sets, board and history.
+The existing learned-only tie/order regression explicitly disables both new
+context switches.
+
+A 12-root D8 matrix completed 480 legal searches: three deterministic cold
+trials and one retained-history trial per profile, with parent/off/threat/check/
+both and LMR on/off. All 96 disabled signatures matched the parent exactly.
+Retained trials warm each root at D6 then search a fixed legal two-ply continuation.
+Compared with the disabled candidate, both features reduced cold nodes by
+9.20%/1.04% with LMR on/off; retained nodes changed by -5.14%/+1.92%. Cold
+median CPU changed by -7.42%/+1.52%; retained CPU by -2.83%/+2.77%.
+Compared directly with the frozen parent, both-feature CPU changed by
+-5.20%/+4.12% cold and +2.49%/+3.21% retained. Disabled structural CPU
+cost was +2.40%/+2.56% cold; cold timing ranges overlap the parent. Timing
+used a readiness barrier and one low-priority CPU without pause throttling.
+These short, mixed samples establish no general speed or strength gain.
+
+A real-search D6 audit over 12 roots recorded 1,093,687 scored quiet candidates,
+21,292 net threat escapes, 138,182 net threat entries, and 3,114 SEE-passing
+checks out of 8,758 checking candidates with both features enabled. Ordinary
+quiet cutoffs numbered 12,616, with rank sum 18,329 and 10,518 first-move
+cutoffs; helper searches are excluded. Disabled context counters were zero.
+Constants remain provisional; no parameter tuning, timed match or installation
+accompanied this increment. Integrated baseline and strength acceptance remain
+pending.

@@ -153,7 +153,7 @@ class search_lifecycle_tests(unittest.TestCase):
         for name in ("Aspiration", "IID", "QsearchTT", "NullMove", "NullVerify",
                      "BetaPruning", "FutilityPruning", "LMR", "MainHistory",
                      "ContinuationHistory", "PawnHistory", "Countermoves", "Killers",
-                     "UpcomingRepetition", "CheckEvasions", "CaptureHistory", "LongContinuationHistory"):
+                     "UpcomingRepetition", "CheckEvasions", "CaptureHistory", "LongContinuationHistory", "ThreatOrdering", "CheckOrdering"):
             with self.subTest(option=name), running_engine() as engine:
                 engine.send("setoption name OwnBook value false")
                 engine.start_search()

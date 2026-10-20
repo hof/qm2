@@ -435,6 +435,9 @@ bool test_quiet_order() {
             for (int hints = 0; hints < 2; ++hints) {
                 auto storage = std::make_unique<search_t>(fen);
                 auto & search = *storage;
+                // Keep this learned-only tie/order regression as a disabled control.
+                search.threat_ordering_enabled = false;
+                search.check_ordering_enabled = false;
                 search.stack->in_check = search.brd.in_check();
                 for (int from = 0; from < 64; ++from) {
                     for (int square = 0; square < 64; ++square) {

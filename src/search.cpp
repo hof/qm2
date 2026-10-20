@@ -252,6 +252,8 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         options::get_value("ContinuationHistory") != 0, options::get_value("PawnHistory") != 0};
     capture_history_enabled = wild == 0 && options::get_value("CaptureHistory");
     long_continuation_enabled = wild == 0 && options::get_value("LongContinuationHistory");
+    threat_ordering_enabled = wild == 0 && options::get_value("ThreatOrdering");
+    check_ordering_enabled = wild == 0 && options::get_value("CheckOrdering");
     countermoves_enabled = options::get_value("Countermoves");
     killers_enabled = options::get_value("Killers");
     upcoming_repetition_enabled = wild == 0 && options::get_value("UpcomingRepetition");
@@ -532,6 +534,14 @@ void search_t::go() {
         uci::out("info string audit_long_history_cutoffs count " + std::to_string(counts.long_history_cutoffs)
             + " rank_sum " + std::to_string(counts.long_history_rank_sum)
             + " first " + std::to_string(counts.long_history_first));
+        uci::out("info string audit_quiet_ordering scores " + std::to_string(counts.threat_ordering_scores)
+            + " escapes " + std::to_string(counts.threat_escapes)
+            + " entries " + std::to_string(counts.threat_entries)
+            + " checks " + std::to_string(counts.check_ordering_candidates)
+            + " bonuses " + std::to_string(counts.check_ordering_bonuses)
+            + " cutoffs " + std::to_string(counts.quiet_ordering_cutoffs)
+            + " rank_sum " + std::to_string(counts.quiet_ordering_rank_sum)
+            + " first " + std::to_string(counts.quiet_ordering_first));
         uci::out("info string audit_evasions nodes " + std::to_string(counts.evasion_nodes)
             + " double_check " + std::to_string(counts.double_check_nodes));
         uci::out("info string audit_repetition attempts " + std::to_string(counts.repetition_attempts)
@@ -1960,6 +1970,13 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
                         const auto & previous = (stack - 1)->current_move;
                         countermoves[previous.piece][previous.tsq] = move->to_compact();
                     }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                    if (!iid_active) {
+                        ++nnue_audit.counters.quiet_ordering_cutoffs;
+                        nnue_audit.counters.quiet_ordering_rank_sum += searched_moves + 1;
+                        nnue_audit.counters.quiet_ordering_first += searched_moves == 0;
+                    }
+#endif
                     update_quiet_cutoff(move, depth, searched_moves);
                     // A returned move can alias killer[1]; update killers last.
                     if (killers_enabled) {

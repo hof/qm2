@@ -153,6 +153,8 @@ public:
     std::unique_ptr<capture_history_t> capture_history;
     bool capture_history_enabled;
     bool long_continuation_enabled;
+    bool threat_ordering_enabled;
+    bool check_ordering_enabled;
     quiet_history_policy_t quiet_history_policy;
     bool countermoves_enabled;
     bool killers_enabled;
