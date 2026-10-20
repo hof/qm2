@@ -155,6 +155,10 @@ add_executable(test_correction_history test_correction_history.cpp)
 target_link_libraries(test_correction_history MAX2SRC)
 add_test(NAME test_correction_history COMMAND test_correction_history)
 
+add_executable(test_adaptive_lmr test_adaptive_lmr.cpp)
+target_link_libraries(test_adaptive_lmr MAX2SRC)
+add_test(NAME test_adaptive_lmr COMMAND test_adaptive_lmr)
+
 get_property(maxima_subdirectory_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${maxima_subdirectory_tests} PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

@@ -43,9 +43,9 @@ namespace options {
     };
 
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    const int length = 49;
+    const int length = 51;
 #else
-    const int length = 36;
+    const int length = 38;
 #endif
     extern option_t PARAM[length+1];
     

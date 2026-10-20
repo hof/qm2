@@ -175,6 +175,8 @@ public:
     bool null_enabled;
     bool beta_pruning;
     bool lmr_enabled;
+    bool adaptive_lmr_enabled;
+    bool lmr_history_enabled;
     bool aspiration_enabled;
     bool iid_enabled;
     bool q_tt_enabled;
@@ -238,7 +240,9 @@ public:
     void reset_stack();
     U64 tt_context() const;
     int extension(move_t * move, int gives_check);
-    int reduction(int depth, int searched_moves, bool is_dangerous);
+    int reduction(int depth, int searched_moves, bool is_dangerous,
+        const move_t & move, bool pv, bool cut_node);
+    void update_lmr_history(const move_t & move, int depth, int value, int alpha, int beta);
 
     int draw_score() {
         return brd.stack->wtm == root_wtm? draw_contempt: - draw_contempt;

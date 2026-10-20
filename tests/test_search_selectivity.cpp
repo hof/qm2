@@ -31,6 +31,7 @@ public:
 
     explicit selective_search_t(const char * fen) : search_t(fen) {
         beta_pruning = null_enabled = false;
+        adaptive_lmr_enabled = lmr_history_enabled = false;
         tablebase_limit = draw_contempt = 0;
         stack->in_check = brd.in_check();
     }
@@ -170,68 +171,77 @@ bool test_futility(const fixture_t & fixture, int & probes, int & skipped, int &
 bool test_lmr(const fixture_t & fixture, int & probes, int & reductions, int & restarts) {
     bool ok = true;
     auto original = std::make_unique<search_t>(fixture.fen);
-    for (int depth : {1, 2, 3, 4, 6, 9, 15}) {
-        for (bool enabled : {false, true}) {
-            for (bool pv : {false, true}) {
-                auto search = std::make_unique<selective_search_t>(fixture.fen);
-                std::map<std::string, move_info_t> moves;
-                ok &= certify(*search, fixture, moves);
-                search->ffp_enabled = false;
-                search->lmr_enabled = enabled;
-                const int beta = pv ? 2 : 1;
-                search->pvs(0, beta, depth);
-                ok &= check(search->calls.size() == moves.size(), "LMR skipped a move", fixture.fen);
-                std::string target;
-                int target_call = 0, reduced_depth = 0, full_depth = 0;
-                for (size_t i = 0; i < search->calls.size(); ++i) {
-                    auto & call = search->calls[i];
-                    const auto info = moves.at(call.move);
-                    const int reduce = enabled && depth >= 3 && !fixture.in_check && !info.flags && i >= 3 ? 1 : 0;
-                    ok &= check(call.depth == depth - 1 + info.extend - reduce,
-                        "LMR child depth differs", fixture.fen);
-                    if (reduce) {
-                        ++reductions;
-                        target = call.move;
-                        target_call = static_cast<int>(i) + 1;
-                        reduced_depth = call.depth;
-                        full_depth = depth - 1 + info.extend;
+    for (bool adaptive : {false, true}) {
+        for (int depth : {1, 2, 3, 4, 6, 9, 15}) {
+            for (bool enabled : {false, true}) {
+                for (bool pv : {false, true}) {
+                    auto search = std::make_unique<selective_search_t>(fixture.fen);
+                    std::map<std::string, move_info_t> moves;
+                    ok &= certify(*search, fixture, moves);
+                    search->ffp_enabled = false;
+                    search->lmr_enabled = enabled;
+                    search->adaptive_lmr_enabled = adaptive;
+                    const int beta = pv ? 2 : 1;
+                    search->pvs(0, beta, depth);
+                    ok &= check(search->calls.size() == moves.size(), "LMR skipped a move", fixture.fen);
+                    std::string target;
+                    int target_call = 0, reduced_depth = 0, full_depth = 0;
+                    for (size_t i = 0; i < search->calls.size(); ++i) {
+                        auto & call = search->calls[i];
+                        const auto info = moves.at(call.move);
+                        const bool eligible = enabled && depth >= 3 && !fixture.in_check && !info.flags && i >= 3;
+                        const int full = depth - 1 + info.extend;
+                        const int reduce = full - call.depth;
+                        const bool valid_depth = adaptive && eligible
+                            ? call.depth >= 1 && call.depth <= full
+                            : reduce == int(eligible);
+                        ok &= check(valid_depth,
+                            "LMR child depth differs", fixture.fen);
+                        if (reduce) {
+                            ++reductions;
+                            target = call.move;
+                            target_call = static_cast<int>(i) + 1;
+                            reduced_depth = call.depth;
+                            full_depth = depth - 1 + info.extend;
+                        }
                     }
-                }
-                ++probes;
-                ok &= restored(*search, *original, fixture.fen);
-                if (target.empty()) {
-                    continue;
-                }
-                for (int cancel : {0, target_call, target_call + 1}) {
-                    auto retry = std::make_unique<selective_search_t>(fixture.fen);
-                    retry->ffp_enabled = false;
-                    retry->lmr_enabled = enabled;
-                    retry->target = target;
-                    retry->improve = true;
-                    retry->cancel_call = cancel;
-                    const int result = retry->pvs(0, beta, depth);
-                    const int expected_calls = cancel ? cancel : static_cast<int>(moves.size()) + 1;
-                    ok &= check(static_cast<int>(retry->calls.size()) == expected_calls,
-                        "reduced re-search call count differs", fixture.fen);
-                    ok &= check(retry->calls[target_call - 1].depth == reduced_depth,
-                        "improving reduced depth differs", fixture.fen);
-                    if (cancel != target_call && retry->calls.size() > static_cast<size_t>(target_call)) {
-                        auto & full = retry->calls[target_call];
-                        ok &= check(full.move == target && full.depth == full_depth
-                            && full.alpha == -beta && full.beta == 0,
-                            "improvement was not verified at full depth", fixture.fen);
+                    ++probes;
+                    ok &= restored(*search, *original, fixture.fen);
+                    if (target.empty()) {
+                        continue;
                     }
-                    ok &= check(result == 0 && retry->stop_all == (cancel != 0),
-                        "refuted/cancelled result differs", fixture.fen);
-                    ok &= restored(*retry, *original, fixture.fen);
-                    if (cancel) {
-                        retry->stop_all = false;
-                        retry->cancel_call = 0;
-                        retry->calls.clear();
-                        ok &= check(retry->pvs(0, beta, depth) == 0 && !retry->stop_all,
-                            "cancelled re-search restart differs", fixture.fen);
+                    for (int cancel : {0, target_call, target_call + 1}) {
+                        auto retry = std::make_unique<selective_search_t>(fixture.fen);
+                        retry->ffp_enabled = false;
+                        retry->lmr_enabled = enabled;
+                        retry->adaptive_lmr_enabled = adaptive;
+                        retry->target = target;
+                        retry->improve = true;
+                        retry->cancel_call = cancel;
+                        const int result = retry->pvs(0, beta, depth);
+                        const int expected_calls = cancel ? cancel : static_cast<int>(moves.size()) + 1;
+                        ok &= check(static_cast<int>(retry->calls.size()) == expected_calls,
+                            "reduced re-search call count differs", fixture.fen);
+                        ok &= check(retry->calls[target_call - 1].depth == reduced_depth,
+                            "improving reduced depth differs", fixture.fen);
+                        if (cancel != target_call && retry->calls.size() > static_cast<size_t>(target_call)) {
+                            auto & full = retry->calls[target_call];
+                            ok &= check(full.move == target && full.depth == full_depth
+                                && full.alpha == -beta && full.beta == 0,
+                                "improvement was not verified at full depth", fixture.fen);
+                        }
+                        ok &= check(result == 0 && retry->stop_all == (cancel != 0),
+                            "refuted/cancelled result differs", fixture.fen);
                         ok &= restored(*retry, *original, fixture.fen);
-                        ++restarts;
+                        if (cancel) {
+                            retry->stop_all = false;
+                            retry->cancel_call = 0;
+                            retry->calls.clear();
+                            ok &= check(retry->pvs(0, beta, depth) == 0 && !retry->stop_all,
+                                "cancelled re-search restart differs", fixture.fen);
+                            ok &= restored(*retry, *original, fixture.fen);
+                            ++restarts;
+                        }
                     }
                 }
             }

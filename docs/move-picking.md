@@ -55,6 +55,13 @@ stages, early hints and final legality retain their contracts. Quiescence scores
 its existing quiet candidate domain without generating additional move classes.
 The shared `move_history_score` accessor returns learned history only; contextual
 bonuses are neither learned nor passed to history-based search decisions.
+Adaptive LMR reads this accessor before making an eligible quiet move. Positive
+history reduces the depth reduction; negative history increases it. Depth,
+searched legal move count, PV/cut-node context and static-evaluation improvement
+also inform the bounded trial. The first three legal moves and all existing
+tactical protections remain; an alpha improvement always receives a full-depth
+re-search before it can establish a cutoff. `AdaptiveLMR=false` restores the
+fixed-one reduction, while `LMR=false` disables reductions entirely.
 
 The worker owns approximately 2.2 MiB of 16-bit history entries. On a quiet
 cutoff, reward the winner and penalize previously searched ordinary quiets with
@@ -62,6 +69,17 @@ bounded gravity. Keep the provisional bonus `32 * clamp(depth, 1, 8)^2` and
 bound 16384; these are not claimed tuned. Protect winner slots from aliasing
 penalties and update history/countermoves before mutating killer slots.
 The legacy piece/destination history remains only for royal-losers.
+
+`LMRHistory` additionally learns from completed full-depth verifications of
+reduced quiet improvements. Update only enabled continuation contexts at one,
+two and four plies with half the ordinary cutoff bonus: reward verified beta
+cutoffs, penalize refutations at or below alpha, and leave in-window outcomes
+unchanged. Main/pawn history is unaffected by this feedback. Cancelled searches,
+IID/verification helpers, null subtrees and repetition floors cannot teach it.
+Reduced fail-lows without verification supply no feedback. Existing cutoff
+learning remains independent. Both new flags default true, are worker snapshots,
+and clear TT on change; both false reproduce the previous policy. Royal-losers
+and fixed/aligned audit horizons retain their existing reduction contracts.
 
 Capture history adds 11,648 bytes of worker-owned signed entries, indexed by
 colored moving piece, destination and captured-piece type. En passant uses the
@@ -129,3 +147,14 @@ the combined policy reduced nodes 9.20% cold and 5.14% retained versus the
 disabled candidate. Without LMR, node changes were -1.04%/+1.92%. CPU results
 were mixed across cold/retained and LMR settings; no general speed or strength
 gain is established. See MAXIMA.md for timing, controls and audit results.
+
+
+Adaptive LMR/feedback validation (2026-10-20): 46 Debug and 46 Release checks,
+13 focused ASan/UBSan checks (leak detection disabled), 15 audit checks and the
+independent oracle passed. The initial Release lifecycle timing failures passed
+on an unchanged full repeat. All 384 D8 searches completed legally; 144 disabled
+signatures matched the parent exactly. Combined cold/retained nodes changed by
+-48.35%/-46.33%, with CPU -43.75%/-48.43%, versus the same-binary disabled
+control. Feedback alone had mixed tree effects; the combined sample is useful
+for integration, with playing strength still pending. See MAXIMA.md for the
+complete protocol, timing limits and activation evidence.

@@ -37,6 +37,10 @@ struct audit_counters_t {
     uint64_t min_aspiration_depth = 0, max_aspiration_depth = 0;
     uint64_t lmr_candidates = 0, lmr_reductions = 0, lmr_researches = 0;
     uint64_t lmr_refutations = 0, lmr_cutoffs = 0;
+    uint64_t lmr_plies = 0, lmr_multiple = 0;
+    uint64_t lmr_history_reads = 0, lmr_history_hits = 0;
+    uint64_t lmr_history_less = 0, lmr_history_more = 0;
+    uint64_t lmr_history_rewards = 0, lmr_history_penalties = 0;
     uint64_t min_lmr_depth = 0, max_lmr_depth = 0, min_lmr_child_depth = 0;
     uint64_t extension_candidates = 0, extension_see_rejected = 0;
     uint64_t extensions_applied = 0;

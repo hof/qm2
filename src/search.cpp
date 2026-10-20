@@ -29,6 +29,7 @@
 #include "search.h"
 #include "repetition.h"
 #include <limits>
+#include <cmath>
 #include <algorithm>
 #include <chrono>
 #include <thread>
@@ -245,6 +246,8 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     null_verify = options::get_value("NullVerify");
     null_enabled = options::get_value("NullMove");
     lmr_enabled = options::get_value("LMR");
+    adaptive_lmr_enabled = wild == 0 && options::get_value("AdaptiveLMR");
+    lmr_history_enabled = wild == 0 && options::get_value("LMRHistory");
     aspiration_enabled = options::get_value("Aspiration");
     iid_enabled = options::get_value("IID");
     q_tt_enabled = wild == 0 && options::get_value("QsearchTT");
@@ -281,6 +284,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
+        adaptive_lmr_enabled = lmr_history_enabled = false;
         correction_history_enabled = false;
         upcoming_repetition_enabled = false;
         q_tt_enabled = false;
@@ -590,6 +594,14 @@ void search_t::go() {
             + " researches " + std::to_string(counts.lmr_researches)
             + " refuted " + std::to_string(counts.lmr_refutations)
             + " cutoffs " + std::to_string(counts.lmr_cutoffs)
+            + " plies " + std::to_string(counts.lmr_plies)
+            + " multiple " + std::to_string(counts.lmr_multiple)
+            + " history_reads " + std::to_string(counts.lmr_history_reads)
+            + " history_hits " + std::to_string(counts.lmr_history_hits)
+            + " history_less " + std::to_string(counts.lmr_history_less)
+            + " history_more " + std::to_string(counts.lmr_history_more)
+            + " rewards " + std::to_string(counts.lmr_history_rewards)
+            + " penalties " + std::to_string(counts.lmr_history_penalties)
             + " min_depth " + std::to_string(counts.min_lmr_depth)
             + " max_depth " + std::to_string(counts.max_lmr_depth)
             + " min_child " + std::to_string(counts.min_lmr_child_depth));
@@ -1341,20 +1353,71 @@ int search_t::extension(move_t * move, int gives_check) {
     return 0;
 }
 
-/**
- * Determine reduction for the current move
- * @param depth remaining search depth
- * @param searched_moves how many moves have been searched in the current node
- * @param is_dangerous if the move is dangerous, e.g. a capture
- * @return amount of plies to reduce
- */
-int search_t::reduction(int depth, int searched_moves, bool is_dangerous) {
-    // Search the first three legal moves at full depth. A one-ply reduction
-    // must leave at least one positive-depth child ply for the trial search.
+// The parent position owns both the history lookup and the node context.
+int search_t::reduction(int depth, int searched_moves, bool is_dangerous,
+        const move_t & move, bool pv, bool cut_node) {
+    // Preserve the first three legal moves and all existing tactical guards.
+    // The reduced trial always retains at least one main-search child ply.
     if (depth < 3 || is_dangerous || searched_moves < 3 || !lmr_enabled) {
         return 0;
     }
-    return 1;
+    if (!adaptive_lmr_enabled) {
+        return 1;
+    }
+    // Immutable shared table: avoid logarithms and initialization in the loop.
+    // Saturation keeps unusually deep/wide positions within the sampled range.
+    static const auto base_reductions = [] {
+        std::array<std::array<int, 64>, 64> table{};
+        for (int d = 1; d < 64; ++d) {
+            for (int m = 1; m < 64; ++m) {
+                table[d][m] = int(1.0 + std::log(d) * std::log(m) / 3.0);
+            }
+        }
+        return table;
+    }();
+    const int history = move_history_score(move);
+    const int reduce = base_reductions[std::min(depth, 63)][std::min(searched_moves + 1, 63)]
+        + int(cut_node) + int(!stack->improving) - int(pv)
+        - std::clamp(history / 8192, -2, 2);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.lmr_history_reads;
+    nnue_audit.counters.lmr_history_hits += history != 0;
+    nnue_audit.counters.lmr_history_less += history >= 8192;
+    nnue_audit.counters.lmr_history_more += history <= -8192;
+#endif
+    return std::clamp(reduce, 0, depth - 2);
+}
+
+void search_t::update_lmr_history(const move_t & move, int depth, int value, int alpha, int beta) {
+    // Learn only from a completed full-depth verification of a reduced trial.
+    // Helpers and artificial null paths must not teach ordinary move history.
+    if (!lmr_enabled || !lmr_history_enabled || stop_all || iid_active
+            || verification_mode != verification_mode_t::none || stack->excluded_move
+            || stack->repetition_start > 0 || stack->in_check
+            || move.capture || move.promotion || move.castle || depth < 3
+            || (value > alpha && value < beta)) {
+        return;
+    }
+    const int d = std::min(depth, 8);
+    const int bonus = (value >= beta ? 16 : -16) * d * d;
+    const auto * previous = brd.ply > 0 ? &(stack - 1)->current_move : nullptr;
+    bool updated = false;
+    if (quiet_history_policy.continuation && previous && previous->piece) {
+        quiet_history->update_continuation(move, *previous, bonus);
+        updated = true;
+    }
+    for (const auto * context : long_continuation_contexts()) {
+        if (context) {
+            quiet_history->update_continuation(move, *context, bonus);
+            updated = true;
+        }
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    nnue_audit.counters.lmr_history_rewards += updated && bonus > 0;
+    nnue_audit.counters.lmr_history_penalties += updated && bonus < 0;
+#else
+    (void) updated;
+#endif
 }
 
 // No child stack is available here. Resolve legal terminals and draws before
@@ -1966,21 +2029,8 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
          */
 
         int extend = extension(move, gives_check);
-        int reduce = excluded_move ? 0 : reduction(depth, searched_moves, is_dangerous);
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        if (!excluded_move && depth >= 3 && searched_moves >= 3 && !is_dangerous) {
-            ++nnue_audit.counters.lmr_candidates;
-        }
-        if (reduce) {
-            auto & counts = nnue_audit.counters;
-            ++counts.lmr_reductions;
-            counts.min_lmr_depth = counts.min_lmr_depth ? std::min(counts.min_lmr_depth, uint64_t(depth)) : depth;
-            counts.max_lmr_depth = std::max(counts.max_lmr_depth, uint64_t(depth));
-            const uint64_t child_depth = depth - 1 - reduce + extend;
-            counts.min_lmr_child_depth = counts.min_lmr_child_depth
-                ? std::min(counts.min_lmr_child_depth, child_depth) : child_depth;
-        }
-#endif
+        int reduce = excluded_move ? 0 : reduction(depth, searched_moves, is_dangerous, *move, pv, cut_node);
+
 
         /*
          * Go forward and search next node
@@ -1990,11 +2040,28 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             continue;
         }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        if (!excluded_move && depth >= 3 && searched_moves >= 3 && !is_dangerous) {
+            ++nnue_audit.counters.lmr_candidates;
+        }
+        if (reduce) {
+            auto & counts = nnue_audit.counters;
+            ++counts.lmr_reductions;
+            counts.lmr_plies += reduce;
+            counts.lmr_multiple += reduce > 1;
+            counts.min_lmr_depth = counts.min_lmr_depth ? std::min(counts.min_lmr_depth, uint64_t(depth)) : depth;
+            counts.max_lmr_depth = std::max(counts.max_lmr_depth, uint64_t(depth));
+            const uint64_t child_depth = depth - 1 - reduce + extend;
+            counts.min_lmr_child_depth = counts.min_lmr_child_depth
+                ? std::min(counts.min_lmr_child_depth, child_depth) : child_depth;
+        }
+#endif
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
         stack->check_extensions += extend;
         nnue_audit.counters.max_check_extensions = std::max(nnue_audit.counters.max_check_extensions,
             uint64_t(stack->check_extensions));
 #endif
         int score;
+        bool lmr_researched = false;
         if (searched_moves == 0) {
             score = -pvs(-beta, -alpha, depth - 1 + extend, !pv && !cut_node);
         } else {
@@ -2005,6 +2072,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
                 nnue_audit.counters.research_fail_highs += score >= beta;
                 nnue_audit.counters.lmr_researches += reduce > 0;
 #endif
+                lmr_researched = reduce > 0;
                 const clock_range_t previous_clocks = stack->tt_clocks;
                 score = -pvs(-beta, -alpha, depth - 1 + extend, !pv && !cut_node);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
@@ -2017,6 +2085,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             }
         }
         backward(move);
+        if (lmr_researched && !repetition_floor) {
+            update_lmr_history(*move, depth, score, alpha, beta);
+        }
 
         /*
          * Handle results: update the best value / do a beta cutoff

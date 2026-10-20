@@ -227,8 +227,45 @@ four plies when needed. Equality, missing evaluations and checked positions do
 not count as improvement. Artificial null passes block comparisons across their
 boundary. Tracking reuses cached static evaluations without extra evaluation
 calls; it never uses TT search scores. Child entry and root reset clear stale
-trends, and same-position helpers restore their caller's state. These fields
-prepare later pruning work; existing pruning and reduction decisions are unchanged.
+trends, and same-position helpers restore their caller's state. Adaptive LMR
+uses the improving flag; other pruning policies retain their own guards.
+
+Standard interior LMR now varies the reduction with remaining depth, searched
+legal move count, learned quiet history and node context. Preserve the first
+three searched legal moves and require depth at least three. Never reduce
+captures, promotions, checks, evasions, castling or advanced passed-pawn moves.
+Excluded-move searches retain their no-reduction policy. The root remains full
+depth. The base is `floor(1 + ln(depth) * ln(searched_moves + 1) / 3)`, from an
+immutable table with both indices saturated at 63. Add one for an expected cut
+node and one when not improving; subtract one for a PV node and
+`clamp(learned_score / 8192, -2, 2)`. Clamp the final reduction to `[0, depth - 2]`,
+so every reduced child retains at least one main-search ply. The history accessor
+runs in the parent position and excludes material, SEE and contextual picker
+bonuses. These round constants remain provisional, pending integrated validation.
+
+Every reduced result above alpha is re-searched at the original full child
+depth and original window, including a reduced result already above beta.
+Both passes contribute reversible-clock constraints; cancellation restores the
+parent and cannot authorize a cutoff or feedback. A completed verification may
+teach continuation history at one, two and four plies: penalize a refuted result
+at or below alpha and reward a result at or above beta. An in-window result has
+no additional feedback. Use the existing bounded gravity with bonus
+`+/-16 * min(depth, 8)^2`; ordinary cutoff learning still applies independently.
+This feedback changes neither main nor pawn history. It excludes IID,
+verification/excluded searches, null subtrees, repetition floors and cancelled
+searches. Each continuation component respects its own enabled policy and root/
+null context boundaries.
+
+`AdaptiveLMR` and `LMRHistory` default true and are independent worker snapshots.
+Changing either clears both TT modes. `AdaptiveLMR=false` restores fixed-one
+reductions; `LMRHistory=false` retains ordinary cutoff-only history updates.
+Disabling both restores the previous policy, including retained histories.
+`LMR=false` disables reductions and their feedback regardless of the new flags.
+Royal-losers retains its current policy. Fixed/aligned diagnostic horizons keep
+the existing fixed-one `NNUEAuditLMR` behavior and disable the new feedback.
+See [CPW Late Move Reductions](https://chessprogramming.org/Late_Move_Reductions)
+and [History Heuristic](https://chessprogramming.org/History_Heuristic) for
+mechanisms and limitations; reductions remain selective search, not score bounds.
 
 Standard NNUE search retains the simple pruning baseline established during
 the HCE comparison, expressed on the 100-cp pawn scale. Reverse futility is limited to depths
@@ -333,16 +370,11 @@ Playable positions, including checks with legal evasions, retain static
 evaluation when no further child stack is available. Cancellation retains its
 existing precedence; a ceiling evaluation is not a completed deeper search.
 
-Late-move reduction uses a conservative one-ply baseline. Standard PVS searches
-the first three legal moves at full depth and reduces later ordinary quiet
-moves only with at least three plies remaining. Check evasions, checking moves,
-captures, promotions, castling and advanced passed-pawn pushes are protected.
-The root driver does not reduce moves. A reduced trial that beats alpha is
-verified at full depth with the original alpha/beta window before accepting
-an improvement or cutoff; cancellation restores the parent state. Reductions
-at depths one/two and the former depth-scaled late-move reduction are removed.
-This simple policy applies to both HCE and NNUE when `LMR=true`; it remains a
-heuristic rather than a proof that reduced fail-low moves cannot improve.
+Late-move reduction follows the adaptive policy described above. The fixed-one
+baseline remains available with `AdaptiveLMR=false`; disable `LMRHistory` too
+for the previous cutoff-only learning policy. Both retain the same tactical
+protections and full-depth verification. A reduced fail-low remains a heuristic
+rather than a proof that the move cannot improve.
 
 Standard quiescence retains castling at entry and below entry, alongside captures
 and promotions; entry also searches quiet checks, and checked nodes search all
@@ -396,8 +428,8 @@ unfinished result. Qsearch clears stale PV/best-move state before probing.
 
 Search-policy options carry their TT invalidation rule beside their declaration.
 Changing `NullMove`, `NullVerify`, `BetaPruning`, `FutilityPruning`, `LMR`,
-`Aspiration`, `IID`, `QsearchTT`, draw contempt, variant or tablebase probing
-policy stops and joins the worker before clearing both main and quiescence TT
+`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `QsearchTT`, draw contempt,
+variant or tablebase probing policy stops and joins the worker before clearing both main and quiescence TT
 results and move hints. History controls and audit search policies follow the
 same rule. Invalid values and unchanged numeric/checkbox policies preserve the
 cache. Successful network loads and tablebase-path changes clear it separately.
@@ -1378,13 +1410,17 @@ selected first, rejected hints and TT score cutoffs; the last must remain zero.
 Root drivers retain their existing PV and ordering behavior. Matched controls
 must explicitly enable main-search hash moves in both engines.
 
-`NNUEAuditLMR` (default false, audit builds only) enables this same conservative
-LMR rule in `quiet` mode; other controlled features remain independently
-selectable. It is ignored in `fixed` mode. Changing it stops search and clears
+`NNUEAuditLMR` (default false, audit builds only) enables the fixed-one
+LMR control without adaptive reductions or verification feedback in `quiet`
+mode; other controlled features remain independently selectable. It is ignored in `fixed` mode. Changing it stops search and clears
 TT. `audit_lmr` reports eligible candidates, reduced trials, full-depth
 verification attempts, refutations and verified cutoffs, plus minimum/maximum
-remaining depth and minimum reduced child depth. Candidates are counted even
-with LMR disabled; reduction/verification counts then remain zero. At nominal
+remaining depth and minimum reduced child depth. Normal-mode counters also
+report total reduced plies, trials reducing more than one ply, learned-score
+reads/hits and positive/negative history modifiers, and continuation feedback
+rewards/penalties. Candidates/reductions count accepted legal moves; history
+reads occur before make and can include rejected pseudo-legal candidates.
+Candidates are counted even with LMR disabled; reduction/verification counts then remain zero. At nominal
 depth three no eligible nonroot nonchecking node retains three plies. Tests
 verify that boundary and activation at depth four with both evaluators/colors,
 certified tactical exclusions, full-depth re-searches and cancellation.
@@ -3995,6 +4031,18 @@ Release checks. When using the local toolchain, prefix these commands with
 - For documentation-only changes, review the content and diff; a build is not
   necessary.
 
+For a small sanity check of reduction/history changes, build first and run the
+four focused tests (5.50 seconds in the recorded 2026-10-20 Debug run):
+
+```bash
+ctest --preset cpp26_debug -R '^(test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
+```
+
+Use the local toolchain prefix above when needed. This subset checks reduction
+and verification guards, cancellation/restoration, node context and UCI policy
+cache invalidation. The full preset additionally covers lifecycle, evaluation,
+board rules and other search contracts.
+
 Use identical Release compiler flags, positions, search limits, and hash size
 for performance comparisons. Track nodes, NPS, and time to depth; only match
 testing establishes a playing-strength gain. Test score bounds and cache reuse
@@ -5728,3 +5776,58 @@ results show added cost on this sample; efficiency and playing-strength
 acceptance remain pending. A real depth-six audit recorded 231,628 lookups,
 11,203 nonzero hits and 2,297 changed updates: 1,693 lower, 457 upper and 147
 exact. All correction counters were zero with the feature disabled.
+
+
+### Adaptive reductions and verification feedback (2026-10-20)
+
+`AdaptiveLMR` replaces fixed-one interior reductions with the depth/move-count,
+learned-history and node-context policy documented in chapter 4. `LMRHistory`
+adds directional continuation feedback after completed full-depth verification.
+Both default true, have independent worker flags and clear incompatible TT
+entries on change. The old policy is available with both false; `LMR=false`
+disables both consumers. Tactical protections, full-depth verification, clock
+propagation and cancellation/restoration retain their contracts. Constants are
+provisional; integrated playing-strength acceptance remains pending.
+
+Validation passed 46/46 Debug checks (191.05 s), 46/46 Release (109.29 s),
+13 focused ASan/UBSan checks (57.22 s, leak detection disabled), 15 audit checks
+(22.44 s), and the independent oracle covering 4,372 positions/95,734 legal
+children. The first Release run passed 44/46: both lifecycle suites encountered
+five-second startup/model-loading/shutdown timeouts. An unchanged full repeat
+passed, with no timeout or assertion changes; original logs are retained.
+The native reduction test includes 108 controlled PVS verification/cancellation
+cases and 48 feedback-eligibility cases, plus directional history, component,
+null-boundary and worker-option checks. The certified selectivity suite now
+exercises both reduction policies, including tactical exclusions and restarts.
+
+A 12-root matrix compared the frozen parent and the same binary with both off,
+adaptive only, feedback only and both enabled. Master-LMR-off controls were
+also included. Three alternating cold D8 trials and one retained-history trial
+per profile completed 384 legal searches. Retained trials warm each fresh root
+at D6, play the same fixed legal two-ply continuation and search D8. All 288 cold
+searches were deterministic; 144 disabled-parent signatures matched nodes,
+scores, best moves and full PVs exactly. Measurements used one low-priority CPU,
+a readiness barrier before process-CPU timing, and no pause throttle.
+
+Relative to the same-binary disabled control, the combined policy changed cold
+nodes by -48.35% and median CPU by -43.75%; retained nodes changed by -46.33%
+and CPU by -48.43%. Adaptive-only nodes changed by -44.91%/-45.12% cold/retained;
+feedback-only changed by -3.46%/+1.68%. Their cold CPU medians changed by
+-37.85%/+1.39%, and retained CPU by -46.64%/-0.45%. This interaction supports
+measuring the combination rather than judging feedback solely in isolation.
+Compared with the complete frozen parent, combined CPU changed by -47.57%
+cold and -46.51% retained. With LMR disabled all trees matched exactly, while
+CPU varied: both-on versus both-off differed by +9.15% cold/+6.58% retained.
+The short, tick-quantized samples and single retained trial limit timing claims;
+smaller trees do not establish playing strength or generator throughput.
+
+The real D6 activation audit recorded 7,424 combined reduced trials, 2,514
+reducing more than one ply, 110 full-depth verifications, 55 refutations and
+11 verified cutoffs. Eligible ordinary searches taught 11 continuation rewards
+and 36 penalties. Learned-score reads had 5,937 nonzero hits out of 7,940;
+six reached the positive modifier threshold and none the negative threshold.
+Native seeded-history contracts cover both signs. Disabled consumers had zero
+activity. Audit counters distinguish accepted legal trials from parent history
+reads that can include rejected pseudo-legal attempts. TT history feedback,
+remaining baseline mechanisms and final integration/strength validation remain
+pending.
