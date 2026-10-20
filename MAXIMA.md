@@ -428,7 +428,7 @@ unfinished result. Qsearch clears stale PV/best-move state before probing.
 
 Search-policy options carry their TT invalidation rule beside their declaration.
 Changing `NullMove`, `NullVerify`, `BetaPruning`, `FutilityPruning`, `LMR`,
-`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `QsearchTT`, draw contempt,
+`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `QsearchTT`, draw contempt,
 variant or tablebase probing policy stops and joins the worker before clearing both main and quiescence TT
 results and move hints. History controls and audit search policies follow the
 same rule. Invalid values and unchanged numeric/checkbox policies preserve the
@@ -2191,12 +2191,34 @@ traces and independent audits are private under
 `.context/baselines/2026-10-14/aspiration-control/`, reserved from training.
 Managed-time matches with ordinary optimized builds remain the strength gate.
 
-IID uses one ordering helper at nonroot PV nodes with no hash move and at
+When `IIR=false`, IID uses one ordering helper at nonroot PV nodes with no hash move and at
 least four plies remaining. It searches two plies shallower, without nested IID,
 and accepts a legal helper move only when the helper score exceeds alpha.
 The main search always retains its original depth; the helper score, including
 a mate score, cannot replace it. The search frame is restored before continuing,
 and cancellation returns immediately. `IID=false` disables it independently.
+
+Standard search defaults `IIR=true`. At PV or expected cut nodes with remaining
+depth at least six and no legal TT move, internal iterative reduction subtracts
+one ply from the whole node. Root searches, checks, same-position IID helpers,
+verification subtrees, excluded moves and reversible clocks at least 99 are
+protected. Normal TT, draw, terminal/tablebase and static/null decisions precede
+this reduction. The TT lookup requests the original depth; subsequent child
+searches, LMR, history bonuses and TT stores use the effective searched depth.
+A legal shallow TT hint suppresses IIR; an invalid or self-check hint does not.
+IIR is selective and can miss deeper tactics; node savings do not prove strength.
+
+`IIR=true` takes precedence over `IID` at every node, including nodes below the
+IIR depth threshold. Both true therefore selects IIR alone. `IIR=false` restores
+the existing IID policy; both false disables both mechanisms. Each worker
+snapshots the option, and changing it clears incompatible TT entries. Royal-losers
+and fixed/aligned audit horizons retain their previous IID policy with IIR off.
+The depth threshold and reduction are provisional, awaiting integrated strength
+validation. See [CPW Internal Iterative Reductions](https://chessprogramming.org/Internal_Iterative_Reductions).
+`test_search_iir` covers effective child/TT depths, upper/exact/lower bounds,
+IIR/IID precedence, shallow hints, cancellation, board/hash/frame/clock restoration,
+terminals and worker/variant/audit isolation. Audit counters record reductions by
+PV/cut context, depth range, reduced-node cutoffs, terminals and cancellation.
 The threshold keeps one-ply ordering probes out of shallow search. At nominal
 depth four it is eligible mainly after a root check extension preserves four
 plies; ordinary interior nodes become eligible at depth five.
@@ -4032,14 +4054,14 @@ Release checks. When using the local toolchain, prefix these commands with
   necessary.
 
 For a small sanity check of reduction/history changes, build first and run the
-four focused tests (5.50 seconds in the recorded 2026-10-20 Debug run):
+six focused tests:
 
 ```bash
-ctest --preset cpp26_debug -R '^(test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
+ctest --preset cpp26_debug -R '^(test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
 ```
 
 Use the local toolchain prefix above when needed. This subset checks reduction
-and verification guards, cancellation/restoration, node context and UCI policy
+and IIR/IID selection, verification guards, cancellation/restoration, node context and UCI policy
 cache invalidation. The full preset additionally covers lifecycle, evaluation,
 board rules and other search contracts.
 
@@ -5831,3 +5853,46 @@ activity. Audit counters distinguish accepted legal trials from parent history
 reads that can include rejected pseudo-legal attempts. TT history feedback,
 remaining baseline mechanisms and final integration/strength validation remain
 pending.
+
+### Internal iterative reduction baseline increment — 2026-10-20
+
+The standard default now selects IIR in place of IID, with the explicit option
+matrix documented above. Correctness gates passed:47/47 Debug (161.91s),47/47
+Release (95.62s),15 selected ASan/UBSan checks (51.51s, leak detection off),17
+audit checks (21.54s), and the independent board oracle (4,372 positions/95,734
+legal children,30.993s). Native coverage includes864 controlled IIR/IID cases
+across both colors, searched-depth TT storage, upper/exact/lower bounds,
+cancellation and restoration. Changed C++ files passed the brace scan.
+
+Twelve reserved roots produced288 legal completed D8 searches:three alternating
+cold trials and one retained-history trial per policy. Retained searches warm
+each root at D6, advance a fixed legal two-ply continuation, then search D8.
+The frozen parent has IID on/off controls; the candidate covers neither,
+IID-only, IIR-only and both.96 disabled-parent signatures matched nodes, scores,
+best moves and full PVs exactly;48 IIR-only/both signatures also matched exactly.
+One low-priority CPU and a readiness barrier preceded process-CPU sampling.
+
+| Policy | Cold nodes | Cold CPU median (s) | Retained nodes | Retained CPU (s) |
+|---|---:|---:|---:|---:|
+| Parent, IID on | 1099908 | 1.64 | 875285 | 1.17 |
+| Parent, IID off | 1099908 | 1.63 | 876623 | 1.22 |
+| Neither | 1099908 | 1.64 | 876623 | 1.25 |
+| IID only | 1099908 | 1.62 | 875285 | 1.23 |
+| IIR only | 1099216 | 1.59 | 858115 | 1.23 |
+| Both (default IIR precedence) | 1099216 | 1.78 | 858115 | 1.17 |
+
+The default reduced nodes by0.063% cold and1.962% retained versus the frozen
+parent. Default cold CPU samples were1.65/1.90/1.78s versus parent1.61/1.66/1.64s;
+the median rose8.537%, while retained CPU matched. IIR-only has identical trees
+to both-on but different short CPU samples (1.59/1.89/1.56s), illustrating timing
+variability. These tick-quantized samples and one retained trial do not establish
+a speed improvement or playing-strength gain. No generator-throughput or perft
+performance claim is made. Integrated strength acceptance remains pending.
+
+Direct production D7 probes recorded35 reductions (11PV/24cut),12 reduced-node
+cutoffs and no IID calls with IIR enabled; both-on matched IIR-only. IID-only
+recorded13 helper calls/112,131 visits; disabled IIR counters were zero. Native
+tests additionally cover cancellation and terminals absent from this sample.
+Initial test-fixture clock/cancellation assumptions and a test-expansion compile
+error were corrected before full validation; runtime policy was unchanged.
+No timed match, tuning or installation was performed in this increment.

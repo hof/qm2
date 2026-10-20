@@ -178,6 +178,7 @@ public:
     bool adaptive_lmr_enabled;
     bool lmr_history_enabled;
     bool aspiration_enabled;
+    bool iir_enabled;
     bool iid_enabled;
     bool q_tt_enabled;
     bool iid_active;
@@ -201,6 +202,7 @@ public:
     void book_calc();
     void iterative_deepening();
     int aspiration(int depth, int last_score);
+    int internal_search_depth(int depth, bool pv, bool cut_node);
     void prepare_iid_move(int alpha, int beta, int depth);
     int verification_search(int alpha, int beta, int depth, bool cut_node,
         verification_mode_t mode, uint16_t excluded_move = 0);

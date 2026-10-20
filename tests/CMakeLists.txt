@@ -114,6 +114,10 @@ add_executable(test_search_aspiration test_search_aspiration.cpp)
 target_link_libraries(test_search_aspiration MAX2SRC)
 add_test(NAME test_search_aspiration COMMAND test_search_aspiration)
 
+add_executable(test_search_iir test_search_iir.cpp)
+target_link_libraries(test_search_iir MAX2SRC)
+add_test(NAME test_search_iir COMMAND test_search_iir)
+
 add_executable(test_search_iid test_search_iid.cpp)
 target_link_libraries(test_search_iid MAX2SRC)
 add_test(NAME test_search_iid COMMAND test_search_iid)

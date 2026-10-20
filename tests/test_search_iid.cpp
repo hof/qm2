@@ -9,6 +9,7 @@ public:
     std::string hint, first_move;
     explicit iid_probe_t(const char * fen) : search_t(fen) {
         beta_pruning = null_enabled = lmr_enabled = false;
+        iir_enabled = false;
         iid_enabled = true;
         tablebase_limit = 0;
         hint = brd.us() ? "g1f3" : "g8f6";

@@ -86,7 +86,7 @@ public:
         play(*this, "g8f6");
         play(*this, "b1c3");
         play(*this, "b8c6");
-        beta_pruning = null_enabled = ffp_enabled = iid_enabled = correction_history_enabled = false;
+        beta_pruning = null_enabled = ffp_enabled = iid_enabled = iir_enabled = correction_history_enabled = false;
         draw_contempt = tablebase_limit = 0;
     }
     int pvs(int alpha, int beta, int depth, bool cut = false) override {

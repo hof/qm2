@@ -249,6 +249,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     adaptive_lmr_enabled = wild == 0 && options::get_value("AdaptiveLMR");
     lmr_history_enabled = wild == 0 && options::get_value("LMRHistory");
     aspiration_enabled = options::get_value("Aspiration");
+    iir_enabled = wild == 0 && options::get_value("IIR");
     iid_enabled = options::get_value("IID");
     q_tt_enabled = wild == 0 && options::get_value("QsearchTT");
     quiet_history_policy = {options::get_value("MainHistory") != 0,
@@ -284,6 +285,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
+        iir_enabled = false;
         adaptive_lmr_enabled = lmr_history_enabled = false;
         correction_history_enabled = false;
         upcoming_repetition_enabled = false;
@@ -1637,10 +1639,33 @@ bool search_t::is_improving() const {
     return false;
 }
 
+// Missing move hints make deep ordering less reliable. Reduce the whole node
+// once; all downstream consumers, including TT storage, use the searched depth.
+int search_t::internal_search_depth(int depth, bool pv, bool cut_node) {
+    if (!iir_enabled || !brd.ply || depth < 6 || (!pv && !cut_node)
+            || stack->in_check || iid_active || verification_mode != verification_mode_t::none
+            || stack->excluded_move || brd.stack->fifty_count >= 99) {
+        return depth;
+    }
+    if (stack->tt_move.piece && brd.valid(&stack->tt_move) && brd.legal(&stack->tt_move)) {
+        return depth;
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    auto & counts = nnue_audit.counters;
+    ++counts.iir_reductions;
+    counts.iir_pv += pv;
+    counts.iir_cut += cut_node;
+    counts.min_iir_depth = counts.min_iir_depth
+        ? std::min(counts.min_iir_depth, uint64_t(depth)) : depth;
+    counts.max_iir_depth = std::max(counts.max_iir_depth, uint64_t(depth));
+#endif
+    return depth - 1;
+}
+
 // A shallow PV search supplies only a move-ordering hint. Restore this
 // frame before searching the original depth, even when the helper is stopped.
 void search_t::prepare_iid_move(int alpha, int beta, int depth) {
-    if (iid_active || verification_mode != verification_mode_t::none
+    if (iir_enabled || iid_active || verification_mode != verification_mode_t::none
             || depth < 4 || alpha + 1 >= beta || stack->tt_move.piece) {
         return;
     }
@@ -1950,6 +1975,13 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         }
     }
 
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    const int depth_before_iir = depth;
+#endif
+    depth = internal_search_depth(depth, pv, cut_node);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    const bool iir_reduced = depth != depth_before_iir;
+#endif
     prepare_iid_move(alpha, beta, depth);
     if (stop_all) {
         return alpha;
@@ -1967,6 +1999,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     }
 #endif
     if (!move) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        nnue_audit.counters.iir_terminals += iir_reduced;
+#endif
         if (excluded_move) {
             return alpha;
         }
@@ -2094,10 +2129,16 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
          */
 
         if (stop_all) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            nnue_audit.counters.iir_cancelled += iir_reduced;
+#endif
             return alpha;
         } else if (score > best) {
             stack->best_move.set(move);
             if (score >= beta) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                nnue_audit.counters.iir_cutoffs += iir_reduced;
+#endif
                 if (normal_search) {
                     trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
                 }
@@ -2510,6 +2551,9 @@ void search_t::reset_stack() {
     counts.researches = counts.root_researches = counts.research_fail_highs = 0;
     counts.hash_probes = counts.hash_moves = counts.hash_first = 0;
     counts.hash_rejected = counts.hash_score_cutoffs = 0;
+    counts.iir_reductions = counts.iir_pv = counts.iir_cut = 0;
+    counts.min_iir_depth = counts.max_iir_depth = 0;
+    counts.iir_cutoffs = counts.iir_cancelled = counts.iir_terminals = 0;
     counts.iid_calls = counts.iid_candidates = counts.iid_moves = 0;
     counts.verification_calls = counts.excluded_calls = counts.verification_cancelled = counts.verification_visits = 0;
     counts.iid_cancelled = counts.iid_visits = 0;

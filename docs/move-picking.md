@@ -61,7 +61,7 @@ searched legal move count, PV/cut-node context and static-evaluation improvement
 also inform the bounded trial. The first three legal moves and all existing
 tactical protections remain; an alpha improvement always receives a full-depth
 re-search before it can establish a cutoff. `AdaptiveLMR=false` restores the
-fixed-one reduction, while `LMR=false` disables reductions entirely.
+fixed-one reduction, while `LMR=false` disables late-move reductions entirely.
 
 The worker owns approximately 2.2 MiB of 16-bit history entries. On a quiet
 cutoff, reward the winner and penalize previously searched ordinary quiets with
@@ -158,3 +158,10 @@ signatures matched the parent exactly. Combined cold/retained nodes changed by
 control. Feedback alone had mixed tree effects; the combined sample is useful
 for integration, with playing strength still pending. See MAXIMA.md for the
 complete protocol, timing limits and activation evidence.
+
+Before picking moves, standard `IIR=true` reduces eligible PV/expected-cut nodes
+without a legal TT hint by one ply from depth six. Check, root, helper,
+verification and clock-99 protections apply. The effective depth governs both
+child searches and TT storage. IIR takes precedence over IID globally; select
+`IIR=false` to use the existing `IID` policy. Both false disables both. This
+option changes search allocation; generation and final legality remain unchanged.

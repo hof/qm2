@@ -50,6 +50,7 @@ namespace options {
         { "EvalFile", STRING, 0, "type string default eval.nnue" },
         { "Aspiration", BOOL, 1, "type check default true", true },
         { "IID", BOOL, 1, "type check default true", true },
+        { "IIR", BOOL, 1, "type check default true", true },
         { "QsearchTT", BOOL, 1, "type check default true", true },
         { "MainHistory", BOOL, 1, "type check default true", true },
         { "ContinuationHistory", BOOL, 1, "type check default true", true },
