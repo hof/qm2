@@ -253,6 +253,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     countermoves_enabled = options::get_value("Countermoves");
     killers_enabled = options::get_value("Killers");
     upcoming_repetition_enabled = wild == 0 && options::get_value("UpcomingRepetition");
+    evasions_enabled = wild == 0 && options::get_value("CheckEvasions");
     iid_active = false;
     verification_mode = verification_mode_t::none;
     ffp_enabled = options::get_value("FutilityPruning");
@@ -511,6 +512,8 @@ void search_t::go() {
             + " min_depth " + std::to_string(counts.min_iid_depth)
             + " max_depth " + std::to_string(counts.max_iid_depth)
             + " min_probe " + std::to_string(counts.min_iid_probe_depth));
+        uci::out("info string audit_evasions nodes " + std::to_string(counts.evasion_nodes)
+            + " double_check " + std::to_string(counts.double_check_nodes));
         uci::out("info string audit_repetition attempts " + std::to_string(counts.repetition_attempts)
             + " hits " + std::to_string(counts.repetition_hits)
             + " cutoffs " + std::to_string(counts.repetition_cutoffs)
@@ -2211,6 +2214,7 @@ void search_t::reset_stack() {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     auto & counts = nnue_audit.counters;
     stack->check_extensions = 0;
+    counts.evasion_nodes = counts.double_check_nodes = 0;
     counts.pvs_nodes = counts.q_nodes = counts.root_calls = 0;
     counts.repetition_attempts = counts.repetition_hits = counts.repetition_cutoffs = 0;
     counts.q_repetition_hits = counts.q_repetition_cutoffs = 0;

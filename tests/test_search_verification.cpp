@@ -74,6 +74,7 @@ bool test_scope() {
             search->iid_active = outcome == 1;
             search->stack->improving = true;
             search->stack->tt_clocks = {0, 90};
+            search->stack->move_list.evasion_targets = BIT(e2);
             const auto before = *search->stack;
             const bool previous_null = search->null_enabled, previous_iid = search->iid_active;
             search->cancel = outcome == 1;
@@ -98,6 +99,7 @@ bool test_scope() {
                 && after.current_move.piece == before.current_move.piece && after.killer[0].piece == before.killer[0].piece
                 && after.pv_count == before.pv_count && after.move_list.stage == before.move_list.stage
                 && after.move_list.first == before.move_list.first
+                && after.move_list.evasion_targets == before.move_list.evasion_targets
                 && after.tt_clocks.min == 0 && after.tt_clocks.max == 80,
                 "verification must restore picker/PV/evaluation/history state and merge clock restrictions");
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT

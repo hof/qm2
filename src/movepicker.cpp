@@ -45,7 +45,7 @@ move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
         //pick move with the highest score
 
         move_t * best = list->first;
-        if (list->stage == STOP && s->wild == 0) {
+        if (list->stage == stop && s->wild == 0) {
             // The previously selected maximum bounds this unchanged quiet list.
             // Stop at its first occurrence to preserve swap-removal tie order.
             const int maximum_score = list->best->score;
@@ -109,7 +109,14 @@ move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
 move_t * move_picker_t::first(search_t * s, int depth) {
     move::list_t * list = &s->stack->move_list;
     list->clear();
-    list->stage = HASH;
+    if (s->wild == 0 && s->evasions_enabled && s->stack->in_check) {
+        list->evasion_targets = move::evasion_targets(s->brd);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++s->nnue_audit.counters.evasion_nodes;
+        s->nnue_audit.counters.double_check_nodes += list->evasion_targets == 0;
+#endif
+    }
+    list->stage = hash_move;
     return next(s, depth);
 }
 
@@ -142,14 +149,14 @@ move_t * move_picker_t::next(search_t * s, int depth) {
     board_t * brd = &s->brd;
     const bool do_quiets = depth >= 0 || s->stack->in_check;
     switch (list->stage) {
-        case HASH:
+        case hash_move:
             result = &s->stack->tt_move;
             if (result->piece && brd->valid(result)
                     && (s->wild != 17 || brd->legal(result))) {
-                list->stage = CAPTURES;
+                list->stage = captures;
                 return result;
             }
-        case CAPTURES:
+        case captures:
             move::gen_captures(brd, list);
             if (list->current != list->last) {
                 for (move_t * move = list->current; move != list->last; move++) {
@@ -162,19 +169,19 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 if (s->wild != 17) {
                     result = pop(s, list);
                     if (result) {
-                        list->stage = PROMOTIONS;
+                        list->stage = promotions;
                         return result;
                     }
                 } else {
                     list->minimum_score = -move::INF;
                     result = pop(s, list);
                     if (result || (s->stack->tt_move.piece && s->stack->tt_move.capture)) {
-                        list->stage = STOP;
+                        list->stage = stop;
                         return result;
                     }
                 }
             }
-        case PROMOTIONS:
+        case promotions:
             move::gen_promotions(brd, list);
             if (list->current != list->last) {
                 for (move_t * move = list->current; move != list->last; move++) {
@@ -188,23 +195,23 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 }
                 result = pop(s, list);
                 if (result) {
-                    list->stage = KILLER1;
+                    list->stage = killer_1;
                     return result;
                 }
             }
-        case KILLER1:
+        case killer_1:
             if (do_quiets) {
                 result = &s->stack->killer[0];
                 if (result->piece
                         && !s->stack->tt_move.equals(result)
                         && brd->valid(result)
                         && (s->wild != 17 || brd->legal(result))) {
-                    list->stage = KILLER2;
+                    list->stage = killer_2;
                     assert(result->capture == EMPTY && result->promotion == EMPTY);
                     return result;
                 }
             }
-        case KILLER2:
+        case killer_2:
             if (do_quiets) {
                 result = &s->stack->killer[1];
                 if (result->piece
@@ -213,18 +220,18 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                         && (s->wild != 17 || brd->legal(result))) {
                     assert(s->stack->killer[0].equals(result) == false);
                     assert(result->capture == EMPTY && result->promotion == EMPTY);
-                    list->stage = MINORPROMOTIONS;
+                    list->stage = minor_promotions;
                     return result;
                 }
             }
-        case MINORPROMOTIONS: //and captures with see < 0
+        case minor_promotions: //and captures with see < 0
             list->minimum_score = -move::INF;
             result = pop(s, list);
             if (result) {
-                list->stage = CASTLING;
+                list->stage = castling;
                 return result;
             }
-        case CASTLING:
+        case castling:
             if (s->stack->in_check == false) {
                 move::gen_castles(brd, list);
                 for (move_t * move = list->current; move != list->last; move++) {
@@ -232,11 +239,11 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 }
                 result = pop(s, list);
                 if (result) {
-                    list->stage = QUIET_MOVES;
+                    list->stage = quiet_moves;
                     return result;
                 }
             }
-        case QUIET_MOVES:
+        case quiet_moves:
             if (do_quiets) {
                 list->minimum_score = -move::INF;
                 move::gen_quiet_moves(brd, list);
@@ -244,11 +251,11 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                     move->score = s->history[move->piece][move->tsq];
                 }
                 list->best->score = std::numeric_limits<int>::max();
-                list->stage = STOP;
+                list->stage = stop;
                 result = pop(s, list);
                 return result;
             }
-        case STOP:
+        case stop:
         default:
             return NULL;
     }
@@ -264,7 +271,7 @@ move_t * move_picker_t::pop_standard(search_t * s, int phase) {
             : std::numeric_limits<int>::max();
         for (auto * move = list->first; move != list->last; ++move) {
             const bool noisy = move->capture || move->promotion;
-            const bool eligible = phase == PROMOTIONS ? noisy && move->score >= 0
+            const bool eligible = phase == promotions ? noisy && move->score >= 0
                 : phase == good_quiets ? !noisy && move->score > 0
                 : phase == bad_noisy ? noisy : !noisy;
             if (eligible && (!best || move->score > best->score)) {
@@ -277,7 +284,7 @@ move_t * move_picker_t::pop_standard(search_t * s, int phase) {
         if (!best) {
             return nullptr;
         }
-        if (phase == PROMOTIONS && !s->brd.see(best, 0)) {
+        if (phase == promotions && !s->brd.see(best, 0)) {
             best->score = s->brd.see(best);
             continue;
         }
@@ -302,36 +309,38 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
     for (;;) {
         move_t * result = nullptr;
         switch (list->stage) {
-            case HASH:
-                list->stage = CAPTURES;
+            case hash_move:
+                list->stage = captures;
                 result = &s->stack->tt_move;
-                if (result->piece && board->valid(result)) {
+                if (result->piece && board->valid(result)
+                        && move::allows_evasion(*result, list->evasion_targets)) {
                     list->returned_hints[0] = result->to_compact();
                     return result;
                 }
                 break;
-            case CAPTURES:
+            case captures:
                 move::gen_captures(board, list);
                 move::gen_promotions(board, list);
                 for (auto * move = list->first; move != list->last; ++move) {
                     move->score = board->mvvlva(move);
                 }
-                list->stage = PROMOTIONS;
+                list->stage = promotions;
                 break;
-            case PROMOTIONS:
-                result = pop_standard(s, PROMOTIONS);
+            case promotions:
+                result = pop_standard(s, promotions);
                 if (result) {
                     return result;
                 }
-                list->stage = KILLER1;
+                list->stage = killer_1;
                 break;
-            case KILLER1:
-            case KILLER2: {
-                const int index = list->stage == KILLER1 ? 0 : 1;
-                list->stage = index == 0 ? KILLER2 : countermove;
+            case killer_1:
+            case killer_2: {
+                const int index = list->stage == killer_1 ? 0 : 1;
+                list->stage = index == 0 ? killer_2 : countermove;
                 result = &s->stack->killer[index];
                 if (s->killers_enabled && do_quiets && result->piece && !result->capture && !result->promotion
                         && !result->castle && board->valid(result)
+                        && move::allows_evasion(*result, list->evasion_targets)
                         && result->to_compact() != list->returned_hints[0]
                         && (index == 0 || result->to_compact() != list->returned_hints[1])) {
                     list->returned_hints[index + 1] = result->to_compact();
@@ -349,6 +358,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                         result = &list->counter_candidate;
                         if (result->piece && !result->capture && !result->promotion
                                 && !result->castle && board->valid(result)
+                                && move::allows_evasion(*result, list->evasion_targets)
                                 && result->to_compact() != list->returned_hints[0]
                                 && result->to_compact() != list->returned_hints[1]
                                 && result->to_compact() != list->returned_hints[2]) {
@@ -392,7 +402,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 if (result) {
                     return result;
                 }
-                list->stage = STOP;
+                list->stage = stop;
                 break;
             default:
                 return nullptr;

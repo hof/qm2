@@ -114,7 +114,7 @@ bool disabled_hints() {
                 ++hints;
                 const bool enabled = killer ? search->killers_enabled : search->countermoves_enabled;
                 const int stage = search->stack->move_list.stage;
-                if ((enabled && stage != KILLER2 && stage != countermove && stage != quiet_init)
+                if ((enabled && stage != killer_2 && stage != countermove && stage != quiet_init)
                         || (!enabled && stage != bad_quiets)) {
                     return false;
                 }

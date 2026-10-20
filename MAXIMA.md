@@ -148,6 +148,41 @@ run, so stalemate remains an exact draw with production pruning enabled. The
 probe uses a king escape first and fresh move generation when needed, without
 changing the active move picker.
 
+`CheckEvasions` is a default-on standard-search checkbox. At checked picker
+entry, compute a destination mask for non-king moves: capture the checker or
+block its ray in single check, and generate only king moves in double check.
+The existing staged capture, promotion and quiet generators apply this mask
+before emitting moves; cached TT, killer and countermove hints use the same
+restriction. King moves still require search-owned final legality. En passant
+remains conservative in single check because its captured pawn is off the
+destination square; final legality handles pins and discovered attacks. Castling
+is excluded from checked lists. The mask belongs to the search frame and is
+restored with same-position verification state.
+
+Each worker snapshots the option. Changing it stops the worker and clears both
+TT modes. With it off, the picker retains unrestricted pseudo-legal generation
+and search still rejects illegal moves. Ordinary move generation and terminal
+probes start unrestricted; royal losers keeps its existing path. Audit builds
+report `audit_evasions nodes` and `double_check` picker-entry counts. These are
+candidate restrictions, not selective score cutoffs. Picker stage identifiers
+consistently use lowercase `snake_case`; "noisy" means capture or promotion,
+and quiet checks remain quiet moves under that classification.
+
+Check-evasion validation passed 42/42 Debug and 42/42 Release checks, including
+both lifecycle suites, plus six focused ASan/UBSan checks (leak detection off)
+and six audit checks. Direct legal-set comparisons covered 2,566 positions;
+the independent rules/state oracle covered 4,372 positions and 95,734 legal
+children across both variants. All 288 depth-eight probes had legal results;
+96 disabled-control signatures matched the parent exactly in nodes, scores,
+best moves and full PVs, with LMR on/off and cold/retained history.
+
+A separate same-binary depth-four perft comparison preserved 4,315,290 leaves
+and reduced emitted candidates from 4,503,566 to 4,463,759. It includes legality
+and make/unmake work, rather than isolating raw generator throughput. Enabled
+search nodes changed by +1.67%/-0.74% with cold history and -0.61%/+0.62% with
+retained history (LMR on/off). Short CPU samples varied substantially; these
+measurements establish neither playing strength nor a general speed result.
+
 `UpcomingRepetition` is a default-on standard-search checkbox. At descendants,
 when `alpha < draw_score()`, search checks whether one legal reversible non-pawn
 move reaches an earlier position. An immutable two-choice hash table maps key

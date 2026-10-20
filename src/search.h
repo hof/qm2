@@ -152,6 +152,7 @@ public:
     bool countermoves_enabled;
     bool killers_enabled;
     bool upcoming_repetition_enabled;
+    bool evasions_enabled;
     uint16_t countermoves[BKING + 1][64];
     move_t ponder_move;
     std::string book_name;

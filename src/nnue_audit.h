@@ -14,6 +14,7 @@ enum class audit_mode_t { verify, full, off };
 struct audit_counters_t {
     uint64_t pvs_nodes = 0, q_nodes = 0, root_calls = 0;
     uint64_t move_visits = 0, null_visits = 0;
+    uint64_t evasion_nodes = 0, double_check_nodes = 0;
     uint64_t repetition_attempts = 0, repetition_hits = 0, repetition_cutoffs = 0;
     uint64_t q_repetition_hits = 0, q_repetition_cutoffs = 0;
     uint64_t researches = 0, root_researches = 0, research_fail_highs = 0;
