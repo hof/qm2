@@ -327,6 +327,36 @@ store lower bounds, other nonterminal completions store upper bounds, and
 certified mate/stalemate results may be exact. Interrupted searches store no
 unfinished result. Qsearch clears stale PV/best-move state before probing.
 
+Search-policy options carry their TT invalidation rule beside their declaration.
+Changing `NullMove`, `NullVerify`, `BetaPruning`, `FutilityPruning`, `LMR`,
+`Aspiration`, `IID`, `QsearchTT`, draw contempt, variant or tablebase probing
+policy stops and joins the worker before clearing both main and quiescence TT
+results and move hints. History controls and audit search policies follow the
+same rule. Invalid values and unchanged numeric/checkbox policies preserve the
+cache. Successful network loads and tablebase-path changes clear it separately.
+Clock overhead and other non-search-policy settings retain cached results.
+
+Standard search exposes independent `MainHistory`, `ContinuationHistory`,
+`PawnHistory`, `Countermoves` and `Killers` checkboxes, all defaulting to true.
+Each worker snapshots them before search. A disabled history table contributes
+zero to ordering and receives neither rewards nor penalties. Disabled
+countermoves and killers skip hint selection and learning; their moves remain
+available through ordinary generation. Standard quiet history and countermoves
+remain worker-owned and persist across moves, including dormant entries while
+a component is disabled. Re-enabling can reuse those entries; use `ucinewgame`
+for a fresh-history comparison. Killers retain their existing search lifetime.
+Royal losers keeps its legacy ordering and learning behavior.
+
+Baseline-control validation passed 40/40 Debug and 40/40 Release checks,
+five focused ASan/UBSan checks (leak detection disabled), and six audit checks.
+All 32 history-control combinations passed controlled scoring/learning tests
+and 128 legal depth-six searches. Frozen-parent comparisons matched all 72
+paired depth-eight signatures, including nodes, scores, best moves and full PVs,
+with both cold and retained history. Short CPU samples had higher candidate
+medians (6.25% cold, 9.82% retained), mixed paired directions and substantial
+variation; they establish neither a speed benefit nor a reliable isolated cost.
+Playing-strength acceptance remains outstanding.
+
 An exact TT return can shorten the searched PV because an entry stores a score
 and move rather than a complete continuation. Search clears the stale PV before
 reuse. UCI text may append TT move hints to a short searched prefix; those hints

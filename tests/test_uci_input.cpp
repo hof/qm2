@@ -16,10 +16,80 @@ bool check(const char * message, bool success) {
 }
 }
 
+namespace {
+bool policy_cache_controls() {
+    bool success = true;
+    const U64 main_key = 0x1234567812345678ULL;
+    const U64 q_key = 0x9876543298765432ULL;
+    auto seed = [&]() {
+        trans_table::clear();
+        trans_table::store(main_key, 0, 0, 4, 123, 456, score::EXACT);
+        trans_table::store(q_key, 0, 0, 1, 234, 567, score::LOWERBOUND,
+            0, {0, 101}, tt_mode_t::quiescence_entry);
+    };
+    auto retained = [&]() {
+        int value = 0, move = 0, flag = 0;
+        return trans_table::retrieve(main_key, 0, 4, value, move, flag) && value == 123
+            && trans_table::retrieve(q_key, 0, 1, value, move, flag,
+                0, 0, nullptr, tt_mode_t::quiescence_entry) && value == 234;
+    };
+    auto cleared = [&]() {
+        int value = 0, move = 0, flag = 0;
+        const bool main_hit = trans_table::retrieve(main_key, 0, 4, value, move, flag);
+        const bool main_clear = !main_hit && move == 0;
+        const bool q_hit = trans_table::retrieve(q_key, 0, 1, value, move, flag,
+            0, 0, nullptr, tt_mode_t::quiescence_entry);
+        return main_clear && !q_hit && move == 0;
+    };
+    for (const char * name : {"NullMove", "BetaPruning", "LMR", "FutilityPruning",
+            "NullVerify", "Aspiration", "IID", "QsearchTT", "MainHistory",
+            "ContinuationHistory", "PawnHistory", "Countermoves", "Killers",
+            "DrawContempt", "SyzygyProbeLimit", "SyzygyProbeDepth"
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            , "NNUEAuditNullMove", "NNUEAuditBetaPruning", "NNUEAuditFutility",
+            "NNUEAuditLMR", "NNUEAuditHashMoves", "NNUEAuditIID", "NNUEAuditAspiration",
+            "NNUEAuditDelta", "NNUEAuditSEE", "NNUEAuditQuietChecks", "NNUEAuditCastling",
+            "NNUEAuditCheckExtensions"
+#endif
+            }) {
+        const int saved = options::get_value(name);
+        const std::string command = std::string("setoption name ") + name + " value ";
+        seed();
+        uci::in(command + std::to_string(saved));
+        success &= check("unchanged policy must preserve both TT modes", retained());
+        uci::in(command + "invalid");
+        success &= check("invalid policy must preserve both TT modes", retained());
+        uci::in(command + std::to_string(saved == 0 ? 1 : 0));
+        success &= check(name, cleared());
+        seed();
+        uci::in(command + std::to_string(saved));
+        success &= check("restoring policy must clear both TT modes", cleared());
+    }
+    for (const char * value : {"losers", "standard"}) {
+        seed();
+        uci::in(std::string("setoption name Wild value ") + value);
+        success &= check("variant changes must clear both TT modes", cleared());
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    for (const char * value : {"fixed", "quiet", "normal"}) {
+        seed();
+        uci::in(std::string("setoption name NNUEAuditHorizon value ") + value);
+        success &= check("horizon changes must clear both TT modes", cleared());
+    }
+#endif
+    seed();
+    uci::in("setoption name Move Overhead value 100");
+    success &= check("clock overhead must preserve TT", retained());
+    uci::in("setoption name Move Overhead value 50");
+    trans_table::clear();
+    return success;
+}
+}
+
 int main() {
     magic::init();
     uci::silent(true);
-    bool success = true;
+    bool success = policy_cache_controls();
     uci::in("position startpos moves g1f3 g8f6 f3g1 f6g8");
     const auto fen = uci::fen;
     const auto history = uci::position_history;

@@ -89,6 +89,44 @@ bool pawn_hint_geometry() {
     return true;
 }
 
+bool disabled_hints() {
+    for (int mask = 0; mask < 4; ++mask) {
+        auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
+        move_t parent;
+        parent.set(&search->brd, "d2c2");
+        search->forward(&parent, search->brd.gives_check(&parent));
+        search->killers_enabled = mask & 1;
+        search->countermoves_enabled = mask & 2;
+        search->stack->killer[0].set(&search->brd, "d8e8");
+        search->stack->killer[1].set(&search->brd, "d8f8");
+        move_t counter;
+        counter.set(&search->brd, "d8g8");
+        search->countermoves[WQUEEN][c2] = counter.to_compact();
+        std::set<uint16_t> seen;
+        int hints = 0;
+        for (auto * move = move::first(search.get(), 2); move; move = move::next(search.get(), 2)) {
+            if (!seen.insert(move->to_compact()).second) {
+                return false;
+            }
+            const bool killer = search->is_killer(move);
+            const bool is_countermove = move->equals(&counter);
+            if (killer || is_countermove) {
+                ++hints;
+                const bool enabled = killer ? search->killers_enabled : search->countermoves_enabled;
+                const int stage = search->stack->move_list.stage;
+                if ((enabled && stage != KILLER2 && stage != countermove && stage != quiet_init)
+                        || (!enabled && stage != bad_quiets)) {
+                    return false;
+                }
+            }
+        }
+        if (hints != 3) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool staging_contract() {
     auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
     search->stack->tt_move.set(&search->brd, "d2c2");
@@ -141,7 +179,7 @@ bool staging_contract() {
 
 int main() {
     magic::init();
-    if (!legality_contract() || !pawn_hint_geometry() || !staging_contract()) {
+    if (!legality_contract() || !pawn_hint_geometry() || !staging_contract() || !disabled_hints()) {
         std::cerr << "pseudo-legal picker / lazy legality contract failed\n";
         return EXIT_FAILURE;
     }

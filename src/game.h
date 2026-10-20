@@ -39,12 +39,13 @@ namespace options {
         int type;
         int value;
         const char * uci_option; 
+        bool clears_tt = false;
     };
 
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    const int length = 37;
+    const int length = 42;
 #else
-    const int length = 24;
+    const int length = 29;
 #endif
     extern option_t PARAM[length+1];
     

@@ -32,37 +32,42 @@ namespace options {
         { "OwnBook", BOOL, 1, "type check default true" },
         { "UCI_AnalyseMode", BOOL, 0, "type check default false" },
         { "UCI_Opponent", STRING, 0, "type string" },
-        { "NullMove", BOOL, 1, "type check default true" },
-        { "BetaPruning", BOOL, 1, "type check default true" },
-        { "LMR", BOOL, 1, "type check default true" },
-        { "FutilityPruning", BOOL, 1, "type check default true" },
-        { "NullVerify", BOOL, 1, "type check default true" },
-        { "Wild", STRING, 0, "type combo default standard var standard var losers" },
-        { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100" },
+        { "NullMove", BOOL, 1, "type check default true", true },
+        { "BetaPruning", BOOL, 1, "type check default true", true },
+        { "LMR", BOOL, 1, "type check default true", true },
+        { "FutilityPruning", BOOL, 1, "type check default true", true },
+        { "NullVerify", BOOL, 1, "type check default true", true },
+        { "Wild", STRING, 0, "type combo default standard var standard var losers", true },
+        { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100", true },
         { "SyzygyPath", STRING, 0, "type string default <empty>" },
-        { "SyzygyProbeLimit", INT, 5, "type spin default 5 min 0 max 5" },
-        { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64" },
+        { "SyzygyProbeLimit", INT, 5, "type spin default 5 min 0 max 5", true },
+        { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64", true },
         { "BookFile", STRING, 0, "type string default book.bin" },
         { "ExperienceFile", STRING, 0, "type string default <empty>" },
         { "ExperienceDepth", INT, 16, "type spin default 16 min 1 max 128" },
         { "EvalFile", STRING, 0, "type string default eval.nnue" },
-        { "Aspiration", BOOL, 1, "type check default true" },
-        { "IID", BOOL, 1, "type check default true" },
-        { "QsearchTT", BOOL, 1, "type check default true" }
+        { "Aspiration", BOOL, 1, "type check default true", true },
+        { "IID", BOOL, 1, "type check default true", true },
+        { "QsearchTT", BOOL, 1, "type check default true", true },
+        { "MainHistory", BOOL, 1, "type check default true", true },
+        { "ContinuationHistory", BOOL, 1, "type check default true", true },
+        { "PawnHistory", BOOL, 1, "type check default true", true },
+        { "Countermoves", BOOL, 1, "type check default true", true },
+        { "Killers", BOOL, 1, "type check default true", true }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        , { "NNUEAuditHorizon", STRING, 0, "type combo default normal var normal var fixed var quiet" }
-        , { "NNUEAuditNullMove", BOOL, 0, "type check default false" }
-        , { "NNUEAuditBetaPruning", BOOL, 0, "type check default false" }
-        , { "NNUEAuditFutility", BOOL, 0, "type check default false" }
-        , { "NNUEAuditLMR", BOOL, 0, "type check default false" }
-        , { "NNUEAuditHashMoves", BOOL, 0, "type check default false" }
-        , { "NNUEAuditIID", BOOL, 0, "type check default false" }
-        , { "NNUEAuditAspiration", BOOL, 0, "type check default false" }
-        , { "NNUEAuditDelta", BOOL, 0, "type check default false" }
-        , { "NNUEAuditSEE", BOOL, 0, "type check default false" }
-        , { "NNUEAuditQuietChecks", BOOL, 0, "type check default false" }
-        , { "NNUEAuditCastling", BOOL, 0, "type check default false" }
-        , { "NNUEAuditCheckExtensions", BOOL, 0, "type check default false" }
+        , { "NNUEAuditHorizon", STRING, 0, "type combo default normal var normal var fixed var quiet", true }
+        , { "NNUEAuditNullMove", BOOL, 0, "type check default false", true }
+        , { "NNUEAuditBetaPruning", BOOL, 0, "type check default false", true }
+        , { "NNUEAuditFutility", BOOL, 0, "type check default false", true }
+        , { "NNUEAuditLMR", BOOL, 0, "type check default false", true }
+        , { "NNUEAuditHashMoves", BOOL, 0, "type check default false", true }
+        , { "NNUEAuditIID", BOOL, 0, "type check default false", true }
+        , { "NNUEAuditAspiration", BOOL, 0, "type check default false", true }
+        , { "NNUEAuditDelta", BOOL, 0, "type check default false", true }
+        , { "NNUEAuditSEE", BOOL, 0, "type check default false", true }
+        , { "NNUEAuditQuietChecks", BOOL, 0, "type check default false", true }
+        , { "NNUEAuditCastling", BOOL, 0, "type check default false", true }
+        , { "NNUEAuditCheckExtensions", BOOL, 0, "type check default false", true }
 #endif
     };
     

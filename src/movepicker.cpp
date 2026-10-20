@@ -330,7 +330,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 const int index = list->stage == KILLER1 ? 0 : 1;
                 list->stage = index == 0 ? KILLER2 : countermove;
                 result = &s->stack->killer[index];
-                if (do_quiets && result->piece && !result->capture && !result->promotion
+                if (s->killers_enabled && do_quiets && result->piece && !result->capture && !result->promotion
                         && !result->castle && board->valid(result)
                         && result->to_compact() != list->returned_hints[0]
                         && (index == 0 || result->to_compact() != list->returned_hints[1])) {
@@ -341,7 +341,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
             }
             case countermove:
                 list->stage = quiet_init;
-                if (do_quiets && board->ply > 0) {
+                if (s->countermoves_enabled && do_quiets && board->ply > 0) {
                     const auto & previous = (s->stack - 1)->current_move;
                     if (previous.piece) {
                         list->counter_candidate.set_compact(board,

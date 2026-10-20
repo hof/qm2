@@ -4,6 +4,12 @@
 #include "board.h"
 #include <algorithm>
 
+struct quiet_history_policy_t {
+    bool main = true;
+    bool continuation = true;
+    bool pawn = true;
+};
+
 // Worker-owned tables. Piece keys include color; pawn buckets intentionally
 // share colliding structures, like other bounded history heuristics.
 struct quiet_history_t {
@@ -18,24 +24,34 @@ struct quiet_history_t {
         entry += bonus - int(entry) * std::abs(bonus) / limit;
     }
 
-    int score(bool us, const move_t & move, const move_t * previous, U64 pawn_key) const {
-        int value = main[us][move.ssq][move.tsq]
-            + pawn[pawn_key % pawn_buckets][move.piece][move.tsq];
-        if (previous && previous->piece) {
+    int score(bool us, const move_t & move, const move_t * previous, U64 pawn_key,
+            const quiet_history_policy_t & policy = {}) const {
+        int value = 0;
+        if (policy.main) {
+            value += main[us][move.ssq][move.tsq];
+        }
+        if (policy.pawn) {
+            value += pawn[pawn_key % pawn_buckets][move.piece][move.tsq];
+        }
+        if (policy.continuation && previous && previous->piece) {
             value += continuation[previous->piece][previous->tsq][move.piece][move.tsq];
         }
         return value;
     }
 
     void update(bool us, const move_t & move, const move_t * previous, U64 pawn_key, int bonus,
-            const move_t * protected_move = nullptr) {
-        update_entry(main[us][move.ssq][move.tsq], bonus);
+            const move_t * protected_move = nullptr, const quiet_history_policy_t & policy = {}) {
+        if (policy.main) {
+            update_entry(main[us][move.ssq][move.tsq], bonus);
+        }
         if (protected_move && protected_move->piece == move.piece
                 && protected_move->tsq == move.tsq) {
             return;
         }
-        update_entry(pawn[pawn_key % pawn_buckets][move.piece][move.tsq], bonus);
-        if (previous && previous->piece) {
+        if (policy.pawn) {
+            update_entry(pawn[pawn_key % pawn_buckets][move.piece][move.tsq], bonus);
+        }
+        if (policy.continuation && previous && previous->piece) {
             update_entry(continuation[previous->piece][previous->tsq][move.piece][move.tsq], bonus);
         }
     }

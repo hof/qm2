@@ -118,6 +118,62 @@ bool context_and_bounds() {
     return true;
 }
 
+bool component_controls() {
+    const char * names[] = {"MainHistory", "ContinuationHistory", "PawnHistory", "Countermoves", "Killers"};
+    for (int mask = 0; mask < 32; ++mask) {
+        for (int i = 0; i < 5; ++i) {
+            options::get_option(names[i])->value = (mask >> i) & 1;
+        }
+        trans_table::clear();
+        auto search = std::make_unique<cutoff_search_t>(1);
+        // A real preceding move supplies both continuation and countermove context.
+        move_t previous;
+        previous.set(&search->brd, "a2a3");
+        search->forward(&previous, search->brd.gives_check(&previous));
+        search->stack->in_check = search->brd.in_check();
+        const auto policy = search->quiet_history_policy;
+        if (policy.main != bool(mask & 1) || policy.continuation != bool(mask & 2)
+                || policy.pawn != bool(mask & 4) || search->countermoves_enabled != bool(mask & 8)
+                || search->killers_enabled != bool(mask & 16)) {
+            return false;
+        }
+        // Changing global options after worker creation must not alter the snapshot.
+        for (const char * name : names) {
+            options::get_option(name)->value = 1;
+        }
+        const int value = search->search_t::pvs(0, 1, 1);
+        const auto & best = search->stack->best_move;
+        const auto & history = *search->quiet_history;
+        const auto bucket = search->brd.stack->pawn_key % quiet_history_t::pawn_buckets;
+        if (value != 1 || history.main[BLACK][best.ssq][best.tsq] != ((mask & 1) ? 32 : 0)
+                || history.continuation[previous.piece][previous.tsq][best.piece][best.tsq]
+                    != ((mask & 2) ? 32 : 0)
+                || history.pawn[bucket][best.piece][best.tsq] != ((mask & 4) ? 32 : 0)
+                || search->countermoves[previous.piece][previous.tsq] != ((mask & 8) ? best.to_compact() : 0)
+                || bool(search->stack->killer[0].piece) != bool(mask & 16)
+                || search->quiet_score(best) != 32 * ((bool(mask & 1)) + bool(mask & 2) + bool(mask & 4))) {
+            std::cerr << "component cutoff/snapshot failed: " << mask << '\n';
+            return false;
+        }
+        // Retained nonzero entries must neither score nor change while disabled.
+        auto & mutable_history = *search->quiet_history;
+        mutable_history.main[BLACK][best.ssq][best.tsq] = 101;
+        mutable_history.continuation[previous.piece][previous.tsq][best.piece][best.tsq] = 202;
+        mutable_history.pawn[bucket][best.piece][best.tsq] = 303;
+        if (search->quiet_score(best) != ((mask & 1) ? 101 : 0)
+                + ((mask & 2) ? 202 : 0) + ((mask & 4) ? 303 : 0)) {
+            return false;
+        }
+        search->update_quiet_cutoff(&search->stack->best_move, 1, 0);
+        if ((!(mask & 1) && mutable_history.main[BLACK][best.ssq][best.tsq] != 101)
+                || (!(mask & 2) && mutable_history.continuation[previous.piece][previous.tsq][best.piece][best.tsq] != 202)
+                || (!(mask & 4) && mutable_history.pawn[bucket][best.piece][best.tsq] != 303)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool history_ownership() {
     const char * fen = "7k/8/8/8/8/8/8/K7 w - - 0 1";
     auto old = std::make_unique<search_t>(fen);
@@ -146,5 +202,5 @@ bool history_ownership() {
 
 int main() {
     magic::init();
-    return cutoff_updates() && killer_alias() && context_and_bounds() && history_ownership() ? EXIT_SUCCESS : EXIT_FAILURE;
+    return cutoff_updates() && killer_alias() && context_and_bounds() && component_controls() && history_ownership() ? EXIT_SUCCESS : EXIT_FAILURE;
 }

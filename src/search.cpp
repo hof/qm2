@@ -247,6 +247,10 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     aspiration_enabled = options::get_value("Aspiration");
     iid_enabled = options::get_value("IID");
     q_tt_enabled = wild == 0 && options::get_value("QsearchTT");
+    quiet_history_policy = {options::get_value("MainHistory") != 0,
+        options::get_value("ContinuationHistory") != 0, options::get_value("PawnHistory") != 0};
+    countermoves_enabled = options::get_value("Countermoves");
+    killers_enabled = options::get_value("Killers");
     iid_active = false;
     verification_mode = verification_mode_t::none;
     ffp_enabled = options::get_value("FutilityPruning");
@@ -980,7 +984,7 @@ void search_t::take_quiet_history(search_t & previous) {
 
 int search_t::quiet_score(const move_t & move) const {
     const auto * previous = brd.ply > 0 ? &(stack - 1)->current_move : nullptr;
-    return quiet_history->score(brd.us(), move, previous, brd.stack->pawn_key);
+    return quiet_history->score(brd.us(), move, previous, brd.stack->pawn_key, quiet_history_policy);
 }
 
 void search_t::update_quiet_cutoff(move_t * move, int depth, int searched_moves) {
@@ -992,10 +996,10 @@ void search_t::update_quiet_cutoff(move_t * move, int depth, int searched_moves)
         const auto & failed = stack->searched[i];
         if (!failed.capture && !failed.promotion && !failed.castle) {
             quiet_history->update(brd.us(), failed, previous, brd.stack->pawn_key,
-                -bonus, move);
+                -bonus, move, quiet_history_policy);
         }
     }
-    quiet_history->update(brd.us(), *move, previous, brd.stack->pawn_key, bonus);
+    quiet_history->update(brd.us(), *move, previous, brd.stack->pawn_key, bonus, nullptr, quiet_history_policy);
 }
 
 /**
@@ -1744,13 +1748,15 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
                     trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
                 }
                 if (normal_search && !move->capture && !move->promotion && !move->castle) {
-                    if (brd.ply > 0 && (stack - 1)->current_move.piece) {
+                    if (countermoves_enabled && brd.ply > 0 && (stack - 1)->current_move.piece) {
                         const auto & previous = (stack - 1)->current_move;
                         countermoves[previous.piece][previous.tsq] = move->to_compact();
                     }
                     update_quiet_cutoff(move, depth, searched_moves);
                     // A returned move can alias killer[1]; update killers last.
-                    update_killers(move);
+                    if (killers_enabled) {
+                        update_killers(move);
+                    }
                 }
                 return score;
             }

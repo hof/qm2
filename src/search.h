@@ -147,6 +147,9 @@ public:
     result_source_t result_source;
     int history[BKING + 1][64]; //legacy royal-losers ordering
     std::unique_ptr<quiet_history_t> quiet_history;
+    quiet_history_policy_t quiet_history_policy;
+    bool countermoves_enabled;
+    bool killers_enabled;
     uint16_t countermoves[BKING + 1][64];
     move_t ponder_move;
     std::string book_name;

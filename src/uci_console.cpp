@@ -503,7 +503,6 @@ namespace uci {
                                 out("info string Invalid option value: " + name);
                                 return true;
                             }
-                            trans_table::clear();
                         }
 #endif
                         if (name == "EvalFile") {
@@ -521,21 +520,7 @@ namespace uci {
                             out("info string NNUE loaded");
                             return true;
                         }
-                        if (candidate != opt->value
-                                && (name == "Aspiration" || name == "IID" || name == "QsearchTT"
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-                                    || name == "NNUEAuditNullMove"
-                                    || name == "NNUEAuditBetaPruning"
-                                    || name == "NNUEAuditFutility"
-                                    || name == "NNUEAuditLMR"
-                                    || name == "NNUEAuditAspiration" || name == "NNUEAuditIID" || name == "NNUEAuditHashMoves"
-                                    || name == "NNUEAuditDelta"
-                                    || name == "NNUEAuditSEE"
-                                    || name == "NNUEAuditQuietChecks"
-                                    || name == "NNUEAuditCastling"
-                                    || name == "NNUEAuditCheckExtensions"
-#endif
-                                    )) {
+                        if (candidate != opt->value && opt->clears_tt) {
                             trans_table::clear();
                         }
                         opt->value = candidate;
