@@ -165,3 +165,21 @@ verification and clock-99 protections apply. The effective depth governs both
 child searches and TT storage. IIR takes precedence over IID globally; select
 `IIR=false` to use the existing `IID` policy. Both false disables both. This
 option changes search allocation; generation and final legality remain unchanged.
+
+After picking a candidate, `MainSEE=true` may prune it before make at shallow
+non-PV nodes, after one legal alternative has completed search. Captures use a
+linear depth margin and quiets a quadratic margin; checks, special moves,
+advanced passed pawns, endgames, helpers and draw/decisive boundaries are
+protected. Original PV nodes remain protected after alpha rises. Failed SEE
+requires final legality before a skip is counted. Skipped moves never enter the
+searched-move list or its history penalties; picker stages and deferred quiet
+generation keep their existing contract. Workers snapshot the independent
+option, and changes clear incompatible TT entries. See MAXIMA.md for exact
+margins, clock propagation, validation and measurement limits.
+
+Main-search SEE validation (2026-10-20): 48 Debug and 48 Release checks, 16
+selected ASan/UBSan checks, 18 audit checks and the independent oracle passed.
+All 288 D8 searches completed legally; 96 disabled-parent signatures matched
+exactly. With LMR, cold/retained nodes fell 8.22%/8.44%; without LMR they fell
+18.20%/9.33%, with mixed CPU results. No playing-strength gain is established.
+See MAXIMA.md for the full protocol, activation counts and timing limitations.

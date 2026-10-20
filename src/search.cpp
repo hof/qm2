@@ -51,6 +51,8 @@ constexpr U64 search_history_salt = 0xd1b54a32d192ed03ULL;
 constexpr int reverse_futility_margin_per_ply = 100;
 constexpr int null_move_margin = 50;
 constexpr int forward_futility_margin = 300;
+constexpr int main_see_quiet_margin = 50;
+constexpr int main_see_capture_margin = 100;
 constexpr int quiescence_delta_margin = 200;
 constexpr int delta_endgame_material = 1300;
 
@@ -249,6 +251,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     adaptive_lmr_enabled = wild == 0 && options::get_value("AdaptiveLMR");
     lmr_history_enabled = wild == 0 && options::get_value("LMRHistory");
     aspiration_enabled = options::get_value("Aspiration");
+    main_see_enabled = wild == 0 && options::get_value("MainSEE");
     iir_enabled = wild == 0 && options::get_value("IIR");
     iid_enabled = options::get_value("IID");
     q_tt_enabled = wild == 0 && options::get_value("QsearchTT");
@@ -285,6 +288,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
+        main_see_enabled = false;
         iir_enabled = false;
         adaptive_lmr_enabled = lmr_history_enabled = false;
         correction_history_enabled = false;
@@ -1639,6 +1643,47 @@ bool search_t::is_improving() const {
     return false;
 }
 
+// SEE only models exchanges on one square. Search a legal alternative first,
+// protect tactical/draw boundaries, and allow larger sacrifices at greater depth.
+bool search_t::prune_main_see(move_t & move, int depth, int searched_moves,
+        int best, int alpha, int beta, int gives_check) {
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    if (!main_see_enabled || !brd.ply || depth < 1 || depth > 6 || !searched_moves
+            || alpha + 1 != beta || stack->in_check || gives_check
+            || iid_active || verification_mode != verification_mode_t::none
+            || stack->excluded_move || brd.stack->fifty_count >= 99
+            || best <= -decisive || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
+            || !brd.has_pieces(brd.us()) || stack->metadata.endgame
+            || move.promotion || move.castle || is_advanced_passed_pawn(&move)) {
+        return false;
+    }
+    const int threshold = move.capture ? -main_see_capture_margin * depth
+        : -main_see_quiet_margin * depth * depth;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    auto & counts = nnue_audit.counters;
+    ++counts.main_see_candidates;
+#endif
+    if (brd.see(&move, threshold)) {
+        return false;
+    }
+    // The picker may return self-check candidates. They cannot contribute to
+    // pruning evidence, nor replace the already searched legal alternative.
+    if (!brd.legal(&move)) {
+        return false;
+    }
+    stack->tt_clocks.max = std::min(int(stack->tt_clocks.max), 98);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++counts.main_see_prunes;
+    counts.main_see_captures += move.capture != 0;
+    counts.main_see_quiets += move.capture == 0;
+    counts.min_main_see_depth = counts.min_main_see_depth
+        ? std::min(counts.min_main_see_depth, uint64_t(depth)) : depth;
+    counts.max_main_see_depth = std::max(counts.max_main_see_depth, uint64_t(depth));
+#endif
+    ++pruned_nodes;
+    return true;
+}
+
 // Missing move hints make deep ordering less reliable. Reduce the whole node
 // once; all downstream consumers, including TT storage, use the searched depth.
 int search_t::internal_search_depth(int depth, bool pv, bool cut_node) {
@@ -2058,6 +2103,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             }
         }
 
+        if (!pv && prune_main_see(*move, depth, searched_moves, best, alpha, beta, gives_check)) {
+            continue;
+        }
 
         /*
          * Move extensions and reductions
@@ -2551,6 +2599,9 @@ void search_t::reset_stack() {
     counts.researches = counts.root_researches = counts.research_fail_highs = 0;
     counts.hash_probes = counts.hash_moves = counts.hash_first = 0;
     counts.hash_rejected = counts.hash_score_cutoffs = 0;
+    counts.main_see_candidates = counts.main_see_prunes = 0;
+    counts.main_see_captures = counts.main_see_quiets = 0;
+    counts.min_main_see_depth = counts.max_main_see_depth = 0;
     counts.iir_reductions = counts.iir_pv = counts.iir_cut = 0;
     counts.min_iir_depth = counts.max_iir_depth = 0;
     counts.iir_cutoffs = counts.iir_cancelled = counts.iir_terminals = 0;

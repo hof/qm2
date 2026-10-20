@@ -428,7 +428,7 @@ unfinished result. Qsearch clears stale PV/best-move state before probing.
 
 Search-policy options carry their TT invalidation rule beside their declaration.
 Changing `NullMove`, `NullVerify`, `BetaPruning`, `FutilityPruning`, `LMR`,
-`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `QsearchTT`, draw contempt,
+`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `QsearchTT`, draw contempt,
 variant or tablebase probing policy stops and joins the worker before clearing both main and quiescence TT
 results and move hints. History controls and audit search policies follow the
 same rule. Invalid values and unchanged numeric/checkbox policies preserve the
@@ -2222,6 +2222,33 @@ PV/cut context, depth range, reduced-node cutoffs, terminals and cancellation.
 The threshold keeps one-ply ordering probes out of shallow search. At nominal
 depth four it is eligible mainly after a root check extension preserves four
 plies; ordinary interior nodes become eligible at depth five.
+
+Standard search defaults `MainSEE=true`. At non-PV nodes with one through six
+remaining effective plies, SEE pruning can skip a move after at least one legal
+alternative has completed search. A capture must meet `-100 * depth`; a quiet
+must meet `-50 * depth * depth`, in the 100-cp pawn scale. Equality passes.
+A node that began PV stays protected even if its alpha rises to one point below
+beta. These simple provisional margins use full effective depth independently
+of LMR and history. SEE models exchanges on the destination square, so this heuristic can
+miss tactical sacrifices and still needs integrated playing-strength validation.
+
+Root nodes, checks and checking moves, promotions, castles, advanced passed
+pawns, pawn-only sides, endgame metadata, IID helpers, verification subtrees,
+excluded moves, decisive windows and clocks at least 99 are protected. The
+searched best value must exceed the negative mate/tablebase band. A failed SEE
+also requires final legality before recording a skip. Skips do not enter the
+searched-move history list. At least one searched legal alternative preserves
+terminal handling and a real best move; completed results retain ordinary PVS
+bound handling. Legal skips cap the propagated TT clock interval at 98.
+
+Workers snapshot `MainSEE`; disabling it skips both tests and pruning, and
+changing it stops the worker and clears incompatible TT entries. Royal losers
+and fixed/aligned audit horizons keep it disabled. Existing qsearch SEE retains
+its own policy. `test_main_see` covers margins, eligibility, controlled child
+sets, bounds, clock-safe cache reuse, cancellation, restoration and worker
+ownership. Audit counters distinguish pseudo-legal candidates from legal
+capture/quiet skips and record their depth range. See
+[CPW Static Exchange Evaluation](https://chessprogramming.org/Static_Exchange_Evaluation).
 
 The following IID comparison and earlier quiet-horizon cross-engine match
 tables used different main-search hash-move policies: Maxima excluded TT lookup,
@@ -4053,16 +4080,15 @@ Release checks. When using the local toolchain, prefix these commands with
 - For documentation-only changes, review the content and diff; a build is not
   necessary.
 
-For a small sanity check of reduction/history changes, build first and run the
-six focused tests:
+For a small sanity check of pruning/reduction/history changes, build first and run
+the seven focused tests:
 
 ```bash
-ctest --preset cpp26_debug -R '^(test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
+ctest --preset cpp26_debug -R '^(test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
 ```
 
-Use the local toolchain prefix above when needed. This subset checks reduction
-and IIR/IID selection, verification guards, cancellation/restoration, node context and UCI policy
-cache invalidation. The full preset additionally covers lifecycle, evaluation,
+Use the local toolchain prefix above when needed. This subset checks SEE pruning, reductions and IIR/IID selection, verification
+guards, cancellation/restoration, node context and UCI policy cache invalidation. The full preset additionally covers lifecycle, evaluation,
 board rules and other search contracts.
 
 Use identical Release compiler flags, positions, search limits, and hash size
@@ -5896,3 +5922,54 @@ tests additionally cover cancellation and terminals absent from this sample.
 Initial test-fixture clock/cancellation assumptions and a test-expansion compile
 error were corrected before full validation; runtime policy was unchanged.
 No timed match, tuning or installation was performed in this increment.
+
+### Main-search SEE pruning validation — 2026-10-20
+
+Standard search now defaults `MainSEE=true`, with an independent worker snapshot
+and policy-change TT clearing. The conservative policy and protections are
+specified in chapter 4. Implementation and correctness validation are complete;
+integrated playing-strength acceptance remains pending.
+
+All 48 Debug tests passed in 196.35s and all 48 Release tests in 106.19s,
+including both lifecycle suites. Sixteen selected ASan/UBSan tests passed in
+60.61s with leak detection disabled; eighteen audit tests passed in 22.64s.
+The independent oracle checked 4,372 positions and 95,734 legal children in
+32.012s. Native tests include 120 controlled PVS cases, threshold/guard checks,
+first-move and terminal safety, legality, clock-safe TT reuse, cancellation,
+restoration and worker/variant/audit isolation. Review caught a PV node becoming
+eligible after alpha rose to beta-1; a new regression failed before the explicit
+original-PV guard and passed afterward. The final full gates include that fix.
+Initial fixture mistakes and the superseded first Debug run remain recorded.
+
+A frozen parent and same-binary SEE off/on controls were compared with LMR both
+on and off: 12 reserved roots, three alternating cold depth-eight trials, plus
+one retained trial per profile after a depth-six warm search and fixed legal
+two-ply continuation. All 288 measured searches completed legally; all 216 cold
+searches repeated deterministically. Ninety-six disabled-parent signatures
+matched nodes, scores, best moves and complete PVs exactly. Measurements used
+one low-priority CPU, no pause throttle, and a UCI readiness barrier before
+process CPU sampling.
+
+| LMR | SEE | Cold nodes | Cold CPU median (s) | Retained nodes | Retained CPU (s) |
+|---|---|---:|---:|---:|---:|
+| On | Off | 1099216 | 1.83 | 858115 | 1.32 |
+| On | On | 1008871 | 1.61 | 785676 | 1.26 |
+| Off | Off | 6255546 | 8.78 | 3996389 | 5.41 |
+| Off | On | 5117158 | 8.87 | 3623621 | 5.81 |
+
+Relative to the same-binary off control, enabled SEE with LMR changed cold/
+retained nodes by -8.219%/-8.442% and CPU by -12.022%/-4.545%. Without LMR,
+nodes changed by -18.198%/-9.328%, while CPU rose 1.025%/7.394%. Short,
+tick-quantized CPU samples and one retained trial limit interpretation: even
+identical disabled-parent trees had materially different timings. These results
+do not establish general speed, generation throughput or playing-strength gains.
+No additional tuning, timed match or installation was performed.
+
+Direct production depth-six audit searches across the same roots recorded
+21,066 legal SEE skips with LMR (2,602 captures and 18,464 quiets), from 92,815
+pseudo-legal candidates. Without LMR, 114,537 legal skips were recorded. Actual
+skip depths ranged from one to four in both samples; native tests cover the
+eligibility boundaries through six. Disabled counters were all zero. Evidence,
+source/binary/model/corpus hashes and initial logs are retained privately under
+`.context/baselines/2026-10-20/main-see/`. Next are razoring, singular extensions
+and ProbCut, with TT feedback and final integration/strength acceptance pending.
