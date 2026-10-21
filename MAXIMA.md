@@ -4870,6 +4870,34 @@ isready
 ```
 
 The path can contain several directories separated by `:` on Linux. An empty
+### 7.1.1 FICS client download
+
+Maxima plays on ICS servers through the separate icsdrone-rs client
+(github.com/jshriver/icsdrone-rs, AGPL-3.0), which speaks UCI to the engine.
+It is downloaded from the upstream release, never vendored:
+
+```bash
+./maxima icsdrone:download              # pinned version for this machine
+./maxima icsdrone:download --dry-run
+./maxima icsdrone:download --version latest --target x86_64-pc-windows-msvc
+```
+
+The default version is pinned in `download_icsdrone.py` (currently v2.2.17).
+The archive must match the SHA-256 digest GitHub publishes for the release asset;
+unsafe archive paths are rejected. Each version installs atomically into
+`.tools/icsdrone-rs/<version>/` (ignored by Git), and reruns reuse a verified
+install. The command prints the client path.
+
+The client reads `config.json` from its working directory. For FICS use
+`"Host": "freechess.org"`, `"Port": 5000`, `"Timeseal": "Yes"`, and an absolute
+`Engine` path. Pass absolute `EvalFile` and `BookFile` paths in
+`engine_options`, because the engine's defaults are relative to its working
+directory. The client accepts every challenge, including variants, and sends
+neither `Wild` nor `UCI_Opponent`. A registered account therefore needs a FICS
+`formula` that excludes variants. Running a computer on FICS requires an
+account with computer status; guest testing is unrated. The v2.2.17 Linux build
+warns about a missing weak `GLIBC_2.39` symbol on glibc 2.35 but runs.
+
 path (`<empty>`) or a probe limit of 0 disables tablebase use. The initial engine
 integration supports up to five pieces; six/seven-piece downloads are available
 for later work. Missing tables fall back to normal search, and changing the path
@@ -5161,8 +5189,8 @@ the tagline "Chess engine & ops" and
 commands, `maxima help` for the full implemented command listing, and
 `maxima help COMMAND` or `maxima COMMAND --help` for detailed usage, options,
 and defaults. Build/test help includes examples. Current command groups are
-engine operation, development, and chess data; online-play commands will be added
-when implemented. Existing colon-style commands and the
+engine operation, development, chess data, and online play (currently the
+icsdrone-rs client download). Existing colon-style commands and the
 no-argument native-engine launch are preserved.
 
 Help must work without an engine build, credentials, network access, or optional
