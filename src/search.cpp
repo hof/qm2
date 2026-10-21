@@ -27,6 +27,7 @@
  */
 
 #include "search.h"
+#include <bit>
 #include "repetition.h"
 #include <limits>
 #include <cmath>
@@ -289,6 +290,8 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     check_ordering_enabled = wild == 0 && options::get_value("CheckOrdering");
     tt_eval_enabled = wild == 0 && options::get_value("TTEval");
     correction_history_enabled = wild == 0 && options::get_value("CorrectionHistory");
+    piece_correction_enabled = wild == 0 && options::get_value("PieceCorrection");
+    continuation_correction_enabled = wild == 0 && options::get_value("ContinuationCorrection");
     countermoves_enabled = options::get_value("Countermoves");
     killers_enabled = options::get_value("Killers");
     upcoming_repetition_enabled = wild == 0 && options::get_value("UpcomingRepetition");
@@ -572,7 +575,10 @@ void search_t::go() {
             + " updates " + std::to_string(counts.correction_updates)
             + " lower " + std::to_string(counts.correction_lower)
             + " upper " + std::to_string(counts.correction_upper)
-            + " exact " + std::to_string(counts.correction_exact));
+            + " exact " + std::to_string(counts.correction_exact)
+            + " pieces " + std::to_string(counts.piece_correction_updates)
+            + " cont2 " + std::to_string(counts.continuation_correction_updates[0])
+            + " cont4 " + std::to_string(counts.continuation_correction_updates[1]));
         uci::out("info string audit_capture_history scores " + std::to_string(counts.capture_history_scores)
             + " hits " + std::to_string(counts.capture_history_hits)
             + " rewards " + std::to_string(counts.capture_history_rewards)
@@ -1105,6 +1111,51 @@ void search_t::update_history(move_t * move) {
     assert(*record < 2 * HISTORY_MAX);
 }
 
+std::array<U64, 2> search_t::correction_context_keys() const {
+    std::array<U64, 2> keys{};
+    if (!continuation_correction_enabled || brd.ply < 2) {
+        return keys;
+    }
+    // Context belongs to this search only. A null move breaks every older pair.
+    const auto & last = (stack - 1)->current_move;
+    if (!last.piece) {
+        return keys;
+    }
+    const int last_piece = last.promotion ? last.promotion : last.piece;
+    for (int distance = 2; distance <= 4 && distance <= brd.ply; ++distance) {
+        const auto & older = (stack - distance)->current_move;
+        if (!older.piece) {
+            break;
+        }
+        if (distance == 2 || distance == 4) {
+            const int piece = older.promotion ? older.promotion : older.piece;
+            keys[distance / 2 - 1] = hash::codes[last_piece][last.tsq]
+                ^ std::rotl(hash::codes[piece][older.tsq], 1);
+        }
+    }
+    return keys;
+}
+
+int search_t::correction_value() const {
+    const bool side = brd.us();
+    constexpr int mask = correction_history_t::size - 1;
+    int value = correction_history->entries[side][brd.stack->pawn_key & mask];
+    if (piece_correction_enabled) {
+        const U64 keys[] = {brd.stack->nonpawn_key[0], brd.stack->nonpawn_key[1],
+            brd.stack->minor_key, brd.stack->major_key};
+        for (int i = 0; i < 4; ++i) {
+            value += correction_history->pieces[i][side][keys[i] & mask];
+        }
+    }
+    const auto keys = correction_context_keys();
+    for (int i = 0; i < 2; ++i) {
+        if (keys[i]) {
+            value += correction_history->continuation[i][side][keys[i] & mask] / (i + 1);
+        }
+    }
+    return value / correction_history_t::grain;
+}
+
 int search_t::corrected_static_eval(int raw) {
     if (!correction_history_enabled) {
         return raw;
@@ -1114,7 +1165,7 @@ int search_t::corrected_static_eval(int raw) {
         return raw;
     }
 #endif
-    const int correction = correction_history->correction(brd.us(), brd.stack->pawn_key);
+    const int correction = correction_value();
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     ++nnue_audit.counters.correction_lookups;
     nnue_audit.counters.correction_hits += correction != 0;
@@ -1147,7 +1198,32 @@ void search_t::update_correction_history(int value, int bound, int depth) {
             || (bound == score::UPPERBOUND && value >= eval)) {
         return;
     }
-    const bool changed = correction_history->update(brd.us(), brd.stack->pawn_key, depth, value - eval);
+    const bool side = brd.us();
+    const int bonus = correction_history_t::bonus_for(depth, value - eval);
+    bool changed = correction_history->update(side, brd.stack->pawn_key, depth, value - eval);
+    if (piece_correction_enabled) {
+        const U64 keys[] = {brd.stack->nonpawn_key[0], brd.stack->nonpawn_key[1],
+            brd.stack->minor_key, brd.stack->major_key};
+        for (int i = 0; i < 4; ++i) {
+            const bool updated = correction_history_t::update_entry(
+                correction_history->pieces[i][side][keys[i] & (correction_history_t::size - 1)], bonus);
+            changed |= updated;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            nnue_audit.counters.piece_correction_updates += updated;
+#endif
+        }
+    }
+    const auto keys = correction_context_keys();
+    for (int i = 0; i < 2; ++i) {
+        if (keys[i]) {
+            const bool updated = correction_history_t::update_entry(
+                correction_history->continuation[i][side][keys[i] & (correction_history_t::size - 1)], bonus);
+            changed |= updated;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            nnue_audit.counters.continuation_correction_updates[i] += updated;
+#endif
+        }
+    }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     if (changed) {
         ++nnue_audit.counters.correction_updates;

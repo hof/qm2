@@ -71,7 +71,9 @@ namespace options {
         { "LongContinuationHistory", BOOL, 1, "type check default true", true },
         { "ThreatOrdering", BOOL, 1, "type check default true", true },
         { "CheckOrdering", BOOL, 1, "type check default true", true },
-        { "CorrectionHistory", BOOL, 1, "type check default true", true }
+        { "CorrectionHistory", BOOL, 1, "type check default true", true },
+        { "PieceCorrection", BOOL, 1, "type check default true", true },
+        { "ContinuationCorrection", BOOL, 1, "type check default true", true }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         , { "NNUEAuditHorizon", STRING, 0, "type combo default normal var normal var fixed var quiet", true }
         , { "NNUEAuditNullMove", BOOL, 0, "type check default false", true }

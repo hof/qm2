@@ -5827,19 +5827,19 @@ pending.
 ### Evaluation correction history (2026-10-20)
 
 `CorrectionHistory` is a default-on standard-chess checkbox. A worker-owned
-64 KiB table indexed by side to move and pawn hash learns a bounded estimate
-of static-evaluation error. It adjusts main-search and quiescence static
+448 KiB set of tables indexed by side to move and pawn, piece-group and move-pair
+features learns a bounded estimate of static-evaluation error. It adjusts main-search and quiescence static
 scores; it changes neither legal moves nor draw, mate or tablebase adjudication.
 The independent switch skips both correction lookups and learning when disabled.
 Changing it stops the worker and clears incompatible main and quiescence TT
 results. Royal losers retains its existing evaluator and allocates no table.
 
-The table has 16,384 signed entries per side, bounded at 16,384 units with
+Each table has 16,384 signed entries per side, bounded at 16,384 units with
 128 units per centipawn. Updates use history gravity with a bonus equal to
 `error * clamp(depth, 1, 16) / 8`, capped at one quarter of the table bound.
 These are provisional constants awaiting integrated validation and tuning.
-Pawn-hash collisions intentionally share a heuristic estimate, not an exact
-score. Other feature-indexed correction tables are outside this increment.
+Feature-hash collisions intentionally share a heuristic estimate, not an exact
+score. Piece-group and continuation domains are described below.
 
 Raw NNUE cache entries stay unadjusted. Search-frame `eval_result` retains its
 existing uncorrected, reversible-clock-damped value, metadata and improving
@@ -6450,3 +6450,100 @@ TT probes/hits were zero. This demonstrates reuse after local-cache misses,
 including across workers, without claiming a global CPU or playing-strength gain.
 Private evidence is under `baselines/2026-10-21/raw-eval-tt/`. Richer correction
 history remains next; baseline integration and strength acceptance are pending.
+
+
+### Piece-group and continuation correction (2026-10-21)
+
+`PieceCorrection` and `ContinuationCorrection` are default-on standard-search
+controls under the existing `CorrectionHistory` master switch. Piece correction
+adds independent tables for white and black nonpawn placement, minor pieces and
+major pieces. Nonpawn tables include kings; the minor group contains knights,
+bishops and kings, and the major group contains rooks, queens and kings. These
+hashes update through normal piece mutations, including captures, promotions,
+en passant and castling. Board snapshots preserve them over null moves and undo;
+board flipping rebuilds the feature hashes. Each board frame grows by 32 bytes.
+
+Continuation correction uses the last move paired with the move two or four
+plies back. Its directional hash combines colored landing pieces and destination
+squares, using the promoted piece after a promotion. Both contexts stop at the
+search root or an intervening null move. Separate distance tables prevent a
+coincident bucket from receiving two updates for the same observation. These
+contexts are independent of move-ordering continuation-history controls.
+
+All seven tables have 16,384 signed entries per side, consuming 448 KiB per
+standard worker (previously 64 KiB). Each enabled table learns the same fresh
+aggregate evaluation error using the existing bounded gravity update. Sum the
+integer entries before dividing by 128; the four-ply continuation contributes
+half its stored value, and other domains have unit weight. These provisional
+scales require integrated strength validation. Shared feature buckets hold
+heuristic estimates and confer no search-bound validity.
+
+The existing quiet-result, bound-direction, check, decisive-score, clock,
+helper, exclusion, cancellation and null-subtree learning guards apply to every
+domain. Raw neural/frame/TT evaluations stay uncorrected; every read applies the
+current aggregate with rule-50 damping and the decisive-band clamp. Workers
+snapshot the controls; changing either stops the worker and clears both TT modes.
+All tables transfer together only for the same immutable model snapshot. Royal
+losers allocates no correction tables. Artificial fixed/aligned audit horizons
+bypass correction and learning. Audit output adds changed-entry counts for the
+four piece domains and each continuation distance; these count table entries,
+whereas the existing update counter counts learning nodes.
+
+
+Validation passed 54/54 Debug checks (207.17 s), 54/54 Release (108.97 s),
+both lifecycle suites in each, 18 focused ASan/UBSan checks (65.61 s, leak
+detection disabled), 20 instrumented checks (11.48 s), and the independent
+oracle's 4,372 positions / 95,734 legal children (34.462 s). Native regressions
+cover incremental feature keys against fresh board calculations, both colors,
+special moves, null/undo/flip, promoted continuation pieces, root/null context
+boundaries, aggregate limits, fresh-error learning, worker/model ownership and
+raw TT/local/frame-cache independence over rule-50 boundaries. Two older
+post-search raw-inference assertions required explicit separation from learned
+correction; their raw full/incremental/reference scores still agreed. The
+instrumented-only fixture fix reused unaffected ordinary/sanitizer evidence.
+All 14 changed source/test hashes remained frozen through their relevant gates;
+13 changed C++ files passed the brace scan.
+
+The parent/disabled/pieces/continuation/combined matrix, with raw TT evaluation
+enabled and disabled, completed 480 legal D8 searches over 12 reserved roots.
+Three alternating cold trials repeated deterministically. All 96 parent/disabled
+signatures matched nodes, depth, score, best move and full PV exactly; all 240
+paired raw-TT on/off signatures also matched. Retained trials warm D6 and play
+a fixed legal two-ply continuation before D8. One low-priority CPU and UCI
+readiness barriers isolate search CPU from configuration, with no pause throttle.
+
+| Raw TT evaluation | Correction policy | Cold nodes | Cold CPU median (s) | Retained nodes | Retained CPU (s) |
+|---|---|---:|---:|---:|---:|
+| On | Parent | 486,342 | 0.89 | 357,670 | 0.64 |
+| On | Disabled additions | 486,342 | 0.91 | 357,670 | 0.65 |
+| On | Pieces | 399,847 | 0.77 | 365,201 | 0.61 |
+| On | Continuation | 442,380 | 0.84 | 354,230 | 0.61 |
+| On | Combined | 407,264 | 0.78 | 416,075 | 0.73 |
+| Off | Parent | 486,342 | 0.88 | 357,670 | 0.62 |
+| Off | Disabled additions | 486,342 | 0.88 | 357,670 | 0.61 |
+| Off | Pieces | 399,847 | 0.76 | 365,201 | 0.61 |
+| Off | Continuation | 442,380 | 0.79 | 354,230 | 0.62 |
+| Off | Combined | 407,264 | 0.76 | 416,075 | 0.74 |
+
+Combined correction versus the same-binary disabled control changed cold/retained
+nodes by -16.26%/+16.33%. With raw TT evaluation enabled, CPU changed by
+-14.29%/+12.31%; without it, -13.64%/+21.31%. Piece correction alone changed
+nodes by -17.78%/+2.11%, continuation alone by -9.04%/-0.96%. These interactions
+establish neither the strength of either component nor their combination.
+
+Existing retained rows locate the combined net increase of 58,405 nodes at
+reserved root 5 (+85,090), with savings elsewhere. Its score changes from +18
+to +3 and best move from f8e8 to d7d5. Its CPU increase of 0.15 s exceeds the
+net 0.08 s with raw TT evaluation enabled. Combined versus pieces alone adds
+50,874 retained nodes, including 62,835 at that root. This locates changed tree
+allocation, without proving move quality or an isolated per-node cost. CPU
+samples are short and tick-quantized, with one retained trial; no general speed
+or playing-strength claim follows. No timed match, tuning or installation ran.
+
+Direct production D8 probes after real D6 warmup and same-model history transfer
+recorded 38,580 changed piece entries, 9,584 immediate continuation entries and
+8,944 four-ply entries with both additions enabled, across 9,645 learning nodes.
+Disabled components and the master-off control recorded zero corresponding
+updates. Private evidence is under `baselines/2026-10-21/richer-correction/`.
+This completes the second search-baseline implementation group. Selective-policy
+completion and final baseline integration remain before Phase 2 or strength tests.

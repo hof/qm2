@@ -76,8 +76,12 @@ public:
     bool wtm; //white to move
     bool legal_enpassant; //cached legality for repetition identity
     U64 pawn_key; //colored-pawn structure, independent of side and rights
+    U64 nonpawn_key[2]; //colored nonpawns, including kings
+    U64 minor_key; //knights, bishops and kings of both colors
+    U64 major_key; //rooks, queens and kings of both colors
     U64 tt_key; //transposition table (hash) key
 
+    void update_piece_keys(int piece, U64 delta);
     void do_flip();
 
     U64 repetition_key() const {

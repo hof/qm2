@@ -53,6 +53,21 @@ void board_stack_t::do_flip() {
     }
 }
 
+void board_stack_t::update_piece_keys(int piece, U64 delta) {
+    if (piece == WPAWN || piece == BPAWN) {
+        pawn_key ^= delta;
+    } else {
+        nonpawn_key[piece > WKING] ^= delta;
+        const int type = (piece - 1) % WKING + 1;
+        if (type == WKNIGHT || type == WBISHOP || type == WKING) {
+            minor_key ^= delta;
+        }
+        if (type == WROOK || type == WQUEEN || type == WKING) {
+            major_key ^= delta;
+        }
+    }
+}
+
 /**
  * Empty and initialize the board structure
  */
@@ -74,9 +89,7 @@ void board_t::clear() {
 void board_t::add_piece(const int piece, const int sq, const bool hash = false) {
     if (hash) {
         HASH_ADD_PIECE(stack->tt_key, piece, sq);
-        if (piece == WPAWN || piece == BPAWN) {
-            HASH_ADD_PIECE(stack->pawn_key, piece, sq);
-        }
+        stack->update_piece_keys(piece, hash::codes[piece][sq]);
     }
     U64 bit = BIT(sq);
     bb[piece] ^= bit;
@@ -99,9 +112,7 @@ void board_t::remove_piece(const int piece, const int sq, const bool hash = fals
     matrix[sq] = EMPTY;
     if (hash) {
         HASH_REMOVE_PIECE(stack->tt_key, piece, sq);
-        if (piece == WPAWN || piece == BPAWN) {
-            HASH_REMOVE_PIECE(stack->pawn_key, piece, sq);
-        }
+        stack->update_piece_keys(piece, hash::codes[piece][sq]);
     }
 }
 
@@ -121,9 +132,7 @@ void board_t::move_piece(const int piece, const int ssq, int tsq, const bool has
     matrix[tsq] = piece;
     if (hash) {
         HASH_MOVE_PIECE(stack->tt_key, piece, ssq, tsq);
-        if (piece == WPAWN || piece == BPAWN) {
-            HASH_MOVE_PIECE(stack->pawn_key, piece, ssq, tsq);
-        }
+        stack->update_piece_keys(piece, hash::codes[piece][ssq] ^ hash::codes[piece][tsq]);
     }
 }
 
@@ -1202,11 +1211,12 @@ void board_t::do_flip() {
         }
     }
     stack->do_flip();
-    stack->pawn_key = 0;
-    for (int piece : {WPAWN, BPAWN}) {
-        U64 pawns = bb[piece];
-        while (pawns) {
-            HASH_ADD_PIECE(stack->pawn_key, piece, pop(pawns));
+    stack->pawn_key = stack->minor_key = stack->major_key = 0;
+    stack->nonpawn_key[0] = stack->nonpawn_key[1] = 0;
+    for (int piece = WPAWN; piece <= BKING; ++piece) {
+        U64 pieces = bb[piece];
+        while (pieces) {
+            stack->update_piece_keys(piece, hash::codes[piece][pop(pieces)]);
         }
     }
 }

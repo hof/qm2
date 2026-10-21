@@ -45,8 +45,13 @@ bool compare(search_t & search) {
         for (int lane = 0; lane < 256; ++lane)
             success &= fresh.values[color][lane] == reference_data.accumulator.accumulation[!color][lane];
     if (!search.brd.in_check()) {
+        // Compare raw inference after real searches too: learned correction is
+        // deliberately separate from this independent network oracle.
+        const bool correction_enabled = search.correction_history_enabled;
+        search.correction_history_enabled = false;
         success &= evaluate(&search)
             == damp_rule50(reference_score * 100 / 208, search.brd.stack->fifty_count);
+        search.correction_history_enabled = correction_enabled;
     }
     if (!success) {
         std::cerr << fen << ": reference=" << reference_score << " full=" << recomputed

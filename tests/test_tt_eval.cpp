@@ -68,6 +68,65 @@ bool table_contract() {
     return check(ok, "raw evaluation identity, bounds, replacement, disable, clear or resize");
 }
 
+bool rich_evaluation_contract() {
+    bool ok = true;
+    for (bool black : {false, true}) {
+        const char * fen = black
+            ? "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1" : position;
+        auto replay = [black](search_t & search) {
+            for (const char * text : black ? std::initializer_list<const char *>{"g8f6", "g1f3", "b8c6", "b1c3"}
+                    : std::initializer_list<const char *>{"g1f3", "g8f6", "b1c3", "b8c6"}) {
+                move_t move;
+                move.set(&search.brd, text);
+                search.forward(&move, false);
+            }
+        };
+        auto cold = std::make_unique<search_t>(fen);
+        cold->tt_eval_enabled = false;
+        replay(*cold);
+        const int raw = cold->neural_static_score();
+        for (bool enabled : {false, true}) {
+            for (int clock : {0, 9, 10, 89, 90, 99, 100}) {
+                auto warm = std::make_unique<search_t>(fen);
+                replay(*warm);
+                warm->tt_eval_enabled = enabled;
+                warm->brd.stack->fifty_count = clock;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                warm->nnue_audit.mode = nnue::audit_mode_t::off;
+#endif
+                const U64 key = warm->brd.stack->tt_key;
+                const U64 model = warm->evaluation_network->fingerprint();
+                trans_table::clear();
+                trans_table::store_eval(key, model, raw, 0);
+                const bool side = warm->brd.us();
+                const U64 features[] = {warm->brd.stack->nonpawn_key[0], warm->brd.stack->nonpawn_key[1],
+                    warm->brd.stack->minor_key, warm->brd.stack->major_key};
+                const auto contexts = warm->correction_context_keys();
+                const int values[] = {2048, -512, 768, -256};
+                for (int sign : {1, -1}) {
+                    auto & tables = *warm->correction_history;
+                    tables.entries[side][warm->brd.stack->pawn_key & 16383] = sign * 1024;
+                    for (int i = 0; i < 4; ++i) {
+                        tables.pieces[i][side][features[i] & 16383] = sign * values[i];
+                    }
+                    tables.continuation[0][side][contexts[0] & 16383] = sign * -128;
+                    tables.continuation[1][side][contexts[1] & 16383] = sign * 512;
+                    ok &= evaluate(warm.get()) == damp_rule50(raw, clock) + damp_rule50(sign * 25, clock);
+                    ok &= warm->stack->eval_result == damp_rule50(raw, clock)
+                        && warm->stack->metadata == search_metadata(warm->brd)
+                        && warm->neural_static_score() == raw;
+                    int stored;
+                    ok &= trans_table::retrieve_eval(key, model, stored) && stored == raw;
+                }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                ok &= warm->nnue_audit.counters.tt_eval_hits == unsigned(enabled);
+#endif
+            }
+        }
+    }
+    return check(ok, "rich correction must be fresh over raw TT/local/frame caches and rule50 damping");
+}
+
 bool evaluation_contract() {
     bool ok = true;
     trans_table::clear();
@@ -136,5 +195,5 @@ int main() {
     trans_table::set_size(1);
     const bool table = table_contract();
     const bool evaluation = evaluation_contract();
-    return table && evaluation ? EXIT_SUCCESS : EXIT_FAILURE;
+    return table && evaluation && rich_evaluation_contract() ? EXIT_SUCCESS : EXIT_FAILURE;
 }

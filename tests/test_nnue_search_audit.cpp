@@ -58,7 +58,10 @@ int main(int argc, char ** argv) {
     if (search.nodes != 4000 || search.brd.ply || !search.nnue_audit.counters.calls) {
         return failure(__LINE__);
     }
-    if (evaluate(&search) != expected) {
+    // A completed descendant can train correction before the root is restored.
+    // Audit the unchanged raw cache and the freshly corrected return separately.
+    if (evaluate(&search) != search.corrected_static_eval(expected)
+            || search.stack->eval_result != expected) {
         return failure(__LINE__);
     }
     search.init(fen, nullptr);

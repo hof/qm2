@@ -65,6 +65,7 @@ struct audit_counters_t {
     uint64_t extension_candidates = 0, extension_see_rejected = 0;
     uint64_t extensions_applied = 0;
     uint64_t max_check_extensions = 0, max_main_ply = 0, max_q_ply = 0;
+    uint64_t piece_correction_updates = 0, continuation_correction_updates[2] = {};
     uint64_t correction_lookups = 0, correction_hits = 0;
     uint64_t correction_updates = 0, correction_lower = 0, correction_upper = 0, correction_exact = 0;
     uint64_t calls = 0, cached_returns = 0;
