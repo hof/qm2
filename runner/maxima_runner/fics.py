@@ -321,9 +321,17 @@ def machine_description(threads, hash_mb):
     return f"{cpu_model()}, {threads} thread{'s' if int(threads) != 1 else ''}{hash_text}, {platform.system()}"
 
 
+def short_engine_name(name):
+    """'Maxima 2.0.0-branch-commit-Release' becomes 'Maxima 2.0.0'; other names stay as they are."""
+    if not name:
+        return "UCI engine"
+    match = re.match(r"(.*?\d+(?:\.\d+)+)[-+ ]", name + " ")
+    return match.group(1) if match else name
+
+
 def finger_notes(engine_name, owners, machine, extra=()):
     """Notes 1-3: engine, owners, machine (mandatory for FICS computer accounts); then extra lines."""
-    notes = [f"{engine_name or 'UCI engine'} on {client_name}"]
+    notes = [f"{short_engine_name(engine_name)} on {client_name}"]
     if owners:
         owners = [owners] if isinstance(owners, str) else list(owners)
         notes.append("Owner: " + (" and ".join(owners) if len(owners) < 3

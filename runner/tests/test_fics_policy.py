@@ -64,6 +64,13 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
         await guest.on_login("GuestTEST")
         self.assertEqual(guest.connection.sent, ["unseek", "seek 3 0 u"])
 
+    def test_engine_name_is_shortened_to_version(self):
+        self.assertEqual(fics.short_engine_name("Maxima 2.0.0-feat/nnue-bootstrap-8778e07-Release"), "Maxima 2.0.0")
+        self.assertEqual(fics.short_engine_name("Maxima 2.1"), "Maxima 2.1")
+        self.assertEqual(fics.short_engine_name("Stockfish 17.1"), "Stockfish 17.1")
+        self.assertEqual(fics.short_engine_name("Crafty"), "Crafty")
+        self.assertEqual(fics.short_engine_name(None), "UCI engine")
+
     def test_cpu_model_is_shortened(self):
         model = fics.cpu_model()
         self.assertNotRegex(model, r"\(R\)|\(TM\)|@")
