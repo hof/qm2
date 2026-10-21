@@ -1,6 +1,7 @@
 """Play on FICS: timeseal transport, login, keepalive probes, and reconnects."""
 import argparse
 import asyncio
+from contextlib import asynccontextmanager
 import os
 import platform
 import re
@@ -8,6 +9,13 @@ import socket
 import sys
 import threading
 import time
+
+import chess
+import chess.engine
+
+from . import fics_game
+from .project import engine_path, project_root
+from .uci import open_engine
 
 timeseal_key = b"Timestamp (FICS) v1.0 - programmed by Henrik Gram."
 timeseal_ping = b"[G]\x00"
@@ -18,7 +26,7 @@ iac, will, wont, do, dont = 255, 251, 252, 253, 254
 prompt = "fics% "
 login_settings = (
     "set style 12", "set interface Maxima runner", "set seek 0", "set shout 0", "set cshout 0",
-    "set bell 0", "set autoflag 1", "set noescape 1", "set width 240", "iset nowrap 1",
+    "set bell 0", "set autoflag 1", "set noescape 1", "set width 240", "iset nowrap 1", "iset ms 1",
 )
 backoff_seconds = (5, 10, 30, 60)
 closed = object()
@@ -245,7 +253,116 @@ async def login(connection, handle, password=None, timeout=60, on_line=None):
     return match.group(1)
 
 
-async def serve(connection, commands, on_line, probe_interval=300, probe_timeout=60):
+class engine_player:
+    """Play our games with a UCI engine; searches run as tasks so server lines keep flowing."""
+
+    def __init__(self, open_session, on_line, margin=5):
+        self.open_session = open_session
+        self.on_line = on_line
+        self.margin = margin
+        self.connection = None
+        self.context = self.session = None
+        self.game = self.history = self.token = None
+        self.task = self.searched = self.retried = None
+
+    async def start(self):
+        self.context = self.open_session()
+        self.session = await self.context.__aenter__()
+
+    async def stop_engine(self):
+        if self.context is not None:
+            context, self.context, self.session = self.context, None, None
+            await context.__aexit__(None, None, None)
+
+    async def close(self):
+        self.cancel()
+        await self.stop_engine()
+
+    def cancel(self):
+        if self.task is not None and not self.task.done():
+            self.task.cancel()
+
+    async def handle(self, line):
+        position = fics_game.style12.parse(line) if line.startswith("<12> ") else None
+        if position is not None:
+            try:
+                self.on_board(position)
+            except ValueError as error:
+                self.on_line(f"-- ignored board: {error}")
+            return
+        end = fics_game.game_end_pattern.match(line)
+        if end and int(end["game"]) == self.game:
+            self.cancel()
+            self.on_line(f"-- game {self.game} over: {end['reason']} {end['result']}")
+            self.game = self.history = None
+        elif line.startswith("Illegal move") and self.game is not None and self.retried != self.searched:
+            self.retried = self.searched
+            await self.send("refresh")
+
+    def on_board(self, position):
+        if position.relation not in (fics_game.playing_my_move, fics_game.playing_their_move):
+            return
+        if position.game != self.game:
+            history = fics_game.game_history(position)
+            self.cancel()
+            self.game, self.token, self.history = position.game, object(), history
+            self.on_line(f"-- game {self.game}: {position.white} vs {position.black}, "
+                         f"{position.initial_seconds // 60} {position.increment_seconds}")
+        else:
+            self.history.update(position)
+        if position.relation != fics_game.playing_my_move:
+            return
+        board = self.history.board
+        key = (self.game, board.fen(), len(board.move_stack))
+        if self.task is not None and not self.task.done() and self.searched == key:
+            return
+        self.cancel()
+        self.searched = key
+        self.task = asyncio.ensure_future(self.play(position, board.copy()))
+        self.task.add_done_callback(self.report)
+
+    def report(self, task):
+        if not task.cancelled() and task.exception() is not None:
+            self.on_line(f"-- move task failed: {task.exception()!r}")
+
+    async def send(self, line):
+        try:
+            await self.connection.send(line)
+        except (ConnectionError, OSError) as error:
+            self.on_line(f"-- could not send {line!r}: {error}")
+
+    async def play(self, position, board):
+        clock = (position.white_ms if board.turn == chess.WHITE else position.black_ms) / 1000
+        limit = chess.engine.Limit(white_clock=position.white_ms / 1000, black_clock=position.black_ms / 1000,
+                                   white_inc=position.increment_seconds, black_inc=position.increment_seconds)
+        started = time.monotonic()
+        try:
+            result = await self.session.play(board, limit, game=self.token, timeout=max(clock, 1) + self.margin)
+        except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
+            self.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
+            await self.stop_engine()
+            await self.start()
+            await self.send("refresh")
+            return
+        if result.move is None or not board.is_legal(result.move):
+            self.on_line(f"-- engine returned no legal move in {board.fen()}")
+            return
+        await self.send(fics_game.ics_move(result.move))
+        self.on_line(f"-- {board.san(result.move)} {describe(result.info, board.turn)} "
+                     f"{time.monotonic() - started:.1f}s")
+
+
+def describe(info, turn):
+    score = info.get("score")
+    depth = info.get("depth", 0)
+    if score is None or not depth:
+        return "book"
+    relative = score.pov(turn)
+    value = f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}"
+    return f"d{depth} {value}"
+
+
+async def serve(connection, commands, on_line, probe_interval=300, probe_timeout=60, player=None):
     """Relay server lines and operator commands until quit; probe the server when it is quiet."""
     probe_sent = None
     command = asyncio.ensure_future(commands.get())
@@ -258,6 +375,8 @@ async def serve(connection, commands, on_line, probe_interval=300, probe_timeout
                 text = line.result()
                 if text is not None:
                     on_line(text)
+                    if player is not None:
+                        await player.handle(text)
             else:
                 line.cancel()
             if command in done:
@@ -279,7 +398,7 @@ async def serve(connection, commands, on_line, probe_interval=300, probe_timeout
         command.cancel()
 
 
-async def run_client(options, commands, on_line, backoff=backoff_seconds, transcript=None):
+async def run_client(options, commands, on_line, backoff=backoff_seconds, transcript=None, player=None):
     """Keep a FICS session alive with reconnect backoff until the operator quits."""
     attempt = 0
     while True:
@@ -289,7 +408,9 @@ async def run_client(options, commands, on_line, backoff=backoff_seconds, transc
             name = await login(connection, options.handle, options.password, on_line=on_line)
             on_line(f"-- logged in as {name}")
             attempt = 0
-            if await serve(connection, commands, on_line, options.probe_interval) == "quit":
+            if player is not None:
+                player.connection = connection
+            if await serve(connection, commands, on_line, options.probe_interval, player=player) == "quit":
                 return 0
         except (ConnectionError, OSError, asyncio.TimeoutError) as error:
             delay = backoff[min(attempt, len(backoff) - 1)]
@@ -319,7 +440,17 @@ def main():
     parser.add_argument("--probe-interval", type=float, default=300,
                         help="seconds of server silence before a liveness probe (default: 300)")
     parser.add_argument("--debug", metavar="FILE", help="append a wire transcript (password masked)")
+    parser.add_argument("--engine", help="UCI engine to play with (default: the Release Maxima build)")
+    parser.add_argument("--option", action="append", default=[], metavar="NAME=VALUE",
+                        help="UCI option for the engine, repeatable (e.g. Hash=256)")
+    parser.add_argument("--no-engine", action="store_true", help="connect without playing games")
     options = parser.parse_args()
+    settings = {}
+    for item in options.option:
+        name, separator, value = item.partition("=")
+        if not separator or not name.strip():
+            parser.error(f"--option expects NAME=VALUE, got {item!r}")
+        settings[name.strip()] = value.strip()
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
     if not valid_handle(options.handle):
         parser.error("FICS handles have 3 to 17 letters, or use guest")
@@ -331,11 +462,27 @@ def main():
             stream.write(time.strftime("%H:%M:%S") + f".{int(time.time() * 1000) % 1000:03d} {text}\n")
             stream.flush()
 
+    def show(line):
+        print(line, flush=True)
+
+    @asynccontextmanager
+    async def engine_session():
+        # The project root resolves the engine's relative eval.nnue and book.bin defaults.
+        async with open_engine([str(options.engine or engine_path())], str(project_root())) as session:
+            await session.configure(settings)
+            yield session
+
     async def session():
         commands = asyncio.Queue()
         read_commands(asyncio.get_event_loop(), commands)
-        return await run_client(options, commands, lambda line: print(line, flush=True),
-                                transcript=transcript)
+        player = None if options.no_engine else engine_player(engine_session, show)
+        try:
+            if player is not None:
+                await player.start()
+            return await run_client(options, commands, show, transcript=transcript, player=player)
+        finally:
+            if player is not None:
+                await player.close()
 
     return asyncio.run(session())
 

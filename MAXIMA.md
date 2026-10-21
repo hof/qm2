@@ -1235,14 +1235,34 @@ for every data command remain a planned documentation improvement.
 
 ### 10.2 FICS client
 
-`maxima fics` connects to freechess.org:5000, logs in, and keeps the session
-alive. Game play, seeking, and PGN capture are not implemented yet.
+`maxima fics` connects to freechess.org:5000, logs in, keeps the session
+alive, and plays our games with the Release Maxima build. Automatic seeking,
+challenge filtering, and PGN capture are not implemented yet: seek or accept at
+the prompt (e.g. `seek 3 0 u`).
 
 ```bash
-./maxima fics                                   # guest login
+./maxima fics                                   # guest login, plays with Maxima
 FICS_PASSWORD=... ./maxima fics --handle Maxima # registered account
 ./maxima fics --debug fics.log                  # wire transcript, password masked
+./maxima fics --engine /path/to/engine --option Hash=256
+./maxima fics --no-engine                       # connect only
 ```
+
+The engine runs in the project root, so its relative `eval.nnue` and `book.bin`
+defaults resolve. Login sets `iset ms 1`, so style12 clocks are milliseconds.
+Each style12 board of our own game (relation 1 or -1) is checked and applied to a
+python-chess board holding the whole game, so the engine receives
+`position startpos moves …` and can see repetitions. A board that does not
+follow from the previous one (takeback, missed update, resumed game) restarts
+the history from the server position; invalid boards are ignored. On our move
+the engine searches with both clocks and the increment; a new game number gives
+a new python-chess game token, which sends `ucinewgame`. Moves go out in
+coordinate form, promotions as `e7e8=Q`. Searches run as tasks, so server
+lines, pings, and commands keep flowing; a new board or a game end cancels a
+stale search. A search that misses our clock plus five seconds, or an engine
+that fails, is restarted and the board requested again with `refresh`; an
+`Illegal move` reply also triggers one `refresh`. The terminal shows each of
+our moves with depth, score, and time, or `book`.
 
 Lines typed at the terminal go to the server verbatim; `quit` logs off.
 Handles are validated before connecting (3–17 letters, or `guest`); the
