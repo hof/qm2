@@ -230,6 +230,30 @@ calls; it never uses TT search scores. Child entry and root reset clear stale
 trends, and same-position helpers restore their caller's state. Adaptive LMR
 uses the improving flag; other pruning policies retain their own guards.
 
+`LMP` and `HistoryPruning` are independent default-on standard-search controls.
+At non-PV descendants outside check, a completed legal alternative permits
+pruning ordinary quiet moves. LMP's searched-move budget is
+`(3 + depth * depth) / (2 - improving)` and applies when the predicted
+LMR-adjusted depth is below nine. History pruning applies below seven and
+requires learned quiet history strictly below `-2048 * depth`; equality and
+neutral history are retained, and killers are protected from history pruning.
+The predicted depth is `depth - reduction`, using the same current depth,
+move count, history and node context as the subsequent reduced search. With
+LMR disabled, this is the unreduced depth. These constants are provisional.
+
+Each move is considered separately: later quiet checks remain available and
+picker bonuses never substitute for learned history. Captures, promotions,
+castles, advanced passed pawns and singular hints are protected. Require
+nonpawn material and a nondecisive window/best alternative; skip IID, verification,
+excluded searches, artificial null subtrees, repetition floors and clock 99+.
+Confirm legality before a prune and restrict its TT clock domain to at most 98.
+Pruned candidates neither advance searched-move counts nor train history.
+The first legal move and all legal terminal adjudication retain their contracts.
+Both switches are worker snapshots; policy changes stop the worker and clear
+both TT modes. Royal losers and artificial audit horizons disable both.
+Audit builds expose `audit_quiet_pruning` candidate counts and legal prune counts;
+overlapping prunes are attributed once to LMP. Generator batching is unchanged.
+
 Standard interior LMR now varies the reduction with remaining depth, searched
 legal move count, learned quiet history and node context. Preserve the first
 three searched legal moves and require depth at least three. Never reduce
@@ -4103,13 +4127,13 @@ Release checks. When using the local toolchain, prefix these commands with
   necessary.
 
 For a small sanity check of pruning/reduction/history changes, build first and run
-the nine focused tests:
+the ten focused tests:
 
 ```bash
-ctest --preset cpp26_debug -R '^(test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
+ctest --preset cpp26_debug -R '^(test_quiet_pruning|test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
 ```
 
-Use the local toolchain prefix above when needed. This subset checks TT history feedback, razoring verification, SEE pruning, reductions and IIR/IID selection, verification
+Use the local toolchain prefix above when needed. This subset checks quiet-pruning depth/history thresholds, TT history feedback, razoring verification, SEE pruning, reductions and IIR/IID selection, verification
 guards, cancellation/restoration, node context and UCI policy cache invalidation. The full preset additionally covers lifecycle, evaluation,
 board rules and other search contracts.
 
@@ -6307,3 +6331,52 @@ disabled, 3,984 and 2,289. Disabled feedback counters were zero. Evidence is und
 search-baseline implementation group. Depth/context-aware LMP, history pruning,
 raw static-evaluation TT caching, richer correction and selective-policy
 completion remain. Integrated strength acceptance is pending.
+
+### Depth/context-aware quiet pruning (2026-10-21)
+
+Independent `LMP` and `HistoryPruning` controls add the depth/context policy
+described in chapter 4. Generator batching and low-level optimizations are
+preserved. The retired fixed-four pruning experiment remains historical.
+Validation passed 53/53 Debug checks (181.30 s), 53/53 Release (106.69 s),
+11 focused ASan/UBSan checks (47.28 s, leak detection disabled), 13 instrumented
+checks (11.52 s), and the independent oracle's 4,372 positions/95,734 legal
+children. Native checks cover 9,648 depth/count/history thresholds, 192 controlled
+PVS cases, helper and tactical guards, clock/cache bounds, cancellation and
+restoration. Preserve original PV status after alpha rises: a temporarily narrow
+window cannot authorize quiet pruning. Older artificial minimax/history probes
+explicitly disable the new policies to retain their independent contracts.
+
+The frozen parent/off/LMP/history/both matrix, with adaptive LMR on/off, completed
+480 legal D8 searches on 12 reserved roots. Three alternating cold trials repeated
+exactly; all 96 cold/retained disabled-parent signatures matched nodes, depth,
+score, best move and full PV. Retained trials warm D6 and play a fixed legal
+two-ply continuation before D8. One low-priority CPU and a readiness barrier
+separate search CPU from configuration; measurements use no pause throttling.
+
+With adaptive LMR enabled, combined pruning changed cold/retained nodes by
+-49.31%/-56.78% and measured CPU by -46.99%/-39.34%. LMP alone changed nodes
+by -51.45%/-57.26%; history alone by +0.46%/-4.99%. With adaptive LMR disabled,
+combined nodes changed by -62.98%/-61.29% and CPU by -56.19%/-56.52%.
+These results establish neither playing strength nor generator throughput.
+
+Production D8 after real D6 warmup counted 208,798 LMP prunes and three
+additional history prunes with both policies and adaptive LMR enabled. History
+alone counted 10,663 prunes; LMP shadows most qualifying moves in the combination.
+Disabled mechanisms counted zero. The combined cold tree exceeds LMP alone by
+20,571 nodes, mostly two roots; retained adds 4,020, mostly one changed-score
+root. This interaction does not establish standalone history-pruning benefit or
+move quality. CPU samples are short and tick-quantized: identical cold parent/off
+trees used median 1.97/1.66 s; retained LMP/combined used 0.55/0.74 s. Three cold
+trials and one retained trial limit broader timing claims. Private artifacts are
+under `baselines/2026-10-21/quiet-pruning/`. Raw static-evaluation TT caching,
+richer correction and the selective-policy group remain before baseline acceptance.
+
+At the end of Phase 1, before Phase 2 and before any strength tests, the
+integration review must include fixed-depth, single-worker comparisons against
+the four pinned reference implementations plus the historical control using
+a compatible evaluator. Normalize completed-depth and node/work definitions, freeze settings/
+models, and investigate large per-position gaps with ordering, reductions,
+pruning, extensions, cache and quiescence evidence. Feature-name coverage does
+not establish equal trees; native modern evaluations also differ. This gate
+precedes parallel search, time-management and modern-network work. Smaller
+trees alone do not establish correctness or playing strength.

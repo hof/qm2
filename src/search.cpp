@@ -252,6 +252,8 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     adaptive_lmr_enabled = wild == 0 && options::get_value("AdaptiveLMR");
     lmr_history_enabled = wild == 0 && options::get_value("LMRHistory");
     aspiration_enabled = options::get_value("Aspiration");
+    lmp_enabled = wild == 0 && options::get_value("LMP");
+    history_pruning_enabled = wild == 0 && options::get_value("HistoryPruning");
     tt_history_enabled = wild == 0 && options::get_value("TTHistory");
     probcut_enabled = wild == 0 && options::get_value("ProbCut");
     singular_extensions_enabled = wild == 0 && options::get_value("SingularExtensions");
@@ -293,6 +295,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
+        lmp_enabled = history_pruning_enabled = false;
         tt_history_enabled = false;
         probcut_enabled = false;
         singular_extensions_enabled = false;
@@ -578,6 +581,10 @@ void search_t::go() {
             + " cutoffs " + std::to_string(counts.repetition_cutoffs)
             + " q_hits " + std::to_string(counts.q_repetition_hits)
             + " q_cutoffs " + std::to_string(counts.q_repetition_cutoffs));
+        uci::out("info string audit_quiet_pruning lmp_candidates " + std::to_string(counts.lmp_candidates)
+            + " lmp_prunes " + std::to_string(counts.lmp_prunes)
+            + " history_candidates " + std::to_string(counts.history_pruning_candidates)
+            + " history_prunes " + std::to_string(counts.history_prunes));
         uci::out("info string audit_tt_history rewards " + std::to_string(counts.tt_history_rewards)
             + " penalties " + std::to_string(counts.tt_history_penalties));
         uci::out("info string audit_probcut attempts " + std::to_string(counts.probcut_attempts)
@@ -1897,6 +1904,49 @@ bool search_t::razor_node(int alpha, int beta, int depth, int eval, int & value)
     return false;
 }
 
+// A searched legal alternative protects terminals and losing/mating lines.
+// Inspect each quiet separately: picker bonuses do not order learned history,
+// and later quiet checks must remain searchable after ordinary quiet pruning.
+bool search_t::prune_quiet(move_t & move, int depth, int searched_moves,
+        int reduced_depth, int best, int alpha, int beta, bool dangerous) {
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    if ((!lmp_enabled && !history_pruning_enabled) || !brd.ply || depth < 1
+            || !searched_moves || dangerous || stack->in_check || stop_all
+            || move.capture || move.promotion || move.castle
+            || alpha + 1 != beta || best <= -decisive
+            || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
+            || iid_active || verification_mode != verification_mode_t::none
+            || stack->excluded_move || stack->repetition_start > 0
+            || brd.stack->fifty_count >= 99 || !brd.has_pieces(brd.us())) {
+        return false;
+    }
+    // Quadratic depth growth, with a larger budget for improving positions.
+    // Count only completed legal searches, never picker candidates or prunes.
+    const int move_limit = (3 + depth * depth) / (2 - int(stack->improving));
+    const bool lmp_candidate = lmp_enabled && reduced_depth < 9;
+    const bool history_candidate = history_pruning_enabled && reduced_depth < 7
+        && !move.equals(&stack->killer[0]) && !move.equals(&stack->killer[1]);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    auto & counts = nnue_audit.counters;
+    counts.lmp_candidates += lmp_candidate;
+    counts.history_pruning_candidates += history_candidate;
+#endif
+    const bool lmp_prune = lmp_candidate && searched_moves >= move_limit;
+    const bool history_prune = !lmp_prune && history_candidate && move_history_score(move) < -2048 * depth;
+    // An illegal pseudo-legal candidate supplies no pruning evidence.
+    if (!(lmp_prune || history_prune) || !brd.legal(&move)) {
+        return false;
+    }
+    stack->tt_clocks.max = std::min(int(stack->tt_clocks.max), 98);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    // Attribute overlaps once, to move-count pruning.
+    counts.lmp_prunes += lmp_prune;
+    counts.history_prunes += !lmp_prune && history_prune;
+#endif
+    ++pruned_nodes;
+    return true;
+}
+
 // SEE only models exchanges on one square. Search a legal alternative first,
 // protect tactical/draw boundaries, and allow larger sacrifices at greater depth.
 bool search_t::prune_main_see(move_t & move, int depth, int searched_moves,
@@ -2427,6 +2477,14 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 
         const bool is_dangerous = in_check || gives_check || move->capture || move->promotion || move->castle || is_advanced_passed_pawn(move);
 
+        const bool singular = singular_move && move->to_compact() == singular_move;
+        const int reduce = excluded_move || singular ? 0
+            : reduction(depth, searched_moves, is_dangerous, *move, pv, cut_node);
+        if (!pv && !repetition_floor && !singular && prune_quiet(*move, depth, searched_moves,
+                depth - reduce, best, alpha, beta, is_dangerous)) {
+            continue;
+        }
+
         bool pruned = false;
         if (can_ffp && searched_moves > 0 && best > -decisive_score && !is_dangerous) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
@@ -2451,14 +2509,11 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
          */
 
         int extend = extension(move, gives_check);
-        const bool singular = singular_move && move->to_compact() == singular_move;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         const int check_extend = extend;
         nnue_audit.counters.singular_check_overlap += singular && extend;
 #endif
         extend = MAX(extend, int(singular));
-        int reduce = excluded_move || singular ? 0
-            : reduction(depth, searched_moves, is_dangerous, *move, pv, cut_node);
 
 
         /*
@@ -2963,6 +3018,8 @@ void search_t::reset_stack() {
     counts.hash_probes = counts.hash_moves = counts.hash_first = 0;
     counts.hash_rejected = counts.hash_score_cutoffs = 0;
     counts.probcut_adaptive = counts.probcut_q_only = 0;
+    counts.lmp_candidates = counts.lmp_prunes = 0;
+    counts.history_pruning_candidates = counts.history_prunes = 0;
     counts.tt_history_rewards = counts.tt_history_penalties = 0;
     counts.probcut_attempts = counts.probcut_candidates = counts.probcut_q_passes = 0;
     counts.probcut_searches = counts.probcut_researches = counts.probcut_cutoffs = 0;

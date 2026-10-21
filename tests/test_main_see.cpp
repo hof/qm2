@@ -22,6 +22,8 @@ public:
         beta_pruning = null_enabled = ffp_enabled = lmr_enabled = false;
         // Isolate move-level SEE from same-position qsearch node pruning.
         razoring_enabled = iir_enabled = iid_enabled = correction_history_enabled = false;
+        // Keep this mechanism probe independent of quiet-pruning policy.
+        lmp_enabled = history_pruning_enabled = false;
         tablebase_limit = draw_contempt = 0;
         evaluate(this);
         stack->killer[0].set(&brd, black ? "g8f6" : "g1f3");

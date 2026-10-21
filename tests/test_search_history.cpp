@@ -15,6 +15,8 @@ public:
         : search_t(fen),
           _quiet_before(quiet_before) {
         null_enabled = beta_pruning = lmr_enabled = ffp_enabled = false;
+        // This artificial child contract isolates bounds/history from pruning.
+        lmp_enabled = history_pruning_enabled = false;
         iid_enabled = false;
         stack->in_check = brd.in_check();
     }

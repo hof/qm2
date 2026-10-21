@@ -157,6 +157,8 @@ public:
     bool correction_history_enabled;
     int corrected_static_eval(int raw);
     void update_correction_history(int value, int bound, int depth);
+    bool lmp_enabled;
+    bool history_pruning_enabled;
     bool tt_history_enabled;
     bool capture_history_enabled;
     bool long_continuation_enabled;
@@ -210,6 +212,8 @@ public:
     int aspiration(int depth, int last_score);
     bool probcut(int alpha, int beta, int depth, int eval, bool cut_node, int & value);
     bool razor_node(int alpha, int beta, int depth, int eval, int & value);
+    bool prune_quiet(move_t & move, int depth, int searched_moves, int reduced_depth,
+        int best, int alpha, int beta, bool dangerous);
     bool prune_main_see(move_t & move, int depth, int searched_moves,
         int best, int alpha, int beta, int gives_check);
     uint16_t singular_extension(int alpha, int beta, int depth, bool cut_node);

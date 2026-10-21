@@ -38,6 +38,8 @@ public:
 
     explicit tree_search_t(const char * fen) : search_t(fen) {
         beta_pruning = null_enabled = ffp_enabled = lmr_enabled = false;
+        // This artificial child contract isolates bounds/history from pruning.
+        lmp_enabled = history_pruning_enabled = false;
         tablebase_limit = draw_contempt = 0;
         stack->in_check = brd.in_check();
     }

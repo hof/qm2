@@ -28,6 +28,8 @@ public:
         iid_enabled = iir_enabled = main_see_enabled = razoring_enabled = false;
         probcut_enabled = singular_extensions_enabled = false;
         correction_history_enabled = upcoming_repetition_enabled = false;
+        // Keep this mechanism probe independent of quiet-pruning policy.
+        lmp_enabled = history_pruning_enabled = false;
         tablebase_limit = draw_contempt = 0;
     }
     int pvs(int, int, int, bool = false) override {
