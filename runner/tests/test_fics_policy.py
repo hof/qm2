@@ -3,6 +3,7 @@ import asyncio
 import json
 from pathlib import Path
 import tempfile
+import types
 import unittest
 
 import chess.engine
@@ -50,16 +51,22 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(registered.connection.sent[-2:], ["unseek", "seek 3 0"])
 
     async def test_registered_login_sets_finger_notes(self):
-        subject = player(seeks=["3 0"], guest=False, owner="hof", notes=["Maxima plays unrated tests"])
-        subject.session = type("session", (), {"protocol": type("protocol", (), {"id": {"name": "Maxima 2.1"}})})()
+        subject = player(seeks=["3 0"], guest=False, owner=["hof", "hajewiet"], notes=["Maxima plays unrated tests"])
+        protocol = type("protocol", (), {"id": {"name": "Maxima 2.1"}, "config": {"Hash": 256},
+                                         "options": {"Threads": types.SimpleNamespace(default=1)}})
+        subject.session = types.SimpleNamespace(protocol=protocol)
         await subject.on_login("Maxima")
-        self.assertEqual(subject.connection.sent[:2], ["set 1 Maxima 2.1, controlled by the Maxima runner",
-                                                       "set 2 Owner: hof"])
-        self.assertTrue(subject.connection.sent[2].startswith("set 3 Hardware: "))
+        self.assertEqual(subject.connection.sent[:2], ["set 1 Maxima 2.1 on Maxima runner",
+                                                       "set 2 Owner: hof and hajewiet"])
+        self.assertRegex(subject.connection.sent[2], r"^set 3 Hardware: .+, 1 thread, Hash 256 MB, \w+$")
         self.assertEqual(subject.connection.sent[3:], ["set 4 Maxima plays unrated tests", "unseek", "seek 3 0"])
         guest = player(seeks=["3 0"])
         await guest.on_login("GuestTEST")
         self.assertEqual(guest.connection.sent, ["unseek", "seek 3 0 u"])
+
+    def test_cpu_model_is_shortened(self):
+        model = fics.cpu_model()
+        self.assertNotRegex(model, r"\(R\)|\(TM\)|@")
 
     async def test_no_rematch_by_default(self):
         subject = player(seeks=["3 0"])
@@ -164,7 +171,8 @@ class settings_tests(unittest.TestCase):
 
     def test_rejects_unknown_keys_and_wrong_types(self):
         for value, message in (({"seek": ["3 0"]}, "unknown"), ({"games": "5"}, "games must be int"),
-                               ({"rematches": True}, "rematches must be int"), ({"seeks": [3]}, "strings"), ({"notes": ["x"] * 8}, "at most 7"),
+                               ({"rematches": True}, "rematches must be int"), ({"seeks": [3]}, "strings"), ({"notes": ["x"] * 8}, "at most 7"), ({"owner": 5}, "owner must be str or list"),
+                               ({"owner": ["hof", 5]}, "list of handles"),
                                ([], "JSON object")):
             with self.assertRaisesRegex(ValueError, message):
                 fics.load_settings(self.write(value))

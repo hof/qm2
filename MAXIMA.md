@@ -1254,7 +1254,7 @@ Play policy, as JDrone's `ics.seeks`/`autoaccept`/`autorematch`, from a JSON fil
 ```json
 {"seeks": ["3 0", "3 1", "5 2"], "seeks_at_once": 2, "accept": true, "rematches": 0,
  "games": 20, "handle": "guest", "engine": null, "options": {"Hash": "256"},
- "owner": "hof", "notes": ["Unrated test games welcome"]}
+ "owner": ["hof", "hajewiet"], "notes": ["Unrated test games welcome"]}
 ```
 
 After login and after each game the client posts `seeks_at_once` random seeks
@@ -1271,8 +1271,9 @@ and a second `quit` leaves at once. Unknown settings or wrong types are errors.
 FICS computer accounts must keep the owner, machine, and engine in their finger
 notes (`help computers`), and may only play the engine, time controls, and
 variants the computer committee approved. On a registered login the client
-writes note 1 (engine `id name`), note 2 (`owner`), note 3 (CPU, threads, OS),
-then up to seven `notes`. Guest accounts may test engines freely and get no
+writes note 1 (`<engine id name> on Maxima runner`), note 2 (`owner`, a handle
+or a list), note 3 (CPU model with the engine's `Threads` and `Hash`, and the
+OS), then up to seven `notes`. Guest accounts may test engines freely and get no
 notes.
 
 The engine runs in the project root, so its relative `eval.nnue` and `book.bin`

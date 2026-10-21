@@ -23,11 +23,12 @@ timeseal_key = b"Timestamp (FICS) v1.0 - programmed by Henrik Gram."
 timeseal_ping = b"[G]\x00"
 timeseal_pong = "\x029"
 # FICS only decodes timeseal input after this hello line.
+client_name = "Maxima runner"
 timeseal_hello = f"TIMESTAMP|maxima|{platform.system() or 'unknown'}|"
 iac, will, wont, do, dont = 255, 251, 252, 253, 254
 prompt = "fics% "
 login_settings = (
-    "set style 12", "set interface Maxima runner", "set seek 0", "set shout 0", "set cshout 0",
+    "set style 12", f"set interface {client_name}", "set seek 0", "set shout 0", "set cshout 0",
     "set bell 0", "set autoflag 1", "set noescape 1", "set width 240", "iset nowrap 1", "iset ms 1",
 )
 backoff_seconds = (5, 10, 30, 60)
@@ -303,22 +304,30 @@ class play_policy:
         return [f"seek {spec}" + (" u" if self.guest and not rated_word.search(spec) else "") for spec in chosen]
 
 
-def machine_description():
-    """CPU model, logical cores, and OS for the finger notes FICS requires of computer accounts."""
+def cpu_model():
     model = platform.processor()
     try:
         with open("/proc/cpuinfo", encoding="utf-8") as stream:
-            model = next((line.split(":", 1)[1].strip() for line in stream if line.startswith("model name")), model)
+            model = next((line.split(":", 1)[1] for line in stream if line.startswith("model name")), model)
     except OSError:
         pass
-    return f"{model or platform.machine() or 'unknown CPU'}, {os.cpu_count() or 1} threads, {platform.system()}"
+    model = re.sub(r"\((?:R|TM|tm)\)|\bCPU\b|@.*$|\d+(?:th|rd|nd|st) Gen\b", " ", model or "")
+    return " ".join(model.split()) or platform.machine() or "unknown CPU"
 
 
-def finger_notes(engine_name, owner, machine, extra=()):
-    """Notes 1-3: engine, owner, machine (mandatory for FICS computer accounts); then extra lines."""
-    notes = [f"{engine_name or 'UCI engine'}, controlled by the Maxima runner"]
-    if owner:
-        notes.append(f"Owner: {owner}")
+def machine_description(threads, hash_mb):
+    """What the engine uses, not the whole machine: CPU model, its Threads and Hash, and the OS."""
+    hash_text = f", Hash {hash_mb} MB" if hash_mb else ""
+    return f"{cpu_model()}, {threads} thread{'s' if int(threads) != 1 else ''}{hash_text}, {platform.system()}"
+
+
+def finger_notes(engine_name, owners, machine, extra=()):
+    """Notes 1-3: engine, owners, machine (mandatory for FICS computer accounts); then extra lines."""
+    notes = [f"{engine_name or 'UCI engine'} on {client_name}"]
+    if owners:
+        owners = [owners] if isinstance(owners, str) else list(owners)
+        notes.append("Owner: " + (" and ".join(owners) if len(owners) < 3
+                                  else ", ".join(owners[:-1]) + " and " + owners[-1]))
     notes.append(f"Hardware: {machine}")
     notes.extend(extra)
     return [" ".join(note.split()) for note in notes[:10]]
@@ -366,11 +375,23 @@ class engine_player:
         self.name = name
         self.game = self.history = None
         if not self.policy.guest:
-            engine_name = self.session.protocol.id.get("name") if self.session is not None else None
-            notes = finger_notes(engine_name, self.policy.owner, machine_description(), self.policy.notes)
+            notes = finger_notes(*self.engine_facts(), self.policy.notes)
             for number, note in enumerate(notes, 1):
                 await self.send(f"set {number} {note}")
         await self.seek()
+
+    def engine_facts(self):
+        """Engine name, owners, and machine for the finger notes, from the running engine's settings."""
+        protocol = self.session.protocol if self.session is not None else None
+
+        def setting(name, fallback):
+            if protocol is None:
+                return fallback
+            option = protocol.options.get(name)
+            return protocol.config.get(name, option.default if option is not None else fallback)
+
+        name = protocol.id.get("name") if protocol is not None else None
+        return name, self.policy.owner, machine_description(setting("Threads", 1), setting("Hash", None))
 
     async def seek(self):
         if self.stopping or self.game is not None or not self.policy.seeks:
@@ -603,14 +624,18 @@ def load_settings(path):
     if not isinstance(loaded, dict):
         raise ValueError(f"{path}: expected a JSON object")
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
-             "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": str, "notes": list}
+             "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
         if value is not None and not isinstance(value, types[key]) or isinstance(value, bool) and types[key] is int:
-            raise ValueError(f"{path}: {key} must be {types[key].__name__}")
+            expected = " or ".join(kind.__name__ for kind in (types[key] if isinstance(types[key], tuple)
+                                                                 else (types[key],)))
+            raise ValueError(f"{path}: {key} must be {expected}")
         if key == "seeks" and not all(isinstance(spec, str) for spec in value):
             raise ValueError(f"{path}: seeks must be strings like '3 0'")
+        if key == "owner" and isinstance(value, list) and not all(isinstance(name, str) for name in value):
+            raise ValueError(f"{path}: owner must be a handle or a list of handles")
         if key == "notes" and (len(value) > 7 or not all(isinstance(note, str) for note in value)):
             raise ValueError(f"{path}: notes must be at most 7 strings (notes 1-3 are generated)")
         settings[key] = value
