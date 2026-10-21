@@ -369,8 +369,8 @@ real and null child entry clear local exclusions. Its root skips whole-position
 tablebase results and static/null/quiet-futility pruning and LMR. If no legal
 alternative remains, it returns the search alpha as a fail-low result, without
 inventing mate or stalemate. Actual draw adjudication retains precedence. The
-helper currently provides infrastructure for later extensions; no singular
-extension or ProbCut policy is enabled by this change. Audit builds expose
+helper supports the singular-extension policy described below; ProbCut remains
+pending. Audit builds expose
 `audit_verification` calls, excluded calls, cancelled calls and helper visits.
 
 Static beta and null-move node pruning also stop at reversible clock 99: the
@@ -444,7 +444,7 @@ unfinished result. Qsearch clears stale PV/best-move state before probing.
 
 Search-policy options carry their TT invalidation rule beside their declaration.
 Changing `NullMove`, `NullVerify`, `BetaPruning`, `FutilityPruning`, `LMR`,
-`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `Razoring`, `QsearchTT`, draw contempt,
+`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `Razoring`, `SingularExtensions`, `QsearchTT`, draw contempt,
 variant or tablebase probing policy stops and joins the worker before clearing both main and quiescence TT
 results and move hints. History controls and audit search policies follow the
 same rule. Invalid values and unchanged numeric/checkbox policies preserve the
@@ -6044,3 +6044,77 @@ search context affects the result. Native tests cover cancellation separately.
 Evidence and source/binary/model/corpus identities are retained privately under
 `.context/baselines/2026-10-20/razoring/`. Next are singular extensions and
 ProbCut; TT feedback and final integration/strength acceptance remain pending.
+
+### Singular extensions
+
+`SingularExtensions=true` allocates one extra ply to a legal TT move when a
+reduced search of all alternatives fails below a lower threshold. It uses only
+compatible main-search lower or exact scores searched to at least `depth-3`;
+ordinary TT cutoffs still require the full requested depth. An ordering hint
+alone cannot nominate an extension. The provisional threshold is `tt_score-depth`
+in the engine's pawn-100 scale, and the excluded search has depth `(depth-1)/2`
+and window `[threshold-1, threshold]`. These values await integrated tuning.
+
+Eligibility requires a non-root, non-check node at depth seven or greater,
+a nondecisive window, reversible clock below 99, and stack room. The current
+ply must be below twice the attempted iteration depth; direct PVS calls without
+an iteration use remaining depth as the limit. IID, verification subtrees,
+local exclusions and an upcoming-repetition draw floor disable the test.
+Candidate TT clock limits and all verification limits propagate to the caller;
+attempted verification restricts compatible clocks through 98.
+
+The existing excluded-move helper restores the complete caller frame, including
+on cancellation or an exception. It cannot probe/store ordinary main/q TT
+entries or train ordinary history. No legal alternative is a fail-low, rather
+than a synthetic mate or stalemate. A completed fail-low extends only the
+nominated move. A rejected verification continues ordinary search; cancellation
+cannot authorize an extension or an unfinished main TT result. Check and singular
+extensions share at most one extra ply; the singular move is not LMR-reduced.
+The original node depth remains the depth of its stored TT result.
+
+Each worker snapshots the independent checkbox; changing it stops the worker
+and clears incompatible TT results. With it off, the additional probe and helper
+are skipped. Fixed/aligned audit horizons disable it, and royal losers keeps
+its existing behavior. Audit builds report `audit_singular` attempts, extensions,
+rejections, cancellations, helper visits, check overlaps and attempted depths.
+This increment adds neither multiple/negative extensions nor multicut pruning.
+Correctness and search-cost measurements do not establish playing strength.
+
+Singular-extension validation (2026-10-20) passed all 50 Debug tests (183.65s),
+50 Release tests (106.08s), 18 selected ASan/UBSan tests (76.43s, leak detection
+disabled), 20 audit tests (26.17s), and the independent oracle over 4,372 positions
+and 95,734 legal children (33.275s). Native tests cover both colors, compatible
+TT bound/depth/context/mode/clock guards, illegal hints, strict verification
+thresholds, helper cancellation/exception restoration, child depth and TT bounds,
+check overlap, repetition floors, a real only-legal-move position, real cancelled
+searches and history/TT isolation. UCI tests cover advertisement, invalidation,
+worker snapshots and changed-option lifecycle. Frozen source hashes remained
+unchanged through validation; seven changed C++ files passed the brace scan.
+
+The search comparison used 12 reserved positions, frozen parent and same-binary
+off/on controls, with IIR independently enabled/disabled. Three alternating cold
+D8 trials and one retained-history trial (D6 warmup, fixed legal two-ply continuation,
+D8) produced 288 legal completed searches. Cold signatures were deterministic;
+96 parent/disabled signatures matched exactly in nodes, score, best move and PV.
+One low-priority CPU, a UCI readiness barrier and process CPU timing were used.
+
+| IIR | Singular extensions | Cold nodes | Cold CPU median (s) | Retained nodes | Retained CPU (s) |
+|---|---|---:|---:|---:|---:|
+| On | Off | 978,174 | 1.57 | 729,100 | 1.27 |
+| On | On | 1,015,349 | 1.73 | 759,724 | 1.25 |
+| Off | Off | 978,574 | 1.65 | 727,921 | 1.09 |
+| Off | On | 1,015,843 | 1.65 | 760,023 | 1.18 |
+
+With IIR, cold/retained nodes increased 3.80%/4.20%, with CPU changes of
++10.19%/-1.57%. Without IIR, nodes increased 3.81%/4.41%, with CPU changes of
+0.00%/+8.26%. Short, variable, tick-quantized samples and one retained trial
+limit timing conclusions. This extra search allocation establishes neither
+playing-strength improvement nor regression; no timed match or tuning was run.
+
+A separate real D6 TT warmup followed by direct production D8 searches recorded
+25 attempts, 15 extensions, 10 rejections and 8,138 helper visits with IIR;
+without IIR, 28 attempts, 10 extensions, 18 rejections and 5,964 visits. All
+attempts were at depth seven, one overlapped a check extension, and disabled
+counts were zero. Native probes cover cancellation separately. Full evidence
+is under `.context/baselines/2026-10-20/singular/`. ProbCut, TT feedback and
+integrated baseline acceptance remain pending.

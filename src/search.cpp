@@ -252,6 +252,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     adaptive_lmr_enabled = wild == 0 && options::get_value("AdaptiveLMR");
     lmr_history_enabled = wild == 0 && options::get_value("LMRHistory");
     aspiration_enabled = options::get_value("Aspiration");
+    singular_extensions_enabled = wild == 0 && options::get_value("SingularExtensions");
     razoring_enabled = wild == 0 && options::get_value("Razoring");
     main_see_enabled = wild == 0 && options::get_value("MainSEE");
     iir_enabled = wild == 0 && options::get_value("IIR");
@@ -290,6 +291,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
+        singular_extensions_enabled = false;
         razoring_enabled = false;
         main_see_enabled = false;
         iir_enabled = false;
@@ -571,6 +573,14 @@ void search_t::go() {
             + " cutoffs " + std::to_string(counts.repetition_cutoffs)
             + " q_hits " + std::to_string(counts.q_repetition_hits)
             + " q_cutoffs " + std::to_string(counts.q_repetition_cutoffs));
+        uci::out("info string audit_singular attempts " + std::to_string(counts.singular_attempts)
+            + " extensions " + std::to_string(counts.singular_extensions)
+            + " rejected " + std::to_string(counts.singular_rejected)
+            + " cancelled " + std::to_string(counts.singular_cancelled)
+            + " visits " + std::to_string(counts.singular_visits)
+            + " check_overlap " + std::to_string(counts.singular_check_overlap)
+            + " min_depth " + std::to_string(counts.min_singular_depth)
+            + " max_depth " + std::to_string(counts.max_singular_depth));
         uci::out("info string audit_verification calls " + std::to_string(counts.verification_calls)
             + " excluded " + std::to_string(counts.excluded_calls)
             + " cancelled " + std::to_string(counts.verification_cancelled)
@@ -1801,6 +1811,63 @@ void search_t::prepare_iid_move(int alpha, int beta, int depth) {
     }
 }
 
+// Only a compatible lower/exact main-search score can nominate an only move.
+// Verification owns an isolated same-position frame; retain a compact move,
+// never a pointer into its picker. A failed-low alternative is a heuristic
+// reason to allocate one extra ply, not a new bound on the original position.
+uint16_t search_t::singular_extension(int alpha, int beta, int depth, bool cut_node) {
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    const int root_depth = attempted_depth ? attempted_depth : depth;
+    if (!singular_extensions_enabled || !brd.ply || depth < 7
+            || brd.ply >= 2 * root_depth || brd.ply >= MAX_PLY - 2
+            || stack->in_check || iid_active || stack->excluded_move
+            || verification_mode != verification_mode_t::none
+            || brd.stack->fifty_count >= 99
+            || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
+            || !stack->tt_move.piece || !brd.valid(&stack->tt_move)
+            || !brd.legal(&stack->tt_move)) {
+        return 0;
+    }
+    int value = 0, move = 0, flag = 0;
+    clock_range_t clocks;
+    if (!trans_table::retrieve(brd.stack->tt_key, brd.ply, depth - 3,
+            value, move, flag, tt_context(), brd.stack->fifty_count, &clocks)
+            || move != stack->tt_move.to_compact()
+            || (flag != score::LOWERBOUND && flag != score::EXACT)
+            || std::abs(value) >= decisive) {
+        return 0;
+    }
+    const int threshold = value - depth;
+    if (std::abs(threshold) >= decisive) {
+        return 0;
+    }
+    stack->tt_clocks.include_child(clocks, 0);
+    stack->tt_clocks.max = MIN(stack->tt_clocks.max, 98);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    auto & counts = nnue_audit.counters;
+    ++counts.singular_attempts;
+    counts.min_singular_depth = counts.min_singular_depth
+        ? std::min(counts.min_singular_depth, uint64_t(depth)) : depth;
+    counts.max_singular_depth = std::max(counts.max_singular_depth, uint64_t(depth));
+    const auto nodes_before = nodes;
+#endif
+    const auto candidate = uint16_t(move);
+    const int alternative = verification_search(threshold - 1, threshold,
+        (depth - 1) / 2, cut_node, verification_mode_t::excluded_move, candidate);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    counts.singular_visits += nodes - nodes_before;
+    counts.singular_cancelled += stop_all;
+#endif
+    if (stop_all) {
+        return 0;
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    counts.singular_extensions += alternative < threshold;
+    counts.singular_rejected += alternative >= threshold;
+#endif
+    return alternative < threshold ? candidate : 0;
+}
+
 // Verification searches cannot establish normal TT bounds or train ordinary
 // ordering history. Only this frame excludes a move; children remain legal chess.
 int search_t::verification_search(int alpha, int beta, int depth, bool cut_node,
@@ -2093,6 +2160,12 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
      * Moves loop
      */
 
+    const uint16_t singular_move = repetition_floor ? 0
+        : singular_extension(alpha, beta, depth, cut_node);
+    if (stop_all) {
+        return alpha;
+    }
+
     //if there is no first move, it's checkmate or stalemate
     move_t * move = move::first(this, depth);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
@@ -2169,7 +2242,14 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
          */
 
         int extend = extension(move, gives_check);
-        int reduce = excluded_move ? 0 : reduction(depth, searched_moves, is_dangerous, *move, pv, cut_node);
+        const bool singular = singular_move && move->to_compact() == singular_move;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        const int check_extend = extend;
+        nnue_audit.counters.singular_check_overlap += singular && extend;
+#endif
+        extend = MAX(extend, int(singular));
+        int reduce = excluded_move || singular ? 0
+            : reduction(depth, searched_moves, is_dangerous, *move, pv, cut_node);
 
 
         /*
@@ -2196,7 +2276,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         }
 #endif
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        stack->check_extensions += extend;
+        stack->check_extensions += check_extend;
         nnue_audit.counters.max_check_extensions = std::max(nnue_audit.counters.max_check_extensions,
             uint64_t(stack->check_extensions));
 #endif

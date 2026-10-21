@@ -176,3 +176,9 @@ target_link_libraries(test_razoring MAX2SRC)
 add_test(NAME test_razoring COMMAND test_razoring)
 set_tests_properties(test_razoring PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
+
+add_executable(test_singular_extensions test_singular_extensions.cpp)
+target_link_libraries(test_singular_extensions MAX2SRC)
+add_test(NAME test_singular_extensions COMMAND test_singular_extensions)
+set_tests_properties(test_singular_extensions PROPERTIES
+    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

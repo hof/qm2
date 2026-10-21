@@ -197,3 +197,20 @@ ASan/UBSan tests, 19 audit tests and the independent board oracle passed. All
 exactly. With main SEE, cold/retained nodes changed -3.04%/-7.20%; without it,
 +8.73%/-0.61%. CPU results were mixed and variable; playing-strength acceptance
 remains pending. See MAXIMA.md for the complete protocol and limitations.
+
+`SingularExtensions=true` may verify the current legal TT move before picker
+initialization. Its reduced excluded-move search restores the complete frame;
+the main picker then starts normally. Only compatible lower/exact main TT scores
+at sufficient depth can nominate the move. The saved identity is compact, so
+no pointer into a helper's picker survives restoration. Completed verification
+can allocate one extra ply to that move, sharing the existing check extension
+rather than adding to it. Picker stages and final legality remain unchanged.
+See MAXIMA.md for eligibility, clocks, worker controls and validation.
+
+Singular-extension validation (2026-10-20): 50 Debug and 50 Release checks,
+18 selected ASan/UBSan checks, 20 audit checks and the independent oracle passed.
+All 288 D8 searches completed legally; 96 disabled-parent signatures matched
+exactly. With IIR enabled, cold/retained nodes increased 3.80%/4.20%; without
+it, 3.81%/4.41%. This allocates extra search to nominated moves; mixed CPU
+results and tree sizes do not establish playing strength. See MAXIMA.md for
+activation counts, protocol and timing limitations.

@@ -178,6 +178,7 @@ public:
     bool adaptive_lmr_enabled;
     bool lmr_history_enabled;
     bool aspiration_enabled;
+    bool singular_extensions_enabled;
     bool razoring_enabled;
     bool main_see_enabled;
     bool iir_enabled;
@@ -207,6 +208,7 @@ public:
     bool razor_node(int alpha, int beta, int depth, int eval, int & value);
     bool prune_main_see(move_t & move, int depth, int searched_moves,
         int best, int alpha, int beta, int gives_check);
+    uint16_t singular_extension(int alpha, int beta, int depth, bool cut_node);
     int internal_search_depth(int depth, bool pv, bool cut_node);
     void prepare_iid_move(int alpha, int beta, int depth);
     int verification_search(int alpha, int beta, int depth, bool cut_node,
