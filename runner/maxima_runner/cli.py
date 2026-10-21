@@ -24,6 +24,9 @@ command_groups = (
         ("experience:analyze", "Analyze experience positions"),
         ("tablebases:syzygy:download", "Download selected Syzygy tablebases"),
     )),
+    ("Online play", (
+        ("fics", "Connect to FICS (login, keepalive, reconnect)"),
+    )),
 )
 
 
@@ -41,7 +44,8 @@ def show_help(all_commands=False):
     for title, commands in command_groups:
         visible = commands if all_commands else tuple(
             item for item in commands if item[0] in (
-                "uci", "build", "test", "suite:run", "match:run", "experience:show", "tablebases:syzygy:download"))
+                "uci", "build", "test", "suite:run", "match:run", "experience:show", "tablebases:syzygy:download",
+                "fics"))
         print(styled("-" * 72, "36"))
         print(styled(title, "1"))
         print(styled("-" * 72, "36"))
@@ -143,7 +147,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
         "uci, build, test, suite:run, match:run, experience:import|export|show|analyze, "
-        "tablebases:syzygy:download (no command: run engine)"))
+        "tablebases:syzygy:download, fics (no command: run engine)"))
     if arguments and arguments[0] in ("--help", "-h"):
         show_help()
         return 0
@@ -178,6 +182,9 @@ def main(argv=None):
         elif command == "tablebases:syzygy:download":
             from . import download_tablebases
             entrypoint = download_tablebases.main
+        elif command == "fics":
+            from . import fics
+            entrypoint = fics.main
         else:
             parser.error(f"unknown command: {command}")
         # Existing subcommands retain their argparse interfaces.

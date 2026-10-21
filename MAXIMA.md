@@ -1202,10 +1202,10 @@ the runner still fails and reaps the process. Async lifecycle checks require
 local socket access for asyncio's event-loop wake-up mechanism.
 
 JDrone's Java implementation remains operational in its own existing checkout.
-The next migration increment is FICS transport, game/clock orchestration,
-automation, and PGN capture built on this async runner. ICC, legacy database
-migration, remote control, and notifications are deferred. Learning writes stay
-in Python; snapshot reading and move selection stay in Maxima.
+FICS play is being migrated onto this async runner (see 10.2); game/clock
+orchestration, automation, and PGN capture follow the transport. ICC, legacy
+database migration, remote control, and notifications are deferred. Learning
+writes stay in Python; snapshot reading and move selection stay in Maxima.
 
 ### 10.1 Documentation and CLI interface
 
@@ -1222,8 +1222,8 @@ the tagline "Chess engine & ops" and
 commands, `maxima help` for the full implemented command listing, and
 `maxima help COMMAND` or `maxima COMMAND --help` for detailed usage, options,
 and defaults. Build/test help includes examples. Current command groups are
-engine operation, development, and chess data; online-play commands will be added
-when implemented. Existing colon-style commands and the
+engine operation, development, chess data, and online play (`fics`). Existing
+colon-style commands and the
 no-argument native-engine launch are preserved.
 
 Help must work without an engine build, credentials, network access, or optional
@@ -1232,3 +1232,33 @@ guidance. Output must remain readable when redirected; any styling is limited to
 terminals and respects `NO_COLOR`: the crown is gold, separators cyan, and titles
 bold. Native UCI streams remain free of banners and styling. Detailed examples
 for every data command remain a planned documentation improvement.
+
+### 10.2 FICS client
+
+`maxima fics` connects to freechess.org:5000, logs in, and keeps the session
+alive. Game play, seeking, and PGN capture are not implemented yet.
+
+```bash
+./maxima fics                                   # guest login
+FICS_PASSWORD=... ./maxima fics --handle Maxima # registered account
+./maxima fics --debug fics.log                  # wire transcript, password masked
+```
+
+Lines typed at the terminal go to the server verbatim; `quit` logs off.
+Handles are validated before connecting (3–17 letters, or `guest`); the
+password is read only from `FICS_PASSWORD`. Login applies style 12, seek/shout
+silence, autoflag, noescape, width 240, and nowrap.
+
+Outgoing lines use timeseal v1 so the server charges thinking time, not network
+lag. FICS decodes timeseal input only after the client's `TIMESTAMP|…|` hello;
+without it, the encoded login name is rejected. Each line carries milliseconds
+since connecting; the server's `[G]` pings (sent during games) are answered with
+the encoded `\x02` `9` reply. `--no-timeseal` sends plain lines.
+
+Every wait has a deadline. The server is silent outside games, so after five
+minutes without output (`--probe-interval`) the client sends `date`; no reply
+within a minute counts as a dead connection. Lost connections reconnect after
+5, 10, 30, then every 60 seconds. Wrong passwords, unregistered names, and
+rejected handles stop with an error instead of retrying. JDrone could hang on
+waits without deadlines (engine readiness, a half-open socket); the client
+avoids both.
