@@ -445,19 +445,21 @@ searches may replace the score. This is a provisional cache-retention policy.
 Collisions use empty slots first, then move-only entries, then older and
 shallower scored entries. Packed ages wrap modulo 64. These policies share the
 existing storage between standard chess and royal losers without changing the
-score-compatibility rules or entry layout.
+score-compatibility rules.
 
 Quiescence TT entries distinguish entry searches (which can include quiet
 checks) from deeper tactical searches. Both retain captures, promotions,
 castling and all legal check evasions. The mode uses the two spare packed bits;
-entries remain 24 bytes. Scores are reused only within the same mode: main
+the raw-evaluation fields described below bring entries to 40 bytes. Scores are
+reused only within the same mode: main
 results do not substitute for qsearch bounds, and neither qsearch mode satisfies
 a main-search probe or the other qsearch mode. Move hints cross modes after
 validation and filtering to the requested move domain. Valid current main entries retain priority over
 q writes in the same score domain; incompatible or aged domains may refresh.
 
 `QsearchTT` is a UCI checkbox, enabled by default and snapshotted by each standard
-worker. Disabled means no qsearch probes, move hints or stores; changing it
+worker. Disabled means no qsearch bound probes, move hints or bound stores;
+raw evaluation reuse is controlled independently by `TTEval`. Changing it
 stops the worker and clears cached results. Fixed and aligned diagnostic horizons
 disable it to retain their independent search contracts. Royal losers retains
 its existing search behavior. Reuse follows cancellation, ceiling, draw and
@@ -473,7 +475,7 @@ bounds and the score magnitude needed by adaptive tactical verification.
 
 Search-policy options carry their TT invalidation rule beside their declaration.
 Changing `NullMove`, `NullVerify`, `BetaPruning`, `FutilityPruning`, `LMR`,
-`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `Razoring`, `SingularExtensions`, `ProbCut`, `TTHistory`, `QsearchTT`, draw contempt,
+`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `Razoring`, `SingularExtensions`, `ProbCut`, `TTHistory`, `TTEval`, `QsearchTT`, draw contempt,
 variant or tablebase probing policy stops and joins the worker before clearing both main and quiescence TT
 results and move hints. History controls and audit search policies follow the
 same rule. Invalid values and unchanged numeric/checkbox policies preserve the
@@ -650,9 +652,10 @@ remains bounded. Ordinary bounded searches publish their result when work finish
 Playable positions reach the fifty-move threshold at 100 halfmoves, including
 positions in check; checkmate does not become a draw at higher clock counts.
 
-The transposition table uses 24-byte entries: a full 64-bit position signature,
-a 64-bit context fingerprint, and packed move, score, depth, age, and halfmove
-clock-range metadata. Move hints can survive a context mismatch, but score
+The transposition table uses 40-byte entries: a full 64-bit position signature,
+a 64-bit search-context fingerprint, packed move/score/depth/age/clock/mode
+metadata, a full 64-bit evaluation-model fingerprint, a signed 16-bit raw
+centipawn evaluation, and alignment padding. Move hints can survive a context mismatch, but score
 cutoffs require compatible context and clock ranges. Standard chess includes
 the ten-halfmove damping bucket in that context, so different counters within
 a bucket can reuse scores, while other buckets retain only move hints. This
@@ -665,6 +668,32 @@ horizon rules differ. A node keeps that identity when it changes mode or reduces
 depth locally; incompatible modes retain move hints but cannot reuse scores.
 Material and pawn caches and the transposition table still need synchronization
 before parallel search.
+
+
+`TTEval` is a default-on standard-search checkbox. After a miss in the existing
+worker-local neural cache, reuse a raw TT evaluation only when the full position
+key and immutable model fingerprint match. Cache centipawns before rule-50 damping
+and correction history; every read uses the current clock and current correction.
+Evaluation reuse is independent of score depth, bound, mode and repetition context.
+A raw value never authorizes a search cutoff or supplies a move/PV. The existing
+frame cache still holds the uncorrected, clock-damped score and rebuilds metadata.
+Skipped inference leaves accumulators lazy under the existing ancestor contract.
+
+Evaluation writes preserve matching search bounds and move hints. On a miss they
+use a no-bound entry and cannot evict a scored collision; replacement by another
+position invalidates the raw evaluation. Full model identity also protects retained
+worker snapshots across model changes. At fixed Hash size, 40-byte entries hold
+about 40% fewer positions than the prior 24-byte layout. Saved inference must be
+measured against that capacity and lookup cost. The worker-local cache remains.
+
+Each worker snapshots the switch. Changes stop/join the worker and clear both TT
+modes. Disabling the TT also disables raw reads/writes; clear and resize discard
+raw evaluations. Royal losers and fixed/aligned diagnostic horizons disable this
+feature. Raw position/model evaluation may be reused in null, IID and verification
+helpers without publishing their search bounds. Audit verification compares the
+production raw cache with fresh independent inference; `audit_tt_eval` reports
+TT probes/hits and production neural evaluations after local-cache misses. Full audit
+inference retains its independent path.
 
 KPK is an embedded win/draw bitbase. Proven draws stop search with the configured
 draw score; winning positions retain search because KPK has no distance-to-zero
@@ -6380,3 +6409,44 @@ pruning, extensions, cache and quiescence evidence. Feature-name coverage does
 not establish equal trees; native modern evaluations also differ. This gate
 precedes parallel search, time-management and modern-network work. Smaller
 trees alone do not establish correctness or playing strength.
+
+
+### Raw static-evaluation TT caching (2026-10-21)
+
+`TTEval` adds model-tagged raw neural scores to the shared table while retaining
+worker-local and frame caches. Apply current rule-50 damping and correction on
+reuse; raw entries supply no search bound. The full model fingerprint permits
+reuse across score contexts and retained immutable snapshots. Entries grow from
+24 to 40 bytes, holding about 40% fewer positions at the same Hash setting.
+
+Validation passed 54/54 Debug checks (190.14 s), 54/54 Release (106.03 s), both
+lifecycle suites in each, 16 focused ASan/UBSan checks (64.78 s, leak detection
+disabled), 18 instrumented checks (10.54 s), and the independent oracle's 4,372
+positions/95,734 legal children. An older reinitialization test explicitly disables
+TT evaluation to isolate its worker-local invalidation contract; shared TT reuse
+can legitimately leave the new accumulator lazy. Audit verification compares
+production raw cache values with fresh full inference.
+
+The frozen parent/off/on matrix with correction history on/off completed 288
+legal D8 searches: three alternating cold trials and one retained trial over 12
+reserved roots. Retained searches warm D6 and play a fixed legal two-ply
+continuation before D8. All 96 parent-enabled and 96 parent-disabled signatures
+matched nodes, completed depth, score, best move and full PV; cold trials repeated
+exactly. One low-priority CPU and a readiness barrier exclude configuration cost.
+
+With correction enabled, cold median parent/off/on CPU totals were 0.89/0.87/0.89 s;
+the single retained trial used 0.63/0.71/0.69 s. Thus enabled versus parent was
+unchanged cold and +9.52% retained (+0.06 s). Without correction, enabled versus
+parent CPU changed by +4.11%/+1.72%. These short, tick-quantized samples establish
+no general speed benefit. The disabled layout also costs more in the retained
+sample; existing rows concentrate most of that difference in two roots. Identical
+cold parent totals varied from 0.88 to 1.23 s. The data do not isolate layout cost
+from timing variability; no additional engine runs or causal per-node claim.
+
+Separate real-D6-warm/new-worker D8 probes with correction enabled preserved
+238,883 nodes while avoiding 9,758 of 177,367 production neural evaluations
+(5.50%). Without correction, 10,773 of 188,992 were avoided (5.70%); disabled
+TT probes/hits were zero. This demonstrates reuse after local-cache misses,
+including across workers, without claiming a global CPU or playing-strength gain.
+Private evidence is under `baselines/2026-10-21/raw-eval-tt/`. Richer correction
+history remains next; baseline integration and strength acceptance are pending.

@@ -57,8 +57,10 @@ private:
         U64 key;
         U64 value;
         U64 context;
+        U64 eval_model;
+        int16_t raw_eval;
     };
-    static_assert(sizeof(entry_t) == 24);
+    static_assert(sizeof(entry_t) == 40);
 
     int size_in_mb;
     int size;
@@ -126,6 +128,11 @@ public:
     void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101}, tt_mode_t mode = tt_mode_t::main_search);
     bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search);
 
+    // Static NNUE values have their own model identity, independent of score
+    // depth, mode, repetition context and rule-50 clock. No bound is implied.
+    bool retrieve_eval(U64 key, U64 model, int & value);
+    void store_eval(U64 key, U64 model, int value, int age);
+
     ~trans_table_t() {
         delete [] table;
     }
@@ -139,6 +146,8 @@ namespace trans_table {
     const int TABLE_SIZE = options::get_value("Hash");
     void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101}, tt_mode_t mode = tt_mode_t::main_search);
     bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search);
+    bool retrieve_eval(U64 key, U64 model, int & value);
+    void store_eval(U64 key, U64 model, int value, int age);
     void clear();
     void set_size(int size_in_MB);
     void enable();

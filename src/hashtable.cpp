@@ -121,6 +121,8 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
     if (!flags && decode_flag(best_entry->value)) {
         return;
     }
+    best_entry->raw_eval = score::INVALID;
+    best_entry->eval_model = 0;
     best_entry->context = context;
     best_entry->value = value;
     best_entry->key = value ^ key;
@@ -155,6 +157,45 @@ bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & mov
     return false;
 }
 
+bool trans_table_t::retrieve_eval(U64 key, U64 model, int & value) {
+    if (!enabled) {
+        return false;
+    }
+    const int ix = index(key);
+    for (int i = 0; i < BUCKETS; ++i) {
+        const auto & entry = table[ix + i];
+        if (decode_depth(entry.value) && (entry.key ^ entry.value) == key
+                && entry.eval_model == model && entry.raw_eval != score::INVALID) {
+            value = entry.raw_eval;
+            return true;
+        }
+    }
+    return false;
+}
+
+void trans_table_t::store_eval(U64 key, U64 model, int value, int age) {
+    assert(value > -score::TABLEBASE && value < score::TABLEBASE);
+    if (!enabled) {
+        return;
+    }
+    const int ix = index(key);
+    // Preserve every existing score, move and domain when attaching evaluation.
+    // A miss uses the ordinary no-bound replacement policy: never evict a bound.
+    for (int pass = 0; pass < 2; ++pass) {
+        for (int i = 0; i < BUCKETS; ++i) {
+            auto & entry = table[ix + i];
+            if (decode_depth(entry.value) && (entry.key ^ entry.value) == key) {
+                entry.eval_model = model;
+                entry.raw_eval = static_cast<int16_t>(value);
+                return;
+            }
+        }
+        if (pass == 0) {
+            store(key, age, 0, 1, 0, 0, 0);
+        }
+    }
+}
+
 namespace trans_table {
 
     trans_table_t _global_table(TABLE_SIZE);
@@ -165,6 +206,14 @@ namespace trans_table {
 
     bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode) {
         return _global_table.retrieve(key, ply, depth, score, move, flags, context, clock, clocks, mode);
+    }
+
+    bool retrieve_eval(U64 key, U64 model, int & value) {
+        return _global_table.retrieve_eval(key, model, value);
+    }
+
+    void store_eval(U64 key, U64 model, int value, int age) {
+        _global_table.store_eval(key, model, value, age);
     }
 
     void clear() {

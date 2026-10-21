@@ -33,9 +33,15 @@ int audit_evaluate(search_t & search) {
     if (state.mode == audit_mode_t::full) {
         live = fresh;
     }
-    const int expected = damp_rule50(to_centipawns(fresh_raw), clock);
+    const int fresh_cp = to_centipawns(fresh_raw);
+    // Exercise production caches against independent full inference. A TT hit
+    // may leave the live accumulator lazy; the explicit evaluation above still
+    // verifies incremental state independently.
+    const bool cache_mismatch = state.mode == audit_mode_t::verify && !cached
+        && search.neural_static_score() != fresh_cp;
+    const int expected = damp_rule50(fresh_cp, clock);
     const bool stale_metadata = cached && search.stack->metadata != search_metadata(search.brd);
-    if (live_raw != fresh_raw || live.values != fresh.values || live.kings != fresh.kings
+    if (cache_mismatch || live_raw != fresh_raw || live.values != fresh.values || live.kings != fresh.kings
             || (cached && search.stack->eval_result != expected)
             || stale_metadata
             || key != search.brd.stack->tt_key || repetition != search.brd.stack->repetition_key()

@@ -334,6 +334,9 @@ int main() {
             "Neural cache hits must skip inference and preserve clock/metadata contracts");
         for (size_t i = cycle.size(); i > 0; --i) cached->backward(&cycle[i - 1]);
         cached->init(cached_fen, nullptr, nullptr);
+        // Isolate worker-local invalidation: shared TT evaluation can otherwise
+        // legitimately leave this freshly initialized accumulator lazy.
+        cached->tt_eval_enabled = false;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         cached->nnue_audit.mode = nnue::audit_mode_t::off;
 #endif

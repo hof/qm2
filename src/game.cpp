@@ -54,6 +54,7 @@ namespace options {
         { "Razoring", BOOL, 1, "type check default true", true },
         { "LMP", BOOL, 1, "type check default true", true },
         { "HistoryPruning", BOOL, 1, "type check default true", true },
+        { "TTEval", BOOL, 1, "type check default true", true },
         { "TTHistory", BOOL, 1, "type check default true", true },
         { "ProbCut", BOOL, 1, "type check default true", true },
         { "SingularExtensions", BOOL, 1, "type check default true", true },

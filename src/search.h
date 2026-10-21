@@ -155,6 +155,7 @@ public:
     std::unique_ptr<capture_history_t> capture_history;
     std::unique_ptr<correction_history_t> correction_history;
     bool correction_history_enabled;
+    bool tt_eval_enabled;
     int corrected_static_eval(int raw);
     void update_correction_history(int value, int bound, int depth);
     bool lmp_enabled;

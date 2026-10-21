@@ -212,13 +212,32 @@ int search_t::neural_static_score() {
     if (cached.key == brd.stack->tt_key && cached.value != score::INVALID) {
         return cached.value;
     }
+    int tt_eval;
+    if (tt_eval_enabled) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++nnue_audit.counters.tt_eval_probes;
+#endif
+        if (trans_table::retrieve_eval(brd.stack->tt_key, evaluation_network->fingerprint(), tt_eval)) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++nnue_audit.counters.tt_eval_hits;
+#endif
+            cached = {brd.stack->tt_key, tt_eval};
+            return tt_eval;
+        }
+    }
     auto & accumulator = evaluation_accumulators[brd.ply];
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.neural_evaluations;
+#endif
     const int value = nnue::to_centipawns(evaluation_network->evaluate(brd, accumulator,
         std::span<const nnue::accumulator_t>(evaluation_accumulators.data(), brd.ply)
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         , &nnue_audit.counters
 #endif
         ));
+    if (tt_eval_enabled) {
+        trans_table::store_eval(brd.stack->tt_key, evaluation_network->fingerprint(), value, brd.root_ply);
+    }
     cached = {brd.stack->tt_key, value};
     return value;
 }
@@ -268,6 +287,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     long_continuation_enabled = wild == 0 && options::get_value("LongContinuationHistory");
     threat_ordering_enabled = wild == 0 && options::get_value("ThreatOrdering");
     check_ordering_enabled = wild == 0 && options::get_value("CheckOrdering");
+    tt_eval_enabled = wild == 0 && options::get_value("TTEval");
     correction_history_enabled = wild == 0 && options::get_value("CorrectionHistory");
     countermoves_enabled = options::get_value("Countermoves");
     killers_enabled = options::get_value("Killers");
@@ -303,6 +323,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         main_see_enabled = false;
         iir_enabled = false;
         adaptive_lmr_enabled = lmr_history_enabled = false;
+        tt_eval_enabled = false;
         correction_history_enabled = false;
         upcoming_repetition_enabled = false;
         q_tt_enabled = false;
@@ -543,6 +564,9 @@ void search_t::go() {
             + " min_depth " + std::to_string(counts.min_iid_depth)
             + " max_depth " + std::to_string(counts.max_iid_depth)
             + " min_probe " + std::to_string(counts.min_iid_probe_depth));
+        uci::out("info string audit_tt_eval probes " + std::to_string(counts.tt_eval_probes)
+            + " hits " + std::to_string(counts.tt_eval_hits)
+            + " evaluations " + std::to_string(counts.neural_evaluations));
         uci::out("info string audit_correction lookups " + std::to_string(counts.correction_lookups)
             + " hits " + std::to_string(counts.correction_hits)
             + " updates " + std::to_string(counts.correction_updates)

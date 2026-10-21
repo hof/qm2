@@ -200,3 +200,9 @@ target_link_libraries(test_quiet_pruning MAX2SRC)
 add_test(NAME test_quiet_pruning COMMAND test_quiet_pruning)
 set_tests_properties(test_quiet_pruning PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
+
+add_executable(test_tt_eval test_tt_eval.cpp)
+target_link_libraries(test_tt_eval MAX2SRC)
+add_test(NAME test_tt_eval COMMAND test_tt_eval)
+set_tests_properties(test_tt_eval PROPERTIES
+    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
