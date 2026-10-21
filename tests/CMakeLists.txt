@@ -188,3 +188,9 @@ target_link_libraries(test_probcut MAX2SRC)
 add_test(NAME test_probcut COMMAND test_probcut)
 set_tests_properties(test_probcut PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
+
+add_executable(test_tt_history test_tt_history.cpp)
+target_link_libraries(test_tt_history MAX2SRC)
+add_test(NAME test_tt_history COMMAND test_tt_history)
+set_tests_properties(test_tt_history PROPERTIES
+    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

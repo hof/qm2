@@ -252,6 +252,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     adaptive_lmr_enabled = wild == 0 && options::get_value("AdaptiveLMR");
     lmr_history_enabled = wild == 0 && options::get_value("LMRHistory");
     aspiration_enabled = options::get_value("Aspiration");
+    tt_history_enabled = wild == 0 && options::get_value("TTHistory");
     probcut_enabled = wild == 0 && options::get_value("ProbCut");
     singular_extensions_enabled = wild == 0 && options::get_value("SingularExtensions");
     razoring_enabled = wild == 0 && options::get_value("Razoring");
@@ -292,6 +293,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
+        tt_history_enabled = false;
         probcut_enabled = false;
         singular_extensions_enabled = false;
         razoring_enabled = false;
@@ -344,6 +346,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     stack->eval_result = score::INVALID;
     stack->improving = false;
     stack->excluded_move = 0;
+    stack->move_count = 0;
     stack->repetition_start = -static_cast<int>(_position_history.size());
     init_tt_history();
     stack->tt_clocks = {0, 101};
@@ -575,6 +578,8 @@ void search_t::go() {
             + " cutoffs " + std::to_string(counts.repetition_cutoffs)
             + " q_hits " + std::to_string(counts.q_repetition_hits)
             + " q_cutoffs " + std::to_string(counts.q_repetition_cutoffs));
+        uci::out("info string audit_tt_history rewards " + std::to_string(counts.tt_history_rewards)
+            + " penalties " + std::to_string(counts.tt_history_penalties));
         uci::out("info string audit_probcut attempts " + std::to_string(counts.probcut_attempts)
             + " candidates " + std::to_string(counts.probcut_candidates)
             + " q_passes " + std::to_string(counts.probcut_q_passes)
@@ -897,6 +902,7 @@ void search_t::forward() {
     stack->eval_result = score::INVALID;
     stack->improving = false;
     stack->excluded_move = 0;
+    stack->move_count = 0;
     brd.forward();
     if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, nullptr, evaluation_accumulators[brd.ply]);
@@ -938,6 +944,7 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->eval_result = score::INVALID;
     stack->improving = false;
     stack->excluded_move = 0;
+    stack->move_count = 0;
     brd.forward(move);
     if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, move, evaluation_accumulators[brd.ply]);
@@ -1213,6 +1220,56 @@ int search_t::move_history_score(const move_t & move) {
         }
     }
     return value;
+}
+
+// Cached fail-highs supply ordering evidence even though no move was searched here.
+void search_t::update_tt_history(int compact_move, int depth) {
+    if (!tt_history_enabled || !brd.ply || stop_all || iid_active
+            || verification_mode != verification_mode_t::none || stack->excluded_move
+            || stack->repetition_start > 0 || brd.stack->fifty_count >= 99) {
+        return;
+    }
+    move_t move{};
+    move.set_compact(&brd, compact_move);
+    // Hints can survive a score replacement. Validate before learning their indices.
+    if (!move.piece || !brd.valid(&move) || !brd.legal(&move)) {
+        return;
+    }
+    const int d = std::clamp(depth, 1, 8);
+    const int bonus = 32 * d * d;
+    const auto & previous = (stack - 1)->current_move;
+    if (!move.capture && !move.promotion && !move.castle) {
+        quiet_history->update(brd.us(), move, &previous, brd.stack->pawn_key,
+            bonus, nullptr, quiet_history_policy);
+        for (const auto * context : long_continuation_contexts()) {
+            if (context) {
+                quiet_history->update_continuation(move, *context, bonus);
+            }
+        }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++nnue_audit.counters.tt_history_rewards;
+#endif
+    }
+    // An early quiet predecessor allowed this cached refutation. Penalize only
+    // its continuation contexts, never moves that were not searched at this node.
+    const int ordinal = (stack - 1)->move_count;
+    if (!previous.piece || previous.capture || previous.promotion || previous.castle
+            || ordinal < 1 || ordinal > 3) {
+        return;
+    }
+    for (int distance = 2; distance <= 5 && distance <= brd.ply; ++distance) {
+        const auto & context = (stack - distance)->current_move;
+        if (!context.piece) {
+            break;
+        }
+        if ((distance == 2 && quiet_history_policy.continuation)
+                || ((distance == 3 || distance == 5) && long_continuation_enabled)) {
+            quiet_history->update_continuation(previous, context, -bonus);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++nnue_audit.counters.tt_history_penalties;
+#endif
+        }
+    }
 }
 
 void search_t::update_quiet_cutoff(move_t * move, int depth, int searched_moves) {
@@ -1498,6 +1555,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
 #endif
 
         //go forward and search one level deeper
+        stack->move_count = i + 1;
         forward(move, rmove->gives_check);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         stack->check_extensions += extend;
@@ -2162,12 +2220,19 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     if (usable_tt_score && use_tt_scores && (!repetition_floor || tt_score >= draw_score())) {
         // A compatible exact score resolves either side of a non-PV window too.
         if (tt_flag == score::EXACT) {
+            if (!pv && !repetition_floor && tt_score >= beta
+                    && std::abs(tt_score) < score::TABLEBASE - MAX_PLY) {
+                update_tt_history(tt_move, depth);
+            }
             stack->tt_clocks.include_child(tt_clocks, 0);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
             ++nnue_audit.counters.hash_score_cutoffs;
 #endif
             return tt_score;
         } else if (!pv && tt_score >= beta && tt_flag == score::LOWERBOUND) {
+            if (!repetition_floor && std::abs(tt_score) < score::TABLEBASE - MAX_PLY) {
+                update_tt_history(tt_move, depth);
+            }
             stack->tt_clocks.include_child(tt_clocks, 0);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
             ++nnue_audit.counters.hash_score_cutoffs;
@@ -2403,6 +2468,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         if (!try_forward(move, gives_check)) {
             continue;
         }
+        (stack - 1)->move_count = searched_moves + 1;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         if (!excluded_move && depth >= 3 && searched_moves >= 3 && !is_dangerous) {
             ++nnue_audit.counters.lmr_candidates;
@@ -2878,6 +2944,7 @@ void search_t::reset_stack() {
     stack->eval_result = score::INVALID;
     stack->improving = false;
     stack->excluded_move = 0;
+    stack->move_count = 0;
     stack->repetition_start = -static_cast<int>(_position_history.size());
     init_tt_history();
     stack->tt_clocks = {0, 101};
@@ -2896,6 +2963,7 @@ void search_t::reset_stack() {
     counts.hash_probes = counts.hash_moves = counts.hash_first = 0;
     counts.hash_rejected = counts.hash_score_cutoffs = 0;
     counts.probcut_adaptive = counts.probcut_q_only = 0;
+    counts.tt_history_rewards = counts.tt_history_penalties = 0;
     counts.probcut_attempts = counts.probcut_candidates = counts.probcut_q_passes = 0;
     counts.probcut_searches = counts.probcut_researches = counts.probcut_cutoffs = 0;
     counts.probcut_cancelled = counts.probcut_visits = counts.probcut_tt_vetoes = 0;

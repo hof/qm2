@@ -75,6 +75,7 @@ public:
 struct search_stack_t {
     move::list_t move_list;
     move_t searched[256];
+    int move_count; // One-based legal main-search ordinal; zero outside a move loop.
     move_t current_move;
     move_t best_move;
     move_t tt_move;
@@ -156,6 +157,7 @@ public:
     bool correction_history_enabled;
     int corrected_static_eval(int raw);
     void update_correction_history(int value, int bound, int depth);
+    bool tt_history_enabled;
     bool capture_history_enabled;
     bool long_continuation_enabled;
     bool threat_ordering_enabled;
@@ -244,6 +246,7 @@ public:
     int move_history_score(const move_t & move);
     void update_capture_cutoff(const move_t & move, int depth, int searched_moves);
     void take_history(search_t & previous);
+    void update_tt_history(int compact_move, int depth);
     void update_quiet_cutoff(move_t * move, int depth, int searched_moves);
     void update_killers(move_t * move);
     bool is_killer(move_t * const move);

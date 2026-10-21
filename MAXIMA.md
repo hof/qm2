@@ -449,7 +449,7 @@ bounds and the score magnitude needed by adaptive tactical verification.
 
 Search-policy options carry their TT invalidation rule beside their declaration.
 Changing `NullMove`, `NullVerify`, `BetaPruning`, `FutilityPruning`, `LMR`,
-`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `Razoring`, `SingularExtensions`, `ProbCut`, `QsearchTT`, draw contempt,
+`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `Razoring`, `SingularExtensions`, `ProbCut`, `TTHistory`, `QsearchTT`, draw contempt,
 variant or tablebase probing policy stops and joins the worker before clearing both main and quiescence TT
 results and move hints. History controls and audit search policies follow the
 same rule. Invalid values and unchanged numeric/checkbox policies preserve the
@@ -4103,13 +4103,13 @@ Release checks. When using the local toolchain, prefix these commands with
   necessary.
 
 For a small sanity check of pruning/reduction/history changes, build first and run
-the eight focused tests:
+the nine focused tests:
 
 ```bash
-ctest --preset cpp26_debug -R '^(test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
+ctest --preset cpp26_debug -R '^(test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
 ```
 
-Use the local toolchain prefix above when needed. This subset checks razoring verification, SEE pruning, reductions and IIR/IID selection, verification
+Use the local toolchain prefix above when needed. This subset checks TT history feedback, razoring verification, SEE pruning, reductions and IIR/IID selection, verification
 guards, cancellation/restoration, node context and UCI policy cache invalidation. The full preset additionally covers lifecycle, evaluation,
 board rules and other search contracts.
 
@@ -6234,3 +6234,76 @@ cancellation independently. Evidence is under
 `.context/baselines/2026-10-20/probcut/`. TT history feedback is next;
 the remaining search-baseline groups and integrated strength acceptance remain
 unfinished. This increment does not complete the baseline.
+
+
+### TT cutoff history feedback
+
+`TTHistory` is a default-on standard-search control, snapshotted by each worker.
+Changing it stops the worker and clears main and quiescence TT entries. Royal
+losers and artificial audit horizons disable this feedback.
+
+An accepted non-PV main-search TT exact/lower fail-high can teach move ordering:
+reward its legal quiet move in enabled main, pawn and immediate/2/4-ply
+continuation history. If the preceding move was an early quiet move (legal
+main-search ordinal 1–3), penalize that predecessor in its own enabled
+continuation contexts. The ordinal includes the currently searched legal move;
+illegal or pruned candidates do not consume it. Contexts stop at the root or a
+null move. Castling retains the existing separate ordering policy.
+
+Validate TT hints both pseudo-legally and legally before learning: a retained
+hint is not itself a score certificate. The existing depth, context, clock,
+bound and main/qsearch mode checks still own score reuse. Feedback changes no
+TT cutoff conditions. Hint-only hits, fail-lows, PV reuse, repetition floors,
+decisive scores, clock 99+, actual root reuse, aborted searches, IID and
+verification/exclusion helpers, and artificial null subtrees do not train.
+
+Use the existing bounded gravity update with provisional bonus
+`32 * clamp(depth, 1, 8)^2`. Reward only the cached quiet move; no alternatives
+were searched here, so none receive current-node penalties. Predecessor penalties
+update continuation history only. Capture history, killers, countermoves and
+ordinary-cutoff counters are not updated by TT feedback. Audit builds expose
+`audit_tt_history rewards` (eligible quiet hints) and `penalties` (updated
+predecessor continuation entries). These are different units.
+
+`test_tt_history` exercises seeded compatible cutoffs through PVS, both colors,
+exact/lower/upper bounds and equality, full/non-PV windows, policy masks and
+depth/ordinal boundaries, worker snapshots, cache incompatibility, legality,
+pins, captures, promotions, castling, checked quiet evasions, helper/null/root
+exclusions and board/hash/frame restoration. UCI policy and lifecycle tests
+cover option validation, cache clearing and worker stop/restart.
+
+Validation passed 52/52 Debug (182.70s), 52/52 Release (101.03s), including
+both lifecycle suites in each, seven focused ASan/UBSan checks (16.79s,
+leak detection off), nine audit checks (6.79s), and the independent board
+oracle's 4,372 positions / 95,734 legal children (32.348s).
+
+The frozen parent and same-binary disabled control matched all 96 cold/retained
+search signatures exactly: nodes, depth, score, best move and full PV. All 288
+D8 results were legal and complete; 216 cold searches repeated deterministically.
+Twelve reserved roots used three alternating cold trials and one retained trial
+with D6 warmup and a fixed legal two-ply continuation, Hash64, one low-priority
+CPU, pinned model, readiness barriers, and books/experience/tablebases off.
+
+| AdaptiveLMR | History | Nodes, enabled vs disabled | Process CPU |
+|---|---|---:|---:|
+| On | Cold | -13.167% | -12.651% |
+| On | Retained | +5.454% | +17.117% |
+| Off | Cold | -5.991% | -6.751% |
+| Off | Retained | +1.911% | +1.818% |
+
+Cold CPU uses the median total of three trials. Retained results have one trial;
+short CPU samples and clock-tick resolution limit timing conclusions. Existing
+retained rows locate the default-policy net increase of 42,799 nodes primarily
+at reserved root 7 (+43,009), with gains and losses elsewhere. Its score changed
+while best move/PV stayed the same. Total retained CPU rose 0.19s; identical-work
+parent/disabled timings differed by 0.07s. This accounts for tree cost without
+isolating per-node overhead or establishing move quality. No general speed,
+generator-throughput or playing-strength gain is established.
+
+Production D8 probes after real D6 warmup recorded 4,765 eligible quiet rewards
+and 2,697 predecessor continuation penalties with adaptive LMR enabled; with it
+disabled, 3,984 and 2,289. Disabled feedback counters were zero. Evidence is under
+`.context/baselines/2026-10-21/tt-history/`. TT feedback completes the first
+search-baseline implementation group. Depth/context-aware LMP, history pruning,
+raw static-evaluation TT caching, richer correction and selective-policy
+completion remain. Integrated strength acceptance is pending.
