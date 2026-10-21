@@ -1236,9 +1236,8 @@ for every data command remain a planned documentation improvement.
 ### 10.2 FICS client
 
 `maxima fics` connects to freechess.org:5000, logs in, keeps the session
-alive, and plays our games with the Release Maxima build. Automatic seeking,
-challenge filtering, and PGN capture are not implemented yet: seek or accept at
-the prompt (e.g. `seek 3 0 u`).
+alive, seeks, and plays its games with the Release Maxima build. PGN capture is
+not implemented yet.
 
 ```bash
 ./maxima fics                                   # guest login, plays with Maxima
@@ -1246,7 +1245,27 @@ FICS_PASSWORD=... ./maxima fics --handle Maxima # registered account
 ./maxima fics --debug fics.log                  # wire transcript, password masked
 ./maxima fics --engine /path/to/engine --option Hash=256
 ./maxima fics --no-engine                       # connect only
+./maxima fics --config fics.json --games 20     # settings file; flags override it
 ```
+
+Play policy, as JDrone's `ics.seeks`/`autoaccept`/`autorematch`, from a JSON file
+(`--config`) or flags:
+
+```json
+{"seeks": ["3 0", "3 1", "5 2"], "seeks_at_once": 2, "accept": true, "rematches": 2,
+ "games": 20, "handle": "guest", "engine": null, "options": {"Hash": "256"}}
+```
+
+After login and after each game the client posts `seeks_at_once` random seeks
+from the pool (`--seek`, `--seeks-at-once`, `--no-seek`); guests add ` u`.
+Challenges are accepted only for standard lightning, blitz, or standard chess
+with a clock and only when idle (`--no-accept` declines all); a game created
+with a variant is aborted. After a game it offers `rematch` up to `rematches`
+games in a row against the same opponent (`--rematches`). At `Creating:` it
+fingers the opponent; the first search waits up to two seconds for the reply so
+`UCI_Opponent` carries the rating, title, and computer flag. `--games N` quits
+after N games; `quit` during a game stops seeking and leaves after the game,
+and a second `quit` leaves at once. Unknown settings or wrong types are errors.
 
 The engine runs in the project root, so its relative `eval.nnue` and `book.bin`
 defaults resolve. Login sets `iset ms 1`, so style12 clocks are milliseconds.

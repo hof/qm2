@@ -1,9 +1,11 @@
 """Play on FICS: timeseal transport, login, keepalive probes, and reconnects."""
 import argparse
 import asyncio
+import json
 from contextlib import asynccontextmanager
 import os
 import platform
+import random
 import re
 import socket
 import sys
@@ -253,17 +255,68 @@ async def login(connection, handle, password=None, timeout=60, on_line=None):
     return match.group(1)
 
 
+creating_pattern = re.compile(
+    r"^Creating: (?P<white>[A-Za-z]+) \((?P<white_rating>[^)]*)\) (?P<black>[A-Za-z]+) "
+    r"\((?P<black_rating>[^)]*)\) (?P<rated>rated|unrated) (?P<type>.+?) (?P<time>\d+) (?P<increment>\d+)"
+    r"(?: \(adjourned\))?$")
+challenge_pattern = re.compile(
+    r"^Challenge: (?P<name>[A-Za-z]+) \([^)]*\)(?: \[(?:white|black)\])? [A-Za-z]+ \([^)]*\) "
+    r"(?P<rated>rated|unrated) (?P<type>.+?) (?P<time>\d+) (?P<increment>\d+)(?: \(adjourned\))?\.?$")
+finger_pattern = re.compile(r"^Finger of (?P<name>[A-Za-z]+)(?P<titles>(?:\([A-Z*]+\))*):")
+playable_types = ("lightning", "blitz", "standard")
+chess_titles = ("GM", "IM", "FM", "WGM", "WIM", "WFM", "CM", "WCM", "NM")
+seek_pattern = re.compile(r"\d{1,3} \d{1,3}(?: [a-z0-9+-]+)*")
+rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
+default_settings = {
+    "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
+    "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 2, "games": None,
+}
+
+
+def playable(game_type, minutes, increment):
+    """Standard chess with a running clock; variants and untimed games are refused."""
+    return game_type.lower() in playable_types and int(minutes) + int(increment) > 0
+
+
+def rating_of(text):
+    return int(text) if text.strip().isdigit() else None
+
+
+class play_policy:
+    """When to seek, accept, rematch, and stop; mirrors JDrone's seek pool and rematch limit."""
+
+    def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=2, games=None, guest=True):
+        self.seeks = list(seeks)
+        self.seeks_at_once = seeks_at_once
+        self.accept = accept
+        self.rematches = rematches
+        self.games = games
+        self.guest = guest
+
+    def seek_commands(self):
+        """A random draw from the pool; guests can only play unrated."""
+        chosen = random.sample(self.seeks, min(self.seeks_at_once, len(self.seeks)))
+        return [f"seek {spec}" + (" u" if self.guest and not rated_word.search(spec) else "") for spec in chosen]
+
+
 class engine_player:
     """Play our games with a UCI engine; searches run as tasks so server lines keep flowing."""
 
-    def __init__(self, open_session, on_line, margin=5):
+    def __init__(self, open_session, on_line, margin=5, policy=None, finger_wait=2):
         self.open_session = open_session
         self.on_line = on_line
         self.margin = margin
+        self.policy = policy or play_policy()
+        self.finger_wait = finger_wait
         self.connection = None
         self.context = self.session = None
         self.game = self.history = self.token = None
         self.task = self.searched = self.retried = None
+        self.name = self.opponent = self.last_opponent = None
+        self.opponent_ready = asyncio.Event()
+        self.opponent_ready.set()
+        self.streak = self.played = 0
+        self.stopping = self.finished = False
 
     async def start(self):
         self.context = self.open_session()
@@ -282,6 +335,29 @@ class engine_player:
         if self.task is not None and not self.task.done():
             self.task.cancel()
 
+    async def on_login(self, name):
+        """A new session: any earlier game was forfeited (noescape), so start seeking again."""
+        self.cancel()
+        self.name = name
+        self.game = self.history = None
+        await self.seek()
+
+    async def seek(self):
+        if self.stopping or self.game is not None or not self.policy.seeks:
+            return
+        await self.send("unseek")
+        for command in self.policy.seek_commands():
+            await self.send(command)
+
+    async def stop(self):
+        """Stop seeking; quit now when idle, or after the current game."""
+        self.stopping = True
+        await self.send("unseek")
+        if self.game is None:
+            self.finished = True
+        else:
+            self.on_line("-- stopping after this game; quit again to leave now")
+
     async def handle(self, line):
         position = fics_game.style12.parse(line) if line.startswith("<12> ") else None
         if position is not None:
@@ -292,12 +368,63 @@ class engine_player:
             return
         end = fics_game.game_end_pattern.match(line)
         if end and int(end["game"]) == self.game:
-            self.cancel()
-            self.on_line(f"-- game {self.game} over: {end['reason']} {end['result']}")
-            self.game = self.history = None
+            await self.on_game_end(end)
         elif line.startswith("Illegal move") and self.game is not None and self.retried != self.searched:
             self.retried = self.searched
             await self.send("refresh")
+        elif creating_pattern.match(line):
+            await self.on_creating(creating_pattern.match(line))
+        elif challenge_pattern.match(line):
+            await self.on_challenge(challenge_pattern.match(line))
+        elif finger_pattern.match(line) and self.opponent is not None:
+            found = finger_pattern.match(line)
+            if found["name"].lower() == self.opponent.name.lower():
+                titles = re.findall(r"\(([A-Z*]+)\)", found["titles"])
+                title = next((title for title in titles if title in chess_titles), None)
+                self.opponent = chess.engine.Opponent(self.opponent.name, title, self.opponent.rating, "C" in titles)
+                self.opponent_ready.set()
+
+    async def on_creating(self, match):
+        we_are_white = self.name is not None and match["white"].lower() == self.name.lower()
+        name, rating = ((match["black"], match["black_rating"]) if we_are_white
+                        else (match["white"], match["white_rating"]))
+        self.opponent = chess.engine.Opponent(name, None, rating_of(rating), False)
+        self.opponent_ready.clear()
+        if not playable(match["type"], match["time"], match["increment"]):
+            self.on_line(f"-- aborting unsupported game: {match['type']} {match['time']} {match['increment']}")
+            await self.send("abort")
+            return
+        await self.send(f"finger {name}")
+
+    async def on_challenge(self, match):
+        name = match["name"]
+        if self.game is not None or self.stopping or not self.policy.accept:
+            await self.send(f"decline {name}")
+        elif not playable(match["type"], match["time"], match["increment"]):
+            self.on_line(f"-- declining {match['type']} {match['time']} {match['increment']} from {name}")
+            await self.send(f"decline {name}")
+        else:
+            await self.send(f"accept {name}")
+
+    async def on_game_end(self, end):
+        self.cancel()
+        self.on_line(f"-- game {self.game} over: {end['reason']} {end['result']}")
+        opponent = end["black"] if self.name and end["white"].lower() == self.name.lower() else end["white"]
+        self.game = self.history = self.opponent = None
+        self.opponent_ready.set()
+        self.played += 1
+        self.streak = self.streak + 1 if opponent == self.last_opponent else 1
+        self.last_opponent = opponent
+        if self.policy.games is not None and self.played >= self.policy.games:
+            self.on_line(f"-- played {self.played} games; stopping")
+            self.stopping = True
+        if self.stopping:
+            await self.send("unseek")
+            self.finished = True
+            return
+        if self.streak <= self.policy.rematches:
+            await self.send("rematch")
+        await self.seek()
 
     def on_board(self, position):
         if position.relation not in (fics_game.playing_my_move, fics_game.playing_their_move):
@@ -336,8 +463,15 @@ class engine_player:
         limit = chess.engine.Limit(white_clock=position.white_ms / 1000, black_clock=position.black_ms / 1000,
                                    white_inc=position.increment_seconds, black_inc=position.increment_seconds)
         started = time.monotonic()
+        if not self.opponent_ready.is_set():
+            # The first search waits briefly for finger, so UCI_Opponent carries title and engine flag.
+            try:
+                await asyncio.wait_for(self.opponent_ready.wait(), self.finger_wait)
+            except asyncio.TimeoutError:
+                self.opponent_ready.set()
         try:
-            result = await self.session.play(board, limit, game=self.token, timeout=max(clock, 1) + self.margin)
+            result = await self.session.play(board, limit, game=self.token, opponent=self.opponent,
+                                             timeout=max(clock, 1) + self.margin)
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
             self.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
             await self.stop_engine()
@@ -382,10 +516,16 @@ async def serve(connection, commands, on_line, probe_interval=300, probe_timeout
             if command in done:
                 text = command.result()
                 if text.strip().lower() in ("quit", "exit"):
-                    await connection.send("quit")
-                    return "quit"
-                await connection.send(text)
+                    if player is None or player.stopping or player.game is None:
+                        await connection.send("quit")
+                        return "quit"
+                    await player.stop()
+                else:
+                    await connection.send(text)
                 command = asyncio.ensure_future(commands.get())
+            if player is not None and player.finished:
+                await connection.send("quit")
+                return "quit"
             now = time.monotonic()
             if probe_sent is not None and connection.received > probe_sent:
                 probe_sent = None
@@ -410,6 +550,7 @@ async def run_client(options, commands, on_line, backoff=backoff_seconds, transc
             attempt = 0
             if player is not None:
                 player.connection = connection
+                await player.on_login(name)
             if await serve(connection, commands, on_line, options.probe_interval, player=player) == "quit":
                 return 0
         except (ConnectionError, OSError, asyncio.TimeoutError) as error:
@@ -422,6 +563,29 @@ async def run_client(options, commands, on_line, backoff=backoff_seconds, transc
                 await connection.close()
 
 
+def load_settings(path):
+    """Defaults merged with an optional JSON file; unknown keys and wrong types are errors."""
+    settings = dict(default_settings)
+    if path is None:
+        return settings
+    with open(path, encoding="utf-8") as stream:
+        loaded = json.load(stream)
+    if not isinstance(loaded, dict):
+        raise ValueError(f"{path}: expected a JSON object")
+    types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
+             "seeks_at_once": int, "accept": bool, "rematches": int, "games": int}
+    for key, value in loaded.items():
+        if key not in types:
+            raise ValueError(f"{path}: unknown setting {key!r}")
+        if value is not None and not isinstance(value, types[key]) or isinstance(value, bool) and types[key] is int:
+            raise ValueError(f"{path}: {key} must be {types[key].__name__}")
+        if key == "seeks" and not all(isinstance(spec, str) for spec in value):
+            raise ValueError(f"{path}: seeks must be strings like '3 0'")
+        settings[key] = value
+    settings["options"] = {str(name): str(value) for name, value in (settings["options"] or {}).items()}
+    return settings
+
+
 def read_commands(loop, commands):
     def reader():
         for line in sys.stdin:
@@ -431,10 +595,12 @@ def read_commands(loop, commands):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="freechess.org")
-    parser.add_argument("--port", type=int, default=5000)
-    parser.add_argument("--handle", default="guest",
-                        help="registered handle (password from FICS_PASSWORD), default guest")
+    parser.add_argument("--config", metavar="FILE",
+                        help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
+                             "accept, rematches, games); flags override it")
+    parser.add_argument("--host")
+    parser.add_argument("--port", type=int)
+    parser.add_argument("--handle", help="registered handle (password from FICS_PASSWORD), default guest")
     parser.add_argument("--no-timeseal", dest="timeseal", action="store_false",
                         help="send plain lines; the server then charges network lag to our clock")
     parser.add_argument("--probe-interval", type=float, default=300,
@@ -444,13 +610,39 @@ def main():
     parser.add_argument("--option", action="append", default=[], metavar="NAME=VALUE",
                         help="UCI option for the engine, repeatable (e.g. Hash=256)")
     parser.add_argument("--no-engine", action="store_true", help="connect without playing games")
+    parser.add_argument("--seek", action="append", metavar="SPEC",
+                        help='seek pool entry, repeatable (e.g. "3 0"; default pool 3 0, 3 1, 5 0)')
+    parser.add_argument("--seeks-at-once", type=int, help="seeks posted at a time, drawn from the pool (default: 2)")
+    parser.add_argument("--no-seek", action="store_true", help="do not seek; only accept challenges")
+    parser.add_argument("--no-accept", action="store_true", help="decline all challenges")
+    parser.add_argument("--rematches", type=int, help="rematches in a row per opponent (default: 2)")
+    parser.add_argument("--games", type=int, help="quit after this many games")
     options = parser.parse_args()
-    settings = {}
+    try:
+        configured = load_settings(options.config)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+    flags = {"host": options.host, "port": options.port, "handle": options.handle, "engine": options.engine,
+             "seeks": options.seek, "seeks_at_once": options.seeks_at_once, "rematches": options.rematches,
+             "games": options.games}
+    configured.update({key: value for key, value in flags.items() if value is not None})
+    if options.no_seek:
+        configured["seeks"] = []
+    if options.no_accept:
+        configured["accept"] = False
+    for name in ("host", "port", "handle", "engine"):
+        setattr(options, name, configured[name])
+    settings = dict(configured["options"])
     for item in options.option:
         name, separator, value = item.partition("=")
         if not separator or not name.strip():
             parser.error(f"--option expects NAME=VALUE, got {item!r}")
         settings[name.strip()] = value.strip()
+    for spec in configured["seeks"]:
+        if not seek_pattern.fullmatch(spec):
+            parser.error(f"seek spec must look like '3 0' or '5 2 u', got {spec!r}")
+    policy = play_policy(configured["seeks"], configured["seeks_at_once"], configured["accept"],
+                         configured["rematches"], configured["games"], guest=options.handle == "guest")
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
     if not valid_handle(options.handle):
         parser.error("FICS handles have 3 to 17 letters, or use guest")
@@ -475,7 +667,7 @@ def main():
     async def session():
         commands = asyncio.Queue()
         read_commands(asyncio.get_event_loop(), commands)
-        player = None if options.no_engine else engine_player(engine_session, show)
+        player = None if options.no_engine else engine_player(engine_session, show, policy=policy)
         try:
             if player is not None:
                 await player.start()
