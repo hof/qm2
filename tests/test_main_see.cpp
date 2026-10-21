@@ -20,7 +20,8 @@ public:
         move.set(&brd, black ? "a2a3" : "a7a6");
         forward(&move, brd.gives_check(&move));
         beta_pruning = null_enabled = ffp_enabled = lmr_enabled = false;
-        iir_enabled = iid_enabled = correction_history_enabled = false;
+        // Isolate move-level SEE from same-position qsearch node pruning.
+        razoring_enabled = iir_enabled = iid_enabled = correction_history_enabled = false;
         tablebase_limit = draw_contempt = 0;
         evaluate(this);
         stack->killer[0].set(&brd, black ? "g8f6" : "g1f3");
@@ -170,7 +171,8 @@ bool test_search() {
                         if (before_ok && !ok) {
                             std::cerr << "search " << black << '/' << enabled << '/' << depth
                                 << '/' << pv << '/' << cancel << " result " << result
-                                << " kids " << s->children.size() << " first " << s->children.front()
+                                << " kids " << s->children.size() << " first "
+                                << (s->children.empty() ? "<none>" : s->children.front())
                                 << " clock " << int(s->stack->tt_clocks.max) << " hit " << hit
                                 << " value/flag " << value << '/' << flag << '\n';
                         }

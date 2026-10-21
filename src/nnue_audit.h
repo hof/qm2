@@ -28,6 +28,9 @@ struct audit_counters_t {
     uint64_t q_repetition_hits = 0, q_repetition_cutoffs = 0;
     uint64_t researches = 0, root_researches = 0, research_fail_highs = 0;
     uint64_t hash_probes = 0, hash_moves = 0, hash_first = 0, hash_rejected = 0, hash_score_cutoffs = 0;
+    uint64_t razoring_attempts = 0, razoring_cutoffs = 0, razoring_rejected = 0;
+    uint64_t razoring_cancelled = 0, razoring_visits = 0;
+    uint64_t min_razoring_depth = 0, max_razoring_depth = 0;
     uint64_t main_see_candidates = 0, main_see_prunes = 0;
     uint64_t main_see_captures = 0, main_see_quiets = 0;
     uint64_t min_main_see_depth = 0, max_main_see_depth = 0;

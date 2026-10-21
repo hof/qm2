@@ -178,6 +178,7 @@ public:
     bool adaptive_lmr_enabled;
     bool lmr_history_enabled;
     bool aspiration_enabled;
+    bool razoring_enabled;
     bool main_see_enabled;
     bool iir_enabled;
     bool iid_enabled;
@@ -203,6 +204,7 @@ public:
     void book_calc();
     void iterative_deepening();
     int aspiration(int depth, int last_score);
+    bool razor_node(int alpha, int beta, int depth, int eval, int & value);
     bool prune_main_see(move_t & move, int depth, int searched_moves,
         int best, int alpha, int beta, int gives_check);
     int internal_search_depth(int depth, bool pv, bool cut_node);

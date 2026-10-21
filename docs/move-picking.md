@@ -183,3 +183,17 @@ All 288 D8 searches completed legally; 96 disabled-parent signatures matched
 exactly. With LMR, cold/retained nodes fell 8.22%/8.44%; without LMR they fell
 18.20%/9.33%, with mixed CPU results. No playing-strength gain is established.
 See MAXIMA.md for the full protocol, activation counts and timing limitations.
+
+Before node pruning or picker initialization, `Razoring=true` may verify a
+shallow non-PV fail-low with entry qsearch. It saves and restores the complete
+main-search frame, so qsearch stages, hints and PV cannot leak into the main
+picker when verification fails high. Completed nondecisive fail-lows return
+without a main-depth TT store; cancellation cannot authorize a cutoff. See
+MAXIMA.md for eligibility, clock propagation and the provisional margin.
+
+Razoring validation (2026-10-20): 49 Debug and 49 Release tests, 17 selected
+ASan/UBSan tests, 19 audit tests and the independent board oracle passed. All
+288 D8 searches completed legally; 96 disabled-parent signatures matched
+exactly. With main SEE, cold/retained nodes changed -3.04%/-7.20%; without it,
++8.73%/-0.61%. CPU results were mixed and variable; playing-strength acceptance
+remains pending. See MAXIMA.md for the complete protocol and limitations.

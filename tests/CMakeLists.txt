@@ -170,3 +170,9 @@ add_test(NAME test_adaptive_lmr COMMAND test_adaptive_lmr)
 get_property(maxima_subdirectory_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${maxima_subdirectory_tests} PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
+
+add_executable(test_razoring test_razoring.cpp)
+target_link_libraries(test_razoring MAX2SRC)
+add_test(NAME test_razoring COMMAND test_razoring)
+set_tests_properties(test_razoring PROPERTIES
+    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

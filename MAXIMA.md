@@ -339,6 +339,22 @@ mate/tablebase score windows, and artificial null lines cannot supply reserved
 mate/tablebase scores as cutoffs. Pawn-only positions retain the non-pawn-material
 exclusion. These safeguards do not make selective search an exhaustive oracle.
 
+`Razoring` is an independent standard UCI checkbox, enabled by default and
+snapshotted by the worker. At non-root, non-PV nodes with 1–3 plies remaining,
+a static score strictly below `alpha - 300 * depth` triggers entry qsearch with
+the same null window. Only a completed, nondecisive result at or below alpha
+returns a selective fail-low. A fail-high or decisive result resumes full-depth
+search. The 300-cp-per-ply margin is provisional and untuned. Checks, endgames,
+pawn-only sides, IID/verification/excluded searches, repetition floors,
+mate/tablebase score windows and reversible clocks at least 99 are protected.
+The caller frame is restored after qsearch, including on cancellation; clock
+constraints merge back. Accepted results restrict compatible parent TT clocks
+through 98. This return stores no main-depth TT bound; qsearch retains its own
+mode-gated cache policy. Disabling razoring skips verification entirely. Fixed
+and aligned diagnostic horizons disable it; royal losers retains its policy.
+This heuristic can miss quiet tactical resources; correctness checks do not
+establish playing strength. Changing the option stops the worker and clears TT.
+
 Same-position IID and verification helpers restore the complete caller frame,
 including its picker, PV, evaluation, repetition state, killers and local move
 exclusion. Clock restrictions merge back conservatively; work and cancellation
@@ -428,7 +444,7 @@ unfinished result. Qsearch clears stale PV/best-move state before probing.
 
 Search-policy options carry their TT invalidation rule beside their declaration.
 Changing `NullMove`, `NullVerify`, `BetaPruning`, `FutilityPruning`, `LMR`,
-`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `QsearchTT`, draw contempt,
+`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `Razoring`, `QsearchTT`, draw contempt,
 variant or tablebase probing policy stops and joins the worker before clearing both main and quiescence TT
 results and move hints. History controls and audit search policies follow the
 same rule. Invalid values and unchanged numeric/checkbox policies preserve the
@@ -4081,13 +4097,13 @@ Release checks. When using the local toolchain, prefix these commands with
   necessary.
 
 For a small sanity check of pruning/reduction/history changes, build first and run
-the seven focused tests:
+the eight focused tests:
 
 ```bash
-ctest --preset cpp26_debug -R '^(test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
+ctest --preset cpp26_debug -R '^(test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
 ```
 
-Use the local toolchain prefix above when needed. This subset checks SEE pruning, reductions and IIR/IID selection, verification
+Use the local toolchain prefix above when needed. This subset checks razoring verification, SEE pruning, reductions and IIR/IID selection, verification
 guards, cancellation/restoration, node context and UCI policy cache invalidation. The full preset additionally covers lifecycle, evaluation,
 board rules and other search contracts.
 
@@ -5973,3 +5989,58 @@ eligibility boundaries through six. Disabled counters were all zero. Evidence,
 source/binary/model/corpus hashes and initial logs are retained privately under
 `.context/baselines/2026-10-20/main-see/`. Next are razoring, singular extensions
 and ProbCut, with TT feedback and final integration/strength acceptance pending.
+
+
+### Razoring with qsearch verification — 2026-10-20
+
+Standard search now defaults `Razoring=true`, with worker-owned policy and TT
+invalidation. The shallow eligibility and provisional margin are documented in
+chapter 4. Implementation and correctness checks are complete; integrated
+playing-strength acceptance remains pending.
+
+Final checks passed: 49/49 Debug (179.26s), 49/49 Release (105.39s), 17 selected
+ASan/UBSan tests (68.00s, leak detection disabled), 19 audit tests (30.38s), and
+the independent oracle (4,372 positions/95,734 legal children, 38.465s). Native
+coverage includes 96 controlled PVS cases, strict margin/depth boundaries,
+qsearch fail-low/fail-high and cache modes, decisive-score rejection, complete
+frame/history restoration, clock propagation, cancellation after legal captures,
+terminal/draw precedence and worker/variant/audit isolation. UCI tests cover
+policy-cache invalidation and changes during active search. The changed C++
+files passed the brace scan. Initial test-fixture issues were corrected before
+these final gates: isolate the SEE-only mock children from independent razoring,
+and use a naturally eligible tactical position instead of overriding metadata.
+The earlier logs remain available; assertions and deadlines were retained.
+
+The frozen parent and same-binary razoring off/on were compared with main-search
+SEE on/off: 12 reserved roots, three alternating cold depth-eight trials and one
+retained-history trial per profile after depth-six warming and a fixed legal
+two-ply continuation. All 288 measured searches completed legally; all 216 cold
+searches repeated deterministically. All 96 disabled-parent signatures matched
+nodes, scores, best moves and complete PVs exactly. One low-priority CPU and a
+readiness barrier preceded process-CPU timing.
+
+| Main SEE | Razoring | Cold nodes | Cold CPU median (s) | Retained nodes | Retained CPU (s) |
+|---|---|---:|---:|---:|---:|
+| On | Off | 1008871 | 1.72 | 785676 | 1.32 |
+| On | On | 978174 | 1.93 | 729100 | 1.10 |
+| Off | Off | 1099216 | 1.68 | 858115 | 1.42 |
+| Off | On | 1195190 | 1.83 | 852893 | 1.41 |
+
+With main SEE enabled, razoring changed cold/retained nodes by -3.043%/-7.201%
+and CPU by +12.209%/-16.667%. Without main SEE, nodes changed by +8.731%/-0.609%
+and CPU by +8.929%/-0.704%. Cold enabled CPU samples were 1.56/1.93/2.08s versus
+1.72/1.63/2.28s disabled with SEE; identical parent/disabled trees also varied.
+The short, tick-quantized CPU samples and single retained trial establish no
+general speed or playing-strength gain. These interactions remain part of final
+baseline acceptance. No generator-throughput claim, tuning, timed match or
+installation was made.
+
+Direct production depth-six probes with SEE recorded 471 attempts, 418 verified
+fail-lows, 53 rejections and 958 qsearch visits, across remaining depths 1–3.
+Without SEE: 478 attempts, 417 fail-lows, 61 rejections and 1,078 visits. Disabled
+counters were zero. These non-iterative probes increased total nodes with SEE
+(249,375 to 266,579), whereas the iterative depth-eight matrix reduced them;
+search context affects the result. Native tests cover cancellation separately.
+Evidence and source/binary/model/corpus identities are retained privately under
+`.context/baselines/2026-10-20/razoring/`. Next are singular extensions and
+ProbCut; TT feedback and final integration/strength acceptance remain pending.

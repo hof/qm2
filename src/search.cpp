@@ -51,6 +51,7 @@ constexpr U64 search_history_salt = 0xd1b54a32d192ed03ULL;
 constexpr int reverse_futility_margin_per_ply = 100;
 constexpr int null_move_margin = 50;
 constexpr int forward_futility_margin = 300;
+constexpr int razoring_margin_per_ply = 300;
 constexpr int main_see_quiet_margin = 50;
 constexpr int main_see_capture_margin = 100;
 constexpr int quiescence_delta_margin = 200;
@@ -251,6 +252,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     adaptive_lmr_enabled = wild == 0 && options::get_value("AdaptiveLMR");
     lmr_history_enabled = wild == 0 && options::get_value("LMRHistory");
     aspiration_enabled = options::get_value("Aspiration");
+    razoring_enabled = wild == 0 && options::get_value("Razoring");
     main_see_enabled = wild == 0 && options::get_value("MainSEE");
     iir_enabled = wild == 0 && options::get_value("IIR");
     iid_enabled = options::get_value("IID");
@@ -288,6 +290,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
+        razoring_enabled = false;
         main_see_enabled = false;
         iir_enabled = false;
         adaptive_lmr_enabled = lmr_history_enabled = false;
@@ -1643,6 +1646,53 @@ bool search_t::is_improving() const {
     return false;
 }
 
+// A low static score only triggers a tactical verification, never a cutoff by
+// itself. The full main-search frame must survive a rejected same-position probe.
+bool search_t::razor_node(int alpha, int beta, int depth, int eval, int & value) {
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    if (!razoring_enabled || !brd.ply || depth < 1 || depth > 3
+            || alpha + 1 != beta || stack->in_check || stack->metadata.endgame
+            || !brd.has_pieces(brd.us()) || iid_active || stack->excluded_move
+            || verification_mode != verification_mode_t::none
+            || brd.stack->fifty_count >= 99 || std::abs(alpha) >= decisive
+            || std::abs(beta) >= decisive || std::abs(eval) >= decisive
+            || eval >= alpha - razoring_margin_per_ply * depth) {
+        return false;
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    auto & counts = nnue_audit.counters;
+    ++counts.razoring_attempts;
+    counts.min_razoring_depth = counts.min_razoring_depth
+        ? std::min(counts.min_razoring_depth, uint64_t(depth)) : depth;
+    counts.max_razoring_depth = std::max(counts.max_razoring_depth, uint64_t(depth));
+    const U64 nodes_before = nodes;
+#endif
+    {
+        search_frame_scope_t scope(*this);
+        value = qsearch(alpha, beta, 0);
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    counts.razoring_visits += nodes - nodes_before;
+    counts.razoring_cancelled += stop_all;
+#endif
+    if (stop_all) {
+        value = alpha;
+        return false;
+    }
+    if (value <= alpha && std::abs(value) < decisive) {
+        // Parents must not reuse this selective result at the clock-99 boundary.
+        stack->tt_clocks.max = std::min<uint8_t>(stack->tt_clocks.max, 98);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++counts.razoring_cutoffs;
+#endif
+        return true;
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++counts.razoring_rejected;
+#endif
+    return false;
+}
+
 // SEE only models exchanges on one square. Search a legal alternative first,
 // protect tactical/draw boundaries, and allow larger sacrifices at greater depth.
 bool search_t::prune_main_see(move_t & move, int depth, int searched_moves,
@@ -1949,6 +1999,13 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
     stack->improving = is_improving();
+    int razor_score = alpha;
+    if (!pv && !repetition_floor && razor_node(alpha, beta, depth, eval, razor_score)) {
+        return razor_score;
+    }
+    if (stop_all) {
+        return alpha;
+    }
     const int decisive_score = score::TABLEBASE - MAX_PLY;
     const bool do_prune_node = !excluded_move && eval >= beta && !in_check && !pv
         && std::abs(beta) < decisive_score && brd.has_pieces(brd.us())
@@ -2599,6 +2656,9 @@ void search_t::reset_stack() {
     counts.researches = counts.root_researches = counts.research_fail_highs = 0;
     counts.hash_probes = counts.hash_moves = counts.hash_first = 0;
     counts.hash_rejected = counts.hash_score_cutoffs = 0;
+    counts.razoring_attempts = counts.razoring_cutoffs = counts.razoring_rejected = 0;
+    counts.razoring_cancelled = counts.razoring_visits = 0;
+    counts.min_razoring_depth = counts.max_razoring_depth = 0;
     counts.main_see_candidates = counts.main_see_prunes = 0;
     counts.main_see_captures = counts.main_see_quiets = 0;
     counts.min_main_see_depth = counts.max_main_see_depth = 0;
