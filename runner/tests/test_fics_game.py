@@ -148,7 +148,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.1)
         self.assertTrue(task.cancelled())
         self.assertIsNone(player.game)
-        self.assertEqual(player.connection.sent, ["rematch"])
+        self.assertEqual(player.connection.sent, [])
 
     async def test_hung_engine_is_restarted_and_board_refreshed(self):
         player = await self.player("hang", margin=0.3)

@@ -269,7 +269,8 @@ seek_pattern = re.compile(r"\d{1,3} \d{1,3}(?: [a-z0-9+-]+)*")
 rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
 default_settings = {
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
-    "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 2, "games": None,
+    "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
+    "owner": None, "notes": [],
 }
 
 
@@ -285,18 +286,42 @@ def rating_of(text):
 class play_policy:
     """When to seek, accept, rematch, and stop; mirrors JDrone's seek pool and rematch limit."""
 
-    def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=2, games=None, guest=True):
+    def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=0, games=None, guest=True,
+                 owner=None, notes=()):
         self.seeks = list(seeks)
         self.seeks_at_once = seeks_at_once
         self.accept = accept
         self.rematches = rematches
         self.games = games
         self.guest = guest
+        self.owner = owner
+        self.notes = list(notes)
 
     def seek_commands(self):
         """A random draw from the pool; guests can only play unrated."""
         chosen = random.sample(self.seeks, min(self.seeks_at_once, len(self.seeks)))
         return [f"seek {spec}" + (" u" if self.guest and not rated_word.search(spec) else "") for spec in chosen]
+
+
+def machine_description():
+    """CPU model, logical cores, and OS for the finger notes FICS requires of computer accounts."""
+    model = platform.processor()
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8") as stream:
+            model = next((line.split(":", 1)[1].strip() for line in stream if line.startswith("model name")), model)
+    except OSError:
+        pass
+    return f"{model or platform.machine() or 'unknown CPU'}, {os.cpu_count() or 1} threads, {platform.system()}"
+
+
+def finger_notes(engine_name, owner, machine, extra=()):
+    """Notes 1-3: engine, owner, machine (mandatory for FICS computer accounts); then extra lines."""
+    notes = [f"{engine_name or 'UCI engine'}, controlled by the Maxima runner"]
+    if owner:
+        notes.append(f"Owner: {owner}")
+    notes.append(f"Hardware: {machine}")
+    notes.extend(extra)
+    return [" ".join(note.split()) for note in notes[:10]]
 
 
 class engine_player:
@@ -340,6 +365,11 @@ class engine_player:
         self.cancel()
         self.name = name
         self.game = self.history = None
+        if not self.policy.guest:
+            engine_name = self.session.protocol.id.get("name") if self.session is not None else None
+            notes = finger_notes(engine_name, self.policy.owner, machine_description(), self.policy.notes)
+            for number, note in enumerate(notes, 1):
+                await self.send(f"set {number} {note}")
         await self.seek()
 
     async def seek(self):
@@ -573,7 +603,7 @@ def load_settings(path):
     if not isinstance(loaded, dict):
         raise ValueError(f"{path}: expected a JSON object")
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
-             "seeks_at_once": int, "accept": bool, "rematches": int, "games": int}
+             "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": str, "notes": list}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -581,6 +611,8 @@ def load_settings(path):
             raise ValueError(f"{path}: {key} must be {types[key].__name__}")
         if key == "seeks" and not all(isinstance(spec, str) for spec in value):
             raise ValueError(f"{path}: seeks must be strings like '3 0'")
+        if key == "notes" and (len(value) > 7 or not all(isinstance(note, str) for note in value)):
+            raise ValueError(f"{path}: notes must be at most 7 strings (notes 1-3 are generated)")
         settings[key] = value
     settings["options"] = {str(name): str(value) for name, value in (settings["options"] or {}).items()}
     return settings
@@ -597,7 +629,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
-                             "accept, rematches, games); flags override it")
+                             "accept, rematches, games, owner, notes); flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
     parser.add_argument("--handle", help="registered handle (password from FICS_PASSWORD), default guest")
@@ -615,7 +647,7 @@ def main():
     parser.add_argument("--seeks-at-once", type=int, help="seeks posted at a time, drawn from the pool (default: 2)")
     parser.add_argument("--no-seek", action="store_true", help="do not seek; only accept challenges")
     parser.add_argument("--no-accept", action="store_true", help="decline all challenges")
-    parser.add_argument("--rematches", type=int, help="rematches in a row per opponent (default: 2)")
+    parser.add_argument("--rematches", type=int, help="rematches in a row per opponent (default: 0)")
     parser.add_argument("--games", type=int, help="quit after this many games")
     options = parser.parse_args()
     try:
@@ -642,7 +674,8 @@ def main():
         if not seek_pattern.fullmatch(spec):
             parser.error(f"seek spec must look like '3 0' or '5 2 u', got {spec!r}")
     policy = play_policy(configured["seeks"], configured["seeks_at_once"], configured["accept"],
-                         configured["rematches"], configured["games"], guest=options.handle == "guest")
+                         configured["rematches"], configured["games"], guest=options.handle == "guest",
+                         owner=configured["owner"], notes=configured["notes"])
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
     if not valid_handle(options.handle):
         parser.error("FICS handles have 3 to 17 letters, or use guest")

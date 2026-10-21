@@ -47,7 +47,25 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
         self.assertCountEqual(subject.connection.sent[1:], ["seek 3 0 u", "seek 5 2 r", "seek 1 0 unrated"])
         registered = player(seeks=["3 0"], guest=False)
         await registered.on_login("Maxima")
-        self.assertEqual(registered.connection.sent, ["unseek", "seek 3 0"])
+        self.assertEqual(registered.connection.sent[-2:], ["unseek", "seek 3 0"])
+
+    async def test_registered_login_sets_finger_notes(self):
+        subject = player(seeks=["3 0"], guest=False, owner="hof", notes=["Maxima plays unrated tests"])
+        subject.session = type("session", (), {"protocol": type("protocol", (), {"id": {"name": "Maxima 2.1"}})})()
+        await subject.on_login("Maxima")
+        self.assertEqual(subject.connection.sent[:2], ["set 1 Maxima 2.1, controlled by the Maxima runner",
+                                                       "set 2 Owner: hof"])
+        self.assertTrue(subject.connection.sent[2].startswith("set 3 Hardware: "))
+        self.assertEqual(subject.connection.sent[3:], ["set 4 Maxima plays unrated tests", "unseek", "seek 3 0"])
+        guest = player(seeks=["3 0"])
+        await guest.on_login("GuestTEST")
+        self.assertEqual(guest.connection.sent, ["unseek", "seek 3 0 u"])
+
+    async def test_no_rematch_by_default(self):
+        subject = player(seeks=["3 0"])
+        await subject.on_login("GuestTEST")
+        await play_one_game(subject)
+        self.assertEqual(subject.connection.sent, ["unseek", "seek 3 0 u"])
 
     async def test_challenges_are_filtered_by_variant_and_state(self):
         subject = player()
@@ -146,7 +164,7 @@ class settings_tests(unittest.TestCase):
 
     def test_rejects_unknown_keys_and_wrong_types(self):
         for value, message in (({"seek": ["3 0"]}, "unknown"), ({"games": "5"}, "games must be int"),
-                               ({"rematches": True}, "rematches must be int"), ({"seeks": [3]}, "strings"),
+                               ({"rematches": True}, "rematches must be int"), ({"seeks": [3]}, "strings"), ({"notes": ["x"] * 8}, "at most 7"),
                                ([], "JSON object")):
             with self.assertRaisesRegex(ValueError, message):
                 fics.load_settings(self.write(value))

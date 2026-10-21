@@ -1252,20 +1252,28 @@ Play policy, as JDrone's `ics.seeks`/`autoaccept`/`autorematch`, from a JSON fil
 (`--config`) or flags:
 
 ```json
-{"seeks": ["3 0", "3 1", "5 2"], "seeks_at_once": 2, "accept": true, "rematches": 2,
- "games": 20, "handle": "guest", "engine": null, "options": {"Hash": "256"}}
+{"seeks": ["3 0", "3 1", "5 2"], "seeks_at_once": 2, "accept": true, "rematches": 0,
+ "games": 20, "handle": "guest", "engine": null, "options": {"Hash": "256"},
+ "owner": "hof", "notes": ["Unrated test games welcome"]}
 ```
 
 After login and after each game the client posts `seeks_at_once` random seeks
 from the pool (`--seek`, `--seeks-at-once`, `--no-seek`); guests add ` u`.
 Challenges are accepted only for standard lightning, blitz, or standard chess
 with a clock and only when idle (`--no-accept` declines all); a game created
-with a variant is aborted. After a game it offers `rematch` up to `rematches`
-games in a row against the same opponent (`--rematches`). At `Creating:` it
+with a variant is aborted. Rematches are off by default; `rematches` (or
+`--rematches`) offers `rematch` up to that many games in a row per opponent. At `Creating:` it
 fingers the opponent; the first search waits up to two seconds for the reply so
 `UCI_Opponent` carries the rating, title, and computer flag. `--games N` quits
 after N games; `quit` during a game stops seeking and leaves after the game,
 and a second `quit` leaves at once. Unknown settings or wrong types are errors.
+
+FICS computer accounts must keep the owner, machine, and engine in their finger
+notes (`help computers`), and may only play the engine, time controls, and
+variants the computer committee approved. On a registered login the client
+writes note 1 (engine `id name`), note 2 (`owner`), note 3 (CPU, threads, OS),
+then up to seven `notes`. Guest accounts may test engines freely and get no
+notes.
 
 The engine runs in the project root, so its relative `eval.nnue` and `book.bin`
 defaults resolve. Login sets `iset ms 1`, so style12 clocks are milliseconds.
