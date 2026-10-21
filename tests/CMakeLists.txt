@@ -212,3 +212,9 @@ target_link_libraries(test_futility MAX2SRC)
 add_test(NAME test_futility COMMAND test_futility)
 set_tests_properties(test_futility PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
+
+add_executable(test_context_lmr test_context_lmr.cpp)
+target_link_libraries(test_context_lmr MAX2SRC)
+add_test(NAME test_context_lmr COMMAND test_context_lmr)
+set_tests_properties(test_context_lmr PROPERTIES
+    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

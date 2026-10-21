@@ -254,18 +254,44 @@ both TT modes. Royal losers and artificial audit horizons disable both.
 Audit builds expose `audit_quiet_pruning` candidate counts and legal prune counts;
 overlapping prunes are attributed once to LMP. Generator batching is unchanged.
 
-Standard interior LMR now varies the reduction with remaining depth, searched
-legal move count, learned quiet history and node context. Preserve the first
-three searched legal moves and require depth at least three. Never reduce
-captures, promotions, checks, evasions, castling or advanced passed-pawn moves.
-Excluded-move searches retain their no-reduction policy. The root remains full
-depth. The base is `floor(1 + ln(depth) * ln(searched_moves + 1) / 3)`, from an
-immutable table with both indices saturated at 63. Add one for an expected cut
-node and one when not improving; subtract one for a PV node and
-`clamp(learned_score / 8192, -2, 2)`. Clamp the final reduction to `[0, depth - 2]`,
-so every reduced child retains at least one main-search ply. The history accessor
-runs in the parent position and excludes material, SEE and contextual picker
-bonuses. These round constants remain provisional, pending integrated validation.
+Standard LMR varies the reduction with depth, searched legal move count,
+learned history and node context. `ContextLMR` defaults true under the `LMR`
+and `AdaptiveLMR` masters. At depth three and above, preserve the first interior
+move and first two root moves. All move types may receive reduced trials;
+checks, evasions, captures/promotions, castling and advanced passers are no
+longer blanket exclusions. Singular hints remain protected. Verification/IID
+helpers retain their previous eligibility and excluded-move probes never reduce.
+
+The immutable base table is `floor(1 + ln(depth) * ln(searched_moves + 1) / 3)`,
+with indices saturated at 63. Start with one extra ply for an expected cut node
+and one when not improving; subtract one for a current PV node and
+`clamp(learned_score / divisor, -2, 2)`. The divisor is 4096 for tactical moves
+and 8192 for quiets, whose learned score combines several components. Read it
+in the parent position; material, SEE and picker bonuses are excluded.
+Contextual policy adds another cut-node ply, one for a legal tactical TT hint,
+and `min(alpha_raises / 2, 2)`. Subtract one each for persistent/current PV
+provenance, giving check, evading check, a tactical move, a quiet killer or
+countermove, and an advanced quiet passer. Subtract up to two more plies for
+correction uncertainty, `min(abs(corrected_eval - raw_eval) / 100, 2)`.
+Compute correction and validate a tactical hint once per node, outside the move
+loop. Root metadata/correction uses one cached evaluation per iteration when
+eligible and outside check. The final reduction stays in `[0, depth - 2]`;
+check/singular extensions are applied separately. No LMR-created extensions
+or score-dependent shallower verification are used. These round constants are
+provisional policy choices, not measured playing-strength gains.
+
+Persistent PV provenance occupies existing TT-entry padding: entries remain
+40 bytes. Preserve it when retaining a deeper bound; replace it with a replaced
+score, and clear it on eviction. Move-only stores and raw-evaluation attachment
+cannot rewrite it. Only a main-search bound with matching position, repetition
+context and clock domain supplies this heuristic, even when too shallow to
+supply a score cutoff. A qsearch or no-bound entry supplies none. Provenance
+never implies an exact score and does not change TT cutoff conditions.
+
+`ContextLMR=false` restores the preceding adaptive interior policy exactly:
+first three moves, non-dangerous quiets only, no extra context modifiers and
+no root reductions. That same eligibility applies with `AdaptiveLMR=false`,
+which restores fixed-one reductions. Both retain the positive-child-depth clamp.
 
 Every reduced result above alpha is re-searched at the original full child
 depth and original window, including a reduced result already above beta.
@@ -280,10 +306,13 @@ verification/excluded searches, null subtrees, repetition floors and cancelled
 searches. Each continuation component respects its own enabled policy and root/
 null context boundaries.
 
-`AdaptiveLMR` and `LMRHistory` default true and are independent worker snapshots.
-Changing either clears both TT modes. `AdaptiveLMR=false` restores fixed-one
-reductions; `LMRHistory=false` retains ordinary cutoff-only history updates.
-Disabling both restores the previous policy, including retained histories.
+`AdaptiveLMR`, `ContextLMR` and `LMRHistory` default true and are independent
+worker snapshots. Changing any of them clears both TT modes. `AdaptiveLMR=false`
+restores fixed-one interior reductions and disables contextual/root LMR;
+`LMRHistory=false` retains ordinary cutoff-only history updates. Disabling
+`AdaptiveLMR` and `LMRHistory` restores the fixed-one policy, including retained
+histories. Additional verification feedback remains interior-only; root ordering
+keeps its existing PV/subtree-effort policy.
 `LMR=false` disables reductions and their feedback regardless of the new flags.
 Royal-losers retains its current policy. Fixed/aligned diagnostic horizons keep
 the existing fixed-one `NNUEAuditLMR` behavior and disable the new feedback.
@@ -665,7 +694,8 @@ positions in check; checkmate does not become a draw at higher clock counts.
 The transposition table uses 40-byte entries: a full 64-bit position signature,
 a 64-bit search-context fingerprint, packed move/score/depth/age/clock/mode
 metadata, a full 64-bit evaluation-model fingerprint, a signed 16-bit raw
-centipawn evaluation, and alignment padding. Move hints can survive a context mismatch, but score
+centipawn evaluation, a PV-provenance flag in existing padding, and alignment
+padding. Move hints can survive a context mismatch, but score
 cutoffs require compatible context and clock ranges. Standard chess includes
 the ten-halfmove damping bucket in that context, so different counters within
 a bucket can reuse scores, while other buckets retain only move hints. This
@@ -4166,13 +4196,14 @@ Release checks. When using the local toolchain, prefix these commands with
   necessary.
 
 For a small sanity check of pruning/reduction/history changes, build first and run
-the twelve focused tests:
+the thirteen focused tests:
 
 ```bash
-ctest --preset cpp26_debug -R '^(test_futility|test_null_search|test_quiet_pruning|test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
+ctest --preset cpp26_debug -R '^(test_futility|test_null_search|test_quiet_pruning|test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_context_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
 ```
 
-Use the local toolchain prefix above when needed. This subset checks futility material/history/depth boundaries, tactical guards and adaptive null eligibility, reductions and verification, quiet-pruning depth/history thresholds, TT history feedback, razoring verification, SEE pruning, reductions and IIR/IID selection, verification
+Use the local toolchain prefix above when needed. This subset checks futility material/history/depth boundaries, tactical guards and adaptive null eligibility, reductions and verification, quiet-pruning depth/history thresholds, TT history feedback, razoring verification, SEE pruning, contextual root/interior
+LMR eligibility and verification, reductions and IIR/IID selection, verification
 guards, cancellation/restoration, node context and UCI policy cache invalidation. The full preset additionally covers lifecycle, evaluation,
 board rules and other search contracts.
 
@@ -4688,13 +4719,21 @@ contract; real-search coverage remains separate. Independent
 python-chess certificates supply both colors' legal moves, checks, captures,
 promotions, castling and advanced passed pawns. It checks futility margins,
 depth/check/endgame/mate exclusions, first-move retention and gain-based tactical
-pruning; protected tactical improvements must still reach a cutoff. LMR checks
+pruning; protected tactical improvements must still reach a cutoff. Legacy LMR checks
 early and late move depths, dangerous-move exclusions, full-depth verification
 of a refuted reduced improvement, cancellation in either pass and restart/state
 restoration. These isolated guard probes disable node pruning and TT; they do
 not certify selective-search equality, evaluation or real quiescence. Verify
 data with `python tests/data/search/generate_selectivity.py --check`; native
 tests need no python-chess installation.
+
+`test_context_lmr` separately covers the broader policy with the same independent
+legal-move certificates: early/root eligibility, all tactical move types,
+per-type history, confidence/refutation context, full nominal-depth verification
+including false beta cutoffs, both-pass cancellation and board/hash/path/frame/
+clock restoration. It checks persistent TT-PV replacement/domain isolation,
+actual PVS consumption of a tactical hint and correction, worker snapshots,
+royal-losers isolation and fixed/aligned audit exclusions.
 
 `test_nnue_hash_ordering` seeds poisoned exact scores with legal ordering
 hints for both colors. It verifies that deep, shallow, context-
@@ -6729,3 +6768,68 @@ tracked separately; 11 C++ files passed the brace scan. Evidence is under privat
 `baselines/2026-10-21/broader-futility/`. Remaining Phase 1 work is LMR context/
 eligibility and multiple/negative singular extensions with multicut, followed by
 the consolidated integration/reference gate. No timed match, tuning or install ran.
+
+### Contextual reduction eligibility and confidence (2026-10-21)
+
+`ContextLMR` completes the broader LMR policy described in chapter 4: early
+interior and root trials, tactical/evasion/check eligibility, learned per-type
+history, refutations, PV provenance, legal tactical TT hints, correction and
+alpha-raise context. Its independent worker switch clears both TT modes and
+requires `LMR` and `AdaptiveLMR`. False restores the preceding policy exactly.
+Full nominal-depth verification of every reduced alpha improvement remains
+mandatory, including apparent beta cutoffs. No generator or inference kernel
+changed. Persistent PV metadata fits the existing 40-byte TT entry.
+
+Final correctness coverage includes 56 Debug checks (55 initial passes plus the
+corrected new reset fixture passing 1/1), all 56 Release checks, 28 ASan/UBSan
+checks with leak detection disabled, and 30 audit checks. Both lifecycle suites
+passed. The new native test covers 7,740 root/interior verification/cancellation
+cases and every certified tactical category; the independent board oracle
+checked 4,372 positions and 95,734 legal children. The initial new fixture called
+reset at the root rather than after playing a move; fixing that setup required
+no runtime changes. One test indentation correction preserves identical C++
+tokens. Existing compiler warning categories/counts match the parent Release
+build; the new native test compiled without warnings, and sanitizer runs emitted
+no diagnostics. No warnings were suppressed.
+
+The frozen parent and same-binary off/on controls completed 480 legal D8 searches:
+360 deterministic cold searches across three alternating trials, plus 120
+retained-history searches after D6 warmup and a fixed legal two-ply continuation.
+All 192 parent/disabled node/depth/score/best-move/full-PV signatures matched
+exactly, including master-LMR-off and adaptive-LMR-off controls. The same network,
+Hash 64, no book/experience/tablebases, one low-priority CPU and readiness barrier
+were used throughout. Contextual LMR and broader futility were crossed together:
+
+| ContextLMR | BroaderFutility | Cold nodes | Cold CPU median (s) | Retained nodes | Retained CPU (s) |
+|---|---|---:|---:|---:|---:|
+| Off | Off | 395,469 | 0.79 | 268,508 | 0.52 |
+| On | Off | 295,740 | 0.57 | 300,225 | 0.54 |
+| Off | On | 322,804 | 0.66 | 282,311 | 0.49 |
+| On | On | 252,275 | 0.50 | 294,793 | 0.56 |
+
+With default broader futility, enabling the new policy changes cold/retained
+nodes by -21.85%/+4.42%; without it, -25.22%/+11.81%. The components are not
+additive: broader futility reduces retained work with contextual LMR enabled,
+although it increases retained work under the preceding LMR policy. Cold CPU
+medians change -24.24%/-27.85% with broader futility on/off, and single retained
+samples change +14.29%/+3.85%. Short runs, 100-Hz CPU ticks and control drift
+preclude precise/general CPU or per-node throughput claims. Default retained
+parent/off controls measure 0.52/0.49 s; enabled measures 0.56 s. No cause of
+timing drift is established. These are search-allocation measurements, not
+playing-strength or move-quality evidence.
+
+Existing rows concentrate the default retained increase in roots 6/7/5
+(+16,356/+10,240/+10,112 nodes), offset chiefly by roots 2/4 (-21,435/-7,257).
+The net increase is 12,482 nodes. Cold root 3 adds 19,010 nodes and changes
+`g7h5` (-33 cp) to `b2e5` (-38 cp); roots 7/0 save 35,820/22,574 nodes, with
+legal best-move and score changes. These rows do not identify an objectively
+better move or a single causal modifier. No position-specific guard, extra
+diagnostic search or parameter tuning was added.
+
+Actual production D8 searches recorded 22,903 contextual reductions, including
+1,344 at the root, 3,684 early interior moves, 1,842 tactical moves, 730 checks
+and 500 evasions; these subsets overlap. Corresponding disabled/master/adaptive
+off counters were zero. Evidence is under private
+`baselines/2026-10-21/context-lmr/`. Remaining Phase 1 work is multiple/negative
+singular extensions with multicut, followed by the consolidated integration and
+reference gate. No timed strength match or installation ran.

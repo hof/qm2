@@ -59,6 +59,7 @@ private:
         U64 context;
         U64 eval_model;
         int16_t raw_eval;
+        bool pv; // Search provenance, never an exact-score flag; fits existing padding.
     };
     static_assert(sizeof(entry_t) == 40);
 
@@ -125,8 +126,8 @@ public:
     void set_size(int size_in_MB);
 
     // Moves use move_t::to_compact(); score validation retains both full keys.
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101}, tt_mode_t mode = tt_mode_t::main_search);
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search);
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101}, tt_mode_t mode = tt_mode_t::main_search, bool pv = false);
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search, bool * pv = nullptr);
 
     // Static NNUE values have their own model identity, independent of score
     // depth, mode, repetition context and rule-50 clock. No bound is implied.
@@ -144,8 +145,8 @@ public:
 
 namespace trans_table {
     const int TABLE_SIZE = options::get_value("Hash");
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101}, tt_mode_t mode = tt_mode_t::main_search);
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search);
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101}, tt_mode_t mode = tt_mode_t::main_search, bool pv = false);
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search, bool * pv = nullptr);
     bool retrieve_eval(U64 key, U64 model, int & value);
     void store_eval(U64 key, U64 model, int value, int age);
     void clear();

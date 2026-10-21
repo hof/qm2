@@ -58,6 +58,8 @@ struct audit_counters_t {
     uint64_t lmr_candidates = 0, lmr_reductions = 0, lmr_researches = 0;
     uint64_t lmr_refutations = 0, lmr_cutoffs = 0;
     uint64_t lmr_plies = 0, lmr_multiple = 0;
+    uint64_t lmr_context = 0, lmr_root = 0, lmr_early = 0;
+    uint64_t lmr_noisy = 0, lmr_checks = 0, lmr_evasions = 0, lmr_tt_pv = 0;
     uint64_t lmr_history_reads = 0, lmr_history_hits = 0;
     uint64_t lmr_history_less = 0, lmr_history_more = 0;
     uint64_t lmr_history_rewards = 0, lmr_history_penalties = 0;

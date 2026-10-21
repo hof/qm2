@@ -21,6 +21,7 @@ void play(search_t & search, const char * text) {
 
 bool test_reductions() {
     auto search = std::make_unique<search_t>(start);
+    search->context_lmr_enabled = false;
     move_t move;
     move.set(&search->brd, "g1f3");
     bool ok = true;
@@ -82,6 +83,7 @@ public:
     int outcome = 0, cancel_call = 0;
     bool entry_active = false;
     probe_t() : search_t(start) {
+        context_lmr_enabled = false;
         play(*this, "g1f3");
         play(*this, "g8f6");
         play(*this, "b1c3");
@@ -251,6 +253,7 @@ bool test_feedback_guards() {
         for (int enabled : {0, 1}) {
             options::get_option(name)->value = enabled;
             auto search = std::make_unique<search_t>(start);
+            search->context_lmr_enabled = false;
             options::get_option(name)->value = !enabled;
             ok &= (std::string(name) == "AdaptiveLMR" ? search->adaptive_lmr_enabled : search->lmr_history_enabled) == bool(enabled);
         }

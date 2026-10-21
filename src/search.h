@@ -89,6 +89,10 @@ struct search_stack_t {
     uint8_t pv_count;
     int16_t eval_result;
     bool improving;
+    bool tt_pv;
+    bool lmr_tt_tactical;
+    int lmr_correction;
+    int lmr_alpha_raises;
     uint16_t excluded_move;
     search_metadata_t metadata;
     U64 tt_key;
@@ -189,6 +193,7 @@ public:
     bool beta_pruning;
     bool lmr_enabled;
     bool adaptive_lmr_enabled;
+    bool context_lmr_enabled;
     bool lmr_history_enabled;
     bool aspiration_enabled;
     bool probcut_enabled;
@@ -271,7 +276,9 @@ public:
     U64 tt_context() const;
     int extension(move_t * move, int gives_check);
     int reduction(int depth, int searched_moves, bool is_dangerous,
-        const move_t & move, bool pv, bool cut_node);
+        const move_t & move, bool pv, bool cut_node, int gives_check = 0, bool root_node = false);
+    void record_lmr(const move_t & move, int depth, int searched_moves, int reduce,
+        int extend, int gives_check, bool root_node);
     void update_lmr_history(const move_t & move, int depth, int value, int alpha, int beta);
 
     int draw_score() {
@@ -287,7 +294,7 @@ public:
         return move->capture && prev_move->capture && move->tsq == prev_move->tsq;
     }
 
-    bool is_passed_pawn(move_t * move) {
+    bool is_passed_pawn(const move_t * move) {
         if (move->piece != WPAWN && move->piece != BPAWN) {
             return false;
         }
@@ -297,7 +304,7 @@ public:
         return BIT(move->ssq) & stack->metadata.passed_pawns & SIDE[brd.them()];
     }
     
-    bool is_advanced_passed_pawn(move_t * move) {
+    bool is_advanced_passed_pawn(const move_t * move) {
         if (move->piece == WPAWN && move->tsq >= a6 && is_passed_pawn(move)) {
             return true;
         } else if (move->piece == BPAWN && move->tsq <= h3 && is_passed_pawn(move)) {

@@ -63,7 +63,7 @@ int trans_table_t::unmake_score(int score, int ply) {
     return score;
 }
 
-void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int flags, U64 context, clock_range_t clocks, tt_mode_t mode) {
+void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int flags, U64 context, clock_range_t clocks, tt_mode_t mode, bool pv) {
     assert(depth > 0);
     entry_t * best_entry = nullptr;
     entry_t * empty_entry = nullptr;
@@ -98,6 +98,7 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
                 || flags == score::EXACT || !same_domain || mode != stored_mode
                 || age != decode_age(entry.value) || depth >= stored_depth);
             if (replace_score) {
+                entry.pv = pv && mode == tt_mode_t::main_search;
                 entry.context = context;
                 entry.value = value;
             } else {
@@ -121,6 +122,7 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
     if (!flags && decode_flag(best_entry->value)) {
         return;
     }
+    best_entry->pv = pv && mode == tt_mode_t::main_search;
     best_entry->raw_eval = score::INVALID;
     best_entry->eval_model = 0;
     best_entry->context = context;
@@ -128,9 +130,12 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
     best_entry->key = value ^ key;
 }
 
-bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode) {
+bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode, bool * pv) {
     assert(depth >= 0);
     move = 0;
+    if (pv) {
+        *pv = false;
+    }
     if (enabled) {
         int ix = index(key);
         int bix = ix;
@@ -145,8 +150,12 @@ bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & mov
                 const clock_range_t stored_clocks = decode_clocks(entry.value);
                 const auto stored_mode = decode_mode(entry.value);
                 const bool compatible_mode = stored_mode == mode;
-                const bool usable = compatible_mode && entry_depth >= depth && entry.context == context
+                const bool same_domain = compatible_mode && entry.context == context
                     && stored_clocks.contains(clock);
+                if (pv) {
+                    *pv = same_domain && flags && mode == tt_mode_t::main_search && entry.pv;
+                }
+                const bool usable = same_domain && entry_depth >= depth;
                 if (usable && clocks) {
                     *clocks = stored_clocks;
                 }
@@ -200,12 +209,12 @@ namespace trans_table {
 
     trans_table_t _global_table(TABLE_SIZE);
 
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context, clock_range_t clocks, tt_mode_t mode) {
-        _global_table.store(key, age, ply, depth, score, move, flag, context, clocks, mode);
+    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context, clock_range_t clocks, tt_mode_t mode, bool pv) {
+        _global_table.store(key, age, ply, depth, score, move, flag, context, clocks, mode, pv);
     }
 
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode) {
-        return _global_table.retrieve(key, ply, depth, score, move, flags, context, clock, clocks, mode);
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode, bool * pv) {
+        return _global_table.retrieve(key, ply, depth, score, move, flags, context, clock, clocks, mode, pv);
     }
 
     bool retrieve_eval(U64 key, U64 model, int & value) {
