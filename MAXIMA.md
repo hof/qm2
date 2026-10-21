@@ -2638,9 +2638,9 @@ networks. Use `C:\\dev\\maxima\\syzygy` for `SyzygyPath`, with
 
 The separate development launcher `C:\dev\uci-engines\maxima-new.exe` (also
 available at `C:\dev\maxima\maxima-new.exe`) runs `engine/maxima-new` from the
-same bundle. The 2026-10-20 package was refreshed to engine revision `1188c90`,
-including the completed ordering/history, adaptive reductions, main-search SEE,
-razoring and singular-extension increments.
+same bundle. The 2026-10-21 package was refreshed to engine revision `7fee1d1`,
+including ProbCut, TT history feedback, depth/context-aware quiet pruning, raw
+static-evaluation TT caching, richer correction history and adaptive null move.
 It shares the existing model and chess data; the original standard and frozen HCE
 launchers retain their existing backends. See `README-new.txt` in the bundle.
 The remaining baseline features and playing-strength acceptance are still pending.
