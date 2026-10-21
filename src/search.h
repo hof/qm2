@@ -185,6 +185,7 @@ public:
     bool null_verify;
     bool null_enabled;
     bool adaptive_null_enabled;
+    bool broader_futility_enabled;
     bool beta_pruning;
     bool lmr_enabled;
     bool adaptive_lmr_enabled;
@@ -220,6 +221,9 @@ public:
     int aspiration(int depth, int last_score);
     bool probcut(int alpha, int beta, int depth, int eval, bool cut_node, int & value);
     bool razor_node(int alpha, int beta, int depth, int eval, int & value);
+    bool reverse_futility(int beta, int depth, int eval, int & value);
+    bool prune_futility(move_t & move, int reduced_depth, int searched_moves,
+        int best, int alpha, int beta, int gives_check, int eval);
     bool prune_quiet(move_t & move, int depth, int searched_moves, int reduced_depth,
         int best, int alpha, int beta, bool dangerous);
     bool prune_main_see(move_t & move, int depth, int searched_moves,

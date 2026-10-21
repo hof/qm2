@@ -30,6 +30,7 @@ public:
     bool entry_active = false;
 
     explicit selective_search_t(const char * fen) : search_t(fen) {
+        broader_futility_enabled = false;
         beta_pruning = null_enabled = false;
         adaptive_lmr_enabled = lmr_history_enabled = false;
         tablebase_limit = draw_contempt = 0;

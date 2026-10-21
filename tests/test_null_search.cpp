@@ -425,7 +425,8 @@ bool test_adaptive_policy() {
     move_t king_move;
     king_move.set(&confirmation->brd, "h8g8");
     confirmation->forward(&king_move, false);
-    confirmation->run(-1001, -1000, 6, true);
+    // Enter above the broader static-cutoff range so this fixture reaches NMP.
+    confirmation->run(-1001, -1000, 9, true);
     ok &= check(confirmation->verification_calls == 1 && confirmation->verified_moves > 0,
         "adaptive verification must search legal moves instead of reverse futility");
     // Disabled/null/helper/root/PV/clock/decisive/check/depth exclusions.

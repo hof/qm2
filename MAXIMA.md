@@ -291,27 +291,40 @@ See [CPW Late Move Reductions](https://chessprogramming.org/Late_Move_Reductions
 and [History Heuristic](https://chessprogramming.org/History_Heuristic) for
 mechanisms and limitations; reductions remain selective search, not score bounds.
 
-Standard NNUE reverse futility retains the baseline established during the HCE
-comparison, on the 100-cp pawn scale. At depths one through three it requires
-`eval - 100 * depth >= beta` and returns `eval`. The default adaptive null-move
-policy below supersedes the fixed reduction and 50-cp cushion; disabling
-`AdaptiveNullMove` restores that older null policy exactly. These heuristic
-constants remain provisional. Existing legal-terminal, non-PV, check,
-non-pawn-material, clock and decisive-score guards remain active. Earlier
-112/40 experiments below are historical controls, not measurements of the
-current policy. Confirm playing strength separately before tuning.
+`BroaderFutility` is a default-on, standard-search policy switch under the
+existing `BetaPruning` and `FutilityPruning` controls. Workers snapshot it;
+changing it stops search and clears both TT modes. False preserves the old
+reverse-futility depth1..3 `eval-100*depth>=beta`/return-eval policy and quiet
+frontier `eval+300<=alpha` rule, including its material-defined endgame exclusion.
+Royal-losers and fixed/aligned diagnostic horizons keep their existing policy.
 
-Forward futility now uses a conservative frontier-only baseline. At a non-PV
-node with exactly one ply remaining, an ordinary quiet move may be skipped
-when `eval + 300 <= alpha`, after at least one legal move has been searched
-and its score is outside the decisive-loss range. Never prune captures,
-promotions, checks, castling or advanced passed-pawn moves with this rule.
-Checked nodes, the existing material-defined endgame regime and decisive
-alpha/beta windows are excluded. It replaces `40 * depth` through depth eight
-and its capture/promotion gain filter. The round three-pawn allowance is a
-conservative starting value, not a tuned NNUE optimum. Static evaluation does
-not provide a proven upper bound on positional improvement; this remains an
-empirically tested selective heuristic.
+Broader reverse futility covers interior non-PV depths1..8. Its margin is
+`max(25,100*depth-100*improving_without_lower_value_threat+abs(correction)/2)`;
+correction here is the difference between corrected and raw clock-scaled static
+evaluation. The threat test uses opponent pawn/minor/rook pseudo-attacks on more
+valuable own pieces, using the same threat model as quiet ordering. A validated
+legal quiet TT hint vetoes this static cutoff. Return `beta+(eval-beta)/3`,
+without substituting a TT score for static evaluation. Checked nodes, decisive
+scores, missing own nonpawn material, IID, verification/excluded searches,
+repetition contexts and clock99 are excluded. Verify legal play before cutting;
+stalemate is a draw. Pruned bounds propagate a maximum compatible clock of98.
+Current PV exclusion does not represent historical TT-PV status.
+
+Broader move futility uses the existing estimated reduced parent depth. Ordinary
+quiet moves require reduced depth<6 and
+`eval+100*(1+reduced_depth)+learned_history/64<=alpha`. Nonchecking captures
+require reduced depth<8 and
+`eval+200*(1+reduced_depth)+victim_value+capture_history/64<=alpha`;
+en passant includes its off-target victim. Require a searched legal alternative
+with a nondecisive-loss score, ordinary non-PV interior search, own nonpawn
+material and nondecisive alpha/beta. Protect promotions, checks/evasions,
+castles, advanced passed-pawn quiet moves, IID/verification/excluded/repetition
+contexts and clock99. Check each candidate's legality; preserve later tactical quiets
+rather than disabling a picker stage. Retain the actual searched best score.
+These provisional margins are selective heuristics, not proven bounds on neural
+evaluation or measured strength gains. See
+[CPW futility](https://chessprogramming.org/Futility_Pruning) and
+[reverse futility](https://chessprogramming.org/Reverse_Futility_Pruning).
 
 Quiescence delta pruning uses the simple captured-piece gain plus a 200-cp
 allowance: skip a nonchecking capture when `eval + captured_value + 200 <= alpha`.
@@ -4153,13 +4166,13 @@ Release checks. When using the local toolchain, prefix these commands with
   necessary.
 
 For a small sanity check of pruning/reduction/history changes, build first and run
-the eleven focused tests:
+the twelve focused tests:
 
 ```bash
-ctest --preset cpp26_debug -R '^(test_null_search|test_quiet_pruning|test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
+ctest --preset cpp26_debug -R '^(test_futility|test_null_search|test_quiet_pruning|test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
 ```
 
-Use the local toolchain prefix above when needed. This subset checks adaptive null eligibility, reductions and verification, quiet-pruning depth/history thresholds, TT history feedback, razoring verification, SEE pruning, reductions and IIR/IID selection, verification
+Use the local toolchain prefix above when needed. This subset checks futility material/history/depth boundaries, tactical guards and adaptive null eligibility, reductions and verification, quiet-pruning depth/history thresholds, TT history feedback, razoring verification, SEE pruning, reductions and IIR/IID selection, verification
 guards, cancellation/restoration, node context and UCI policy cache invalidation. The full preset additionally covers lifecycle, evaluation,
 board rules and other search contracts.
 
@@ -4857,19 +4870,6 @@ and verify/reuse completed files when rerun. The download command is part of
 the Python 3.8+ runner and uses only the standard library; see chapter 6.1.
 Running the compiled engine requires no Python.
 
-### 7.2 Engine and UCI configuration
-
-After a Release build, `./maxima` starts the engine (falls back to the Debug build
-if Release is absent). Enable local tables with UCI commands:
-
-```text
-setoption name SyzygyPath value /absolute/path/to/tablebases/syzygy
-setoption name SyzygyProbeLimit value 5
-setoption name SyzygyProbeDepth value 1
-isready
-```
-
-The path can contain several directories separated by `:` on Linux. An empty
 ### 7.1.1 FICS client download
 
 Maxima plays on ICS servers through the separate icsdrone-rs client
@@ -4898,6 +4898,19 @@ neither `Wild` nor `UCI_Opponent`. A registered account therefore needs a FICS
 account with computer status; guest testing is unrated. The v2.2.17 Linux build
 warns about a missing weak `GLIBC_2.39` symbol on glibc 2.35 but runs.
 
+### 7.2 Engine and UCI configuration
+
+After a Release build, `./maxima` starts the engine (falls back to the Debug build
+if Release is absent). Enable local tables with UCI commands:
+
+```text
+setoption name SyzygyPath value /absolute/path/to/tablebases/syzygy
+setoption name SyzygyProbeLimit value 5
+setoption name SyzygyProbeDepth value 1
+isready
+```
+
+The path can contain several directories separated by `:` on Linux. An empty
 path (`<empty>`) or a probe limit of 0 disables tablebase use. The initial engine
 integration supports up to five pieces; six/seven-piece downloads are available
 for later work. Missing tables fall back to normal search, and changing the path
@@ -6675,3 +6688,72 @@ branch is not claimed active in the D8 matrix. Evidence is under the private
 `baselines/2026-10-21/adaptive-null/` directory. Playing strength remains unmeasured;
 broader futility and the other selective policies remain before baseline completion.
 No timed match, parameter tuning or installation ran.
+
+
+### Broader futility validation (2026-10-21)
+
+The default policy described in chapter 4 is implemented and correctness-validated;
+playing strength remains unmeasured. Debug covered all 55 checks: the initial
+full run passed 54/55 in 221.82 s, then the corrected legacy leaf fixture and
+expanded futility test passed 2/2 in 15.19 s. Release passed 55/55 in 110.87 s,
+including both lifecycle suites. Selected ASan/UBSan passed 25/25 in 438.24 s
+(leak detection disabled). Instrumented coverage is 27 checks: initial 26/27
+in 51.28 s, then the corrected audit-only cutoff-recorder test 1/1 in 1.07 s.
+The independent board oracle passed 4,372 positions and 95,734 legal children
+in 35.035 s. Runtime stayed frozen through validation. The fixture changes retain
+legacy direct-root return-eval assertions and separately test the new interior
+damped cutoff, legal king/rook certificates and recorded FEN/window/evaluation.
+GCC 16 reports array-bound diagnostics in virtual-search test harnesses, including
+the new harness; the same pattern exists in five parent harness files. Sanitized
+checks passed without diagnostics; no compiler warning suppression was added.
+
+The comparison completed 432 legal D8 searches over 12 reserved roots: 324 cold
+searches across three alternating trials and 108 retained searches after D6
+warmup and a fixed legal two-ply continuation. All 96 disabled/parent node,
+depth, score, best-move and full-PV signatures matched exactly. Cold search
+signatures repeat deterministically. Settings include one low-priority worker,
+Hash 64, the same pinned model, contempt 0 and book/experience/tablebases off.
+Readiness barriers finish option/model configuration before measured search CPU.
+
+| MainSEE | Policy | Cold nodes | Cold CPU median (s) | Retained nodes | Retained CPU (s) |
+|---|---|---:|---:|---:|---:|
+| On | Parent | 395,469 | 0.84 | 268,508 | 0.58 |
+| On | Broader disabled | 395,469 | 1.00 | 268,508 | 0.52 |
+| On | Broader enabled | 322,804 | 0.65 | 282,311 | 0.54 |
+| Off | Parent | 368,009 | 0.76 | 298,667 | 0.57 |
+| Off | Broader disabled | 368,009 | 0.78 | 298,667 | 0.69 |
+| Off | Broader enabled | 372,621 | 1.57 | 310,867 | 0.89 |
+
+With MainSEE enabled, broader versus disabled changes cold/retained nodes
+by -18.37%/+5.14%; without MainSEE, by +1.25%/+4.08%. Neither/reverse-only/
+move-only/both controls with MainSEE on use cold nodes 510,144/354,219/458,987/
+322,804 and retained nodes 422,474/282,069/370,499/282,311. These controls disable
+both futility master rules for neither, then enable each broader rule separately;
+they demonstrate interaction, not additive gains over the legacy policy.
+
+CPU timing is variable: default parent cold trials are 1.70/0.83/0.84 s,
+disabled 2.05/0.81/1.00 s and enabled 2.04/0.65/0.65 s despite deterministic trees.
+The default retained controls differ 0.58/0.52 s, while enabled is 0.54 s.
+Short samples, 100-Hz CPU ticks, trial drift and one retained trial preclude
+precise/general CPU or per-node-throughput claims. Median component timings
+must not be treated as additive mechanism efficiency. No cause of timing drift
+is established, and smaller trees alone do not establish stronger play.
+
+Existing rows explain the default retained increase: root 4 adds 21,885 nodes
+(c6b4, -35 -> c8d7, -41), root 2 adds 14,247 (same b1c1, +8 -> +6), offset by
+root 7 saving 13,095 and root 0 saving 10,749; the net increase is 13,803. Cold
+root 10 adds 7,681 (b2b1q, +51 -> b2b1r, +49) and root 0 adds 5,504; root 7 saves
+25,062, root 5 saves 18,998 and root 3 saves 12,349, with net savings 72,665.
+These legal score/PV changes are search-allocation observations, not move-quality
+labels. No position-specific guard, extra diagnostic search or tuning was added.
+
+Direct production D8 probes after D6 warmup and same-model history transfer
+recorded 16,922 reverse-futility cutoffs, including 204 beyond depth 3, and 21,424
+move-futility prunes, including 100 captures and 12,281 at reduced depth > 1.
+These subsets overlap. Corresponding master-disabled counters were zero;
+legacy controls had no new deep/capture activity. All 13 final runtime/test/build
+hashes match the recorded validation sources, with fixture-only corrections
+tracked separately; 11 C++ files passed the brace scan. Evidence is under private
+`baselines/2026-10-21/broader-futility/`. Remaining Phase 1 work is LMR context/
+eligibility and multiple/negative singular extensions with multicut, followed by
+the consolidated integration/reference gate. No timed match, tuning or install ran.

@@ -58,6 +58,35 @@ constexpr int main_see_capture_margin = 100;
 constexpr int quiescence_delta_margin = 200;
 constexpr int delta_endgame_material = 1300;
 
+// Pseudo-attacks by cheaper pieces make a static surplus less trustworthy.
+// This is the same parent-position threat model used for quiet ordering.
+bool lower_value_threat(board_t & board) {
+    const bool us = board.us();
+    const U64 queens = board.bb[QUEEN[us]];
+    const U64 rooks = board.bb[ROOK[us]];
+    const U64 minors = board.bb[KNIGHT[us]] | board.bb[BISHOP[us]];
+    U64 attacks = board.pawn_attacks(!us);
+    if (attacks & (queens | rooks | minors)) {
+        return true;
+    }
+    U64 pieces = board.bb[KNIGHT[!us]];
+    while (pieces) {
+        attacks |= KNIGHT_MOVES[pop(pieces)];
+    }
+    pieces = board.bb[BISHOP[!us]];
+    while (pieces) {
+        attacks |= magic::bishop_moves(pop(pieces), board.all());
+    }
+    if (attacks & (queens | rooks)) {
+        return true;
+    }
+    pieces = board.bb[ROOK[!us]];
+    while (pieces) {
+        attacks |= magic::rook_moves(pop(pieces), board.all());
+    }
+    return attacks & queens;
+}
+
 U64 mix_context(U64 key) {
     key = (key ^ (key >> 30)) * 0xbf58476d1ce4e5b9ULL;
     key = (key ^ (key >> 27)) * 0x94d049bb133111ebULL;
@@ -265,6 +294,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     _experience_depth = options::get_value("ExperienceDepth");
     _experience = experience::snapshot();
     _book_seeded = false;
+    broader_futility_enabled = wild == 0 && options::get_value("BroaderFutility");
     beta_pruning = options::get_value("BetaPruning");
     null_verify = options::get_value("NullVerify");
     null_enabled = options::get_value("NullMove");
@@ -328,6 +358,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         iir_enabled = false;
         adaptive_lmr_enabled = lmr_history_enabled = false;
         adaptive_null_enabled = false;
+        broader_futility_enabled = false;
         tt_eval_enabled = false;
         correction_history_enabled = false;
         upcoming_repetition_enabled = false;
@@ -2006,9 +2037,86 @@ bool search_t::razor_node(int alpha, int beta, int depth, int eval, int & value)
     return false;
 }
 
+// Static evaluation supplies a selective fail-high premise, not a legal pass.
+bool search_t::reverse_futility(int beta, int depth, int eval, int & value) {
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    if (!broader_futility_enabled || !beta_pruning || depth < 1 || depth >= 9
+            || !brd.ply || stack->in_check || stop_all || iid_active
+            || verification_mode != verification_mode_t::none || stack->excluded_move
+            || stack->repetition_start > 0 || brd.stack->fifty_count >= 99
+            || !brd.has_pieces(brd.us()) || std::abs(beta) >= decisive
+            || std::abs(eval) >= decisive || eval < beta) {
+        return false;
+    }
+    // A quiet refutation deserves a search. Never trust an unvalidated hash
+    // hint as tactical evidence or use its bound as a static evaluation.
+    auto & hint = stack->tt_move;
+    const bool legal_hint = hint.piece && brd.valid(&hint) && brd.legal(&hint);
+    if (legal_hint && !hint.capture && !hint.promotion) {
+        return false;
+    }
+    // Correction magnitude expresses uncertainty in the raw evaluator. A
+    // threatened valuable piece must not strengthen the improving discount.
+    const int correction = std::abs(eval - int(stack->eval_result));
+    const int margin = std::max(25, 100 * depth
+        - 100 * int(stack->improving && !lower_value_threat(brd)) + correction / 2);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.beta_candidates;
+#endif
+    if (eval - margin < beta) {
+        return false;
+    }
+    // A null-like static premise is invalid in stalemate. Keep its clock
+    // restriction even when this node's result is propagated to a TT parent.
+    stack->tt_clocks.max = std::min(int(stack->tt_clocks.max), 98);
+    value = has_legal_move(brd) ? beta + (eval - beta) / 3 : draw_score();
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.beta_cutoffs;
+    nnue_audit.counters.beta_deep += depth > 3;
+    nnue::audit_beta_cutoff(*this, beta - 1, beta, depth, eval);
+#endif
+    return true;
+}
+
+bool search_t::prune_futility(move_t & move, int reduced_depth, int searched_moves,
+        int best, int alpha, int beta, int gives_check, int eval) {
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    if (!broader_futility_enabled || !ffp_enabled || !brd.ply || !searched_moves
+            || alpha + 1 != beta || stack->in_check || gives_check || stop_all
+            || iid_active || verification_mode != verification_mode_t::none
+            || stack->excluded_move || stack->repetition_start > 0
+            || brd.stack->fifty_count >= 99 || !brd.has_pieces(brd.us())
+            || best <= -decisive || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
+            || move.promotion || move.castle || is_advanced_passed_pawn(&move)) {
+        return false;
+    }
+    const bool capture = move.capture;
+    reduced_depth = std::max(0, reduced_depth);
+    if (reduced_depth >= (capture ? 8 : 6)) {
+        return false;
+    }
+    // Use parent-position learned history, never picker stage/material bonuses.
+    // Captures need a separate material allowance, including the EP victim.
+    const int margin = (capture ? 200 : 100) * (1 + reduced_depth)
+        + move_history_score(move) / 64 + (capture ? brd.max_gain(&move) : 0);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.ffp_candidates;
+#endif
+    if (eval + margin > alpha || !brd.legal(&move)) {
+        return false;
+    }
+    stack->tt_clocks.max = std::min(int(stack->tt_clocks.max), 98);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.ffp_prunes;
+    nnue_audit.counters.ffp_captures += capture;
+    nnue_audit.counters.ffp_deep += reduced_depth > 1;
+#endif
+    ++pruned_nodes;
+    return true;
+}
+
+// Inspect each quiet separately: later quiet checks must remain searchable.
 // A searched legal alternative protects terminals and losing/mating lines.
-// Inspect each quiet separately: picker bonuses do not order learned history,
-// and later quiet checks must remain searchable after ordinary quiet pruning.
 bool search_t::prune_quiet(move_t & move, int depth, int searched_moves,
         int reduced_depth, int best, int alpha, int beta, bool dangerous) {
     const int decisive = score::TABLEBASE - MAX_PLY;
@@ -2440,6 +2548,10 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         return alpha;
     }
     const int decisive_score = score::TABLEBASE - MAX_PLY;
+    int futility_score = beta;
+    if (!pv && !repetition_floor && reverse_futility(beta, depth, eval, futility_score)) {
+        return futility_score;
+    }
     const bool do_prune_node = !excluded_move && eval >= beta && !in_check && !pv
         && std::abs(beta) < decisive_score && brd.has_pieces(brd.us())
         && brd.stack->fifty_count < 99;
@@ -2458,10 +2570,10 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     // reusing the same static premise through reverse futility.
     const bool verification_pruning = !adaptive_null_enabled
         || verification_mode != verification_mode_t::null_move;
-    const bool beta_cutoff = depth < 4 && beta_pruning && verification_pruning
+    const bool beta_cutoff = !broader_futility_enabled && depth < 4 && beta_pruning && verification_pruning
         && eval - beta_margin >= beta;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    if (do_prune_node && depth < 4 && beta_pruning) {
+    if (!broader_futility_enabled && do_prune_node && depth < 4 && beta_pruning) {
         ++nnue_audit.counters.beta_candidates;
     }
 #endif
@@ -2597,7 +2709,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 
     // Frontier-only quiet-move futility. The positional allowance is a
     // heuristic, not a proven bound on the neural evaluation.
-    const bool can_ffp = !excluded_move && ffp_enabled && depth == 1 && !pv && !in_check
+    const bool can_ffp = !broader_futility_enabled && !excluded_move && ffp_enabled && depth == 1 && !pv && !in_check
         && std::abs(alpha) < decisive_score && std::abs(beta) < decisive_score
         && !stack->metadata.endgame;
 
@@ -2635,6 +2747,11 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             : reduction(depth, searched_moves, is_dangerous, *move, pv, cut_node);
         if (!pv && !repetition_floor && !singular && prune_quiet(*move, depth, searched_moves,
                 depth - reduce, best, alpha, beta, is_dangerous)) {
+            continue;
+        }
+
+        if (!pv && !repetition_floor && !singular && prune_futility(*move,
+                depth - reduce, searched_moves, best, alpha, beta, gives_check, eval)) {
             continue;
         }
 

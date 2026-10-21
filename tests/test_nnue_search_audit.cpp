@@ -37,7 +37,8 @@ int main(int argc, char ** argv) {
         return failure(__LINE__);
     }
     search.init(fen, nullptr);
-    // Verify that the recorder captures a genuine eligible beta cutoff.
+    // Pin the recorder's legacy direct-root return-eval contract.
+    search.broader_futility_enabled = false;
     trans_table::clear();
     search.nnue_audit.record_cutoffs = true;
     const int lower = expected - 201, upper = expected - 200;
@@ -48,6 +49,29 @@ int main(int argc, char ** argv) {
         }
         const auto & event = search.nnue_audit.beta_cutoffs.front();
         if (event.fen != fen || event.alpha != lower || event.beta != upper || event.eval != expected) {
+            return failure(__LINE__);
+        }
+    }
+    // A real irreversible predecessor gives the broader interior cutoff a
+    // replayable clock-zero event, without relying on an injected evaluation.
+    {
+        trans_table::clear();
+        auto entry = std::make_unique<search_t>(fen);
+        move_t pawn{};
+        pawn.set(&entry->brd, "e2e4");
+        entry->forward(&pawn, false);
+        const auto position = entry->brd.to_string();
+        const int eval = evaluate(entry.get());
+        const int beta = eval - 1000;
+        entry->nnue_audit.record_cutoffs = true;
+        const int value = entry->pvs(beta - 1, beta, 4);
+        if (value != beta + (eval - beta) / 3 || entry->nnue_audit.beta_cutoffs.size() != 1
+                || entry->nnue_audit.counters.beta_deep != 1
+                || entry->brd.to_string() != position || entry->brd.ply != 1) {
+            return failure(__LINE__);
+        }
+        const auto & event = entry->nnue_audit.beta_cutoffs.front();
+        if (event.fen != position || event.alpha != beta - 1 || event.beta != beta || event.eval != eval) {
             return failure(__LINE__);
         }
     }
@@ -234,7 +258,7 @@ int main(int argc, char ** argv) {
     options::get_option("NNUEAuditHorizon")->value = 2;
     search.init(fen, nullptr);
     if (!search.evaluation_network || !search.nnue_audit.aligned_quiescence
-            || search.beta_pruning || search.ffp_enabled || search.null_enabled || search.adaptive_null_enabled || search.lmr_enabled
+            || search.broader_futility_enabled || search.beta_pruning || search.ffp_enabled || search.null_enabled || search.adaptive_null_enabled || search.lmr_enabled
             || search.iid_enabled || search.nnue_audit.q_delta || search.nnue_audit.q_see
             || search.extension(&search.root.moves[0].move, 2)) {
         return failure(__LINE__);

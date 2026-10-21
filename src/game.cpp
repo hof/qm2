@@ -39,6 +39,7 @@ namespace options {
         { "AdaptiveLMR", BOOL, 1, "type check default true", true },
         { "LMRHistory", BOOL, 1, "type check default true", true },
         { "FutilityPruning", BOOL, 1, "type check default true", true },
+        { "BroaderFutility", BOOL, 1, "type check default true", true },
         { "NullVerify", BOOL, 1, "type check default true", true },
         { "Wild", STRING, 0, "type combo default standard var standard var losers", true },
         { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100", true },

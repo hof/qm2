@@ -226,3 +226,17 @@ moves are undone even if verification throws. Successful verification stores a
 lower bound only at its actual child depth plus one. Its parent cutoff does not
 update ordinary move histories. See `MAXIMA.md` for the adaptive threshold/depth
 policy, worker switch, clocks and validation scope.
+
+`BroaderFutility=true` adds reduced-depth move futility after picking, under
+`FutilityPruning`. Quiet margins use the parent-position learned history;
+captures add victim value (including en passant) and capture history. Neither
+uses picker stage/material bonuses as learned history. Decisions apply to each
+legal candidate after a completed legal alternative, preserving later quiet
+checks, promotions, castling and advanced passed-pawn quiet moves. Skipped moves
+do not enter searched-move history updates or advance the legal-search ordinal. The picker and deferred generation
+remain unchanged. Before picking, the broader reverse-futility policy under
+`BetaPruning` vetoes a validated legal quiet TT hint and checks legal play before
+cutting; its temporary terminal probe does not consume the active picker.
+Workers snapshot the policy and option changes clear TT scores. False restores
+the previous futility rules; variant and fixed/aligned audit policies remain
+unchanged. See `MAXIMA.md` for guards, margins and measured limits.

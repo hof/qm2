@@ -151,7 +151,7 @@ class search_lifecycle_tests(unittest.TestCase):
 
     def test_search_option_changes_stop_active_search(self):
         for name in ("Aspiration", "IID", "IIR", "MainSEE", "Razoring", "SingularExtensions", "ProbCut", "TTHistory", "TTEval", "LMP", "HistoryPruning", "QsearchTT", "NullMove", "AdaptiveNullMove", "NullVerify",
-                     "BetaPruning", "FutilityPruning", "LMR", "MainHistory",
+                     "BetaPruning", "FutilityPruning", "BroaderFutility", "LMR", "MainHistory",
                      "ContinuationHistory", "PawnHistory", "Countermoves", "Killers",
                      "UpcomingRepetition", "CheckEvasions", "CaptureHistory", "LongContinuationHistory", "ThreatOrdering", "CheckOrdering", "CorrectionHistory", "PieceCorrection", "ContinuationCorrection", "AdaptiveLMR", "LMRHistory"):
             with self.subTest(option=name), running_engine() as engine:
