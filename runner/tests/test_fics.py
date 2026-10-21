@@ -96,7 +96,7 @@ class fake_server:
 
         try:
             if self.timeseal:
-                assert (await read_line()).startswith("TIMESTAMP|maxima|"), "missing timeseal hello"
+                assert (await read_line()).startswith("TIMESTAMP|MaxDrone|"), "missing timeseal hello"
                 received.clear()
             await self.script(len(self.connections), writer, read_line)
         except (ConnectionError, asyncio.TimeoutError):

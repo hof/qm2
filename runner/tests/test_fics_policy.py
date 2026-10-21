@@ -56,7 +56,7 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
                                          "options": {"Threads": types.SimpleNamespace(default=1)}})
         subject.session = types.SimpleNamespace(protocol=protocol)
         await subject.on_login("Maxima")
-        self.assertEqual(subject.connection.sent[:2], ["set 1 Maxima 2.1 on Maxima runner",
+        self.assertEqual(subject.connection.sent[:2], ["set 1 Maxima 2.1 on MaxDrone",
                                                        "set 2 Owner: hof and hajewiet"])
         self.assertRegex(subject.connection.sent[2], r"^set 3 Hardware: .+, 1 thread, Hash 256 MB, \w+$")
         self.assertEqual(subject.connection.sent[3:], ["set 4 Maxima plays unrated tests", "unseek", "seek 3 0"])

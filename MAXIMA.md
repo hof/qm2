@@ -1233,7 +1233,7 @@ terminals and respects `NO_COLOR`: the crown is gold, separators cyan, and title
 bold. Native UCI streams remain free of banners and styling. Detailed examples
 for every data command remain a planned documentation improvement.
 
-### 10.2 FICS client
+### 10.2 FICS client (MaxDrone)
 
 `maxima fics` connects to freechess.org:5000, logs in, keeps the session
 alive, seeks, and plays its games with the Release Maxima build. PGN capture is
@@ -1271,7 +1271,7 @@ and a second `quit` leaves at once. Unknown settings or wrong types are errors.
 FICS computer accounts must keep the owner, machine, and engine in their finger
 notes (`help computers`), and may only play the engine, time controls, and
 variants the computer committee approved. On a registered login the client
-writes note 1 (`<engine id name> on Maxima runner`), note 2 (`owner`, a handle
+writes note 1 (`<engine name and version> on MaxDrone`), note 2 (`owner`, a handle
 or a list), note 3 (CPU model with the engine's `Threads` and `Hash`, and the
 OS), then up to seven `notes`. Guest accounts may test engines freely and get no
 notes.

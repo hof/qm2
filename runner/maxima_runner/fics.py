@@ -23,8 +23,8 @@ timeseal_key = b"Timestamp (FICS) v1.0 - programmed by Henrik Gram."
 timeseal_ping = b"[G]\x00"
 timeseal_pong = "\x029"
 # FICS only decodes timeseal input after this hello line.
-client_name = "Maxima runner"
-timeseal_hello = f"TIMESTAMP|maxima|{platform.system() or 'unknown'}|"
+client_name = "MaxDrone"
+timeseal_hello = f"TIMESTAMP|{client_name}|{platform.system() or 'unknown'}|"
 iac, will, wont, do, dont = 255, 251, 252, 253, 254
 prompt = "fics% "
 login_settings = (
