@@ -108,7 +108,9 @@ shared between running workers. Per-entry gravity provides aging; no full-table
 per-search clearing or scaling is added. Strength remains unmeasured.
 
 The empty-tactical qsearch path returns the same fail-low bound as a loop
-that rejects all illegal candidates. Exact mate/stalemate scores take priority.
+that rejects all illegal candidates. Both retain the static score below alpha
+when legal quiet play exists, following the global fail-soft qsearch contract.
+Exact mate/stalemate scores take priority.
 A regression and before/after-legality paired searches cover this contract.
 
 Validation on 2026-10-19: 37 Debug and 37 Release checks, three focused
@@ -214,3 +216,13 @@ exactly. With IIR enabled, cold/retained nodes increased 3.80%/4.20%; without
 it, 3.81%/4.41%. This allocates extra search to nominated moves; mixed CPU
 results and tree sizes do not establish playing strength. See MAXIMA.md for
 activation counts, protocol and timing limitations.
+
+ProbCut uses a separate tactical list before initializing the ordinary main
+picker. It calls the unchanged capture/promotion generators, orders by learned
+capture history and material with a TT-hint priority, and tests SEE and legality
+before making each candidate. It generates neither quiet moves nor castles.
+The caller frame and active picker survive rejected or cancelled probes; made
+moves are undone even if verification throws. Successful verification stores a
+lower bound only at its actual child depth plus one. Its parent cutoff does not
+update ordinary move histories. See `MAXIMA.md` for the adaptive threshold/depth
+policy, worker switch, clocks and validation scope.

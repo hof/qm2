@@ -441,10 +441,15 @@ tablebase handling and propagates clock constraints. Completed beta cutoffs
 store lower bounds, other nonterminal completions store upper bounds, and
 certified mate/stalemate results may be exact. Interrupted searches store no
 unfinished result. Qsearch clears stale PV/best-move state before probing.
+Standard qsearch returns fail-soft scores: a completed fail-low retains its best
+searched score or optimistic pruning bound below alpha, including for empty
+playable tactical lists. Keep alpha separate for move-selection windows and
+preserve any established repetition draw floor. This provides useful upper TT
+bounds and the score magnitude needed by adaptive tactical verification.
 
 Search-policy options carry their TT invalidation rule beside their declaration.
 Changing `NullMove`, `NullVerify`, `BetaPruning`, `FutilityPruning`, `LMR`,
-`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `Razoring`, `SingularExtensions`, `QsearchTT`, draw contempt,
+`AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `Razoring`, `SingularExtensions`, `ProbCut`, `QsearchTT`, draw contempt,
 variant or tablebase probing policy stops and joins the worker before clearing both main and quiescence TT
 results and move hints. History controls and audit search policies follow the
 same rule. Invalid values and unchanged numeric/checkbox policies preserve the
@@ -6119,3 +6124,113 @@ attempts were at depth seven, one overlapped a check extension, and disabled
 counts were zero. Native probes cover cancellation separately. Full evidence
 is under `.context/baselines/2026-10-20/singular/`. ProbCut, TT feedback and
 integrated baseline acceptance remain pending.
+
+### Fail-soft quiescence and tactical ProbCut
+
+`ProbCut` is a default-on standard-search checkbox. At a nonroot, non-PV,
+nonchecked node with at least five remaining plies, try legal captures and
+promotions that pass a static-exchange threshold. Reuse the ordinary tactical
+generators and learned capture ordering in a separate list, prioritizing the TT
+hint. No quiet or castling batch is generated for this probe. En passant and
+underpromotions retain their normal legality and SEE rules.
+
+The raised beta is `beta + 250 - 50 * improving`. A compatible main TT upper or
+exact bound below it at depth `depth - 3` suppresses the attempt; a low lower
+bound cannot refute a higher score. A preliminary child qsearch must reach the
+raised beta before main verification. Qsearch returns fail-soft scores
+throughout standard search, tracking its best score separately from alpha so a
+completed fail-low retains useful information. Delta-pruned captures contribute
+the optimistic material bound used by that test; repetition draw floors remain
+in force. Empty tactical lists and illegal-only candidates return the static
+score when legal quiet play exists, while mate/stalemate precedence is preserved.
+Base child depth is
+`clamp(depth - 3 - (eval - beta) / 300, 0, depth - 1)`. A large qsearch result
+can reduce this by up to three more plies, increasing the verification threshold
+by 200 per extra reduction. If reduced main verification fails, retry at the
+base depth and original raised beta. Zero child depth uses the completed qsearch
+screen alone. These pawn-100 constants are provisional, not fitted confidence
+bounds or a playing-strength claim. See [ProbCut](https://chessprogramming.org/ProbCut)
+for the statistical motivation and its empirical limitations.
+
+A successful ordinary score stores a lower bound at the actual verified child
+depth plus one, then removes the raised margin from the score returned to the
+caller. It never stores the requested full-depth bound. Decisive scores fall
+through to ordinary search. Preserve draw/tablebase/full-depth-TT precedence,
+original PV status, upcoming-repetition floors, clock-99 boundaries, stack room,
+IID and verification exclusions. Making a real legal tactical move prevents a
+stalemate cutoff. The complete caller frame survives rejection, cancellation
+or an exception; made moves are undone before frame restoration. Captures and
+pawn moves reset the clock; successful selective results restrict compatible
+parent clocks through 98. The parent cutoff does not train ordinary histories;
+normal main-search descendants retain their existing learning rules.
+
+Workers snapshot the switch; a changed policy stops the worker and clears both
+TT modes. Royal losers and fixed/aligned diagnostic horizons disable ProbCut.
+Audit builds report attempts, legal SEE-qualified candidates, qsearch passes,
+main verifications, adaptive reductions/retries, q-only screens, cutoffs,
+cancellations, visits, TT vetoes and attempted depths in `audit_probcut`. Search-cost and correctness validation
+remain separate from paired playing-strength acceptance.
+
+Fail-soft/ProbCut validation (2026-10-21) passed 51 Debug checks (183.21s), 51 Release checks (102.51s),
+19 selected ASan/UBSan checks (74.44s, leak detection
+disabled), and 21 audit checks (26.04s). Both lifecycle
+suites passed in both ordinary builds. The independent oracle covered 4,372
+positions and 95,734 legal children. Native tests cover both colors, cold
+fail-soft qsearch and real adaptive activation without q-TT seeds, screen/main
+thresholds, adaptive retries and q-only cases, compatible cache bounds/depths/
+contexts/clocks/modes, cancellation/exception restoration, en passant, promotions,
+pinned captures and worker/policy isolation. Frozen code/test hashes stayed
+unchanged through validation; all eight changed C++ files passed the brace scan.
+
+The controlled comparison used 12 reserved roots and three configurations:
+the frozen parent with clamped qsearch, global fail-soft with ProbCut disabled,
+and global fail-soft with ProbCut enabled. Each also ran with null move enabled
+and disabled. Three alternating cold D8 trials plus one retained-history trial
+(D6 warmup, fixed legal two-ply continuation, D8) produced 288 legal completed
+searches. Cold signatures repeated deterministically. Parent/foundation equality
+was not expected because the global qsearch contract intentionally changed.
+One low-priority CPU, UCI readiness barriers and process CPU timing were used.
+
+| Null move | Qsearch / ProbCut | Cold nodes | Cold CPU median (s) | Retained nodes | Retained CPU (s) |
+|---|---|---:|---:|---:|---:|
+| On | Clamped / absent | 1,015,349 | 1.540 | 759,724 | 1.090 |
+| On | Fail-soft / off | 1,087,558 | 1.750 | 773,775 | 1.110 |
+| On | Fail-soft / on | 1,104,878 | 1.760 | 784,709 | 1.160 |
+| Off | Clamped / absent | 1,296,343 | 1.970 | 993,644 | 1.510 |
+| Off | Fail-soft / off | 1,388,570 | 2.130 | 880,353 | 1.280 |
+| Off | Fail-soft / on | 1,274,734 | 2.000 | 850,172 | 1.260 |
+
+ProbCut relative to the same-binary fail-soft control:
+With null move on, cold/retained nodes changed +1.59%/+1.41%,
+and CPU changed +0.57%/+4.50%.
+With null move off, cold/retained nodes changed -8.20%/-3.43%,
+and CPU changed -6.10%/-1.56%.
+
+Global fail-soft relative to the clamped parent:
+With null move on, cold/retained nodes changed +7.11%/+1.85%,
+and CPU changed +13.64%/+1.83%.
+With null move off, cold/retained nodes changed +7.11%/-11.40%,
+and CPU changed +8.12%/-15.23%.
+
+The cold foundation cost with null move was concentrated in one changed
+search tree: reserved root 7 added 129,787 nodes, exceeding the net increase
+of 72,209 over all 12 roots; its score and PV also changed. Other positions
+both gained and lost work. This accounts for the aggregate tree-cost increase
+without identifying an isolated per-node throughput or playing-strength effect.
+
+Short variable CPU samples, clock-tick precision and one retained trial limit
+timing conclusions. These tree/cost results establish no playing-strength gain
+or regression. No timed match, parameter tuning or installation was run.
+
+Direct production D8 probes after real D6 warmup confirmed ProbCut activation:
+With null move disabled, 655 attempts tried 214 legal SEE candidates,
+with 167 cutoffs, 93 main verifications, 55 adaptive reductions
+and 76 q-only screens; attempts spanned depths 5–7.
+With null move enabled, 482 attempts tried 129 legal SEE candidates,
+with 98 cutoffs, 70 main verifications, 34 adaptive reductions
+and 28 q-only screens; attempts spanned depths 5–7.
+Disabled counters were zero. Native regressions cover adaptive retry and
+cancellation independently. Evidence is under
+`.context/baselines/2026-10-20/probcut/`. TT history feedback is next;
+the remaining search-baseline groups and integrated strength acceptance remain
+unfinished. This increment does not complete the baseline.

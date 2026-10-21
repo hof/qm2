@@ -178,6 +178,7 @@ public:
     bool adaptive_lmr_enabled;
     bool lmr_history_enabled;
     bool aspiration_enabled;
+    bool probcut_enabled;
     bool singular_extensions_enabled;
     bool razoring_enabled;
     bool main_see_enabled;
@@ -205,6 +206,7 @@ public:
     void book_calc();
     void iterative_deepening();
     int aspiration(int depth, int last_score);
+    bool probcut(int alpha, int beta, int depth, int eval, bool cut_node, int & value);
     bool razor_node(int alpha, int beta, int depth, int eval, int & value);
     bool prune_main_see(move_t & move, int depth, int searched_moves,
         int best, int alpha, int beta, int gives_check);

@@ -182,3 +182,9 @@ target_link_libraries(test_singular_extensions MAX2SRC)
 add_test(NAME test_singular_extensions COMMAND test_singular_extensions)
 set_tests_properties(test_singular_extensions PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
+
+add_executable(test_probcut test_probcut.cpp)
+target_link_libraries(test_probcut MAX2SRC)
+add_test(NAME test_probcut COMMAND test_probcut)
+set_tests_properties(test_probcut PROPERTIES
+    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

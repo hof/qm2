@@ -407,10 +407,11 @@ bool test_empty_tactical_bounds() {
             "k3r3/8/8/8/8/8/4P3/4K3 w - - 0 1"}) {
         auto search = std::make_unique<search_t>(fen);
         prepare_search(*search);
-        const int alpha = evaluate(search.get()) + 50;
+        const int expected = evaluate(search.get());
+        const int alpha = expected + 50;
         const int actual = search->qsearch(alpha, alpha + 100, -1);
-        if (actual != alpha || !restored_position(*search, fen)) {
-            std::cerr << "empty tactical fail-low bound: expected " << alpha
+        if (actual != expected || !restored_position(*search, fen)) {
+            std::cerr << "empty tactical fail-low bound: expected " << expected
                 << ", got " << actual << ": " << fen << '\n';
             return false;
         }

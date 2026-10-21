@@ -28,6 +28,11 @@ struct audit_counters_t {
     uint64_t q_repetition_hits = 0, q_repetition_cutoffs = 0;
     uint64_t researches = 0, root_researches = 0, research_fail_highs = 0;
     uint64_t hash_probes = 0, hash_moves = 0, hash_first = 0, hash_rejected = 0, hash_score_cutoffs = 0;
+    uint64_t probcut_attempts = 0, probcut_candidates = 0, probcut_q_passes = 0;
+    uint64_t probcut_adaptive = 0, probcut_q_only = 0;
+    uint64_t probcut_searches = 0, probcut_researches = 0, probcut_cutoffs = 0;
+    uint64_t probcut_cancelled = 0, probcut_visits = 0, probcut_tt_vetoes = 0;
+    uint64_t min_probcut_depth = 0, max_probcut_depth = 0;
     uint64_t singular_attempts = 0, singular_extensions = 0, singular_rejected = 0;
     uint64_t singular_cancelled = 0, singular_visits = 0, singular_check_overlap = 0;
     uint64_t min_singular_depth = 0, max_singular_depth = 0;

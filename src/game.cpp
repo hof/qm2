@@ -52,6 +52,7 @@ namespace options {
         { "IID", BOOL, 1, "type check default true", true },
         { "IIR", BOOL, 1, "type check default true", true },
         { "Razoring", BOOL, 1, "type check default true", true },
+        { "ProbCut", BOOL, 1, "type check default true", true },
         { "SingularExtensions", BOOL, 1, "type check default true", true },
         { "MainSEE", BOOL, 1, "type check default true", true },
         { "QsearchTT", BOOL, 1, "type check default true", true },

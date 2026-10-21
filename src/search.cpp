@@ -252,6 +252,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     adaptive_lmr_enabled = wild == 0 && options::get_value("AdaptiveLMR");
     lmr_history_enabled = wild == 0 && options::get_value("LMRHistory");
     aspiration_enabled = options::get_value("Aspiration");
+    probcut_enabled = wild == 0 && options::get_value("ProbCut");
     singular_extensions_enabled = wild == 0 && options::get_value("SingularExtensions");
     razoring_enabled = wild == 0 && options::get_value("Razoring");
     main_see_enabled = wild == 0 && options::get_value("MainSEE");
@@ -291,6 +292,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
+        probcut_enabled = false;
         singular_extensions_enabled = false;
         razoring_enabled = false;
         main_see_enabled = false;
@@ -573,6 +575,19 @@ void search_t::go() {
             + " cutoffs " + std::to_string(counts.repetition_cutoffs)
             + " q_hits " + std::to_string(counts.q_repetition_hits)
             + " q_cutoffs " + std::to_string(counts.q_repetition_cutoffs));
+        uci::out("info string audit_probcut attempts " + std::to_string(counts.probcut_attempts)
+            + " candidates " + std::to_string(counts.probcut_candidates)
+            + " q_passes " + std::to_string(counts.probcut_q_passes)
+            + " adaptive " + std::to_string(counts.probcut_adaptive)
+            + " q_only " + std::to_string(counts.probcut_q_only)
+            + " searches " + std::to_string(counts.probcut_searches)
+            + " researches " + std::to_string(counts.probcut_researches)
+            + " cutoffs " + std::to_string(counts.probcut_cutoffs)
+            + " cancelled " + std::to_string(counts.probcut_cancelled)
+            + " visits " + std::to_string(counts.probcut_visits)
+            + " tt_vetoes " + std::to_string(counts.probcut_tt_vetoes)
+            + " min_depth " + std::to_string(counts.min_probcut_depth)
+            + " max_depth " + std::to_string(counts.max_probcut_depth));
         uci::out("info string audit_singular attempts " + std::to_string(counts.singular_attempts)
             + " extensions " + std::to_string(counts.singular_extensions)
             + " rejected " + std::to_string(counts.singular_rejected)
@@ -1656,6 +1671,127 @@ bool search_t::is_improving() const {
     return false;
 }
 
+// A tactical move that survives qsearch and a reduced main search can justify
+// a selective fail-high. Neither test is a proof at the requested main depth.
+bool search_t::probcut(int alpha, int beta, int depth, int eval, bool cut_node, int & value) {
+    constexpr int margin = 250, improving_margin = 50;
+    constexpr int eval_divisor = 300, adaptive_offset = 100, adaptive_divisor = 200;
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    const int threshold = beta + margin - improving_margin * int(stack->improving);
+    if (!probcut_enabled || !brd.ply || depth < 5 || alpha + 1 != beta
+            || stack->in_check || iid_active || stack->excluded_move
+            || verification_mode != verification_mode_t::none
+            || brd.ply >= MAX_PLY - 2 || brd.stack->fifty_count >= 99
+            || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
+            || std::abs(eval) >= decisive || threshold >= decisive) {
+        return false;
+    }
+    int cached = 0, hint = 0, bound = 0;
+    clock_range_t clocks;
+    const U64 key = brd.stack->tt_key, context = tt_context();
+    // Only a compatible upper/exact bound can refute the raised threshold.
+    // A low lower bound says nothing about whether a better result exists.
+    if (trans_table::retrieve(key, brd.ply, depth - 3, cached, hint, bound,
+            context, brd.stack->fifty_count, &clocks)
+            && (bound == score::UPPERBOUND || bound == score::EXACT) && cached < threshold) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++nnue_audit.counters.probcut_tt_vetoes;
+#endif
+        return false;
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    auto & counts = nnue_audit.counters;
+    ++counts.probcut_attempts;
+    counts.min_probcut_depth = counts.min_probcut_depth
+        ? std::min(counts.min_probcut_depth, uint64_t(depth)) : depth;
+    counts.max_probcut_depth = std::max(counts.max_probcut_depth, uint64_t(depth));
+#endif
+    search_frame_scope_t frame(*this);
+    move::list_t candidates;
+    move::gen_captures(&brd, &candidates);
+    move::gen_promotions(&brd, &candidates);
+    for (auto * move = candidates.first; move != candidates.last; ++move) {
+        move->score = 16 * brd.mvvlva(move) + move_history_score(*move)
+            + (move->to_compact() == hint ? 1000000 : 0);
+    }
+    const int base_depth = std::clamp(depth - 3 - (eval - beta) / eval_divisor, 0, depth - 1);
+    const int see_threshold = (threshold - eval) * 3 / 4;
+    while (candidates.first != candidates.last) {
+        auto * best = std::max_element(candidates.first, candidates.last,
+            [](const move_t & a, const move_t & b) { return a.score < b.score; });
+        move_t move = *best;
+        *best = *--candidates.last;
+        if (!brd.see(&move, see_threshold) || !brd.legal(&move)) {
+            continue;
+        }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        ++counts.probcut_candidates;
+        const auto before = nodes;
+#endif
+        int result, searched_depth = base_depth, search_beta = threshold;
+        {
+            // Undo even if a child throws; frame restoration alone cannot undo
+            // a made move. The qsearch screen and main search share this child.
+            forward(&move, brd.gives_check(&move));
+            struct undo_t {
+                search_t & search;
+                move_t & move;
+                ~undo_t() { search.backward(&move); }
+            } undo{*this, move};
+            result = -qsearch(-threshold, -threshold + 1, 0);
+            if (!stop_all && result >= threshold && std::abs(result) < decisive) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                ++counts.probcut_q_passes;
+#endif
+                searched_depth = std::max(0, base_depth
+                    - std::clamp((result - threshold - adaptive_offset) / adaptive_divisor, 0, 3));
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                counts.probcut_adaptive += searched_depth < base_depth;
+                counts.probcut_q_only += searched_depth == 0;
+#endif
+                // Shallower verification requires a correspondingly higher bar.
+                search_beta = std::min(threshold + (base_depth - searched_depth) * adaptive_divisor,
+                    decisive - 1);
+                if (searched_depth > 0) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                    ++counts.probcut_searches;
+#endif
+                    result = -pvs(-search_beta, -search_beta + 1, searched_depth, !cut_node);
+                    if (!stop_all && result < search_beta && search_beta > threshold) {
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                        ++counts.probcut_researches;
+#endif
+                        searched_depth = base_depth;
+                        search_beta = threshold;
+                        result = -pvs(-threshold, -threshold + 1, searched_depth, !cut_node);
+                    }
+                }
+            }
+        }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        counts.probcut_visits += nodes - before;
+        counts.probcut_cancelled += stop_all;
+#endif
+        if (stop_all) {
+            value = alpha;
+            return false;
+        }
+        if (result >= search_beta && std::abs(result) < decisive) {
+            stack->tt_clocks.max = std::min<uint8_t>(stack->tt_clocks.max, 98);
+            // Cache only the depth actually verified, before removing the margin
+            // for the caller. Never label a ProbCut result as a full-depth bound.
+            trans_table::store(key, brd.root_ply, brd.ply, searched_depth + 1,
+                result, move.to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
+            value = result - (search_beta - beta);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+            ++counts.probcut_cutoffs;
+#endif
+            return true;
+        }
+    }
+    return false;
+}
+
 // A low static score only triggers a tactical verification, never a cutoff by
 // itself. The full main-search frame must survive a rejected same-position probe.
 bool search_t::razor_node(int alpha, int beta, int depth, int eval, int & value) {
@@ -2156,6 +2292,14 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         return alpha;
     }
 
+    int probcut_score = alpha;
+    if (!pv && !repetition_floor && probcut(alpha, beta, depth, eval, cut_node, probcut_score)) {
+        return probcut_score;
+    }
+    if (stop_all) {
+        return alpha;
+    }
+
     /*
      * Moves loop
      */
@@ -2526,7 +2670,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         // Match the normal fail-low path even when the picker is empty.
         // Merely having an illegal tactical candidate must not change the bound.
         return !has_legal_move(brd) ? finish(draw_score(), score::EXACT)
-            : finish(std::max(alpha, eval), score::UPPERBOUND);
+            : finish(repetition_floor ? std::max(eval, draw_score()) : eval, score::UPPERBOUND);
     }
     if (eval > alpha && !in_check) {
         alpha = eval;
@@ -2536,6 +2680,13 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      * Moves loop
      */
 
+    // Keep the best searched score independently of the window: a fail-low
+    // still carries a useful upper bound below alpha. A legal repetition
+    // escape remains a floor even when the static score is lower.
+    int best_score = in_check ? -score::INF : eval;
+    if (repetition_floor) {
+        best_score = std::max(best_score, draw_score());
+    }
     int searched_moves = 0;
     const bool is_eg = !in_check && stack->metadata.endgame;
     do {
@@ -2634,6 +2785,12 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             pruned = delta_prune || see_prune;
             if (pruned) {
                 pruned_nodes++;
+                // Retain the same optimistic material bound used by delta
+                // pruning, rather than replacing it with the window's alpha.
+                if (delta_prune && brd.legal(move)) {
+                    best_score = std::max(best_score,
+                        eval + board::PVAL[move->capture] + quiescence_delta_margin);
+                }
                 continue;
             }
         }
@@ -2663,7 +2820,9 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
         if (stop_all) {
             return alpha;
-        } else if (score > alpha) {
+        }
+        best_score = std::max(best_score, score);
+        if (score > alpha) {
             stack->best_move.set(move);
             if (score >= beta) {
                 return finish(score, score::LOWERBOUND);
@@ -2674,7 +2833,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     if (searched_moves == 0 && (in_check || !has_legal_move(brd))) {
         return finish(in_check ? -score::MATE + brd.ply : draw_score(), score::EXACT);
     }
-    return finish(alpha, score::UPPERBOUND);
+    return finish(best_score, score::UPPERBOUND);
 }
 
 /**
@@ -2736,6 +2895,11 @@ void search_t::reset_stack() {
     counts.researches = counts.root_researches = counts.research_fail_highs = 0;
     counts.hash_probes = counts.hash_moves = counts.hash_first = 0;
     counts.hash_rejected = counts.hash_score_cutoffs = 0;
+    counts.probcut_adaptive = counts.probcut_q_only = 0;
+    counts.probcut_attempts = counts.probcut_candidates = counts.probcut_q_passes = 0;
+    counts.probcut_searches = counts.probcut_researches = counts.probcut_cutoffs = 0;
+    counts.probcut_cancelled = counts.probcut_visits = counts.probcut_tt_vetoes = 0;
+    counts.min_probcut_depth = counts.max_probcut_depth = 0;
     counts.razoring_attempts = counts.razoring_cutoffs = counts.razoring_rejected = 0;
     counts.razoring_cancelled = counts.razoring_visits = 0;
     counts.min_razoring_depth = counts.max_razoring_depth = 0;
