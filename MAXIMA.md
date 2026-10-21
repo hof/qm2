@@ -291,18 +291,15 @@ See [CPW Late Move Reductions](https://chessprogramming.org/Late_Move_Reductions
 and [History Heuristic](https://chessprogramming.org/History_Heuristic) for
 mechanisms and limitations; reductions remain selective search, not score bounds.
 
-Standard NNUE search retains the simple pruning baseline established during
-the HCE comparison, expressed on the 100-cp pawn scale. Reverse futility is limited to depths
-one through three: require `eval - 100 * depth >= beta` and return `eval` on
-success. Null move requires `eval >= beta + 50`, a zero-window search and a
-fixed extra reduction of three (`depth - 1 - 3`). These round margins replace
-the earlier 50-cp-per-ply reverse-futility margin and zero null-move cushion.
-They have no improving/history/evaluator-specific adjustments; the constants
-are starting values, not claimed tuned optima. Existing legal-terminal,
-non-PV, check, non-pawn-material, clock and decisive-score guards remain active.
-Evaluation functions and other pruning features are unchanged. Earlier 112/40
-experiments below remain historical controls, not measured results for this
-new combined 100/50 policy. Confirm strength at equal nodes/time before tuning.
+Standard NNUE reverse futility retains the baseline established during the HCE
+comparison, on the 100-cp pawn scale. At depths one through three it requires
+`eval - 100 * depth >= beta` and returns `eval`. The default adaptive null-move
+policy below supersedes the fixed reduction and 50-cp cushion; disabling
+`AdaptiveNullMove` restores that older null policy exactly. These heuristic
+constants remain provisional. Existing legal-terminal, non-PV, check,
+non-pawn-material, clock and decisive-score guards remain active. Earlier
+112/40 experiments below are historical controls, not measurements of the
+current policy. Confirm playing strength separately before tuning.
 
 Forward futility now uses a conservative frontier-only baseline. At a non-PV
 node with exactly one ply remaining, an ordinary quiet move may be skipped
@@ -356,7 +353,7 @@ change. Certificate tests compare both interfaces at equality boundaries,
 extreme integer thresholds and a broad range of ordinary thresholds.
 
 Standard null-move pruning excludes consecutive artificial passes and runs
-endgame verification with null pruning disabled throughout its subtree. The
+endgame and deep-node verification with null pruning disabled throughout its subtree. The
 setting and board/history state are restored before handling cancellation;
 an interrupted verification cannot authorize a cutoff. Node pruning excludes
 mate/tablebase score windows, and artificial null lines cannot supply reserved
@@ -474,7 +471,7 @@ preserve any established repetition draw floor. This provides useful upper TT
 bounds and the score magnitude needed by adaptive tactical verification.
 
 Search-policy options carry their TT invalidation rule beside their declaration.
-Changing `NullMove`, `NullVerify`, `BetaPruning`, `FutilityPruning`, `LMR`,
+Changing `NullMove`, `AdaptiveNullMove`, `NullVerify`, `BetaPruning`, `FutilityPruning`, `LMR`,
 `AdaptiveLMR`, `LMRHistory`, `Aspiration`, `IID`, `IIR`, `MainSEE`, `Razoring`, `SingularExtensions`, `ProbCut`, `TTHistory`, `TTEval`, `QsearchTT`, draw contempt,
 variant or tablebase probing policy stops and joins the worker before clearing both main and quiescence TT
 results and move hints. History controls and audit search policies follow the
@@ -4156,13 +4153,13 @@ Release checks. When using the local toolchain, prefix these commands with
   necessary.
 
 For a small sanity check of pruning/reduction/history changes, build first and run
-the ten focused tests:
+the eleven focused tests:
 
 ```bash
-ctest --preset cpp26_debug -R '^(test_quiet_pruning|test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
+ctest --preset cpp26_debug -R '^(test_null_search|test_quiet_pruning|test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
 ```
 
-Use the local toolchain prefix above when needed. This subset checks quiet-pruning depth/history thresholds, TT history feedback, razoring verification, SEE pruning, reductions and IIR/IID selection, verification
+Use the local toolchain prefix above when needed. This subset checks adaptive null eligibility, reductions and verification, quiet-pruning depth/history thresholds, TT history feedback, razoring verification, SEE pruning, reductions and IIR/IID selection, verification
 guards, cancellation/restoration, node context and UCI policy cache invalidation. The full preset additionally covers lifecycle, evaluation,
 board rules and other search contracts.
 
@@ -4631,10 +4628,14 @@ in both directions, all TT bound types, unchanged/rejected-setting reuse, and
 draw-contempt context changes. Lifecycle tests compare completed warm and cold
 UCI search scores after king-attack option changes and verify that changing either
 weight safely stops an active search before another search begins.
-`test_null_search` instruments artificial passes and endgame verification,
+`test_null_search` instruments artificial passes, adaptive eligibility/reduction,
+legal tactical hints, and endgame/general deep verification,
 including consecutive-null exclusion, verification subtree exclusion, failed
 verification, cancellation, reserved scores, pawn-endgame bounds, and state
-restoration. Reserved-score tests inject search results through the virtual
+restoration. Adaptive confirmation also proves a legal child is searched with
+reverse futility enabled in the caller. Worker snapshots and royal-losers/audit
+isolation are covered alongside UCI cache invalidation and lifecycle checks.
+Reserved-score tests inject search results through the virtual
 PVS boundary and require no tablebase files.
 
 `test_search_ceiling` checks both colors' mate/stalemate and playable checked
@@ -6547,3 +6548,102 @@ Disabled components and the master-off control recorded zero corresponding
 updates. Private evidence is under `baselines/2026-10-21/richer-correction/`.
 This completes the second search-baseline implementation group. Selective-policy
 completion and final baseline integration remain before Phase 2 or strength tests.
+
+
+### Adaptive null-move pruning (2026-10-21)
+
+`AdaptiveNullMove` is a default-on standard-search checkbox under `NullMove`.
+At an interior expected non-PV cutoff node with depth at least three, require
+corrected static evaluation at least beta and
+`eval + 132 * improving >= beta + 8 * depth`. A real previous move is required;
+root, IID, verification, excluded-move and repetition-floor contexts do not
+attempt the adaptive policy. Check, pawn-only material, decisive windows,
+clock 99 and legal terminal guards remain. Reverse futility still runs first.
+
+The total reduction, including the artificial pass, is
+`4 + depth / 3 + clamp((eval - beta) / 174, 0, 4) + tactical_hint`.
+Search the opponent at `max(0, depth - reduction)` with window
+`[-beta, -beta + 1]` and opposite cut-node context. A capture or promotion TT
+hint contributes one extra ply only after pseudo-legal and legal validation;
+quiet, malformed and pinned hints contribute none. This uses no TT score as a
+static evaluation and changes no move generation. The constants are provisional.
+
+With `NullVerify`, ordinary null fail-highs require same-position verification
+at depth 12 or more, including middlegames. Existing endgame confirmation still
+starts at depth six. Verification depth is at least one and at least the null
+child depth; endgames also retain their previous `depth - 6` floor. Thus even a
+null probe reduced to qsearch receives real-move confirmation when verification
+is required. Reverse futility is disabled in adaptive null-verification subtrees
+to prevent the same static premise from confirming itself. Failed confirmation falls through to legal search at the original
+depth. Scoped verification disables null pruning throughout the helper subtree,
+isolates normal TT bounds and history learning, restores the caller frame and
+merges clock constraints. Cancellation authorizes no cutoff. Artificial decisive
+scores remain inadmissible; these safeguards are heuristic, not zugzwang proofs.
+
+Each worker snapshots the switch. Changing it stops/joins the worker and clears
+both TT modes. Disabling it restores the prior fixed reduction, 50-cp cushion
+and endgame-only verification, while `NullMove=false` disables both policies and
+`NullVerify=false` disables confirmation. Royal losers and fixed/aligned audit
+horizons retain their existing policies. Audit counters distinguish adaptive
+attempts, reductions, null-probe work, confirmations, rejections, cancellation,
+verification work/depth and attempt-depth range.
+
+
+Validation covered all 54 Debug checks: 53 passed in the full run (286.06 s),
+and the sole corrected boundary fixture passed its focused rerun (7.10 s), with
+engine source unchanged. All 54 Release checks passed (132.79 s), including
+both lifecycle suites in each configuration. The 22 focused ASan/UBSan checks
+passed (128.58 s, leak detection disabled), as did 24 instrumented checks
+(24.02 s) and the independent oracle's 4,372 positions / 95,734 legal children
+(42.944 s). The boundary fixture now exercises legacy null at parent depth two
+and adaptive null at parent depth four, retaining identical losing-bound and
+clock-range rejection assertions; its old depth-one child cannot activate the
+new policy. Native coverage includes reduction bounds and surplus monotonicity,
+legal/pinned/malformed capture and promotion hints, improving/depth thresholds,
+ordinary/reserved fail-highs, confirmation/refutation, cancellation, real-move
+verification, state restoration, worker snapshots and variant/audit isolation.
+All ten final source/test hashes stayed frozen; nine C++ files passed the brace scan.
+
+The parent/disabled/adaptive matrix with `NullVerify` enabled and disabled
+completed 288 legal D8 searches over 12 reserved roots: 216 deterministic cold
+searches across three alternating trials and 72 retained searches after D6
+warmup and a fixed legal two-ply continuation. All 96 disabled/parent node,
+depth, score, best-move and full-PV signatures matched exactly. One low-priority
+CPU and readiness barriers isolated configuration from measured search CPU.
+
+| Null verification | Policy | Cold nodes | Cold CPU median (s) | Retained nodes | Retained CPU (s) |
+|---|---|---:|---:|---:|---:|
+| On | Parent | 407,264 | 0.94 | 416,075 | 0.81 |
+| On | Adaptive disabled | 407,264 | 0.94 | 416,075 | 1.38 |
+| On | Adaptive enabled | 395,469 | 0.94 | 268,508 | 0.69 |
+| Off | Parent | 407,239 | 0.84 | 416,050 | 0.94 |
+| Off | Adaptive disabled | 407,239 | 0.95 | 416,050 | 0.81 |
+| Off | Adaptive enabled | 395,393 | 0.92 | 268,474 | 0.66 |
+
+With verification enabled, adaptive versus disabled changed cold/retained nodes
+by -2.90%/-35.47% and CPU by 0%/-50.00%. Without verification, nodes changed
+by -2.91%/-35.47% and CPU by -3.16%/-18.52%. These timings do not establish a
+precise CPU gain: the default retained parent and disabled controls have matching
+search signatures but differ by 0.57 s (0.81 versus 1.38 s). Enabled is 0.69 s,
+or -14.81% against the parent. This control spread occurs across several roots;
+short samples, 100-Hz CPU ticks and one retained trial do not isolate its cause.
+No general speed or per-node throughput claim follows.
+
+Existing rows locate the default cold increase at reserved root 7: +44,471
+nodes (+108.61%), with best move f7f5 (+51) changing to b7b6 (+56). Root 5
+adds 15,183 nodes; root 4 saves 28,796 and root 8 saves 15,196. Retained root 5
+saves 85,771 of the net 147,567 nodes, changing d7d5 (+3) to d7d6 (-5).
+Root 8 saves 21,324; root 7 adds 6,946. These are changes in search allocation,
+not evidence of better moves. No position-specific guards or tuning were added.
+
+Production D8 probes after real D6 warmup and same-model history transfer
+recorded 2,179 adaptive attempts, 1,475 cutoffs, 7,651 effective reduction plies
+and 6,914 null-probe visits, at remaining depths three through seven. Three
+endgame confirmations visited nine nodes. A separate real depth-12 expected-cut
+probe exercised general verification: one null visit and two confirmation visits
+at verification depth one. Disabled controls recorded zero corresponding activity;
+native probes cover rejected confirmations and cancellation. The general depth-12
+branch is not claimed active in the D8 matrix. Evidence is under the private
+`baselines/2026-10-21/adaptive-null/` directory. Playing strength remains unmeasured;
+broader futility and the other selective policies remain before baseline completion.
+No timed match, parameter tuning or installation ran.

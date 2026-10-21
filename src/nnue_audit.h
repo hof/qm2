@@ -77,7 +77,11 @@ struct audit_counters_t {
     uint64_t q_see_candidates = 0;
     uint64_t q_check_candidates = 0, q_check_rejected = 0, q_check_searched = 0;
     uint64_t q_castles = 0;
-    uint64_t null_attempts = 0, null_cutoffs = 0;
+    uint64_t null_attempts = 0, null_cutoffs = 0, null_adaptive = 0;
+    uint64_t null_reduction_plies = 0, null_probe_visits = 0;
+    uint64_t null_verifications = 0, null_rejected = 0, null_cancelled = 0;
+    uint64_t null_verification_visits = 0, null_verification_depth = 0;
+    uint64_t min_null_depth = 0, max_null_depth = 0;
     uint64_t beta_candidates = 0, beta_cutoffs = 0;
     uint64_t ffp_candidates = 0, ffp_prunes = 0;
 };

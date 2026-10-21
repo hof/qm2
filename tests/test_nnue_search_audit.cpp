@@ -228,13 +228,13 @@ int main(int argc, char ** argv) {
     options::get_option("NNUEAuditCheckExtensions")->value = 0;
     options::get_option("NNUEAuditHorizon")->value = 0;
     if (!search.nnue_audit.aligned_quiescence || search.beta_pruning || search.ffp_enabled
-            || search.null_enabled || search.lmr_enabled || search.extension(&search.root.moves[0].move, 2)) {
+            || search.null_enabled || search.adaptive_null_enabled || search.lmr_enabled || search.extension(&search.root.moves[0].move, 2)) {
         return failure(__LINE__);
     }
     options::get_option("NNUEAuditHorizon")->value = 2;
     search.init(fen, nullptr);
     if (!search.evaluation_network || !search.nnue_audit.aligned_quiescence
-            || search.beta_pruning || search.ffp_enabled || search.null_enabled || search.lmr_enabled
+            || search.beta_pruning || search.ffp_enabled || search.null_enabled || search.adaptive_null_enabled || search.lmr_enabled
             || search.iid_enabled || search.nnue_audit.q_delta || search.nnue_audit.q_see
             || search.extension(&search.root.moves[0].move, 2)) {
         return failure(__LINE__);

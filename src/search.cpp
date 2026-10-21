@@ -268,6 +268,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     beta_pruning = options::get_value("BetaPruning");
     null_verify = options::get_value("NullVerify");
     null_enabled = options::get_value("NullMove");
+    adaptive_null_enabled = wild == 0 && options::get_value("AdaptiveNullMove");
     lmr_enabled = options::get_value("LMR");
     adaptive_lmr_enabled = wild == 0 && options::get_value("AdaptiveLMR");
     lmr_history_enabled = wild == 0 && options::get_value("LMRHistory");
@@ -326,6 +327,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         main_see_enabled = false;
         iir_enabled = false;
         adaptive_lmr_enabled = lmr_history_enabled = false;
+        adaptive_null_enabled = false;
         tt_eval_enabled = false;
         correction_history_enabled = false;
         upcoming_repetition_enabled = false;
@@ -2212,6 +2214,19 @@ uint16_t search_t::singular_extension(int alpha, int beta, int depth, bool cut_n
     return alternative < threshold ? candidate : 0;
 }
 
+// Stronger static evidence and deeper nodes permit a shallower artificial
+// branch. The legal tactical hint is ordering evidence, never a score bound.
+int search_t::null_search_depth(int depth, int eval, int beta) {
+    if (!adaptive_null_enabled) {
+        return depth - 4;
+    }
+    auto hint = stack->tt_move;
+    const bool tactical = hint.piece && (hint.capture || hint.promotion)
+        && brd.valid(&hint) && brd.legal(&hint);
+    const int surplus = std::clamp((eval - beta) / 174, 0, 4);
+    return std::max(0, depth - 4 - depth / 3 - surplus - int(tactical));
+}
+
 // Verification searches cannot establish normal TT bounds or train ordinary
 // ordering history. Only this frame excludes a move; children remain legal chess.
 int search_t::verification_search(int alpha, int beta, int depth, bool cut_node,
@@ -2429,13 +2444,22 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         && std::abs(beta) < decisive_score && brd.has_pieces(brd.us())
         && brd.stack->fifty_count < 99;
     const bool previous_null = brd.ply > 0 && !(stack - 1)->current_move.piece;
-    const bool do_null = null_enabled && !previous_null && eval >= beta + null_move_margin;
+    const bool null_policy = adaptive_null_enabled
+        ? brd.ply > 0 && cut_node && depth > 2 && normal_search && !iid_active
+            && !repetition_floor && eval + 132 * int(stack->improving) >= beta + 8 * depth
+        : eval >= beta + null_move_margin;
+    const bool do_null = null_enabled && !previous_null && null_policy;
 
     // A static/null cutoff requires legal play: passing in stalemate would
     // turn an exact draw into a heuristic fail-high. Probe only when pruning
     // can run; the ordinary move loop handles the remaining terminal nodes.
     const int beta_margin = reverse_futility_margin_per_ply * depth;
-    const bool beta_cutoff = depth < 4 && beta_pruning && eval - beta_margin >= beta;
+    // Adaptive null verification must confirm with real moves, rather than
+    // reusing the same static premise through reverse futility.
+    const bool verification_pruning = !adaptive_null_enabled
+        || verification_mode != verification_mode_t::null_move;
+    const bool beta_cutoff = depth < 4 && beta_pruning && verification_pruning
+        && eval - beta_margin >= beta;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     if (do_prune_node && depth < 4 && beta_pruning) {
         ++nnue_audit.counters.beta_candidates;
@@ -2465,17 +2489,46 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         ++nnue_audit.counters.null_attempts;
 #endif
-        constexpr int null_reduction = 3;
+        const int null_depth = null_search_depth(depth, eval, beta);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        const auto null_before = nodes;
+        auto & counts = nnue_audit.counters;
+        counts.null_adaptive += adaptive_null_enabled;
+        counts.null_reduction_plies += depth - null_depth;
+        counts.min_null_depth = counts.min_null_depth
+            ? std::min(counts.min_null_depth, uint64_t(depth)) : depth;
+        counts.max_null_depth = std::max(counts.max_null_depth, uint64_t(depth));
+#endif
         forward();
-        int null_score = -pvs(-beta, -beta + 1, depth - 1 - null_reduction, !cut_node);
+        int null_score = -pvs(-beta, -beta + 1, null_depth, !cut_node);
         backward();
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+        counts.null_probe_visits += nodes - null_before;
+        counts.null_cancelled += stop_all;
+#endif
         if (stop_all) {
             return alpha;
         } else if (null_score >= beta && std::abs(null_score) < decisive_score) {
             constexpr int verification_reduction = 5;
-            if (null_verify && depth > verification_reduction && stack->metadata.endgame) {
+            const bool endgame_verification = depth > verification_reduction && stack->metadata.endgame;
+            if (null_verify && (endgame_verification || (adaptive_null_enabled && depth >= 12))) {
+                // Preserve the endgame verifier's existing depth floor. Even a
+                // null probe reduced to qsearch must be confirmed by real moves.
+                const int verification_depth = adaptive_null_enabled
+                    ? std::max({1, null_depth, endgame_verification ? depth - 6 : 0})
+                    : depth - 1 - verification_reduction;
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                ++counts.null_verifications;
+                counts.null_verification_depth += verification_depth;
+                const auto verification_before = nodes;
+#endif
                 int verified_score = verification_search(beta - 1, beta,
-                    depth - 1 - verification_reduction, cut_node, verification_mode_t::null_move);
+                    verification_depth, cut_node, verification_mode_t::null_move);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+                counts.null_verification_visits += nodes - verification_before;
+                counts.null_cancelled += stop_all;
+                counts.null_rejected += !stop_all && verified_score < beta;
+#endif
                 if (stop_all) {
                     return alpha;
                 }
