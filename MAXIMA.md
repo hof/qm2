@@ -1130,8 +1130,11 @@ publication, legal selection, rejected reloads, OwnBook, and unchanged book byte
 
 ### 9.7 Online opening learning (MaxDrone, planned)
 
-Status: design agreed 2026-10-21, not implemented. It replaces the SQLite store
-for online play; the engine snapshot path above stays for GUI use.
+Status: design agreed 2026-10-21. Implemented: game digests (decision point,
+credit, analyses), the index cache, and player stats via
+`./maxima experience:build` (`learning.py`). Not yet: layers, soundness, and
+selection in MaxDrone. It replaces the SQLite store for online play; the engine
+snapshot path above stays for GUI use.
 
 **Storage.** PGN under `experience/games/fics/` is the only source of truth
 (10.2). Everything else is derived and rebuildable: a game index cache under

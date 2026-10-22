@@ -22,6 +22,7 @@ command_groups = (
         ("experience:export", "Export an engine experience snapshot"),
         ("experience:show", "Inspect experience"),
         ("experience:analyze", "Analyze experience positions"),
+        ("experience:build", "Digest FICS games into the learning index and player stats"),
         ("tablebases:syzygy:download", "Download selected Syzygy tablebases"),
     )),
     ("Online play", (
@@ -147,7 +148,7 @@ def main(argv=None):
     arguments = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
-        "uci, build, test, suite:run, match:run, experience:import|export|show|analyze, "
+        "uci, build, test, suite:run, match:run, experience:import|export|show|analyze|build, "
         "tablebases:syzygy:download, fics (no command: run engine)"))
     if not arguments and sys.stdin.isatty() and sys.stdout.isatty():
         arguments = ["--help"]
@@ -178,6 +179,9 @@ def main(argv=None):
         elif command == "match:run":
             from . import matches
             entrypoint = matches.main
+        elif command == "experience:build":
+            from . import learning
+            entrypoint = learning.main
         elif command in ("experience:import", "experience:export", "experience:show", "experience:analyze"):
             from . import experience
             remaining.insert(0, command.split(":", 1)[1])
