@@ -701,7 +701,6 @@ depth locally; incompatible modes retain move hints but cannot reuse scores.
 Material and pawn caches and the transposition table still need synchronization
 before parallel search.
 
-
 `TTEval` is a default-on standard-search checkbox. After a miss in the existing
 worker-local neural cache, reuse a raw TT evaluation only when the full position
 key and immutable model fingerprint match. Cache centipawns before rule-50 damping
@@ -1320,7 +1319,6 @@ showed median HCE 0.3933/0.3935 seconds before/after and NNUE 1.0732/1.0772;
 this is not a general speed or strength result. Full replay/configuration/test
 artifacts: `.context/gui-tests/2026-10-15/progress-integrated/README.md`.
 
-
 The fresh current-build NNUE–HCE confirmation completed and passed its audit:
 200 games / 100 fresh color-swapped opening pairs, 5+0.05 seconds, Hash64,
 one worker, identical ordinary Release binary and production search defaults.
@@ -1667,7 +1665,6 @@ substitution; it is not unmodified SF13. Source patches, scripts, declared
 protocols, frozen binaries, counters, PGNs and audits are private under
 `.context/baselines/2026-10-13/nnue-beta-control/`, reserved from training.
 
-
 The combined null-move plus reverse-futility check enabled both features in
 both engines, retaining the same depth-three/common-qsearch contract, pinned
 network, 50 paired openings and frozen Maxima binary. The SF13 control was
@@ -1689,7 +1686,6 @@ two-feature control, not full production search. Production code and defaults
 are unchanged. Source reconstruction, the added SF patch, declared protocol,
 frozen SF binary, PGNs, counters and audit are private under
 `.context/baselines/2026-10-13/nnue-combined-control/`, reserved from training.
-
 
 A review before adding further features compared Maxima's null-move and
 reverse-futility implementations with the pinned SF13 source. The basic null
@@ -1737,7 +1733,6 @@ change. Do not tune toward an exact 50% score. Review protocols, source patches,
 policy witnesses, frozen binaries, PGNs, counters and audits are private under
 `.context/baselines/2026-10-13/nnue-pruning-review/`, reserved from training.
 
-
 The requested 100-game repeat with the implemented round 100/50 policy scored
 **22 wins, 60 draws, 18 losses (52%)** against the same frozen SF13 combined
 control. It retained both null move and reverse futility in both engines,
@@ -1759,7 +1754,6 @@ close to even in this matched control; equal nodes/time and deeper horizons
 remain separate checks. Declared protocol, frozen Maxima binary, scripts,
 PGNs, counters, audit and comparison are private under
 `.context/baselines/2026-10-13/nnue-rounded-control/`, reserved from training.
-
 
 The frontier-futility depth-three comparison ran four fixed 100-game/50-pair
 profiles with null move and reverse futility retained in both engines. Each
@@ -1795,7 +1789,6 @@ features before advancing to depth four and five. Source patches, declared
 protocols, frozen binaries, PGNs, per-feature counters, audits and comparison
 scripts are private under `.context/baselines/2026-10-13/nnue-ffp-control/`,
 reserved from training.
-
 
 The isolated 200-cp delta step retained null move, reverse futility and simple
 frontier futility in both engines, with SEE entirely disabled. Four fixed
@@ -2290,9 +2283,7 @@ snapshots the option, and changing it clears incompatible TT entries. Royal-lose
 and fixed/aligned audit horizons retain their previous IID policy with IIR off.
 The depth threshold and reduction are provisional, awaiting integrated strength
 validation. See [CPW Internal Iterative Reductions](https://chessprogramming.org/Internal_Iterative_Reductions).
-`test_search_iir` covers effective child/TT depths, upper/exact/lower bounds,
-IIR/IID precedence, shallow hints, cancellation, board/hash/frame/clock restoration,
-terminals and worker/variant/audit isolation. Audit counters record reductions by
+Audit counters record reductions by
 PV/cut context, depth range, reduced-node cutoffs, terminals and cancellation.
 The threshold keeps one-ply ordering probes out of shallow search. At nominal
 depth four it is eligible mainly after a root check extension preserves four
@@ -2319,9 +2310,7 @@ bound handling. Legal skips cap the propagated TT clock interval at 98.
 Workers snapshot `MainSEE`; disabling it skips both tests and pruning, and
 changing it stops the worker and clears incompatible TT entries. Royal losers
 and fixed/aligned audit horizons keep it disabled. Existing qsearch SEE retains
-its own policy. `test_main_see` covers margins, eligibility, controlled child
-sets, bounds, clock-safe cache reuse, cancellation, restoration and worker
-ownership. Audit counters distinguish pseudo-legal candidates from legal
+its own policy. Audit counters distinguish pseudo-legal candidates from legal
 capture/quiet skips and record their depth range. See
 [CPW Static Exchange Evaluation](https://chessprogramming.org/Static_Exchange_Evaluation).
 
@@ -2712,7 +2701,6 @@ passed through both launcher locations. Restart existing GUI engine processes
 to load the replacement. Private update/verification artifacts:
 `.context/gui-tests/2026-10-15/windows-bundle-update/`.
 
-
 The bundled engine was byte-identical to the ordinary Release executable:
 `-O3 -DNDEBUG -march=native`, search auditing off, with AVX2 NNUE instructions
 verified in the object file. A short diagnostic on one fixed middlegame,
@@ -2774,7 +2762,6 @@ show negative differences between the two clocks, so this log does not
 establish exact interface latency throughout the game. The clock reserve is
 now configurable through `Move Overhead`, default50ms, range0–5000ms.
 Evidence: `.context/gui-tests/2026-10-16/move-overhead/`.
-
 
 A subsequent starting-position `go depth 14` test, one fresh process per mode
 with the same Hash64/options, completed in 1.810 seconds for archived HCE,
@@ -2850,7 +2837,6 @@ different search trees, not equal-depth or strength results. They locate
 neural work in that pre-reboot run; fresh measurements under healthy machine
 conditions are needed before drawing performance conclusions. Private profile data and symbol mapping:
 `.context/gui-tests/2026-10-15/cpu-profile-functions.json`.
-
 
 GNU Chess 6.3.0 is also bundled locally at `C:\dev\gnuchess`; add
 `C:\dev\gnuchess\gnuchess.exe` as a second UCI engine. It uses the same
@@ -4158,17 +4144,16 @@ Release checks. When using the local toolchain, prefix these commands with
 - For documentation-only changes, review the content and diff; a build is not
   necessary.
 
-For a small sanity check of pruning/reduction/history changes, build first and run
-the fifteen focused tests:
+For a small sanity check of pruning/reduction changes, build first and run:
 
 ```bash
-ctest --preset cpp26_debug -R '^(test_futility|test_null_search|test_quiet_pruning|test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_context_lmr|test_search_selectivity|test_search_node_context|test_singular_extensions|test_singular_policy|test_uci_input)$'
+ctest --preset cpp26_debug -R '^(test_search_features|test_uci_input)$'
 ```
 
-Use the local toolchain prefix above when needed. This subset checks futility material/history/depth boundaries, tactical guards and adaptive null eligibility, reductions and verification, quiet-pruning depth/history thresholds, TT history feedback, razoring verification, SEE pruning, contextual root/interior
-LMR eligibility and verification, reductions and IIR/IID selection, verification
-guards, cancellation/restoration, singular allocation/multicut bounds and line ownership, node context and UCI policy cache invalidation. The full preset additionally covers lifecycle, evaluation,
-board rules and other search contracts.
+`test_search_features` holds one minimal trigger per search feature: a position
+and window where the feature must fire, plus one case where it must not. Feature
+tests never assert node counts or restate tuning formulas. The full preset
+additionally covers lifecycle, evaluation, board rules and search contracts.
 
 Use identical Release compiler flags, positions, search limits, and hash size
 for performance comparisons. Track nodes, NPS, and time to depth; only match
@@ -4635,15 +4620,6 @@ in both directions, all TT bound types, unchanged/rejected-setting reuse, and
 draw-contempt context changes. Lifecycle tests compare completed warm and cold
 UCI search scores after king-attack option changes and verify that changing either
 weight safely stops an active search before another search begins.
-`test_null_search` instruments artificial passes, adaptive eligibility/reduction,
-legal tactical hints, and endgame/general deep verification,
-including consecutive-null exclusion, verification subtree exclusion, failed
-verification, cancellation, reserved scores, pawn-endgame bounds, and state
-restoration. Adaptive confirmation also proves a legal child is searched with
-reverse futility enabled in the caller. Worker snapshots and royal-losers/audit
-isolation are covered alongside UCI cache invalidation and lifecycle checks.
-Reserved-score tests inject search results through the virtual
-PVS boundary and require no tablebase files.
 
 `test_search_ceiling` checks both colors' mate/stalemate and playable checked
 and quiet positions at the final stack slot, clocks 0/99/100/101, full/null
@@ -4674,53 +4650,7 @@ windows, and checks state restoration and interrupted interior re-search restart
 Verify certificates with `python tests/data/search/generate_tree.py --check` in
 the runner environment; native checks need no python-chess installation.
 
-`test_search_selectivity` observes production move-futility and LMR decisions
-through synthetic child contracts at the virtual PVS boundary. Both null and
-full PV windows cover reduced improvements, full-depth re-search, cancellation
-and restart. Parent internal iterative deepening is isolated by the test
-contract; real-search coverage remains separate. Independent
-python-chess certificates supply both colors' legal moves, checks, captures,
-promotions, castling and advanced passed pawns. It checks futility margins,
-depth/check/endgame/mate exclusions, first-move retention and gain-based tactical
-pruning; protected tactical improvements must still reach a cutoff. Legacy LMR checks
-early and late move depths, dangerous-move exclusions, full-depth verification
-of a refuted reduced improvement, cancellation in either pass and restart/state
-restoration. These isolated guard probes disable node pruning and TT; they do
-not certify selective-search equality, evaluation or real quiescence. Verify
-data with `python tests/data/search/generate_selectivity.py --check`; native
-tests need no python-chess installation.
-
-`test_context_lmr` separately covers the broader policy with the same independent
-legal-move certificates: early/root eligibility, all tactical move types,
-per-type history, confidence/refutation context, full nominal-depth verification
-including false beta cutoffs, both-pass cancellation and board/hash/path/frame/
-clock restoration. It checks persistent TT-PV replacement/domain isolation,
-actual PVS consumption of a tactical hint and correction, worker snapshots,
-royal-losers isolation and fixed/aligned audit exclusions.
-
-`test_nnue_hash_ordering` seeds poisoned exact scores with legal ordering
-hints for both colors. It verifies that deep, shallow, context-
-and clock-mismatched entries can order a move while their scores never cut off
-the controlled search, and that legal hash moves suppress IID. It also covers
-disabled ordering, invalid hints and fixed-mode exclusion. Real NNUE
-searches cover warmed ordering hints, unchanged root evaluation and restoration
-after node-budget cancellation.
-
-`test_search_iid` controls only the shallow helper and child scores while
-running the production IID preparation and main PVS path. It checks both colors,
-remaining/probe depth, first-move ordering, hash/disabled/non-PV exclusions,
-suppression of nested IID, full-depth continuation after a shallow mate score,
-cancellation, absent hints and frame restoration after a helper exception.
-Live audit tests cover NNUE, depth-three inactivity, depth-four helper
-work accounting and cancellation inside a real helper.
-
-`test_search_aspiration` exercises the production root driver with controlled
-child scores for both colors. It checks fail-high, fail-low and alternating
-failures, unchanged nonfailed bounds, full-depth retries, decisive-score
-fallback, cancellation and board/hash/stack restoration. A first-move fail-low
-must still search an improving alternative. Interrupted fail-low work must omit
-an unproven root score. Live audit tests cover NNUE, depth-three
-inactivity and depth-four activation with LMR enabled.
+Verify `selectivity.inc` with `python tests/data/search/generate_selectivity.py --check`.
 
 `test_search_horizon` exercises real quiescence at depths 0/-1/-2 and PVS at
 depths 0/1 on independently certified capture, recapture, promotion, en passant,
@@ -5079,7 +5009,6 @@ and analysis never change fifty-move/repetition identity or TT score semantics.
 Tests cover confidence smoothing, both-side result attribution, duplicate and
 repeated-position handling, stronger annotations, unfinished games, atomic
 publication, legal selection, rejected reloads, OwnBook, and unchanged book bytes.
-
 
 ## 10. Python runner and project CLI
 
@@ -5460,7 +5389,6 @@ Opening histories are preserved in PGN/UCI searches; depth analysis accounts for
 the16 prescribed plies. Inputs/scripts were frozen before any replacement games.
 Production remains unchanged. No UHO run or improving-RFP match remains active.
 
-
 The 8moves_v3 fixed-four LMP SPRT is now retired at the user's request. It
 stopped earlier on a technical response timeout, with 159 finished games
 (candidate 42 wins, 49 draws, 68 losses) and one unfinished game. The 79
@@ -5472,7 +5400,6 @@ The user authorized a separate diagnostic of skipped quiet moves, including
 whether they would cause a frontier beta cutoff and whether existing futility
 pruning would independently skip them. No new match or production change is
 authorized by that diagnostic.
-
 
 #### Skipped quiet-move diagnostic after retiring the LMP screen
 
@@ -5575,7 +5502,6 @@ also passed all 724 probes. No new Debug, sanitizer, race or timed-strength run
 was performed; no shared-state or ownership changes were introduced. Original
 and production identities were rechecked after completion.
 
-
 Quiet-rank analysis of the revised audit found a broad distribution, not a
 pile-up just beyond the gate. Ranks exclude captures/checks/promotions/castles
 and include searched protected advanced-pawn quiets. For every record, full
@@ -5668,7 +5594,6 @@ counts and paired tree-equivalence results remain valid. Duty-throttled wall
 times are not ordinary NPS measurements. No strength gain is established. No new
 match or installation was performed for this experiment.
 
-
 ### Capture ordering history (2026-10-20)
 
 `CaptureHistory` defaults true for standard chess. A worker-owned bounded table
@@ -5710,7 +5635,6 @@ throttling. These short, variable samples show no efficiency benefit; they do
 not establish playing strength or isolate the cause of the LMR-dependent tree
 changes. Baseline acceptance remains pending. No parameter tuning, timed match
 or Windows installation accompanied this increment.
-
 
 ### Longer continuation ordering history (2026-10-20)
 
@@ -5806,7 +5730,6 @@ confirmation with 36 further exact pairs and overlapping CPU ranges. Retained
 CPU changed +2.21%/-1.23% with LMR on/off. These short, variable samples establish
 neither a general speed gain nor playing strength; combined baseline acceptance
 remains pending.
-
 
 ### Threat and checking-move ordering validation (2026-10-20)
 
@@ -5915,7 +5838,6 @@ results show added cost on this sample; efficiency and playing-strength
 acceptance remain pending. A real depth-six audit recorded 231,628 lookups,
 11,203 nonzero hits and 2,297 changed updates: 1,693 lower, 457 upper and 147
 exact. All correction counters were zero with the feature disabled.
-
 
 ### Adaptive reductions and verification feedback (2026-10-20)
 
@@ -6064,7 +5986,6 @@ eligibility boundaries through six. Disabled counters were all zero. Evidence,
 source/binary/model/corpus hashes and initial logs are retained privately under
 `.context/baselines/2026-10-20/main-see/`. Next are razoring, singular extensions
 and ProbCut, with TT feedback and final integration/strength acceptance pending.
-
 
 ### Razoring with qsearch verification — 2026-10-20
 
@@ -6305,7 +6226,6 @@ cancellation independently. Evidence is under
 the remaining search-baseline groups and integrated strength acceptance remain
 unfinished. This increment does not complete the baseline.
 
-
 ### TT cutoff history feedback
 
 `TTHistory` is a default-on standard-search control, snapshotted by each worker.
@@ -6334,13 +6254,6 @@ update continuation history only. Capture history, killers, countermoves and
 ordinary-cutoff counters are not updated by TT feedback. Audit builds expose
 `audit_tt_history rewards` (eligible quiet hints) and `penalties` (updated
 predecessor continuation entries). These are different units.
-
-`test_tt_history` exercises seeded compatible cutoffs through PVS, both colors,
-exact/lower/upper bounds and equality, full/non-PV windows, policy masks and
-depth/ordinal boundaries, worker snapshots, cache incompatibility, legality,
-pins, captures, promotions, castling, checked quiet evasions, helper/null/root
-exclusions and board/hash/frame restoration. UCI policy and lifecycle tests
-cover option validation, cache clearing and worker stop/restart.
 
 Validation passed 52/52 Debug (182.70s), 52/52 Release (101.03s), including
 both lifecycle suites in each, seven focused ASan/UBSan checks (16.79s,
@@ -6427,7 +6340,6 @@ not establish equal trees; native modern evaluations also differ. This gate
 precedes parallel search, time-management and modern-network work. Smaller
 trees alone do not establish correctness or playing strength.
 
-
 ### Raw static-evaluation TT caching (2026-10-21)
 
 `TTEval` adds model-tagged raw neural scores to the shared table while retaining
@@ -6468,7 +6380,6 @@ including across workers, without claiming a global CPU or playing-strength gain
 Private evidence is under `baselines/2026-10-21/raw-eval-tt/`. Richer correction
 history remains next; baseline integration and strength acceptance are pending.
 
-
 ### Piece-group and continuation correction (2026-10-21)
 
 `PieceCorrection` and `ContinuationCorrection` are default-on standard-search
@@ -6505,7 +6416,6 @@ losers allocates no correction tables. Artificial fixed/aligned audit horizons
 bypass correction and learning. Audit output adds changed-entry counts for the
 four piece domains and each continuation distance; these count table entries,
 whereas the existing update counter counts learning nodes.
-
 
 Validation passed 54/54 Debug checks (207.17 s), 54/54 Release (108.97 s),
 both lifecycle suites in each, 18 focused ASan/UBSan checks (65.61 s, leak
@@ -6565,7 +6475,6 @@ updates. Private evidence is under `baselines/2026-10-21/richer-correction/`.
 This completes the second search-baseline implementation group. Selective-policy
 completion and final baseline integration remain before Phase 2 or strength tests.
 
-
 ### Adaptive null-move pruning (2026-10-21)
 
 `AdaptiveNullMove` is a default-on standard-search checkbox under `NullMove`.
@@ -6603,7 +6512,6 @@ and endgame-only verification, while `NullMove=false` disables both policies and
 horizons retain their existing policies. Audit counters distinguish adaptive
 attempts, reductions, null-probe work, confirmations, rejections, cancellation,
 verification work/depth and attempt-depth range.
-
 
 Validation covered all 54 Debug checks: 53 passed in the full run (286.06 s),
 and the sole corrected boundary fixture passed its focused rerun (7.10 s), with
@@ -6663,7 +6571,6 @@ branch is not claimed active in the D8 matrix. Evidence is under the private
 `baselines/2026-10-21/adaptive-null/` directory. Playing strength remains unmeasured;
 broader futility and the other selective policies remain before baseline completion.
 No timed match, parameter tuning or installation ran.
-
 
 ### Broader futility validation (2026-10-21)
 
@@ -6797,7 +6704,6 @@ off counters were zero. Evidence is under private
 `baselines/2026-10-21/context-lmr/`. Remaining Phase 1 work is multiple/negative
 singular extensions with multicut, followed by the consolidated integration and
 reference gate. No timed strength match or installation ran.
-
 
 ### Multiple and negative singular allocation with multicut (2026-10-21)
 

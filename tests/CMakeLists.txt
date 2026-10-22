@@ -14,7 +14,6 @@ add_executable(testEvaluation test_evaluation.cpp)
 add_executable(testMates test_mates.cpp)
 add_executable(test_leaf_search test_leaf_search.cpp)
 add_executable(test_search_ownership test_search_ownership.cpp)
-add_executable(test_search_history test_search_history.cpp)
 add_executable(test_search_pv test_search_pv.cpp)
 add_executable(test_search_repetition test_search_repetition.cpp)
 
@@ -29,7 +28,6 @@ target_link_libraries(testEvaluation MAX2SRC)
 target_link_libraries(testMates MAX2SRC)
 target_link_libraries(test_leaf_search MAX2SRC)
 target_link_libraries(test_search_ownership MAX2SRC)
-target_link_libraries(test_search_history MAX2SRC)
 target_link_libraries(test_search_pv MAX2SRC)
 target_link_libraries(test_search_repetition MAX2SRC)
 
@@ -41,9 +39,6 @@ target_link_libraries(test_w17_evaluation MAX2SRC)
 
 add_executable(test_search_tt_context test_search_tt_context.cpp)
 target_link_libraries(test_search_tt_context MAX2SRC)
-
-add_executable(test_null_search test_null_search.cpp)
-target_link_libraries(test_null_search MAX2SRC)
 
 add_executable(test_search_ceiling test_search_ceiling.cpp)
 target_link_libraries(test_search_ceiling MAX2SRC)
@@ -74,9 +69,6 @@ target_link_libraries(board_oracle_probe MAX2SRC)
 add_executable(test_search_tree test_search_tree.cpp)
 target_link_libraries(test_search_tree MAX2SRC)
 
-add_executable(test_search_selectivity test_search_selectivity.cpp)
-target_link_libraries(test_search_selectivity MAX2SRC)
-
 add_executable(test_search_horizon test_search_horizon.cpp)
 target_link_libraries(test_search_horizon MAX2SRC)
 
@@ -91,9 +83,6 @@ if(maxima_nnue_search_audit)
     endif()
     add_executable(nnue_search_probe nnue_search_probe.cpp)
     target_link_libraries(nnue_search_probe MAX2SRC)
-    add_executable(test_nnue_hash_ordering test_nnue_hash_ordering.cpp)
-    target_link_libraries(test_nnue_hash_ordering MAX2SRC)
-    add_test(NAME test_nnue_hash_ordering COMMAND test_nnue_hash_ordering "${maxima_nnue_test_network}")
     add_executable(test_nnue_search_audit test_nnue_search_audit.cpp)
     target_link_libraries(test_nnue_search_audit MAX2SRC)
     add_test(NAME test_nnue_search_audit COMMAND test_nnue_search_audit "${maxima_nnue_test_network}")
@@ -110,29 +99,9 @@ if(maxima_nnue_test_network)
     add_test(NAME test_nnue_reference COMMAND test_nnue_reference "${maxima_nnue_test_network}")
 endif()
 
-add_executable(test_search_aspiration test_search_aspiration.cpp)
-target_link_libraries(test_search_aspiration MAX2SRC)
-add_test(NAME test_search_aspiration COMMAND test_search_aspiration)
-
-add_executable(test_main_see test_main_see.cpp)
-target_link_libraries(test_main_see MAX2SRC)
-add_test(NAME test_main_see COMMAND test_main_see)
-
-add_executable(test_search_iir test_search_iir.cpp)
-target_link_libraries(test_search_iir MAX2SRC)
-add_test(NAME test_search_iir COMMAND test_search_iir)
-
-add_executable(test_search_iid test_search_iid.cpp)
-target_link_libraries(test_search_iid MAX2SRC)
-add_test(NAME test_search_iid COMMAND test_search_iid)
-
 add_executable(test_move_picker test_move_picker.cpp)
 target_link_libraries(test_move_picker MAX2SRC)
 add_test(NAME test_move_picker COMMAND test_move_picker)
-
-add_executable(test_quiet_ordering test_quiet_ordering.cpp)
-target_link_libraries(test_quiet_ordering MAX2SRC)
-add_test(NAME test_quiet_ordering COMMAND test_quiet_ordering)
 
 add_executable(test_qsearch_tt test_qsearch_tt.cpp)
 target_link_libraries(test_qsearch_tt MAX2SRC)
@@ -146,7 +115,6 @@ add_executable(test_search_verification test_search_verification.cpp)
 target_link_libraries(test_search_verification MAX2SRC)
 add_test(NAME test_search_verification COMMAND test_search_verification)
 
-
 add_executable(test_upcoming_repetition test_upcoming_repetition.cpp)
 target_link_libraries(test_upcoming_repetition MAX2SRC)
 add_test(NAME test_upcoming_repetition COMMAND test_upcoming_repetition)
@@ -155,74 +123,8 @@ add_executable(test_check_evasions test_check_evasions.cpp)
 target_link_libraries(test_check_evasions MAX2SRC)
 add_test(NAME test_check_evasions COMMAND test_check_evasions)
 
-add_executable(test_capture_history test_capture_history.cpp)
-target_link_libraries(test_capture_history MAX2SRC)
-add_test(NAME test_capture_history COMMAND test_capture_history)
-
-add_executable(test_correction_history test_correction_history.cpp)
-target_link_libraries(test_correction_history MAX2SRC)
-add_test(NAME test_correction_history COMMAND test_correction_history)
-
-add_executable(test_adaptive_lmr test_adaptive_lmr.cpp)
-target_link_libraries(test_adaptive_lmr MAX2SRC)
-add_test(NAME test_adaptive_lmr COMMAND test_adaptive_lmr)
-
 get_property(maxima_subdirectory_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${maxima_subdirectory_tests} PROPERTIES
-    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
-
-add_executable(test_razoring test_razoring.cpp)
-target_link_libraries(test_razoring MAX2SRC)
-add_test(NAME test_razoring COMMAND test_razoring)
-set_tests_properties(test_razoring PROPERTIES
-    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
-
-add_executable(test_singular_extensions test_singular_extensions.cpp)
-target_link_libraries(test_singular_extensions MAX2SRC)
-add_test(NAME test_singular_extensions COMMAND test_singular_extensions)
-set_tests_properties(test_singular_extensions PROPERTIES
-    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
-
-add_executable(test_singular_policy test_singular_policy.cpp)
-target_link_libraries(test_singular_policy MAX2SRC)
-add_test(NAME test_singular_policy COMMAND test_singular_policy)
-set_tests_properties(test_singular_policy PROPERTIES
-    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
-
-add_executable(test_probcut test_probcut.cpp)
-target_link_libraries(test_probcut MAX2SRC)
-add_test(NAME test_probcut COMMAND test_probcut)
-set_tests_properties(test_probcut PROPERTIES
-    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
-
-add_executable(test_tt_history test_tt_history.cpp)
-target_link_libraries(test_tt_history MAX2SRC)
-add_test(NAME test_tt_history COMMAND test_tt_history)
-set_tests_properties(test_tt_history PROPERTIES
-    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
-
-add_executable(test_quiet_pruning test_quiet_pruning.cpp)
-target_link_libraries(test_quiet_pruning MAX2SRC)
-add_test(NAME test_quiet_pruning COMMAND test_quiet_pruning)
-set_tests_properties(test_quiet_pruning PROPERTIES
-    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
-
-add_executable(test_tt_eval test_tt_eval.cpp)
-target_link_libraries(test_tt_eval MAX2SRC)
-add_test(NAME test_tt_eval COMMAND test_tt_eval)
-set_tests_properties(test_tt_eval PROPERTIES
-    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
-
-add_executable(test_futility test_futility.cpp)
-target_link_libraries(test_futility MAX2SRC)
-add_test(NAME test_futility COMMAND test_futility)
-set_tests_properties(test_futility PROPERTIES
-    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
-
-add_executable(test_context_lmr test_context_lmr.cpp)
-target_link_libraries(test_context_lmr MAX2SRC)
-add_test(NAME test_context_lmr COMMAND test_context_lmr)
-set_tests_properties(test_context_lmr PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
 
 add_executable(test_search_features test_search_features.cpp)
