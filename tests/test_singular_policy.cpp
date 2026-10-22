@@ -164,7 +164,7 @@ bool child_contracts() {
                             case_ok &= p->depths.empty() == (cancel == 1 || cutoff);
                             for (size_t i = 0; i < p->depths.size(); ++i) {
                                 const bool nominated = p->moves[i] == candidate;
-                                const int allocation = nominated && extension ? extension : int(capture && nominated);
+                                const int allocation = nominated ? extension : 0;
                                 case_ok &= p->depths[i] == 6 + allocation
                                     && p->budgets[i] == int(nominated && extension >= 2);
                             }
@@ -187,7 +187,7 @@ bool child_contracts() {
             }
         }
     }
-    return check(ok, "singular allocation child depths, check overlap, cancellation, TT bounds or line ownership failed");
+    return check(ok, "singular allocation child depths, cancellation, TT bounds or line ownership failed");
 }
 bool only_legal_move() {
     auto p = std::make_unique<search_t>("8/8/8/8/8/1qk4P/8/K7 b - - 0 1");

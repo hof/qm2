@@ -82,9 +82,6 @@ struct search_stack_t {
     move_t killer[2];
     move_t pv_moves[MAX_PLY + 1];
     bool in_check;
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    int check_extensions;
-#endif
     int repetition_start;
     uint8_t pv_count;
     int16_t eval_result;
@@ -283,7 +280,6 @@ public:
     bool in_searched(move_t * move, int searched_moves);
     void reset_stack();
     U64 tt_context() const;
-    int extension(move_t * move, int gives_check);
     int reduction(int depth, int searched_moves, bool is_dangerous,
         const move_t & move, bool pv, bool cut_node, int gives_check = 0, bool root_node = false);
     void record_lmr(const move_t & move, int depth, int searched_moves, int reduce,

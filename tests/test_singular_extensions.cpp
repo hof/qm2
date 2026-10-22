@@ -261,7 +261,7 @@ bool test_repetition_floor() {
         && p->brd.to_string() == fen && p->stack == p->root_stack + 3,
         "upcoming repetition floor must suppress singular verification");
 }
-bool test_check_overlap() {
+bool test_checking_candidate() {
     bool ok = true;
     for (bool black : {false, true}) {
         for (int delta : {-1, 0}) {
@@ -269,23 +269,19 @@ bool test_check_overlap() {
             p->delta = delta;
             p->seed();
             const auto candidate = p->stack->tt_move.to_compact();
-            ok &= p->brd.gives_check(&p->stack->tt_move)
-                && p->extension(&p->stack->tt_move, 1) == 1;
+            ok &= p->brd.gives_check(&p->stack->tt_move) != 0;
             p->pvs(-1000, 1000, 7);
             bool found = false;
             for (size_t i = 0; i < p->child_depths.size(); ++i) {
                 if (p->child_moves[i] == candidate) {
                     found = true;
-                    ok &= p->child_depths[i] == 7;
+                    ok &= p->child_depths[i] == 6 + int(delta < 0);
                 }
             }
             ok &= found && p->valid;
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            ok &= p->nnue_audit.counters.singular_check_overlap == unsigned(delta < 0);
-#endif
         }
     }
-    return check(ok, "singular and check extensions must share one extra ply");
+    return check(ok, "a checking candidate must receive only its singular allocation");
 }
 bool test_real_verification() {
     bool ok = true;
@@ -361,6 +357,6 @@ int main() {
     trans_table::set_size(4);
     options::get_option("SingularPolicy")->value = 0;
     const bool ok = test_policy_and_cache() & test_helper_scope() & test_pvs()
-        & test_repetition_floor() & test_check_overlap() & test_real_verification() & test_real_cancellation() & test_workers();
+        & test_repetition_floor() & test_checking_candidate() & test_real_verification() & test_real_cancellation() & test_workers();
     return ok ? 0 : 1;
 }

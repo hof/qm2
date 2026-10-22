@@ -37,7 +37,7 @@ struct audit_counters_t {
     uint64_t probcut_cancelled = 0, probcut_visits = 0, probcut_tt_vetoes = 0;
     uint64_t min_probcut_depth = 0, max_probcut_depth = 0;
     uint64_t singular_attempts = 0, singular_extensions = 0, singular_rejected = 0;
-    uint64_t singular_cancelled = 0, singular_visits = 0, singular_check_overlap = 0;
+    uint64_t singular_cancelled = 0, singular_visits = 0;
     uint64_t min_singular_depth = 0, max_singular_depth = 0;
     uint64_t singular_double = 0, singular_triple = 0, singular_negative = 0, singular_multicuts = 0;
     uint64_t razoring_attempts = 0, razoring_cutoffs = 0, razoring_rejected = 0;
@@ -65,9 +65,7 @@ struct audit_counters_t {
     uint64_t lmr_history_less = 0, lmr_history_more = 0;
     uint64_t lmr_history_rewards = 0, lmr_history_penalties = 0;
     uint64_t min_lmr_depth = 0, max_lmr_depth = 0, min_lmr_child_depth = 0;
-    uint64_t extension_candidates = 0, extension_see_rejected = 0;
-    uint64_t extensions_applied = 0;
-    uint64_t max_check_extensions = 0, max_main_ply = 0, max_q_ply = 0;
+    uint64_t max_main_ply = 0, max_q_ply = 0;
     uint64_t piece_correction_updates = 0, continuation_correction_updates[2] = {};
     uint64_t correction_lookups = 0, correction_hits = 0;
     uint64_t correction_updates = 0, correction_lower = 0, correction_upper = 0, correction_exact = 0;
@@ -94,7 +92,6 @@ struct audit_state_t {
     bool q_delta = true, q_see = true;
     bool fixed_horizon = false;
     bool aligned_quiescence = false;
-    bool check_extensions = false;
     bool hash_moves = false;
     std::string root_fen;
     struct cutoff_t {

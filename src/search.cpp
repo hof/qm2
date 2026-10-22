@@ -347,7 +347,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.fixed_horizon = horizon == 1;
     nnue_audit.aligned_quiescence = horizon == 2;
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
-    nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
         lmp_enabled = history_pruning_enabled = false;
         tt_history_enabled = false;
@@ -671,7 +670,6 @@ void search_t::go() {
             + " rejected " + std::to_string(counts.singular_rejected)
             + " cancelled " + std::to_string(counts.singular_cancelled)
             + " visits " + std::to_string(counts.singular_visits)
-            + " check_overlap " + std::to_string(counts.singular_check_overlap)
             + " double " + std::to_string(counts.singular_double)
             + " triple " + std::to_string(counts.singular_triple)
             + " negative " + std::to_string(counts.singular_negative)
@@ -724,11 +722,7 @@ void search_t::go() {
             + " min_depth " + std::to_string(counts.min_lmr_depth)
             + " max_depth " + std::to_string(counts.max_lmr_depth)
             + " min_child " + std::to_string(counts.min_lmr_child_depth));
-        uci::out("info string audit_extensions candidates " + std::to_string(counts.extension_candidates)
-            + " see_rejected " + std::to_string(counts.extension_see_rejected)
-            + " applied " + std::to_string(counts.extensions_applied)
-            + " max_per_line " + std::to_string(counts.max_check_extensions)
-            + " max_main_ply " + std::to_string(counts.max_main_ply)
+        uci::out("info string audit_plies max_main_ply " + std::to_string(counts.max_main_ply)
             + " max_q_ply " + std::to_string(counts.max_q_ply));
     }
 #endif
@@ -974,7 +968,6 @@ bool search_t::abort(bool force_poll = false) {
 void search_t::forward() {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     ++nnue_audit.counters.null_visits;
-    (stack + 1)->check_extensions = stack->check_extensions;
 #endif
     (stack + 1)->multiple_extensions = stack->multiple_extensions;
     stack->current_move.clear();
@@ -1016,7 +1009,6 @@ void search_t::backward() {
 void search_t::forward(move_t * move, bool gives_check) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     ++nnue_audit.counters.move_visits;
-    (stack + 1)->check_extensions = stack->check_extensions;
 #endif
     (stack + 1)->multiple_extensions = stack->multiple_extensions;
     stack->current_move.set(move);
@@ -1582,41 +1574,6 @@ void root_t::sort_moves(move_t * best_move) {
     }
 }
 
-/**
- * Move extensions
- * @param move the move
- * @param depth remaining search depth
- * @param pv pv node
- * @param gives_check if the move checks
- * @return 1 for extending, 0 otherwise
- */
-int search_t::extension(move_t * move, int gives_check) {
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    if (nnue_audit.fixed_horizon) {
-        return 0;
-    }
-    if (nnue_audit.aligned_quiescence) {
-        if (!nnue_audit.check_extensions || !gives_check) {
-            return 0;
-        }
-        auto & counts = nnue_audit.counters;
-        ++counts.extension_candidates;
-        if (!brd.see(move, 0)) {
-            ++counts.extension_see_rejected;
-            return 0;
-        }
-        ++counts.extensions_applied;
-        return 1;
-    }
-#endif
-    if (gives_check > 1) {
-        return 1;
-    } else if (gives_check == 1 && brd.see(move, 0)) {
-        return 1;
-    }
-    return 0;
-}
-
 // The parent position owns both the history lookup and the node context.
 int search_t::reduction(int depth, int searched_moves, bool is_dangerous,
         const move_t & move, bool pv, bool cut_node, int gives_check, bool root_node) {
@@ -1792,28 +1749,17 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         move_t * move = &rmove->move;
         U64 nodes_before = nodes;
         int score = 0;
-        int extend = 0;
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        if (nnue_audit.aligned_quiescence) {
-            extend = extension(move, rmove->gives_check);
-        }
-#endif
 
         const int reduce = wild == 0
             ? reduction(depth, i, true, *move, true, false, rmove->gives_check, true) : 0;
         //go forward and search one level deeper
         stack->move_count = i + 1;
         forward(move, rmove->gives_check);
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        stack->check_extensions += extend;
-        nnue_audit.counters.max_check_extensions = std::max(nnue_audit.counters.max_check_extensions,
-            uint64_t(stack->check_extensions));
-#endif
-        record_lmr(*move, depth, i, reduce, extend, rmove->gives_check, true);
+        record_lmr(*move, depth, i, reduce, 0, rmove->gives_check, true);
         if (i == 0) {
-            score = -pvs(-beta, -alpha, depth - 1 + extend, false);
+            score = -pvs(-beta, -alpha, depth - 1, false);
         } else {
-            score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend, true);
+            score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce, true);
             if (!stop_all && score > alpha) { //open window research w/o reductions
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                 ++nnue_audit.counters.researches;
@@ -1821,7 +1767,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
                 nnue_audit.counters.lmr_researches += reduce > 0;
 #endif
                 const auto previous_clocks = stack->tt_clocks;
-                score = -pvs(-beta, -alpha, depth - 1 + extend, false);
+                score = -pvs(-beta, -alpha, depth - 1, false);
                 if (context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled) {
                     stack->tt_clocks.include_child(previous_clocks, 0);
                 }
@@ -2943,17 +2889,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
          * Move extensions and reductions
          */
 
-        int extend = extension(move, gives_check);
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        const int check_extend = extend;
-        nnue_audit.counters.singular_check_overlap += singular && extend;
-#endif
-        if (nominated) {
-            // A negative allocation replaces a check extension; positive check
-            // and singular allocations overlap rather than add.
-            extend = singular_result.extension < 0 ? singular_result.extension
-                : MAX(extend, singular_result.extension);
-        }
+        const int extend = nominated ? singular_result.extension : 0;
 
 
         /*
@@ -2973,11 +2909,6 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
                 : searched_moves >= 3 && !is_dangerous)) {
             ++nnue_audit.counters.lmr_candidates;
         }
-#endif
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        stack->check_extensions += check_extend && extend > 0;
-        nnue_audit.counters.max_check_extensions = std::max(nnue_audit.counters.max_check_extensions,
-            uint64_t(stack->check_extensions));
 #endif
         int score;
         bool lmr_researched = false;
@@ -3403,7 +3334,6 @@ void search_t::reset_stack() {
     nodes = 0;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     auto & counts = nnue_audit.counters;
-    stack->check_extensions = 0;
     counts.evasion_nodes = counts.double_check_nodes = 0;
     counts.pvs_nodes = counts.q_nodes = counts.root_calls = 0;
     counts.repetition_attempts = counts.repetition_hits = counts.repetition_cutoffs = 0;

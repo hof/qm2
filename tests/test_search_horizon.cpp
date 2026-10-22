@@ -74,7 +74,7 @@ int reference(search_t & search, int mode) {
         move.set(&search.brd, name.c_str());
         valid &= check(search.brd.valid(&move) && search.brd.legal(&move), "reference move invalid", node.fen);
         const int gives_check = search.brd.gives_check(&move);
-        const int child_mode = mode == 1 ? search.extension(&move, gives_check) : -1;
+        const int child_mode = mode == 1 ? 0 : -1;
         search.forward(&move, gives_check);
         best = std::max(best, -reference(search, child_mode));
         search.backward(&move);

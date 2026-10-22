@@ -8,7 +8,7 @@ struct fixture_t { const char * fen; bool in_check; const char * moves; };
 const fixture_t fixtures[] = {
 #include "data/search/selectivity.inc"
 };
-struct move_info_t { int flags, gain, extend; };
+struct move_info_t { int flags, gain; };
 struct call_t { std::string move; int depth, alpha, beta; };
 
 bool check(bool ok, const char * message, const char * fen) {
@@ -88,8 +88,7 @@ bool certify(selective_search_t & search, const fixture_t & fixture,
         const int flags = (move.capture ? 1 : 0) | (move.promotion ? 2 : 0)
             | (move.castle ? 4 : 0) | (gives_check ? 8 : 0)
             | (search.is_advanced_passed_pawn(&move) ? 16 : 0);
-        moves.emplace(move.to_string(), move_info_t{flags, search.brd.max_gain(&move),
-            search.extension(&move, gives_check)});
+        moves.emplace(move.to_string(), move_info_t{flags, search.brd.max_gain(&move)});
         auto found = certified.find(move.to_string());
         ok &= check(found != certified.end() && found->second == flags,
             "legal/tactical certificate differs", fixture.fen);
@@ -191,7 +190,7 @@ bool test_lmr(const fixture_t & fixture, int & probes, int & reductions, int & r
                         auto & call = search->calls[i];
                         const auto info = moves.at(call.move);
                         const bool eligible = enabled && depth >= 3 && !fixture.in_check && !info.flags && i >= 3;
-                        const int full = depth - 1 + info.extend;
+                        const int full = depth - 1;
                         const int reduce = full - call.depth;
                         const bool valid_depth = adaptive && eligible
                             ? call.depth >= 1 && call.depth <= full
@@ -203,7 +202,7 @@ bool test_lmr(const fixture_t & fixture, int & probes, int & reductions, int & r
                             target = call.move;
                             target_call = static_cast<int>(i) + 1;
                             reduced_depth = call.depth;
-                            full_depth = depth - 1 + info.extend;
+                            full_depth = depth - 1;
                         }
                     }
                     ++probes;

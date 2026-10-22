@@ -388,7 +388,7 @@ whether that score is at least the threshold. Both share one exchange routine
 and its legality checks. The threshold path uses material bounds to stop when
 the answer is determined, including possible recapture promotion gains; it
 does not build or fold a complete gain list. Threshold arithmetic uses a wider
-integer to handle extreme inputs safely. Qsearch, check extensions and boolean
+integer to handle extreme inputs safely. Qsearch and boolean
 gain tests use this path; ordering that needs the numeric score retains the
 full-score call. This is an implementation optimization, not a pruning-policy
 change. Certificate tests compare both interfaces at equality boundaries,
@@ -555,7 +555,7 @@ Quiet checks, including discovered checks, earn 10000 ordering units only when
 adjustment because it moves two pieces. These provisional constants are not
 tuned strength claims. Context scores affect the existing positive-quiet stage
 and selection within quiets; they do not change good-noisy SEE classification,
-move generation, final legality, pruning, or check extensions. Available
+move generation, final legality, or pruning. Available
 qsearch quiet checks/evasions use the same scoring without expanding their domain.
 `move_history_score` remains learned history only, so contextual bonuses do not
 leak into history-based search decisions or get learned as rewards.
@@ -576,7 +576,9 @@ Standard root search orders moves like an interior node: D1 keeps the move
 picker's legal order, and each later
 iteration reorders the root list by running the picker with the previous best
 move as hash move. There is no second root sort and no initial SEE/danger bonus.
-Royal losers retains its variant ordering. Per-root ordering/complexity counters
+Royal losers retains its variant ordering. Maxima has no check extensions: the
+general interior check extension and the audit `NNUEAuditCheckExtensions` rule
+were removed (2026-10-22). Singular allocation is the only extension. Per-root ordering/complexity counters
 use signed 64-bit values, add unsigned visited work with saturation, and compare
 without subtraction. They are ordering estimates; the separate unsigned visited counter
 continues to drive UCI nodes and node budgets.
@@ -1485,22 +1487,8 @@ restart with the node counter when resetting the self-play stack. Ordinary
 UCI node counting and search decisions are unchanged by this instrumentation.
 The standard-search visit count reconciles with `pvs_nodes + q_nodes`.
 
-`NNUEAuditCheckExtensions` (default false, audit builds only) adds a controlled
-check-extension rule in `quiet` mode: one extra main-search ply for a checking
-move with nonnegative SEE, including root moves. There is no per-line extension
-cap; the existing draw, repetition, cancellation and stack-ceiling handling
-remain active. Child stack frames track accumulated extensions, including
-through null moves; siblings and re-searches retain the proper parent count.
-Quiescence does not add these extensions but retains captures and compulsory
-evasions. The `audit_extensions` report distinguishes candidates, SEE rejections
-and applied extensions, plus peak extensions per line and main/q
-ply. Changing the flag stops search and clears TT. Tests cover both colors and
-evaluators, safe/losing checks, extension beyond the former three-ply budget,
-inheritance and cancellation.
-This controlled rule does not change ordinary search's existing extensions.
 Internal iterative deepening stays disabled in `fixed`. In `quiet`, the
-independent `NNUEAuditIID` flag defaults false, so extensions cannot silently
-activate it. `audit_iid` reports calls; `audit_iid_work` adds eligible candidates,
+independent `NNUEAuditIID` flag defaults false. `audit_iid` reports calls; `audit_iid_work` adds eligible candidates,
 legal ordering hints, cancellations, helper visits and remaining/probe depths.
 A depth-four/no-TT-move regression verifies exclusion when the flag is off.
 Each same-position IID helper entry is included in visited work: with other
@@ -3516,7 +3504,9 @@ nodes; qsearch already resolves many exchanges but does not make all main-search
 recapture extensions equivalent or redundant. There is no demonstrated universal
 root policy from this review.
 
-Maxima keeps root check extensions disabled. Giving-check and evasion-based
+Superseded 2026-10-22: Maxima has no check extensions at all (see the
+reference-baseline note under move ordering). Historical record follows.
+Maxima kept root check extensions disabled. Giving-check and evasion-based
 extensions are different policies; a root guard alone does not establish an
 equivalent effective horizon. Algorithm reading and pinned source comparisons
 are retained in the private development records.

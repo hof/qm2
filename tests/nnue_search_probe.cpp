@@ -149,10 +149,6 @@ int main(int argc, char ** argv) {
                 << ",\"min_lmr_depth\":" << counts.min_lmr_depth
                 << ",\"max_lmr_depth\":" << counts.max_lmr_depth
                 << ",\"min_lmr_child_depth\":" << counts.min_lmr_child_depth
-                << ",\"extension_candidates\":" << counts.extension_candidates
-                << ",\"extension_see_rejected\":" << counts.extension_see_rejected
-                << ",\"extensions_applied\":" << counts.extensions_applied
-                << ",\"max_check_extensions\":" << counts.max_check_extensions
                 << ",\"max_main_ply\":" << counts.max_main_ply
                 << ",\"max_q_ply\":" << counts.max_q_ply
                 << ",\"null_attempts\":" << counts.null_attempts

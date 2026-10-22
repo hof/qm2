@@ -48,8 +48,7 @@ bool policy_cache_controls() {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
             , "NNUEAuditNullMove", "NNUEAuditBetaPruning", "NNUEAuditFutility",
             "NNUEAuditLMR", "NNUEAuditHashMoves", "NNUEAuditIID", "NNUEAuditAspiration",
-            "NNUEAuditDelta", "NNUEAuditSEE",
-            "NNUEAuditCheckExtensions"
+            "NNUEAuditDelta", "NNUEAuditSEE"
 #endif
             }) {
         const int saved = options::get_value(name);

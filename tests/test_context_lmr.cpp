@@ -159,8 +159,7 @@ bool searches() {
                     move_t move;
                     move.set(&baseline->brd, call.move.c_str());
                     const int gives_check = baseline->brd.gives_check(&move);
-                    const int extend = root ? 0 : baseline->extension(&move, gives_check);
-                    const int full_depth = 11 + extend;
+                    const int full_depth = 11;
                     ok &= call.depth >= 1 && call.depth <= full_depth;
                     if (i < size_t(root ? 2 : 1)) {
                         ok &= call.depth == full_depth;

@@ -109,71 +109,6 @@ int main(int argc, char ** argv) {
     }
     options::get_option("NNUEAuditHorizon")->value = 2;
     search.init(fen, nullptr);
-    options::get_option("NNUEAuditCheckExtensions")->value = 1;
-    {
-        for (bool white : {false, true}) {
-            const char * check_fen = white ? "6k1/8/8/8/8/8/6r1/K2Q4 w - - 0 1"
-                : "k2q4/6R1/8/8/8/8/8/6K1 b - - 0 1";
-            auto probe = std::make_unique<search_t>(check_fen);
-            move_t safe{}, losing{};
-            safe.set(&probe->brd, white ? "d1b3" : "d8b6");
-            losing.set(&probe->brd, white ? "d1g4" : "d8g5");
-            if (!probe->brd.legal(&safe) || !probe->brd.legal(&losing)
-                    || !probe->brd.gives_check(&safe) || !probe->brd.gives_check(&losing)) {
-                return failure(__LINE__);
-            }
-            if (probe->extension(&safe, probe->brd.gives_check(&safe)) != 1
-                    || probe->extension(&losing, probe->brd.gives_check(&losing))) {
-                return failure(__LINE__);
-            }
-            probe->stack->check_extensions = 3;
-            if (probe->extension(&safe, probe->brd.gives_check(&safe)) != 1) {
-                return failure(__LINE__);
-            }
-            const auto & extension_counts = probe->nnue_audit.counters;
-            if (extension_counts.extension_candidates != 3 || extension_counts.extensions_applied != 2
-                    || extension_counts.extension_see_rejected != 1) {
-                return failure(__LINE__);
-            }
-            probe->stack->check_extensions = 1;
-            probe->forward(&safe, probe->brd.gives_check(&safe));
-            if (probe->stack->check_extensions != 1) {
-                return failure(__LINE__);
-            }
-            probe->backward(&safe);
-            probe->forward();
-            if (probe->stack->check_extensions != 1) {
-                return failure(__LINE__);
-            }
-            probe->backward();
-            if (probe->stack->check_extensions != 1 || probe->brd.to_string() != check_fen) {
-                return failure(__LINE__);
-            }
-            // Depth four with no TT move is IID eligible. The controlled
-            // flag is off here; exercise that entry directly.
-            probe->init(check_fen, nullptr);
-            probe->stack->check_extensions = 3;
-            probe->game.max_nodes = 2048;
-            probe->pvs(-score::INF, score::INF, 4);
-            if (probe->nnue_audit.counters.iid_calls || probe->brd.ply
-                    || probe->brd.to_string() != check_fen || probe->stack->check_extensions != 3
-                    || !probe->nnue_audit.counters.extensions_applied
-                    || probe->nnue_audit.counters.max_check_extensions <= 3) {
-                return failure(__LINE__);
-            }
-            probe->init(check_fen, nullptr);
-            probe->game.max_nodes = 512;
-            probe->game.max_depth = 3;
-            probe->go();
-            if (probe->nodes != 512 || !probe->stop_all || probe->brd.ply
-                    || probe->brd.to_string() != check_fen || probe->stack->check_extensions
-                    || !probe->nnue_audit.counters.extensions_applied
-                    || probe->nnue_audit.counters.iid_calls
-                    || probe->nnue_audit.counters.max_main_ply >= MAX_PLY) {
-                return failure(__LINE__);
-            }
-        }
-    }
     options::get_option("NNUEAuditLMR")->value = 1;
     {
         for (bool white : {false, true}) {
@@ -187,7 +122,7 @@ int main(int argc, char ** argv) {
                 probe->go();
                 const auto & counts = probe->nnue_audit.counters;
                 if (!probe->lmr_enabled || probe->completed_depth != depth || probe->brd.ply
-                        || probe->brd.to_string() != start_fen || probe->stack->check_extensions
+                        || probe->brd.to_string() != start_fen
                         || counts.iid_calls || counts.pvs_nodes + counts.q_nodes
                             != counts.move_visits + counts.null_visits + counts.researches) {
                     return failure(__LINE__);
@@ -208,7 +143,7 @@ int main(int argc, char ** argv) {
             cancelled->game.max_nodes = 4096;
             cancelled->go();
             if (cancelled->nodes != 4096 || cancelled->brd.ply
-                    || cancelled->brd.to_string() != start_fen || cancelled->stack->check_extensions
+                    || cancelled->brd.to_string() != start_fen
                     || !cancelled->nnue_audit.counters.lmr_reductions) {
                 return failure(__LINE__);
             }
@@ -245,18 +180,16 @@ int main(int argc, char ** argv) {
     }
     options::get_option("NNUEAuditAspiration")->value = 0;
     options::get_option("NNUEAuditLMR")->value = 0;
-    options::get_option("NNUEAuditCheckExtensions")->value = 0;
     options::get_option("NNUEAuditHorizon")->value = 0;
     if (!search.nnue_audit.aligned_quiescence || search.beta_pruning || search.ffp_enabled
-            || search.null_enabled || search.adaptive_null_enabled || search.lmr_enabled || search.extension(&search.root.moves[0].move, 2)) {
+            || search.null_enabled || search.adaptive_null_enabled || search.lmr_enabled) {
         return failure(__LINE__);
     }
     options::get_option("NNUEAuditHorizon")->value = 2;
     search.init(fen, nullptr);
     if (!search.evaluation_network || !search.nnue_audit.aligned_quiescence
             || search.broader_futility_enabled || search.beta_pruning || search.ffp_enabled || search.null_enabled || search.adaptive_null_enabled || search.lmr_enabled
-            || search.iid_enabled || search.nnue_audit.q_delta || search.nnue_audit.q_see
-            || search.extension(&search.root.moves[0].move, 2)) {
+            || search.iid_enabled || search.nnue_audit.q_delta || search.nnue_audit.q_see) {
         return failure(__LINE__);
     }
     search.game.max_depth = 3;
