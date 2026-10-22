@@ -58,8 +58,8 @@ bool futility() {
 bool late_move_pruning() {
     auto s = position();
     auto quiet = make(*s, "d2d3");
-    bool ok = s->prune_quiet(quiet, 1, 60, 1, 0, 0, 1);
-    ok &= !s->prune_quiet(quiet, 1, 0, 1, 0, 0, 1);
+    bool ok = s->prune_quiet(quiet, 1, 60, 1, 0);
+    ok &= !s->prune_quiet(quiet, 1, 0, 1, 0);
     return check(ok, "late quiet moves are pruned at shallow depth");
 }
 
