@@ -1204,7 +1204,13 @@ MaxDrone config). In each position:
    games against John accumulate.
 4. Proven losers (at least 4 games, rate under 30%) are multiplied by 0.1 in
    every layer, book.bin included.
-5. The move is drawn from the result. Out of book a learned move is played only
+5. Signature lines, for psychology: when our move beat this registered opponent
+   three times in a row, each time with our eval after it at 45% or better, it
+   gets 70% of the choice there (`signature` in the PGN comment); the rest keeps
+   its proportions, so some variety stays. The streak counts games, not time, so
+   the line returns when the opponent comes back months later; a loss or a poor
+   eval with it resets the streak.
+6. The move is drawn from the result. Out of book a learned move is played only
    with real evidence (two games at 50% or more, or an analysis that took this
    game's budget); otherwise an analysis longer than the per-move budget
    (about remaining/30 + increment) is `recalled`, else the engine searches.

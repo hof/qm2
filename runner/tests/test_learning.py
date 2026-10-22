@@ -168,6 +168,21 @@ class selection_tests(unittest.TestCase):
         _, reason = self.opening([record([[start_key, "e2e4", 1.0]]) for _ in range(30)]).choose(chess.Board(), 5000)
         self.assertRegex(reason, r"^(book|learned) \d+%: book \d+%, global \d+%, humans \d+%, John \d+%$")
 
+    def test_signature_line_comes_back_against_the_same_opponent(self):
+        def game(score, evaluated=0.55, opponent="John"):
+            played = record([[start_key, "e2e4", score]], opponent=opponent)
+            played.update(values=[[start_key, "e2e4", evaluated, score]], moves=[[start_key, "e2e4"]], color="white")
+            return played
+
+        counts, reasons = self.picks([game(1.0) for _ in range(3)])
+        self.assertIn("signature", reasons)
+        self.assertTrue(240 < counts["e2e4"] < 320, counts)  # about 70%: some variety stays
+        for records in ([game(1.0)] * 2, [game(1.0)] * 3 + [game(0.0)], [game(1.0, evaluated=0.3)] * 3):
+            self.assertNotIn("signature", self.picks(records)[1])
+        self.assertNotIn("signature", self.picks([game(1.0)] * 3, opponent="Mary")[1])
+        # One bad game resets the streak; new convincing wins bring the line back.
+        self.assertIn("signature", self.picks([game(0.0)] + [game(1.0)] * 3)[1])
+
     def test_proven_losers_drop_even_in_book(self):
         counts, _ = self.picks([record([[start_key, "e2e4", 0.0]]) for _ in range(8)])
         self.assertLess(counts.get("e2e4", 0), 25)

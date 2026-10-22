@@ -15,6 +15,11 @@ horizon_plies = 40
 index_version = 2
 eval_window = 4
 result_share = 0.2
+# Signature lines: after this many convincing wins in a row against one opponent with a move, it gets
+# this share of the choice there; a win is convincing when our eval after the move stayed this good.
+signature_wins = 3
+signature_share = 0.7
+signature_eval = 0.45
 game_types = ("lightning", "blitz", "standard")
 
 
@@ -295,6 +300,7 @@ class opening_book:
         self.layers = ({}, {}, {})  # global, group, opponent: (key, move) -> [value sum, games]
         self.totals = ({}, {}, {})  # the same per position: key -> games
         self.analyses = {}  # key -> {move: [depth, centipawns, mate, think_ms, halfmove clock]}
+        self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         opponent = (opponent or "").lower()
         for record in records:
             weight = 1.0 if record["type"] == game_type else 0.5
@@ -302,9 +308,15 @@ class opening_book:
             layers = [(0, weight if registered else weight / 2)]
             if registered and group is not None and record["group"] == group:
                 layers.append((1, weight))
+            ours = set()
             if registered and opponent and record["opponent"].lower() == opponent:
                 layers.append((2, weight))
+                first = 0 if record.get("color") == "white" else 1
+                ours = {tuple(played) for played in record.get("moves", [])[first::2]}
             for key, move, evaluated, result in record["values"]:
+                if (key, move) in ours:
+                    convincing = result == 1.0 and (evaluated is None or evaluated >= signature_eval)
+                    self.signatures[(key, move)] = self.signatures.get((key, move), 0) + 1 if convincing else 0
                 value = self.value(evaluated, result)
                 for layer, layer_weight in layers:
                     entry = self.layers[layer].setdefault((key, move), [0.0, 0.0])
@@ -415,8 +427,26 @@ class opening_book:
         if not total:
             return {}, in_book, 0.0
         total += search
-        return ({move: (sum(parts.values()) / total, {name: part / total for name, part in parts.items()})
-                 for move, parts in shares.items()}, in_book, search / total)
+        moves = {move: (sum(parts.values()) / total, {name: part / total for name, part in parts.items()})
+                 for move, parts in shares.items()}
+        search /= total
+        signature = self.signature(key, moves)
+        if signature is not None and moves[signature][0] < signature_share:
+            # The signature line: same opening again, with some variety left.
+            mine = signature_share / moves[signature][0]
+            rest = (1 - signature_share) / (1 - moves[signature][0])
+            moves = {move: (probability * (mine if move == signature else rest),
+                            {name: part * (mine if move == signature else rest) for name, part in parts.items()})
+                     for move, (probability, parts) in moves.items()}
+            search *= rest
+        return moves, in_book, search
+
+    def signature(self, key, moves):
+        """Our move that beat this opponent convincingly several times in a row here, if any."""
+        streaks = {move: self.signatures.get((key, move.uci()), 0) for move, (probability, _) in moves.items()
+                   if probability > 0}
+        move = max(streaks, key=lambda move: (streaks[move], move.uci()), default=None)
+        return move if move is not None and streaks[move] >= signature_wins else None
 
     def describe(self, probability, parts):
         """Label first (book or learned), then each layer's share of the choice, for tuning."""
@@ -447,7 +477,10 @@ class opening_book:
             # Out of book a learned move must have real evidence: several games scoring well, or an
             # analysis that took at least this game's budget.
             if in_book or (games >= 2 and rate >= 0.5) or (analysis and analysis[3] >= budget_ms):
-                return move, self.describe(*moves[move])
+                reason = self.describe(*moves[move])
+                if move == self.signature(key, moves):
+                    reason = "signature " + reason
+                return move, reason
         if analyses:
             text, (depth, centipawns, mate, think_ms, clock) = max(analyses.items(),
                                                                    key=lambda item: (item[1][3], item[1][0]))
