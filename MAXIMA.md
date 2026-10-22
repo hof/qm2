@@ -2285,9 +2285,7 @@ The depth threshold and reduction are provisional, awaiting integrated strength
 validation. See [CPW Internal Iterative Reductions](https://chessprogramming.org/Internal_Iterative_Reductions).
 Audit counters record reductions by
 PV/cut context, depth range, reduced-node cutoffs, terminals and cancellation.
-The threshold keeps one-ply ordering probes out of shallow search. At nominal
-depth four it is eligible mainly after a root check extension preserves four
-plies; ordinary interior nodes become eligible at depth five.
+The threshold keeps one-ply ordering probes out of shallow search.
 
 Standard search defaults `MainSEE=true`. At non-PV nodes with one through six
 remaining effective plies, SEE pruning can skip a move after at least one legal
@@ -3471,7 +3469,7 @@ recapture extensions equivalent or redundant. There is no demonstrated universal
 root policy from this review.
 
 Superseded 2026-10-22: Maxima has no check extensions at all (see the
-reference-baseline note under move ordering). Historical record follows.
+move-ordering section). Historical record follows.
 Maxima kept root check extensions disabled. Giving-check and evasion-based
 extensions are different policies; a root guard alone does not establish an
 equivalent effective horizon. Algorithm reading and pinned source comparisons
