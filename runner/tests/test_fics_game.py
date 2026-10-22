@@ -201,7 +201,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle(start.replace(" 17 GuestHJGC", " 18 GuestHJGC"))
         await self.settle(player)
         self.assertEqual(player.connection.sent, ["e2e4"])
-        self.assertTrue(any(line.startswith("-- e4 d3 +0.25") and line.endswith("pv e4") for line in self.lines))
+        self.assertTrue(any(line.startswith("-- e4 d3 +0.25") and line.endswith("pv 1. e4") for line in self.lines))
         self.assertEqual(self.positions.read_text().split("\n")[0], "position startpos")
         self.assertNotIn("DrawContempt", self.positions.read_text())
 
@@ -209,7 +209,8 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         player = await self.player("play", policy=fics.play_policy(whisper=True))
         await player.handle(start)
         await self.settle(player)
-        self.assertEqual(player.connection.sent, ["e2e4", "whisper d3 +0.25 e4"])
+        self.assertEqual(player.connection.sent[0], "e2e4")
+        self.assertRegex(player.connection.sent[1], r"^whisper d3 \+0\.25 \d+\.\ds 1\. e4$")
 
     async def test_muted_account_stops_whispering(self):
         player = await self.player("play", policy=fics.play_policy(whisper=True))
@@ -231,7 +232,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(player.connection.sent[-1], "tell hof No game to resign.")
         await player.handle(start)
         await self.settle(player)
-        self.assertEqual(player.connection.sent[-1], "tell hermen d3 +0.25 e4")
+        self.assertRegex(player.connection.sent[-1], r"^tell hermen d3 \+0\.25 \d+\.\ds 1\. e4$")
         await player.handle("hof tells you: s3cret !abort")
         self.assertEqual(player.connection.sent[-1], "abort")
         await player.handle("hermen tells you: unfollow")
@@ -241,14 +242,14 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
 
     def test_learning_report_says_what_was_kept(self):
         self.assertEqual(fics.learning_report(None, None, []),
-                         ["nothing to learn: under ten moves or too few searches"])
+                         ["not learned: under ten moves or too few searches"])
         game = chess.pgn.Game.from_board(chess.Board())
         for uci in ("e2e4", "e7e5", "f2f4"):
             game.end().add_main_variation(chess.Move.from_uci(uci))
         record = {"opponent": "John", "values": [1, 2, 3], "score": 0.0}
         lines = fics.learning_report(game, record, [record, dict(record, score=1.0)])
-        self.assertEqual(lines, ["kept 3 opening moves with evals; vs John now +1 =0 -1",
-                                 "revenge line filed: 1. e4 e5 2. f4"])
+        self.assertEqual(lines, ["learned: 3 moves | vs John +1 =0 -1",
+                                 "revenge filed: 1. e4 e5 2. f4"])
 
     def test_whispers_explain_book_choices_simply(self):
         opening = learning.opening_book([], opponent="John", group="humans", mood="parham")
@@ -261,8 +262,8 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
             "f4 book: revenge vs John ("))
         self.assertEqual(fics.book_whisper("Bd6", ("recalled", 19, 36.6), opening), "Bd6 recalled d19 37s")
         info = {"depth": 18, "score": chess.engine.PovScore(chess.engine.Mate(5), chess.BLACK), "tbhits": 3}
-        self.assertEqual(fics.search_whisper(info, chess.BLACK, "Qd5+ Qd6 c7+ Kxc7 Qc6+ Kb8 Ba6", "out of book"),
-                         "d18 #5 TB Qd5+ Qd6 c7+ Kxc7 Qc6+ Kb8 (out of book)")
+        self.assertEqual(fics.search_whisper(info, chess.BLACK, "21...Qd5+ 22. Qd6", "out of book"),
+                         "d18 #5 TB 21...Qd5+ 22. Qd6 (out of book)")
 
     async def test_game_end_cancels_search(self):
         player = await self.player("hang")

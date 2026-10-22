@@ -1453,12 +1453,13 @@ The log shows each searched move with depth, score, time, and the expected line
 (`pv`). `whisper` (or `--whisper`) explains every move to observers (never to the
 opponent, unlike kibitz) in plain words:
 
-    e5 book: fire (base 44%, fire 20%, surprise 10%, experience 26%)
-    f4 book: revenge vs John (base 30%, vs John 70%)
-    d19 +2.07 Bd6 c4 O-O cxd5 Bxd5 Bxd5 (out of book)
+    1...e5 book: fire (base 44%, fire 20%, surprise 10%, experience 26%)
+    2. f4 book: revenge vs John (base 30%, vs John 70%)
+    d19 +2.07 36.6s 7...Bd6 8. c4 O-O 9. cxd5 Bxd5 10. Bxd5 (out of book)
+    learned: 24 moves | vs John +2 =0 -1
 
-Searched moves show depth, score (`#5` for mate), `TB` when tablebases were hit, and
-the first six plies of the line, starting with the move played. Book moves name the layer
+Searched moves show depth, score (`#5` for mate), `TB` when tablebases were hit, the
+time, and the first six plies of the line in numbered SAN, starting with the move played. Book moves name the layer
 with the largest share (ties to the more specific layer), then the mix; `base` is book.bin.
 
 FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and stops

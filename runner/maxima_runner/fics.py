@@ -397,21 +397,21 @@ def learning_report(game, record, records):
     """Plain lines for the owner after a game: what Maxima keeps from it, and the score against this
     opponent; a loss also files their opening as a revenge line."""
     if record is None:
-        return ["nothing to learn: under ten moves or too few searches"]
+        return ["not learned: under ten moves or too few searches"]
     opponent = record["opponent"]
     moves = sum(1 for _ in record["values"])
     played = [other["score"] for other in records if other["opponent"].lower() == opponent.lower()]
     wins, draws, losses = played.count(1.0), played.count(0.5), played.count(0.0)
-    lines = [f"kept {moves} opening moves with evals; vs {opponent} now +{wins} ={draws} -{losses}"]
+    lines = [f"learned: {moves} moves | vs {opponent} +{wins} ={draws} -{losses}"]
     if record["score"] == 0.0:
         board, line = game.board(), list(game.mainline_moves())[:learning.revenge_plies // 2]
-        lines.append(f"revenge line filed: {board.variation_san(line)}")
+        lines.append(f"revenge filed: {board.variation_san(line)}")
     return lines
 
 
-def search_whisper(info, turn, line, note=None):
-    """A searched move for observers: "d15 +4.52 TB Bg2 d5 d4 Nbd7 O-O (out of book)"; the line starts
-    with our move and is cut at whisper_plies."""
+def search_whisper(info, turn, line, note=None, seconds=None):
+    """A searched move for observers: "d15 +4.52 TB 9. Bg2 d5 10. d4 Nbd7 (out of book)"; the line starts
+    with our move, already cut at whisper_plies."""
     score, depth = info.get("score"), info.get("depth", 0)
     parts = []
     if score is not None and depth:
@@ -419,7 +419,9 @@ def search_whisper(info, turn, line, note=None):
         parts += [f"d{depth}", f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}"]
     if info.get("tbhits"):
         parts.append("TB")
-    parts += line.split()[:whisper_plies]
+    if seconds is not None:
+        parts.append(f"{seconds:.1f}s")
+    parts += line.split()
     if note:
         parts.append(f"({note})")
     return " ".join(parts)
@@ -795,7 +797,7 @@ class engine_player:
                 self.on_line(f"-- {board.san(move)} {reason} {time.monotonic() - started:.1f}s")
                 self.from_book = True
                 if (self.whispering or self.followers) and self.opening.why:
-                    await self.explain(book_whisper(board.san(move), self.opening.why, self.opening))
+                    await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
                 return
         try:
             result = await self.session.play(board, limit, game=self.token, opponent=self.opponent,
@@ -823,19 +825,21 @@ class engine_player:
                 note = "own idea"
             elif self.from_book:
                 note = "out of book"
-            await self.explain(search_whisper(result.info, board.turn, pv or board.san(result.move), note))
+            line = variation(board, result.info.get("pv", [])[:whisper_plies]) or board.variation_san([result.move])
+            await self.explain(search_whisper(result.info, board.turn, line, note, time.monotonic() - started))
         self.from_book = False
 
 
 def variation(board, moves, limit=10):
-    """The engine's expected line in SAN, up to limit moves or the first illegal one."""
-    replay, text = board.copy(), []
+    """The engine's expected line in numbered SAN ("12...Rfe8 13. b3 b5"), up to limit moves or the first
+    illegal one."""
+    replay, legal = board.copy(), []
     for move in moves[:limit]:
         if not replay.is_legal(move):
             break
-        text.append(replay.san(move))
+        legal.append(move)
         replay.push(move)
-    return " ".join(text)
+    return board.variation_san(legal) if legal else ""
 
 
 def describe(info, turn):
