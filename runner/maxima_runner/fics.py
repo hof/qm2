@@ -16,7 +16,7 @@ import chess
 import chess.engine
 
 from . import fics_game, learning
-from .project import engine_path, project_root
+from .project import data_root, engine_path
 from .uci import open_engine
 
 timeseal_key = b"Timestamp (FICS) v1.0 - programmed by Henrik Gram."
@@ -784,8 +784,8 @@ def layer_profiles(overrides, path):
 def style_books(configured):
     """Style book paths: <style>.bin beside book.bin unless the config names a file (relative to the
     project root), e.g. {"fire": "ph-gambitbook.bin"}."""
-    books = {name: project_root() / f"{name}.bin" for name in learning.style_names}
-    books.update({name: project_root() / Path(path).expanduser() for name, path in (configured or {}).items()})
+    books = {name: data_root() / f"{name}.bin" for name in learning.style_names}
+    books.update({name: data_root() / Path(path).expanduser() for name, path in (configured or {}).items()})
     return books
 
 
@@ -817,6 +817,9 @@ def run(options, parser):
     settings = dict(configured["options"])
     if configured["learning"]:
         settings.setdefault("OwnBook", "false")  # MaxDrone chooses book and learned moves (MAXIMA.md 9.7)
+    tables = data_root() / "tablebases" / "syzygy"
+    if tables.is_dir():
+        settings.setdefault("SyzygyPath", str(tables))
     for item in options.option:
         name, separator, value = item.partition("=")
         if not separator or not name.strip():
@@ -829,7 +832,7 @@ def run(options, parser):
                          configured["rematches"], configured["games"], guest=options.handle == "guest",
                          owner=configured["owner"], notes=configured["notes"],
                          contempt_window=configured["contempt_window"])
-    pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or project_root() / "experience" / "games" / "fics")
+    pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or data_root() / "experience" / "games" / "fics")
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
     if not valid_handle(options.handle):
         parser.error("FICS handles have 3 to 17 letters, or use guest")
@@ -846,8 +849,8 @@ def run(options, parser):
 
     @asynccontextmanager
     async def engine_session():
-        # The project root resolves the engine's relative eval.nnue and book.bin defaults.
-        async with open_engine([str(options.engine or engine_path())], str(project_root())) as session:
+        # The data directory resolves the engine's relative eval.nnue and book.bin defaults.
+        async with open_engine([str(options.engine or engine_path())], str(data_root())) as session:
             await session.configure(settings)
             yield session
 
@@ -857,7 +860,7 @@ def run(options, parser):
         learner = None
         if configured["learning"] and not options.no_engine:
             # index/ and players/ sit beside games/<server>/, so a custom --pgn-dir keeps them together
-            learner = learning.learner(pgn_dir.parent.parent, pgn_dir, project_root() / "book.bin",
+            learner = learning.learner(pgn_dir.parent.parent, pgn_dir, data_root() / "book.bin",
                                        configured["variety"],
                                        style_books(configured["style_books"]),
                                        configured["layer_profiles"] or None)

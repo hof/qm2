@@ -14,6 +14,12 @@ def project_root():
     return Path.cwd()
 
 
+def data_root():
+    """Books, network, tablebases and experience: MAXIMA_DATA_DIR (e.g. a persistent volume), else the checkout."""
+    configured = os.environ.get("MAXIMA_DATA_DIR")
+    return Path(configured).expanduser().resolve() if configured else project_root()
+
+
 def engine_path(root=None):
     root = root or project_root()
     for mode in ("release", "debug"):

@@ -132,8 +132,8 @@ def build(fetch, plies=16, min_games=50, margin=0.05, min_reply=0.05, min_reach=
 
 
 def main():
-    from .project import project_root
-    root = project_root()
+    from .project import data_root, project_root
+    root = data_root()
     parser = argparse.ArgumentParser(prog="maxima experience:solid", description=__doc__)
     parser.add_argument("--output", default=str(root / "solid.bin"), help="book to write (default: solid.bin)")
     parser.add_argument("--plies", type=int, default=16, help="depth of the book in plies (default: 16)")
@@ -145,7 +145,7 @@ def main():
     parser.add_argument("--cache-dir", default=str(root / "experience" / "explorer"),
                         help="explorer answers by position (default: experience/explorer)")
     options = parser.parse_args()
-    token = lichess_token(root)
+    token = lichess_token(project_root())
     if not token:
         parser.error("set LICHESS_TOKEN (environment or .env); a token without scopes is enough")
     fetch = explorer(token, options.cache_dir)

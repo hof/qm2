@@ -486,9 +486,9 @@ class learner:
 
 
 def main():
-    from .project import project_root
+    from .project import data_root
     parser = argparse.ArgumentParser(prog="maxima experience:build", description=__doc__)
-    parser.add_argument("--experience-dir", default=str(project_root() / "experience"),
+    parser.add_argument("--experience-dir", default=str(data_root() / "experience"),
                         help="reads games/fics/*.pgn, writes index/ and players/ (default: experience)")
     options = parser.parse_args()
     summary = build(options.experience_dir)
@@ -498,14 +498,14 @@ def main():
 
 
 def repertoire_main():
-    from .project import project_root
+    from .project import data_root, project_root
     parser = argparse.ArgumentParser(
         prog="maxima experience:repertoire",
         description="Build the style books of the multi-layer book (MAXIMA.md 9.7) from repertoire PGNs.")
     parser.add_argument("--books-dir", default=str(project_root() / "books"),
                         help="reads <style>.pgn (default: books/)")
-    parser.add_argument("--output-dir", default=str(project_root()),
-                        help="writes <style>.bin beside book.bin (default: project root)")
+    parser.add_argument("--output-dir", default=str(data_root()),
+                        help="writes <style>.bin beside book.bin (default: the data directory)")
     parser.add_argument("--plies", type=int, default=30, help="moves per line to include (default: 30)")
     options = parser.parse_args()
     built = 0

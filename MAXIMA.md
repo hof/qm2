@@ -1296,6 +1296,14 @@ ready, so it is safe to rerun and suits CI:
 `--check` changes nothing, reports each item, and exits 1 when something is
 missing. `--no-build` and `--no-debug` skip builds.
 
+`MAXIMA_DATA_DIR` moves the data out of the checkout, for example onto a
+persistent volume: books (`book.bin`, `fire.bin`, `solid.bin`), `eval.nnue`,
+`tablebases/` and `experience/` (PGN games, learning index, player stats).
+`init`, the download and experience commands and `maxima fics` all use it; the
+engine runs in that directory, so its relative `book.bin` and `eval.nnue`
+resolve there. MaxDrone sets `SyzygyPath` to `tablebases/syzygy` there unless
+configured otherwise. The `.env` token file stays in the checkout.
+
 ```bash
 ./maxima build                 # configure and compile Release
 ./maxima build --debug

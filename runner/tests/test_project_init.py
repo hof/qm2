@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-from maxima_runner import download_tablebases, project_init
+from maxima_runner import download_tablebases, project, project_init
 
 
 def archive(member, data):
@@ -20,7 +20,7 @@ def archive(member, data):
 
 
 def options(**overrides):
-    values = dict(check=False, build=False, debug=False, syzygy=0, solid=False, force=False)
+    values = dict(check=False, build=False, debug=False, syzygy=0, solid=False, force=False, data=None)
     values.update(overrides)
     return argparse.Namespace(**values)
 
@@ -40,30 +40,30 @@ class init_tests(unittest.TestCase):
 
     def test_downloads_then_skips_verified_book(self):
         with self.fetch():
-            self.assertEqual(self.step(self.root, options()), ("done", "Daring.zip"))
+            self.assertEqual(self.step(self.root, options(data=self.root)), ("done", "Daring.zip"))
         self.assertEqual((self.root / "fire.bin").read_bytes(), self.data)
         with patch.object(project_init.urllib.request, "urlopen") as request:
-            self.assertEqual(self.step(self.root, options())[0], "ok")
+            self.assertEqual(self.step(self.root, options(data=self.root))[0], "ok")
             request.assert_not_called()
 
     def test_keeps_own_book_unless_forced(self):
         (self.root / "fire.bin").write_bytes(b"my own gambits")
         with patch.object(project_init.urllib.request, "urlopen") as request:
-            self.assertIn("kept", self.step(self.root, options())[1])
+            self.assertIn("kept", self.step(self.root, options(data=self.root))[1])
             request.assert_not_called()
         with self.fetch():
-            self.assertEqual(self.step(self.root, options(force=True))[0], "done")
+            self.assertEqual(self.step(self.root, options(data=self.root, force=True))[0], "done")
         self.assertEqual((self.root / "fire.bin").read_bytes(), self.data)
 
     def test_rejects_wrong_member_or_checksum_without_leftovers(self):
         for member, data in (("Other.bin", None), ("Daring.bin", b"x" * len(self.data))):
             with self.fetch(member, data), self.assertRaises(ValueError):
-                self.step(self.root, options())
+                self.step(self.root, options(data=self.root))
             self.assertEqual(list(self.root.iterdir()), [])
 
     def test_check_mode_changes_nothing(self):
         with patch.object(project_init.urllib.request, "urlopen") as request:
-            self.assertEqual(self.step(self.root, options(check=True))[0], "missing")
+            self.assertEqual(self.step(self.root, options(data=self.root, check=True))[0], "missing")
             request.assert_not_called()
         self.assertFalse((self.root / "fire.bin").exists())
 
@@ -80,9 +80,16 @@ class init_tests(unittest.TestCase):
         self.assertFalse(download_tablebases.installed(directory, 3))
 
     def test_optional_steps_do_not_fail(self):
-        self.assertEqual(project_init.solid_step(self.root, options())[0], "skipped")
-        self.assertEqual(project_init.syzygy_step(self.root, options())[0], "skipped")
-        self.assertEqual(project_init.network_step(self.root, options())[0], "skipped")
+        self.assertEqual(project_init.solid_step(self.root, options(data=self.root))[0], "skipped")
+        self.assertEqual(project_init.syzygy_step(self.root, options(data=self.root))[0], "skipped")
+        self.assertEqual(project_init.network_step(self.root, options(data=self.root))[0], "skipped")
+
+    def test_data_directory_follows_environment(self):
+        with patch.dict(project.os.environ, {"MAXIMA_DATA_DIR": str(self.root)}):
+            self.assertEqual(project.data_root(), self.root.resolve())
+        with patch.dict(project.os.environ, {}, clear=True), patch.object(project, "project_root",
+                                                                          return_value=Path("/checkout")):
+            self.assertEqual(project.data_root(), Path("/checkout"))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,6 @@
-"""Prepare a checkout: toolchain, runner, builds, network, books and tablebases; ready parts are skipped."""
+"""Prepare a checkout: toolchain, runner, builds, network, books and tablebases; ready parts are skipped.
+
+Books, network, tablebases and experience go to MAXIMA_DATA_DIR when set, else the checkout."""
 import argparse
 import hashlib
 import os
@@ -11,7 +13,7 @@ import urllib.request
 import zipfile
 
 from . import download_tablebases
-from .project import project_root
+from .project import data_root, project_root
 
 books_url = "https://github.com/ChrisWhittington/polyglot-books/releases/download/v1.0/"
 # Pinned downloads: file, archive URL, archive member, size, SHA-256.
@@ -110,7 +112,7 @@ def build_step(mode):
 def network_step(root, options):
     """Only engines with NNUE ship tools/download_nnue.py; it prints the verified file."""
     script = root / "tools/download_nnue.py"
-    target = root / "eval.nnue"
+    target = options.data / "eval.nnue"
     if not script.is_file():
         return "skipped", "this engine has no network"
     if target.is_file():
@@ -126,7 +128,7 @@ def network_step(root, options):
 
 def book_step(name, url, member, size, sha256):
     def step(root, options):
-        target = root / name
+        target = options.data / name
         if target.is_file():
             if file_checksum(target) == sha256:
                 return "ok", "verified"
@@ -141,7 +143,7 @@ def book_step(name, url, member, size, sha256):
 
 def solid_step(root, options):
     from . import solid_book
-    if (root / "solid.bin").is_file():
+    if (options.data / "solid.bin").is_file():
         return "ok", "solid.bin"
     if not options.solid:
         return "skipped", "optional: ./maxima init --solid (needs LICHESS_TOKEN)"
@@ -154,7 +156,7 @@ def solid_step(root, options):
 
 
 def syzygy_step(root, options):
-    directory = root / "tablebases/syzygy"
+    directory = options.data / "tablebases/syzygy"
     if not options.syzygy:
         return "skipped", "--syzygy 0"
     if download_tablebases.installed(directory, options.syzygy):
@@ -194,8 +196,10 @@ def main():
                         help="build solid.bin from Lichess master games (needs LICHESS_TOKEN)")
     parser.add_argument("--force", action="store_true", help="replace books that differ from the pinned files")
     options = parser.parse_args()
+    options.data = data_root()
     if not (root / "CMakePresets.json").is_file():
         raise ValueError("init requires a Maxima checkout; set MAXIMA_PROJECT_DIR")
+    print(f"data in {options.data} (set MAXIMA_DATA_DIR to move it, e.g. to a persistent volume)\n")
     results = []
     for name, step in steps(options):
         try:

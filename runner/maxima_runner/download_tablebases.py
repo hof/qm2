@@ -10,7 +10,7 @@ import re
 import tempfile
 import urllib.request
 
-from .project import project_root
+from .project import data_root
 
 
 def list_tables(base_url, pieces):
@@ -149,7 +149,7 @@ def main():
     parser.add_argument("--pieces", type=int, choices=(3, 4, 5, 6, 7), default=4,
                         help="maximum piece count, including kings (default: 4)")
     parser.add_argument("--directory", type=Path,
-                        default=project_root() / "tablebases" / "syzygy")
+                        default=data_root() / "tablebases" / "syzygy")
     parser.add_argument("--dry-run", action="store_true", help="show size without downloading table files")
     parser.add_argument("--base-url", default="https://tablebase.lichess.ovh/tables/standard",
                         help="Syzygy mirror containing piece-count WDL and DTZ directories")
