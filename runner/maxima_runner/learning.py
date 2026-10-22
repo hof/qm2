@@ -1,4 +1,4 @@
-"""Opening learning from MaxDrone's PGN games (MAXIMA.md 9.7): per-game digests and player stats."""
+"""Opening learning from MaxDrone's PGN games (MAXIMA.md 9.7): digests, player stats, and the multi-layer book."""
 import argparse
 from datetime import datetime
 import json
@@ -12,51 +12,15 @@ import chess.pgn
 import chess.polyglot
 
 horizon_plies = 40
-index_version = 1
+index_version = 2
+eval_window = 4
+result_share = 0.2
 game_types = ("lightning", "blitz", "standard")
 
 
-def bucket(centipawns):
-    """JDrone's score bands from the mover's point of view: -3 (lost) to 3 (won)."""
-    for limit, value in ((300, 3), (150, 2), (50, 1)):
-        if centipawns >= limit:
-            return value
-    for limit, value in ((-50, 0), (-150, -1), (-300, -2)):
-        if centipawns > limit:
-            return value
-    return -3
-
-
-def find_decision(scores, plies):
-    """Where Maxima's evals settled: (result, last credited ply, final band), or (None, None, None).
-
-    scores holds (ply, band) for our searched moves in order; plies is the game length.
-    Ported from JDrone's LearnBook.findResultChain.
-    """
-    draw_chain = win_chain = loss_chain = 0
-    previous, score_drop = 3, False
-    for ply, band in scores:
-        score_drop = band + 1 < previous
-        if band == -3:
-            win_chain, draw_chain, loss_chain = 0, 0, loss_chain + 3
-        elif band == -2:
-            win_chain, draw_chain, loss_chain = 0, 0, loss_chain + 1
-        elif band == -1:
-            win_chain, draw_chain, loss_chain = 0, draw_chain + 1, loss_chain + 1
-        elif band in (0, 1):
-            win_chain, draw_chain, loss_chain = 0, draw_chain + 1, 0
-        else:
-            win_chain, draw_chain, loss_chain = win_chain + 1, 0, 0
-        previous = band
-        near_end = ply >= plies - 2
-        if draw_chain == 0 and win_chain == 0 and (loss_chain >= 6 or (loss_chain >= 2 and near_end)):
-            return "loss", ply - 1, band
-        if loss_chain == 0 and win_chain == 0 and (
-                (band == 0 and draw_chain >= 12) or (draw_chain > 0 and near_end and ply >= 12)):
-            return "draw", ply - 6, band
-        if win_chain > 0 and loss_chain == 0 and draw_chain == 0 and near_end and not score_drop:
-            return "win", ply, band
-    return None, None, None
+def expected_score(centipawns):
+    """Win expectation of an eval: +1.00 is about 64%, +3.00 about 85%."""
+    return 1 / (1 + 10 ** (-max(-2000, min(2000, centipawns)) / 400))
 
 
 def game_type(event):
@@ -77,7 +41,10 @@ def opponent_group(headers, color):
 
 
 def digest(game):
-    """One game's learning record, or None when it is not one of our games."""
+    """One game's learning record, or None when it is not one of our games.
+
+    Every opening move gets two values from the mover's point of view: Maxima's eval just after it
+    (the mean expected score of our next eval_window searched moves) and the game result."""
     headers = game.headers
     ours = [color for color, prefix in ((chess.WHITE, "White"), (chess.BLACK, "Black"))
             if headers.get(f"{prefix}Type") == "program" and headers.get(f"{prefix}Engine")]
@@ -86,7 +53,7 @@ def digest(game):
     our_color = ours[0]
     their_prefix = "Black" if our_color == chess.WHITE else "White"
     board = game.board()
-    moves, scores, analyses = [], [], []
+    moves, evals, analyses = [], [], []
     for ply, node in enumerate(game.mainline()):
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         mover = board.turn
@@ -94,29 +61,24 @@ def digest(game):
         evaluation, depth = node.eval(), node.eval_depth()
         if mover == our_color and evaluation is not None and depth:
             relative = evaluation.pov(mover)
-            centipawns = relative.score(mate_score=100000)
-            scores.append((ply, bucket(centipawns)))
+            centipawns = relative.score(mate_score=2000)
+            evals.append((ply, expected_score(centipawns)))
             if ply < horizon_plies:
                 analyses.append([key, node.move.uci(), depth, centipawns, int(relative.is_mate()),
                                  round((node.emt() or 0) * 1000), board.halfmove_clock])
         board.push(node.move)
-    result, end, final = find_decision(scores, len(moves))
-    credited = []
-    if result is not None:
-        bands = dict(scores)
-        strong = 0
-        for ply, (key, move, our_move) in enumerate(moves[:min(end + 1, horizon_plies)]):
-            if final >= 3 and bands.get(ply, -9) >= 3:
-                strong += 1
-                if strong > 2:
-                    continue  # easy wins: later moves of the game get no credit
-            if result == "draw":
-                credited.append([key, move, 0.5])
-            elif result == "loss":
-                credited.append([key, move, 0.0 if our_move else 1.0])
-            elif our_move:
-                credited.append([key, move, 1.0])
     outcome = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(headers.get("Result"))
+    score = None if outcome is None else (outcome if our_color == chess.WHITE else 1 - outcome)
+    values = []
+    for ply, (key, move, our_move) in enumerate(moves[:horizon_plies]):
+        after = [value for at, value in evals if at >= ply][:eval_window]
+        evaluated = round(sum(after) / len(after), 4) if after else None
+        result = score
+        if not our_move:
+            evaluated = None if evaluated is None else round(1 - evaluated, 4)
+            result = None if score is None else 1 - score
+        if evaluated is not None or result is not None:
+            values.append([key, move, evaluated, result])
     rating = headers.get(f"{their_prefix}Elo", "")
     return {
         "date": headers.get("UTCDate", headers.get("Date", "")),
@@ -129,10 +91,9 @@ def digest(game):
         "rating": int(rating) if rating.isdigit() else None,
         "type": game_type(headers.get("Event", "")),
         "time_control": headers.get("TimeControl", ""),
-        "score": None if outcome is None else (outcome if our_color == chess.WHITE else 1 - outcome),
-        "decision": result, "decided_at": end,
+        "score": score,
         "moves": [move[:2] for move in moves[:horizon_plies]],
-        "credited": credited, "analyses": analyses,
+        "values": values, "analyses": analyses,
     }
 
 
@@ -214,7 +175,7 @@ def build(experience_dir, games_dir=None):
     records = load_index(games_dir or experience_dir / "games" / "fics", experience_dir / "index")
     count = write_player_stats(player_stats(records), experience_dir / "players")
     return {"games": len(records), "players": count,
-            "decided": sum(record["decision"] is not None for record in records),
+            "evaluated": sum(any(value[2] is not None for value in record["values"]) for record in records),
             "built": datetime.now().isoformat(timespec="seconds")}
 
 
@@ -309,17 +270,27 @@ class opening_book:
                 layers.append((1, weight))
             if registered and opponent and record["opponent"].lower() == opponent:
                 layers.append((2, weight))
-            for key, move, value in record["credited"]:
+            for key, move, evaluated, result in record["values"]:
+                value = self.value(evaluated, result)
                 for layer, layer_weight in layers:
                     entry = self.layers[layer].setdefault((key, move), [0.0, 0.0, 0.0])
-                    entry[0] += layer_weight * (value == 1.0)
-                    entry[1] += layer_weight * (value == 0.5)
+                    entry[0] += layer_weight * value
                     entry[2] += layer_weight
             for key, move, depth, centipawns, mate, think_ms, clock in record["analyses"]:
                 moves = self.analyses.setdefault(key, {})
                 known = moves.get(move)
                 if known is None or (think_ms, depth) > (known[3], known[0]):
                     moves[move] = [depth, centipawns, mate, think_ms, clock]
+
+    def value(self, evaluated, result):
+        """Maxima's eval is the main signal; the result adds what evals miss, such as time trouble."""
+        if result == 0.5:
+            result = self.draw_value
+        if evaluated is None:
+            return result
+        if result is None:
+            return evaluated
+        return (1 - result_share) * evaluated + result_share * result
 
     def estimate(self, key, move):
         """Score rate shrunk global -> group -> opponent, its posterior strength, and the games behind it."""
@@ -432,7 +403,7 @@ def main():
                         help="reads games/fics/*.pgn, writes index/ and players/ (default: experience)")
     options = parser.parse_args()
     summary = build(options.experience_dir)
-    print(f"{summary['games']} games, {summary['decided']} with a detected decision, "
+    print(f"{summary['games']} games, {summary['evaluated']} with Maxima's evals, "
           f"{summary['players']} opponents")
     return 0
 

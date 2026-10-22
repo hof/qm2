@@ -262,7 +262,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         learner = learning.learner(Path(self.directory.name) / "experience", folder)
         key = f"{chess.polyglot.zobrist_hash(chess.Board()):016x}"
         learner.records = [{"opponent": "guestNinja", "group": "humans", "type": "blitz",
-                            "credited": [[key, "d2d4", 1.0]], "analyses": []}] * 6
+                            "values": [[key, "d2d4", 0.9, 1.0]], "analyses": []}] * 6
         player = await self.player("hang", pgn_dir=folder, learner=learner)
         player.name = "GuestHJGC"
         await player.handle("Creating: GuestHJGC (++++) guestNinja (1500) unrated blitz 3 0")

@@ -1,4 +1,4 @@
-"""Learning digests: JDrone's decision point, asymmetric credit, index cache, and player stats."""
+"""Learning digests: eval and result values per move, index cache, player stats, and selection."""
 import json
 from pathlib import Path
 import tempfile
@@ -36,39 +36,29 @@ def make_game(our_scores, ours="white", result="1-0", opponent_headers=None, pli
     return game
 
 
-class decision_tests(unittest.TestCase):
-    def test_score_bands_match_jdrone(self):
-        self.assertEqual([learning.bucket(cp) for cp in (300, 299, 150, 149, 50, 49, -49, -50, -149, -150, -299, -300)],
-                         [3, 2, 2, 1, 1, 0, 0, -1, -1, -2, -2, -3])
-
-    def test_detects_loss_draw_and_win(self):
-        self.assertEqual(learning.find_decision([(1, 0), (3, -2), (5, -3), (7, -3)], 30), ("loss", 6, -3))
-        self.assertEqual(learning.find_decision([(ply, 0) for ply in range(0, 40, 2)], 60)[0], "draw")
-        self.assertEqual(learning.find_decision([(0, 1), (2, 2), (4, 3)], 6), ("win", 4, 3))
-        self.assertEqual(learning.find_decision([(0, 1), (2, 2), (4, 3)], 20), (None, None, None))
-
-
 class digest_tests(unittest.TestCase):
-    def test_loss_credits_opponent_moves_as_wins(self):
-        record = learning.digest(make_game([0, -60, -200, -400, -500, -600, -700, -800], result="0-1"))
-        self.assertEqual(record["decision"], "loss")
-        ours = {credit[2] for credit, (key, move) in zip(record["credited"], record["moves"]) if line.index(move) % 2 == 0}
-        theirs = {credit[2] for credit, (key, move) in zip(record["credited"], record["moves"]) if line.index(move) % 2}
-        self.assertEqual((ours, theirs), ({0.0}, {1.0}))
+    def test_expected_score_curve(self):
+        self.assertAlmostEqual(learning.expected_score(0), 0.5)
+        self.assertAlmostEqual(learning.expected_score(100), 0.64, places=2)
+        self.assertAlmostEqual(learning.expected_score(-300), 0.15, places=2)
+
+    def test_each_move_gets_the_following_evals_and_the_result_from_its_movers_view(self):
+        record = learning.digest(make_game([0, 100, 100, 100, 100, 300, 300, 300, 300], result="0-1"))
+        values = {move: (evaluated, result) for _, move, evaluated, result in record["values"]}
+        mean = (0.5 + 3 * learning.expected_score(100)) / 4
+        self.assertAlmostEqual(values["e2e4"][0], mean, places=3)
+        self.assertAlmostEqual(values["e7e5"][0], 1 - learning.expected_score(100), places=3)
+        self.assertAlmostEqual(values["g1f3"][0], learning.expected_score(100), places=3)
+        self.assertEqual((values["e2e4"][1], values["e7e5"][1]), (0.0, 1.0))
         self.assertEqual(record["score"], 0.0)
-
-    def test_win_credits_only_our_moves_and_stops_after_easy_moves(self):
-        record = learning.digest(make_game([20, 80, 320, 400, 500, 600, 700, 800, 900]))
-        self.assertEqual(record["decision"], "win")
-        credited = [move for _, move, _ in record["credited"]]
-        self.assertEqual(credited, ["e2e4", "g1f3", "f1b5", "b5a4"])
-        self.assertEqual({value for _, _, value in record["credited"]}, {1.0})
-
-    def test_draw_credits_both_sides_and_records_analysis(self):
-        record = learning.digest(make_game([0] * 9, result="1/2-1/2"))
-        self.assertEqual(record["decision"], "draw")
-        self.assertEqual({value for _, _, value in record["credited"]}, {0.5})
         self.assertEqual(record["analyses"][0][1:], ["e2e4", 12, 0, 0, 2500, 0])
+
+    def test_unfinished_games_keep_evals_only_and_book_tails_keep_results_only(self):
+        record = learning.digest(make_game([0, 0], result="*"))
+        self.assertEqual({result for *_, result in record["values"]}, {None})
+        played = learning.digest(make_game([], result="1-0"))
+        self.assertEqual({(evaluated, result) for _, move, evaluated, result in played["values"]
+                          if line.index(move) % 2 == 0}, {(None, 1.0)})
 
     def test_groups_and_unknown_games(self):
         self.assertEqual(learning.digest(make_game([0], ours="black", opponent_headers={"WhiteTitle": "GM"}))["group"],
@@ -116,9 +106,10 @@ def polyglot_book(path, entries):
             stream.write(struct.pack(">QHHI", key, code, weight, 0))
 
 
-def record(credited, opponent="John", group="humans", game_type="blitz", analyses=()):
-    return {"opponent": opponent, "group": group, "type": game_type, "credited": credited,
-            "analyses": list(analyses)}
+def record(results, opponent="John", group="humans", game_type="blitz", analyses=()):
+    """A game record whose moves carry only a result value, so draws follow the contempt."""
+    return {"opponent": opponent, "group": group, "type": game_type,
+            "values": [[key, move, None, result] for key, move, result in results], "analyses": list(analyses)}
 
 
 start_key = f"{chess.polyglot.zobrist_hash(chess.Board()):016x}"
