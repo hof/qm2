@@ -323,6 +323,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     threat_ordering_enabled = wild == 0 && options::get_value("ThreatOrdering");
     check_ordering_enabled = wild == 0 && options::get_value("CheckOrdering");
     tt_eval_enabled = wild == 0 && options::get_value("TTEval");
+    tt_search_eval_enabled = wild == 0 && options::get_value("TTSearchEval");
     correction_history_enabled = wild == 0 && options::get_value("CorrectionHistory");
     piece_correction_enabled = wild == 0 && options::get_value("PieceCorrection");
     continuation_correction_enabled = wild == 0 && options::get_value("ContinuationCorrection");
@@ -362,7 +363,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         adaptive_lmr_enabled = context_lmr_enabled = lmr_history_enabled = false;
         adaptive_null_enabled = false;
         broader_futility_enabled = false;
-        tt_eval_enabled = false;
+        tt_eval_enabled = tt_search_eval_enabled = false;
         correction_history_enabled = false;
         upcoming_repetition_enabled = false;
         q_tt_enabled = false;
@@ -1213,6 +1214,27 @@ int search_t::correction_value() const {
         }
     }
     return value / correction_history_t::grain;
+}
+
+// A shallow compatible searched bound can improve the pruning estimate without
+// becoming a full-depth cutoff or replacing the raw/corrected static snapshot.
+int search_t::tt_pruning_eval(int static_eval, int value, int bound, bool compatible) {
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    if (!tt_search_eval_enabled || !compatible || stack->in_check || stop_all
+            || iid_active || verification_mode != verification_mode_t::none
+            || stack->excluded_move || stack->repetition_start > 0
+            || std::abs(static_eval) >= decisive || std::abs(value) >= decisive
+            || value == static_eval) {
+        return static_eval;
+    }
+    if (bound != score::EXACT && !(bound == score::LOWERBOUND && value > static_eval)
+            && !(bound == score::UPPERBOUND && value < static_eval)) {
+        return static_eval;
+    }
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.tt_search_eval_hits;
+#endif
+    return value;
 }
 
 int search_t::corrected_static_eval(int raw) {
@@ -2176,7 +2198,7 @@ bool search_t::razor_node(int alpha, int beta, int depth, int eval, int & value)
 }
 
 // Static evaluation supplies a selective fail-high premise, not a legal pass.
-bool search_t::reverse_futility(int beta, int depth, int eval, int & value) {
+bool search_t::reverse_futility(int beta, int depth, int static_eval, int eval, int & value) {
     const int decisive = score::TABLEBASE - MAX_PLY;
     if (!broader_futility_enabled || !beta_pruning || depth < 1 || depth >= 9
             || !brd.ply || stack->in_check || stop_all || iid_active
@@ -2195,7 +2217,7 @@ bool search_t::reverse_futility(int beta, int depth, int eval, int & value) {
     }
     // Correction magnitude expresses uncertainty in the raw evaluator. A
     // threatened valuable piece must not strengthen the improving discount.
-    const int correction = std::abs(eval - int(stack->eval_result));
+    const int correction = std::abs(static_eval - int(stack->eval_result));
     const int margin = std::max(25, 100 * depth
         - 100 * int(stack->improving && !lower_value_threat(brd)) + correction / 2);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
@@ -2644,7 +2666,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     stack->tt_key = brd.stack->tt_key;
     const U64 context = normal_search ? tt_context() : 0;
     clock_range_t tt_clocks;
-    int tt_move = 0, tt_flag = 0, tt_score;
+    int tt_move = 0, tt_flag = 0, tt_score = 0;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     const bool use_tt_scores = normal_search && !nnue_audit.fixed_horizon && !nnue_audit.aligned_quiescence;
     const bool probe_tt = normal_search
@@ -2655,10 +2677,10 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 #else
     const bool probe_tt = normal_search, use_tt_scores = normal_search;
 #endif
-    bool cached_pv = false;
+    bool cached_pv = false, compatible_bound = false;
     const bool usable_tt_score = probe_tt && trans_table::retrieve(stack->tt_key, brd.ply,
         depth, tt_score, tt_move, tt_flag, context, brd.stack->fifty_count, &tt_clocks,
-        tt_mode_t::main_search, &cached_pv);
+        tt_mode_t::main_search, &cached_pv, &compatible_bound);
     stack->tt_pv = context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled && (pv || cached_pv);
     // A cached score below a legal draw escape cannot resolve this node.
     // Retain its move hint, but continue searching for something better.
@@ -2710,10 +2732,15 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
      */
 
     const bool in_check = stack->in_check;
-    const int eval = evaluate(this);
-    stack->static_eval = eval;
+    const int static_eval = evaluate(this);
+    stack->static_eval = static_eval;
     if (!repetition_floor) {
-        update_eval_history(eval);
+        update_eval_history(static_eval);
+    }
+    const int eval = tt_pruning_eval(static_eval, tt_score, tt_flag,
+        compatible_bound && use_tt_scores && !repetition_floor);
+    if (eval != static_eval) {
+        stack->tt_clocks.include_child(tt_clocks, 0);
     }
     stack->improving = is_improving();
     if (context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled && normal_search && !iid_active) {
@@ -2721,11 +2748,11 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         stack->lmr_tt_tactical = hint.piece && (hint.capture || hint.promotion)
             && brd.valid(&hint) && brd.legal(&hint);
         if (!in_check && stack->eval_result != score::INVALID) {
-            stack->lmr_correction = std::min(2, std::abs(eval - stack->eval_result) / 100);
+            stack->lmr_correction = std::min(2, std::abs(static_eval - stack->eval_result) / 100);
         }
     }
     int razor_score = alpha;
-    if (!pv && !repetition_floor && razor_node(alpha, beta, depth, eval, razor_score)) {
+    if (!pv && !repetition_floor && razor_node(alpha, beta, depth, static_eval, razor_score)) {
         return razor_score;
     }
     if (stop_all) {
@@ -2733,7 +2760,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     }
     const int decisive_score = score::TABLEBASE - MAX_PLY;
     int futility_score = beta;
-    if (!pv && !repetition_floor && reverse_futility(beta, depth, eval, futility_score)) {
+    if (!pv && !repetition_floor && reverse_futility(beta, depth, static_eval, eval, futility_score)) {
         return futility_score;
     }
     const bool do_prune_node = !excluded_move && eval >= beta && !in_check && !pv
@@ -2742,7 +2769,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     const bool previous_null = brd.ply > 0 && !(stack - 1)->current_move.piece;
     const bool null_policy = adaptive_null_enabled
         ? brd.ply > 0 && cut_node && depth > 2 && normal_search && !iid_active
-            && !repetition_floor && eval + 132 * int(stack->improving) >= beta + 8 * depth
+            && !repetition_floor && static_eval + 132 * int(stack->improving) >= beta + 8 * depth
         : eval >= beta + null_move_margin;
     const bool do_null = null_enabled && !previous_null && null_policy;
 
@@ -2785,7 +2812,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         ++nnue_audit.counters.null_attempts;
 #endif
-        const int null_depth = null_search_depth(depth, eval, beta);
+        const int null_depth = null_search_depth(depth, static_eval, beta);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         const auto null_before = nodes;
         auto & counts = nnue_audit.counters;
@@ -2857,7 +2884,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     }
 
     int probcut_score = alpha;
-    if (!pv && !repetition_floor && probcut(alpha, beta, depth, eval, cut_node, probcut_score)) {
+    if (!pv && !repetition_floor && probcut(alpha, beta, depth, static_eval, cut_node, probcut_score)) {
         return probcut_score;
     }
     if (stop_all) {
@@ -2942,7 +2969,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         }
 
         if (!pv && !repetition_floor && !singular && prune_futility(*move,
-                depth - reduce, searched_moves, best, alpha, beta, gives_check, eval)) {
+                depth - reduce, searched_moves, best, alpha, beta, gives_check, static_eval)) {
             continue;
         }
 
@@ -2951,7 +2978,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
             ++nnue_audit.counters.ffp_candidates;
 #endif
-            pruned = eval + forward_futility_margin <= alpha;
+            pruned = static_eval + forward_futility_margin <= alpha;
             if (pruned) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                 ++nnue_audit.counters.ffp_prunes;
@@ -3205,11 +3232,16 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     const bool use_q_tt = q_tt_enabled && verification_mode == verification_mode_t::none;
     const U64 context = use_q_tt ? tt_context() : 0;
     stack->tt_key = key;
+    int tt_score = 0, tt_move = 0, tt_flag = 0;
+    bool compatible_bound = false;
+    clock_range_t tt_clocks;
     if (use_q_tt) {
-        int tt_score = 0, tt_move = 0, tt_flag = 0;
         clock_range_t clocks;
         const bool usable = trans_table::retrieve(key, brd.ply, 1, tt_score, tt_move,
-            tt_flag, context, brd.stack->fifty_count, &clocks, mode);
+            tt_flag, context, brd.stack->fifty_count, &clocks, mode, nullptr, &compatible_bound);
+        if (compatible_bound) {
+            tt_clocks = clocks;
+        }
         if (usable && (!repetition_floor || tt_score >= draw_score())
                 && alpha + 1 == beta && (tt_flag == score::EXACT
                 || (tt_flag == score::LOWERBOUND && tt_score >= beta)
@@ -3240,8 +3272,14 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return value;
     };
 
+    // A searched estimate is distinct from the static input to delta pruning.
+    const int static_eval = evaluate(this);
+    const int eval = tt_pruning_eval(static_eval, tt_score, tt_flag,
+        compatible_bound && !repetition_floor);
+    if (eval != static_eval) {
+        stack->tt_clocks.include_child(tt_clocks, 0);
+    }
     //stand-pat: return if eval is already good enough
-    const int eval = evaluate(this);
     if (eval >= beta && !in_check) {
         return has_legal_move(brd) ? finish(eval, score::LOWERBOUND)
             : finish(draw_score(), score::EXACT);
@@ -3352,7 +3390,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                         ++nnue_audit.counters.q_delta_candidates;
 #endif
-                        delta_prune = eval + board::PVAL[move->capture] + quiescence_delta_margin <= alpha;
+                        delta_prune = static_eval + board::PVAL[move->capture] + quiescence_delta_margin <= alpha;
                     }
                     // SEE estimates material on one square, not positional
                     // compensation. Keep equal exchanges and tactical guards.
@@ -3375,7 +3413,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
                 // pruning, rather than replacing it with the window's alpha.
                 if (delta_prune && brd.legal(move)) {
                     best_score = std::max(best_score,
-                        eval + board::PVAL[move->capture] + quiescence_delta_margin);
+                        static_eval + board::PVAL[move->capture] + quiescence_delta_margin);
                 }
                 continue;
             }
@@ -3490,7 +3528,7 @@ void search_t::reset_stack() {
     counts.lmp_candidates = counts.lmp_prunes = 0;
     counts.history_pruning_candidates = counts.history_prunes = 0;
     counts.tt_history_rewards = counts.tt_history_penalties = 0;
-    counts.eval_history_updates = 0;
+    counts.eval_history_updates = counts.tt_search_eval_hits = 0;
     counts.probcut_attempts = counts.probcut_candidates = counts.probcut_q_passes = 0;
     counts.probcut_searches = counts.probcut_researches = counts.probcut_cutoffs = 0;
     counts.probcut_cancelled = counts.probcut_visits = counts.probcut_tt_vetoes = 0;

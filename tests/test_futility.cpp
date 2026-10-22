@@ -68,7 +68,7 @@ bool test_reverse() {
                         int value = 9999;
                         s->stack->tt_clocks = {0, 101};
                         const bool want = depth < 9 && offset <= 0;
-                        const bool got = s->reverse_futility(beta, depth, 1000, value);
+                        const bool got = s->reverse_futility(beta, depth, 1000, 1000, value);
                         ok &= got == want && (!got || value == beta + (1000 - beta) / 3)
                             && s->stack->tt_clocks.max == (want ? 98 : 101);
                         ++cases;
@@ -94,7 +94,7 @@ bool test_reverse() {
             if (guard == 9) { s->brd.stack->fifty_count = 99; }
             if (guard == 10) { s->stack->tt_move = s->quiet(); }
             int value = 0;
-            ok &= !s->reverse_futility(guard == 11 ? -score::TABLEBASE : 0, 4, 1000, value);
+            ok &= !s->reverse_futility(guard == 11 ? -score::TABLEBASE : 0, 4, 1000, 1000, value);
             *s->stack = frame;
             s->brd.stack->fifty_count = clock;
             s->stop_all = s->iid_active = false;
@@ -102,10 +102,10 @@ bool test_reverse() {
         }
         s->broader_futility_enabled = s->beta_pruning = true;
         int value = 0;
-        ok &= !s->reverse_futility(0, 4, score::TABLEBASE, value);
+        ok &= !s->reverse_futility(0, 4, score::TABLEBASE, score::TABLEBASE, value);
         // A malformed hint has no policy authority and must not reach legality.
         s->stack->tt_move.set(WPAWN, a1, a8);
-        ok &= s->reverse_futility(0, 4, 1000, value);
+        ok &= s->reverse_futility(0, 4, 1000, 1000, value);
         ok &= s->brd.to_string() == fen && s->brd.stack->tt_key == key;
     }
     // A pawn attacking our rook suppresses the improving discount. A legal
@@ -120,17 +120,17 @@ bool test_reverse() {
     int threatened_value = 0;
     ok &= threatened->brd.valid(&threatened->stack->tt_move)
         && threatened->brd.legal(&threatened->stack->tt_move)
-        && !threatened->reverse_futility(601, 4, 1000, threatened_value)
-        && threatened->reverse_futility(600, 4, 1000, threatened_value);
+        && !threatened->reverse_futility(601, 4, 1000, 1000, threatened_value)
+        && threatened->reverse_futility(600, 4, 1000, 1000, threatened_value);
     threatened->stack->tt_move.set(&threatened->brd, "d2e2");
-    ok &= !threatened->reverse_futility(0, 4, 1000, threatened_value);
+    ok &= !threatened->reverse_futility(0, 4, 1000, 1000, threatened_value);
     // No synthetic legal move is required for these terminal certificates.
     for (const char * fen : {"k7/8/1QK5/8/8/8/8/8 b - - 0 1",
                             "k7/1Q6/2K5/8/8/8/8/8 b - - 0 1",
                             "7k/8/8/8/8/8/6P1/6K1 w - - 0 1"}) {
         auto s = std::make_unique<search_t>(fen);
         int value = 0;
-        ok &= !s->reverse_futility(0, 4, 1000, value); // Root is always protected.
+        ok &= !s->reverse_futility(0, 4, 1000, 1000, value); // Root is always protected.
     }
     auto terminal = std::make_unique<search_t>("knR5/8/8/1Q1K4/8/8/8/8 w - - 0 1");
     move_t last{};
@@ -140,7 +140,7 @@ bool test_reverse() {
     int terminal_value = 123;
     terminal->stack->eval_result = 1000;
     ok &= !terminal->stack->in_check && terminal->brd.has_pieces(terminal->brd.us())
-        && terminal->reverse_futility(0, 4, 1000, terminal_value) && terminal_value == terminal->draw_score();
+        && terminal->reverse_futility(0, 4, 1000, 1000, terminal_value) && terminal_value == terminal->draw_score();
     // Test both king-escape and fresh-generation legal certificates. In the
     // second position only rook moves are available to the side being pruned.
     for (const auto & fixture : std::vector<std::pair<const char *, const char *>>{

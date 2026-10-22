@@ -104,6 +104,9 @@ bool test_qsearch_bounds_and_modes() {
                     trans_table::clear();
                     auto search = std::make_unique<search_t>(fen);
                     prepare(*search);
+                    // Isolate direct score cutoffs from the independent searched
+                    // stand-pat estimate, which may return the same value.
+                    search->tt_search_eval_enabled = false;
                     search->stack->pv_count = 1;
                     trans_table::store(search->brd.stack->tt_key, 0, 0, 1, value, 0,
                         flag, search->tt_context(), {3, 8}, mode);

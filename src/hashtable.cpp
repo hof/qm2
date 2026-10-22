@@ -130,9 +130,12 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
     best_entry->key = value ^ key;
 }
 
-bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode, bool * pv) {
+bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode, bool * pv, bool * bound_compatible) {
     assert(depth >= 0);
     move = 0;
+    if (bound_compatible) {
+        *bound_compatible = false;
+    }
     if (pv) {
         *pv = false;
     }
@@ -155,8 +158,11 @@ bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & mov
                 if (pv) {
                     *pv = same_domain && flags && mode == tt_mode_t::main_search && entry.pv;
                 }
+                if (bound_compatible) {
+                    *bound_compatible = same_domain && flags;
+                }
                 const bool usable = same_domain && entry_depth >= depth;
-                if (usable && clocks) {
+                if (clocks && (usable || (bound_compatible && *bound_compatible))) {
                     *clocks = stored_clocks;
                 }
                 return usable;
@@ -213,8 +219,8 @@ namespace trans_table {
         _global_table.store(key, age, ply, depth, score, move, flag, context, clocks, mode, pv);
     }
 
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode, bool * pv) {
-        return _global_table.retrieve(key, ply, depth, score, move, flags, context, clock, clocks, mode, pv);
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode, bool * pv, bool * bound_compatible) {
+        return _global_table.retrieve(key, ply, depth, score, move, flags, context, clock, clocks, mode, pv, bound_compatible);
     }
 
     bool retrieve_eval(U64 key, U64 model, int & value) {

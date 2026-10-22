@@ -166,6 +166,8 @@ public:
     std::array<U64, 2> correction_context_keys() const;
     int correction_value() const;
     bool tt_eval_enabled;
+    bool tt_search_eval_enabled;
+    int tt_pruning_eval(int static_eval, int value, int bound, bool compatible);
     int corrected_static_eval(int raw);
     void update_correction_history(int value, int bound, int depth);
     bool lmp_enabled;
@@ -230,7 +232,7 @@ public:
     int aspiration(int depth, int last_score);
     bool probcut(int alpha, int beta, int depth, int eval, bool cut_node, int & value);
     bool razor_node(int alpha, int beta, int depth, int eval, int & value);
-    bool reverse_futility(int beta, int depth, int eval, int & value);
+    bool reverse_futility(int beta, int depth, int static_eval, int eval, int & value);
     bool prune_futility(move_t & move, int reduced_depth, int searched_moves,
         int best, int alpha, int beta, int gives_check, int eval);
     bool prune_quiet(move_t & move, int depth, int searched_moves, int reduced_depth,

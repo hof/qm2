@@ -127,7 +127,9 @@ public:
 
     // Moves use move_t::to_compact(); score validation retains both full keys.
     void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101}, tt_mode_t mode = tt_mode_t::main_search, bool pv = false);
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search, bool * pv = nullptr);
+    // Optional bound compatibility ignores depth, while preserving mode/context/clock.
+    // Its clock domain is returned for an explicitly requested shallow bound too.
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search, bool * pv = nullptr, bool * bound_compatible = nullptr);
 
     // Static NNUE values have their own model identity, independent of score
     // depth, mode, repetition context and rule-50 clock. No bound is implied.
@@ -146,7 +148,7 @@ public:
 namespace trans_table {
     const int TABLE_SIZE = options::get_value("Hash");
     void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101}, tt_mode_t mode = tt_mode_t::main_search, bool pv = false);
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search, bool * pv = nullptr);
+    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr, tt_mode_t mode = tt_mode_t::main_search, bool * pv = nullptr, bool * bound_compatible = nullptr);
     bool retrieve_eval(U64 key, U64 model, int & value);
     void store_eval(U64 key, U64 model, int value, int age);
     void clear();

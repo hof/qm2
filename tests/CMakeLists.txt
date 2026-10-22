@@ -230,3 +230,9 @@ target_link_libraries(test_eval_history MAX2SRC)
 add_test(NAME test_eval_history COMMAND test_eval_history)
 set_tests_properties(test_eval_history PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
+
+add_executable(test_tt_search_eval test_tt_search_eval.cpp)
+target_link_libraries(test_tt_search_eval MAX2SRC)
+add_test(NAME test_tt_search_eval COMMAND test_tt_search_eval)
+set_tests_properties(test_tt_search_eval PROPERTIES
+    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

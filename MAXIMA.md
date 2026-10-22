@@ -6928,3 +6928,45 @@ nodes, scores, bestmoves and full PVs for all12 cold/retained controls. Enabled
 work changes133027->170033 cold nodes (+27.82%) and125012->134104 retained
 (+7.27%). This closes an ordering capability gap; it does not establish a tree,
 CPU or playing-strength improvement. Combined baseline acceptance remains open.
+
+### Searched TT bounds as pruning estimates
+
+The default-on `TTSearchEval` option lets a compatible searched TT bound improve
+standard search's pruning estimate and quiescence stand-pat even when its depth
+is insufficient for a direct TT cutoff. A lower bound may raise the estimate,
+an upper bound may lower it, and an exact bound may replace it. Decisive scores
+are excluded from this heuristic substitution. This is independent of `TTEval`,
+which caches raw NNUE output. The existing full-depth cutoff rules remain.
+
+The raw cache and corrected static snapshot remain unchanged by substitution.
+Static inputs still drive evaluation-change history, the existing improving
+policy, correction uncertainty, razoring, forward futility, ProbCut and adaptive
+null's static margin/reduction. RFP and null's fail-high eligibility use the
+searched estimate; quiescence uses it for stand-pat and keeps static delta inputs.
+RFP receives both values explicitly so a searched-score difference is not mistaken
+for learned evaluator correction.
+
+Score consumption retains full board/model/repetition context, TT mode and clock
+compatibility; main and quiescence horizons remain separate. Any consumed bound
+propagates its valid clock range, including shallow bounds. The TT probe's optional
+compatibility output distinguishes this use from a sufficient-depth cutoff;
+existing callers retain their depth-miss output contract. Check, null/helper,
+excluded, repetition-floor, invalid and cancellation guards remain. The option
+is copied into workers and changing it clears TT. Royal-losers and fixed/aligned
+audit policies retain their existing behavior.
+
+Focused TT/qsearch/futility/null/ProbCut/history/UCI checks pass in Debug and
+Release (eight each), both Release lifecycle tests pass, and audit/sanitizer
+coverage passes for TT, qsearch, futility, UCI and the new estimate path. A native
+consumer fixture uses actual inference values so the independent NNUE audit stays
+enabled. The existing direct-TT-cutoff matrix disables estimate substitution to
+keep its original cutoff assertions isolated; separate production tests cover
+stand-pat substitution for both signs and all bound directions.
+
+On24 legal completed D8 cold/retained searches, disabling `TTSearchEval` exactly
+matches the preceding implementation's12 nodes/depth/score/bestmove/full-PV
+signatures. Enabled nodes change170033->159810 cold (-6.01%) and134104->119065
+retained (-11.21%). An independent native counter run matches the12 cold UCI
+controls and records4609 natural estimate uses when enabled, zero when disabled.
+These bounded tree measurements do not establish playing strength or complete
+baseline acceptance.
