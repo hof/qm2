@@ -1471,7 +1471,9 @@ so a supervisor loop (`while ...; [ $? -eq 75 ]`) starts it again with the lates
 `help` lists the commands, and `!abort`, `!resign`,
 `!draw` act on the current game. After each saved game, followers also get what
 Maxima learned: the opening moves it kept, the score against that opponent, and on a
-loss the revenge line it filed. Only this fixed list is accepted; a wrong key gets no
+loss the revenge line it filed. FICS queues guest tells sent too fast, so MaxDrone paces
+them itself (one tell every two seconds, joining what waits with ` | `) and drops a
+follower who is no longer logged in. Only this fixed list is accepted; a wrong key gets no
 answer.
 
 FICS computer accounts must keep the owner, machine, and engine in their finger

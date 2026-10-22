@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import chess
 import chess.engine
@@ -219,6 +220,18 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await self.settle(player)
         self.assertEqual(player.connection.sent, ["e2e4"])
         self.assertTrue(any("whispers off" in line for line in self.lines))
+
+    async def test_follower_tells_are_paced_and_merged(self):
+        player = await self.player("play")
+        player.followers = ["hermen", "hof"]
+        with patch.object(fics, "tell_gap", 0.05):
+            for text in ("e4 book: base (base 100%)", "learned: 3 moves"):
+                player.tell_followers(text)
+            await asyncio.sleep(0)
+            await player.handle("hof is not logged in.")
+            await player.teller
+        self.assertEqual(player.connection.sent, ["tell hermen e4 book: base (base 100%) | learned: 3 moves"])
+        self.assertEqual(player.followers, ["hermen"])
 
     async def test_remote_control_needs_the_key(self):
         player = await self.player("play", policy=fics.play_policy(follow_key="s3cret"))

@@ -266,6 +266,10 @@ challenge_pattern = re.compile(
     r"(?P<rated>rated|unrated) (?P<type>.+?) (?P<time>\d+) (?P<increment>\d+)(?: \(adjourned\))?\.?$")
 tell_pattern = re.compile(r"^(?P<name>[A-Za-z]{3,17})(?:\([A-Z*]+\))* tells you: (?P<text>.*)$")
 max_followers = 5
+# FICS queues a guest's tells sent too fast ("Your communication has been queued"); we pace them ourselves and
+# merge what piles up per follower, so followers never fall behind the game.
+tell_gap = 2.0
+gone_pattern = re.compile(r"^(?P<name>[A-Za-z]{3,17}) is not logged in\.$")
 remote_commands = ("follow", "softquit", "softrestart", "help", "!abort", "!resign", "!draw")
 # Exit status after softrestart (EX_TEMPFAIL): a supervisor loop starts MaxDrone again with the latest code.
 restart_status = 75
@@ -461,6 +465,7 @@ class engine_player:
         self.policy = policy or play_policy()
         self.whispering = self.policy.whisper
         self.followers = []
+        self.outbox, self.teller = {}, None
         self.finger_wait = finger_wait
         self.connection = None
         self.context = self.session = None
@@ -483,6 +488,8 @@ class engine_player:
 
     async def close(self):
         self.cancel()
+        if self.teller is not None:
+            self.teller.cancel()
         await self.stop_engine()
 
     def cancel(self):
@@ -555,8 +562,22 @@ class engine_player:
         """A move's explanation to observers (whisper) and to followers (tell)."""
         if self.whispering:
             await self.send(f"whisper {text}")
+        self.tell_followers(text)
+
+    def tell_followers(self, text):
+        """Queue text for each follower; deliver sends one tell per tell_gap, merging what waits."""
         for name in self.followers:
-            await self.send(f"tell {name} {text}")
+            self.outbox.setdefault(name, []).append(text)
+        if self.outbox and (self.teller is None or self.teller.done()):
+            self.teller = asyncio.ensure_future(self.deliver())
+
+    async def deliver(self):
+        while self.outbox:
+            name = next(iter(self.outbox))
+            texts = self.outbox.pop(name)
+            if name in self.followers:
+                await self.send(f"tell {name} {' | '.join(texts)}")
+                await asyncio.sleep(tell_gap)
 
     async def announce(self):
         """Finger notes for registered accounts, with the week's mood after the configured notes."""
@@ -617,6 +638,11 @@ class engine_player:
             await self.on_creating(creating_pattern.match(line))
         elif challenge_pattern.match(line):
             await self.on_challenge(challenge_pattern.match(line))
+        elif (gone := gone_pattern.match(line.strip())) and gone["name"] in self.followers:
+            name = gone["name"]
+            self.followers.remove(name)
+            self.outbox.pop(name, None)
+            self.on_line(f"-- {name} left; no longer followed")
         elif tell_pattern.match(line):
             await self.on_tell(tell_pattern.match(line))
         elif line.strip() == "You are muted." and self.whispering:
@@ -730,8 +756,7 @@ class engine_player:
             asyncio.get_event_loop().run_in_executor(None, self.refresh_experience)
             for text in learning_report(game, record, self.learner.records):
                 self.on_line(f"-- {text}")
-                for name in self.followers:
-                    asyncio.ensure_future(self.send(f"tell {name} {text}"))
+                self.tell_followers(text)
 
     def refresh_experience(self):
         try:
