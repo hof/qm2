@@ -81,6 +81,8 @@ class init_tests(unittest.TestCase):
 
     def test_optional_steps_do_not_fail(self):
         self.assertEqual(project_init.solid_step(self.root, options(data=self.root))[0], "skipped")
+        with patch.dict(project_init.os.environ, {}, clear=True):
+            self.assertEqual(project_init.solid_step(self.root, options(data=self.root, solid=True))[0], "missing")
         self.assertEqual(project_init.syzygy_step(self.root, options(data=self.root))[0], "skipped")
         self.assertEqual(project_init.network_step(self.root, options(data=self.root))[0], "skipped")
 

@@ -15,6 +15,7 @@ import zipfile
 from . import download_tablebases
 from .project import data_root, project_root
 
+# Chris Whittington's polyglot-books collection: Noomen's Rebel book and his gambit-minded Daring.
 books_url = "https://github.com/ChrisWhittington/polyglot-books/releases/download/v1.0/"
 # Pinned downloads: file, archive URL, archive member, size, SHA-256.
 books = (
@@ -33,13 +34,27 @@ def file_checksum(path):
     return digest.hexdigest()
 
 
-def download_member(url, member, size, sha256, target):
+def show_progress(received, total):
+    if sys.stdout.isatty() and total:
+        amount = f"{total / 1024**2:.0f} MiB" if total >= 1024**2 else f"{total / 1024:.0f} KiB"
+        print(f"\r  {received * 100 // total:3d}% of {amount}", end="", flush=True)
+        if received >= total:
+            print()
+
+
+def download_member(url, member, size, sha256, target, progress=None):
     """Download a zip, verify one member's size and SHA-256, then replace target atomically."""
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=target.parent, prefix=".init-") as temporary:
         archive = Path(temporary) / "archive.zip"
         with urllib.request.urlopen(url, timeout=60) as response, archive.open("wb") as output:
-            shutil.copyfileobj(response, output, 1024 * 1024)
+            total = int(getattr(response, "headers", {}).get("Content-Length") or 0)
+            received = 0
+            for chunk in iter(lambda: response.read(1024 * 1024), b""):
+                output.write(chunk)
+                received += len(chunk)
+                if progress:
+                    progress(received, total)
         extracted = Path(temporary) / target.name
         digest = hashlib.sha256()
         with zipfile.ZipFile(archive) as bundle:
@@ -136,12 +151,14 @@ def book_step(name, url, member, size, sha256):
                 return "ok", "kept your own file (--force replaces it)"
         if options.check:
             return "missing", "./maxima init downloads it"
-        download_member(url, member, size, sha256, target)
+        print(f"{name}: {member} from Chris Whittington's polyglot-books. Thanks Chris!", flush=True)
+        download_member(url, member, size, sha256, target, show_progress)
         return "done", url.rsplit("/", 1)[1]
     return step
 
 
 def solid_step(root, options):
+    """solid.bin: drawish lines from Lichess master games (MAXIMA.md 9.7); no published book plays for the draw."""
     from . import solid_book
     if (options.data / "solid.bin").is_file():
         return "ok", "solid.bin"
@@ -193,7 +210,7 @@ def main():
     parser.add_argument("--syzygy", type=int, choices=(0, 3, 4, 5, 6, 7), default=5,
                         help="tablebase pieces to install, 0 skips (default: 5, about 1 GB)")
     parser.add_argument("--solid", action="store_true",
-                        help="build solid.bin from Lichess master games (needs LICHESS_TOKEN)")
+                        help="build solid.bin, drawish lines from Lichess master games (needs LICHESS_TOKEN)")
     parser.add_argument("--force", action="store_true", help="replace books that differ from the pinned files")
     options = parser.parse_args()
     options.data = data_root()
