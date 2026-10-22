@@ -201,9 +201,15 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle(start.replace(" 17 GuestHJGC", " 18 GuestHJGC"))
         await self.settle(player)
         self.assertEqual(player.connection.sent, ["e2e4"])
-        self.assertTrue(any(line.startswith("-- e4 d3 +0.25") for line in self.lines))
+        self.assertTrue(any(line.startswith("-- e4 d3 +0.25") and line.endswith("pv e4") for line in self.lines))
         self.assertEqual(self.positions.read_text().split("\n")[0], "position startpos")
         self.assertNotIn("DrawContempt", self.positions.read_text())
+
+    async def test_whispers_the_expected_line_when_asked(self):
+        player = await self.player("play", policy=fics.play_policy(whisper=True))
+        await player.handle(start)
+        await self.settle(player)
+        self.assertEqual(player.connection.sent, ["e2e4", "whisper d3 +0.25 e4"])
 
     async def test_game_end_cancels_search(self):
         player = await self.player("hang")

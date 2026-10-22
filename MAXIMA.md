@@ -1422,6 +1422,9 @@ An opponent who lets a fifth of the starting clock pass (at least 15 s, at most
 `first_move_wait`, default 60 s) before their first move is aborted: FICS aborts
 without agreement until both sides have moved. Games aborted that early are
 not saved.
+The log shows each searched move with depth, score, time, and the expected line
+(`pv`); `whisper` (or `--whisper`) also whispers depth, score, and line to
+observers.
 
 FICS computer accounts must keep the owner, machine, and engine in their finger
 notes (`help computers`), and may only play the engine, time controls, and

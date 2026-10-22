@@ -8,7 +8,7 @@ def parser():
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
-                             "layer_profiles, style_books, first_move_wait); "
+                             "layer_profiles, style_books, first_move_wait, whisper); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
@@ -26,6 +26,8 @@ def parser():
                         help='seek pool entry, repeatable (e.g. "3 0"; default pool 3 0, 3 1, 5 0)')
     parser.add_argument("--seeks-at-once", type=int, help="seeks posted at a time, drawn from the pool (default: 2)")
     parser.add_argument("--no-seek", action="store_true", help="do not seek; only accept challenges")
+    parser.add_argument("--whisper", action="store_true",
+                        help="whisper depth, score and expected line to observers after each searched move")
     parser.add_argument("--no-accept", action="store_true", help="decline all challenges")
     parser.add_argument("--rematches", type=int, help="rematches in a row per opponent (default: 0)")
     parser.add_argument("--games", type=int, help="quit after this many games")

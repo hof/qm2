@@ -273,6 +273,7 @@ default_settings = {
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
     "contempt_window": 100, "layer_profiles": {}, "style_books": {}, "first_move_wait": 60,
+    "whisper": False,
 }
 
 
@@ -298,7 +299,8 @@ class play_policy:
     """When to seek, accept, rematch, and stop; mirrors JDrone's seek pool and rematch limit."""
 
     def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=0, games=None, guest=True,
-                 owner=None, notes=(), contempt_window=100, first_move_wait=60):
+                 owner=None, notes=(), contempt_window=100, first_move_wait=60,
+                 whisper=False):
         self.seeks = list(seeks)
         self.seeks_at_once = seeks_at_once
         self.accept = accept
@@ -309,6 +311,7 @@ class play_policy:
         self.notes = list(notes)
         self.contempt_window = contempt_window
         self.first_move_wait = first_move_wait
+        self.whisper = whisper
 
     def opening_wait(self, initial_seconds):
         """Seconds the opponent gets for their first move: a fifth of the clock, at least 15, at most first_move_wait."""
@@ -677,8 +680,23 @@ class engine_player:
         await self.send(fics_game.ics_move(result.move))
         if self.record is not None:
             self.record.on_search(board, result.move, result.info)
-        self.on_line(f"-- {board.san(result.move)} {describe(result.info, board.turn)} "
-                     f"{time.monotonic() - started:.1f}s")
+        summary = describe(result.info, board.turn)
+        pv = variation(board, result.info.get("pv", []))
+        self.on_line(f"-- {board.san(result.move)} {summary} {time.monotonic() - started:.1f}s"
+                     + (f" pv {pv}" if pv else ""))
+        if self.policy.whisper and summary != "book":
+            await self.send(f"whisper {summary} {pv}".rstrip())
+
+
+def variation(board, moves, limit=10):
+    """The engine's expected line in SAN, up to limit moves or the first illegal one."""
+    replay, text = board.copy(), []
+    for move in moves[:limit]:
+        if not replay.is_legal(move):
+            break
+        text.append(replay.san(move))
+        replay.push(move)
+    return " ".join(text)
 
 
 def describe(info, turn):
@@ -770,7 +788,7 @@ def load_settings(path):
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
              "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
-             "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float)}
+             "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float), "whisper": bool}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -839,6 +857,8 @@ def run(options, parser):
         configured["seeks"] = []
     if options.no_accept:
         configured["accept"] = False
+    if options.whisper:
+        configured["whisper"] = True
     if options.no_learning or options.no_pgn:
         configured["learning"] = False
     for name in ("host", "port", "handle", "engine"):
@@ -861,7 +881,7 @@ def run(options, parser):
                          configured["rematches"], configured["games"], guest=options.handle == "guest",
                          owner=configured["owner"], notes=configured["notes"],
                          contempt_window=configured["contempt_window"],
-                         first_move_wait=configured["first_move_wait"])
+                         first_move_wait=configured["first_move_wait"], whisper=configured["whisper"])
     pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or data_root() / "experience" / "games" / "fics")
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
     if not valid_handle(options.handle):
