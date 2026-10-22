@@ -2135,8 +2135,8 @@ bool search_t::reverse_futility(int beta, int depth, int eval, int & value) {
     // Correction magnitude expresses uncertainty in the raw evaluator. A
     // threatened valuable piece must not strengthen the improving discount.
     const int correction = std::abs(eval - int(stack->eval_result));
-    const int margin = std::max(25, 100 * depth
-        - 100 * int(stack->improving && !lower_value_threat(brd)) + correction / 2);
+    const int margin = 100 * depth
+        - 100 * int(stack->improving && !lower_value_threat(brd)) + correction / 2;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     ++nnue_audit.counters.beta_candidates;
 #endif
