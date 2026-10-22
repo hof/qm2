@@ -190,7 +190,7 @@ def polyglot_code(board, move):
 
 
 def build_repertoire(pgn_path, book_path, plies=30):
-    """A Polyglot book of our side's moves: each repertoire line adds weight 1 to its moves.
+    """A Polyglot book of our side's moves: each repertoire line adds weight 100 to its moves.
 
     Games carry [Repertoire "white"] or [Repertoire "black"]; opponent moves are only the path."""
     weights = {}
@@ -207,7 +207,7 @@ def build_repertoire(pgn_path, book_path, plies=30):
             for node in list(game.mainline())[:plies]:
                 if board.turn == ours:
                     entry = (chess.polyglot.zobrist_hash(board), polyglot_code(board, node.move))
-                    weights[entry] = weights.get(entry, 0) + 1
+                    weights[entry] = weights.get(entry, 0) + 100
                 board.push(node.move)
     return write_book(weights, book_path)
 
@@ -344,13 +344,14 @@ class opening_book:
     @staticmethod
     def read_book(path, board):
         """Move shares (summing to 1) from a Polyglot book without its rare moves (under a tenth of the
-        heaviest); empty when absent or unreadable."""
+        heaviest) and without weights 0 and 1, which books use for known moves not to play; empty when
+        absent or unreadable."""
         if not path:
             return {}
         weights = {}
         try:
             with chess.polyglot.open_reader(str(path)) as reader:
-                for entry in reader.find_all(board):
+                for entry in reader.find_all(board, minimum_weight=2):
                     weights[entry.move] = weights.get(entry.move, 0) + entry.weight
         except (OSError, ValueError, IndexError):
             return {}

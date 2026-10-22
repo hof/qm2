@@ -146,6 +146,12 @@ class selection_tests(unittest.TestCase):
             reasons.add(reason.split(":")[0].split()[0])
         return counts, reasons
 
+    def test_books_ignore_do_not_play_weights(self):
+        board = board_after("d2d4 d7d5")
+        polyglot_book(self.book, [(board, "c2c4", 1), (board, "h2h3", 1), (board, "g1f3", 0)])
+        self.assertEqual(learning.opening_book.read_book(self.book, board), {})
+        self.assertIsNone(self.opening().choose(board, 5000))
+
     def test_without_experience_it_plays_book_by_weight_and_skips_rare_moves(self):
         counts, reasons = self.picks()
         self.assertEqual(reasons, {"book"})
@@ -270,7 +276,7 @@ class multi_layer_book_tests(unittest.TestCase):
             self.assertEqual([entry.move.uci() for entry in reader.find_all(chess.Board())], ["e2e4"])
             self.assertEqual([entry.move.uci() for entry in reader.find_all(board_after("e2e4"))], ["c7c5"])
             self.assertEqual({entry.move.uci(): entry.weight for entry in reader.find_all(self.after_e5)},
-                             {"g1f3": 1, "f2f4": 1})
+                             {"g1f3": 100, "f2f4": 100})
 
     def test_profiles_follow_rating_gap_and_unrated_games_play_fire_and_experiment(self):
         profiles = learning.layer_profiles
