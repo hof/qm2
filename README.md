@@ -49,7 +49,8 @@ included "LICENSE" file.
 is the quick contributor entry.
 
 ```bash
-./maxima                                         # start the built engine
+./maxima                                         # command help (a GUI or pipe gets the engine)
+./maxima uci                                      # run the built engine in this terminal
 ./maxima build --release                          # configure and compile
 ./maxima test --release                           # engine and runner checks
 ./maxima suite:run --suite bratko-kopec --movetime 1000

@@ -932,7 +932,8 @@ Running the compiled engine requires no Python.
 ### 7.2 Engine and UCI configuration
 
 After a Release build, `./maxima` starts the engine (falls back to the Debug build
-if Release is absent). Enable local tables with UCI commands:
+if Release is absent) when a GUI or pipe launches it; started bare in a terminal it
+shows the command help instead, and `./maxima uci` runs the engine there. Enable local tables with UCI commands:
 
 ```text
 setoption name SyzygyPath value /absolute/path/to/tablebases/syzygy

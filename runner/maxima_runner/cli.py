@@ -25,7 +25,7 @@ command_groups = (
         ("tablebases:syzygy:download", "Download selected Syzygy tablebases"),
     )),
     ("Online play", (
-        ("fics", "Connect to FICS (login, keepalive, reconnect)"),
+        ("fics", "Play on FICS as MaxDrone (seek, play, save PGN)"),
     )),
 )
 
@@ -40,7 +40,8 @@ def show_help(all_commands=False):
     print(styled("M A X I M A", "1"))
     print("Chess engine & ops\n")
     print("Usage: maxima <command> [options]")
-    print("       maxima                  Run the native UCI engine\n")
+    print("       maxima                  Run the native UCI engine (from a GUI or pipe)")
+    print("       maxima uci              Run it in this terminal\n")
     for title, commands in command_groups:
         visible = commands if all_commands else tuple(
             item for item in commands if item[0] in (
@@ -148,6 +149,8 @@ def main(argv=None):
     parser.add_argument("command", nargs="?", help=(
         "uci, build, test, suite:run, match:run, experience:import|export|show|analyze, "
         "tablebases:syzygy:download, fics (no command: run engine)"))
+    if not arguments and sys.stdin.isatty() and sys.stdout.isatty():
+        arguments = ["--help"]
     if arguments and arguments[0] in ("--help", "-h"):
         show_help()
         return 0
