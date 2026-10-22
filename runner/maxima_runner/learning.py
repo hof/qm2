@@ -12,7 +12,10 @@ import chess.pgn
 import chess.polyglot
 
 horizon_plies = 40
-index_version = 2
+index_version = 3
+# A game teaches only when it lasted 10 moves and Maxima searched enough moves to judge them: early
+# resignations, aborts, disconnects, and book-only games carry no eval, only a result.
+minimum_plies = 20
 eval_window = 4
 result_share = 0.2
 # Signature lines: after this many convincing wins in a row against one opponent with a move, it gets
@@ -72,6 +75,8 @@ def digest(game):
                 analyses.append([key, node.move.uci(), depth, centipawns, int(relative.is_mate()),
                                  round((node.emt() or 0) * 1000), board.halfmove_clock])
         board.push(node.move)
+    if len(moves) < minimum_plies or len(evals) < eval_window:
+        return None
     outcome = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(headers.get("Result"))
     score = None if outcome is None else (outcome if our_color == chess.WHITE else 1 - outcome)
     values = []

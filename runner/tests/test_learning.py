@@ -10,7 +10,8 @@ import chess.pgn
 
 from maxima_runner import learning
 
-line = "e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 g8f6 e1g1 f8e7 f1e1 b7b5 a4b3 d7d6 c2c3 e8g8 h2h3 c6a5".split()
+line = ("e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 g8f6 e1g1 f8e7 f1e1 b7b5 a4b3 d7d6 c2c3 e8g8 h2h3 c6a5 b3c2 c7c5 "
+        "d2d4").split()
 
 
 def make_game(our_scores, ours="white", result="1-0", opponent_headers=None, plies=len(line)):
@@ -54,19 +55,24 @@ class digest_tests(unittest.TestCase):
         self.assertEqual(record["analyses"][0][1:], ["e2e4", 12, 0, 0, 2500, 0])
 
     def test_unfinished_games_keep_evals_only_and_book_tails_keep_results_only(self):
-        record = learning.digest(make_game([0, 0], result="*"))
+        record = learning.digest(make_game([0] * 4, result="*"))
         self.assertEqual({result for *_, result in record["values"]}, {None})
-        played = learning.digest(make_game([], result="1-0"))
+        played = learning.digest(make_game([0] * 4, result="1-0"))
         self.assertEqual({(evaluated, result) for _, move, evaluated, result in played["values"]
-                          if line.index(move) % 2 == 0}, {(None, 1.0)})
+                          if line.index(move) % 2 == 0 and line.index(move) >= 8}, {(None, 1.0)})
+
+    def test_short_and_thoughtless_games_are_ignored(self):
+        self.assertIsNone(learning.digest(make_game([0] * 10, plies=19)))
+        self.assertIsNone(learning.digest(make_game([None] * 7 + [0] * 3)))
+        self.assertIsNotNone(learning.digest(make_game([None] * 6 + [0] * 4, plies=20)))
 
     def test_groups_and_unknown_games(self):
-        self.assertEqual(learning.digest(make_game([0], ours="black", opponent_headers={"WhiteTitle": "GM"}))["group"],
+        self.assertEqual(learning.digest(make_game([0] * 4, ours="black", opponent_headers={"WhiteTitle": "GM"}))["group"],
                          "masters")
-        self.assertEqual(learning.digest(make_game([0], opponent_headers={"BlackType": "program"}))["group"], "engines")
-        self.assertIsNone(learning.digest(make_game([0], opponent_headers={"BlackAccount": "unregistered"}))["group"])
-        self.assertEqual(learning.digest(make_game([0]))["group"], "humans")
-        self.assertIsNone(learning.digest(make_game([0], opponent_headers={"BlackType": "program",
+        self.assertEqual(learning.digest(make_game([0] * 4, opponent_headers={"BlackType": "program"}))["group"], "engines")
+        self.assertIsNone(learning.digest(make_game([0] * 4, opponent_headers={"BlackAccount": "unregistered"}))["group"])
+        self.assertEqual(learning.digest(make_game([0] * 4))["group"], "humans")
+        self.assertIsNone(learning.digest(make_game([0] * 4, opponent_headers={"BlackType": "program",
                                                                            "BlackEngine": "Other"})))
 
 

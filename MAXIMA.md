@@ -1154,7 +1154,9 @@ sides, first 40 plies) gets two values from the mover's point of view:
   opening that sets the opponent thinking is a real gain.
 
 A move's value is `0.8 × eval + 0.2 × result`; either one alone when the other
-is missing (book-only games, unfinished games). In the result part a draw is
+is missing (book tails, unfinished games). A game teaches only when it lasted
+10 moves and Maxima searched at least four of its moves: early resignations,
+aborts, disconnects, and book-only wins carry a result but no judgement. In the result part a draw is
 worth `0.5 + 0.45 × DrawContempt/100` (JDrone's draw factor), so draws are
 welcome against stronger opponents and near-losses against weaker ones.
 

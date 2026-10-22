@@ -303,7 +303,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle("{Game 17 (GuestHJGC vs. guestNinja) guestNinja resigns} 1-0")
         with next(folder.glob("*.pgn")).open() as stream:
             self.assertEqual(chess.pgn.read_game(stream).next().comment.split()[0], "learned")
-        self.assertEqual(len(learner.records), 7)
+        self.assertEqual(len(learner.records), 6)  # one move teaches nothing
 
     async def test_draw_contempt_follows_the_rating_gap(self):
         self.assertEqual(fics.draw_contempt(1800, 1800), -10)
