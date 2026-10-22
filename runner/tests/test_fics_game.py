@@ -143,10 +143,11 @@ for line in sys.stdin:
     command = line.strip()
     if command == "uci":
         print("id name fics fixture")
+        print("option name DrawContempt type spin default -10 min -100 max 100")
         print("uciok", flush=True)
     elif command == "isready":
         print("readyok", flush=True)
-    elif command.startswith("position"):
+    elif command.startswith("position") or command.startswith("setoption"):
         with open(sys.argv[2], "a") as log:
             log.write(command + "\\n")
     elif command.startswith("go ") and mode == "play":
@@ -202,6 +203,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(player.connection.sent, ["e2e4"])
         self.assertTrue(any(line.startswith("-- e4 d3 +0.25") for line in self.lines))
         self.assertEqual(self.positions.read_text().split("\n")[0], "position startpos")
+        self.assertNotIn("DrawContempt", self.positions.read_text())
 
     async def test_game_end_cancels_search(self):
         player = await self.player("hang")
@@ -277,6 +279,34 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         with next(folder.glob("*.pgn")).open() as stream:
             self.assertEqual(chess.pgn.read_game(stream).next().comment.split()[0], "learned")
         self.assertEqual(len(learner.records), 7)
+
+    async def test_draw_contempt_follows_the_rating_gap(self):
+        self.assertEqual(fics.draw_contempt(1800, 1800), -10)
+        self.assertEqual(fics.draw_contempt(1800, 2000), 40)
+        self.assertEqual(fics.draw_contempt(1800, 2600), 100)
+        self.assertEqual(fics.draw_contempt(2000, 1500), -100)
+        self.assertIsNone(fics.draw_contempt(None, 1500))
+        self.assertIsNone(fics.draw_contempt(1800, 1500, window=0))
+        player = await self.player("play")
+        player.name = "GuestHJGC"
+        await player.handle("Creating: GuestHJGC (1700) guestNinja (1900) rated blitz 3 0")
+        self.assertEqual(player.contempt, 40)
+        await player.handle("Finger of guestNinja:")
+        await player.handle(start)
+        await self.settle(player)
+        self.assertIn("setoption name DrawContempt value 40", self.positions.read_text())
+        self.assertTrue(any(line.startswith("-- draw contempt +0.40 (1700 vs 1900)") for line in self.lines))
+        await player.handle("Creating: guestNinja (1900) GuestHJGC (1700) rated blitz 3 0")
+        self.assertEqual(player.contempt, 40)
+        await player.handle("{Game 17 (GuestHJGC vs. guestNinja) guestNinja resigns} 1-0")
+        await player.handle("Creating: GuestHJGC (++++) GuestOther (++++) unrated blitz 3 0")
+        self.assertIsNone(player.contempt)
+        await player.handle("Finger of GuestOther(U):")
+        await player.handle(start.replace(" 17 GuestHJGC guestNinja", " 18 GuestHJGC GuestOther"))
+        await self.settle(player)
+        sent = self.positions.read_text()
+        self.assertGreater(sent.rfind("setoption name DrawContempt value -10"),
+                           sent.rfind("setoption name DrawContempt value 40"))
 
     async def test_ignores_observed_games_and_invalid_boards(self):
         player = await self.player("play")

@@ -273,6 +273,7 @@ default_settings = {
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
+    "contempt_window": 100,
 }
 
 
@@ -285,11 +286,20 @@ def rating_of(text):
     return int(text) if text.strip().isdigit() else None
 
 
+def draw_contempt(our_rating, their_rating, window=100, default=-10, elo_per_cp=4):
+    """DrawContempt in cp from our view: draws welcome against stronger players, avoided against weaker.
+
+    None when a rating is unknown, so the engine keeps its own default."""
+    if not window or our_rating is None or their_rating is None:
+        return None
+    return int(max(-window, min(window, default + round((their_rating - our_rating) / elo_per_cp))))
+
+
 class play_policy:
     """When to seek, accept, rematch, and stop; mirrors JDrone's seek pool and rematch limit."""
 
     def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=0, games=None, guest=True,
-                 owner=None, notes=()):
+                 owner=None, notes=(), contempt_window=100):
         self.seeks = list(seeks)
         self.seeks_at_once = seeks_at_once
         self.accept = accept
@@ -298,6 +308,7 @@ class play_policy:
         self.guest = guest
         self.owner = owner
         self.notes = list(notes)
+        self.contempt_window = contempt_window
 
     def seek_commands(self):
         """A random draw from the pool; guests can only play unrated."""
@@ -350,6 +361,7 @@ class engine_player:
         self.open_session = open_session
         self.learner = learner
         self.opening = None
+        self.contempt = None
         self.fingered = False
         self.pgn_dir = pgn_dir
         self.site = site
@@ -462,6 +474,10 @@ class engine_player:
         self.opponent_ready.clear()
         self.opponent_unregistered = self.fingered = False
         self.created = match.groupdict()
+        our_rating = match["white_rating"] if we_are_white else match["black_rating"]
+        self.contempt = draw_contempt(rating_of(our_rating), rating_of(rating), self.policy.contempt_window)
+        if self.contempt is not None:
+            self.on_line(f"-- draw contempt {self.contempt / 100:+.2f} ({rating_of(our_rating)} vs {rating_of(rating)})")
         if not playable(match["type"], match["time"], match["increment"]):
             self.on_line(f"-- aborting unsupported game: {match['type']} {match['time']} {match['increment']}")
             await self.send("abort")
@@ -483,7 +499,7 @@ class engine_player:
         self.on_line(f"-- game {self.game} over: {end['reason']} {end['result']}")
         opponent = end["black"] if self.name and end["white"].lower() == self.name.lower() else end["white"]
         self.save(end)
-        self.game = self.history = self.opponent = self.record = self.created = self.opening = None
+        self.game = self.history = self.opponent = self.record = self.created = self.opening = self.contempt = None
         self.opponent_ready.set()
         self.played += 1
         self.streak = self.streak + 1 if opponent == self.last_opponent else 1
@@ -618,7 +634,8 @@ class engine_player:
                 return
         try:
             result = await self.session.play(board, limit, game=self.token, opponent=self.opponent,
-                                             timeout=max(clock, 1) + self.margin)
+                                             timeout=max(clock, 1) + self.margin,
+                                             options={"DrawContempt": self.contempt})
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
             self.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
             await self.stop_engine()
@@ -723,7 +740,7 @@ def load_settings(path):
         raise ValueError(f"{path}: expected a JSON object")
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
-             "pgn_dir": str, "learning": bool, "variety": (int, float)}
+             "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -754,7 +771,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
-                             "accept, rematches, games, owner, notes, pgn_dir, learning, variety); flags override it")
+                             "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window); "
+                             "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
     parser.add_argument("--handle", help="registered handle (password from FICS_PASSWORD), default guest")
@@ -810,7 +828,8 @@ def main():
             parser.error(f"seek spec must look like '3 0' or '5 2 u', got {spec!r}")
     policy = play_policy(configured["seeks"], configured["seeks_at_once"], configured["accept"],
                          configured["rematches"], configured["games"], guest=options.handle == "guest",
-                         owner=configured["owner"], notes=configured["notes"])
+                         owner=configured["owner"], notes=configured["notes"],
+                         contempt_window=configured["contempt_window"])
     pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or project_root() / "experience" / "games" / "fics")
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
     if not valid_handle(options.handle):

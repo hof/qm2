@@ -1349,6 +1349,14 @@ or a list), note 3 (CPU model with the engine's `Threads` and `Hash`, and the
 OS), then up to seven `notes`. Guest accounts may test engines freely and get no
 notes.
 
+Draw contempt follows the rating gap: at `Creating:` MaxDrone sets the engine's
+`DrawContempt` (cp, our view) to the default -10 plus a quarter of the opponent's
+rating minus ours, clamped to `contempt_window` (default ±100 cp = ±1 pawn; 0
+disables). Equal ratings keep -10; 200 points stronger gives +40 (a draw is
+welcome); 400 or more weaker gives -100 (avoid draws). Without both ratings
+(guests, unrated) the engine default is sent, as python-chess would otherwise
+keep the previous game's value.
+
 Every game with at least one move is appended to
 `experience/games/fics/<YYYY-MM>.pgn` (UTC month; `pgn_dir` or `--pgn-dir`,
 `--no-pgn` to disable) and fsynced. Tags: `Event` (`FICS unrated blitz game`),

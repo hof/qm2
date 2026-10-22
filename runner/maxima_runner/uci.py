@@ -48,9 +48,14 @@ class engine_session:
             raise ValueError("unsupported board variant")
         return settings
 
-    async def play(self, board, limit, *, game=None, opponent=None, timeout=None):
-        """Choose a move under game clocks; a new game token makes python-chess send ucinewgame."""
-        settings = self.variant_settings(board)
+    async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None):
+        """Choose a move under game clocks; a new game token makes python-chess send ucinewgame.
+
+        options are per-search UCI settings, applied only when the engine has them; None restores the
+        option's default, since python-chess keeps the last value sent."""
+        settings = {name: self.protocol.options[name].default if value is None else value
+                    for name, value in (options or {}).items() if name in self.protocol.options}
+        settings.update(self.variant_settings(board))
         return await asyncio.wait_for(
             self.protocol.play(board, limit, game=game, info=chess.engine.INFO_ALL,
                                options=settings, opponent=opponent),
