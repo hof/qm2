@@ -229,7 +229,7 @@ public:
     bool prune_futility(move_t & move, int reduced_depth, int searched_moves,
         int best, int alpha, int beta, int gives_check, int eval);
     bool prune_quiet(move_t & move, int depth, int searched_moves, int reduced_depth,
-        int best, int alpha, int beta, bool dangerous);
+        int best, int alpha, int beta);
     bool prune_main_see(move_t & move, int depth, int searched_moves, int best);
     struct singular_result_t {
         uint16_t move = 0;

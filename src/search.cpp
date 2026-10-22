@@ -2192,16 +2192,14 @@ bool search_t::prune_futility(move_t & move, int reduced_depth, int searched_mov
     return true;
 }
 
-// Inspect each quiet separately: later quiet checks must remain searchable.
 // A searched legal alternative protects terminals and losing/mating lines.
 bool search_t::prune_quiet(move_t & move, int depth, int searched_moves,
-        int reduced_depth, int best, int alpha, int beta, bool dangerous) {
+        int reduced_depth, int best, int alpha, int beta) {
     const int decisive = score::TABLEBASE - MAX_PLY;
     if ((!lmp_enabled && !history_pruning_enabled) || !brd.ply || depth < 1
-            || !searched_moves || dangerous || stack->in_check || stop_all
-            || move.capture || move.promotion || move.castle
+            || !searched_moves || stack->in_check || stop_all
+            || move.capture || move.promotion
             || alpha + 1 != beta || best <= -decisive
-            || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
             || iid_active || verification_mode != verification_mode_t::none
             || stack->excluded_move || stack->repetition_start > 0
             || brd.stack->fifty_count >= 99 || !brd.has_pieces(brd.us())) {
@@ -2865,7 +2863,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             : reduction(depth, searched_moves, is_dangerous, estimate);
         const int lmr_depth = depth - estimate;
         if (!pv && !repetition_floor && !singular && prune_quiet(*move, depth, searched_moves,
-                lmr_depth, best, alpha, beta, is_dangerous)) {
+                lmr_depth, best, alpha, beta)) {
             continue;
         }
 
