@@ -73,6 +73,7 @@ public:
     reporting_search_t(int depth, int count) : search_t(start_fen),
         interrupt_depth(depth), completed_children(count) {
         game.max_depth = 2;
+        aspiration_enabled = false;
     }
     int pvs(int, int, int depth, bool = false) override {
         nodes += 10;

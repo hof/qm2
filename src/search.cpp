@@ -885,11 +885,12 @@ void search_t::iterative_deepening() {
  * @return search result score
  */
 int search_t::aspiration(int depth, int last_score) {
-    if (!aspiration_enabled || depth < 4 || score::is_win(last_score)) {
+    if (!aspiration_enabled || depth < 2) {
         return pvs_root(-score::INF, score::INF, depth);
     }
 
-    int delta = 50;
+    // Uncertain (large) scores start with a wider window.
+    int delta = 12 + last_score * last_score / 30155;
     int alpha = MAX(-score::INF, last_score - delta);
     int beta = MIN(score::INF, last_score + delta);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
@@ -921,19 +922,13 @@ int search_t::aspiration(int depth, int last_score) {
         counts.aspiration_fail_lows += value <= alpha;
         counts.aspiration_fail_highs += value >= beta;
 #endif
-        if (score::is_win(value)) {
-            alpha = -score::INF;
-            beta = score::INF;
+        if (value <= alpha) {
+            beta = (alpha + beta) / 2;
+            alpha = MAX(-score::INF, value - delta);
         } else {
-            // Preserve the bound that did not fail. Widen monotonically, even
-            // when selective search changes from fail-high to fail-low.
-            delta = MIN(delta * 2, score::INF);
-            if (value <= alpha) {
-                alpha = MAX(-score::INF, alpha - delta);
-            } else {
-                beta = MIN(score::INF, beta + delta);
-            }
+            beta = MIN(score::INF, value + delta);
         }
+        delta = MIN(delta + delta / 3, score::INF);
     }
 }
 
