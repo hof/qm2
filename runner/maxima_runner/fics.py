@@ -729,7 +729,7 @@ class engine_player:
             record = self.learner.add(game)
             asyncio.get_event_loop().run_in_executor(None, self.refresh_experience)
             for text in learning_report(game, record, self.learner.records):
-                self.on_line(f"-- learned: {text}")
+                self.on_line(f"-- {text}")
                 for name in self.followers:
                     asyncio.ensure_future(self.send(f"tell {name} {text}"))
 
