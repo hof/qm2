@@ -210,8 +210,10 @@ bool test_production_integration() {
 
 class large_root_search_t : public search_t {
 public:
+    std::vector<uint16_t> visited;
     explicit large_root_search_t(const char * fen) : search_t(fen) {}
     int pvs(int, int, int, bool = false) override {
+        visited.push_back((stack - 1)->current_move.to_compact());
         nodes += U64{1} << 32;
         stack->pv_count = 0;
         return 0;
@@ -243,6 +245,22 @@ bool test_root_counts() {
     first.add_nodes(U64{1} << 63);
     ok &= check(first.nodes == std::numeric_limits<int64_t>::max() - 19,
         "negative ordering bias lost at signed boundary");
+    // D1 must preserve the picker's legal order even when a separate root
+    // priority would promote a later move. No completed iteration exists yet.
+    large_root_search_t first_pass("r1bq1rk1/pp2ppbp/3p1np1/8/2PB4/1P2P3/P3BPPP/RN1Q1RK1 b - - 0 1");
+    first_pass.init_root_moves();
+    std::vector<uint16_t> picker_order;
+    for (int i = 0; i < first_pass.root.move_count; ++i) {
+        picker_order.push_back(first_pass.root.moves[i].move.to_compact());
+        ok &= check(first_pass.root.moves[i].nodes == 0,
+            "standard root work must not contain an initial SEE/danger bonus");
+    }
+    auto & promoted = first_pass.root.moves[first_pass.root.move_count - 1];
+    promoted.nodes = int64_t{1} << 40;
+    first_pass.stack->best_move = promoted.move;
+    first_pass.pvs_root(-score::INF, score::INF, 1);
+    ok &= check(first_pass.visited == picker_order,
+        "D1 root search overrode the picker's move order");
     large_root_search_t search("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     search.init_root_moves();
     std::ostringstream output;

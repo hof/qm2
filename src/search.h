@@ -261,6 +261,7 @@ public:
     bool abort(bool force_poll);
     bool pondering();
     int init_root_moves();
+    void order_root_moves(int depth);
     void store_pv();
     void debug_print_search(int alpha, int beta, int depth);
     void trace_root(int alpha, int beta, int depth);

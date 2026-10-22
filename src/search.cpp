@@ -1515,11 +1515,28 @@ int search_t::init_root_moves() {
             continue;
         }
         int gives_check = brd.gives_check(move);
-        bool is_dangerous = root.in_check || gives_check || move->capture || move->promotion || is_passed_pawn(move);
+        const bool is_dangerous = wild != 0 && (root.in_check || gives_check
+            || move->capture || move->promotion || is_passed_pawn(move));
         root_move_t * rmove = &root.moves[root.move_count++];
-        rmove->init(move, gives_check, is_dangerous, brd.see(move));
+        rmove->init(move, gives_check, is_dangerous, wild != 0 ? brd.see(move) : 0);
     }
     return root.move_count;
+}
+
+// Order standard root moves like an interior node: the move picker with the
+// previous best move as hash move. Root work counters move with their moves.
+void search_t::order_root_moves(int depth) {
+    int count = 0;
+    stack->tt_move = stack->best_move;
+    for (move_t * move = move::first(this, depth); move && count < root.move_count;
+            move = move::next(this, depth)) {
+        for (int i = count; i < root.move_count; ++i) {
+            if (root.moves[i].move.equals(move)) {
+                std::swap(root.moves[i], root.moves[count++]);
+                break;
+            }
+        }
+    }
 }
 
 /**
@@ -1755,7 +1772,11 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
 
     assert(root.move_count > 0);
     int best = -score::INF;
-    root.sort_moves(&stack->best_move);
+    if (wild != 0) {
+        root.sort_moves(&stack->best_move);
+    } else if (depth > 1) {
+        order_root_moves(depth);
+    }
     stack->tt_pv = context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled;
     if (stack->tt_pv && depth >= 3 && !stack->in_check) {
         const int eval = evaluate(this);

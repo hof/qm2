@@ -572,9 +572,13 @@ reuse. UCI text may append TT move hints to a short searched prefix; those hints
 are not a completed deeper search or a guaranteed line of the cached score.
 Ponder selection uses the searched prefix and can therefore be absent.
 
-Per-root ordering/complexity counters use signed 64-bit values to preserve their
-initial SEE bias, add unsigned visited work with saturation, and compare without
-subtraction. They are ordering estimates; the separate unsigned visited counter
+Standard root search orders moves like an interior node: D1 keeps the move
+picker's legal order, and each later
+iteration reorders the root list by running the picker with the previous best
+move as hash move. There is no second root sort and no initial SEE/danger bonus.
+Royal losers retains its variant ordering. Per-root ordering/complexity counters
+use signed 64-bit values, add unsigned visited work with saturation, and compare
+without subtraction. They are ordering estimates; the separate unsigned visited counter
 continues to drive UCI nodes and node budgets.
 
 The UCI boundary validates positions and moves before committing the new FEN and
