@@ -1128,6 +1128,67 @@ repeated-position handling, stronger annotations, unfinished games, atomic
 publication, legal selection, rejected reloads, OwnBook, and unchanged book bytes.
 
 
+### 9.7 Online opening learning (MaxDrone, planned)
+
+Status: design agreed 2026-10-21, not implemented. It replaces the SQLite store
+for online play; the engine snapshot path above stays for GUI use.
+
+**Storage.** PGN under `experience/games/fics/` is the only source of truth
+(10.2). Everything else is derived and rebuildable: a game index cache under
+`experience/index/` (per game: players, colour, account, title, computer flag,
+group, game type, ratings, result, detected decision, opening moves, and our
+analyses), and readable `experience/players/<handle>.json` stats. No database.
+
+**Learning signal (JDrone's result chain).** The final result is a weak signal:
+Maxima beats most opposition, and blitz games are often decided after the
+opening or on the clock. Maxima's own `[%eval]` after each searched move is
+bucketed (about 0 within 50 cp, ±1 to 150 cp, ±2 to 300 cp, ±3 beyond or mate),
+and the game's *decision point* is where it settled: a run of losing scores, a
+long level stretch or a level finish, or a winning finish with no large drop.
+Only moves up to that point receive credit; games without a detected decision
+add observations but no result. Credit is asymmetric:
+
+| Decided result | our moves | opponent's moves |
+|---|---|---|
+| loss | loss | win (their line beat us; playable from their side) |
+| draw | draw | draw |
+| win | win | not stored (a weak opponent's error teaches little) |
+
+After two consecutive moves at +3 or better, further moves of that game get no
+credit, so easy wins do not inflate whole lines.
+
+**Layers.** Each candidate move gets a score estimate per layer, shrunk toward
+the layer below: global (all games; Maxima's own repertoire) toward 50%, group
+(engines `(C)`, masters with a title, other registered humans) toward global,
+and opponent toward group. A game counts once per layer. Evidence weights:
+same FICS game type (lightning, blitz, standard) 1, other types ½;
+unregistered opponents (`Account "unregistered"`) count in the global layer
+only, at ½.
+
+**Soundness from analysis.** Each position keeps the strongest analysis per
+move (think time, then depth). A move is unsound while a clearly deeper search
+in the same position preferred a different move; its results stay recorded, and
+a later deeper search choosing it restores it. Book.bin moves and opponents'
+winning moves without contrary deeper analysis are sound.
+
+**Selection (MaxDrone decides; the engine plays with `OwnBook=false`).**
+1. Among sound candidates (book.bin moves, moves with results), sample each
+   move's score from its opponent-layer posterior and play the highest
+   (Thompson sampling). Winning lines dominate as evidence grows; untried moves
+   keep a chance. A `variety` setting widens or narrows the posteriors.
+2. Otherwise, when the deepest analysis in the position took longer than this
+   game's per-move budget (about remaining/30 + increment), play its move
+   instantly: a 10 s analysis beats a 5 s search in a 3 0 game, but a 60 s
+   budget searches afresh and a deeper result supersedes the old one.
+3. Otherwise the engine searches.
+
+The decision is built per game at `Creating:` (opponent, group, game type, and
+budget are known then) and must be ready before our first move; if it is late,
+the global layer alone is used. Engine-side variants (rating-based draw value,
+UCI_Opponent books) wait until `feat/nnue-bootstrap` merges, as it changes
+`src/search.cpp`. Later: background analysis of positions from games that were
+not easy wins, as JDrone's `book_calc`.
+
 ## 10. Python runner and project CLI
 
 One repository contains two independently usable components: the C++ engine and
