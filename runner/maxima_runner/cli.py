@@ -8,6 +8,9 @@ from .project import engine_path, project_root
 
 
 command_groups = (
+    ("Setup", (
+        ("init", "Prepare everything: toolchain, runner, builds, books, tablebases (skips what is ready)"),
+    )),
     ("Engine", (
         ("uci", "Run a UCI engine (Maxima2 by default)"),
     )),
@@ -48,7 +51,7 @@ def show_help(all_commands=False):
     for title, commands in command_groups:
         visible = commands if all_commands else tuple(
             item for item in commands if item[0] in (
-                "uci", "build", "test", "suite:run", "match:run", "experience:show", "tablebases:syzygy:download",
+                "init", "uci", "build", "test", "suite:run", "match:run", "experience:show", "tablebases:syzygy:download",
                 "fics"))
         print(styled("-" * 72, "36"))
         print(styled(title, "1"))
@@ -68,6 +71,16 @@ def toolchain_prefix(root):
     if micromamba.is_file() and os.access(micromamba, os.X_OK) and environment.is_dir():
         return [str(micromamba), "run", "-p", str(environment)]
     return []
+
+
+def toolchain(root):
+    """Command prefix and environment for the local compiler environment, else tools on PATH."""
+    prefix = toolchain_prefix(root)
+    environment = dict(os.environ)
+    if prefix:
+        environment.setdefault("MAMBA_ROOT_PREFIX", str(root / ".tools/mamba"))
+        environment.setdefault("XDG_CACHE_HOME", str(root / ".tools/cache"))
+    return prefix, environment
 
 
 def run_command(command, root, env=None):
@@ -115,11 +128,7 @@ def development_command(command, arguments):
         raise ValueError("build/test requires a Maxima checkout; set MAXIMA_PROJECT_DIR")
     mode = "debug" if args.debug else "release"
     preset = f"cpp26_{mode}"
-    prefix = toolchain_prefix(root)
-    environment = dict(os.environ)
-    if prefix:
-        environment.setdefault("MAMBA_ROOT_PREFIX", str(root / ".tools/mamba"))
-        environment.setdefault("XDG_CACHE_HOME", str(root / ".tools/cache"))
+    prefix, environment = toolchain(root)
     if command == "build":
         status = run_command(prefix + ["cmake", "--preset", preset], root, environment)
         if status:
@@ -150,7 +159,7 @@ def main(argv=None):
     arguments = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
-        "uci, build, test, suite:run, match:run, experience:import|export|show|analyze|build|repertoire|solid, "
+        "init, uci, build, test, suite:run, match:run, experience:import|export|show|analyze|build|repertoire|solid, "
         "tablebases:syzygy:download, fics (no command: run engine)"))
     if not arguments and sys.stdin.isatty() and sys.stdout.isatty():
         arguments = ["--help"]
@@ -175,7 +184,10 @@ def main(argv=None):
             return uci_command(remaining)
         if command in ("build", "test"):
             return development_command(command, remaining)
-        if command == "suite:run":
+        if command == "init":
+            from . import project_init
+            entrypoint = project_init.main
+        elif command == "suite:run":
             from . import run_suite
             entrypoint = run_suite.main
         elif command == "match:run":

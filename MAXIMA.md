@@ -1280,6 +1280,22 @@ commands discover the checkout from the current directory or
 `--engine /absolute/path/to/engine` and experience/download data defaults to the
 current directory. Benchmark positions ship with the installed package.
 
+`./maxima init` prepares a checkout in one command and skips what is already
+ready, so it is safe to rerun and suits CI:
+
+- toolchain (creates `.tools/cpp26` with micromamba when no compilers are found)
+- runner (`.tools/runner` with python-chess, unless the current Python has it)
+- Release and Debug builds (Ninja's no-op check decides "up to date")
+- `eval.nnue` through `tools/download_nnue.py`, for engines that use a network
+- `book.bin` and `fire.bin` from pinned polyglot-books v1.0 archives, verified by
+  size and SHA-256; a different existing file is kept unless `--force`
+- `solid.bin` only with `--solid` and a Lichess token (see 9.7)
+- Syzygy tables up to `--syzygy N` pieces (default 5, about 940 MiB; 0 skips),
+  skipped offline when the manifest lists the complete set
+
+`--check` changes nothing, reports each item, and exits 1 when something is
+missing. `--no-build` and `--no-debug` skip builds.
+
 ```bash
 ./maxima build                 # configure and compile Release
 ./maxima build --debug

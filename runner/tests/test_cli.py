@@ -68,7 +68,7 @@ class cli_tests(unittest.TestCase):
 
     def test_subcommand_help_needs_no_chess(self):
         for command in ('uci', 'suite:run', 'match:run', 'experience:show', 'tablebases:syzygy:download',
-                        'fics'):
+                        'fics', 'init'):
             with patch.dict(sys.modules, {'chess': None}), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as result:
                     cli.main([command, '--help'])

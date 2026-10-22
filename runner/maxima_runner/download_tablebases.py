@@ -101,6 +101,49 @@ def save_manifest(path, entries):
     temporary.replace(path)
 
 
+# Complete Syzygy sets by maximum piece count; the tables never change.
+table_counts = {3: 10, 4: 70, 5: 290, 6: 1020, 7: 3022}
+
+
+def installed(directory, pieces):
+    """Offline check: the manifest lists the complete set and every file has its size."""
+    manifest = directory / "manifest.json"
+    if not manifest.is_file():
+        return False
+    entries = [entry for entry in json.loads(manifest.read_text())
+               if len(entry["file"].split(".")[0].replace("v", "")) <= pieces]
+    return len(entries) == table_counts[pieces] and all(
+        (directory / entry["file"]).is_file() and (directory / entry["file"]).stat().st_size == entry["bytes"]
+        for entry in entries)
+
+
+def download(pieces, directory, base_url="https://tablebase.lichess.ovh/tables/standard", dry_run=False):
+    tables = list_tables(base_url, pieces)
+    total = sum(table["bytes"] for table in tables)
+    amount = total / 1024**2
+    unit = "MiB"
+    if amount >= 1024:
+        amount /= 1024
+        unit = "GiB"
+    if amount >= 1024:
+        amount /= 1024
+        unit = "TiB"
+    print(f"Up to {pieces} pieces: {len(tables)} files, {amount:.2f} {unit}")
+    if dry_run:
+        return
+    directory.mkdir(parents=True, exist_ok=True)
+    manifest = directory / "manifest.json"
+    entries = {entry["file"]: entry for entry in json.loads(manifest.read_text())} if manifest.exists() else {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(download_table, table, directory) for table in tables]
+        for future in concurrent.futures.as_completed(futures):
+            entry, downloaded = future.result()
+            entries[entry["file"]] = entry
+            save_manifest(manifest, entries)
+            print(f"{'Downloaded' if downloaded else 'Verified'} {entry['file']}")
+    print(f"Ready: {directory.resolve()}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pieces", type=int, choices=(3, 4, 5, 6, 7), default=4,
@@ -111,31 +154,7 @@ def main():
     parser.add_argument("--base-url", default="https://tablebase.lichess.ovh/tables/standard",
                         help="Syzygy mirror containing piece-count WDL and DTZ directories")
     args = parser.parse_args()
-    tables = list_tables(args.base_url, args.pieces)
-    total = sum(table["bytes"] for table in tables)
-    amount = total / 1024**2
-    unit = "MiB"
-    if amount >= 1024:
-        amount /= 1024
-        unit = "GiB"
-    if amount >= 1024:
-        amount /= 1024
-        unit = "TiB"
-    print(f"Up to {args.pieces} pieces: {len(tables)} files, {amount:.2f} {unit}")
-    if args.dry_run:
-        return
-    args.directory.mkdir(parents=True, exist_ok=True)
-    manifest = args.directory / "manifest.json"
-    entries = {entry["file"]: entry for entry in json.loads(manifest.read_text())} if manifest.exists() else {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        futures = [pool.submit(download_table, table, args.directory) for table in tables]
-        for future in concurrent.futures.as_completed(futures):
-            entry, downloaded = future.result()
-            entries[entry["file"]] = entry
-            save_manifest(manifest, entries)
-            print(f"{'Downloaded' if downloaded else 'Verified'} {entry['file']}")
-    print(f"Ready: {args.directory.resolve()}")
-
+    download(args.pieces, args.directory, args.base_url, args.dry_run)
 
 if __name__ == "__main__":
     try:
