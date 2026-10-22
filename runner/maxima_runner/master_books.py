@@ -1,10 +1,12 @@
-"""Build draw.bin from the Lichess masters explorer: the lines where the moving side loses least
-and draws most (MAXIMA.md 9.7)."""
+"""Style books from the Lichess masters explorer (MAXIMA.md 9.7): draw.bin, the lines where the moving
+side loses least and draws most, and fire.bin, Noomen's Daring.bin carried on by the most decisive
+master lines that still score well wherever Daring has no move."""
 import argparse
 import heapq
 import json
 import os
 from pathlib import Path
+import struct
 import time
 import urllib.error
 import urllib.parse
@@ -25,6 +27,15 @@ def safety(white, draws, black, color):
         return None
     losses = black if color == chess.WHITE else white
     return (draws - 2 * losses) / games
+
+
+def sharpness(white, draws, black, color, floor=0.45):
+    """Decisive rate for moves that score at least floor for the side playing color: sharp but sound."""
+    games = white + draws + black
+    if not games:
+        return None
+    wins = white if color == chess.WHITE else black
+    return 1 - draws / games if (wins + draws / 2) / games >= floor else None
 
 
 def lichess_token(root):
@@ -79,11 +90,12 @@ class explorer:
         return moves
 
 
-def build(fetch, plies=16, min_games=50, margin=0.05, min_reply=0.05, min_reach=0.002, budget=2000):
+def build(fetch, plies=16, min_games=50, margin=0.05, min_reply=0.05, min_reach=0.002, budget=2000,
+          rank=safety):
     """{(key, code): weight} for both colours.
 
-    Our moves: those within margin of the safest (by safety()), with at least min_games, weight 100
-    for the safest down to 10 at the margin. Opponent moves: every reply played in at least min_reply
+    Our moves: those within margin of the best by rank (safety() or sharpness(); None skips a move),
+    with at least min_games, weight 100 for the best down to 10 at the margin. Opponent moves: every reply played in at least min_reply
     of games. Positions are expanded most likely first while their reach is at least min_reach, up to
     budget positions per colour."""
     weights = {}
@@ -105,7 +117,9 @@ def build(fetch, plies=16, min_games=50, margin=0.05, min_reply=0.05, min_reach=
                     games = move["white"] + move["draws"] + move["black"]
                     parsed = chess.Move.from_uci(move["uci"])
                     if games >= min_games and board.is_legal(parsed):
-                        scored.append((safety(move["white"], move["draws"], move["black"], color), parsed))
+                        value = rank(move["white"], move["draws"], move["black"], color)
+                        if value is not None:
+                            scored.append((value, parsed))
                 if not scored:
                     continue
                 best = max(score for score, _ in scored)
@@ -131,15 +145,42 @@ def build(fetch, plies=16, min_games=50, margin=0.05, min_reply=0.05, min_reach=
     return weights
 
 
-def main():
+styles = {"draw": ("draw.bin", safety, "safest"), "fire": ("fire.bin", sharpness, "sharpest")}
+
+
+def read_entries(path):
+    """{(zobrist key, polyglot move code): weight} of a Polyglot book."""
+    data = Path(path).read_bytes()
+    return {(key, code): weight for key, code, weight, _ in struct.iter_unpack(">QHHI", data[:len(data) // 16 * 16])}
+
+
+def extend(base, extension):
+    """The base book with the extension's moves added only in positions the base does not know."""
+    known = {key for key, _ in base}
+    return {**base, **{entry: weight for entry, weight in extension.items() if entry[0] not in known}}
+
+
+def daring_book(root):
+    """Noomen's Daring.bin, the start of fire.bin; downloaded once from Chris Whittington's polyglot-books."""
+    from . import project_init
+    path = root / "Daring.bin"
+    _, url, member, size, sha256, source = next(book for book in project_init.books if book[0] == "fire.bin")
+    if not path.is_file() or project_init.file_checksum(path) != sha256:
+        print(f"Daring.bin from {source}", flush=True)
+        project_init.download_member(url, member, size, sha256, path)
+    return path
+
+
+def main(style="draw"):
     from .project import data_root, project_root
     root = data_root()
-    parser = argparse.ArgumentParser(prog="maxima experience:draw", description=__doc__)
-    parser.add_argument("--output", default=str(root / "draw.bin"), help="book to write (default: draw.bin)")
+    output, rank, best = styles[style]
+    parser = argparse.ArgumentParser(prog=f"maxima experience:{style}", description=__doc__)
+    parser.add_argument("--output", default=str(root / output), help=f"book to write (default: {output})")
     parser.add_argument("--plies", type=int, default=16, help="depth of the book in plies (default: 16)")
     parser.add_argument("--min-games", type=int, default=50, help="master games a move needs (default: 50)")
     parser.add_argument("--margin", type=float, default=0.05,
-                        help="keep our moves this close to the safest (default: 0.05)")
+                        help=f"keep our moves this close to the {best} (default: 0.05)")
     parser.add_argument("--budget", type=int, default=2000,
                         help="most positions to query per colour (default: 2000)")
     parser.add_argument("--cache-dir", default=str(root / "experience" / "explorer"),
@@ -149,7 +190,13 @@ def main():
     if not token:
         parser.error("set LICHESS_TOKEN (environment or .env); a token without scopes is enough")
     fetch = explorer(token, options.cache_dir)
-    weights = build(fetch, options.plies, options.min_games, options.margin, budget=options.budget)
+    weights = build(fetch, options.plies, options.min_games, options.margin, budget=options.budget, rank=rank)
+    if style == "fire":
+        weights = extend(read_entries(daring_book(root)), weights)
     count = learning.write_book(weights, options.output)
     print(f"{options.output}: {count} entries, {fetch.requests} new explorer queries")
     return 0
+
+
+def fire_main():
+    return main("fire")

@@ -164,8 +164,8 @@ def book_step(name, url, member, size, sha256, source):
 
 def draw_step(root, options):
     """Rebuild draw.bin from Lichess master games instead of downloading the published one (MAXIMA.md 9.7)."""
-    from . import draw_book
-    if not draw_book.lichess_token(root):
+    from . import master_books
+    if not master_books.lichess_token(root):
         return "missing", "set LICHESS_TOKEN (environment or .env)"
     if options.check:
         return "missing", "./maxima init --draw builds it"
