@@ -376,20 +376,21 @@ def mood_title(mood):
 whisper_plies = 6
 
 
-def book_whisper(why, opening):
-    """A book move for observers, e.g. "book: base 39%, fire 39%, surprise 10%, experience 12%"."""
+def book_whisper(san, why, opening):
+    """A book move for observers: the layer that picked it, then the mix, e.g. "Nc6 book: fire (base 39%,
+    fire 39%, surprise 10%, experience 12%)"."""
     kind = why[0]
     opponent = opening.names["opponent"]
     if kind == "recalled":
-        return f"recalled d{why[1]} {why[2]:.0f}s"
-    probability, parts = why[1], why[2]
+        return f"{san} recalled d{why[1]} {why[2]:.0f}s"
+    probability, parts, source = why[1], why[2], why[3]
     words = {"book": "base", "fire": "fire", "draw": "draw", "experiment": "surprise", "global": "experience",
              "group": opening.names["group"], "opponent": f"vs {opponent}",
              "mood": f"{(opening.mood or '').replace('_', ' ')} mood"}
     mix = ", ".join(f"{words[name]} {parts[name] / probability:.0%}" for name in learning.layer_names
                     if parts.get(name, 0) >= 0.05 * probability)
-    lead = {"signature": f"signature vs {opponent}", "revenge": f"revenge vs {opponent}"}.get(kind, kind)
-    return f"{lead}: {mix}"
+    lead = {"signature": f"signature vs {opponent}", "revenge": f"revenge vs {opponent}"}.get(kind, words[source])
+    return f"{san} book: {lead} ({mix})"
 
 
 def learning_report(game, record, records):
@@ -794,7 +795,7 @@ class engine_player:
                 self.on_line(f"-- {board.san(move)} {reason} {time.monotonic() - started:.1f}s")
                 self.from_book = True
                 if (self.whispering or self.followers) and self.opening.why:
-                    await self.explain(book_whisper(self.opening.why, self.opening))
+                    await self.explain(book_whisper(board.san(move), self.opening.why, self.opening))
                 return
         try:
             result = await self.session.play(board, limit, game=self.token, opponent=self.opponent,

@@ -525,7 +525,8 @@ class opening_book:
         """(move, reason) to play without searching, or None to let the engine search.
 
         why keeps the last decision for observers: ("left book",), ("book" | "learned" | "signature" |
-        "revenge", probability, parts), or ("recalled", depth, seconds)."""
+        "revenge", probability, parts, source), or ("recalled", depth, seconds). The source is the layer
+        that picked the move, drawn by its share of it: the same as picking a layer by weight first."""
         self.why = None
         if (type(board) is not chess.Board or board.ply() >= horizon_plies or board.halfmove_clock >= 90
                 or board.is_repetition(2)):
@@ -557,7 +558,10 @@ class opening_book:
                 elif move == revenge:
                     kind = "revenge"
                     reason = "revenge " + reason
-                self.why = (kind,) + moves[move]
+                parts = moves[move][1]
+                names = sorted(parts)
+                source = self.random.choices(names, [parts[name] for name in names])[0]
+                self.why = (kind,) + moves[move] + (source,)
                 return move, reason
         if analyses:
             text, (depth, centipawns, mate, think_ms, clock) = max(analyses.items(),
