@@ -219,6 +219,26 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(player.connection.sent, ["e2e4"])
         self.assertTrue(any("whispers off" in line for line in self.lines))
 
+    async def test_remote_control_needs_the_key(self):
+        player = await self.player("play", policy=fics.play_policy(follow_key="s3cret"))
+        player.name = "GuestCPKH"
+        await player.handle("hermen tells you: wrong follow")
+        await player.handle("hermen tells you: s3cret rm -rf")
+        self.assertEqual(player.connection.sent, [])
+        await player.handle("hermen(C) tells you: s3cret follow")
+        self.assertEqual(player.followers, ["hermen"])
+        await player.handle("hof tells you: s3cret !resign")
+        self.assertEqual(player.connection.sent[-1], "tell hof No game to resign.")
+        await player.handle(start)
+        await self.settle(player)
+        self.assertEqual(player.connection.sent[-1], "tell hermen e4 | depth 3, +0.25 for me")
+        await player.handle("hof tells you: s3cret !abort")
+        self.assertEqual(player.connection.sent[-1], "abort")
+        await player.handle("hermen tells you: unfollow")
+        self.assertEqual(player.followers, [])
+        await player.handle("hof tells you: s3cret softquit")
+        self.assertTrue(player.stopping)
+
     def test_whispers_explain_book_choices_simply(self):
         opening = learning.opening_book([], opponent="John", group="humans", mood="parham")
         parts = {"book": 0.2, "fire": 0.1, "mood": 0.15, "opponent": 0.05, "global": 0.001}

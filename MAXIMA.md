@@ -1456,6 +1456,14 @@ opponent, unlike kibitz) in plain words:
     f4 | revenge! John beat me with this line (50%): book.bin 30%, vs John 70%
     Bd6 | out of book | depth 19, +2.07 for me | expect c4 O-O cxd5 Bxd5
 
+FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and stops
+whispering. With `MAXDRONE_KEY` set in the environment (never in a file it writes or a
+log: the key is masked in the terminal and wire logs), the owner can steer it by tell:
+`tell <name> <key> follow` sends the same explanations as tells (`unfollow` stops),
+`softquit` stops after the game, `help` lists the commands, and `!abort`, `!resign`,
+`!draw` act on the current game. Only this fixed list is accepted; a wrong key gets no
+answer.
+
 FICS computer accounts must keep the owner, machine, and engine in their finger
 notes (`help computers`), and may only play the engine, time controls, and
 variants the computer committee approved. On a registered login the client

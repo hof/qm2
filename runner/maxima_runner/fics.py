@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import platform
 import random
+import hmac
 import re
 import socket
 import sys
@@ -263,6 +264,9 @@ creating_pattern = re.compile(
 challenge_pattern = re.compile(
     r"^Challenge: (?P<name>[A-Za-z]+) \([^)]*\)(?: \[(?:white|black)\])? [A-Za-z]+ \([^)]*\) "
     r"(?P<rated>rated|unrated) (?P<type>.+?) (?P<time>\d+) (?P<increment>\d+)(?: \(adjourned\))?\.?$")
+tell_pattern = re.compile(r"^(?P<name>[A-Za-z]{3,17})(?:\([A-Z*]+\))* tells you: (?P<text>.*)$")
+max_followers = 5
+remote_commands = ("follow", "softquit", "help", "!abort", "!resign", "!draw")
 finger_pattern = re.compile(r"^Finger of (?P<name>[A-Za-z]+)(?P<titles>(?:\([A-Z*]+\))*):")
 playable_types = ("lightning", "blitz", "standard")
 chess_titles = ("GM", "IM", "FM", "WGM", "WIM", "WFM", "CM", "WCM", "NM")
@@ -300,7 +304,7 @@ class play_policy:
 
     def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=0, games=None, guest=True,
                  owner=None, notes=(), contempt_window=100, first_move_wait=60,
-                 whisper=False):
+                 whisper=False, follow_key=None):
         self.seeks = list(seeks)
         self.seeks_at_once = seeks_at_once
         self.accept = accept
@@ -312,6 +316,7 @@ class play_policy:
         self.contempt_window = contempt_window
         self.first_move_wait = first_move_wait
         self.whisper = whisper
+        self.follow_key = follow_key  # "tell <us> follow <key>" sends our explanations to that player
 
     def opening_wait(self, initial_seconds):
         """Seconds the opponent gets for their first move: a fifth of the clock, at least 15, at most first_move_wait."""
@@ -421,6 +426,7 @@ class engine_player:
         self.margin = margin
         self.policy = policy or play_policy()
         self.whispering = self.policy.whisper
+        self.followers = []
         self.finger_wait = finger_wait
         self.connection = None
         self.context = self.session = None
@@ -478,6 +484,44 @@ class engine_player:
         self.announced_mood = None
         await self.announce()
         await self.seek()
+
+    async def on_tell(self, found):
+        """Remote control by tell: "<key> follow|softquit|help|!abort|!resign|!draw", and "unfollow". Wrong
+        keys get no answer; the ! commands are a fixed list, never raw server commands."""
+        name, words = found["name"], found["text"].split()
+        if words == ["unfollow"]:
+            if name in self.followers:
+                self.followers.remove(name)
+                await self.send(f"tell {name} Stopped. Thanks for following!")
+            return
+        key = self.policy.follow_key
+        if len(words) != 2 or words[1] not in remote_commands:
+            return
+        if not key or not hmac.compare_digest(words[0].encode(), key.encode()):
+            self.on_line(f"-- remote command refused for {name}")
+            return
+        command = words[1]
+        self.on_line(f"-- {name}: {command}")
+        if command == "follow":
+            if name not in self.followers:
+                self.followers = (self.followers + [name])[-max_followers:]
+            await self.send(f"tell {name} Hi! I will tell you why I play each move. 'tell {self.name} unfollow' stops.")
+        elif command == "softquit":
+            await self.stop()
+            await self.send(f"tell {name} OK, I stop after this game.")
+        elif command == "help":
+            await self.send(f"tell {name} Commands after the key: {', '.join(remote_commands)}; and unfollow.")
+        elif self.game is None:
+            await self.send(f"tell {name} No game to {command[1:]}.")
+        else:
+            await self.send(command[1:])
+
+    async def explain(self, text):
+        """A move's explanation to observers (whisper) and to followers (tell)."""
+        if self.whispering:
+            await self.send(f"whisper {text}")
+        for name in self.followers:
+            await self.send(f"tell {name} {text}")
 
     async def announce(self):
         """Finger notes for registered accounts, with the week's mood after the configured notes."""
@@ -538,6 +582,8 @@ class engine_player:
             await self.on_creating(creating_pattern.match(line))
         elif challenge_pattern.match(line):
             await self.on_challenge(challenge_pattern.match(line))
+        elif tell_pattern.match(line):
+            await self.on_tell(tell_pattern.match(line))
         elif line.strip() == "You are muted." and self.whispering:
             self.whispering = False
             self.on_line("-- whispers off: FICS mutes this account (guests cannot whisper; register one)")
@@ -725,8 +771,8 @@ class engine_player:
                     self.record.on_search(board, move, {"source": reason})
                 self.on_line(f"-- {board.san(move)} {reason} {time.monotonic() - started:.1f}s")
                 self.from_book = True
-                if self.whispering and self.opening.why:
-                    await self.send(f"whisper {book_whisper(board.san(move), self.opening.why, self.opening)}")
+                if (self.whispering or self.followers) and self.opening.why:
+                    await self.explain(book_whisper(board.san(move), self.opening.why, self.opening))
                 return
         try:
             result = await self.session.play(board, limit, game=self.token, opponent=self.opponent,
@@ -748,14 +794,14 @@ class engine_player:
         pv = variation(board, result.info.get("pv", []))
         self.on_line(f"-- {board.san(result.move)} {summary} {time.monotonic() - started:.1f}s"
                      + (f" pv {pv}" if pv else ""))
-        if self.whispering:
+        if self.whispering or self.followers:
             note = None
             if self.opening is not None and self.opening.why == ("left book",):
                 note = "own idea: leaving the book on purpose"
             elif self.from_book:
                 note = "out of book"
             reply = pv.split(" ", 1)[1] if " " in pv else ""
-            await self.send(f"whisper {search_whisper(board.san(result.move), result.info, board.turn, reply, note)}")
+            await self.explain(search_whisper(board.san(result.move), result.info, board.turn, reply, note))
         self.from_book = False
 
 
@@ -955,7 +1001,9 @@ def run(options, parser):
                          configured["rematches"], configured["games"], guest=options.handle == "guest",
                          owner=configured["owner"], notes=configured["notes"],
                          contempt_window=configured["contempt_window"],
-                         first_move_wait=configured["first_move_wait"], whisper=configured["whisper"])
+                         first_move_wait=configured["first_move_wait"], whisper=configured["whisper"],
+                         follow_key=os.environ.get("MAXDRONE_KEY") or None)
+    redact = (lambda text: text.replace(policy.follow_key, "********")) if policy.follow_key else (lambda text: text)
     pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or data_root() / "experience" / "games" / "fics")
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
     if not valid_handle(options.handle):
@@ -965,11 +1013,11 @@ def run(options, parser):
         stream = open(options.debug, "a", encoding="utf-8")
 
         def transcript(text):
-            stream.write(time.strftime("%H:%M:%S") + f".{int(time.time() * 1000) % 1000:03d} {text}\n")
+            stream.write(time.strftime("%H:%M:%S") + f".{int(time.time() * 1000) % 1000:03d} {redact(text)}\n")
             stream.flush()
 
     def show(line):
-        print(line, flush=True)
+        print(redact(line), flush=True)
 
     @asynccontextmanager
     async def engine_session():
