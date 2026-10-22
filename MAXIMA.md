@@ -1128,7 +1128,7 @@ repeated-position handling, stronger annotations, unfinished games, atomic
 publication, legal selection, rejected reloads, OwnBook, and unchanged book bytes.
 
 
-### 9.7 Online opening learning (MaxDrone, planned)
+### 9.7 Online opening learning (MaxDrone)
 
 Status: implemented in `learning.py` and MaxDrone (`maxima fics`); thresholds
 are first guesses awaiting measurement. `./maxima experience:build` refreshes
@@ -1139,79 +1139,89 @@ snapshot path above stays for GUI use.
 **Storage.** PGN under `experience/games/fics/` is the only source of truth
 (10.2). Everything else is derived and rebuildable: a game index cache under
 `experience/index/` (per game: players, colour, account, title, computer flag,
-group, game type, ratings, result, detected decision, opening moves, and our
-analyses), and readable `experience/players/<handle>.json` stats. No database.
+group, game type, ratings, result, opening moves with their eval and result
+values, and our analyses), and readable `experience/players/<handle>.json` stats. No database.
 
-**Learning signal (JDrone's result chain).** The final result is a weak signal:
-Maxima beats most opposition, and blitz games are often decided after the
-opening or on the clock. Maxima's own `[%eval]` after each searched move is
-bucketed (about 0 within 50 cp, ±1 to 150 cp, ±2 to 300 cp, ±3 beyond or mate),
-and the game's *decision point* is where it settled: a run of losing scores, a
-long level stretch or a level finish, or a winning finish with no large drop.
-Only moves up to that point receive credit; games without a detected decision
-add observations but no result. Credit is asymmetric:
+**Learning signal (Maxima's eval).** Maxima's own `[%eval]` is the source of
+truth; an eval can miss something, but not for long. Every opening move (both
+sides, first 40 plies) gets two values from the mover's point of view:
 
-| Decided result | our moves | opponent's moves |
-|---|---|---|
-| loss | loss | win (their line beat us; playable from their side) |
-| draw | draw | draw |
-| win | win | not stored (a weak opponent's error teaches little) |
+- *eval*: the mean expected score of our next four searched evals from that
+  move on (`1 / (1 + 10^(-cp/400))`: +1.00 ≈ 64%, +3.00 ≈ 85%), so book moves
+  are judged by the position they led to, and an opponent's move that left us
+  at -1.00 counts as a good move for that side;
+- *result*: the game result (1, ½, 0), time forfeits included, since an
+  opening that sets the opponent thinking is a real gain.
 
-After two consecutive moves at +3 or better, further moves of that game get no
-credit, so easy wins do not inflate whole lines.
+A move's value is `0.8 × eval + 0.2 × result`; either one alone when the other
+is missing (book-only games, unfinished games). In the result part a draw is
+worth `0.5 + 0.45 × DrawContempt/100` (JDrone's draw factor), so draws are
+welcome against stronger opponents and near-losses against weaker ones.
 
-**Layers.** Each candidate move gets a score estimate per layer, shrunk toward
-the layer below: global (all games; Maxima's own repertoire) toward 50%, group
-(engines `(C)`, masters with a title, other registered humans) toward global,
-and opponent toward group. A game counts once per layer. Evidence weights:
-same FICS game type (lightning, blitz, standard) 1, other types ½;
-unregistered opponents (`Account "unregistered"`) count in the global layer
-only, at ½.
+**Learned layers.** Global (all games: what suits Maxima), group (engines `(C)`,
+masters with a title, other registered humans), and opponent. A move's rate in
+each layer is shrunk toward the layer below (global toward 50%) with a prior of
+8 games. Evidence weights: same FICS game type (lightning, blitz, standard) 1,
+other types ½; unregistered opponents (`Account "unregistered"`) count in the
+global layer only, at ½.
 
 **Soundness from analysis.** Each position keeps the strongest analysis per
 move (think time, then depth). A move is unsound while a clearly deeper search
-in the same position preferred a different move; its results stay recorded, and
-a later deeper search choosing it restores it. Book.bin moves and opponents'
-winning moves without contrary deeper analysis are sound.
+in the same position preferred a different move; a later deeper search choosing
+it restores it.
 
-**Selection (MaxDrone decides; the engine plays with `OwnBook=false`).**
-1. Among sound candidates (book.bin moves, moves with results), sample each
-   move's score from its opponent-layer posterior and play the highest
-   (Thompson sampling). Winning lines dominate as evidence grows; untried moves
-   keep a chance. A `variety` setting widens or narrows the posteriors.
-2. Otherwise, when the deepest analysis in the position took longer than this
-   game's per-move budget (about remaining/30 + increment), play its move
-   instantly: a 10 s analysis beats a 5 s search in a 3 0 game, but a 60 s
-   budget searches afresh and a deeper result supersedes the old one.
-3. Otherwise the engine searches.
+**Multi-layer book.** Each game gets its own multi-layer book: book.bin (the
+base: its moves are good in principle), a style book, and the learned layers,
+each with a percentage from the game's profile:
 
-A draw's value in that score follows the game's draw contempt (10.2): `0.5 +
-0.45 × DrawContempt/100`, so up to 0.95 against much stronger opponents (solid
-lines that drew are welcome) and down to 0.05 against much weaker ones (lines
-that drew count as near-losses; decisive lines are preferred), as JDrone's draw
-factor. Book.bin moves have no result statistics, so this cannot yet steer the
-book itself toward solid or sharp openings.
+| profile | book | style | global | group | opponent | search |
+|---|---|---|---|---|---|---|
+| equal | 45 | 0 | 20 | 10 | 25 | 5 |
+| much weaker (fire.bin) | 20 | 25 | 10 | 10 | 35 | 5 |
+| much stronger (solid.bin) | 30 | 25 | 10 | 10 | 25 | 5 |
+| unrated (experiment.bin, else fire.bin) | 35 | 35 | 30 | 0 | 0 | 10 |
 
-**Multi-layer book.** A style book is blended over book.bin per game: each
-book's weights become shares per position, mixed as `(1 - share) × book.bin +
-share × style`, so book.bin is always consulted and style moves book.bin barely
-knows (a King's Gambit) can still be chosen. Rated opponents follow the draw
-contempt: `fire.bin` against weaker players, `solid.bin` against stronger ones,
-share 0 within ±0.20 rising to 1 at ±1.00. Unrated opponents (guests) are for
-experiments: `experiment.bin` (else `fire.bin`) at `unrated_style_share`
-(default 0.5). Learned results sit above both and still decide when present.
-Any Polyglot file works as a style book; `./maxima experience:repertoire` builds
-them from `books/{fire,solid,experiment}.pgn`, one line per game tagged
-`[Repertoire "white"|"black"]` so only our side's moves enter the book. The
-.bin files sit beside book.bin and are not tracked.
+Rated games slide from *equal* toward *weaker* or *stronger* with the draw
+contempt (none within ±0.20, fully at ±1.00); unrated games (guests) use
+*unrated* and experiment. Percentages are configurable (`layer_profiles` in the
+MaxDrone config). In each position:
 
-Moves are labelled by source in the terminal and PGN comment: `book`
-(book.bin, or `book fire 100%` when the style book has the move), `learned` (experience, with the estimated score and games), and
-`recalled` (earlier analysis). Defaults: prior strength 8 games per layer,
-book moves under a tenth of the heaviest book weight need evidence, superseding
-analysis needs depth 16 and two plies more, horizon 40 plies. `variety` (setting
-or `--variety`) divides the posterior strength: 0.5 repeats winners more, 2
-explores more. `--no-learning` (or `--no-pgn`) leaves the book to the engine.
+1. Book layers give each book's move shares; moves under a tenth of a book's
+   heaviest weight are dropped within that book.
+2. Each learned layer reweights the books' mix by its sampled rate, with the
+   engine's experience factor `0.1 + 0.9 × (2·rate)^4` (×1 at 50%, ≈×2.6 at 65%,
+   ≈×0.5 at 40%). Rates are Thompson samples, so untried moves keep a chance
+   and `variety` (setting or `--variety`) widens (2) or narrows (0.5) them.
+   Moves only experience knows (an opponent's good move, an engine novelty) get
+   a base share that grows with their games.
+3. A learned layer counts at its percentage × `n / (n + 8)`, n = its games in
+   the position; weight a layer cannot use goes proportionally to the others.
+   So book.bin and the style keep their floor, and John's layer counts more as
+   games against John accumulate.
+4. Proven losers (at least 4 games, rate under 30%) are multiplied by 0.1 in
+   every layer, book.bin included.
+5. The move is drawn from the result. Out of book a learned move is played only
+   with real evidence (two games at 50% or more, or an analysis that took this
+   game's budget); otherwise an analysis longer than the per-move budget
+   (about remaining/30 + increment) is `recalled`, else the engine searches.
+
+The *search* column is the share of games that leave the book once, at a
+random ply, so the engine can bring in new moves (a per-move share would
+compound over a game).
+
+Style books are Polyglot files beside book.bin (`fire.bin`, `solid.bin`,
+`experiment.bin`, not tracked); any Polyglot book works. `./maxima
+experience:repertoire` builds them from `books/{fire,solid,experiment}.pgn`,
+one line per game tagged `[Repertoire "white"|"black"]` so only our side's
+moves enter the book.
+
+Moves are labelled in the terminal and PGN comment with the label, the move's
+probability, and each layer's share of it, e.g. `learned 65%: fire 45%, global
+13%, humans 13%, John 29%`; `book` when the books gave most, `learned` when the
+learned layers did, `recalled d20 60.0s` for earlier analysis. These shares are
+logged for tuning the profiles. Superseding analysis needs depth 16 and two
+plies more; the horizon is 40 plies. `--no-learning` (or `--no-pgn`) leaves the
+book to the engine.
 
 The decision is built per game at `Creating:` (opponent, group, game type, and
 budget are known then) and must be ready before our first move; if it is late,
@@ -1369,6 +1379,11 @@ or a list), note 3 (CPU model with the engine's `Threads` and `Hash`, and the
 OS), then up to seven `notes`. Guest accounts may test engines freely and get no
 notes.
 
+The multi-layer book (9.7) chooses opening moves; `layer_profiles` in the
+config overrides its percentages per profile, e.g. `{"layer_profiles": {"weaker":
+{"style": 35, "book": 10}}}` (layers `book`, `style`, `global`, `group`,
+`opponent`, `search`; profiles `equal`, `weaker`, `stronger`, `unrated`).
+
 Draw contempt follows the rating gap: at `Creating:` MaxDrone sets the engine's
 `DrawContempt` (cp, our view) to the default -10 plus a quarter of the opponent's
 rating minus ours, clamped to `contempt_window` (default ±100 cp = ±1 pawn; 0
@@ -1388,7 +1403,8 @@ Every game with at least one move is appended to
 `BlackAccount "unregistered"` for guests and other `(U)` logins. Every move has `[%clk]`
 (mover's clock after the move) and `[%emt]` (time FICS charged); our searched
 moves add `[%eval score,depth]`, `[%pv ...]` (SAN, up to 12 plies), and
-`[%nodes]`, book moves the comment `book`; the server's reason ends the game.
+`[%nodes]`; moves from the multi-layer book carry its label and layer shares
+(9.7); the server's reason ends the game.
 `experience:import` reads these annotations. A takeback rewinds the move list;
 a board that does not follow (missed update) restarts it with a `FEN` tag. A
 game cut off by a lost connection has no result line and is not saved. Unregistered

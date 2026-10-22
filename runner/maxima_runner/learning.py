@@ -217,24 +217,42 @@ def build_repertoire(pgn_path, book_path, plies=30):
     return len(weights)
 
 
+# Multi-layer book profiles (MAXIMA.md 9.7): percentages per layer; "search" is the share of games
+# that leave the book once, at a random ply, so the engine can bring in new moves.
+layer_profiles = {
+    "equal": {"book": 45, "style": 0, "global": 20, "group": 10, "opponent": 25, "search": 5},
+    "weaker": {"book": 20, "style": 25, "global": 10, "group": 10, "opponent": 35, "search": 5},
+    "stronger": {"book": 30, "style": 25, "global": 10, "group": 10, "opponent": 25, "search": 5},
+    "unrated": {"book": 35, "style": 35, "global": 30, "group": 0, "opponent": 0, "search": 10},
+}
+layer_names = ("book", "style", "global", "group", "opponent")
+
+
 def style_share(contempt):
-    """How much of the style book to blend in: none within ±0.20, all at ±1.00."""
+    """How far a rated game leans to the weaker or stronger profile: none within ±0.20, all at ±1.00."""
     if contempt is None:
         return 0.0
     return max(0.0, min(1.0, (abs(contempt) - 20) / 80))
 
 
-def choose_style(contempt, style_books, unrated_share=0.5):
-    """(style, share) for this game's multi-layer book.
+def game_profile(contempt, rated, profiles=None):
+    """(style book name, layer percentages) for one game.
 
-    Unrated opponents (guests) are for experiments: experiment.bin, else fire.bin, at unrated_share.
-    Rated ones follow the draw contempt: fire.bin against weaker, solid.bin against stronger."""
-    available = {style for style, path in (style_books or {}).items() if path and Path(path).is_file()}
-    if contempt is None:
-        style = next((style for style in ("experiment", "fire") if style in available), None)
-        return style, unrated_share if style else 0.0
-    style = "fire" if contempt < 0 else "solid"
-    return style, style_share(contempt) if style in available else 0.0
+    Unrated games (guests) experiment: experiment.bin, else fire.bin. Rated games slide from the equal
+    profile towards fire.bin against weaker opponents or solid.bin against stronger ones."""
+    profiles = profiles or layer_profiles
+    if not rated:
+        return ("experiment", "fire"), dict(profiles["unrated"])
+    side = "weaker" if contempt is not None and contempt < 0 else "stronger"
+    share = style_share(contempt)
+    weights = {name: (1 - share) * profiles["equal"].get(name, 0) + share * profiles[side].get(name, 0)
+               for name in profiles["equal"]}
+    return ("fire",) if side == "weaker" else ("solid",), weights
+
+
+def learned_factor(rate):
+    """The engine's experience factor: x1 at 50%, about x2.6 at 65%, x0.47 at 40%, never below x0.1."""
+    return 0.1 + 0.9 * (2 * rate) ** 4
 
 
 def per_move_budget_ms(clock_seconds, increment_seconds):
@@ -243,23 +261,32 @@ def per_move_budget_ms(clock_seconds, increment_seconds):
 
 
 class opening_book:
-    """One game's view of the experience: layered results, analyses, and book.bin (MAXIMA.md 9.7)."""
+    """One game's multi-layer book (MAXIMA.md 9.7): book.bin, a style book, and the learned layers
+    global, group, and opponent, each with a percentage from the game's profile."""
 
     def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
                  variety=1.0, supersede_depth=16, random_source=None, contempt=None, style_books=None,
-                 unrated_share=0.5):
+                 rated=True, profiles=None):
         self.book_path = book_path
-        # Multi-layer book: a style book blended over book.bin (MAXIMA.md 9.7).
-        self.style, self.style_share = choose_style(contempt, style_books, unrated_share)
-        self.style_path = (style_books or {}).get(self.style)
-        # JDrone's draw factor, tied to DrawContempt: a draw is worth up to 0.95 against much stronger
-        # opponents and down to 0.05 against much weaker ones.
+        self.random = random_source or random.Random()
+        styles, self.weights = game_profile(contempt, rated, profiles)
+        books = style_books or {}
+        self.style = next((name for name in styles if books.get(name) and Path(books[name]).is_file()), None)
+        self.style_path = books.get(self.style)
+        self.names = {"book": "book", "style": self.style or "style", "global": "global",
+                      "group": group or "group", "opponent": opponent or "opponent"}
+        # The search layer: some games leave the book once, at a random ply of ours.
+        self.search_ply = None
+        if self.random.random() * 100 < self.weights.get("search", 0):
+            self.search_ply = self.random.randrange(horizon_plies)
+        # JDrone's draw factor, tied to DrawContempt, for the result part: a draw is worth up to 0.95
+        # against much stronger opponents and down to 0.05 against much weaker ones.
         self.draw_value = 0.5 if contempt is None else 0.5 + 0.45 * max(-1.0, min(1.0, contempt / 100))
         self.prior = prior
         self.variety = max(variety, 0.05)
         self.supersede_depth = supersede_depth
-        self.random = random_source or random.Random()
-        self.layers = ({}, {}, {})  # global, group, opponent: (key, move) -> [wins, draws, games]
+        self.layers = ({}, {}, {})  # global, group, opponent: (key, move) -> [value sum, games]
+        self.totals = ({}, {}, {})  # the same per position: key -> games
         self.analyses = {}  # key -> {move: [depth, centipawns, mate, think_ms, halfmove clock]}
         opponent = (opponent or "").lower()
         for record in records:
@@ -273,9 +300,10 @@ class opening_book:
             for key, move, evaluated, result in record["values"]:
                 value = self.value(evaluated, result)
                 for layer, layer_weight in layers:
-                    entry = self.layers[layer].setdefault((key, move), [0.0, 0.0, 0.0])
+                    entry = self.layers[layer].setdefault((key, move), [0.0, 0.0])
                     entry[0] += layer_weight * value
-                    entry[2] += layer_weight
+                    entry[1] += layer_weight
+                    self.totals[layer][key] = self.totals[layer].get(key, 0.0) + layer_weight
             for key, move, depth, centipawns, mate, think_ms, clock in record["analyses"]:
                 moves = self.analyses.setdefault(key, {})
                 known = moves.get(move)
@@ -292,18 +320,24 @@ class opening_book:
             return evaluated
         return (1 - result_share) * evaluated + result_share * result
 
-    def estimate(self, key, move):
-        """Score rate shrunk global -> group -> opponent, its posterior strength, and the games behind it."""
-        rate, games = 0.5, 0.0
+    def rates(self, key, move):
+        """Per learned layer: (rate shrunk toward the layer below, games); global shrinks toward 50%."""
+        rate, rates = 0.5, []
         for layer in self.layers:
-            wins, draws, count = layer.get((key, move), (0.0, 0.0, 0.0))
-            rate = (wins + self.draw_value * draws + self.prior * rate) / (count + self.prior)
-            games = count if count else games
-        return rate, self.prior + games, self.layers[0].get((key, move), (0.0, 0.0, 0.0))[2]
+            total, games = layer.get((key, move), (0.0, 0.0))
+            rate = (total + self.prior * rate) / (games + self.prior)
+            rates.append((rate, games))
+        return rates
+
+    def estimate(self, key, move):
+        """Deepest shrunk rate and the games behind the move overall."""
+        rates = self.rates(key, move)
+        return rates[-1][0], rates[0][1]
 
     @staticmethod
     def read_book(path, board):
-        """Move shares (summing to 1) from a Polyglot book; empty when absent or unreadable."""
+        """Move shares (summing to 1) from a Polyglot book without its rare moves (under a tenth of the
+        heaviest); empty when absent or unreadable."""
         if not path:
             return {}
         weights = {}
@@ -313,16 +347,10 @@ class opening_book:
                     weights[entry.move] = weights.get(entry.move, 0) + entry.weight
         except (OSError, ValueError, IndexError):
             return {}
+        heaviest = max(weights.values(), default=0)
+        weights = {move: weight for move, weight in weights.items() if weight and weight >= heaviest / 10}
         total = sum(weights.values())
         return {move: weight / total for move, weight in weights.items()} if total else {}
-
-    def book_moves(self, board):
-        main = self.read_book(self.book_path, board)
-        style = self.read_book(self.style_path, board) if self.style_share > 0 else {}
-        if not style:
-            return main
-        share = self.style_share if main else 1.0
-        return {move: (1 - share) * main.get(move, 0) + share * style.get(move, 0) for move in set(main) | set(style)}
 
     def superseded(self, analyses, move):
         """A clearly deeper search in this position preferred another move."""
@@ -331,34 +359,80 @@ class opening_book:
         return any(other != move.uci() and analysis[0] >= max(self.supersede_depth, depth + 2)
                    for other, analysis in analyses.items())
 
+    def sample(self, rate, games):
+        strength = (games + self.prior) / self.variety
+        return self.random.betavariate(max(rate * strength, 1e-3), max((1 - rate) * strength, 1e-3))
+
+    def distribution(self, board, key, analyses):
+        """Each move's probability and the share each layer gave it, plus whether any book knew the position."""
+        books = {"book": self.read_book(self.book_path, board),
+                 "style": self.read_book(self.style_path, board) if self.weights.get("style") else {}}
+        learned = {chess.Move.from_uci(move) for (position, move) in self.layers[0] if position == key}
+        candidates = {move for move in set(books["book"]) | set(books["style"]) | learned
+                      if board.is_legal(move) and not self.superseded(analyses, move)}
+        if not candidates:
+            return {}, False
+        in_book = any(move in books["book"] or move in books["style"] for move in candidates)
+        # The base the learned layers reweight: the books' mix, plus a share for moves only experience
+        # knows (the opponent's good moves, engine novelties) that grows with their games.
+        base = {}
+        for move in candidates:
+            share = sum(self.weights.get(name, 0) * books[name].get(move, 0) for name in ("book", "style"))
+            games = self.layers[0].get((key, move.uci()), (0.0, 0.0))[1]
+            base[move] = share / 100 if in_book else 1.0
+            if in_book and move not in books["book"] and move not in books["style"]:
+                base[move] = 0.1 * games / (games + self.prior)
+        total = sum(base.values())
+        base = {move: weight / total for move, weight in base.items()}
+        rates = {move: self.rates(key, move.uci()) for move in candidates}
+        layers = {name: books[name] for name in ("book", "style") if books[name]}
+        weights = {name: self.weights.get(name, 0) for name in layers}
+        for index, name in enumerate(("global", "group", "opponent")):
+            games = self.totals[index].get(key, 0.0)
+            if not games or not self.weights.get(name):
+                continue
+            weighted = {move: base[move] * learned_factor(self.sample(*rates[move][index])) for move in candidates}
+            total = sum(weighted.values())
+            layers[name] = {move: weight / total for move, weight in weighted.items()}
+            weights[name] = self.weights[name] * games / (games + self.prior)
+        # Proven losers drop in every layer, book.bin included.
+        damp = {move: 0.1 if rates[move][0][1] >= 4 and rates[move][-1][0] < 0.3 else 1.0 for move in candidates}
+        shares = {move: {name: weights[name] * layers[name].get(move, 0) * damp[move] for name in layers}
+                  for move in candidates}
+        total = sum(sum(parts.values()) for parts in shares.values())
+        if not total:
+            return {}, in_book
+        return {move: (sum(parts.values()) / total, {name: part / total for name, part in parts.items()})
+                for move, parts in shares.items()}, in_book
+
+    def describe(self, probability, parts):
+        """Label first (book or learned), then each layer's share of the choice, for tuning."""
+        learned = sum(parts.get(name, 0) for name in ("global", "group", "opponent"))
+        label = "learned" if learned > parts.get("book", 0) + parts.get("style", 0) else "book"
+        detail = ", ".join(f"{self.names[name]} {parts[name] / probability:.0%}" for name in layer_names
+                           if parts.get(name, 0) >= 0.005 * probability)
+        return f"{label} {probability:.0%}: {detail}"
+
     def choose(self, board, budget_ms):
         """(move, reason) to play without searching, or None to let the engine search."""
         if (type(board) is not chess.Board or board.ply() >= horizon_plies or board.halfmove_clock >= 90
                 or board.is_repetition(2)):
             return None
+        if self.search_ply is not None and board.ply() >= self.search_ply:
+            self.search_ply = None
+            return None
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         analyses = self.analyses.get(key, {})
-        book = {move: weight for move, weight in self.book_moves(board).items() if board.is_legal(move)}
-        heaviest = max(book.values(), default=0)
-        candidates = {move for move, weight in book.items() if weight >= heaviest / 10}
-        candidates |= {chess.Move.from_uci(move) for (position, move) in self.layers[0] if position == key}
-        candidates = [move for move in candidates if board.is_legal(move) and not self.superseded(analyses, move)]
-        evidence = {move: self.estimate(key, move.uci()) for move in candidates}
-        if any(games for _, _, games in evidence.values()):
-            samples = {}
-            for move, (rate, strength, _) in evidence.items():
-                alpha = max(rate * strength / self.variety, 1e-3)
-                beta = max((1 - rate) * strength / self.variety, 1e-3)
-                samples[move] = self.random.betavariate(alpha, beta)
-            move = max(sorted(samples, key=chess.Move.uci), key=samples.get)
-            rate, _, games = evidence[move]
-            if samples[move] >= 0.5 or move in book:
-                return move, f"learned {rate:.0%} of {games:g}"
-        weighted = sorted((move for move in candidates if move in book), key=chess.Move.uci)
-        if weighted:
-            move = self.random.choices(weighted, [book[move] for move in weighted])[0]
-            style = self.read_book(self.style_path, board) if self.style_share > 0 else {}
-            return move, f"book {self.style} {self.style_share:.0%}" if move in style else "book"
+        moves, in_book = self.distribution(board, key, analyses)
+        if moves:
+            ordered = sorted(moves, key=chess.Move.uci)
+            move = self.random.choices(ordered, [moves[move][0] for move in ordered])[0]
+            rate, games = self.estimate(key, move.uci())
+            analysis = analyses.get(move.uci())
+            # Out of book a learned move must have real evidence: several games scoring well, or an
+            # analysis that took at least this game's budget.
+            if in_book or (games >= 2 and rate >= 0.5) or (analysis and analysis[3] >= budget_ms):
+                return move, self.describe(*moves[move])
         if analyses:
             text, (depth, centipawns, mate, think_ms, clock) = max(analyses.items(),
                                                                    key=lambda item: (item[1][3], item[1][0]))
@@ -372,18 +446,18 @@ class learner:
     """MaxDrone's experience: digests kept in memory, a fresh opening_book per game."""
 
     def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0, style_books=None,
-                 unrated_share=0.5):
+                 profiles=None):
         self.experience_dir = Path(experience_dir)
         self.style_books = style_books
-        self.unrated_share = unrated_share
+        self.profiles = profiles
         self.games_dir = Path(games_dir or self.experience_dir / "games" / "fics")
         self.book_path = book_path
         self.variety = variety
         self.records = load_index(self.games_dir, self.experience_dir / "index")
 
-    def for_game(self, opponent, group, game_type, contempt=None):
+    def for_game(self, opponent, group, game_type, contempt=None, rated=True):
         return opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety,
-                            contempt=contempt, style_books=self.style_books, unrated_share=self.unrated_share)
+                            contempt=contempt, style_books=self.style_books, rated=rated, profiles=self.profiles)
 
     def add(self, game):
         record = digest(game)

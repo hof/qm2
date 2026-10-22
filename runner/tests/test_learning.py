@@ -88,9 +88,6 @@ class index_tests(unittest.TestCase):
             self.assertEqual(stats["by_type"]["blitz"]["games"], 2)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 def polyglot_book(path, entries):
     """Write a Polyglot book: entries of (board, uci move, weight)."""
@@ -115,88 +112,140 @@ def record(results, opponent="John", group="humans", game_type="blitz", analyses
 start_key = f"{chess.polyglot.zobrist_hash(chess.Board()):016x}"
 
 
+def board_after(text):
+    board = chess.Board()
+    for move in text.split():
+        board.push_uci(move)
+    return board
+
+
 class selection_tests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
-        self.book = Path(directory.name) / "book.bin"
+        self.root = Path(directory.name)
+        self.book = self.root / "book.bin"
         polyglot_book(self.book, [(chess.Board(), "e2e4", 100), (chess.Board(), "d2d4", 100),
                                   (chess.Board(), "g2g4", 1)])
 
-    def picks(self, records, trials=300, **options):
+    def opening(self, records=(), seed=7, **options):
         options.setdefault("opponent", "John")
         options.setdefault("group", "humans")
         options.setdefault("game_type", "blitz")
-        book = learning.opening_book(records, book_path=self.book, random_source=__import__("random").Random(7),
-                                     **options)
-        counts = {}
+        options.setdefault("book_path", self.book)
+        book = learning.opening_book(list(records), random_source=__import__("random").Random(seed), **options)
+        book.search_ply = None
+        return book
+
+    def picks(self, records=(), trials=400, board=None, **options):
+        book = self.opening(records, **options)
+        counts, reasons = {}, set()
         for _ in range(trials):
-            move, reason = book.choose(chess.Board(), 5000)
+            move, reason = book.choose(board or chess.Board(), 5000)
             counts[move.uci()] = counts.get(move.uci(), 0) + 1
-        return counts, reason
+            reasons.add(reason.split(":")[0].split()[0])
+        return counts, reasons
 
     def test_without_experience_it_plays_book_by_weight_and_skips_rare_moves(self):
-        counts, reason = self.picks([])
-        self.assertEqual(reason, "book")
+        counts, reasons = self.picks()
+        self.assertEqual(reasons, {"book"})
         self.assertEqual(set(counts), {"e2e4", "d2d4"})
+        move, reason = self.opening().choose(chess.Board(), 5000)
+        self.assertEqual(reason, "book 50%: book 100%")
 
-    def test_winning_line_against_opponent_is_repeated_but_others_still_tried(self):
-        wins = [record([[start_key, "e2e4", 1.0]]) for _ in range(3)]
-        counts, reason = self.picks(wins)
-        self.assertTrue(reason.startswith("learned"))
-        self.assertGreater(counts["e2e4"], 200)
-        self.assertGreater(counts.get("d2d4", 0), 0)
-        narrow, _ = self.picks(wins, variety=0.2)
-        self.assertGreater(narrow["e2e4"], counts["e2e4"])
+    def test_good_line_against_opponent_grows_but_book_keeps_its_floor(self):
+        few, _ = self.picks([record([[start_key, "e2e4", 1.0]]) for _ in range(2)])
+        many, reasons = self.picks([record([[start_key, "e2e4", 1.0]]) for _ in range(30)])
+        self.assertGreater(many["e2e4"], few["e2e4"])
+        self.assertGreater(many.get("d2d4", 0), 40)  # book.bin's 45% still gives d4 its half
+        self.assertIn("learned", reasons)
+        _, reason = self.opening([record([[start_key, "e2e4", 1.0]]) for _ in range(30)]).choose(chess.Board(), 5000)
+        self.assertRegex(reason, r"^(book|learned) \d+%: book \d+%, global \d+%, humans \d+%, John \d+%$")
+
+    def test_proven_losers_drop_even_in_book(self):
+        counts, _ = self.picks([record([[start_key, "e2e4", 0.0]]) for _ in range(8)])
+        self.assertLess(counts.get("e2e4", 0), 25)
+
+    def test_moves_only_experience_knows_are_tried(self):
+        board = board_after("e2e4")
+        key = f"{chess.polyglot.zobrist_hash(board):016x}"
+        polyglot_book(self.book, [(board, "e7e5", 100)])
+        counts, _ = self.picks([record([[key, "c7c5", 1.0]], opponent="Other") for _ in range(6)], board=board)
+        self.assertGreater(counts.get("c7c5", 0), 0)
+        self.assertGreater(counts["e7e5"], counts["c7c5"])
 
     def test_layers_shrink_toward_the_layer_below(self):
         records = [record([[start_key, "e2e4", 1.0]], opponent="Other") for _ in range(4)]
         records.append(record([[start_key, "e2e4", 0.0]]))
-        john = learning.opening_book(records, opponent="John", group="humans", game_type="blitz")
-        stranger = learning.opening_book(records, opponent="Nobody", group="humans", game_type="blitz")
-        rate, _, games = john.estimate(start_key, "e2e4")
+        john = self.opening(records)
+        stranger = self.opening(records, opponent="Nobody")
+        rate, games = john.estimate(start_key, "e2e4")
         self.assertEqual(games, 5)
         self.assertLess(rate, stranger.estimate(start_key, "e2e4")[0])
         self.assertGreater(rate, 0.5)
-        guest = learning.opening_book([record([[start_key, "e2e4", 1.0]], group=None)], game_type="blitz")
-        self.assertEqual(guest.layers[0][(start_key, "e2e4")], [0.5, 0.0, 0.5])
+        guest = self.opening([record([[start_key, "e2e4", 1.0]], group=None)])
+        self.assertEqual(guest.layers[0][(start_key, "e2e4")], [0.5, 0.5])
         self.assertEqual(guest.layers[1], {})
-        other_type = learning.opening_book([record([[start_key, "e2e4", 1.0]])], game_type="standard")
-        self.assertEqual(other_type.layers[0][(start_key, "e2e4")], [0.5, 0.0, 0.5])
+        other_type = self.opening([record([[start_key, "e2e4", 1.0]])], game_type="standard")
+        self.assertEqual(other_type.layers[0][(start_key, "e2e4")], [0.5, 0.5])
+
+    def test_evals_weigh_more_than_results(self):
+        book = self.opening()
+        self.assertAlmostEqual(book.value(0.47, 1.0), 0.8 * 0.47 + 0.2)
+        self.assertEqual(book.value(None, 1.0), 1.0)
+        self.assertEqual(book.value(0.6, None), 0.6)
+        self.assertAlmostEqual(self.opening(contempt=-100).value(None, 0.5), 0.05)
 
     def test_contempt_prefers_drawing_lines_against_stronger_and_sharp_ones_against_weaker(self):
-        drawish = [record([[start_key, "d2d4", 0.5]]) for _ in range(6)]
-        sharp = [record([[start_key, "e2e4", value]]) for value in (1.0, 1.0, 1.0, 0.0, 0.0, 0.0)]
+        drawish = [record([[start_key, "d2d4", 0.5]]) for _ in range(12)]
+        sharp = [record([[start_key, "e2e4", value]]) for value in (1.0, 0.0) * 6]
         stronger, _ = self.picks(drawish + sharp, contempt=100)
         weaker, _ = self.picks(drawish + sharp, contempt=-100)
         self.assertGreater(stronger.get("d2d4", 0), stronger.get("e2e4", 0))
         self.assertGreater(weaker.get("e2e4", 0), weaker.get("d2d4", 0))
 
     def test_deeper_analysis_supersedes_and_is_recalled_within_budget(self):
-        board = chess.Board()
-        for text in "e2e4 e7e5 g1f3 b8c6 f1c4 g8f6".split():
-            board.push_uci(text)
+        board = board_after("e2e4 e7e5 g1f3 b8c6 f1c4 g8f6")
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         records = [record([[key, "f3g5", 1.0]], analyses=[[key, "f3g5", 13, 90, 0, 5000, board.halfmove_clock]])
                    for _ in range(3)]
         records.append(record([[key, "h2h4", 0.5]], analyses=[[key, "h2h4", 20, 40, 0, 60000,
                                                                   board.halfmove_clock]]))
-        book = learning.opening_book(records, opponent="John", group="humans", game_type="blitz")
+        book = self.opening(records, book_path=None)
         self.assertTrue(book.superseded(book.analyses[key], chess.Move.from_uci("f3g5")))
-        choices = {book.choose(board, 5000)[0].uci() for _ in range(50)}
-        self.assertEqual(choices, {"h2h4"})
-        fresh = learning.opening_book(records[:3] + [record([], analyses=[[key, "h2h4", 20, 40, 0, 60000,
-                                                                          board.halfmove_clock]])],
-                                      game_type="blitz")
+        self.assertEqual({book.choose(board, 5000)[0].uci() for _ in range(50)}, {"h2h4"})
+        fresh = self.opening(records[:3] + [record([], analyses=[[key, "h2h4", 20, 40, 0, 60000,
+                                                                 board.halfmove_clock]])], book_path=None)
         self.assertEqual(fresh.choose(board, 5000), (chess.Move.from_uci("h2h4"), "recalled d20 60.0s"))
         self.assertIsNone(fresh.choose(board, 90000))
 
+    def test_out_of_book_a_learned_move_needs_evidence(self):
+        board = board_after("e2e4 e7e5 g1f3 b8c6")
+        key = f"{chess.polyglot.zobrist_hash(board):016x}"
+        quick = [record([[key, "f1b5", 0.6]], analyses=[[key, "f1b5", 8, 30, 0, 300, 2]])]
+        self.assertIsNone(self.opening(quick).choose(board, 5000))
+        proven = self.opening(quick * 3).choose(board, 5000)
+        self.assertEqual(proven[0].uci(), "f1b5")
+        self.assertTrue(proven[1].startswith("learned"))
+
     def test_out_of_horizon_and_repeated_positions_are_searched(self):
-        book = learning.opening_book([], book_path=self.book)
-        board = chess.Board()
-        for text in "g1f3 g8f6 f3g1 f6g8".split():
-            board.push_uci(text)
-        self.assertIsNone(book.choose(board, 5000))
+        book = self.opening()
+        self.assertIsNone(book.choose(board_after("g1f3 g8f6 f3g1 f6g8"), 5000))
+
+    def test_search_layer_leaves_the_book_once_per_game(self):
+        book = self.opening(profiles={name: dict(weights, search=100)
+                                      for name, weights in learning.layer_profiles.items()})
+        book.search_ply = 0
+        self.assertIsNone(book.choose(chess.Board(), 5000))
+        self.assertIsNotNone(book.choose(chess.Board(), 5000))
+        def profiles(search):
+            return {name: dict(weights, search=search) for name, weights in learning.layer_profiles.items()}
+        always = [learning.opening_book([], random_source=__import__("random").Random(seed),
+                                        profiles=profiles(100)).search_ply for seed in range(20)]
+        self.assertTrue(all(ply is not None and 0 <= ply < learning.horizon_plies for ply in always))
+        never = [learning.opening_book([], random_source=__import__("random").Random(seed),
+                                       profiles=profiles(0)).search_ply for seed in range(20)]
+        self.assertEqual(set(never), {None})
 
 
 class multi_layer_book_tests(unittest.TestCase):
@@ -211,41 +260,49 @@ class multi_layer_book_tests(unittest.TestCase):
         self.fire = self.root / "fire.bin"
         self.assertEqual(learning.build_repertoire(source, self.fire), 7)
         self.main = self.root / "book.bin"
-        board = chess.Board()
-        board.push_uci("e2e4")
-        board.push_uci("e7e5")
-        polyglot_book(self.main, [(board, "g1f3", 100)])
-        self.after_e5 = board
+        self.after_e5 = board_after("e2e4 e7e5")
+        polyglot_book(self.main, [(self.after_e5, "g1f3", 90), (self.after_e5, "b1c3", 10)])
 
     def test_repertoire_holds_only_our_side_and_encodes_castling(self):
-        board = chess.Board()
-        for text in "e2e4 e7e5 g1f3 b8c6 f1c4 g8f6".split():
-            board.push_uci(text)
         with chess.polyglot.open_reader(str(self.fire)) as reader:
-            self.assertEqual([entry.move.uci() for entry in reader.find_all(board)], ["e1g1"])
+            castle = board_after("e2e4 e7e5 g1f3 b8c6 f1c4 g8f6")
+            self.assertEqual([entry.move.uci() for entry in reader.find_all(castle)], ["e1g1"])
             self.assertEqual([entry.move.uci() for entry in reader.find_all(chess.Board())], ["e2e4"])
-            black = chess.Board()
-            black.push_uci("e2e4")
-            self.assertEqual([entry.move.uci() for entry in reader.find_all(black)], ["c7c5"])
+            self.assertEqual([entry.move.uci() for entry in reader.find_all(board_after("e2e4"))], ["c7c5"])
             self.assertEqual({entry.move.uci(): entry.weight for entry in reader.find_all(self.after_e5)},
                              {"g1f3": 1, "f2f4": 1})
 
-    def test_style_follows_contempt_and_unrated_opponents_experiment(self):
-        books = {"fire": self.fire, "solid": self.root / "missing.bin", "experiment": self.root / "none.bin"}
-        self.assertEqual(learning.choose_style(-100, books), ("fire", 1.0))
-        self.assertEqual(learning.choose_style(-60, books), ("fire", 0.5))
-        self.assertEqual(learning.choose_style(-10, books), ("fire", 0.0))
-        self.assertEqual(learning.choose_style(100, books), ("solid", 0.0))
-        self.assertEqual(learning.choose_style(None, books), ("fire", 0.5))
-        self.assertEqual(learning.choose_style(None, dict(books, experiment=self.fire)), ("experiment", 0.5))
+    def test_profiles_follow_rating_gap_and_unrated_games_experiment(self):
+        self.assertEqual(learning.game_profile(-10, True), (("fire",), learning.layer_profiles["equal"]))
+        styles, weights = learning.game_profile(-100, True)
+        self.assertEqual((styles, weights), (("fire",), learning.layer_profiles["weaker"]))
+        styles, weights = learning.game_profile(-60, True)
+        self.assertEqual(weights["style"], 12.5)
+        self.assertEqual(learning.game_profile(100, True)[0], ("solid",))
+        self.assertEqual(learning.game_profile(None, True)[1], learning.layer_profiles["equal"])
+        self.assertEqual(learning.game_profile(-100, False), (("experiment", "fire"), learning.layer_profiles["unrated"]))
+        for weights in learning.layer_profiles.values():
+            self.assertEqual(sum(weights[name] for name in learning.layer_names), 100)
 
-    def test_style_book_is_blended_over_book_bin(self):
-        books = {"fire": self.fire}
-        for contempt, expected in ((-10, {"g1f3": 1.0}), (-60, {"g1f3": 0.75, "f2f4": 0.25}),
-                                   (-100, {"g1f3": 0.5, "f2f4": 0.5})):
-            book = learning.opening_book([], book_path=self.main, contempt=contempt, style_books=books)
-            shares = {move.uci(): share for move, share in book.book_moves(self.after_e5).items() if share}
-            self.assertEqual(shares, expected)
-        fire = learning.opening_book([], book_path=self.main, contempt=-100, style_books=books)
-        reasons = {fire.choose(self.after_e5, 5000)[1] for _ in range(40)}
-        self.assertEqual(reasons, {"book fire 100%"})
+    def shares(self, **options):
+        book = learning.opening_book([], book_path=self.main, style_books={"fire": self.fire}, **options)
+        book.search_ply = None
+        moves, in_book = book.distribution(self.after_e5, "", {})
+        self.assertTrue(in_book)
+        return {move.uci(): round(probability, 3) for move, (probability, _) in moves.items()}, book
+
+    def test_style_book_pulls_but_book_bin_keeps_its_share(self):
+        self.assertEqual(self.shares(contempt=-10)[0], {"g1f3": 0.9, "b1c3": 0.1})
+        weaker, book = self.shares(contempt=-100)
+        self.assertEqual(book.style, "fire")
+        self.assertEqual(weaker, {"g1f3": round((20 * 0.9 + 25 * 0.5) / 45, 3), "b1c3": round(2 / 45, 3),
+                                  "f2f4": round(12.5 / 45, 3)})
+        guest, book = self.shares(rated=False)
+        self.assertEqual(book.style, "fire")
+        self.assertEqual(guest["f2f4"], round(17.5 / 70, 3))
+        moves, _ = book.distribution(self.after_e5, "", {})
+        self.assertEqual(book.describe(*moves[chess.Move.from_uci("g1f3")]), "book 70%: book 64%, fire 36%")
+
+
+if __name__ == "__main__":
+    unittest.main()

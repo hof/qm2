@@ -273,7 +273,7 @@ default_settings = {
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
-    "contempt_window": 100, "unrated_style_share": 0.5,
+    "contempt_window": 100, "layer_profiles": {},
 }
 
 
@@ -622,14 +622,15 @@ class engine_player:
         if self.learner is not None:
             if self.opening is None:
                 game_type = self.created["type"].lower() if self.created else None
+                rated = bool(self.created) and self.created["rated"] == "rated"
                 self.opening = self.learner.for_game(self.opponent.name if self.opponent else None,
-                                                     self.opponent_group(), game_type, self.contempt)
+                                                     self.opponent_group(), game_type, self.contempt, rated)
             choice = self.opening.choose(board, learning.per_move_budget_ms(clock, position.increment_seconds))
             if choice is not None:
                 move, reason = choice
                 await self.send(fics_game.ics_move(move))
                 if self.record is not None:
-                    self.record.on_search(board, move, {"source": reason.split()[0]})
+                    self.record.on_search(board, move, {"source": reason})
                 self.on_line(f"-- {board.san(move)} {reason} {time.monotonic() - started:.1f}s")
                 return
         try:
@@ -741,7 +742,7 @@ def load_settings(path):
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
              "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
-             "unrated_style_share": (int, float)}
+             "layer_profiles": dict}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -756,9 +757,26 @@ def load_settings(path):
             raise ValueError(f"{path}: owner must be a handle or a list of handles")
         if key == "notes" and (len(value) > 7 or not all(isinstance(note, str) for note in value)):
             raise ValueError(f"{path}: notes must be at most 7 strings (notes 1-3 are generated)")
+        if key == "layer_profiles":
+            value = layer_profiles(value, path)
         settings[key] = value
     settings["options"] = {str(name): str(value) for name, value in (settings["options"] or {}).items()}
     return settings
+
+
+def layer_profiles(overrides, path):
+    """The multi-layer book's default profiles with the configured percentages merged in."""
+    profiles = {name: dict(weights) for name, weights in learning.layer_profiles.items()}
+    for name, weights in (overrides or {}).items():
+        if name not in profiles or not isinstance(weights, dict):
+            raise ValueError(f"{path}: layer_profiles has profiles {', '.join(profiles)}")
+        for layer, weight in weights.items():
+            if layer not in profiles[name] or isinstance(weight, bool) or not isinstance(weight, (int, float)) \
+                    or weight < 0:
+                raise ValueError(f"{path}: layer_profiles.{name} takes non-negative "
+                                 f"{', '.join(profiles[name])}")
+            profiles[name][layer] = weight
+    return profiles
 
 
 def read_commands(loop, commands):
@@ -773,7 +791,7 @@ def main():
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
-                             "unrated_style_share); "
+                             "layer_profiles); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
@@ -864,7 +882,7 @@ def main():
                                        configured["variety"],
                                        {style: project_root() / f"{style}.bin"
                                         for style in ("fire", "solid", "experiment")},
-                                       configured["unrated_style_share"])
+                                       configured["layer_profiles"] or None)
             show(f"-- experience: {len(learner.records)} games")
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
                                                                   pgn_dir=pgn_dir, site=options.host, learner=learner)
