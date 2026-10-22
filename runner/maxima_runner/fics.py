@@ -4,6 +4,7 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 import os
+from pathlib import Path
 import platform
 import random
 import re
@@ -271,7 +272,7 @@ rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
 default_settings = {
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
-    "owner": None, "notes": [],
+    "owner": None, "notes": [], "pgn_dir": None,
 }
 
 
@@ -344,8 +345,13 @@ def finger_notes(engine_name, owners, machine, extra=()):
 class engine_player:
     """Play our games with a UCI engine; searches run as tasks so server lines keep flowing."""
 
-    def __init__(self, open_session, on_line, margin=5, policy=None, finger_wait=2):
+    def __init__(self, open_session, on_line, margin=5, policy=None, finger_wait=2, pgn_dir=None,
+                 site="freechess.org"):
         self.open_session = open_session
+        self.pgn_dir = pgn_dir
+        self.site = site
+        self.record = self.created = None
+        self.opponent_unregistered = False
         self.on_line = on_line
         self.margin = margin
         self.policy = policy or play_policy()
@@ -441,6 +447,7 @@ class engine_player:
                 titles = re.findall(r"\(([A-Z*]+)\)", found["titles"])
                 title = next((title for title in titles if title in chess_titles), None)
                 self.opponent = chess.engine.Opponent(self.opponent.name, title, self.opponent.rating, "C" in titles)
+                self.opponent_unregistered = "U" in titles
                 self.opponent_ready.set()
 
     async def on_creating(self, match):
@@ -449,6 +456,8 @@ class engine_player:
                         else (match["white"], match["white_rating"]))
         self.opponent = chess.engine.Opponent(name, None, rating_of(rating), False)
         self.opponent_ready.clear()
+        self.opponent_unregistered = False
+        self.created = match.groupdict()
         if not playable(match["type"], match["time"], match["increment"]):
             self.on_line(f"-- aborting unsupported game: {match['type']} {match['time']} {match['increment']}")
             await self.send("abort")
@@ -469,7 +478,8 @@ class engine_player:
         self.cancel()
         self.on_line(f"-- game {self.game} over: {end['reason']} {end['result']}")
         opponent = end["black"] if self.name and end["white"].lower() == self.name.lower() else end["white"]
-        self.game = self.history = self.opponent = None
+        self.save(end)
+        self.game = self.history = self.opponent = self.record = self.created = None
         self.opponent_ready.set()
         self.played += 1
         self.streak = self.streak + 1 if opponent == self.last_opponent else 1
@@ -485,6 +495,47 @@ class engine_player:
             await self.send("rematch")
         await self.seek()
 
+    def headers(self, end):
+        """PGN tags from Creating:, finger, and the engine; our side is a program, the other side as fingered."""
+        created = self.created if self.created and {self.created["white"], self.created["black"]} == {
+            end["white"], end["black"]} else {}
+        headers = {"Event": f"FICS {created['rated']} {created['type']} game" if created else "FICS game",
+                   "Site": self.site, "White": end["white"], "Black": end["black"]}
+        if created:
+            headers["TimeControl"] = f"{int(created['time']) * 60}+{created['increment']}"
+        engine_name = self.session.protocol.id.get("name") if self.session is not None else None
+        for color in ("White", "Black"):
+            name = end[color.lower()]
+            rating = rating_of(created.get(f"{color.lower()}_rating", ""))
+            if rating:
+                headers[f"{color}Elo"] = str(rating)
+            if self.name and name.lower() == self.name.lower():
+                headers[f"{color}Type"] = "program"
+                if self.policy.guest:
+                    headers[f"{color}Account"] = "unregistered"
+                if engine_name:
+                    headers[f"{color}Engine"] = engine_name
+            elif self.opponent is not None and self.opponent.name.lower() == name.lower():
+                if self.opponent.title:
+                    headers[f"{color}Title"] = self.opponent.title
+                if self.opponent_ready.is_set():
+                    headers[f"{color}Type"] = "program" if self.opponent.is_engine else "human"
+                if self.opponent_unregistered:
+                    headers[f"{color}Account"] = "unregistered"
+        return headers
+
+    def save(self, end):
+        if self.pgn_dir is None or self.record is None or self.history is None or not self.history.board.move_stack:
+            return
+        self.record.headers.update(self.headers(end))
+        game = self.record.game(self.history.board, end["result"], end["reason"])
+        try:
+            path = fics_game.save_game(game, self.pgn_dir, self.record.started)
+        except OSError as error:
+            self.on_line(f"-- could not save game {self.game}: {error}")
+            return
+        self.on_line(f"-- saved game {self.game} to {path}")
+
     def on_board(self, position):
         if position.relation not in (fics_game.playing_my_move, fics_game.playing_their_move):
             return
@@ -492,10 +543,12 @@ class engine_player:
             history = fics_game.game_history(position)
             self.cancel()
             self.game, self.token, self.history = position.game, object(), history
+            self.record = fics_game.game_record({})
             self.on_line(f"-- game {self.game}: {position.white} vs {position.black}, "
                          f"{position.initial_seconds // 60} {position.increment_seconds}")
-        else:
-            self.history.update(position)
+        elif self.history.update(position) == "move":
+            mover_ms = position.black_ms if position.turn == chess.WHITE else position.white_ms
+            self.record.on_move(self.history.board, mover_ms / 1000, position.elapsed)
         if position.relation != fics_game.playing_my_move:
             return
         board = self.history.board
@@ -541,6 +594,8 @@ class engine_player:
             self.on_line(f"-- engine returned no legal move in {board.fen()}")
             return
         await self.send(fics_game.ics_move(result.move))
+        if self.record is not None:
+            self.record.on_search(board, result.move, result.info)
         self.on_line(f"-- {board.san(result.move)} {describe(result.info, board.turn)} "
                      f"{time.monotonic() - started:.1f}s")
 
@@ -632,7 +687,8 @@ def load_settings(path):
     if not isinstance(loaded, dict):
         raise ValueError(f"{path}: expected a JSON object")
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
-             "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list}
+             "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
+             "pgn_dir": str}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -662,7 +718,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
-                             "accept, rematches, games, owner, notes); flags override it")
+                             "accept, rematches, games, owner, notes, pgn_dir); flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
     parser.add_argument("--handle", help="registered handle (password from FICS_PASSWORD), default guest")
@@ -682,6 +738,8 @@ def main():
     parser.add_argument("--no-accept", action="store_true", help="decline all challenges")
     parser.add_argument("--rematches", type=int, help="rematches in a row per opponent (default: 0)")
     parser.add_argument("--games", type=int, help="quit after this many games")
+    parser.add_argument("--pgn-dir", help="directory for monthly PGN files (default: experience/games/fics)")
+    parser.add_argument("--no-pgn", action="store_true", help="do not save games")
     options = parser.parse_args()
     try:
         configured = load_settings(options.config)
@@ -689,7 +747,7 @@ def main():
         parser.error(str(error))
     flags = {"host": options.host, "port": options.port, "handle": options.handle, "engine": options.engine,
              "seeks": options.seek, "seeks_at_once": options.seeks_at_once, "rematches": options.rematches,
-             "games": options.games}
+             "games": options.games, "pgn_dir": options.pgn_dir}
     configured.update({key: value for key, value in flags.items() if value is not None})
     if options.no_seek:
         configured["seeks"] = []
@@ -709,6 +767,7 @@ def main():
     policy = play_policy(configured["seeks"], configured["seeks_at_once"], configured["accept"],
                          configured["rematches"], configured["games"], guest=options.handle == "guest",
                          owner=configured["owner"], notes=configured["notes"])
+    pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or project_root() / "experience" / "games" / "fics")
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
     if not valid_handle(options.handle):
         parser.error("FICS handles have 3 to 17 letters, or use guest")
@@ -733,7 +792,8 @@ def main():
     async def session():
         commands = asyncio.Queue()
         read_commands(asyncio.get_event_loop(), commands)
-        player = None if options.no_engine else engine_player(engine_session, show, policy=policy)
+        player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
+                                                                  pgn_dir=pgn_dir, site=options.host)
         try:
             if player is not None:
                 await player.start()

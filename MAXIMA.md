@@ -1237,8 +1237,8 @@ for every data command remain a planned documentation improvement.
 ### 10.2 FICS client (MaxDrone)
 
 `maxima fics` connects to freechess.org:5000, logs in, keeps the session
-alive, seeks, and plays its games with the Release Maxima build. PGN capture is
-not implemented yet.
+alive, seeks, plays its games with the Release Maxima build, and saves them as
+PGN.
 
 ```bash
 ./maxima fics                                   # guest login, plays with Maxima
@@ -1276,6 +1276,25 @@ writes note 1 (`<engine name and version> on MaxDrone`), note 2 (`owner`, a hand
 or a list), note 3 (CPU model with the engine's `Threads` and `Hash`, and the
 OS), then up to seven `notes`. Guest accounts may test engines freely and get no
 notes.
+
+Every game with at least one move is appended to
+`experience/games/fics/<YYYY-MM>.pgn` (UTC month; `pgn_dir` or `--pgn-dir`,
+`--no-pgn` to disable) and fsynced. Tags: `Event` (`FICS unrated blitz game`),
+`Site`, `Date` (local) and `UTCDate`/`UTCTime` at game start, `White`/`Black`, `WhiteElo`/
+`BlackElo` when rated, `TimeControl` (`180+0`), `Termination` (`normal`,
+`time forfeit`, `abandoned`, `adjudication`), our side's `Type "program"` and
+`Engine` (full engine id), and the opponent's `Title` and `Type` (`program` for a
+(C) account, `human` otherwise) when finger answered, and `WhiteAccount`/
+`BlackAccount "unregistered"` for guests and other `(U)` logins. Every move has `[%clk]`
+(mover's clock after the move) and `[%emt]` (time FICS charged); our searched
+moves add `[%eval score,depth]`, `[%pv ...]` (SAN, up to 12 plies), and
+`[%nodes]`, book moves the comment `book`; the server's reason ends the game.
+`experience:import` reads these annotations. A takeback rewinds the move list;
+a board that does not follow (missed update) restarts it with a `FEN` tag. A
+game cut off by a lost connection has no result line and is not saved. Unregistered
+names (guests, and `(U)` logins such as `zahrani`) are not stable identities, so
+per-opponent learning should skip `Account "unregistered"` opponents; their games
+are kept as a record.
 
 The engine runs in the project root, so its relative `eval.nnue` and `book.bin`
 defaults resolve. Login sets `iset ms 1`, so style12 clocks are milliseconds.

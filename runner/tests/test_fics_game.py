@@ -1,13 +1,17 @@
 """Style12 parsing against a recorded FICS game, move history, and the engine player."""
 import asyncio
+from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 
 import chess
+import chess.engine
+import chess.pgn
 
-from maxima_runner import fics, fics_game
+from maxima_runner import experience, fics, fics_game
 from maxima_runner.uci import open_engine
 
 observed = (Path(__file__).parent / "data" / "fics_observed_game.txt").read_text().splitlines()
@@ -65,11 +69,70 @@ class history_tests(unittest.TestCase):
         self.assertEqual(history.board, chess.Board())
         self.assertEqual(history.board.move_stack, [])
 
+    def test_takeback_keeps_earlier_moves(self):
+        history = fics_game.game_history(fics_game.style12.parse(start))
+        history.update(fics_game.style12.parse(after_e4))
+        after_e5 = after_e4.replace("pppppppp -------- --------", "pppp-ppp -------- ----p---").replace(
+            " B 4 ", " W 4 ").replace("-1 3 0", "1 3 0").replace("P/e2-e4 (0:00.000) e4", "P/e7-e5 (0:02.500) e5")
+        self.assertEqual(history.update(fics_game.style12.parse(after_e5)), "move")
+        self.assertEqual(history.update(fics_game.style12.parse(after_e4)), "takeback")
+        self.assertEqual([move.uci() for move in history.board.move_stack], ["e2e4"])
+
     def test_ics_moves(self):
         self.assertEqual(fics_game.ics_move(chess.Move.from_uci("e2e4")), "e2e4")
         self.assertEqual(fics_game.ics_move(chess.Move.from_uci("e1g1")), "e1g1")
         self.assertEqual(fics_game.ics_move(chess.Move.from_uci("e7e8q")), "e7e8=Q")
         self.assertEqual(fics_game.ics_move(chess.Move.from_uci("a2a1n")), "a2a1=N")
+
+
+class record_tests(unittest.TestCase):
+    def recorded_game(self):
+        boards = [fics_game.style12.parse(line) for line in observed if line.startswith("<12>")]
+        history = fics_game.game_history(boards[0])
+        record = fics_game.game_record({"White": "GuestMCZL", "Black": "GuestVHRM", "WhiteEngine": "Maxima 2.0.0"},
+                                       datetime(2026, 10, 21, 20, 5, 7, tzinfo=timezone.utc))
+        for position in boards[1:]:
+            before = history.board.copy()
+            self.assertEqual(history.update(position), "move")
+            mover_ms = position.black_ms if position.turn == chess.WHITE else position.white_ms
+            record.on_move(history.board, mover_ms / 1000, position.elapsed)
+            if before.ply() == boards[0].board().ply():
+                info = {"depth": 16, "score": chess.engine.PovScore(chess.engine.Cp(42), chess.WHITE),
+                        "pv": [history.board.peek(), chess.Move.from_uci("c6a5")], "nodes": 123456}
+                record.on_search(before, history.board.peek(), info)
+        return record.game(history.board, "1-0", "GuestVHRM resigns")
+
+    def test_pgn_has_clocks_move_times_search_and_ending(self):
+        game = self.recorded_game()
+        text = str(game)
+        self.assertEqual(game.headers["FEN"], "r3k2r/1p2bppp/p1np4/q2Qp3/4P3/8/PPPNBPPP/3RK2R w Kkq - 5 14")
+        self.assertEqual((game.headers["UTCDate"], game.headers["UTCTime"]), ("2026.10.21", "20:05:07"))
+        self.assertEqual((game.headers["Result"], game.headers["Termination"]), ("1-0", "normal"))
+        first = game.next()
+        self.assertEqual(first.eval().white().score(), 42)
+        self.assertEqual(first.eval_depth(), 16)
+        self.assertIn("[%pv Qxa5 Nxa5] [%nodes 123456]", first.comment)
+        self.assertEqual(first.clock(), 250.867)
+        self.assertIsNotNone(first.next().emt())
+        self.assertTrue(text.rstrip().endswith("GuestVHRM resigns } 1-0"))
+        self.assertEqual(len(list(game.mainline_moves())), 15)
+
+    def test_saved_games_append_and_import_losslessly(self):
+        game = self.recorded_game()
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "fics"
+            path = fics_game.save_game(game, folder, datetime(2026, 10, 21, tzinfo=timezone.utc))
+            fics_game.save_game(game, folder, datetime(2026, 10, 22, tzinfo=timezone.utc))
+            self.assertEqual(path.name, "2026-10.pgn")
+            with path.open() as stream:
+                games = [chess.pgn.read_game(stream) for _ in range(2)]
+                self.assertIsNone(chess.pgn.read_game(stream))
+            self.assertEqual([str(item) for item in games], [str(game)] * 2)
+            with closing(experience.connect(Path(directory) / "experience.db")) as db:
+                counts = experience.import_games(db, path, {"guestmczl"}, 200)
+                self.assertEqual(counts, {"imported": 1, "duplicates": 1, "analyses": 2})
+                row = db.execute("SELECT move, engine, depth, score, nodes, pv FROM analysis").fetchone()
+        self.assertEqual(row, ("d5a5", "Maxima 2.0.0", 16, 42, 123456, '["d5a5", "c6a5"]'))
 
 
 fake_engine = '''
@@ -111,11 +174,11 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.positions = Path(self.directory.name) / "positions.log"
         self.lines = []
 
-    async def player(self, mode, margin=5):
+    async def player(self, mode, margin=5, **options):
         player = fics.engine_player(
             lambda: open_engine([sys.executable, str(self.script), mode, str(self.positions)],
                                 self.directory.name, timeout=5),
-            self.lines.append, margin=margin)
+            self.lines.append, margin=margin, **options)
         await player.start()
         self.addAsyncCleanup(player.close)
         player.connection = fake_connection()
@@ -165,6 +228,31 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle("Illegal move (e2e4).")
         await player.handle("Illegal move (e2e4).")
         self.assertEqual(player.connection.sent, ["e2e4", "refresh"])
+
+    async def test_played_game_is_saved_as_pgn(self):
+        folder = Path(self.directory.name) / "games"
+        player = await self.player("play", pgn_dir=folder)
+        player.name = "GuestHJGC"
+        await player.handle("Creating: GuestHJGC (++++) guestNinja (1500) unrated blitz 3 0")
+        await player.handle("Finger of guestNinja(U):")
+        await player.handle(start)
+        await self.settle(player)
+        await player.handle(after_e4.replace("180000 180000 1 P/e2-e4 (0:00.000)", "179900 180000 1 P/e2-e4 (0:00.100)"))
+        await player.handle("{Game 17 (GuestHJGC vs. guestNinja) guestNinja resigns} 1-0")
+        files = list(folder.glob("*.pgn"))
+        self.assertEqual(len(files), 1)
+        with files[0].open() as stream:
+            game = chess.pgn.read_game(stream)
+        headers = game.headers
+        self.assertEqual((headers["Event"], headers["Site"], headers["TimeControl"]),
+                         ("FICS unrated blitz game", "freechess.org", "180+0"))
+        self.assertEqual((headers["WhiteType"], headers["WhiteEngine"], headers["BlackType"], headers["BlackElo"]),
+                         ("program", "fics fixture", "human", "1500"))
+        self.assertNotIn("WhiteElo", headers)
+        self.assertEqual((headers["WhiteAccount"], headers["BlackAccount"]), ("unregistered", "unregistered"))
+        move = game.next()
+        self.assertEqual((move.move.uci(), move.eval_depth(), move.clock(), move.emt()), ("e2e4", 3, 179.9, 0.1))
+        self.assertTrue(any(line.startswith("-- saved game 17") for line in self.lines))
 
     async def test_ignores_observed_games_and_invalid_boards(self):
         player = await self.player("play")
