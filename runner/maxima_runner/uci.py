@@ -61,14 +61,6 @@ class engine_session:
                                options=settings, opponent=opponent),
             self.timeout if timeout is None else timeout)
 
-    async def evaluate(self, board, limit, *, game=None, timeout=None):
-        """Score of board for the side to move in centipawns (mates as ±100000), or None."""
-        info = await asyncio.wait_for(
-            self.protocol.analyse(board, limit, game=game, options=self.variant_settings(board)),
-            self.timeout if timeout is None else timeout)
-        score = info.get("score")
-        return None if score is None else score.relative.score(mate_score=100000)
-
     async def search(self, board, limit, *, game=None, on_info=None):
         settings = self.variant_settings(board)
         started = time.monotonic()

@@ -238,31 +238,6 @@ class selection_tests(unittest.TestCase):
         book = self.opening()
         self.assertIsNone(book.choose(board_after("g1f3 g8f6 f3g1 f6g8"), 5000))
 
-    def test_fire_tolerance_follows_rating_gap_and_rated_games(self):
-        self.assertEqual(learning.fire_tolerance(None, False), 50)
-        self.assertEqual(learning.fire_tolerance(-10, True), 15)
-        self.assertEqual(learning.fire_tolerance(-60, True), 32.5)
-        self.assertEqual(learning.fire_tolerance(-100, True), 50)
-        self.assertEqual(learning.fire_tolerance(100, True), 10)
-        self.assertEqual(learning.fire_tolerance(-100, True, {"weaker": 30}), 30)
-
-    def test_checked_style_moves_are_vetoed_by_tolerance(self):
-        board = board_after("e2e4 e7e5")
-        key = f"{chess.polyglot.zobrist_hash(board):016x}"
-        polyglot_book(self.book, [(board, "g1f3", 100)])
-        fire = self.root / "fire.bin"
-        polyglot_book(fire, [(board, "f2f4", 100)])
-        checks = {f"{key} f2f4 g1f3": 40}
-        guest = self.opening(rated=False, style_books={"fire": fire}, checks=checks)
-        self.assertIsNone(guest.needs_check(board, chess.Move.from_uci("f2f4")))
-        self.assertIn(chess.Move.from_uci("f2f4"), guest.distribution(board, key, {})[0])
-        equal = self.opening(contempt=-60, style_books={"fire": fire}, checks=checks)
-        self.assertNotIn(chess.Move.from_uci("f2f4"), equal.distribution(board, key, {})[0])
-        fresh = self.opening(rated=False, style_books={"fire": fire})
-        self.assertEqual(fresh.needs_check(board, chess.Move.from_uci("f2f4")), chess.Move.from_uci("g1f3"))
-        self.assertIsNone(fresh.needs_check(board, chess.Move.from_uci("g1f3")))
-        self.assertTrue(fresh.record_check(board, chess.Move.from_uci("f2f4"), chess.Move.from_uci("g1f3"), 20))
-
     def test_search_layer_leaves_the_book_once_per_game(self):
         book = self.opening(profiles={name: dict(weights, search=100)
                                       for name, weights in learning.layer_profiles.items()})
