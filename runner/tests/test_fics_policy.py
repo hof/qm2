@@ -179,10 +179,10 @@ class settings_tests(unittest.TestCase):
         self.assertEqual(profiles["weaker"]["fire"], 35)
         self.assertEqual(profiles["equal"], learning.layer_profiles["equal"])
         books = fics.style_books(fics.load_settings(self.write({"style_books": {"fire": "ph-gambitbook.bin",
-                                                                                "solid": "/books/solid.bin"}}))
+                                                                                "draw": "/books/draw.bin"}}))
                                  ["style_books"])
-        self.assertEqual((books["fire"].name, str(books["solid"]), books["experiment"].name),
-                         ("ph-gambitbook.bin", "/books/solid.bin", "experiment.bin"))
+        self.assertEqual((books["fire"].name, str(books["draw"]), books["experiment"].name),
+                         ("ph-gambitbook.bin", "/books/draw.bin", "experiment.bin"))
 
     def test_rejects_unknown_keys_and_wrong_types(self):
         for value, message in (({"seek": ["3 0"]}, "unknown"), ({"games": "5"}, "games must be int"),

@@ -1,4 +1,4 @@
-"""Build solid.bin from the Lichess masters explorer: the lines where the moving side loses least
+"""Build draw.bin from the Lichess masters explorer: the lines where the moving side loses least
 and draws most (MAXIMA.md 9.7)."""
 import argparse
 import heapq
@@ -134,8 +134,8 @@ def build(fetch, plies=16, min_games=50, margin=0.05, min_reply=0.05, min_reach=
 def main():
     from .project import data_root, project_root
     root = data_root()
-    parser = argparse.ArgumentParser(prog="maxima experience:solid", description=__doc__)
-    parser.add_argument("--output", default=str(root / "solid.bin"), help="book to write (default: solid.bin)")
+    parser = argparse.ArgumentParser(prog="maxima experience:draw", description=__doc__)
+    parser.add_argument("--output", default=str(root / "draw.bin"), help="book to write (default: draw.bin)")
     parser.add_argument("--plies", type=int, default=16, help="depth of the book in plies (default: 16)")
     parser.add_argument("--min-games", type=int, default=50, help="master games a move needs (default: 50)")
     parser.add_argument("--margin", type=float, default=0.05,

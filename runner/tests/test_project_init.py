@@ -20,7 +20,7 @@ def archive(member, data):
 
 
 def options(**overrides):
-    values = dict(check=False, build=False, debug=False, syzygy=0, solid=False, force=False, data=None)
+    values = dict(check=False, build=False, debug=False, syzygy=0, draw=False, force=False, data=None)
     values.update(overrides)
     return argparse.Namespace(**values)
 
@@ -32,7 +32,7 @@ class init_tests(unittest.TestCase):
         self.root = Path(directory.name)
         self.data = b"polyglot entries"
         self.step = project_init.book_step("fire.bin", "https://mirror/Daring.zip", "Daring.bin",
-                                           len(self.data), hashlib.sha256(self.data).hexdigest())
+                                           len(self.data), hashlib.sha256(self.data).hexdigest(), "a mirror")
 
     def fetch(self, member="Daring.bin", data=None):
         payload = archive(member, self.data if data is None else data)
@@ -80,9 +80,8 @@ class init_tests(unittest.TestCase):
         self.assertFalse(download_tablebases.installed(directory, 3))
 
     def test_optional_steps_do_not_fail(self):
-        self.assertEqual(project_init.solid_step(self.root, options(data=self.root))[0], "skipped")
         with patch.dict(project_init.os.environ, {}, clear=True):
-            self.assertEqual(project_init.solid_step(self.root, options(data=self.root, solid=True))[0], "missing")
+            self.assertEqual(project_init.draw_step(self.root, options(data=self.root, draw=True))[0], "missing")
         self.assertEqual(project_init.syzygy_step(self.root, options(data=self.root))[0], "skipped")
         self.assertEqual(project_init.network_step(self.root, options(data=self.root))[0], "skipped")
 

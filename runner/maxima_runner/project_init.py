@@ -16,13 +16,18 @@ from . import download_tablebases
 from .project import data_root, project_root
 
 # Chris Whittington's polyglot-books collection: Noomen's Rebel book and his gambit-minded Daring.
-books_url = "https://github.com/ChrisWhittington/polyglot-books/releases/download/v1.0/"
-# Pinned downloads: file, archive URL, archive member, size, SHA-256.
+polyglot_books = "https://github.com/ChrisWhittington/polyglot-books/releases/download/v1.0/"
+polyglot_credit = "Chris Whittington's polyglot-books. Thanks Chris!"
+# Our own books, built by maxima experience:draw (MAXIMA.md 9.7).
+maxima_books = "https://github.com/hof/qm2/releases/download/books-v1/"
+# Pinned downloads: file, archive URL, archive member, size, SHA-256, source.
 books = (
-    ("book.bin", books_url + "book.zip", "book.bin", 177973984,
-     "5b2f1794c20f095e23364a966f682b1c235afd46ec1f1acbc6e4bf72f1f92bfe"),
-    ("fire.bin", books_url + "Daring.zip", "Daring.bin", 306432,
-     "168ccb0b467c9280e0e79c9d6309e5fd84d16e229bb28a1903b8ced7c0c2b187"),
+    ("book.bin", polyglot_books + "book.zip", "book.bin", 177973984,
+     "5b2f1794c20f095e23364a966f682b1c235afd46ec1f1acbc6e4bf72f1f92bfe", polyglot_credit),
+    ("fire.bin", polyglot_books + "Daring.zip", "Daring.bin", 306432,
+     "168ccb0b467c9280e0e79c9d6309e5fd84d16e229bb28a1903b8ced7c0c2b187", polyglot_credit),
+    ("draw.bin", maxima_books + "draw.zip", "draw.bin", 19904,
+     "d8aeb8ebee8281a5a59435c16bcbcf5517118dc3837ce972aa3481d2b8f8daca", "Maxima's books-v1 release"),
 )
 
 
@@ -141,7 +146,7 @@ def network_step(root, options):
     return "done", "eval.nnue"
 
 
-def book_step(name, url, member, size, sha256):
+def book_step(name, url, member, size, sha256, source):
     def step(root, options):
         target = options.data / name
         if target.is_file():
@@ -151,25 +156,21 @@ def book_step(name, url, member, size, sha256):
                 return "ok", "kept your own file (--force replaces it)"
         if options.check:
             return "missing", "./maxima init downloads it"
-        print(f"{name}: {member} from Chris Whittington's polyglot-books. Thanks Chris!", flush=True)
+        print(f"{name}: {member} from {source}", flush=True)
         download_member(url, member, size, sha256, target, show_progress)
         return "done", url.rsplit("/", 1)[1]
     return step
 
 
-def solid_step(root, options):
-    """solid.bin: drawish lines from Lichess master games (MAXIMA.md 9.7); no published book plays for the draw."""
-    from . import solid_book
-    if (options.data / "solid.bin").is_file():
-        return "ok", "solid.bin"
-    if not options.solid:
-        return "skipped", "optional: ./maxima init --solid (needs LICHESS_TOKEN)"
-    if not solid_book.lichess_token(root):
+def draw_step(root, options):
+    """Rebuild draw.bin from Lichess master games instead of downloading the published one (MAXIMA.md 9.7)."""
+    from . import draw_book
+    if not draw_book.lichess_token(root):
         return "missing", "set LICHESS_TOKEN (environment or .env)"
     if options.check:
-        return "missing", "./maxima init --solid builds it"
-    status = subprocess.run([sys.executable, "-m", "maxima_runner", "experience:solid"], cwd=root).returncode
-    return ("done", "solid.bin") if status == 0 else ("failed", "./maxima experience:solid")
+        return "missing", "./maxima init --draw builds it"
+    status = subprocess.run([sys.executable, "-m", "maxima_runner", "experience:draw"], cwd=root).returncode
+    return ("done", "draw.bin") if status == 0 else ("failed", "./maxima experience:draw")
 
 
 def syzygy_step(root, options):
@@ -193,8 +194,7 @@ def steps(options):
             yield "debug build", build_step("debug")
     yield "network", network_step
     for name, *download in books:
-        yield name, book_step(name, *download)
-    yield "solid.bin", solid_step
+        yield name, draw_step if name == "draw.bin" and options.draw else book_step(name, *download)
     yield "syzygy", syzygy_step
 
 
@@ -209,8 +209,8 @@ def main():
     parser.add_argument("--no-debug", dest="debug", action="store_false", help="skip the Debug build")
     parser.add_argument("--syzygy", type=int, choices=(0, 3, 4, 5, 6, 7), default=5,
                         help="tablebase pieces to install, 0 skips (default: 5, about 1 GB)")
-    parser.add_argument("--solid", action="store_true",
-                        help="build solid.bin, drawish lines from Lichess master games (needs LICHESS_TOKEN)")
+    parser.add_argument("--draw", action="store_true",
+                        help="rebuild draw.bin from Lichess master games instead of downloading it (needs LICHESS_TOKEN)")
     parser.add_argument("--force", action="store_true", help="replace books that differ from the pinned files")
     options = parser.parse_args()
     options.data = data_root()

@@ -1172,10 +1172,10 @@ it restores it.
 
 **Multi-layer book.** Each game gets its own multi-layer book: book.bin (the
 base: its moves are good in principle), the style books `fire` (sharp, e.g.
-gambits), `solid` (safe), and `experiment`, and the learned layers, each with a
+gambits), `draw` (playing for the draw), and `experiment`, and the learned layers, each with a
 percentage from the game's profile:
 
-| profile | book | fire | solid | experiment | global | group | opponent | search |
+| profile | book | fire | draw | experiment | global | group | opponent | search |
 |---|---|---|---|---|---|---|---|---|
 | equal | 45 | 0 | 0 | 0 | 20 | 10 | 25 | 5 |
 | much weaker | 20 | 25 | 0 | 0 | 10 | 10 | 35 | 5 |
@@ -1213,14 +1213,14 @@ The *search* column is the share of games that leave the book once, at a
 random ply, so the engine can bring in new moves (a per-move share would
 compound over a game).
 
-Style books are Polyglot files beside book.bin (`fire.bin`, `solid.bin`,
+Style books are Polyglot files beside book.bin (`fire.bin`, `draw.bin`,
 `experiment.bin`, not tracked); any Polyglot book works, and `style_books` in
 the MaxDrone config points a style at another file, e.g. `{"style_books":
 {"fire": "ph-gambitbook.bin"}}` (relative to the project root). A missing file
 leaves that style's percentage to the other layers.
 
 No published book aims at safe, drawish positions, so `./maxima
-experience:solid` builds `solid.bin` from the Lichess masters explorer. Our
+experience:draw` builds `draw.bin` from the Lichess masters explorer. Our
 moves are scored `draw% - 2 × loss%` for the side to move (at least 50 master
 games); moves within 0.05 of the safest stay, weighted 100 down to 10.
 Opponent replies played in at least 5% of games are followed, most likely
@@ -1228,7 +1228,7 @@ positions first, to 16 plies and up to 2000 positions per colour. The explorer
 needs a Lichess token without scopes, from `LICHESS_TOKEN` or `.env` in the
 project root (git-ignored); answers are cached in `experience/explorer/`, and
 rate limits wait a minute as Lichess asks. A first build takes a few hours. `./maxima
-experience:repertoire` builds them from `books/{fire,solid,experiment}.pgn`,
+experience:repertoire` builds them from `books/{fire,draw,experiment}.pgn`,
 one line per game tagged `[Repertoire "white"|"black"]` so only our side's
 moves enter the book.
 
@@ -1289,7 +1289,8 @@ ready, so it is safe to rerun and suits CI:
 - `eval.nnue` through `tools/download_nnue.py`, for engines that use a network
 - `book.bin` and `fire.bin` from pinned polyglot-books v1.0 archives, verified by
   size and SHA-256; a different existing file is kept unless `--force`
-- `solid.bin` only with `--solid` and a Lichess token (see 9.7)
+- `draw.bin` from Maxima's `books-v1` release; `--draw` rebuilds it from the
+  Lichess masters explorer instead (needs a Lichess token, see 9.7)
 - Syzygy tables up to `--syzygy N` pieces (default 5, about 940 MiB; 0 skips),
   skipped offline when the manifest lists the complete set
 
@@ -1297,7 +1298,7 @@ ready, so it is safe to rerun and suits CI:
 missing. `--no-build` and `--no-debug` skip builds.
 
 `MAXIMA_DATA_DIR` moves the data out of the checkout, for example onto a
-persistent volume: books (`book.bin`, `fire.bin`, `solid.bin`), `eval.nnue`,
+persistent volume: books (`book.bin`, `fire.bin`, `draw.bin`), `eval.nnue`,
 `tablebases/` and `experience/` (PGN games, learning index, player stats).
 `init`, the download and experience commands and `maxima fics` all use it; the
 engine runs in that directory, so its relative `book.bin` and `eval.nnue`
@@ -1422,7 +1423,7 @@ notes.
 
 The multi-layer book (9.7) chooses opening moves; `layer_profiles` in the
 config overrides its percentages per profile, e.g. `{"layer_profiles": {"weaker":
-{"fire": 35, "book": 10}}}` (layers `book`, `fire`, `solid`, `experiment`,
+{"fire": 35, "book": 10}}}` (layers `book`, `fire`, `draw`, `experiment`,
 `global`, `group`, `opponent`, `search`; profiles `equal`, `weaker`, `stronger`,
 `unrated`).
 

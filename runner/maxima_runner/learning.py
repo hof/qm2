@@ -224,16 +224,16 @@ def write_book(weights, book_path):
 
 # Multi-layer book profiles (MAXIMA.md 9.7): percentages per layer; "search" is the share of games
 # that leave the book once, at a random ply, so the engine can bring in new moves.
-style_names = ("fire", "solid", "experiment")
+style_names = ("fire", "draw", "experiment")
 layer_names = ("book",) + style_names + ("global", "group", "opponent")
 layer_profiles = {
-    "equal": {"book": 45, "fire": 0, "solid": 0, "experiment": 0, "global": 20, "group": 10, "opponent": 25,
+    "equal": {"book": 45, "fire": 0, "draw": 0, "experiment": 0, "global": 20, "group": 10, "opponent": 25,
               "search": 5},
-    "weaker": {"book": 20, "fire": 25, "solid": 0, "experiment": 0, "global": 10, "group": 10, "opponent": 35,
+    "weaker": {"book": 20, "fire": 25, "draw": 0, "experiment": 0, "global": 10, "group": 10, "opponent": 35,
                "search": 5},
-    "stronger": {"book": 30, "fire": 0, "solid": 25, "experiment": 0, "global": 10, "group": 10, "opponent": 25,
+    "stronger": {"book": 30, "fire": 0, "draw": 25, "experiment": 0, "global": 10, "group": 10, "opponent": 25,
                  "search": 5},
-    "unrated": {"book": 30, "fire": 30, "solid": 0, "experiment": 15, "global": 25, "group": 0, "opponent": 0,
+    "unrated": {"book": 30, "fire": 30, "draw": 0, "experiment": 15, "global": 25, "group": 0, "opponent": 0,
                 "search": 10},
 }
 
@@ -247,7 +247,7 @@ def style_share(contempt):
 
 def game_profile(contempt, rated, profiles=None):
     """Layer percentages for one game: unrated games (guests) use the unrated profile; rated games slide
-    from equal toward weaker (fire) or stronger (solid) with the draw contempt."""
+    from equal toward weaker (fire) or stronger (draw) with the draw contempt."""
     profiles = profiles or layer_profiles
     if not rated:
         return dict(profiles["unrated"])
@@ -268,7 +268,7 @@ def per_move_budget_ms(clock_seconds, increment_seconds):
 
 
 class opening_book:
-    """One game's multi-layer book (MAXIMA.md 9.7): book.bin, the style books fire, solid, and experiment,
+    """One game's multi-layer book (MAXIMA.md 9.7): book.bin, the style books fire, draw, and experiment,
     and the learned layers global, group, and opponent, each with a percentage from the game's profile."""
 
     def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
@@ -509,7 +509,7 @@ def repertoire_main():
     parser.add_argument("--plies", type=int, default=30, help="moves per line to include (default: 30)")
     options = parser.parse_args()
     built = 0
-    for style in ("fire", "solid", "experiment"):
+    for style in ("fire", "draw", "experiment"):
         source = Path(options.books_dir) / f"{style}.pgn"
         if not source.is_file():
             continue
@@ -517,5 +517,5 @@ def repertoire_main():
         print(f"{target}: {build_repertoire(source, target, options.plies)} entries from {source}")
         built += 1
     if not built:
-        parser.error(f"no fire.pgn, solid.pgn or experiment.pgn in {options.books_dir}")
+        parser.error(f"no fire.pgn, draw.pgn or experiment.pgn in {options.books_dir}")
     return 0
