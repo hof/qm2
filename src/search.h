@@ -280,8 +280,10 @@ public:
     bool in_searched(move_t * move, int searched_moves);
     void reset_stack();
     U64 tt_context() const;
-    int reduction(int depth, int searched_moves, bool is_dangerous,
-        const move_t & move, bool pv, bool cut_node, int gives_check = 0, bool root_node = false);
+    int reduction(int depth, int searched_moves, bool is_dangerous, int estimate,
+        bool root_node = false);
+    int reduction_estimate(int depth, int searched_moves, const move_t & move,
+        bool pv, bool cut_node, int gives_check);
     void record_lmr(const move_t & move, int depth, int searched_moves, int reduce,
         int extend, int gives_check, bool root_node);
     void update_lmr_history(const move_t & move, int depth, int value, int alpha, int beta);

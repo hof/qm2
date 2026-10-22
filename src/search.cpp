@@ -1574,8 +1574,8 @@ void root_t::sort_moves(move_t * best_move) {
 }
 
 // The parent position owns both the history lookup and the node context.
-int search_t::reduction(int depth, int searched_moves, bool is_dangerous,
-        const move_t & move, bool pv, bool cut_node, int gives_check, bool root_node) {
+int search_t::reduction(int depth, int searched_moves, bool is_dangerous, int estimate,
+        bool root_node) {
     if (depth < 3 || !lmr_enabled || stack->excluded_move) {
         return 0;
     }
@@ -1590,6 +1590,18 @@ int search_t::reduction(int depth, int searched_moves, bool is_dangerous,
     if (!adaptive_lmr_enabled) {
         return 1;
     }
+    return std::clamp(estimate, 0, depth - 2);
+}
+
+// The unclamped reduction a move would receive at any depth; pruning uses it
+// to estimate the move's searched depth.
+int search_t::reduction_estimate(int depth, int searched_moves, const move_t & move,
+        bool pv, bool cut_node, int gives_check) {
+    if (!lmr_enabled || !adaptive_lmr_enabled) {
+        return 0;
+    }
+    const bool contextual = context_lmr_enabled && !iid_active
+        && verification_mode == verification_mode_t::none;
     // Immutable shared table: avoid logarithms and initialization in the loop.
     // Saturation keeps unusually deep/wide positions within the sampled range.
     static const auto base_reductions = [] {
@@ -1631,7 +1643,7 @@ int search_t::reduction(int depth, int searched_moves, bool is_dangerous,
     nnue_audit.counters.lmr_history_less += history >= 8192;
     nnue_audit.counters.lmr_history_more += history <= -8192;
 #endif
-    return std::clamp(reduce, 0, depth - 2);
+    return reduce;
 }
 
 // Record only searched legal moves, after the make/legality boundary.
@@ -1750,7 +1762,8 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         int score = 0;
 
         const int reduce = wild == 0
-            ? reduction(depth, i, true, *move, true, false, rmove->gives_check, true) : 0;
+            ? reduction(depth, i, true,
+                reduction_estimate(depth, i, *move, true, false, rmove->gives_check), true) : 0;
         //go forward and search one level deeper
         stack->move_count = i + 1;
         forward(move, rmove->gives_check);
@@ -2849,15 +2862,18 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 
         const bool nominated = singular_result.move && move->to_compact() == singular_result.move;
         const bool singular = nominated && singular_result.extension > 0;
+        const int estimate = excluded_move || singular ? 0
+            : reduction_estimate(depth, searched_moves, *move, pv, cut_node, gives_check);
         const int reduce = excluded_move || singular ? 0
-            : reduction(depth, searched_moves, is_dangerous, *move, pv, cut_node, gives_check);
+            : reduction(depth, searched_moves, is_dangerous, estimate);
+        const int lmr_depth = depth - estimate;
         if (!pv && !repetition_floor && !singular && prune_quiet(*move, depth, searched_moves,
-                depth - reduce, best, alpha, beta, is_dangerous)) {
+                lmr_depth, best, alpha, beta, is_dangerous)) {
             continue;
         }
 
         if (!pv && !repetition_floor && !singular && prune_futility(*move,
-                depth - reduce, searched_moves, best, alpha, beta, gives_check, eval)) {
+                lmr_depth, searched_moves, best, alpha, beta, gives_check, eval)) {
             continue;
         }
 
