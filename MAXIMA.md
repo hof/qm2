@@ -1319,9 +1319,10 @@ ready, so it is safe to rerun and suits CI:
 - runner (`.tools/runner` with python-chess, unless the current Python has it)
 - Release and Debug builds (Ninja's no-op check decides "up to date")
 - `eval.nnue` through `tools/download_nnue.py`, for engines that use a network
-- `book.bin` and `fire.bin` from pinned polyglot-books v1.0 archives, verified by
-  size and SHA-256; a different existing file is kept unless `--force`
-- `draw.bin` from Maxima's `books-v1` release; `--draw` rebuilds it from the
+- `book.bin` from the pinned polyglot-books v1.0 archive, verified by size and
+  SHA-256; a different existing file is kept unless `--force`
+- `fire.bin` (Noomen's Daring carried on by `experience:fire`) and `draw.bin` from
+  Maxima's `books-v1` release; `--draw` rebuilds it from the
   Lichess masters explorer instead (needs a Lichess token, see 9.7)
 - Syzygy tables up to `--syzygy N` pieces (default 5, about 940 MiB; 0 skips),
   skipped offline when the manifest lists the complete set

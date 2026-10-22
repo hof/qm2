@@ -164,7 +164,9 @@ def daring_book(root):
     """Noomen's Daring.bin, the start of fire.bin; downloaded once from Chris Whittington's polyglot-books."""
     from . import project_init
     path = root / "Daring.bin"
-    _, url, member, size, sha256, source = next(book for book in project_init.books if book[0] == "fire.bin")
+    url, member, size, sha256 = (project_init.polyglot_books + "Daring.zip", "Daring.bin", 306432,
+                                 "168ccb0b467c9280e0e79c9d6309e5fd84d16e229bb28a1903b8ced7c0c2b187")
+    source = project_init.polyglot_credit
     if not path.is_file() or project_init.file_checksum(path) != sha256:
         print(f"Daring.bin from {source}", flush=True)
         project_init.download_member(url, member, size, sha256, path)
