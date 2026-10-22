@@ -1185,6 +1185,13 @@ winning moves without contrary deeper analysis are sound.
    budget searches afresh and a deeper result supersedes the old one.
 3. Otherwise the engine searches.
 
+A draw's value in that score follows the game's draw contempt (10.2): `0.5 +
+0.45 × DrawContempt/100`, so up to 0.95 against much stronger opponents (solid
+lines that drew are welcome) and down to 0.05 against much weaker ones (lines
+that drew count as near-losses; decisive lines are preferred), as JDrone's draw
+factor. Book.bin moves have no result statistics, so this cannot yet steer the
+book itself toward solid or sharp openings.
+
 Moves are labelled by source in the terminal and PGN comment: `book`
 (book.bin), `learned` (experience, with the estimated score and games), and
 `recalled` (earlier analysis). Defaults: prior strength 8 games per layer,

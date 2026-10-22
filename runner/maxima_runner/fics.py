@@ -623,7 +623,7 @@ class engine_player:
             if self.opening is None:
                 game_type = self.created["type"].lower() if self.created else None
                 self.opening = self.learner.for_game(self.opponent.name if self.opponent else None,
-                                                     self.opponent_group(), game_type)
+                                                     self.opponent_group(), game_type, self.contempt)
             choice = self.opening.choose(board, learning.per_move_budget_ms(clock, position.increment_seconds))
             if choice is not None:
                 move, reason = choice

@@ -168,10 +168,18 @@ class selection_tests(unittest.TestCase):
         self.assertLess(rate, stranger.estimate(start_key, "e2e4")[0])
         self.assertGreater(rate, 0.5)
         guest = learning.opening_book([record([[start_key, "e2e4", 1.0]], group=None)], game_type="blitz")
-        self.assertEqual(guest.layers[0][(start_key, "e2e4")], [0.5, 0.5])
+        self.assertEqual(guest.layers[0][(start_key, "e2e4")], [0.5, 0.0, 0.5])
         self.assertEqual(guest.layers[1], {})
         other_type = learning.opening_book([record([[start_key, "e2e4", 1.0]])], game_type="standard")
-        self.assertEqual(other_type.layers[0][(start_key, "e2e4")], [0.5, 0.5])
+        self.assertEqual(other_type.layers[0][(start_key, "e2e4")], [0.5, 0.0, 0.5])
+
+    def test_contempt_prefers_drawing_lines_against_stronger_and_sharp_ones_against_weaker(self):
+        drawish = [record([[start_key, "d2d4", 0.5]]) for _ in range(6)]
+        sharp = [record([[start_key, "e2e4", value]]) for value in (1.0, 1.0, 1.0, 0.0, 0.0, 0.0)]
+        stronger, _ = self.picks(drawish + sharp, contempt=100)
+        weaker, _ = self.picks(drawish + sharp, contempt=-100)
+        self.assertGreater(stronger.get("d2d4", 0), stronger.get("e2e4", 0))
+        self.assertGreater(weaker.get("e2e4", 0), weaker.get("d2d4", 0))
 
     def test_deeper_analysis_supersedes_and_is_recalled_within_budget(self):
         board = chess.Board()

@@ -226,13 +226,16 @@ class opening_book:
     """One game's view of the experience: layered results, analyses, and book.bin (MAXIMA.md 9.7)."""
 
     def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
-                 variety=1.0, supersede_depth=16, random_source=None):
+                 variety=1.0, supersede_depth=16, random_source=None, contempt=None):
         self.book_path = book_path
+        # JDrone's draw factor, tied to DrawContempt: a draw is worth up to 0.95 against much stronger
+        # opponents and down to 0.05 against much weaker ones.
+        self.draw_value = 0.5 if contempt is None else 0.5 + 0.45 * max(-1.0, min(1.0, contempt / 100))
         self.prior = prior
         self.variety = max(variety, 0.05)
         self.supersede_depth = supersede_depth
         self.random = random_source or random.Random()
-        self.layers = ({}, {}, {})  # global, group, opponent: (key, move) -> [points, games]
+        self.layers = ({}, {}, {})  # global, group, opponent: (key, move) -> [wins, draws, games]
         self.analyses = {}  # key -> {move: [depth, centipawns, mate, think_ms, halfmove clock]}
         opponent = (opponent or "").lower()
         for record in records:
@@ -245,9 +248,10 @@ class opening_book:
                 layers.append((2, weight))
             for key, move, value in record["credited"]:
                 for layer, layer_weight in layers:
-                    entry = self.layers[layer].setdefault((key, move), [0.0, 0.0])
-                    entry[0] += layer_weight * value
-                    entry[1] += layer_weight
+                    entry = self.layers[layer].setdefault((key, move), [0.0, 0.0, 0.0])
+                    entry[0] += layer_weight * (value == 1.0)
+                    entry[1] += layer_weight * (value == 0.5)
+                    entry[2] += layer_weight
             for key, move, depth, centipawns, mate, think_ms, clock in record["analyses"]:
                 moves = self.analyses.setdefault(key, {})
                 known = moves.get(move)
@@ -258,10 +262,10 @@ class opening_book:
         """Score rate shrunk global -> group -> opponent, its posterior strength, and the games behind it."""
         rate, games = 0.5, 0.0
         for layer in self.layers:
-            points, count = layer.get((key, move), (0.0, 0.0))
-            rate = (points + self.prior * rate) / (count + self.prior)
+            wins, draws, count = layer.get((key, move), (0.0, 0.0, 0.0))
+            rate = (wins + self.draw_value * draws + self.prior * rate) / (count + self.prior)
             games = count if count else games
-        return rate, self.prior + games, self.layers[0].get((key, move), (0.0, 0.0))[1]
+        return rate, self.prior + games, self.layers[0].get((key, move), (0.0, 0.0, 0.0))[2]
 
     def book_moves(self, board):
         if not self.book_path:
@@ -327,8 +331,9 @@ class learner:
         self.variety = variety
         self.records = load_index(self.games_dir, self.experience_dir / "index")
 
-    def for_game(self, opponent, group, game_type):
-        return opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety)
+    def for_game(self, opponent, group, game_type, contempt=None):
+        return opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety,
+                            contempt=contempt)
 
     def add(self, game):
         record = digest(game)
