@@ -93,6 +93,7 @@ struct search_stack_t {
     bool lmr_tt_tactical;
     int lmr_correction;
     int lmr_alpha_raises;
+    int multiple_extensions; // Multiple-extension events on the current line.
     uint16_t excluded_move;
     search_metadata_t metadata;
     U64 tt_key;
@@ -198,6 +199,7 @@ public:
     bool aspiration_enabled;
     bool probcut_enabled;
     bool singular_extensions_enabled;
+    bool singular_policy_enabled;
     bool razoring_enabled;
     bool main_see_enabled;
     bool iir_enabled;
@@ -233,7 +235,13 @@ public:
         int best, int alpha, int beta, bool dangerous);
     bool prune_main_see(move_t & move, int depth, int searched_moves,
         int best, int alpha, int beta, int gives_check);
-    uint16_t singular_extension(int alpha, int beta, int depth, bool cut_node);
+    struct singular_result_t {
+        uint16_t move = 0;
+        int extension = 0;
+        bool cutoff = false;
+        int value = 0;
+    };
+    singular_result_t singular_extension(int alpha, int beta, int depth, bool cut_node);
     int internal_search_depth(int depth, bool pv, bool cut_node);
     void prepare_iid_move(int alpha, int beta, int depth);
     int verification_search(int alpha, int beta, int depth, bool cut_node,

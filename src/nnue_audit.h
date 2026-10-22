@@ -39,6 +39,7 @@ struct audit_counters_t {
     uint64_t singular_attempts = 0, singular_extensions = 0, singular_rejected = 0;
     uint64_t singular_cancelled = 0, singular_visits = 0, singular_check_overlap = 0;
     uint64_t min_singular_depth = 0, max_singular_depth = 0;
+    uint64_t singular_double = 0, singular_triple = 0, singular_negative = 0, singular_multicuts = 0;
     uint64_t razoring_attempts = 0, razoring_cutoffs = 0, razoring_rejected = 0;
     uint64_t razoring_cancelled = 0, razoring_visits = 0;
     uint64_t min_razoring_depth = 0, max_razoring_depth = 0;

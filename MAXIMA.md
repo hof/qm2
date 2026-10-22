@@ -4196,15 +4196,15 @@ Release checks. When using the local toolchain, prefix these commands with
   necessary.
 
 For a small sanity check of pruning/reduction/history changes, build first and run
-the thirteen focused tests:
+the fifteen focused tests:
 
 ```bash
-ctest --preset cpp26_debug -R '^(test_futility|test_null_search|test_quiet_pruning|test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_context_lmr|test_search_selectivity|test_search_node_context|test_uci_input)$'
+ctest --preset cpp26_debug -R '^(test_futility|test_null_search|test_quiet_pruning|test_tt_history|test_razoring|test_main_see|test_search_iir|test_search_iid|test_adaptive_lmr|test_context_lmr|test_search_selectivity|test_search_node_context|test_singular_extensions|test_singular_policy|test_uci_input)$'
 ```
 
 Use the local toolchain prefix above when needed. This subset checks futility material/history/depth boundaries, tactical guards and adaptive null eligibility, reductions and verification, quiet-pruning depth/history thresholds, TT history feedback, razoring verification, SEE pruning, contextual root/interior
 LMR eligibility and verification, reductions and IIR/IID selection, verification
-guards, cancellation/restoration, node context and UCI policy cache invalidation. The full preset additionally covers lifecycle, evaluation,
+guards, cancellation/restoration, singular allocation/multicut bounds and line ownership, node context and UCI policy cache invalidation. The full preset additionally covers lifecycle, evaluation,
 board rules and other search contracts.
 
 Use identical Release compiler flags, positions, search limits, and hash size
@@ -6159,7 +6159,7 @@ ProbCut; TT feedback and final integration/strength acceptance remain pending.
 
 ### Singular extensions
 
-`SingularExtensions=true` allocates one extra ply to a legal TT move when a
+`SingularExtensions=true` with `SingularPolicy=false` allocates one extra ply to a legal TT move when a
 reduced search of all alternatives fails below a lower threshold. It uses only
 compatible main-search lower or exact scores searched to at least `depth-3`;
 ordinary TT cutoffs still require the full requested depth. An ordering hint
@@ -6189,7 +6189,8 @@ and clears incompatible TT results. With it off, the additional probe and helper
 are skipped. Fixed/aligned audit horizons disable it, and royal losers keeps
 its existing behavior. Audit builds report `audit_singular` attempts, extensions,
 rejections, cancellations, helper visits, check overlaps and attempted depths.
-This increment adds neither multiple/negative extensions nor multicut pruning.
+The original increment adds neither multiple/negative extensions nor multicut pruning;
+the later singular-policy completion below supplies them.
 Correctness and search-cost measurements do not establish playing strength.
 
 Singular-extension validation (2026-10-20) passed all 50 Debug tests (183.65s),
@@ -6833,3 +6834,65 @@ off counters were zero. Evidence is under private
 `baselines/2026-10-21/context-lmr/`. Remaining Phase 1 work is multiple/negative
 singular extensions with multicut, followed by the consolidated integration and
 reference gate. No timed strength match or installation ran.
+
+
+### Multiple and negative singular allocation with multicut (2026-10-21)
+
+`SingularPolicy=true` completes the selective outcomes of `SingularExtensions`.
+It uses the same compatible lower/exact main TT candidate, reduced excluded
+verification, depth-seven eligibility and legal/terminal/clock/repetition/helper
+guards described above. With the new control off, the single-extension policy
+is preserved. Changing the control stops the worker and clears both TT modes;
+workers snapshot it. Royal losers and fixed/aligned audit horizons disable it.
+
+A non-PV fail-low allocates two extra plies when the alternative score is strictly
+below `threshold-16`; quiet candidates receive three below `threshold-64`.
+PV nodes receive one. These pawn-100 margins are provisional, without a tuning
+or strength claim. Each line permits twelve multiple-extension events; its frame
+inherits the count across legal and null edges, increments only in the extended
+child and resets at the root. Siblings and same-position helper restoration
+retain the caller's count. Existing iteration/ply limits still apply. With no
+legal alternative, the helper returns `threshold-1`, granting exactly one ply.
+Check and positive singular allocations overlap using the maximum.
+
+When singular verification fails high, a non-PV, nondecisive alternative score
+at or above the original beta supplies a selective fail-soft multicut return.
+This writes no full-depth TT result and trains no history for an unsearched move.
+Otherwise a TT score at or above beta assigns `-3+PV` plies to its candidate;
+an expected cut node assigns `-2`. A negative allocation replaces a check
+extension. Positive singular candidates keep their existing pruning/LMR
+protection; nonsingular candidates use ordinary first-move guards. The original
+node depth and the full nominal-allocation LMR verification contract remain.
+No decisive reduced score is promoted to a new mate/tablebase certificate.
+Audit builds add double/triple/negative/multicut counts to `audit_singular`.
+
+Validation passed all 57 Debug tests (249.86s), all 57 Release tests (145.03s),
+including both lifecycle suites, 29 selected ASan/UBSan checks (255.92s, leak
+checks disabled), 31 audit checks (50.49s), and the independent oracle over
+4,372 positions and 95,734 legal children (35.719s). Native tests cover 2,112
+boundary cases and 768 PVS child/cancellation combinations, plus actual
+only-legal-move handling, exception restoration, line ownership and controls.
+Eight changed C++ files passed the brace scan. Release warning categories,
+files and counts match the parent; the new test has no warnings or sanitizer
+diagnostics. Final engine/test source stayed frozen throughout validation.
+
+The frozen parent/off/on comparison crossed the new policy with contextual LMR
+and included master-disabled controls. Twelve reserved roots, three alternating
+cold D8 trials and one retained D6 warmup/fixed legal two-ply/D8 trial produced
+384 legal completed searches. All 288 cold searches repeated deterministically;
+144 parent/disabled node/depth/score/best/full-PV signatures matched exactly.
+With contextual LMR, cold/retained nodes changed by -2.04%/-6.78%; without it,
+-10.91%/-15.84%. Default cold CPU medians were equal (0.50s); retained changed
+0.54s to 0.53s. Short, tick-quantized samples and control drift, including
+identical noncontextual retained controls at 0.49s/0.81s, preclude precise or
+general CPU/per-node claims. Retained best moves/scores sometimes change;
+these search-work results establish neither strength nor move quality.
+
+Production D8 activation covered negative allocation and multicut, with doubles
+also active without contextual LMR. The same frozen corpus at D8 warmup/direct
+D10 exercised all outcomes with defaults: 195 attempts, 84 extensions,
+15 doubles, one triple, 49 negative allocations and 50 multicuts. Legacy/master
+controls had zero new counts. No margins or positions were tuned. Evidence is
+under `.context/baselines/2026-10-21/singular-policy/`. The remaining Phase 1 work
+is the consolidated integration review and fixed-depth reference comparison
+before Phase 2 or any strength testing.

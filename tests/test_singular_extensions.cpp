@@ -43,7 +43,7 @@ public:
             valid &= !null_enabled && stack->excluded_move == stack->tt_move.to_compact()
                 && beta == alpha + 1 && beta == expected_threshold;
             // Recursive consumers must remain disabled inside verification.
-            valid &= singular_extension(-1000, 1000, 8, false) == 0;
+            valid &= singular_extension(-1000, 1000, 8, false).move == 0;
             nodes += 3;
             stack->move_list.stage = 99;
             stack->pv_count = 0;
@@ -86,7 +86,7 @@ bool test_policy_and_cache() {
             auto p = std::make_unique<probe_t>(black);
             p->seed(MAX_PLY);
             p->expected_threshold = 100 - depth;
-            const auto result = p->singular_extension(-1000, 1000, depth, false);
+            const auto result = p->singular_extension(-1000, 1000, depth, false).move;
             ok &= bool(result) == (depth >= 7) && p->calls == int(depth >= 7)
                 && (!result || p->helper_depth == (depth - 1) / 2) && p->valid;
         }
@@ -95,7 +95,7 @@ bool test_policy_and_cache() {
                 auto p = std::make_unique<probe_t>(black);
                 p->seed(stored, flag);
                 const bool expected = flag != score::UPPERBOUND && stored >= 4;
-                ok &= bool(p->singular_extension(-1000, 1000, 7, true)) == expected;
+                ok &= bool(p->singular_extension(-1000, 1000, 7, true).move) == expected;
             }
         }
         for (int exclusion = 0; exclusion < 17; ++exclusion) {
@@ -138,19 +138,19 @@ bool test_policy_and_cache() {
             } else {
                 trans_table::disable();
             }
-            ok &= p->singular_extension(-1000, 1000, 7, false) == 0 && !p->calls;
+            ok &= p->singular_extension(-1000, 1000, 7, false).move == 0 && !p->calls;
             trans_table::enable();
         }
         for (int sign : {-1, 1}) {
             auto p = std::make_unique<probe_t>(black);
             p->seed();
             const int bound = sign * (score::TABLEBASE - MAX_PLY);
-            ok &= p->singular_extension(bound, bound + 1, 7, false) == 0;
+            ok &= p->singular_extension(bound, bound + 1, 7, false).move == 0;
         }
     }
     auto root = std::make_unique<search_t>(start);
     root->stack->tt_move.set(&root->brd, "g1f3");
-    ok &= root->singular_extension(-1000, 1000, 7, false) == 0;
+    ok &= root->singular_extension(-1000, 1000, 7, false).move == 0;
     // A pinned pseudo-legal hint cannot nominate an extension.
     auto pinned = std::make_unique<search_t>("4k3/4r3/8/8/8/8/8/K3R3 b - - 0 1");
     play(*pinned, "e7e6");
@@ -158,7 +158,7 @@ bool test_policy_and_cache() {
     pinned->stack->tt_move.set(&pinned->brd, "e6d6");
     ok &= pinned->brd.valid(&pinned->stack->tt_move)
         && !pinned->brd.legal(&pinned->stack->tt_move)
-        && pinned->singular_extension(-1000, 1000, 7, false) == 0;
+        && pinned->singular_extension(-1000, 1000, 7, false).move == 0;
     return check(ok, "singular policy, compatible TT bounds/depth/mode/context/clocks or illegal hint failed");
 }
 bool test_helper_scope() {
@@ -177,7 +177,7 @@ bool test_helper_scope() {
             bool threw = false;
             uint16_t result = 0;
             try {
-                result = p->singular_extension(-1000, 1000, 7, false);
+                result = p->singular_extension(-1000, 1000, 7, false).move;
             } catch (const std::runtime_error &) {
                 threw = true;
             }
@@ -299,7 +299,7 @@ bool test_real_verification() {
     trans_table::clear();
     trans_table::store(p->brd.stack->tt_key, 0, 1, 4, 100, candidate,
         score::LOWERBOUND, p->tt_context());
-    ok &= !p->stack->in_check && p->singular_extension(-1000, 1000, 7, false) == candidate
+    ok &= !p->stack->in_check && p->singular_extension(-1000, 1000, 7, false).move == candidate
         && p->brd.to_string() == fen && p->stack == p->root_stack + 1
         && p->verification_mode == verification_mode_t::none && !p->stack->excluded_move;
     return check(ok, "real only-legal-move exclusion, terminal handling or restoration failed");
@@ -319,7 +319,7 @@ bool test_real_cancellation() {
         trans_table::clear();
         trans_table::store(key, 0, 1, 4, 100, p->stack->tt_move.to_compact(),
             score::LOWERBOUND, p->tt_context());
-        ok &= p->singular_extension(-1000, 1000, 7, false) == 0 && p->stop_all
+        ok &= p->singular_extension(-1000, 1000, 7, false).move == 0 && p->stop_all
             && p->brd.to_string() == fen && p->brd.stack->tt_key == key
             && p->stack == p->root_stack + 1 && p->brd.ply == 1
             && !p->stack->excluded_move && p->verification_mode == verification_mode_t::none
@@ -359,6 +359,7 @@ int main() {
     magic::init();
     uci::silent(true);
     trans_table::set_size(4);
+    options::get_option("SingularPolicy")->value = 0;
     const bool ok = test_policy_and_cache() & test_helper_scope() & test_pvs()
         & test_repetition_floor() & test_check_overlap() & test_real_verification() & test_real_cancellation() & test_workers();
     return ok ? 0 : 1;

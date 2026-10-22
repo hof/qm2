@@ -61,6 +61,7 @@ namespace options {
         { "TTHistory", BOOL, 1, "type check default true", true },
         { "ProbCut", BOOL, 1, "type check default true", true },
         { "SingularExtensions", BOOL, 1, "type check default true", true },
+        { "SingularPolicy", BOOL, 1, "type check default true", true },
         { "MainSEE", BOOL, 1, "type check default true", true },
         { "QsearchTT", BOOL, 1, "type check default true", true },
         { "MainHistory", BOOL, 1, "type check default true", true },
