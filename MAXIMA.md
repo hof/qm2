@@ -1459,7 +1459,7 @@ opponent, unlike kibitz) in plain words:
     learned: 24 moves | vs John +2 =0 -1
 
 Searched moves show depth, score (`#5` for mate), `TB` when tablebases were hit, the
-time, and the first six plies of the line in numbered SAN, starting with the move played. Book moves name the layer
+time, the speed (`850Knps`, `1.2Mnps`), and the first six plies of the line in numbered SAN, starting with the move played. Book moves name the layer
 with the largest share (ties to the more specific layer), then the mix; `base` is book.bin.
 
 FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and stops

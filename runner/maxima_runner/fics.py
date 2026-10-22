@@ -409,6 +409,15 @@ def learning_report(game, record, records):
     return lines
 
 
+def speed(nps):
+    """Nodes per second the short way: 850nps, 500Knps, 1.2Mnps."""
+    if nps >= 1_000_000:
+        return f"{nps / 1_000_000:.1f}Mnps"
+    if nps >= 1_000:
+        return f"{nps / 1_000:.0f}Knps"
+    return f"{nps}nps"
+
+
 def search_whisper(info, turn, line, note=None, seconds=None):
     """A searched move for observers: "d15 +4.52 TB 9. Bg2 d5 10. d4 Nbd7 (out of book)"; the line starts
     with our move, already cut at whisper_plies."""
@@ -421,6 +430,8 @@ def search_whisper(info, turn, line, note=None, seconds=None):
         parts.append("TB")
     if seconds is not None:
         parts.append(f"{seconds:.1f}s")
+    if info.get("nps"):
+        parts.append(speed(info["nps"]))
     parts += line.split()
     if note:
         parts.append(f"({note})")
@@ -849,7 +860,7 @@ def describe(info, turn):
         return "book"
     relative = score.pov(turn)
     value = f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}"
-    return f"d{depth} {value}"
+    return f"d{depth} {value}" + (f" {speed(info['nps'])}" if info.get("nps") else "")
 
 
 async def serve(connection, commands, on_line, probe_interval=300, probe_timeout=60, player=None):
