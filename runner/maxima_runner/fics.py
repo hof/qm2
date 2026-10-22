@@ -275,7 +275,6 @@ default_settings = {
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
     "contempt_window": 100, "layer_profiles": {}, "style_books": {},
 }
-style_names = ("fire", "solid", "experiment")
 
 
 def playable(game_type, minutes, increment):
@@ -760,9 +759,9 @@ def load_settings(path):
             raise ValueError(f"{path}: notes must be at most 7 strings (notes 1-3 are generated)")
         if key == "layer_profiles":
             value = layer_profiles(value, path)
-        if key == "style_books" and not all(name in style_names and isinstance(book, str)
+        if key == "style_books" and not all(name in learning.style_names and isinstance(book, str)
                                             for name, book in value.items()):
-            raise ValueError(f"{path}: style_books maps {', '.join(style_names)} to Polyglot files")
+            raise ValueError(f"{path}: style_books maps {', '.join(learning.style_names)} to Polyglot files")
         settings[key] = value
     settings["options"] = {str(name): str(value) for name, value in (settings["options"] or {}).items()}
     return settings
@@ -786,7 +785,7 @@ def layer_profiles(overrides, path):
 def style_books(configured):
     """Style book paths: <style>.bin beside book.bin unless the config names a file (relative to the
     project root), e.g. {"fire": "ph-gambitbook.bin"}."""
-    books = {name: project_root() / f"{name}.bin" for name in style_names}
+    books = {name: project_root() / f"{name}.bin" for name in learning.style_names}
     books.update({name: project_root() / Path(path).expanduser() for name, path in (configured or {}).items()})
     return books
 

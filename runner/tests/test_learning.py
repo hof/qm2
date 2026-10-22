@@ -272,16 +272,17 @@ class multi_layer_book_tests(unittest.TestCase):
             self.assertEqual({entry.move.uci(): entry.weight for entry in reader.find_all(self.after_e5)},
                              {"g1f3": 1, "f2f4": 1})
 
-    def test_profiles_follow_rating_gap_and_unrated_games_experiment(self):
-        self.assertEqual(learning.game_profile(-10, True), (("fire",), learning.layer_profiles["equal"]))
-        styles, weights = learning.game_profile(-100, True)
-        self.assertEqual((styles, weights), (("fire",), learning.layer_profiles["weaker"]))
-        styles, weights = learning.game_profile(-60, True)
-        self.assertEqual(weights["style"], 12.5)
-        self.assertEqual(learning.game_profile(100, True)[0], ("solid",))
-        self.assertEqual(learning.game_profile(None, True)[1], learning.layer_profiles["equal"])
-        self.assertEqual(learning.game_profile(-100, False), (("experiment", "fire"), learning.layer_profiles["unrated"]))
-        for weights in learning.layer_profiles.values():
+    def test_profiles_follow_rating_gap_and_unrated_games_play_fire_and_experiment(self):
+        profiles = learning.layer_profiles
+        self.assertEqual(learning.game_profile(-10, True), profiles["equal"])
+        self.assertEqual(learning.game_profile(-100, True), profiles["weaker"])
+        self.assertEqual(learning.game_profile(-60, True)["fire"], 12.5)
+        self.assertEqual(learning.game_profile(100, True)["solid"], 25)
+        self.assertEqual(learning.game_profile(None, True), profiles["equal"])
+        unrated = learning.game_profile(-100, False)
+        self.assertEqual(unrated, profiles["unrated"])
+        self.assertGreaterEqual(unrated["fire"], unrated["book"])
+        for weights in profiles.values():
             self.assertEqual(sum(weights[name] for name in learning.layer_names), 100)
 
     def shares(self, **options):
@@ -291,18 +292,17 @@ class multi_layer_book_tests(unittest.TestCase):
         self.assertTrue(in_book)
         return {move.uci(): round(probability, 3) for move, (probability, _) in moves.items()}, book
 
-    def test_style_book_pulls_but_book_bin_keeps_its_share(self):
+    def test_style_books_pull_but_book_bin_keeps_its_share(self):
         self.assertEqual(self.shares(contempt=-10)[0], {"g1f3": 0.9, "b1c3": 0.1})
         weaker, book = self.shares(contempt=-100)
-        self.assertEqual(book.style, "fire")
+        self.assertEqual(set(book.paths), {"book", "fire"})
         self.assertEqual(weaker, {"g1f3": round((20 * 0.9 + 25 * 0.5) / 45, 3), "b1c3": round(2 / 45, 3),
                                   "f2f4": round(12.5 / 45, 3)})
+        self.assertEqual(set(self.shares(contempt=100)[1].paths), {"book"})
         guest, book = self.shares(rated=False)
-        self.assertEqual(book.style, "fire")
-        self.assertEqual(guest["f2f4"], round(17.5 / 70, 3))
+        self.assertEqual(guest["f2f4"], 0.25)
         moves, _ = book.distribution(self.after_e5, "", {})
         self.assertEqual(book.describe(*moves[chess.Move.from_uci("g1f3")]), "book 70%: book 64%, fire 36%")
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -1171,19 +1171,20 @@ in the same position preferred a different move; a later deeper search choosing
 it restores it.
 
 **Multi-layer book.** Each game gets its own multi-layer book: book.bin (the
-base: its moves are good in principle), a style book, and the learned layers,
-each with a percentage from the game's profile:
+base: its moves are good in principle), the style books `fire` (sharp, e.g.
+gambits), `solid` (safe), and `experiment`, and the learned layers, each with a
+percentage from the game's profile:
 
-| profile | book | style | global | group | opponent | search |
-|---|---|---|---|---|---|---|
-| equal | 45 | 0 | 20 | 10 | 25 | 5 |
-| much weaker (fire.bin) | 20 | 25 | 10 | 10 | 35 | 5 |
-| much stronger (solid.bin) | 30 | 25 | 10 | 10 | 25 | 5 |
-| unrated (experiment.bin, else fire.bin) | 35 | 35 | 30 | 0 | 0 | 10 |
+| profile | book | fire | solid | experiment | global | group | opponent | search |
+|---|---|---|---|---|---|---|---|---|
+| equal | 45 | 0 | 0 | 0 | 20 | 10 | 25 | 5 |
+| much weaker | 20 | 25 | 0 | 0 | 10 | 10 | 35 | 5 |
+| much stronger | 30 | 0 | 25 | 0 | 10 | 10 | 25 | 5 |
+| unrated | 30 | 30 | 0 | 15 | 25 | 0 | 0 | 10 |
 
-Rated games slide from *equal* toward *weaker* or *stronger* with the draw
-contempt (none within ±0.20, fully at ±1.00); unrated games (guests) use
-*unrated* and experiment. Percentages are configurable (`layer_profiles` in the
+Rated games slide from *equal* toward *much weaker* or *much stronger* with
+the draw contempt (none within ±0.20, fully at ±1.00); unrated games (guests)
+play fire and experiment. Percentages are configurable (`layer_profiles` in the
 MaxDrone config). In each position:
 
 1. Book layers give each book's move shares; moves under a tenth of a book's
@@ -1196,7 +1197,7 @@ MaxDrone config). In each position:
    a base share that grows with their games.
 3. A learned layer counts at its percentage × `n / (n + 8)`, n = its games in
    the position; weight a layer cannot use goes proportionally to the others.
-   So book.bin and the style keep their floor, and John's layer counts more as
+   So book.bin and the style books keep their floor, and John's layer counts more as
    games against John accumulate.
 4. Proven losers (at least 4 games, rate under 30%) are multiplied by 0.1 in
    every layer, book.bin included.
@@ -1384,8 +1385,9 @@ notes.
 
 The multi-layer book (9.7) chooses opening moves; `layer_profiles` in the
 config overrides its percentages per profile, e.g. `{"layer_profiles": {"weaker":
-{"style": 35, "book": 10}}}` (layers `book`, `style`, `global`, `group`,
-`opponent`, `search`; profiles `equal`, `weaker`, `stronger`, `unrated`).
+{"fire": 35, "book": 10}}}` (layers `book`, `fire`, `solid`, `experiment`,
+`global`, `group`, `opponent`, `search`; profiles `equal`, `weaker`, `stronger`,
+`unrated`).
 
 Draw contempt follows the rating gap: at `Creating:` MaxDrone sets the engine's
 `DrawContempt` (cp, our view) to the default -10 plus a quarter of the opponent's

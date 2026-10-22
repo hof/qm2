@@ -219,13 +219,18 @@ def build_repertoire(pgn_path, book_path, plies=30):
 
 # Multi-layer book profiles (MAXIMA.md 9.7): percentages per layer; "search" is the share of games
 # that leave the book once, at a random ply, so the engine can bring in new moves.
+style_names = ("fire", "solid", "experiment")
+layer_names = ("book",) + style_names + ("global", "group", "opponent")
 layer_profiles = {
-    "equal": {"book": 45, "style": 0, "global": 20, "group": 10, "opponent": 25, "search": 5},
-    "weaker": {"book": 20, "style": 25, "global": 10, "group": 10, "opponent": 35, "search": 5},
-    "stronger": {"book": 30, "style": 25, "global": 10, "group": 10, "opponent": 25, "search": 5},
-    "unrated": {"book": 35, "style": 35, "global": 30, "group": 0, "opponent": 0, "search": 10},
+    "equal": {"book": 45, "fire": 0, "solid": 0, "experiment": 0, "global": 20, "group": 10, "opponent": 25,
+              "search": 5},
+    "weaker": {"book": 20, "fire": 25, "solid": 0, "experiment": 0, "global": 10, "group": 10, "opponent": 35,
+               "search": 5},
+    "stronger": {"book": 30, "fire": 0, "solid": 25, "experiment": 0, "global": 10, "group": 10, "opponent": 25,
+                 "search": 5},
+    "unrated": {"book": 30, "fire": 30, "solid": 0, "experiment": 15, "global": 25, "group": 0, "opponent": 0,
+                "search": 10},
 }
-layer_names = ("book", "style", "global", "group", "opponent")
 
 
 def style_share(contempt):
@@ -236,18 +241,15 @@ def style_share(contempt):
 
 
 def game_profile(contempt, rated, profiles=None):
-    """(style book name, layer percentages) for one game.
-
-    Unrated games (guests) experiment: experiment.bin, else fire.bin. Rated games slide from the equal
-    profile towards fire.bin against weaker opponents or solid.bin against stronger ones."""
+    """Layer percentages for one game: unrated games (guests) use the unrated profile; rated games slide
+    from equal toward weaker (fire) or stronger (solid) with the draw contempt."""
     profiles = profiles or layer_profiles
     if not rated:
-        return ("experiment", "fire"), dict(profiles["unrated"])
+        return dict(profiles["unrated"])
     side = "weaker" if contempt is not None and contempt < 0 else "stronger"
     share = style_share(contempt)
-    weights = {name: (1 - share) * profiles["equal"].get(name, 0) + share * profiles[side].get(name, 0)
-               for name in profiles["equal"]}
-    return ("fire",) if side == "weaker" else ("solid",), weights
+    return {name: (1 - share) * profiles["equal"].get(name, 0) + share * profiles[side].get(name, 0)
+            for name in profiles["equal"]}
 
 
 def learned_factor(rate):
@@ -261,20 +263,20 @@ def per_move_budget_ms(clock_seconds, increment_seconds):
 
 
 class opening_book:
-    """One game's multi-layer book (MAXIMA.md 9.7): book.bin, a style book, and the learned layers
-    global, group, and opponent, each with a percentage from the game's profile."""
+    """One game's multi-layer book (MAXIMA.md 9.7): book.bin, the style books fire, solid, and experiment,
+    and the learned layers global, group, and opponent, each with a percentage from the game's profile."""
 
     def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
                  variety=1.0, supersede_depth=16, random_source=None, contempt=None, style_books=None,
                  rated=True, profiles=None):
         self.book_path = book_path
         self.random = random_source or random.Random()
-        styles, self.weights = game_profile(contempt, rated, profiles)
-        books = style_books or {}
-        self.style = next((name for name in styles if books.get(name) and Path(books[name]).is_file()), None)
-        self.style_path = books.get(self.style)
-        self.names = {"book": "book", "style": self.style or "style", "global": "global",
-                      "group": group or "group", "opponent": opponent or "opponent"}
+        self.weights = game_profile(contempt, rated, profiles)
+        self.paths = {"book": book_path}
+        self.paths.update({name: path for name, path in (style_books or {}).items()
+                           if name in style_names and self.weights.get(name) and path and Path(path).is_file()})
+        self.names = dict({name: name for name in layer_names}, group=group or "group",
+                          opponent=opponent or "opponent")
         # The search layer: some games leave the book once, at a random ply of ours.
         self.search_ply = None
         if self.random.random() * 100 < self.weights.get("search", 0):
@@ -365,27 +367,28 @@ class opening_book:
 
     def distribution(self, board, key, analyses):
         """Each move's probability and the share each layer gave it, plus whether any book knew the position."""
-        books = {"book": self.read_book(self.book_path, board),
-                 "style": self.read_book(self.style_path, board) if self.weights.get("style") else {}}
+        books = {name: self.read_book(path, board) for name, path in self.paths.items()}
+        books = {name: moves for name, moves in books.items() if moves}
+        known = set().union(*books.values()) if books else set()
         learned = {chess.Move.from_uci(move) for (position, move) in self.layers[0] if position == key}
-        candidates = {move for move in set(books["book"]) | set(books["style"]) | learned
+        candidates = {move for move in known | learned
                       if board.is_legal(move) and not self.superseded(analyses, move)}
         if not candidates:
             return {}, False
-        in_book = any(move in books["book"] or move in books["style"] for move in candidates)
+        in_book = bool(candidates & known)
         # The base the learned layers reweight: the books' mix, plus a share for moves only experience
         # knows (the opponent's good moves, engine novelties) that grows with their games.
         base = {}
         for move in candidates:
-            share = sum(self.weights.get(name, 0) * books[name].get(move, 0) for name in ("book", "style"))
+            share = sum(self.weights.get(name, 0) * moves.get(move, 0) for name, moves in books.items())
             games = self.layers[0].get((key, move.uci()), (0.0, 0.0))[1]
             base[move] = share / 100 if in_book else 1.0
-            if in_book and move not in books["book"] and move not in books["style"]:
+            if in_book and move not in known:
                 base[move] = 0.1 * games / (games + self.prior)
         total = sum(base.values())
         base = {move: weight / total for move, weight in base.items()}
         rates = {move: self.rates(key, move.uci()) for move in candidates}
-        layers = {name: books[name] for name in ("book", "style") if books[name]}
+        layers = dict(books)
         weights = {name: self.weights.get(name, 0) for name in layers}
         for index, name in enumerate(("global", "group", "opponent")):
             games = self.totals[index].get(key, 0.0)
@@ -408,7 +411,7 @@ class opening_book:
     def describe(self, probability, parts):
         """Label first (book or learned), then each layer's share of the choice, for tuning."""
         learned = sum(parts.get(name, 0) for name in ("global", "group", "opponent"))
-        label = "learned" if learned > parts.get("book", 0) + parts.get("style", 0) else "book"
+        label = "learned" if learned > sum(parts.get(name, 0) for name in ("book",) + style_names) else "book"
         detail = ", ".join(f"{self.names[name]} {parts[name] / probability:.0%}" for name in layer_names
                            if parts.get(name, 0) >= 0.005 * probability)
         return f"{label} {probability:.0%}: {detail}"

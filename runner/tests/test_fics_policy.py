@@ -175,8 +175,8 @@ class settings_tests(unittest.TestCase):
         self.assertEqual((settings["seeks"], settings["games"], settings["options"]), (["1 0"], 5, {"Hash": "256"}))
         self.assertEqual(settings["host"], "freechess.org")
         self.assertEqual(fics.load_settings(None), fics.default_settings)
-        profiles = fics.load_settings(self.write({"layer_profiles": {"weaker": {"style": 35}}}))["layer_profiles"]
-        self.assertEqual(profiles["weaker"]["style"], 35)
+        profiles = fics.load_settings(self.write({"layer_profiles": {"weaker": {"fire": 35}}}))["layer_profiles"]
+        self.assertEqual(profiles["weaker"]["fire"], 35)
         self.assertEqual(profiles["equal"], learning.layer_profiles["equal"])
         books = fics.style_books(fics.load_settings(self.write({"style_books": {"fire": "ph-gambitbook.bin",
                                                                                 "solid": "/books/solid.bin"}}))
@@ -190,7 +190,7 @@ class settings_tests(unittest.TestCase):
                                ({"owner": ["hof", 5]}, "list of handles"),
                                ({"layer_profiles": {"hot": {}}}, "has profiles"),
                                ({"style_books": {"gambit": "x.bin"}}, "style_books maps"),
-                               ({"layer_profiles": {"weaker": {"fire": 3}}}, "takes non-negative"),
+                               ({"layer_profiles": {"weaker": {"style": 3}}}, "takes non-negative"),
                                ({"layer_profiles": {"weaker": {"book": -1}}}, "takes non-negative"),
                                ([], "JSON object")):
             with self.assertRaisesRegex(ValueError, message):
