@@ -219,7 +219,9 @@ class selection_tests(unittest.TestCase):
                                                                   board.halfmove_clock]]))
         book = self.opening(records, book_path=None)
         self.assertTrue(book.superseded(book.analyses[key], chess.Move.from_uci("f3g5")))
-        self.assertEqual({book.choose(board, 5000)[0].uci() for _ in range(50)}, {"h2h4"})
+        picks = [book.choose(board, 5000) for _ in range(50)]
+        self.assertEqual({pick[0].uci() for pick in picks if pick}, {"h2h4"})
+        self.assertIn(None, picks)  # without book.bin, book.bin's share searches
         fresh = self.opening(records[:3] + [record([], analyses=[[key, "h2h4", 20, 40, 0, 60000,
                                                                  board.halfmove_clock]])], book_path=None)
         self.assertEqual(fresh.choose(board, 5000), (chess.Move.from_uci("h2h4"), "recalled d20 60.0s"))
@@ -230,9 +232,10 @@ class selection_tests(unittest.TestCase):
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         quick = [record([[key, "f1b5", 0.6]], analyses=[[key, "f1b5", 8, 30, 0, 300, 2]])]
         self.assertIsNone(self.opening(quick).choose(board, 5000))
-        proven = self.opening(quick * 3).choose(board, 5000)
-        self.assertEqual(proven[0].uci(), "f1b5")
-        self.assertTrue(proven[1].startswith("learned"))
+        proven = [self.opening(quick * 3, seed=seed).choose(board, 5000) for seed in range(20)]
+        self.assertEqual({pick[0].uci() for pick in proven if pick}, {"f1b5"})
+        self.assertTrue(all(pick[1].startswith("learned") for pick in proven if pick))
+        self.assertIn(None, proven)
 
     def test_out_of_horizon_and_repeated_positions_are_searched(self):
         book = self.opening()
@@ -294,7 +297,8 @@ class multi_layer_book_tests(unittest.TestCase):
     def shares(self, **options):
         book = learning.opening_book([], book_path=self.main, style_books={"fire": self.fire}, **options)
         book.search_ply = None
-        moves, in_book = book.distribution(self.after_e5, "", {})
+        moves, in_book, search = book.distribution(self.after_e5, "", {})
+        self.assertEqual(search, 0.0)
         self.assertTrue(in_book)
         return {move.uci(): round(probability, 3) for move, (probability, _) in moves.items()}, book
 
@@ -307,8 +311,22 @@ class multi_layer_book_tests(unittest.TestCase):
         self.assertEqual(set(self.shares(contempt=100)[1].paths), {"book"})
         guest, book = self.shares(rated=False)
         self.assertEqual(guest["f2f4"], 0.25)
-        moves, _ = book.distribution(self.after_e5, "", {})
+        moves, _, _ = book.distribution(self.after_e5, "", {})
         self.assertEqual(book.describe(*moves[chess.Move.from_uci("g1f3")]), "book 70%: book 64%, fire 36%")
+
+    def test_where_book_bin_has_nothing_its_share_goes_to_search(self):
+        board = board_after("e2e4 e7e5 f2f4")
+        polyglot_book(self.fire, [(board, "e5f4", 100)])
+        book = learning.opening_book([], book_path=self.main, style_books={"fire": self.fire}, rated=False,
+                                     random_source=__import__("random").Random(3))
+        book.search_ply = None
+        moves, in_book, search = book.distribution(board, "", {})
+        self.assertTrue(in_book)
+        self.assertEqual((round(moves[chess.Move.from_uci("e5f4")][0], 3), search), (0.5, 0.5))
+        picks = [book.choose(board, 5000) for _ in range(200)]
+        searched = sum(pick is None for pick in picks)
+        self.assertTrue(60 < searched < 140, searched)
+        self.assertEqual({pick[0].uci() for pick in picks if pick}, {"e5f4"})
 
 if __name__ == "__main__":
     unittest.main()

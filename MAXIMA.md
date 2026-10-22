@@ -1196,7 +1196,10 @@ MaxDrone config). In each position:
    Moves only experience knows (an opponent's good move, an engine novelty) get
    a base share that grows with their games.
 3. A learned layer counts at its percentage × `n / (n + 8)`, n = its games in
-   the position; weight a layer cannot use goes proportionally to the others.
+   the position; weight a layer cannot use goes proportionally to the others,
+   except book.bin's: book.bin is the know-all base, so where it has no move
+   its percentage becomes the chance to search instead (unrated: fire 30 against
+   search 30), and a style book never decides alone.
    So book.bin and the style books keep their floor, and John's layer counts more as
    games against John accumulate.
 4. Proven losers (at least 4 games, rate under 30%) are multiplied by 0.1 in

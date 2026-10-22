@@ -259,7 +259,9 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_learned_move_is_played_without_searching(self):
         folder = Path(self.directory.name) / "games"
-        learner = learning.learner(Path(self.directory.name) / "experience", folder)
+        # Without book.bin in the profile, its share does not turn into searches.
+        profiles = {name: dict(weights, book=0, search=0) for name, weights in learning.layer_profiles.items()}
+        learner = learning.learner(Path(self.directory.name) / "experience", folder, profiles=profiles)
         key = f"{chess.polyglot.zobrist_hash(chess.Board()):016x}"
         learner.records = [{"opponent": "guestNinja", "group": "humans", "type": "blitz",
                             "values": [[key, "d2d4", 0.9, 1.0]], "analyses": []}] * 6

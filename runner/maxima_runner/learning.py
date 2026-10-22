@@ -372,7 +372,9 @@ class opening_book:
         return self.random.betavariate(max(rate * strength, 1e-3), max((1 - rate) * strength, 1e-3))
 
     def distribution(self, board, key, analyses):
-        """Each move's probability and the share each layer gave it, plus whether any book knew the position."""
+        """Each move's probability and the share each layer gave it, whether any book knew the position,
+        and the chance to search instead: book.bin is the know-all base, so where it has no move, its
+        percentage goes to the engine rather than to the other layers."""
         books = {name: self.read_book(path, board) for name, path in self.paths.items()}
         books = {name: moves for name, moves in books.items() if moves}
         known = set().union(*books.values()) if books else set()
@@ -380,7 +382,7 @@ class opening_book:
         candidates = {move for move in known | learned
                       if board.is_legal(move) and not self.superseded(analyses, move)}
         if not candidates:
-            return {}, False
+            return {}, False, 0.0
         in_book = bool(candidates & known)
         # The base the learned layers reweight: the books' mix, plus a share for moves only experience
         # knows (the opponent's good moves, engine novelties) that grows with their games.
@@ -408,11 +410,13 @@ class opening_book:
         damp = {move: 0.1 if rates[move][0][1] >= 4 and rates[move][-1][0] < 0.3 else 1.0 for move in candidates}
         shares = {move: {name: weights[name] * layers[name].get(move, 0) * damp[move] for name in layers}
                   for move in candidates}
+        search = 0.0 if "book" in books else self.weights.get("book", 0)
         total = sum(sum(parts.values()) for parts in shares.values())
         if not total:
-            return {}, in_book
-        return {move: (sum(parts.values()) / total, {name: part / total for name, part in parts.items()})
-                for move, parts in shares.items()}, in_book
+            return {}, in_book, 0.0
+        total += search
+        return ({move: (sum(parts.values()) / total, {name: part / total for name, part in parts.items()})
+                 for move, parts in shares.items()}, in_book, search / total)
 
     def describe(self, probability, parts):
         """Label first (book or learned), then each layer's share of the choice, for tuning."""
@@ -432,10 +436,12 @@ class opening_book:
             return None
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         analyses = self.analyses.get(key, {})
-        moves, in_book = self.distribution(board, key, analyses)
+        moves, in_book, search = self.distribution(board, key, analyses)
         if moves:
             ordered = sorted(moves, key=chess.Move.uci)
-            move = self.random.choices(ordered, [moves[move][0] for move in ordered])[0]
+            move = self.random.choices(ordered + [None], [moves[move][0] for move in ordered] + [search])[0]
+            if move is None:
+                return None
             rate, games = self.estimate(key, move.uci())
             analysis = analyses.get(move.uci())
             # Out of book a learned move must have real evidence: several games scoring well, or an
