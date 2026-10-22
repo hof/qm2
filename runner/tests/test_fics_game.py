@@ -239,6 +239,10 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(player.followers, [])
         await player.handle("hof tells you: s3cret softquit")
         self.assertTrue(player.stopping)
+        self.assertFalse(player.restart)
+        await player.handle("hof tells you: s3cret softrestart")
+        self.assertTrue(player.restart)
+        self.assertEqual(player.connection.sent[-1], "tell hof OK, I restart after this game.")
 
     def test_learning_report_says_what_was_kept(self):
         self.assertEqual(fics.learning_report(None, None, []),

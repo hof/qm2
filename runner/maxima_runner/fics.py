@@ -266,7 +266,9 @@ challenge_pattern = re.compile(
     r"(?P<rated>rated|unrated) (?P<type>.+?) (?P<time>\d+) (?P<increment>\d+)(?: \(adjourned\))?\.?$")
 tell_pattern = re.compile(r"^(?P<name>[A-Za-z]{3,17})(?:\([A-Z*]+\))* tells you: (?P<text>.*)$")
 max_followers = 5
-remote_commands = ("follow", "softquit", "help", "!abort", "!resign", "!draw")
+remote_commands = ("follow", "softquit", "softrestart", "help", "!abort", "!resign", "!draw")
+# Exit status after softrestart (EX_TEMPFAIL): a supervisor loop starts MaxDrone again with the latest code.
+restart_status = 75
 finger_pattern = re.compile(r"^Finger of (?P<name>[A-Za-z]+)(?P<titles>(?:\([A-Z*]+\))*):")
 playable_types = ("lightning", "blitz", "standard")
 chess_titles = ("GM", "IM", "FM", "WGM", "WIM", "WFM", "CM", "WCM", "NM")
@@ -468,7 +470,7 @@ class engine_player:
         self.opponent_ready = asyncio.Event()
         self.opponent_ready.set()
         self.streak = self.played = 0
-        self.stopping = self.finished = False
+        self.stopping = self.finished = self.restart = False
 
     async def start(self):
         self.context = self.open_session()
@@ -518,7 +520,7 @@ class engine_player:
         await self.seek()
 
     async def on_tell(self, found):
-        """Remote control by tell: "<key> follow|softquit|help|!abort|!resign|!draw", and "unfollow". Wrong
+        """Remote control by tell: "<key> follow|softquit|softrestart|help|!abort|!resign|!draw", and "unfollow". Wrong
         keys get no answer; the ! commands are a fixed list, never raw server commands."""
         name, words = found["name"], found["text"].split()
         if words == ["unfollow"]:
@@ -538,9 +540,10 @@ class engine_player:
             if name not in self.followers:
                 self.followers = (self.followers + [name])[-max_followers:]
             await self.send(f"tell {name} Hi! I will tell you why I play each move. 'tell {self.name} unfollow' stops.")
-        elif command == "softquit":
+        elif command in ("softquit", "softrestart"):
+            self.restart = command == "softrestart"
             await self.stop()
-            await self.send(f"tell {name} OK, I stop after this game.")
+            await self.send(f"tell {name} OK, I {'restart' if self.restart else 'stop'} after this game.")
         elif command == "help":
             await self.send(f"tell {name} Commands after the key: {', '.join(remote_commands)}; and unfollow.")
         elif self.game is None:
@@ -1080,7 +1083,8 @@ def run(options, parser):
         try:
             if player is not None:
                 await player.start()
-            return await run_client(options, commands, show, transcript=transcript, player=player)
+            status = await run_client(options, commands, show, transcript=transcript, player=player)
+            return restart_status if status == 0 and player is not None and player.restart else status
         finally:
             if player is not None:
                 await player.close()

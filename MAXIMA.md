@@ -1466,7 +1466,9 @@ FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and
 whispering. With `MAXDRONE_KEY` set in the environment (never in a file it writes or a
 log: the key is masked in the terminal and wire logs), the owner can steer it by tell:
 `tell <name> <key> follow` sends the same explanations as tells (`unfollow` stops),
-`softquit` stops after the game, `help` lists the commands, and `!abort`, `!resign`,
+`softquit` stops after the game, `softrestart` stops after the game with exit status 75
+so a supervisor loop (`while ...; [ $? -eq 75 ]`) starts it again with the latest code,
+`help` lists the commands, and `!abort`, `!resign`,
 `!draw` act on the current game. After each saved game, followers also get what
 Maxima learned: the opening moves it kept, the score against that opponent, and on a
 loss the revenge line it filed. Only this fixed list is accepted; a wrong key gets no
