@@ -1936,13 +1936,14 @@ bool search_t::is_improving() const {
         return false;
     }
     // Compare with the same side's last evaluated position, skipping checks.
+    // Without one, assume improvement.
     for (int distance = 2; distance <= 4 && distance <= brd.ply; distance += 2) {
         const auto & previous = *(stack - distance);
         if (previous.eval_result != score::INVALID) {
             return stack->eval_result > previous.eval_result;
         }
     }
-    return false;
+    return true;
 }
 
 // A tactical move that survives qsearch and a reduced main search can justify
