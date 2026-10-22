@@ -8,7 +8,7 @@ def parser():
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
-                             "layer_profiles, style_books); "
+                             "layer_profiles, style_books, first_move_wait); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)

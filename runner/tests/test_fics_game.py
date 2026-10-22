@@ -232,6 +232,23 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle("Illegal move (e2e4).")
         self.assertEqual(player.connection.sent, ["e2e4", "refresh"])
 
+    async def test_aborts_when_the_opponent_stalls_before_a_first_move(self):
+        after_e5 = ("<12> rnbqkbnr pppp-ppp -------- ----p--- ----P--- -------- PPPP-PPP RNBQKBNR W 4 1 1 1 1 0 17 "
+                    "GuestHJGC guestNinja 1 3 0 39 39 180000 180000 2 P/e7-e5 (0:00.000) e5 0 0 0")
+        folder = Path(self.directory.name) / "games"
+        player = await self.player("hang", policy=fics.play_policy(first_move_wait=0.1), pgn_dir=folder)
+        await player.handle(after_e4)
+        await player.handle(after_e5)
+        await asyncio.sleep(0.3)
+        self.assertNotIn("abort", player.connection.sent)
+        player.cancel()
+        await player.handle(after_e4.replace(" 17 GuestHJGC", " 18 GuestHJGC"))
+        await asyncio.sleep(0.3)
+        self.assertEqual(player.connection.sent, ["abort"])
+        self.assertTrue(any("no first move" in line for line in self.lines))
+        await player.handle("{Game 18 (GuestHJGC vs. guestNinja) Game aborted on move 1} *")
+        self.assertEqual(list(folder.glob("*.pgn")), [])
+
     async def test_played_game_is_saved_as_pgn(self):
         folder = Path(self.directory.name) / "games"
         player = await self.player("play", pgn_dir=folder)

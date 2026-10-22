@@ -1418,6 +1418,10 @@ fingers the opponent; the first search waits up to two seconds for the reply so
 `UCI_Opponent` carries the rating, title, and computer flag. `--games N` quits
 after N games; `quit` during a game stops seeking and leaves after the game,
 and a second `quit` leaves at once. Unknown settings or wrong types are errors.
+An opponent who lets a fifth of the starting clock pass (at least 15 s, at most
+`first_move_wait`, default 60 s) before their first move is aborted: FICS aborts
+without agreement until both sides have moved. Games aborted that early are
+not saved.
 
 FICS computer accounts must keep the owner, machine, and engine in their finger
 notes (`help computers`), and may only play the engine, time controls, and

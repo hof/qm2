@@ -272,7 +272,7 @@ default_settings = {
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
-    "contempt_window": 100, "layer_profiles": {}, "style_books": {},
+    "contempt_window": 100, "layer_profiles": {}, "style_books": {}, "first_move_wait": 60,
 }
 
 
@@ -298,7 +298,7 @@ class play_policy:
     """When to seek, accept, rematch, and stop; mirrors JDrone's seek pool and rematch limit."""
 
     def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=0, games=None, guest=True,
-                 owner=None, notes=(), contempt_window=100):
+                 owner=None, notes=(), contempt_window=100, first_move_wait=60):
         self.seeks = list(seeks)
         self.seeks_at_once = seeks_at_once
         self.accept = accept
@@ -308,6 +308,11 @@ class play_policy:
         self.owner = owner
         self.notes = list(notes)
         self.contempt_window = contempt_window
+        self.first_move_wait = first_move_wait
+
+    def opening_wait(self, initial_seconds):
+        """Seconds the opponent gets for their first move: a fifth of the clock, at least 15, at most first_move_wait."""
+        return min(self.first_move_wait, max(15, initial_seconds / 5))
 
     def seek_commands(self):
         """A random draw from the pool; guests can only play unrated."""
@@ -373,7 +378,7 @@ class engine_player:
         self.connection = None
         self.context = self.session = None
         self.game = self.history = self.token = None
-        self.task = self.searched = self.retried = None
+        self.task = self.searched = self.retried = self.waiting = None
         self.name = self.opponent = self.last_opponent = None
         self.opponent_ready = asyncio.Event()
         self.opponent_ready.set()
@@ -396,6 +401,27 @@ class engine_player:
     def cancel(self):
         if self.task is not None and not self.task.done():
             self.task.cancel()
+        self.stop_waiting()
+
+    def stop_waiting(self):
+        if self.waiting is not None:
+            self.waiting.cancel()
+            self.waiting = None
+
+    def watch_first_move(self, position):
+        """FICS aborts without agreement until both sides have moved, so an opponent who lets the opening
+        wait pass before their first move does not hold us up."""
+        if position.relation != fics_game.playing_their_move or self.history.board.ply() >= 2:
+            self.stop_waiting()
+        elif self.waiting is None:
+            wait = self.policy.opening_wait(position.initial_seconds)
+            self.waiting = asyncio.ensure_future(self.abort_unless_moved(self.game, self.history.board.ply(), wait))
+
+    async def abort_unless_moved(self, game, ply, wait):
+        await asyncio.sleep(wait)
+        if self.game == game and self.history is not None and self.history.board.ply() == ply:
+            self.on_line(f"-- aborting game {game}: no first move from the opponent in {wait:.0f}s")
+            await self.send("abort")
 
     async def on_login(self, name):
         """A new session: any earlier game was forfeited (noescape), so start seeking again."""
@@ -546,6 +572,8 @@ class engine_player:
     def save(self, end):
         if self.pgn_dir is None or self.record is None or self.history is None or not self.history.board.move_stack:
             return
+        if end["result"] == "*" and self.history.board.ply() < 2:
+            return  # aborted before both sides moved: nothing to learn
         self.record.headers.update(self.headers(end))
         game = self.record.game(self.history.board, end["result"], end["reason"])
         try:
@@ -586,6 +614,7 @@ class engine_player:
         elif self.history.update(position) == "move":
             mover_ms = position.black_ms if position.turn == chess.WHITE else position.white_ms
             self.record.on_move(self.history.board, mover_ms / 1000, position.elapsed)
+        self.watch_first_move(position)
         if position.relation != fics_game.playing_my_move:
             return
         board = self.history.board
@@ -741,7 +770,7 @@ def load_settings(path):
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
              "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
-             "layer_profiles": dict, "style_books": dict}
+             "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float)}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -831,7 +860,8 @@ def run(options, parser):
     policy = play_policy(configured["seeks"], configured["seeks_at_once"], configured["accept"],
                          configured["rematches"], configured["games"], guest=options.handle == "guest",
                          owner=configured["owner"], notes=configured["notes"],
-                         contempt_window=configured["contempt_window"])
+                         contempt_window=configured["contempt_window"],
+                         first_move_wait=configured["first_move_wait"])
     pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or data_root() / "experience" / "games" / "fics")
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
     if not valid_handle(options.handle):
