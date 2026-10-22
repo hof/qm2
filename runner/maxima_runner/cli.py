@@ -198,8 +198,8 @@ def main(argv=None):
             from . import download_tablebases
             entrypoint = download_tablebases.main
         elif command == "fics":
-            from . import fics
-            entrypoint = fics.main
+            from . import fics_cli
+            entrypoint = fics_cli.main
         else:
             parser.error(f"unknown command: {command}")
         # Existing subcommands retain their argparse interfaces.
