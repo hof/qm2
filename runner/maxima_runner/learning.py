@@ -23,6 +23,7 @@ result_share = 0.2
 signature_wins = 3
 signature_share = 0.7
 signature_eval = 0.45
+revenge_plies = 24  # the opening of a lost game whose moves we play back at the opponent
 game_types = ("lightning", "blitz", "standard")
 
 
@@ -239,18 +240,19 @@ def write_book(weights, book_path):
 
 
 # Multi-layer book profiles (MAXIMA.md 9.7): percentages per layer; "search" is the share of games
-# that leave the book once, at a random ply, so the engine can bring in new moves.
+# that leave the book once, at a random ply, so the engine can bring in new moves; "revenge" is the chance
+# to play an opponent's winning line back at them.
 style_names = ("fire", "draw", "experiment")
 layer_names = ("book",) + style_names + ("mood", "global", "group", "opponent")
 layer_profiles = {
     "equal": {"book": 45, "fire": 0, "draw": 0, "experiment": 0, "mood": 10, "global": 15, "group": 5,
-              "opponent": 25, "search": 5},
+              "opponent": 25, "search": 5, "revenge": 30},
     "weaker": {"book": 20, "fire": 25, "draw": 0, "experiment": 0, "mood": 10, "global": 5, "group": 5,
-               "opponent": 35, "search": 5},
+               "opponent": 35, "search": 5, "revenge": 40},
     "stronger": {"book": 30, "fire": 0, "draw": 25, "experiment": 0, "mood": 0, "global": 10, "group": 10,
-                 "opponent": 25, "search": 5},
+                 "opponent": 25, "search": 5, "revenge": 15},
     "unrated": {"book": 30, "fire": 30, "draw": 0, "experiment": 10, "mood": 15, "global": 15, "group": 0,
-                "opponent": 0, "search": 10},
+                "opponent": 0, "search": 10, "revenge": 50},
 }
 
 
@@ -331,6 +333,7 @@ class opening_book:
         self.totals = ({}, {}, {})  # the same per position: key -> games
         self.analyses = {}  # key -> {move: [depth, centipawns, mate, think_ms, halfmove clock]}
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
+        self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
         opponent = (opponent or "").lower()
         for record in records:
             weight = 1.0 if record["type"] == game_type else 0.5
@@ -343,6 +346,8 @@ class opening_book:
                 layers.append((2, weight))
                 first = 0 if record.get("color") == "white" else 1
                 ours = {tuple(played) for played in record.get("moves", [])[first::2]}
+            if opponent and record["opponent"].lower() == opponent and record.get("color") in ("white", "black"):
+                self.track_revenge(record)
             for key, move, evaluated, result in record["values"]:
                 if (key, move) in ours:
                     convincing = result == 1.0 and (evaluated is None or evaluated >= signature_eval)
@@ -358,6 +363,15 @@ class opening_book:
                 known = moves.get(move)
                 if known is None or (think_ms, depth) > (known[3], known[0]):
                     moves[move] = [depth, centipawns, mate, think_ms, clock]
+
+    def track_revenge(self, record):
+        """A loss gives us the opponent's line for their colour; a win with that colour serves the revenge."""
+        ours = chess.WHITE if record["color"] == "white" else chess.BLACK
+        if record.get("score") == 0.0:
+            first = 1 if ours == chess.WHITE else 0
+            self.revenge[not ours] = {tuple(played) for played in record.get("moves", [])[:revenge_plies][first::2]}
+        elif record.get("score") == 1.0:
+            self.revenge.pop(ours, None)
 
     def value(self, evaluated, result):
         """Maxima's eval is the main signal; the result adds what evals miss, such as time trouble."""
@@ -461,15 +475,36 @@ class opening_book:
                  for move, parts in shares.items()}
         search /= total
         signature = self.signature(key, moves)
-        if signature is not None and moves[signature][0] < signature_share:
+        if signature is not None:
             # The signature line: same opening again, with some variety left.
-            mine = signature_share / moves[signature][0]
-            rest = (1 - signature_share) / (1 - moves[signature][0])
-            moves = {move: (probability * (mine if move == signature else rest),
-                            {name: part * (mine if move == signature else rest) for name, part in parts.items()})
-                     for move, (probability, parts) in moves.items()}
-            search *= rest
+            moves, search = self.boost(moves, search, signature, signature_share)
+        revenge = self.revenge_move(board, key, moves)
+        if revenge is not None and revenge != signature:
+            # Revenge: the line this opponent beat us with, played back at them.
+            moves, search = self.boost(moves, search, revenge, self.weights.get("revenge", 0) / 100)
         return moves, in_book, search
+
+    @staticmethod
+    def boost(moves, search, chosen, share):
+        """Raise one move to share, scaling the other moves and the search chance down to make room."""
+        probability = moves[chosen][0]
+        if probability >= share or probability >= 1:
+            return moves, search
+        rest = (1 - share) / (1 - probability)
+        boosted = {}
+        for move, (old, parts) in moves.items():
+            if move != chosen:
+                boosted[move] = (old * rest, {name: part * rest for name, part in parts.items()})
+            elif old > 0:
+                boosted[move] = (share, {name: part * share / old for name, part in parts.items()})
+            else:
+                boosted[move] = (share, {"opponent": share})
+        return boosted, search * rest
+
+    def revenge_move(self, board, key, moves):
+        """The opponent's own move from the line they beat us with, when it is a candidate here."""
+        line = self.revenge.get(board.turn, set())
+        return next((move for move in sorted(moves, key=chess.Move.uci) if (key, move.uci()) in line), None)
 
     def signature(self, key, moves):
         """Our move that beat this opponent convincingly several times in a row here, if any."""
@@ -506,10 +541,13 @@ class opening_book:
             analysis = analyses.get(move.uci())
             # Out of book a learned move must have real evidence: several games scoring well, or an
             # analysis that took at least this game's budget.
-            if in_book or (games >= 2 and rate >= 0.5) or (analysis and analysis[3] >= budget_ms):
+            revenge = self.revenge_move(board, key, moves)
+            if in_book or move == revenge or (games >= 2 and rate >= 0.5) or (analysis and analysis[3] >= budget_ms):
                 reason = self.describe(*moves[move])
                 if move == self.signature(key, moves):
                     reason = "signature " + reason
+                elif move == revenge:
+                    reason = "revenge " + reason
                 return move, reason
         if analyses:
             text, (depth, centipawns, mate, think_ms, clock) = max(analyses.items(),

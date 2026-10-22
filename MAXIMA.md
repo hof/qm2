@@ -1177,17 +1177,27 @@ base: its moves are good in principle), the style books `fire` (sharp, e.g.
 gambits), `draw` (playing for the draw), and `experiment`, the week's `mood`, and the
 learned layers, each with a percentage from the game's profile:
 
-| profile | book | fire | draw | experiment | mood | global | group | opponent | search |
-|---|---|---|---|---|---|---|---|---|---|
-| equal | 45 | 0 | 0 | 0 | 10 | 15 | 5 | 25 | 5 |
-| much weaker | 20 | 25 | 0 | 0 | 10 | 5 | 5 | 35 | 5 |
-| much stronger | 30 | 0 | 25 | 0 | 0 | 10 | 10 | 25 | 5 |
-| unrated | 30 | 30 | 0 | 10 | 15 | 15 | 0 | 0 | 10 |
+| profile | book | fire | draw | experiment | mood | global | group | opponent | search | revenge |
+|---|---|---|---|---|---|---|---|---|---|---|
+| equal | 45 | 0 | 0 | 0 | 10 | 15 | 5 | 25 | 5 | 30 |
+| much weaker | 20 | 25 | 0 | 0 | 10 | 5 | 5 | 35 | 5 | 40 |
+| much stronger | 30 | 0 | 25 | 0 | 0 | 10 | 10 | 25 | 5 | 15 |
+| unrated | 30 | 30 | 0 | 10 | 15 | 15 | 0 | 0 | 10 | 50 |
+
+The layers sum to 100. `search` is the chance per game to leave the book once at a random
+ply, so the engine can bring in new moves; `revenge` is the least probability of the
+opponent's own winning line (below).
 
 Rated games slide from *equal* toward *much weaker* or *much stronger* with
 the draw contempt (none within ±0.20, fully at ±1.00); unrated games (guests)
 play fire, experiment, and the mood. book.bin is the source of truth and is never
 rewritten; other layers only add to it.
+
+**Revenge.** When an opponent (guest or registered) beats Maxima, their moves from the
+first 24 plies become our line for their colour: next time Maxima has that colour against
+them, each of those moves gets at least the profile's `revenge` probability where it is
+legal and no deeper search preferred another move, labelled `revenge` in the log. A win
+with that colour serves the revenge; a newer loss replaces the line.
 
 **Moods.** Like a human who is "in a Dutch mood lately", Maxima plays one theme
 repertoire a week: `books/moods/<name>.pgn` (traxler, dutch, dragon, kings_indian,

@@ -147,8 +147,9 @@ class selection_tests(unittest.TestCase):
         book = self.opening(records, **options)
         counts, reasons = {}, set()
         for _ in range(trials):
-            move, reason = book.choose(board or chess.Board(), 5000)
-            counts[move.uci()] = counts.get(move.uci(), 0) + 1
+            move, reason = book.choose(board or chess.Board(), 5000) or (None, "search")
+            name = move.uci() if move else "search"
+            counts[name] = counts.get(name, 0) + 1
             reasons.add(reason.split(":")[0].split()[0])
         return counts, reasons
 
@@ -188,6 +189,28 @@ class selection_tests(unittest.TestCase):
         self.assertNotIn("signature", self.picks([game(1.0)] * 3, opponent="Mary")[1])
         # One bad game resets the streak; new convincing wins bring the line back.
         self.assertIn("signature", self.picks([game(0.0)] + [game(1.0)] * 3)[1])
+
+    def test_revenge_plays_the_opponents_winning_line_back_until_it_wins(self):
+        board = board_after("e2e4 e7e5")
+        key = f"{chess.polyglot.zobrist_hash(board):016x}"
+
+        def game(score, color, opponent="John"):
+            played = record([[key, "f2f4", 1 - score if color == "black" else score]], opponent=opponent)
+            moves = [[start_key, "e2e4"], [f"{chess.polyglot.zobrist_hash(board_after('e2e4')):016x}", "e7e5"],
+                     [key, "f2f4"]]
+            played.update(moves=moves, color=color, score=score)
+            return played
+
+        polyglot_book(self.book, [(board, "g1f3", 100)])  # book.bin plays 3.Nf3 here
+        lost = game(0.0, "black")  # John beat us with the King's Gambit
+        counts, reasons = self.picks([lost], board=board, rated=False)
+        self.assertIn("revenge", reasons)
+        self.assertGreater(counts.get("f2f4", 0), 180, counts)  # at least 50% as a guest game
+        rated, _ = self.picks([lost], board=board)
+        self.assertGreater(rated.get("f2f4", 0), 110, rated)  # at least 30% when rated and equal
+        self.assertNotIn("revenge", self.picks([lost], board=board, opponent="Mary", rated=False)[1])
+        # Our own win with White serves the revenge.
+        self.assertNotIn("revenge", self.picks([lost, game(1.0, "white")], board=board, rated=False)[1])
 
     def test_proven_losers_drop_even_in_book(self):
         counts, _ = self.picks([record([[start_key, "e2e4", 0.0]]) for _ in range(8)])
