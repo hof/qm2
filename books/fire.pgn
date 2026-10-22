@@ -1,0 +1,149 @@
+; Sharp repertoire: used against much weaker opponents (negative draw contempt).
+; Each game is one line; [Repertoire] is the side Maxima plays.
+; Edit freely, then run: ./maxima experience:repertoire
+
+[Event "King's Gambit, Kieseritzky"]
+[Repertoire "white"]
+
+1. e4 e5 2. f4 exf4 3. Nf3 g5 4. h4 g4 5. Ne5 Nf6 6. Bc4 d5 7. exd5 Bd6 8. d4 *
+
+[Event "King's Gambit, Fischer Defence"]
+[Repertoire "white"]
+
+1. e4 e5 2. f4 exf4 3. Nf3 d6 4. d4 g5 5. h4 g4 6. Ng1 f3 7. gxf3 Be7 8. Be3 *
+
+[Event "King's Gambit, Falkbeer"]
+[Repertoire "white"]
+
+1. e4 e5 2. f4 d5 3. exd5 exf4 4. Nf3 Nf6 5. c4 c6 6. d4 *
+
+[Event "King's Gambit Declined, Classical"]
+[Repertoire "white"]
+
+1. e4 e5 2. f4 Bc5 3. Nf3 d6 4. c3 Nf6 5. fxe5 dxe5 6. d4 exd4 7. cxd4 Bb4+ 8. Bd2 *
+
+[Event "King's Gambit, Nc6"]
+[Repertoire "white"]
+
+1. e4 e5 2. f4 Nc6 3. Nf3 exf4 4. d4 g5 5. h4 g4 6. Ng5 h6 7. Nxf7 Kxf7 8. Bc4+ *
+
+[Event "Smith-Morra Gambit"]
+[Repertoire "white"]
+
+1. e4 c5 2. d4 cxd4 3. c3 dxc3 4. Nxc3 Nc6 5. Nf3 d6 6. Bc4 e6 7. O-O Nf6 8. Qe2 *
+
+[Event "Smith-Morra, 3...Nf6"]
+[Repertoire "white"]
+
+1. e4 c5 2. d4 cxd4 3. c3 Nf6 4. e5 Nd5 5. Nf3 Nc6 6. Bc4 Nb6 7. Bb3 *
+
+[Event "French, Alekhine-Chatard Attack"]
+[Repertoire "white"]
+
+1. e4 e6 2. d4 d5 3. Nc3 Nf6 4. Bg5 Be7 5. e5 Nfd7 6. h4 Bxg5 7. hxg5 Qxg5 8. Nh3 *
+
+[Event "French, Winawer 7.Qg4"]
+[Repertoire "white"]
+
+1. e4 e6 2. d4 d5 3. Nc3 Bb4 4. e5 c5 5. a3 Bxc3+ 6. bxc3 Ne7 7. Qg4 *
+
+[Event "Caro-Kann Advance, Bayonet"]
+[Repertoire "white"]
+
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Nc3 e6 5. g4 Bg6 6. Nge2 c5 7. h4 h5 8. Nf4 *
+
+[Event "Scandinavian, 3...Qa5"]
+[Repertoire "white"]
+
+1. e4 d5 2. exd5 Qxd5 3. Nc3 Qa5 4. d4 Nf6 5. Nf3 c6 6. Bc4 Bf5 7. Bd2 e6 8. Nd5 *
+
+[Event "Scandinavian, 2...Nf6"]
+[Repertoire "white"]
+
+1. e4 d5 2. exd5 Nf6 3. d4 Nxd5 4. c4 Nb6 5. Nf3 g6 6. h3 *
+
+[Event "Pirc, Austrian Attack"]
+[Repertoire "white"]
+
+1. e4 d6 2. d4 Nf6 3. Nc3 g6 4. f4 Bg7 5. Nf3 O-O 6. Bd3 Na6 7. O-O c5 8. d5 *
+
+[Event "Alekhine, Four Pawns"]
+[Repertoire "white"]
+
+1. e4 Nf6 2. e5 Nd5 3. d4 d6 4. c4 Nb6 5. f4 dxe5 6. fxe5 Nc6 7. Be3 Bf5 8. Nc3 *
+
+[Event "Sicilian Najdorf, 6.Bg5"]
+[Repertoire "black"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Bg5 e6 7. f4 Qb6 *
+
+[Event "Sicilian Najdorf, English Attack"]
+[Repertoire "black"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Be3 e5 7. Nb3 Be6 8. f3 *
+
+[Event "Sicilian Dragon, Yugoslav"]
+[Repertoire "black"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 g6 6. Be3 Bg7 7. f3 Nc6 8. Qd2 O-O *
+
+[Event "Sicilian vs Alapin"]
+[Repertoire "black"]
+
+1. e4 c5 2. c3 d5 3. exd5 Qxd5 4. d4 Nf6 5. Nf3 Bg4 6. Be2 e6 *
+
+[Event "Sicilian vs Closed"]
+[Repertoire "black"]
+
+1. e4 c5 2. Nc3 Nc6 3. g3 g6 4. Bg2 Bg7 5. d3 d6 6. f4 e5 *
+
+[Event "Sicilian vs Rossolimo"]
+[Repertoire "black"]
+
+1. e4 c5 2. Nf3 d6 3. Bb5+ Bd7 4. Bxd7+ Qxd7 5. O-O Nc6 6. c3 Nf6 *
+
+[Event "King's Indian, Mar del Plata"]
+[Repertoire "black"]
+
+1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6 5. Nf3 O-O 6. Be2 e5 7. O-O Nc6 8. d5 Ne7 *
+
+[Event "King's Indian, Samisch"]
+[Repertoire "black"]
+
+1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6 5. f3 O-O 6. Be3 e5 7. d5 Nh5 *
+
+[Event "King's Indian, Four Pawns"]
+[Repertoire "black"]
+
+1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6 5. f4 O-O 6. Nf3 c5 7. d5 e6 *
+
+[Event "Budapest Gambit"]
+[Repertoire "black"]
+
+1. d4 Nf6 2. c4 e5 3. dxe5 Ng4 4. Bf4 Nc6 5. Nf3 Bb4+ 6. Nbd2 Qe7 *
+
+[Event "King's Indian vs Nf3"]
+[Repertoire "black"]
+
+1. d4 Nf6 2. Nf3 g6 3. c4 Bg7 4. Nc3 O-O 5. e4 d6 6. Be2 e5 *
+
+[Event "King's Indian vs London"]
+[Repertoire "black"]
+
+1. d4 Nf6 2. Bf4 g6 3. e3 Bg7 4. Nf3 O-O 5. Be2 d6 6. h3 c5 *
+
+[Event "Reversed Sicilian"]
+[Repertoire "black"]
+
+1. c4 e5 2. Nc3 Nf6 3. Nf3 Nc6 4. g3 d5 5. cxd5 Nxd5 6. Bg2 Nb6 *
+
+[Event "King's Indian vs Reti"]
+[Repertoire "black"]
+
+1. Nf3 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6 5. d4 O-O *
+
+[Event "Dutch vs 1.d4 alternatives"]
+[Repertoire "black"]
+
+1. Nf3 Nf6 2. g3 g6 3. Bg2 Bg7 4. O-O O-O 5. d3 d6 6. e4 e5 *
+

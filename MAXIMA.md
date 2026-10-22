@@ -1192,8 +1192,21 @@ that drew count as near-losses; decisive lines are preferred), as JDrone's draw
 factor. Book.bin moves have no result statistics, so this cannot yet steer the
 book itself toward solid or sharp openings.
 
+**Multi-layer book.** A style book is blended over book.bin per game: each
+book's weights become shares per position, mixed as `(1 - share) × book.bin +
+share × style`, so book.bin is always consulted and style moves book.bin barely
+knows (a King's Gambit) can still be chosen. Rated opponents follow the draw
+contempt: `fire.bin` against weaker players, `solid.bin` against stronger ones,
+share 0 within ±0.20 rising to 1 at ±1.00. Unrated opponents (guests) are for
+experiments: `experiment.bin` (else `fire.bin`) at `unrated_style_share`
+(default 0.5). Learned results sit above both and still decide when present.
+Any Polyglot file works as a style book; `./maxima experience:repertoire` builds
+them from `books/{fire,solid,experiment}.pgn`, one line per game tagged
+`[Repertoire "white"|"black"]` so only our side's moves enter the book. The
+.bin files sit beside book.bin and are not tracked.
+
 Moves are labelled by source in the terminal and PGN comment: `book`
-(book.bin), `learned` (experience, with the estimated score and games), and
+(book.bin, or `book fire 100%` when the style book has the move), `learned` (experience, with the estimated score and games), and
 `recalled` (earlier analysis). Defaults: prior strength 8 games per layer,
 book moves under a tenth of the heaviest book weight need evidence, superseding
 analysis needs depth 16 and two plies more, horizon 40 plies. `variety` (setting

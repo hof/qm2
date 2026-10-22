@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import random
 import re
+import struct
 
 import chess
 import chess.pgn
@@ -217,6 +218,64 @@ def build(experience_dir, games_dir=None):
             "built": datetime.now().isoformat(timespec="seconds")}
 
 
+def polyglot_code(board, move):
+    """Polyglot move encoding; castling is written as the king taking its own rook."""
+    target = move.to_square
+    if board.is_castling(move):
+        target = chess.square(7 if chess.square_file(move.to_square) > 4 else 0, chess.square_rank(move.to_square))
+    promotion = {chess.KNIGHT: 1, chess.BISHOP: 2, chess.ROOK: 3, chess.QUEEN: 4}.get(move.promotion, 0)
+    return (chess.square_file(target) | chess.square_rank(target) << 3 | chess.square_file(move.from_square) << 6
+            | chess.square_rank(move.from_square) << 9 | promotion << 12)
+
+
+def build_repertoire(pgn_path, book_path, plies=30):
+    """A Polyglot book of our side's moves: each repertoire line adds weight 1 to its moves.
+
+    Games carry [Repertoire "white"] or [Repertoire "black"]; opponent moves are only the path."""
+    weights = {}
+    with open(pgn_path, encoding="utf-8-sig") as stream:
+        while True:
+            game = chess.pgn.read_game(stream)
+            if game is None:
+                break
+            side = game.headers.get("Repertoire")
+            if game.errors or side not in ("white", "black"):
+                raise ValueError(f"{pgn_path}: bad repertoire line {game.headers.get('Event', '?')!r}")
+            ours = chess.WHITE if side == "white" else chess.BLACK
+            board = game.board()
+            for node in list(game.mainline())[:plies]:
+                if board.turn == ours:
+                    entry = (chess.polyglot.zobrist_hash(board), polyglot_code(board, node.move))
+                    weights[entry] = weights.get(entry, 0) + 1
+                board.push(node.move)
+    temporary = Path(book_path).with_suffix(".tmp")
+    with open(temporary, "wb") as stream:
+        for (key, code), weight in sorted(weights.items()):
+            stream.write(struct.pack(">QHHI", key, code, min(weight, 0xffff), 0))
+    temporary.replace(book_path)
+    return len(weights)
+
+
+def style_share(contempt):
+    """How much of the style book to blend in: none within ±0.20, all at ±1.00."""
+    if contempt is None:
+        return 0.0
+    return max(0.0, min(1.0, (abs(contempt) - 20) / 80))
+
+
+def choose_style(contempt, style_books, unrated_share=0.5):
+    """(style, share) for this game's multi-layer book.
+
+    Unrated opponents (guests) are for experiments: experiment.bin, else fire.bin, at unrated_share.
+    Rated ones follow the draw contempt: fire.bin against weaker, solid.bin against stronger."""
+    available = {style for style, path in (style_books or {}).items() if path and Path(path).is_file()}
+    if contempt is None:
+        style = next((style for style in ("experiment", "fire") if style in available), None)
+        return style, unrated_share if style else 0.0
+    style = "fire" if contempt < 0 else "solid"
+    return style, style_share(contempt) if style in available else 0.0
+
+
 def per_move_budget_ms(clock_seconds, increment_seconds):
     """Roughly what the engine spends on a move: a thirtieth of the clock plus the increment."""
     return max(0.0, clock_seconds / 30 + increment_seconds) * 1000
@@ -226,8 +285,12 @@ class opening_book:
     """One game's view of the experience: layered results, analyses, and book.bin (MAXIMA.md 9.7)."""
 
     def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
-                 variety=1.0, supersede_depth=16, random_source=None, contempt=None):
+                 variety=1.0, supersede_depth=16, random_source=None, contempt=None, style_books=None,
+                 unrated_share=0.5):
         self.book_path = book_path
+        # Multi-layer book: a style book blended over book.bin (MAXIMA.md 9.7).
+        self.style, self.style_share = choose_style(contempt, style_books, unrated_share)
+        self.style_path = (style_books or {}).get(self.style)
         # JDrone's draw factor, tied to DrawContempt: a draw is worth up to 0.95 against much stronger
         # opponents and down to 0.05 against much weaker ones.
         self.draw_value = 0.5 if contempt is None else 0.5 + 0.45 * max(-1.0, min(1.0, contempt / 100))
@@ -267,17 +330,28 @@ class opening_book:
             games = count if count else games
         return rate, self.prior + games, self.layers[0].get((key, move), (0.0, 0.0, 0.0))[2]
 
-    def book_moves(self, board):
-        if not self.book_path:
+    @staticmethod
+    def read_book(path, board):
+        """Move shares (summing to 1) from a Polyglot book; empty when absent or unreadable."""
+        if not path:
             return {}
         weights = {}
         try:
-            with chess.polyglot.open_reader(str(self.book_path)) as reader:
+            with chess.polyglot.open_reader(str(path)) as reader:
                 for entry in reader.find_all(board):
                     weights[entry.move] = weights.get(entry.move, 0) + entry.weight
         except (OSError, ValueError, IndexError):
             return {}
-        return weights
+        total = sum(weights.values())
+        return {move: weight / total for move, weight in weights.items()} if total else {}
+
+    def book_moves(self, board):
+        main = self.read_book(self.book_path, board)
+        style = self.read_book(self.style_path, board) if self.style_share > 0 else {}
+        if not style:
+            return main
+        share = self.style_share if main else 1.0
+        return {move: (1 - share) * main.get(move, 0) + share * style.get(move, 0) for move in set(main) | set(style)}
 
     def superseded(self, analyses, move):
         """A clearly deeper search in this position preferred another move."""
@@ -311,7 +385,9 @@ class opening_book:
                 return move, f"learned {rate:.0%} of {games:g}"
         weighted = sorted((move for move in candidates if move in book), key=chess.Move.uci)
         if weighted:
-            return self.random.choices(weighted, [book[move] for move in weighted])[0], "book"
+            move = self.random.choices(weighted, [book[move] for move in weighted])[0]
+            style = self.read_book(self.style_path, board) if self.style_share > 0 else {}
+            return move, f"book {self.style} {self.style_share:.0%}" if move in style else "book"
         if analyses:
             text, (depth, centipawns, mate, think_ms, clock) = max(analyses.items(),
                                                                    key=lambda item: (item[1][3], item[1][0]))
@@ -324,8 +400,11 @@ class opening_book:
 class learner:
     """MaxDrone's experience: digests kept in memory, a fresh opening_book per game."""
 
-    def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0):
+    def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0, style_books=None,
+                 unrated_share=0.5):
         self.experience_dir = Path(experience_dir)
+        self.style_books = style_books
+        self.unrated_share = unrated_share
         self.games_dir = Path(games_dir or self.experience_dir / "games" / "fics")
         self.book_path = book_path
         self.variety = variety
@@ -333,7 +412,7 @@ class learner:
 
     def for_game(self, opponent, group, game_type, contempt=None):
         return opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety,
-                            contempt=contempt)
+                            contempt=contempt, style_books=self.style_books, unrated_share=self.unrated_share)
 
     def add(self, game):
         record = digest(game)
@@ -355,4 +434,28 @@ def main():
     summary = build(options.experience_dir)
     print(f"{summary['games']} games, {summary['decided']} with a detected decision, "
           f"{summary['players']} opponents")
+    return 0
+
+
+def repertoire_main():
+    from .project import project_root
+    parser = argparse.ArgumentParser(
+        prog="maxima experience:repertoire",
+        description="Build the style books of the multi-layer book (MAXIMA.md 9.7) from repertoire PGNs.")
+    parser.add_argument("--books-dir", default=str(project_root() / "books"),
+                        help="reads <style>.pgn (default: books/)")
+    parser.add_argument("--output-dir", default=str(project_root()),
+                        help="writes <style>.bin beside book.bin (default: project root)")
+    parser.add_argument("--plies", type=int, default=30, help="moves per line to include (default: 30)")
+    options = parser.parse_args()
+    built = 0
+    for style in ("fire", "solid", "experiment"):
+        source = Path(options.books_dir) / f"{style}.pgn"
+        if not source.is_file():
+            continue
+        target = Path(options.output_dir) / f"{style}.bin"
+        print(f"{target}: {build_repertoire(source, target, options.plies)} entries from {source}")
+        built += 1
+    if not built:
+        parser.error(f"no fire.pgn, solid.pgn or experiment.pgn in {options.books_dir}")
     return 0

@@ -42,6 +42,9 @@
 __pycache__/
 
 /book.bin
+/fire.bin
+/solid.bin
+/experiment.bin
 
 /book.bin:Zone.Identifier
 

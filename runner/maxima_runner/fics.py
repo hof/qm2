@@ -273,7 +273,7 @@ default_settings = {
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
-    "contempt_window": 100,
+    "contempt_window": 100, "unrated_style_share": 0.5,
 }
 
 
@@ -740,7 +740,8 @@ def load_settings(path):
         raise ValueError(f"{path}: expected a JSON object")
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
-             "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int}
+             "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
+             "unrated_style_share": (int, float)}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -771,7 +772,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
-                             "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window); "
+                             "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
+                             "unrated_style_share); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
@@ -859,7 +861,10 @@ def main():
         if configured["learning"] and not options.no_engine:
             # index/ and players/ sit beside games/<server>/, so a custom --pgn-dir keeps them together
             learner = learning.learner(pgn_dir.parent.parent, pgn_dir, project_root() / "book.bin",
-                                       configured["variety"])
+                                       configured["variety"],
+                                       {style: project_root() / f"{style}.bin"
+                                        for style in ("fire", "solid", "experiment")},
+                                       configured["unrated_style_share"])
             show(f"-- experience: {len(learner.records)} games")
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
                                                                   pgn_dir=pgn_dir, site=options.host, learner=learner)

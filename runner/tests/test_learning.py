@@ -206,3 +206,55 @@ class selection_tests(unittest.TestCase):
         for text in "g1f3 g8f6 f3g1 f6g8".split():
             board.push_uci(text)
         self.assertIsNone(book.choose(board, 5000))
+
+
+class multi_layer_book_tests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        source = self.root / "fire.pgn"
+        source.write_text('[Event "Italian"]\n[Repertoire "white"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. O-O *\n\n'
+                          '[Event "KG"]\n[Repertoire "white"]\n\n1. e4 e5 2. f4 exf4 *\n\n'
+                          '[Event "Najdorf"]\n[Repertoire "black"]\n\n1. e4 c5 2. Nf3 d6 *\n\n')
+        self.fire = self.root / "fire.bin"
+        self.assertEqual(learning.build_repertoire(source, self.fire), 7)
+        self.main = self.root / "book.bin"
+        board = chess.Board()
+        board.push_uci("e2e4")
+        board.push_uci("e7e5")
+        polyglot_book(self.main, [(board, "g1f3", 100)])
+        self.after_e5 = board
+
+    def test_repertoire_holds_only_our_side_and_encodes_castling(self):
+        board = chess.Board()
+        for text in "e2e4 e7e5 g1f3 b8c6 f1c4 g8f6".split():
+            board.push_uci(text)
+        with chess.polyglot.open_reader(str(self.fire)) as reader:
+            self.assertEqual([entry.move.uci() for entry in reader.find_all(board)], ["e1g1"])
+            self.assertEqual([entry.move.uci() for entry in reader.find_all(chess.Board())], ["e2e4"])
+            black = chess.Board()
+            black.push_uci("e2e4")
+            self.assertEqual([entry.move.uci() for entry in reader.find_all(black)], ["c7c5"])
+            self.assertEqual({entry.move.uci(): entry.weight for entry in reader.find_all(self.after_e5)},
+                             {"g1f3": 1, "f2f4": 1})
+
+    def test_style_follows_contempt_and_unrated_opponents_experiment(self):
+        books = {"fire": self.fire, "solid": self.root / "missing.bin", "experiment": self.root / "none.bin"}
+        self.assertEqual(learning.choose_style(-100, books), ("fire", 1.0))
+        self.assertEqual(learning.choose_style(-60, books), ("fire", 0.5))
+        self.assertEqual(learning.choose_style(-10, books), ("fire", 0.0))
+        self.assertEqual(learning.choose_style(100, books), ("solid", 0.0))
+        self.assertEqual(learning.choose_style(None, books), ("fire", 0.5))
+        self.assertEqual(learning.choose_style(None, dict(books, experiment=self.fire)), ("experiment", 0.5))
+
+    def test_style_book_is_blended_over_book_bin(self):
+        books = {"fire": self.fire}
+        for contempt, expected in ((-10, {"g1f3": 1.0}), (-60, {"g1f3": 0.75, "f2f4": 0.25}),
+                                   (-100, {"g1f3": 0.5, "f2f4": 0.5})):
+            book = learning.opening_book([], book_path=self.main, contempt=contempt, style_books=books)
+            shares = {move.uci(): share for move, share in book.book_moves(self.after_e5).items() if share}
+            self.assertEqual(shares, expected)
+        fire = learning.opening_book([], book_path=self.main, contempt=-100, style_books=books)
+        reasons = {fire.choose(self.after_e5, 5000)[1] for _ in range(40)}
+        self.assertEqual(reasons, {"book fire 100%"})
