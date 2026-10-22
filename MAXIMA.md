@@ -1459,7 +1459,7 @@ opponent, unlike kibitz) in plain words:
 
 Searched moves show depth, score (`#5` for mate), `TB` when tablebases were hit, and
 the first six plies of the line, starting with the move played. Book moves name the layer
-that picked them (drawn by its share of the move), then the mix; `base` is book.bin.
+with the largest share (ties to the more specific layer), then the mix; `base` is book.bin.
 
 FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and stops
 whispering. With `MAXDRONE_KEY` set in the environment (never in a file it writes or a
