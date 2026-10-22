@@ -1453,9 +1453,12 @@ The log shows each searched move with depth, score, time, and the expected line
 (`pv`). `whisper` (or `--whisper`) explains every move to observers (never to the
 opponent, unlike kibitz) in plain words:
 
-    e5 | from the book (100%): book.bin 44%, fire 20%, surprise 10%, experience 26%
-    f4 | revenge! John beat me with this line (50%): book.bin 30%, vs John 70%
-    Bd6 | out of book | depth 19, +2.07 for me | expect c4 O-O cxd5 Bxd5
+    book: base 44%, fire 20%, surprise 10%, experience 26%
+    revenge vs John: base 30%, vs John 70%
+    d19 +2.07 Bd6 c4 O-O cxd5 Bxd5 Bxd5 (out of book)
+
+Searched moves show depth, score (`#5` for mate), `TB` when tablebases were hit, and
+the first six plies of the line, starting with the move played; `base` is book.bin.
 
 FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and stops
 whispering. With `MAXDRONE_KEY` set in the environment (never in a file it writes or a

@@ -373,23 +373,23 @@ def mood_title(mood):
     return "the " + mood_names.get(mood, mood.replace("_", " ").title())
 
 
-def book_whisper(san, why, opening):
-    """What observers read for a move from the multi-layer book, e.g. "Nc6 | from the book: book.bin 39%,
-    fire 39%, surprise 10%, experience 12%"."""
+whisper_plies = 6
+
+
+def book_whisper(why, opening):
+    """A book move for observers, e.g. "book: base 39%, fire 39%, surprise 10%, experience 12%"."""
     kind = why[0]
     opponent = opening.names["opponent"]
     if kind == "recalled":
-        return f"{san} | remembered from an earlier search: depth {why[1]}, {why[2]:.0f}s"
+        return f"recalled d{why[1]} {why[2]:.0f}s"
     probability, parts = why[1], why[2]
-    words = {"book": "book.bin", "fire": "fire", "draw": "draw", "experiment": "surprise", "global": "experience",
-             "group": f"{opening.names['group']} experience", "opponent": f"vs {opponent}",
-             "mood": f"{mood_names.get(opening.mood, (opening.mood or '').replace('_', ' ').title())} mood"}
+    words = {"book": "base", "fire": "fire", "draw": "draw", "experiment": "surprise", "global": "experience",
+             "group": opening.names["group"], "opponent": f"vs {opponent}",
+             "mood": f"{(opening.mood or '').replace('_', ' ')} mood"}
     mix = ", ".join(f"{words[name]} {parts[name] / probability:.0%}" for name in learning.layer_names
                     if parts.get(name, 0) >= 0.05 * probability)
-    lead = {"signature": f"signature line vs {opponent}: it keeps winning",
-            "revenge": f"revenge! {opponent} beat me with this line",
-            "learned": "from experience"}.get(kind, "from the book")
-    return f"{san} | {lead} ({probability:.0%}): {mix}" if mix else f"{san} | {lead} ({probability:.0%})"
+    lead = {"signature": f"signature vs {opponent}", "revenge": f"revenge vs {opponent}"}.get(kind, kind)
+    return f"{lead}: {mix}"
 
 
 def learning_report(game, record, records):
@@ -408,18 +408,20 @@ def learning_report(game, record, records):
     return lines
 
 
-def search_whisper(san, info, turn, line, note=None):
-    """What observers read for a searched move: depth, score for Maxima, and the expected reply line."""
+def search_whisper(info, turn, line, note=None):
+    """A searched move for observers: "d15 +4.52 TB Bg2 d5 d4 Nbd7 O-O (out of book)"; the line starts
+    with our move and is cut at whisper_plies."""
     score, depth = info.get("score"), info.get("depth", 0)
-    parts = [san] + ([note] if note else [])
+    parts = []
     if score is not None and depth:
         relative = score.pov(turn)
-        value = f"mate in {relative.mate()}" if relative.is_mate() and relative.mate() > 0 else (
-            f"mated in {-relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f} for me")
-        parts.append(f"depth {depth}, {value}")
-    if line:
-        parts.append(f"expect {line}")
-    return " | ".join(parts)
+        parts += [f"d{depth}", f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}"]
+    if info.get("tbhits"):
+        parts.append("TB")
+    parts += line.split()[:whisper_plies]
+    if note:
+        parts.append(f"({note})")
+    return " ".join(parts)
 
 
 class engine_player:
@@ -792,7 +794,7 @@ class engine_player:
                 self.on_line(f"-- {board.san(move)} {reason} {time.monotonic() - started:.1f}s")
                 self.from_book = True
                 if (self.whispering or self.followers) and self.opening.why:
-                    await self.explain(book_whisper(board.san(move), self.opening.why, self.opening))
+                    await self.explain(book_whisper(self.opening.why, self.opening))
                 return
         try:
             result = await self.session.play(board, limit, game=self.token, opponent=self.opponent,
@@ -817,11 +819,10 @@ class engine_player:
         if self.whispering or self.followers:
             note = None
             if self.opening is not None and self.opening.why == ("left book",):
-                note = "own idea: leaving the book on purpose"
+                note = "own idea"
             elif self.from_book:
                 note = "out of book"
-            reply = pv.split(" ", 1)[1] if " " in pv else ""
-            await self.explain(search_whisper(board.san(result.move), result.info, board.turn, reply, note))
+            await self.explain(search_whisper(result.info, board.turn, pv or board.san(result.move), note))
         self.from_book = False
 
 
