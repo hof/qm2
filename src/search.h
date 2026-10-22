@@ -88,7 +88,6 @@ struct search_stack_t {
     int repetition_start;
     uint8_t pv_count;
     int16_t eval_result;
-    int16_t static_eval; // Corrected evaluation snapshot for the incoming move.
     bool improving;
     bool tt_pv;
     bool lmr_tt_tactical;
@@ -166,14 +165,11 @@ public:
     std::array<U64, 2> correction_context_keys() const;
     int correction_value() const;
     bool tt_eval_enabled;
-    bool tt_search_eval_enabled;
-    int tt_pruning_eval(int static_eval, int value, int bound, bool compatible);
     int corrected_static_eval(int raw);
     void update_correction_history(int value, int bound, int depth);
     bool lmp_enabled;
     bool history_pruning_enabled;
     bool tt_history_enabled;
-    bool eval_history_enabled;
     bool capture_history_enabled;
     bool long_continuation_enabled;
     bool threat_ordering_enabled;
@@ -232,7 +228,7 @@ public:
     int aspiration(int depth, int last_score);
     bool probcut(int alpha, int beta, int depth, int eval, bool cut_node, int & value);
     bool razor_node(int alpha, int beta, int depth, int eval, int & value);
-    bool reverse_futility(int beta, int depth, int static_eval, int eval, int & value);
+    bool reverse_futility(int beta, int depth, int eval, int & value);
     bool prune_futility(move_t & move, int reduced_depth, int searched_moves,
         int best, int alpha, int beta, int gives_check, int eval);
     bool prune_quiet(move_t & move, int depth, int searched_moves, int reduced_depth,
@@ -279,7 +275,6 @@ public:
     int move_history_score(const move_t & move);
     void update_capture_cutoff(const move_t & move, int depth, int searched_moves);
     void take_history(search_t & previous);
-    void update_eval_history(int eval);
     void update_tt_history(int compact_move, int depth);
     void update_quiet_cutoff(move_t * move, int depth, int searched_moves);
     void update_killers(move_t * move);
