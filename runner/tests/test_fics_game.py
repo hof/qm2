@@ -211,6 +211,14 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await self.settle(player)
         self.assertEqual(player.connection.sent, ["e2e4", "whisper e4 | depth 3, +0.25 for me"])
 
+    async def test_muted_account_stops_whispering(self):
+        player = await self.player("play", policy=fics.play_policy(whisper=True))
+        await player.handle("You are muted.")
+        await player.handle(start)
+        await self.settle(player)
+        self.assertEqual(player.connection.sent, ["e2e4"])
+        self.assertTrue(any("whispers off" in line for line in self.lines))
+
     def test_whispers_explain_book_choices_simply(self):
         opening = learning.opening_book([], opponent="John", group="humans", mood="parham")
         parts = {"book": 0.2, "fire": 0.1, "mood": 0.15, "opponent": 0.05, "global": 0.001}

@@ -420,6 +420,7 @@ class engine_player:
         self.on_line = on_line
         self.margin = margin
         self.policy = policy or play_policy()
+        self.whispering = self.policy.whisper
         self.finger_wait = finger_wait
         self.connection = None
         self.context = self.session = None
@@ -537,6 +538,9 @@ class engine_player:
             await self.on_creating(creating_pattern.match(line))
         elif challenge_pattern.match(line):
             await self.on_challenge(challenge_pattern.match(line))
+        elif line.strip() == "You are muted." and self.whispering:
+            self.whispering = False
+            self.on_line("-- whispers off: FICS mutes this account (guests cannot whisper; register one)")
         elif finger_pattern.match(line) and self.opponent is not None:
             found = finger_pattern.match(line)
             if found["name"].lower() == self.opponent.name.lower():
@@ -721,7 +725,7 @@ class engine_player:
                     self.record.on_search(board, move, {"source": reason})
                 self.on_line(f"-- {board.san(move)} {reason} {time.monotonic() - started:.1f}s")
                 self.from_book = True
-                if self.policy.whisper and self.opening.why:
+                if self.whispering and self.opening.why:
                     await self.send(f"whisper {book_whisper(board.san(move), self.opening.why, self.opening)}")
                 return
         try:
@@ -744,7 +748,7 @@ class engine_player:
         pv = variation(board, result.info.get("pv", []))
         self.on_line(f"-- {board.san(result.move)} {summary} {time.monotonic() - started:.1f}s"
                      + (f" pv {pv}" if pv else ""))
-        if self.policy.whisper:
+        if self.whispering:
             note = None
             if self.opening is not None and self.opening.why == ("left book",):
                 note = "own idea: leaving the book on purpose"
