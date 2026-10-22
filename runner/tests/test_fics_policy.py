@@ -178,12 +178,18 @@ class settings_tests(unittest.TestCase):
         profiles = fics.load_settings(self.write({"layer_profiles": {"weaker": {"style": 35}}}))["layer_profiles"]
         self.assertEqual(profiles["weaker"]["style"], 35)
         self.assertEqual(profiles["equal"], learning.layer_profiles["equal"])
+        books = fics.style_books(fics.load_settings(self.write({"style_books": {"fire": "ph-gambitbook.bin",
+                                                                                "solid": "/books/solid.bin"}}))
+                                 ["style_books"])
+        self.assertEqual((books["fire"].name, str(books["solid"]), books["experiment"].name),
+                         ("ph-gambitbook.bin", "/books/solid.bin", "experiment.bin"))
 
     def test_rejects_unknown_keys_and_wrong_types(self):
         for value, message in (({"seek": ["3 0"]}, "unknown"), ({"games": "5"}, "games must be int"),
                                ({"rematches": True}, "rematches must be int"), ({"seeks": [3]}, "strings"), ({"notes": ["x"] * 8}, "at most 7"), ({"owner": 5}, "owner must be str or list"),
                                ({"owner": ["hof", 5]}, "list of handles"),
                                ({"layer_profiles": {"hot": {}}}, "has profiles"),
+                               ({"style_books": {"gambit": "x.bin"}}, "style_books maps"),
                                ({"layer_profiles": {"weaker": {"fire": 3}}}, "takes non-negative"),
                                ({"layer_profiles": {"weaker": {"book": -1}}}, "takes non-negative"),
                                ([], "JSON object")):

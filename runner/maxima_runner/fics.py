@@ -273,8 +273,9 @@ default_settings = {
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
-    "contempt_window": 100, "layer_profiles": {},
+    "contempt_window": 100, "layer_profiles": {}, "style_books": {},
 }
+style_names = ("fire", "solid", "experiment")
 
 
 def playable(game_type, minutes, increment):
@@ -742,7 +743,7 @@ def load_settings(path):
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
              "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
-             "layer_profiles": dict}
+             "layer_profiles": dict, "style_books": dict}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -759,6 +760,9 @@ def load_settings(path):
             raise ValueError(f"{path}: notes must be at most 7 strings (notes 1-3 are generated)")
         if key == "layer_profiles":
             value = layer_profiles(value, path)
+        if key == "style_books" and not all(name in style_names and isinstance(book, str)
+                                            for name, book in value.items()):
+            raise ValueError(f"{path}: style_books maps {', '.join(style_names)} to Polyglot files")
         settings[key] = value
     settings["options"] = {str(name): str(value) for name, value in (settings["options"] or {}).items()}
     return settings
@@ -779,6 +783,14 @@ def layer_profiles(overrides, path):
     return profiles
 
 
+def style_books(configured):
+    """Style book paths: <style>.bin beside book.bin unless the config names a file (relative to the
+    project root), e.g. {"fire": "ph-gambitbook.bin"}."""
+    books = {name: project_root() / f"{name}.bin" for name in style_names}
+    books.update({name: project_root() / Path(path).expanduser() for name, path in (configured or {}).items()})
+    return books
+
+
 def read_commands(loop, commands):
     def reader():
         for line in sys.stdin:
@@ -791,7 +803,7 @@ def main():
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
-                             "layer_profiles); "
+                             "layer_profiles, style_books); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
@@ -880,8 +892,7 @@ def main():
             # index/ and players/ sit beside games/<server>/, so a custom --pgn-dir keeps them together
             learner = learning.learner(pgn_dir.parent.parent, pgn_dir, project_root() / "book.bin",
                                        configured["variety"],
-                                       {style: project_root() / f"{style}.bin"
-                                        for style in ("fire", "solid", "experiment")},
+                                       style_books(configured["style_books"]),
                                        configured["layer_profiles"] or None)
             show(f"-- experience: {len(learner.records)} games")
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,

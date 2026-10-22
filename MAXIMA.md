@@ -1210,7 +1210,10 @@ random ply, so the engine can bring in new moves (a per-move share would
 compound over a game).
 
 Style books are Polyglot files beside book.bin (`fire.bin`, `solid.bin`,
-`experiment.bin`, not tracked); any Polyglot book works. `./maxima
+`experiment.bin`, not tracked); any Polyglot book works, and `style_books` in
+the MaxDrone config points a style at another file, e.g. `{"style_books":
+{"fire": "ph-gambitbook.bin"}}` (relative to the project root). A missing file
+leaves that style's percentage to the other layers. `./maxima
 experience:repertoire` builds them from `books/{fire,solid,experiment}.pgn`,
 one line per game tagged `[Repertoire "white"|"black"]` so only our side's
 moves enter the book.
