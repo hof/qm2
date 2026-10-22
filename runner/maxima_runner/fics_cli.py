@@ -4,11 +4,25 @@ import argparse
 
 def parser():
     """maxima fics arguments; built before python-chess loads, so --help works without it."""
-    parser = argparse.ArgumentParser(prog="maxima fics", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="maxima fics", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="environment:\n"
+               "  FICS_PASSWORD   password for --handle (never logged)\n"
+               "  MAXDRONE_KEY    remote-control key (masked in logs)\n\n"
+               "remote control, from any FICS account:\n"
+               "  tell <name> <key> follow       explain each move to you by tell\n"
+               "  tell <name> unfollow           stop those tells\n"
+               "  tell <name> <key> softquit     stop after this game\n"
+               "  tell <name> <key> softrestart  restart after this game (exit 75, for a supervisor loop)\n"
+               "  tell <name> <key> !abort|!resign|!draw   act on the current game now\n"
+               "  tell <name> <key> help         list the commands\n\n"
+               "examples:\n"
+               "  maxima fics --whisper\n"
+               "  maxima fics --handle MaxDrone --seek \"3 0\" --seek \"5 0\" --games 20")
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
-                             "layer_profiles, style_books, first_move_wait, whisper); "
+                             "layer_profiles, style_books, first_move_wait, whisper, mood); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
@@ -27,7 +41,8 @@ def parser():
     parser.add_argument("--seeks-at-once", type=int, help="seeks posted at a time, drawn from the pool (default: 2)")
     parser.add_argument("--no-seek", action="store_true", help="do not seek; only accept challenges")
     parser.add_argument("--whisper", action="store_true",
-                        help="whisper depth, score and expected line to observers after each searched move")
+                        help="whisper each move's reason to observers: book layer and mix, or depth, score, "
+                             "time, speed and line (guests are muted; MaxDrone then stops whispering)")
     parser.add_argument("--no-accept", action="store_true", help="decline all challenges")
     parser.add_argument("--rematches", type=int, help="rematches in a row per opponent (default: 0)")
     parser.add_argument("--games", type=int, help="quit after this many games")

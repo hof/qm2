@@ -318,7 +318,7 @@ class play_policy:
         self.contempt_window = contempt_window
         self.first_move_wait = first_move_wait
         self.whisper = whisper
-        self.follow_key = follow_key  # "tell <us> follow <key>" sends our explanations to that player
+        self.follow_key = follow_key  # "tell <us> <key> <command>" steers us remotely (on_tell)
 
     def opening_wait(self, initial_seconds):
         """Seconds the opponent gets for their first move: a fifth of the clock, at least 15, at most first_move_wait."""
