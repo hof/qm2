@@ -209,10 +209,15 @@ def build_repertoire(pgn_path, book_path, plies=30):
                     entry = (chess.polyglot.zobrist_hash(board), polyglot_code(board, node.move))
                     weights[entry] = weights.get(entry, 0) + 1
                 board.push(node.move)
+    return write_book(weights, book_path)
+
+
+def write_book(weights, book_path):
+    """Write {(zobrist key, polyglot move code): weight} as a sorted Polyglot book; returns the entries."""
     temporary = Path(book_path).with_suffix(".tmp")
     with open(temporary, "wb") as stream:
         for (key, code), weight in sorted(weights.items()):
-            stream.write(struct.pack(">QHHI", key, code, min(weight, 0xffff), 0))
+            stream.write(struct.pack(">QHHI", key, code, max(1, min(int(weight), 0xffff)), 0))
     temporary.replace(book_path)
     return len(weights)
 

@@ -1214,7 +1214,17 @@ Style books are Polyglot files beside book.bin (`fire.bin`, `solid.bin`,
 `experiment.bin`, not tracked); any Polyglot book works, and `style_books` in
 the MaxDrone config points a style at another file, e.g. `{"style_books":
 {"fire": "ph-gambitbook.bin"}}` (relative to the project root). A missing file
-leaves that style's percentage to the other layers. `./maxima
+leaves that style's percentage to the other layers.
+
+No published book aims at safe, drawish positions, so `./maxima
+experience:solid` builds `solid.bin` from the Lichess masters explorer. Our
+moves are scored `draw% - 2 × loss%` for the side to move (at least 50 master
+games); moves within 0.05 of the safest stay, weighted 100 down to 10.
+Opponent replies played in at least 5% of games are followed, most likely
+positions first, to 16 plies and up to 2000 positions per colour. The explorer
+needs a Lichess token without scopes, from `LICHESS_TOKEN` or `.env` in the
+project root (git-ignored); answers are cached in `experience/explorer/`, and
+rate limits wait a minute as Lichess asks. A first build takes a few hours. `./maxima
 experience:repertoire` builds them from `books/{fire,solid,experiment}.pgn`,
 one line per game tagged `[Repertoire "white"|"black"]` so only our side's
 moves enter the book.

@@ -42,6 +42,7 @@
 __pycache__/
 
 /book.bin
+/.env
 /fire.bin
 /solid.bin
 /experiment.bin

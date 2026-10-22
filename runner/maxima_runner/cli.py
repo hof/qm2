@@ -24,6 +24,7 @@ command_groups = (
         ("experience:analyze", "Analyze experience positions"),
         ("experience:build", "Digest FICS games into the learning index and player stats"),
         ("experience:repertoire", "Build the fire, solid and experiment style books from books/*.pgn"),
+        ("experience:solid", "Build solid.bin from master games: lines that lose least, draw most"),
         ("tablebases:syzygy:download", "Download selected Syzygy tablebases"),
     )),
     ("Online play", (
@@ -149,7 +150,7 @@ def main(argv=None):
     arguments = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
-        "uci, build, test, suite:run, match:run, experience:import|export|show|analyze|build|repertoire, "
+        "uci, build, test, suite:run, match:run, experience:import|export|show|analyze|build|repertoire|solid, "
         "tablebases:syzygy:download, fics (no command: run engine)"))
     if not arguments and sys.stdin.isatty() and sys.stdout.isatty():
         arguments = ["--help"]
@@ -186,6 +187,9 @@ def main(argv=None):
         elif command == "experience:repertoire":
             from . import learning
             entrypoint = learning.repertoire_main
+        elif command == "experience:solid":
+            from . import solid_book
+            entrypoint = solid_book.main
         elif command in ("experience:import", "experience:export", "experience:show", "experience:analyze"):
             from . import experience
             remaining.insert(0, command.split(":", 1)[1])
