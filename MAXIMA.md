@@ -1235,10 +1235,15 @@ Opponent replies played in at least 5% of games are followed, most likely
 positions first, to 16 plies and up to 2000 positions per colour. The explorer
 needs a Lichess token without scopes, from `LICHESS_TOKEN` or `.env` in the
 project root (git-ignored); answers are cached in `experience/explorer/`, and
-rate limits wait a minute as Lichess asks. A first build takes a few hours. `./maxima
-experience:repertoire` builds them from `books/{fire,draw,experiment}.pgn`,
-one line per game tagged `[Repertoire "white"|"black"]` so only our side's
-moves enter the book.
+rate limits wait a minute as Lichess asks. A first build takes a few hours.
+
+`experiment.bin` is for fun in unrated games: gambits and surprise first moves
+(1.b4, 1.b3, 1.a3, 1.Nc3; 1...b6, 1...a6, 1...Nc6) that unsettle humans, while the
+learned layers measure whether they work. `./maxima init` and `./maxima
+experience:repertoire` build it from `books/experiment.pgn`, one line per game
+tagged `[Repertoire "white"|"black"]` so only our side's moves enter the book.
+`--styles fire draw` builds those from their PGNs too, replacing the
+downloaded books.
 
 Moves are labelled in the terminal and PGN comment with the label, the move's
 probability, and each layer's share of it, e.g. `learned 65%: fire 45%, global

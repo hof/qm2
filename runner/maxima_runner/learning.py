@@ -545,9 +545,12 @@ def repertoire_main():
     parser.add_argument("--output-dir", default=str(data_root()),
                         help="writes <style>.bin beside book.bin (default: the data directory)")
     parser.add_argument("--plies", type=int, default=30, help="moves per line to include (default: 30)")
+    parser.add_argument("--styles", nargs="+", choices=style_names, default=["experiment"],
+                        help="books to build (default: experiment; fire.bin and draw.bin normally come from "
+                             "maxima init or experience:fire|draw, which this would replace)")
     options = parser.parse_args()
     built = 0
-    for style in ("fire", "draw", "experiment"):
+    for style in options.styles:
         source = Path(options.books_dir) / f"{style}.pgn"
         if not source.is_file():
             continue
@@ -555,5 +558,5 @@ def repertoire_main():
         print(f"{target}: {build_repertoire(source, target, options.plies)} entries from {source}")
         built += 1
     if not built:
-        parser.error(f"no fire.pgn, draw.pgn or experiment.pgn in {options.books_dir}")
+        parser.error(f"no {', '.join(style + '.pgn' for style in options.styles)} in {options.books_dir}")
     return 0

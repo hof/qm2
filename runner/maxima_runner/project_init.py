@@ -173,6 +173,19 @@ def draw_step(root, options):
     return ("done", "draw.bin") if status == 0 else ("failed", "./maxima experience:draw")
 
 
+def experiment_step(root, options):
+    """experiment.bin, the surprise-and-gambit style book, is built from books/experiment.pgn in the checkout."""
+    from . import learning
+    source, target = root / "books/experiment.pgn", options.data / "experiment.bin"
+    if not source.is_file():
+        return "skipped", "no books/experiment.pgn"
+    if target.is_file() and target.stat().st_mtime >= source.stat().st_mtime:
+        return "ok", "up to date"
+    if options.check:
+        return "missing", "./maxima init builds it from books/experiment.pgn"
+    return "done", f"{learning.build_repertoire(source, target)} entries"
+
+
 def syzygy_step(root, options):
     directory = options.data / "tablebases/syzygy"
     if not options.syzygy:
@@ -195,6 +208,7 @@ def steps(options):
     yield "network", network_step
     for name, *download in books:
         yield name, draw_step if name == "draw.bin" and options.draw else book_step(name, *download)
+    yield "experiment.bin", experiment_step
     yield "syzygy", syzygy_step
 
 
