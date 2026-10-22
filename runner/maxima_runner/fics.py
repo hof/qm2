@@ -392,6 +392,22 @@ def book_whisper(san, why, opening):
     return f"{san} | {lead} ({probability:.0%}): {mix}" if mix else f"{san} | {lead} ({probability:.0%})"
 
 
+def learning_report(game, record, records):
+    """Plain lines for the owner after a game: what Maxima keeps from it, and the score against this
+    opponent; a loss also files their opening as a revenge line."""
+    if record is None:
+        return ["nothing to learn: under ten moves or too few searches"]
+    opponent = record["opponent"]
+    moves = sum(1 for _ in record["values"])
+    played = [other["score"] for other in records if other["opponent"].lower() == opponent.lower()]
+    wins, draws, losses = played.count(1.0), played.count(0.5), played.count(0.0)
+    lines = [f"kept {moves} opening moves with evals; vs {opponent} now +{wins} ={draws} -{losses}"]
+    if record["score"] == 0.0:
+        board, line = game.board(), list(game.mainline_moves())[:learning.revenge_plies // 2]
+        lines.append(f"revenge line filed: {board.variation_san(line)}")
+    return lines
+
+
 def search_whisper(san, info, turn, line, note=None):
     """What observers read for a searched move: depth, score for Maxima, and the expected reply line."""
     score, depth = info.get("score"), info.get("depth", 0)
@@ -691,8 +707,12 @@ class engine_player:
             return
         self.on_line(f"-- saved game {self.game} to {path}")
         if self.learner is not None:
-            self.learner.add(game)
+            record = self.learner.add(game)
             asyncio.get_event_loop().run_in_executor(None, self.refresh_experience)
+            for text in learning_report(game, record, self.learner.records):
+                self.on_line(f"-- learned: {text}")
+                for name in self.followers:
+                    asyncio.ensure_future(self.send(f"tell {name} {text}"))
 
     def refresh_experience(self):
         try:

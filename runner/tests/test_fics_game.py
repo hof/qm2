@@ -239,6 +239,17 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle("hof tells you: s3cret softquit")
         self.assertTrue(player.stopping)
 
+    def test_learning_report_says_what_was_kept(self):
+        self.assertEqual(fics.learning_report(None, None, []),
+                         ["nothing to learn: under ten moves or too few searches"])
+        game = chess.pgn.Game.from_board(chess.Board())
+        for uci in ("e2e4", "e7e5", "f2f4"):
+            game.end().add_main_variation(chess.Move.from_uci(uci))
+        record = {"opponent": "John", "values": [1, 2, 3], "score": 0.0}
+        lines = fics.learning_report(game, record, [record, dict(record, score=1.0)])
+        self.assertEqual(lines, ["kept 3 opening moves with evals; vs John now +1 =0 -1",
+                                 "revenge line filed: 1. e4 e5 2. f4"])
+
     def test_whispers_explain_book_choices_simply(self):
         opening = learning.opening_book([], opponent="John", group="humans", mood="parham")
         parts = {"book": 0.2, "fire": 0.1, "mood": 0.15, "opponent": 0.05, "global": 0.001}
