@@ -1922,12 +1922,10 @@ bool search_t::is_improving() const {
     if (stack->in_check || stack->eval_result == score::INVALID) {
         return false;
     }
-    for (int distance = 1; distance <= 4 && distance <= brd.ply; ++distance) {
+    // Compare with the same side's last evaluated position, skipping checks.
+    for (int distance = 2; distance <= 4 && distance <= brd.ply; distance += 2) {
         const auto & previous = *(stack - distance);
-        if (!previous.current_move.piece) {
-            return false;
-        }
-        if ((distance == 2 || distance == 4) && previous.eval_result != score::INVALID) {
+        if (previous.eval_result != score::INVALID) {
             return stack->eval_result > previous.eval_result;
         }
     }

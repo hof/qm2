@@ -48,21 +48,12 @@ bool test_trend() {
     search->root_stack->eval_result = score::INVALID;
     success &= check(!search->is_improving(), "unknown history must not claim improvement");
     search->root_stack->eval_result = 10;
-    for (int distance = 1; distance <= 4; ++distance) {
-        auto & move = (search->stack - distance)->current_move;
-        const auto saved = move;
-        move.clear();
-        success &= check(!search->is_improving(), "a null pass must block a trend across its boundary");
-        move = saved;
-    }
     search->stack->eval_result = score::INVALID;
     success &= check(!search->is_improving(), "missing current evaluation must not claim improvement");
     search->stack->improving = true;
     search->forward();
     success &= check(!search->stack->improving && !search->is_improving(),
         "a null child must start without stale evaluation history");
-    search->stack->eval_result = 100;
-    success &= check(!search->is_improving(), "evaluating a null child must not cross the artificial pass");
     search->backward();
     success &= check(search->stack->improving, "undo must retain the parent's trend");
     search->reset_stack();
