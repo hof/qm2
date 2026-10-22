@@ -71,7 +71,7 @@ bool test_castling() {
                 ok &= restored(search, original);
                 if (window.first == -score::INF) {
                     ok &= check(search.nodes == tactical.size() + 1,
-                        "qsearch did not visit certified castles/checks");
+                        "qsearch move domain differs from certified captures/evasions");
                 }
                 ++probes;
             }

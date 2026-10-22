@@ -78,8 +78,6 @@ struct audit_counters_t {
     uint64_t q_delta_prunes = 0, q_see_prunes = 0;
     uint64_t q_delta_candidates = 0;
     uint64_t q_see_candidates = 0;
-    uint64_t q_check_candidates = 0, q_check_rejected = 0, q_check_searched = 0;
-    uint64_t q_castles = 0;
     uint64_t null_attempts = 0, null_cutoffs = 0, null_adaptive = 0;
     uint64_t null_reduction_plies = 0, null_probe_visits = 0;
     uint64_t null_verifications = 0, null_rejected = 0, null_cancelled = 0;
@@ -96,8 +94,6 @@ struct audit_state_t {
     bool q_delta = true, q_see = true;
     bool fixed_horizon = false;
     bool aligned_quiescence = false;
-    bool quiet_checks = false;
-    bool quiet_castling = false;
     bool check_extensions = false;
     bool hash_moves = false;
     std::string root_fen;

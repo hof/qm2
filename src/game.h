@@ -43,7 +43,7 @@ namespace options {
     };
 
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    const int length = 66;
+    const int length = 64;
 #else
     const int length = 53;
 #endif

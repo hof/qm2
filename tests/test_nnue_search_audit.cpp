@@ -109,8 +109,6 @@ int main(int argc, char ** argv) {
     }
     options::get_option("NNUEAuditHorizon")->value = 2;
     search.init(fen, nullptr);
-    options::get_option("NNUEAuditQuietChecks")->value = 1;
-    options::get_option("NNUEAuditCastling")->value = 1;
     options::get_option("NNUEAuditCheckExtensions")->value = 1;
     {
         for (bool white : {false, true}) {
@@ -247,8 +245,6 @@ int main(int argc, char ** argv) {
     }
     options::get_option("NNUEAuditAspiration")->value = 0;
     options::get_option("NNUEAuditLMR")->value = 0;
-    options::get_option("NNUEAuditQuietChecks")->value = 0;
-    options::get_option("NNUEAuditCastling")->value = 0;
     options::get_option("NNUEAuditCheckExtensions")->value = 0;
     options::get_option("NNUEAuditHorizon")->value = 0;
     if (!search.nnue_audit.aligned_quiescence || search.beta_pruning || search.ffp_enabled
@@ -477,12 +473,10 @@ int main(int argc, char ** argv) {
         return failure(__LINE__);
     }
     options::get_option("NNUEAuditSEE")->value = 0;
-    options::get_option("NNUEAuditQuietChecks")->value = 1;
     {
         const char * queen_fen = "6k1/8/8/8/8/8/6r1/K2Q4 w - - 0 1";
         auto probe = std::make_unique<search_t>(queen_fen);
-        // Independent legal-move census: Qb3+, Qd5+, Qd8+ are safe;
-        // Qg4+ hangs the queen to Rg2xg4. There are no root captures.
+        // Quiet checking moves must not expand qsearch. There are no root captures.
         const int alpha = evaluate(probe.get()) + 5000;
         probe->qsearch(alpha, alpha + 1, 0);
         const auto & counts = probe->nnue_audit.counters;
@@ -491,14 +485,12 @@ int main(int argc, char ** argv) {
                 || counts.root_calls || counts.researches) {
             return failure(__LINE__);
         }
-        if (counts.q_check_candidates != 4 || counts.q_check_rejected != 1
-                || counts.q_check_searched != 3 || counts.q_castles
-                || probe->brd.ply || probe->brd.to_string() != queen_fen) {
+        if (probe->nodes != 1 || probe->brd.ply || probe->brd.to_string() != queen_fen) {
             return failure(__LINE__);
         }
         probe->init(queen_fen, nullptr);
         probe->qsearch(alpha, alpha + 1, -1);
-        if (probe->nodes != 1 || probe->nnue_audit.counters.q_check_candidates) {
+        if (probe->nodes != 1) {
             return failure(__LINE__);
         }
         const char * counter_fen = "r5k1/8/8/8/8/8/8/KQ6 w - - 0 1";
@@ -511,28 +503,26 @@ int main(int argc, char ** argv) {
             return failure(__LINE__);
         }
         probe->qsearch(-score::INF, score::INF, -1);
-        if (probe->nodes <= 1 || probe->nnue_audit.counters.q_check_candidates
+        if (probe->nodes <= 1
                 || probe->brd.ply || probe->brd.to_string() != counter_fen) {
             return failure(__LINE__);
         }
-        options::get_option("NNUEAuditCastling")->value = 1;
         for (const char * castle_fen : {
                 "5k2/8/8/8/8/8/8/4K2R w K - 0 1",
                 "4k3/8/8/8/8/8/8/4K2R w K - 0 1"}) {
             probe->init(castle_fen, nullptr);
             const int castle_alpha = evaluate(probe.get()) + 5000;
             probe->qsearch(castle_alpha, castle_alpha + 1, 0);
-            if (probe->nnue_audit.counters.q_castles != 1 || probe->brd.ply
+            if (probe->nodes != 1 || probe->brd.ply
                     || probe->brd.to_string() != castle_fen) {
                 return failure(__LINE__);
             }
             probe->init(castle_fen, nullptr);
             probe->qsearch(castle_alpha, castle_alpha + 1, -1);
-            if (probe->nodes != 1 || probe->nnue_audit.counters.q_castles) {
+            if (probe->nodes != 1) {
                 return failure(__LINE__);
             }
         }
-        options::get_option("NNUEAuditCastling")->value = 0;
     }
     search.init(fen, nullptr);
     search.game.max_nodes = 128;
@@ -542,7 +532,6 @@ int main(int argc, char ** argv) {
             || search.brd.to_string() != fen || evaluate(&search) != expected) {
         return failure(__LINE__);
     }
-    options::get_option("NNUEAuditQuietChecks")->value = 0;
     const auto & work = search.nnue_audit.counters;
     if (work.pvs_nodes + work.q_nodes != search.nodes || !work.root_calls
             || work.move_visits + work.null_visits + work.researches != search.nodes

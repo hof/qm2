@@ -116,10 +116,6 @@ int main(int argc, char ** argv) {
                 << ",\"q_delta_candidates\":" << counts.q_delta_candidates
                 << ",\"q_see_candidates\":" << counts.q_see_candidates
                 << ",\"q_see_prunes\":" << counts.q_see_prunes
-                << ",\"q_check_candidates\":" << counts.q_check_candidates
-                << ",\"q_check_rejected\":" << counts.q_check_rejected
-                << ",\"q_check_searched\":" << counts.q_check_searched
-                << ",\"q_castles\":" << counts.q_castles
                 << ",\"pvs_nodes\":" << counts.pvs_nodes
                 << ",\"q_nodes\":" << counts.q_nodes
                 << ",\"root_calls\":" << counts.root_calls

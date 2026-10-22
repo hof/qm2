@@ -362,14 +362,15 @@ void move_picker_t::score_quiets(search_t * s, move_t * begin, move_t * end) {
 move_t * move_picker_t::next_standard(search_t * s, int depth) {
     auto * list = &s->stack->move_list;
     auto * board = &s->brd;
-    const bool do_quiets = depth >= 0 || s->stack->in_check;
+    const bool do_quiets = depth > 0 || s->stack->in_check;
     for (;;) {
         move_t * result = nullptr;
         switch (list->stage) {
             case hash_move:
                 list->stage = captures;
                 result = &s->stack->tt_move;
-                if (result->piece && board->valid(result)
+                if (result->piece && (do_quiets || result->capture || result->promotion)
+                        && board->valid(result)
                         && move::allows_evasion(*result, list->evasion_targets)) {
                     list->returned_hints[0] = result->to_compact();
                     return result;
@@ -431,8 +432,8 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 break;
             case quiet_init: {
                 auto * begin = list->last;
-                move::gen_castles(board, list);
                 if (do_quiets) {
+                    move::gen_castles(board, list);
                     move::gen_quiet_moves(board, list);
                 }
                 score_quiets(s, begin, list->last);

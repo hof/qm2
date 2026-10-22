@@ -3,7 +3,7 @@
 Terminal results and move sets come from python-chess. Native tests use Maxima
 static evaluation as stand-pat labels, not as an independent evaluation oracle.
 Checking PVS moves conservatively retain one ply, covering either SEE extension
-choice; quiescence admits quiet checks only at entry. No castling fixtures here.
+choice; quiescence admits captures/promotions and all check evasions.
 """
 import argparse
 from pathlib import Path
@@ -33,7 +33,7 @@ def generate():
         check = board.is_check()
         terminal = -30000 if not legal and check else 0 if not legal or board.is_insufficient_material() or board.halfmove_clock >= 100 else 32002
         negative = [m for m in legal if check or board.is_capture(m) or m.promotion]
-        entry = [m for m in legal if m in negative or board.gives_check(m)]
+        entry = negative
         row = (check, terminal, " ".join(m.uci() for m in legal),
                " ".join(m.uci() for m in entry), " ".join(m.uci() for m in negative))
         assert nodes.setdefault(fen, row) == row

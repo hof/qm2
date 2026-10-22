@@ -455,14 +455,11 @@ for the previous cutoff-only learning policy. Both retain the same tactical
 protections and full-depth verification. A reduced fail-low remains a heuristic
 rather than a proof that the move cannot improve.
 
-Standard quiescence retains castling at entry and below entry, alongside captures
-and promotions; entry also searches quiet checks, and checked nodes search all
-legal evasions. Ordinary quiet checks at entry require `see(move, 0)`; at
-reversible clock 99 they remain searchable to preserve fifty-move draws.
-Checked nodes retain all legal evasions, including losing counterchecks.
-Capture delta/SEE preserves castling; castles have zero material SEE and their
-positional effect is evaluated after the move.
-This is an existing bounded quiet extension, not a certified strength gain.
+Standard quiescence searches captures and promotions at every depth, plus all
+legal evasions when in check. Optional quiet checking moves and castling are
+excluded, including TT hints. The picker defers quiet generation entirely at
+quiescence nodes unless check evasions require it. Main search retains its full
+legal move domain.
 
 Main-search TT lookup accepts compatible exact scores in both PV and non-PV
 windows. Non-PV lower bounds require `value >= beta`; upper bounds require
@@ -486,9 +483,9 @@ shallower scored entries. Packed ages wrap modulo 64. These policies share the
 existing storage between standard chess and royal losers without changing the
 score-compatibility rules.
 
-Quiescence TT entries distinguish entry searches (which can include quiet
-checks) from deeper tactical searches. Both retain captures, promotions,
-castling and all legal check evasions. The mode uses the two spare packed bits;
+Quiescence TT entries retain separate entry and deeper tactical mode markers;
+both now search captures, promotions and all legal check evasions. The mode
+uses the two spare packed bits;
 the raw-evaluation fields described below bring entries to 40 bytes. Scores are
 reused only within the same mode: main
 results do not substitute for qsearch bounds, and neither qsearch mode satisfies
@@ -1470,16 +1467,8 @@ guards; the count is not the number of all captures. Tests cover losing and
 equal exchanges, checking sacrifices, low-material exclusions, HCE/NNUE parity
 and cancellation/restoration.
 
-`NNUEAuditQuietChecks` and `NNUEAuditCastling` (default false, audit builds
-only) independently add ordinary quiet checks and all legal castles at the
-first quiescence ply in `quiet` mode. Quiet checks use the production SEE and
-clock guards; checked nodes always retain every legal evasion. These controls
-do not add quiet moves below entry. Changing either stops search and clears TT.
-Worker-owned `audit_checks` counters distinguish candidates, SEE rejections
-and searched checks; `audit_castles` counts searched entry castles. Tests cover
-a hanging queen check, safe checks, losing countercheck evasions, checking and
-nonchecking castles, below-entry exclusions and cancellation/restoration with
-both evaluators. Ordinary search retains its existing below-entry castling.
+Audit quiescence uses the same captures/promotions/evasions move domain as
+production. The obsolete quiet-check and castling audit options are removed.
 
 Audit builds report `info string audit_work` in `quiet` mode: effective
 positive-depth PVS visits, quiescence visits, root-driver calls, made moves,

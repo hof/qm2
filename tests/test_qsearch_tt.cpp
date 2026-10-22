@@ -170,11 +170,12 @@ bool test_hint_domains() {
     const hint_case_t cases[] = {
         {"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "g1f3", -1, false},
         {"6k1/8/8/8/8/8/8/K2R4 w - - 0 1", "d1d8", -1, false},
-        {"6k1/8/8/8/8/8/8/K2R4 w - - 0 1", "d1d8", 0, true},
+        {"6k1/8/8/8/8/8/8/K2R4 w - - 0 1", "d1d8", 0, false},
         {"7k/8/8/3q4/8/8/8/K2R4 w - - 0 1", "d1d5", -1, true},
         {"7k/P7/8/8/8/8/8/K7 w - - 0 1", "a7a8q", -1, true},
         {"7k/8/8/3pP3/8/8/8/K7 w - d6 0 1", "e5d6", -1, true},
-        {"4k3/8/8/8/8/8/8/4K2R w K - 0 1", "e1g1", -1, true},
+        {"4k3/8/8/8/8/8/8/4K2R w K - 0 1", "e1g1", -1, false},
+        {"4k3/8/8/8/8/8/8/4K2R w K - 0 1", "e1g1", 0, false},
         {"R6k/8/5K2/8/8/8/8/8 b - - 0 1", "h8h7", -1, true},
     };
     bool success = true;

@@ -346,8 +346,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     const int horizon = wild == 0 ? requested_horizon : 0;
     nnue_audit.fixed_horizon = horizon == 1;
     nnue_audit.aligned_quiescence = horizon == 2;
-    nnue_audit.quiet_checks = horizon == 2 && options::get_value("NNUEAuditQuietChecks");
-    nnue_audit.quiet_castling = horizon == 2 && options::get_value("NNUEAuditCastling");
     nnue_audit.hash_moves = horizon == 2 && options::get_value("NNUEAuditHashMoves");
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
@@ -694,10 +692,6 @@ void search_t::go() {
             + " prunes " + std::to_string(nnue_audit.counters.q_delta_prunes));
         uci::out("info string audit_see candidates " + std::to_string(nnue_audit.counters.q_see_candidates)
             + " prunes " + std::to_string(nnue_audit.counters.q_see_prunes));
-        uci::out("info string audit_checks candidates " + std::to_string(nnue_audit.counters.q_check_candidates)
-            + " rejected " + std::to_string(nnue_audit.counters.q_check_rejected)
-            + " searched " + std::to_string(nnue_audit.counters.q_check_searched));
-        uci::out("info string audit_castles searched " + std::to_string(nnue_audit.counters.q_castles));
         uci::out("info string audit_aspiration searches " + std::to_string(counts.aspiration_searches)
             + " attempts " + std::to_string(counts.aspiration_attempts)
             + " fail_low " + std::to_string(counts.aspiration_fail_lows)
@@ -2543,11 +2537,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             return nnue::audit_evaluate(*this);
         }
 #endif
-        const int score = qsearch(alpha, beta,
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            nnue_audit.aligned_quiescence && !nnue_audit.quiet_checks && !nnue_audit.quiet_castling ? -1 :
-#endif
-            0);
+        const int score = qsearch(alpha, beta, 0);
         return score;
     }
 
@@ -3084,15 +3074,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 
 /**
  * Quiescence search with tactical moves only.
- * At depth 0: captures, promotions, quiet checks and castling
- * At depth < 0: captures, promotions and castling
- * All legal evasions are searched in check. Castling retains the existing
- * bounded quiet extension (each side can castle at most once); delta/SEE
- * pruning still applies to nonchecking castles.
- * @param alpha lowerbound value
- * @param beta upperbound value
- * @param depth depth (0 or lower)
- * @return score
+ * Captures and promotions at every depth; all legal evasions in check.
  */
 
 int search_t::qsearch(int alpha, int beta, int depth) {
@@ -3183,8 +3165,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         stack->tt_move.set_compact(&brd, tt_move);
         const auto & hint = stack->tt_move;
         if (hint.piece && (!brd.valid(&hint)
-                || !(in_check || hint.capture || hint.promotion || hint.castle
-                    || (depth == 0 && brd.gives_check(&hint))))) {
+                || !(in_check || hint.capture || hint.promotion))) {
             stack->tt_move.clear();
         }
     }
@@ -3245,38 +3226,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
-        const bool quiet_check = !in_check && depth == 0 && gives_check
-            && !move->capture && !move->promotion && !move->castle;
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        if (nnue_audit.aligned_quiescence && !in_check && !move->capture && !move->promotion) {
-            if (!(nnue_audit.quiet_checks && quiet_check)
-                    && !(nnue_audit.quiet_castling && depth == 0 && move->castle)) {
-                continue;
-            }
-        }
-#endif
-        // Optional quiet checks are limited to qsearch entry. Checked nodes
-        // always search evasions, including materially losing counterchecks.
-        // At clock 99, preserve quiet moves that can secure a fifty-move draw.
-        if (quiet_check) {
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            ++nnue_audit.counters.q_check_candidates;
-#endif
-            if (brd.stack->fifty_count < 99 && !brd.see(move, 0)) {
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-                ++nnue_audit.counters.q_check_rejected;
-#endif
-                ++pruned_nodes;
-                continue;
-            }
-        }
-        bool dangerous = depth < 0 || move->capture || in_check || gives_check
-                || move->promotion || move->castle;
-
-        //prune all quiet moves
-        if (!dangerous) {
-            assert(depth == 0);
-            pruned_nodes++;
+        if (!in_check && !move->capture && !move->promotion) {
+            ++pruned_nodes;
             continue;
         }
 
@@ -3348,14 +3299,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          * Go forward and search next node
          */
 
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        if (quiet_check) {
-            ++nnue_audit.counters.q_check_searched;
-        }
-        if (!in_check && depth == 0 && move->castle) {
-            ++nnue_audit.counters.q_castles;
-        }
-#endif
         if (!try_forward(move, gives_check)) {
             continue;
         }
