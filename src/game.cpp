@@ -59,6 +59,7 @@ namespace options {
         { "HistoryPruning", BOOL, 1, "type check default true", true },
         { "TTEval", BOOL, 1, "type check default true", true },
         { "TTHistory", BOOL, 1, "type check default true", true },
+        { "EvalHistory", BOOL, 1, "type check default true", true },
         { "ProbCut", BOOL, 1, "type check default true", true },
         { "SingularExtensions", BOOL, 1, "type check default true", true },
         { "SingularPolicy", BOOL, 1, "type check default true", true },

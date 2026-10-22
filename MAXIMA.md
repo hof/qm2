@@ -81,10 +81,11 @@ or require every task to advance every goal.
   over complex changes aimed at marginal Elo improvements.
 - Keep heuristics understandable and independently testable. Justify added
   complexity with measured benefits.
-- During the NNUE search baseline work, use simple documented search rules and
-  conservative round margins. Apply this to every pruning/reduction/extension
-  under review. Establish a sound empirical baseline before adding adaptive
-  tweaks or tuning; cite original references and state heuristic limits.
+- During search baseline work, follow mature, documented implementation policies
+  and compare effective eligibility, guards and settings with the chosen source
+  references. Establish capability coverage and a fixed-depth node sanity check;
+  close concrete omissions before accepting the baseline. Keep parameter tuning
+  separate, cite original sources and state heuristic limits.
 - Before implementing or substantially changing a chess algorithm, read the
   relevant [Chess Programming Wiki](https://chessprogramming.org/) articles.
   Follow their references to original papers and engine implementations when
@@ -6896,3 +6897,34 @@ controls had zero new counts. No margins or positions were tuned. Evidence is
 under `.context/baselines/2026-10-21/singular-policy/`. The remaining Phase 1 work
 is the consolidated integration review and fixed-depth reference comparison
 before Phase 2 or any strength testing.
+
+
+### Static-evaluation feedback into quiet history
+
+Standard search now records corrected static evaluations separately from the raw
+evaluation cache. At an eligible main-search child, the quiet incoming move's
+main-history entry receives a small bounded gravity update based on the parent
+and child evaluation difference. This supplies ordering evidence even when the
+child is pruned before searching its moves; ordinary cutoff history remains.
+The default-on `EvalHistory` option is copied into each worker and clears TT
+results when changed. `MainHistory=false` also disables this feedback.
+
+Parent and child scores have opposite perspectives. The update uses
+`clamp((-(parent_static + child_static) - 16) * 227 / 32, -94, 94)` in Maxima's
+100-centipawn score scale and its existing signed main-history table. These are
+baseline policy constants, not a tuned strength claim. Captures/promotions,
+checked or unevaluated parents/children, artificial-null/helper searches, excluded
+moves, repetition-floor nodes, decisive scores, clock90+ and cancellation are
+excluded. Worker-owned snapshots are initialized on make/reset and restored by
+undo or same-position helper scope. Royal-losers and fixed/aligned audit search
+keep their existing policies.
+
+The focused history/verification/node-context/UCI checks pass in Debug and
+Release, both Release lifecycle suites pass, and the new feedback/UCI checks
+pass on the final source in Debug, Release, audit and ASan/UBSan builds (leak
+checks disabled). A frozen six-root D8 diagnostic plus retained-history continuations
+completes24 legal searches. Disabling `EvalHistory` exactly reproduces the prior
+nodes, scores, bestmoves and full PVs for all12 cold/retained controls. Enabled
+work changes133027->170033 cold nodes (+27.82%) and125012->134104 retained
+(+7.27%). This closes an ordering capability gap; it does not establish a tree,
+CPU or playing-strength improvement. Combined baseline acceptance remains open.

@@ -31,6 +31,7 @@ struct audit_counters_t {
     uint64_t lmp_candidates = 0, lmp_prunes = 0;
     uint64_t history_pruning_candidates = 0, history_prunes = 0;
     uint64_t tt_history_rewards = 0, tt_history_penalties = 0;
+    uint64_t eval_history_updates = 0;
     uint64_t probcut_attempts = 0, probcut_candidates = 0, probcut_q_passes = 0;
     uint64_t probcut_adaptive = 0, probcut_q_only = 0;
     uint64_t probcut_searches = 0, probcut_researches = 0, probcut_cutoffs = 0;

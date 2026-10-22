@@ -224,3 +224,9 @@ target_link_libraries(test_context_lmr MAX2SRC)
 add_test(NAME test_context_lmr COMMAND test_context_lmr)
 set_tests_properties(test_context_lmr PROPERTIES
     ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
+
+add_executable(test_eval_history test_eval_history.cpp)
+target_link_libraries(test_eval_history MAX2SRC)
+add_test(NAME test_eval_history COMMAND test_eval_history)
+set_tests_properties(test_eval_history PROPERTIES
+    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

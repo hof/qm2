@@ -307,6 +307,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     lmp_enabled = wild == 0 && options::get_value("LMP");
     history_pruning_enabled = wild == 0 && options::get_value("HistoryPruning");
     tt_history_enabled = wild == 0 && options::get_value("TTHistory");
+    eval_history_enabled = wild == 0 && options::get_value("EvalHistory");
     probcut_enabled = wild == 0 && options::get_value("ProbCut");
     singular_extensions_enabled = wild == 0 && options::get_value("SingularExtensions");
     singular_policy_enabled = wild == 0 && options::get_value("SingularPolicy");
@@ -352,7 +353,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nnue_audit.check_extensions = horizon == 2 && options::get_value("NNUEAuditCheckExtensions");
     if (horizon) {
         lmp_enabled = history_pruning_enabled = false;
-        tt_history_enabled = false;
+        tt_history_enabled = eval_history_enabled = false;
         probcut_enabled = false;
         singular_extensions_enabled = singular_policy_enabled = false;
         razoring_enabled = false;
@@ -406,6 +407,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     capture_history = wild == 0 ? std::make_unique<capture_history_t>() : nullptr;
     correction_history = wild == 0 ? std::make_unique<correction_history_t>() : nullptr;
     stack->eval_result = score::INVALID;
+    stack->static_eval = score::INVALID;
     stack->improving = false;
     stack->tt_pv = stack->lmr_tt_tactical = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
@@ -987,6 +989,7 @@ void search_t::forward() {
     stack++;
     stack->in_check = false;
     stack->eval_result = score::INVALID;
+    stack->static_eval = score::INVALID;
     stack->improving = false;
     stack->tt_pv = stack->lmr_tt_tactical = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
@@ -1032,6 +1035,7 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->in_check = gives_check;
     stack->tt_clocks = {0, 101};
     stack->eval_result = score::INVALID;
+    stack->static_eval = score::INVALID;
     stack->improving = false;
     stack->tt_pv = stack->lmr_tt_tactical = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
@@ -1382,6 +1386,33 @@ int search_t::move_history_score(const move_t & move) {
         }
     }
     return value;
+}
+
+// A quiet move that improved static evaluation supplies ordering evidence even
+// when this child will be pruned. Compare corrected snapshots in opposite POVs;
+// keep artificial/helper subtrees from training the real game's move history.
+void search_t::update_eval_history(int eval) {
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    if (!eval_history_enabled || !quiet_history_policy.main || wild != 0 || !brd.ply
+            || stop_all || iid_active || verification_mode != verification_mode_t::none
+            || stack->excluded_move || stack->repetition_start > 0 || stack->in_check
+            || brd.stack->fifty_count >= 90 || std::abs(eval) >= decisive) {
+        return;
+    }
+    const auto & parent = *(stack - 1);
+    const auto & move = parent.current_move;
+    if (parent.in_check || !move.piece || move.capture || move.promotion
+            || parent.static_eval == score::INVALID || std::abs(parent.static_eval) >= decisive) {
+        return;
+    }
+    // Both the static score and this bounded gravity update use the 100-cp
+    // scale. This modest policy feedback complements the deeper cutoff bonus.
+    const int improvement = -(int(parent.static_eval) + eval) - 16;
+    const int bonus = std::clamp(improvement * 227 / 32, -94, 94);
+    quiet_history_t::update_entry(quiet_history->main[!brd.us()][move.ssq][move.tsq], bonus);
+#ifdef MAXIMA_NNUE_SEARCH_AUDIT
+    ++nnue_audit.counters.eval_history_updates;
+#endif
 }
 
 // Cached fail-highs supply ordering evidence even though no move was searched here.
@@ -1763,8 +1794,10 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     int best = -score::INF;
     root.sort_moves(&stack->best_move);
     stack->tt_pv = context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled;
-    if (stack->tt_pv && depth >= 3 && !stack->in_check) {
+    if (!stack->in_check && ((eval_history_enabled && quiet_history_policy.main)
+            || (stack->tt_pv && depth >= 3))) {
         const int eval = evaluate(this);
+        stack->static_eval = eval;
         stack->lmr_correction = std::min(2, std::abs(eval - stack->eval_result) / 100);
     }
 
@@ -2678,6 +2711,10 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
+    stack->static_eval = eval;
+    if (!repetition_floor) {
+        update_eval_history(eval);
+    }
     stack->improving = is_improving();
     if (context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled && normal_search && !iid_active) {
         auto & hint = stack->tt_move;
@@ -3425,6 +3462,7 @@ void search_t::reset_stack() {
     brd.ply = 0;
     stack = root_stack;
     stack->eval_result = score::INVALID;
+    stack->static_eval = score::INVALID;
     stack->improving = false;
     stack->tt_pv = stack->lmr_tt_tactical = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
@@ -3452,6 +3490,7 @@ void search_t::reset_stack() {
     counts.lmp_candidates = counts.lmp_prunes = 0;
     counts.history_pruning_candidates = counts.history_prunes = 0;
     counts.tt_history_rewards = counts.tt_history_penalties = 0;
+    counts.eval_history_updates = 0;
     counts.probcut_attempts = counts.probcut_candidates = counts.probcut_q_passes = 0;
     counts.probcut_searches = counts.probcut_researches = counts.probcut_cutoffs = 0;
     counts.probcut_cancelled = counts.probcut_visits = counts.probcut_tt_vetoes = 0;

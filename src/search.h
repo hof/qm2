@@ -88,6 +88,7 @@ struct search_stack_t {
     int repetition_start;
     uint8_t pv_count;
     int16_t eval_result;
+    int16_t static_eval; // Corrected evaluation snapshot for the incoming move.
     bool improving;
     bool tt_pv;
     bool lmr_tt_tactical;
@@ -170,6 +171,7 @@ public:
     bool lmp_enabled;
     bool history_pruning_enabled;
     bool tt_history_enabled;
+    bool eval_history_enabled;
     bool capture_history_enabled;
     bool long_continuation_enabled;
     bool threat_ordering_enabled;
@@ -275,6 +277,7 @@ public:
     int move_history_score(const move_t & move);
     void update_capture_cutoff(const move_t & move, int depth, int searched_moves);
     void take_history(search_t & previous);
+    void update_eval_history(int eval);
     void update_tt_history(int compact_move, int depth);
     void update_quiet_cutoff(move_t * move, int depth, int searched_moves);
     void update_killers(move_t * move);
