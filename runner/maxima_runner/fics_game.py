@@ -156,7 +156,7 @@ class game_record:
 def annotate_search(node, board, info):
     score, depth = info.get("score"), info.get("depth")
     if score is None or not depth:
-        node.comment = "book"
+        node.comment = info.get("source", "book")
         return
     node.set_eval(score, depth)
     pv, replay = [], board.copy()

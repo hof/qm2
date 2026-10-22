@@ -1130,10 +1130,10 @@ publication, legal selection, rejected reloads, OwnBook, and unchanged book byte
 
 ### 9.7 Online opening learning (MaxDrone, planned)
 
-Status: design agreed 2026-10-21. Implemented: game digests (decision point,
-credit, analyses), the index cache, and player stats via
-`./maxima experience:build` (`learning.py`). Not yet: layers, soundness, and
-selection in MaxDrone. It replaces the SQLite store for online play; the engine
+Status: implemented in `learning.py` and MaxDrone (`maxima fics`); thresholds
+are first guesses awaiting measurement. `./maxima experience:build` refreshes
+the index and player stats by hand; MaxDrone does it after every saved game.
+It replaces the SQLite store for online play; the engine
 snapshot path above stays for GUI use.
 
 **Storage.** PGN under `experience/games/fics/` is the only source of truth
@@ -1184,6 +1184,14 @@ winning moves without contrary deeper analysis are sound.
    instantly: a 10 s analysis beats a 5 s search in a 3 0 game, but a 60 s
    budget searches afresh and a deeper result supersedes the old one.
 3. Otherwise the engine searches.
+
+Moves are labelled by source in the terminal and PGN comment: `book`
+(book.bin), `learned` (experience, with the estimated score and games), and
+`recalled` (earlier analysis). Defaults: prior strength 8 games per layer,
+book moves under a tenth of the heaviest book weight need evidence, superseding
+analysis needs depth 16 and two plies more, horizon 40 plies. `variety` (setting
+or `--variety`) divides the posterior strength: 0.5 repeats winners more, 2
+explores more. `--no-learning` (or `--no-pgn`) leaves the book to the engine.
 
 The decision is built per game at `Creating:` (opponent, group, game type, and
 budget are known then) and must be ready before our first move; if it is late,

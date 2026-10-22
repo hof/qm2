@@ -10,8 +10,9 @@ import unittest
 import chess
 import chess.engine
 import chess.pgn
+import chess.polyglot
 
-from maxima_runner import experience, fics, fics_game
+from maxima_runner import experience, fics, fics_game, learning
 from maxima_runner.uci import open_engine
 
 observed = (Path(__file__).parent / "data" / "fics_observed_game.txt").read_text().splitlines()
@@ -253,6 +254,29 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         move = game.next()
         self.assertEqual((move.move.uci(), move.eval_depth(), move.clock(), move.emt()), ("e2e4", 3, 179.9, 0.1))
         self.assertTrue(any(line.startswith("-- saved game 17") for line in self.lines))
+
+    async def test_learned_move_is_played_without_searching(self):
+        folder = Path(self.directory.name) / "games"
+        learner = learning.learner(Path(self.directory.name) / "experience", folder)
+        key = f"{chess.polyglot.zobrist_hash(chess.Board()):016x}"
+        learner.records = [{"opponent": "guestNinja", "group": "humans", "type": "blitz",
+                            "credited": [[key, "d2d4", 1.0]], "analyses": []}] * 6
+        player = await self.player("hang", pgn_dir=folder, learner=learner)
+        player.name = "GuestHJGC"
+        await player.handle("Creating: GuestHJGC (++++) guestNinja (1500) unrated blitz 3 0")
+        await player.handle("Finger of guestNinja:")
+        await player.handle(start)
+        await self.settle(player)
+        self.assertEqual(player.connection.sent[-1], "d2d4")
+        self.assertTrue(any(line.startswith("-- d4 learned") for line in self.lines))
+        self.assertEqual(player.opponent_group(), "humans")
+        after_d4 = after_e4.replace("----P--- -------- PPPP-PPP", "---P---- -------- PPP-PPPP").replace(
+            " B 4 ", " B 3 ").replace("P/e2-e4 (0:00.000) e4", "P/d2-d4 (0:00.000) d4")
+        await player.handle(after_d4)
+        await player.handle("{Game 17 (GuestHJGC vs. guestNinja) guestNinja resigns} 1-0")
+        with next(folder.glob("*.pgn")).open() as stream:
+            self.assertEqual(chess.pgn.read_game(stream).next().comment.split()[0], "learned")
+        self.assertEqual(len(learner.records), 7)
 
     async def test_ignores_observed_games_and_invalid_boards(self):
         player = await self.player("play")

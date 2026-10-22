@@ -3,6 +3,7 @@ import argparse
 from datetime import datetime
 import json
 from pathlib import Path
+import random
 import re
 
 import chess
@@ -206,14 +207,138 @@ def write_player_stats(players, directory):
     return len(players)
 
 
-def build(experience_dir):
+def build(experience_dir, games_dir=None):
     """Refresh the index cache and player stats from experience/games/fics."""
     experience_dir = Path(experience_dir)
-    records = load_index(experience_dir / "games" / "fics", experience_dir / "index")
+    records = load_index(games_dir or experience_dir / "games" / "fics", experience_dir / "index")
     count = write_player_stats(player_stats(records), experience_dir / "players")
     return {"games": len(records), "players": count,
             "decided": sum(record["decision"] is not None for record in records),
             "built": datetime.now().isoformat(timespec="seconds")}
+
+
+def per_move_budget_ms(clock_seconds, increment_seconds):
+    """Roughly what the engine spends on a move: a thirtieth of the clock plus the increment."""
+    return max(0.0, clock_seconds / 30 + increment_seconds) * 1000
+
+
+class opening_book:
+    """One game's view of the experience: layered results, analyses, and book.bin (MAXIMA.md 9.7)."""
+
+    def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
+                 variety=1.0, supersede_depth=16, random_source=None):
+        self.book_path = book_path
+        self.prior = prior
+        self.variety = max(variety, 0.05)
+        self.supersede_depth = supersede_depth
+        self.random = random_source or random.Random()
+        self.layers = ({}, {}, {})  # global, group, opponent: (key, move) -> [points, games]
+        self.analyses = {}  # key -> {move: [depth, centipawns, mate, think_ms, halfmove clock]}
+        opponent = (opponent or "").lower()
+        for record in records:
+            weight = 1.0 if record["type"] == game_type else 0.5
+            registered = record["group"] is not None
+            layers = [(0, weight if registered else weight / 2)]
+            if registered and group is not None and record["group"] == group:
+                layers.append((1, weight))
+            if registered and opponent and record["opponent"].lower() == opponent:
+                layers.append((2, weight))
+            for key, move, value in record["credited"]:
+                for layer, layer_weight in layers:
+                    entry = self.layers[layer].setdefault((key, move), [0.0, 0.0])
+                    entry[0] += layer_weight * value
+                    entry[1] += layer_weight
+            for key, move, depth, centipawns, mate, think_ms, clock in record["analyses"]:
+                moves = self.analyses.setdefault(key, {})
+                known = moves.get(move)
+                if known is None or (think_ms, depth) > (known[3], known[0]):
+                    moves[move] = [depth, centipawns, mate, think_ms, clock]
+
+    def estimate(self, key, move):
+        """Score rate shrunk global -> group -> opponent, its posterior strength, and the games behind it."""
+        rate, games = 0.5, 0.0
+        for layer in self.layers:
+            points, count = layer.get((key, move), (0.0, 0.0))
+            rate = (points + self.prior * rate) / (count + self.prior)
+            games = count if count else games
+        return rate, self.prior + games, self.layers[0].get((key, move), (0.0, 0.0))[1]
+
+    def book_moves(self, board):
+        if not self.book_path:
+            return {}
+        weights = {}
+        try:
+            with chess.polyglot.open_reader(str(self.book_path)) as reader:
+                for entry in reader.find_all(board):
+                    weights[entry.move] = weights.get(entry.move, 0) + entry.weight
+        except (OSError, ValueError, IndexError):
+            return {}
+        return weights
+
+    def superseded(self, analyses, move):
+        """A clearly deeper search in this position preferred another move."""
+        own = analyses.get(move.uci())
+        depth = own[0] if own else 0
+        return any(other != move.uci() and analysis[0] >= max(self.supersede_depth, depth + 2)
+                   for other, analysis in analyses.items())
+
+    def choose(self, board, budget_ms):
+        """(move, reason) to play without searching, or None to let the engine search."""
+        if (type(board) is not chess.Board or board.ply() >= horizon_plies or board.halfmove_clock >= 90
+                or board.is_repetition(2)):
+            return None
+        key = f"{chess.polyglot.zobrist_hash(board):016x}"
+        analyses = self.analyses.get(key, {})
+        book = {move: weight for move, weight in self.book_moves(board).items() if board.is_legal(move)}
+        heaviest = max(book.values(), default=0)
+        candidates = {move for move, weight in book.items() if weight >= heaviest / 10}
+        candidates |= {chess.Move.from_uci(move) for (position, move) in self.layers[0] if position == key}
+        candidates = [move for move in candidates if board.is_legal(move) and not self.superseded(analyses, move)]
+        evidence = {move: self.estimate(key, move.uci()) for move in candidates}
+        if any(games for _, _, games in evidence.values()):
+            samples = {}
+            for move, (rate, strength, _) in evidence.items():
+                alpha = max(rate * strength / self.variety, 1e-3)
+                beta = max((1 - rate) * strength / self.variety, 1e-3)
+                samples[move] = self.random.betavariate(alpha, beta)
+            move = max(sorted(samples, key=chess.Move.uci), key=samples.get)
+            rate, _, games = evidence[move]
+            if samples[move] >= 0.5 or move in book:
+                return move, f"learned {rate:.0%} of {games:g}"
+        weighted = sorted((move for move in candidates if move in book), key=chess.Move.uci)
+        if weighted:
+            return self.random.choices(weighted, [book[move] for move in weighted])[0], "book"
+        if analyses:
+            text, (depth, centipawns, mate, think_ms, clock) = max(analyses.items(),
+                                                                   key=lambda item: (item[1][3], item[1][0]))
+            move = chess.Move.from_uci(text)
+            if think_ms >= budget_ms and clock == board.halfmove_clock and board.is_legal(move):
+                return move, f"recalled d{depth} {think_ms / 1000:.1f}s"
+        return None
+
+
+class learner:
+    """MaxDrone's experience: digests kept in memory, a fresh opening_book per game."""
+
+    def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0):
+        self.experience_dir = Path(experience_dir)
+        self.games_dir = Path(games_dir or self.experience_dir / "games" / "fics")
+        self.book_path = book_path
+        self.variety = variety
+        self.records = load_index(self.games_dir, self.experience_dir / "index")
+
+    def for_game(self, opponent, group, game_type):
+        return opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety)
+
+    def add(self, game):
+        record = digest(game)
+        if record is not None:
+            self.records.append(record)
+        return record
+
+    def refresh(self):
+        """Index cache and player stats on disk; run off the event loop."""
+        return build(self.experience_dir, self.games_dir)
 
 
 def main():

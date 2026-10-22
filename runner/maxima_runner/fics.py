@@ -16,7 +16,7 @@ import time
 import chess
 import chess.engine
 
-from . import fics_game
+from . import fics_game, learning
 from .project import engine_path, project_root
 from .uci import open_engine
 
@@ -272,7 +272,7 @@ rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
 default_settings = {
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
-    "owner": None, "notes": [], "pgn_dir": None,
+    "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
 }
 
 
@@ -346,8 +346,11 @@ class engine_player:
     """Play our games with a UCI engine; searches run as tasks so server lines keep flowing."""
 
     def __init__(self, open_session, on_line, margin=5, policy=None, finger_wait=2, pgn_dir=None,
-                 site="freechess.org"):
+                 site="freechess.org", learner=None):
         self.open_session = open_session
+        self.learner = learner
+        self.opening = None
+        self.fingered = False
         self.pgn_dir = pgn_dir
         self.site = site
         self.record = self.created = None
@@ -448,6 +451,7 @@ class engine_player:
                 title = next((title for title in titles if title in chess_titles), None)
                 self.opponent = chess.engine.Opponent(self.opponent.name, title, self.opponent.rating, "C" in titles)
                 self.opponent_unregistered = "U" in titles
+                self.fingered = True
                 self.opponent_ready.set()
 
     async def on_creating(self, match):
@@ -456,7 +460,7 @@ class engine_player:
                         else (match["white"], match["white_rating"]))
         self.opponent = chess.engine.Opponent(name, None, rating_of(rating), False)
         self.opponent_ready.clear()
-        self.opponent_unregistered = False
+        self.opponent_unregistered = self.fingered = False
         self.created = match.groupdict()
         if not playable(match["type"], match["time"], match["increment"]):
             self.on_line(f"-- aborting unsupported game: {match['type']} {match['time']} {match['increment']}")
@@ -479,7 +483,7 @@ class engine_player:
         self.on_line(f"-- game {self.game} over: {end['reason']} {end['result']}")
         opponent = end["black"] if self.name and end["white"].lower() == self.name.lower() else end["white"]
         self.save(end)
-        self.game = self.history = self.opponent = self.record = self.created = None
+        self.game = self.history = self.opponent = self.record = self.created = self.opening = None
         self.opponent_ready.set()
         self.played += 1
         self.streak = self.streak + 1 if opponent == self.last_opponent else 1
@@ -535,6 +539,23 @@ class engine_player:
             self.on_line(f"-- could not save game {self.game}: {error}")
             return
         self.on_line(f"-- saved game {self.game} to {path}")
+        if self.learner is not None:
+            self.learner.add(game)
+            asyncio.get_event_loop().run_in_executor(None, self.refresh_experience)
+
+    def refresh_experience(self):
+        try:
+            self.learner.refresh()
+        except (OSError, ValueError) as error:
+            self.on_line(f"-- could not refresh experience: {error}")
+
+    def opponent_group(self):
+        """Learning group from finger; None (global layer only) when unregistered or unknown."""
+        if self.opponent is None or not self.fingered or self.opponent_unregistered:
+            return None
+        if self.opponent.is_engine:
+            return "engines"
+        return "masters" if self.opponent.title else "humans"
 
     def on_board(self, position):
         if position.relation not in (fics_game.playing_my_move, fics_game.playing_their_move):
@@ -544,6 +565,7 @@ class engine_player:
             self.cancel()
             self.game, self.token, self.history = position.game, object(), history
             self.record = fics_game.game_record({})
+            self.opening = None
             self.on_line(f"-- game {self.game}: {position.white} vs {position.black}, "
                          f"{position.initial_seconds // 60} {position.increment_seconds}")
         elif self.history.update(position) == "move":
@@ -581,6 +603,19 @@ class engine_player:
                 await asyncio.wait_for(self.opponent_ready.wait(), self.finger_wait)
             except asyncio.TimeoutError:
                 self.opponent_ready.set()
+        if self.learner is not None:
+            if self.opening is None:
+                game_type = self.created["type"].lower() if self.created else None
+                self.opening = self.learner.for_game(self.opponent.name if self.opponent else None,
+                                                     self.opponent_group(), game_type)
+            choice = self.opening.choose(board, learning.per_move_budget_ms(clock, position.increment_seconds))
+            if choice is not None:
+                move, reason = choice
+                await self.send(fics_game.ics_move(move))
+                if self.record is not None:
+                    self.record.on_search(board, move, {"source": reason.split()[0]})
+                self.on_line(f"-- {board.san(move)} {reason} {time.monotonic() - started:.1f}s")
+                return
         try:
             result = await self.session.play(board, limit, game=self.token, opponent=self.opponent,
                                              timeout=max(clock, 1) + self.margin)
@@ -688,11 +723,12 @@ def load_settings(path):
         raise ValueError(f"{path}: expected a JSON object")
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
-             "pgn_dir": str}
+             "pgn_dir": str, "learning": bool, "variety": (int, float)}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
-        if value is not None and not isinstance(value, types[key]) or isinstance(value, bool) and types[key] is int:
+        kinds = types[key] if isinstance(types[key], tuple) else (types[key],)
+        if value is not None and (not isinstance(value, kinds) or isinstance(value, bool) and bool not in kinds):
             expected = " or ".join(kind.__name__ for kind in (types[key] if isinstance(types[key], tuple)
                                                                  else (types[key],)))
             raise ValueError(f"{path}: {key} must be {expected}")
@@ -718,7 +754,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
-                             "accept, rematches, games, owner, notes, pgn_dir); flags override it")
+                             "accept, rematches, games, owner, notes, pgn_dir, learning, variety); flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
     parser.add_argument("--handle", help="registered handle (password from FICS_PASSWORD), default guest")
@@ -740,6 +776,10 @@ def main():
     parser.add_argument("--games", type=int, help="quit after this many games")
     parser.add_argument("--pgn-dir", help="directory for monthly PGN files (default: experience/games/fics)")
     parser.add_argument("--no-pgn", action="store_true", help="do not save games")
+    parser.add_argument("--no-learning", action="store_true",
+                        help="let the engine use its own book instead of MaxDrone's experience")
+    parser.add_argument("--variety", type=float,
+                        help="opening variety: above 1 explores more, below 1 repeats winners (default: 1)")
     options = parser.parse_args()
     try:
         configured = load_settings(options.config)
@@ -747,15 +787,19 @@ def main():
         parser.error(str(error))
     flags = {"host": options.host, "port": options.port, "handle": options.handle, "engine": options.engine,
              "seeks": options.seek, "seeks_at_once": options.seeks_at_once, "rematches": options.rematches,
-             "games": options.games, "pgn_dir": options.pgn_dir}
+             "games": options.games, "pgn_dir": options.pgn_dir, "variety": options.variety}
     configured.update({key: value for key, value in flags.items() if value is not None})
     if options.no_seek:
         configured["seeks"] = []
     if options.no_accept:
         configured["accept"] = False
+    if options.no_learning or options.no_pgn:
+        configured["learning"] = False
     for name in ("host", "port", "handle", "engine"):
         setattr(options, name, configured[name])
     settings = dict(configured["options"])
+    if configured["learning"]:
+        settings.setdefault("OwnBook", "false")  # MaxDrone chooses book and learned moves (MAXIMA.md 9.7)
     for item in options.option:
         name, separator, value = item.partition("=")
         if not separator or not name.strip():
@@ -792,8 +836,14 @@ def main():
     async def session():
         commands = asyncio.Queue()
         read_commands(asyncio.get_event_loop(), commands)
+        learner = None
+        if configured["learning"] and not options.no_engine:
+            # index/ and players/ sit beside games/<server>/, so a custom --pgn-dir keeps them together
+            learner = learning.learner(pgn_dir.parent.parent, pgn_dir, project_root() / "book.bin",
+                                       configured["variety"])
+            show(f"-- experience: {len(learner.records)} games")
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
-                                                                  pgn_dir=pgn_dir, site=options.host)
+                                                                  pgn_dir=pgn_dir, site=options.host, learner=learner)
         try:
             if player is not None:
                 await player.start()
