@@ -54,7 +54,7 @@ bool test_tt() {
         }
     }
 
-    move_t * tmove = move::first(s, 0);
+    move_t * tmove = move::first(s, 1);
     trans_table::store(s->brd.stack->tt_key, s->brd.root_ply, s->brd.ply, 123, -12345, tmove->to_compact(), 3);
 
     bool result = trans_table::retrieve(s->brd.stack->tt_key, s->brd.ply, 123, score, move, flag);
@@ -79,7 +79,7 @@ bool test_tt() {
     search_t warm(fen);
     warm.stack->in_check = warm.brd.in_check();
     const int actual = warm.pvs(-score::INF, score::INF, 8);
-    if (cold.stop_all || warm.stop_all || cold.nodes <= 1 || warm.nodes != 1
+    if (cold.stop_all || warm.stop_all || cold.nodes == 0 || warm.nodes != 0
             || actual != expected || warm.brd.to_string() != fen) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=matching-context score reuse failed" << std::endl;
         delete s;

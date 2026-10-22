@@ -191,7 +191,7 @@ bool test_real_subtree_isolation() {
         trans_table::store(key, 0, 0, 8, 12345, compact(*search, "d1d5"), score::EXACT, context,
             {0, 101}, depth ? tt_mode_t::main_search : tt_mode_t::quiescence_entry);
         const int value = search->verification_search(12344, 12345, depth, true, verification_mode_t::null_move);
-        success &= check(value != 12345 && search->nodes > 1 && restored(*search, queen)
+        success &= check(value != 12345 && search->nodes > 0 && restored(*search, queen)
             && std::memcmp(history.get(), search->quiet_history.get(), sizeof(quiet_history_t)) == 0,
             "real verification subtrees must skip normal main/q TT cutoffs and history training");
         int score = 0, move = 0, flag = 0;

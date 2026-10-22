@@ -2,8 +2,8 @@
 
 Terminal results and move sets come from python-chess. Native tests use Maxima
 static evaluation as stand-pat labels, not as an independent evaluation oracle.
-Checking PVS moves conservatively retain one ply, covering either SEE extension
-choice; quiescence admits captures/promotions and all check evasions.
+Quiescence admits captures, queen promotions and all check evasions; the
+native reference applies Maxima's quiescence SEE bound to the noisy moves.
 """
 import argparse
 from pathlib import Path
@@ -32,7 +32,8 @@ def generate():
         legal = sorted(board.legal_moves, key=lambda m: m.uci())
         check = board.is_check()
         terminal = -30000 if not legal and check else 0 if not legal or board.is_insufficient_material() or board.halfmove_clock >= 100 else 32002
-        negative = [m for m in legal if check or board.is_capture(m) or m.promotion]
+        negative = [m for m in legal if check or ((board.is_capture(m) or m.promotion)
+                    and m.promotion in (None, chess.QUEEN))]
         entry = negative
         row = (check, terminal, " ".join(m.uci() for m in legal),
                " ".join(m.uci() for m in entry), " ".join(m.uci() for m in negative))
@@ -40,12 +41,8 @@ def generate():
         if terminal != 32002:
             return
         for move in legal if mode == 1 else entry if mode == 0 else negative:
-            checking = board.gives_check(move)
             board.push(move)
-            visit(board, 1 if mode == 1 and checking else 0 if mode == 1 else -1, ply + 1)
-            # A checking move with negative SEE is not extended by Maxima.
-            if mode == 1 and checking:
-                visit(board, 0, ply + 1)
+            visit(board, 0 if mode == 1 else -1, ply + 1)
             board.pop()
 
     for fen in positions:

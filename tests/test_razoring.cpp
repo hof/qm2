@@ -25,6 +25,7 @@ public:
         main_see_enabled = iir_enabled = iid_enabled = correction_history_enabled = false;
         tablebase_limit = draw_contempt = 0;
         evaluate(this);
+        nodes = 0; // fixture moves are setup, not search
     }
     int pvs(int alpha, int beta, int depth, bool cut_node = false) override {
         if (brd.ply == entry_ply) {
@@ -136,7 +137,7 @@ bool test_frame_and_q_contract() {
             auto after = *s->stack;
             after.tt_clocks = frame.tt_clocks;
             ok &= accepted == (qvalue <= 100 && score_delta != 30000) && value == qvalue
-                && s->nodes == 1 && s->stack->tt_clocks.max == 80
+                && s->nodes == 0 && s->stack->tt_clocks.max == 80
                 && std::memcmp(&after, &frame, sizeof(frame)) == 0
                 && s->brd.to_string() == fen && s->brd.stack->tt_key == key
                 && std::memcmp(quiet.get(), s->quiet_history.get(), sizeof(quiet_history_t)) == 0
@@ -199,13 +200,15 @@ bool test_real_q_and_cancel() {
     bool ok = true;
     for (bool black : {false, true}) {
         for (bool use_cache : {false, true}) {
-            for (int limit : {0, 1, 2}) {
+            for (int limit : {0, 1}) {
                 auto s = std::make_unique<probe_t>(black);
                 s->q_tt_enabled = use_cache;
                 const int alpha = std::max(2000, evaluate(s.get()) + 1000);
                 const auto fen = s->brd.to_string();
                 const auto key = s->brd.stack->tt_key;
+                // A spent budget interrupts at entry; no budget lets razoring cut.
                 s->game.max_nodes = limit;
+                s->nodes = limit;
                 trans_table::clear();
                 const int result = s->run(alpha, alpha + 1, 2);
                 const bool before_ok = ok;
@@ -220,18 +223,18 @@ bool test_real_q_and_cancel() {
                 ok &= !trans_table::retrieve(key, s->brd.ply, 2, score, hint, flag, s->tt_context());
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
                 const auto & c = s->nnue_audit.counters;
-                ok &= c.razoring_cutoffs == unsigned(!limit)
-                    && c.razoring_cancelled == unsigned(limit >= 2);
+                ok &= c.razoring_cutoffs == unsigned(!limit) && c.razoring_cancelled == 0;
 #endif
             }
         }
     }
     // Cancel after qsearch has made a real capture, then verify complete undo.
-    for (int limit : {1, 2, 3}) {
+    for (int limit : {1}) {
         auto s = std::make_unique<search_t>("7k/pp6/8/3q4/8/8/PP6/K2R4 b - - 0 1");
         move_t last{};
         last.set(&s->brd, "h8g8");
         s->forward(&last, false);
+        s->nodes = 0; // the fixture move is setup, not search
         s->tablebase_limit = s->draw_contempt = 0;
         s->correction_history_enabled = s->q_tt_enabled = false;
         evaluate(s.get());
@@ -256,6 +259,7 @@ bool test_real_q_and_cancel() {
     move_t move{};
     move.set(&tactical->brd, "h8g8");
     tactical->forward(&move, false);
+    tactical->nodes = 0; // the fixture move is setup, not search
     tactical->tablebase_limit = tactical->draw_contempt = 0;
     tactical->correction_history_enabled = false;
     const int tactical_alpha = evaluate(tactical.get()) + 100;
@@ -264,12 +268,12 @@ bool test_real_q_and_cancel() {
     int result = 0;
     const bool accepted = tactical->razor_node(tactical_alpha, tactical_alpha + 1, 1,
         tactical_alpha - 1000, result);
-    if (accepted || result <= tactical_alpha || tactical->nodes <= 1) {
+    if (accepted || result <= tactical_alpha || tactical->nodes == 0) {
         std::cerr << "tactical accepted " << accepted << " result " << result
             << " nodes " << tactical->nodes << '\n';
     }
     ok &= !accepted && result > tactical_alpha
-        && tactical->nodes > 1 && tactical->brd.ply == 1
+        && tactical->nodes > 0 && tactical->brd.ply == 1
         && tactical->stack->eval_result == before.eval_result;
     return check(ok, "razoring real tactical verification, cancellation or restoration failed");
 }

@@ -88,7 +88,6 @@ namespace options {
         , { "NNUEAuditIID", BOOL, 0, "type check default false", true }
         , { "NNUEAuditAspiration", BOOL, 0, "type check default false", true }
         , { "NNUEAuditDelta", BOOL, 0, "type check default false", true }
-        , { "NNUEAuditSEE", BOOL, 0, "type check default false", true }
 #endif
     };
     

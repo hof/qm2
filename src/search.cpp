@@ -55,8 +55,7 @@ constexpr int forward_futility_margin = 300;
 constexpr int razoring_margin_per_ply = 300;
 constexpr int main_see_quiet_margin = 50;
 constexpr int main_see_capture_margin = 100;
-constexpr int quiescence_delta_margin = 200;
-constexpr int delta_endgame_material = 1300;
+constexpr int quiescence_futility_margin = 350;
 
 // Pseudo-attacks by cheaper pieces make a static surplus less trustworthy.
 // This is the same parent-position threat model used for quiet ordering.
@@ -363,7 +362,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         upcoming_repetition_enabled = false;
         q_tt_enabled = false;
         beta_pruning = ffp_enabled = null_enabled = lmr_enabled = aspiration_enabled = iid_enabled = false;
-        nnue_audit.q_delta = nnue_audit.q_see = false;
+        nnue_audit.q_delta = false;
         null_enabled = horizon == 2 && options::get_value("NNUEAuditNullMove");
         beta_pruning = horizon == 2 && options::get_value("NNUEAuditBetaPruning");
         ffp_enabled = horizon == 2 && options::get_value("NNUEAuditFutility");
@@ -371,7 +370,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         aspiration_enabled = horizon == 2 && options::get_value("NNUEAuditAspiration");
         iid_enabled = horizon == 2 && options::get_value("NNUEAuditIID");
         nnue_audit.q_delta = horizon == 2 && options::get_value("NNUEAuditDelta");
-        nnue_audit.q_see = horizon == 2 && options::get_value("NNUEAuditSEE");
     }
 #endif
     _neural_cache.clear();
@@ -686,10 +684,7 @@ void search_t::go() {
             + " cutoffs " + std::to_string(nnue_audit.counters.beta_cutoffs));
         uci::out("info string audit_ffp candidates " + std::to_string(nnue_audit.counters.ffp_candidates)
             + " prunes " + std::to_string(nnue_audit.counters.ffp_prunes));
-        uci::out("info string audit_delta candidates " + std::to_string(nnue_audit.counters.q_delta_candidates)
-            + " prunes " + std::to_string(nnue_audit.counters.q_delta_prunes));
-        uci::out("info string audit_see candidates " + std::to_string(nnue_audit.counters.q_see_candidates)
-            + " prunes " + std::to_string(nnue_audit.counters.q_see_prunes));
+        uci::out("info string audit_delta prunes " + std::to_string(nnue_audit.counters.q_delta_prunes));
         uci::out("info string audit_aspiration searches " + std::to_string(counts.aspiration_searches)
             + " attempts " + std::to_string(counts.aspiration_attempts)
             + " fail_low " + std::to_string(counts.aspiration_fail_lows)
@@ -1007,6 +1002,9 @@ void search_t::backward() {
  * @param gives_check
  */
 void search_t::forward(move_t * move, bool gives_check) {
+    // Count one node per move made; null moves and re-searches of an
+    // already made move are not new nodes.
+    ++nodes;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     ++nnue_audit.counters.move_visits;
 #endif
@@ -1051,6 +1049,7 @@ bool search_t::try_forward(move_t * move, bool gives_check) {
     brd.backward(move);
     --stack;
     stack->current_move = previous;
+    --nodes;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     --nnue_audit.counters.move_visits;
 #endif
@@ -2491,7 +2490,6 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
         if (nnue_audit.fixed_horizon) {
             ++nnue_audit.counters.q_nodes;
-            ++nodes;
             if (abort()) {
                 return alpha;
             }
@@ -2513,7 +2511,6 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
      */
 
     //time
-    nodes++;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     ++nnue_audit.counters.pvs_nodes;
     nnue_audit.counters.max_main_ply = std::max(nnue_audit.counters.max_main_ply, uint64_t(brd.ply));
@@ -3053,7 +3050,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      */
 
     //time
-    nodes++;
     if (abort()) {
         return alpha;
     }
@@ -3116,8 +3112,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         }
         stack->tt_move.set_compact(&brd, tt_move);
         const auto & hint = stack->tt_move;
-        if (hint.piece && (!brd.valid(&hint)
-                || !(in_check || hint.capture || hint.promotion))) {
+        // Any valid hint is searched first, even a quiet move.
+        if (hint.piece && !brd.valid(&hint)) {
             stack->tt_move.clear();
         }
     }
@@ -3170,7 +3166,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         best_score = std::max(best_score, draw_score());
     }
     int searched_moves = 0;
-    const bool is_eg = !in_check && stack->metadata.endgame;
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    const int futility = eval + quiescence_futility_margin;
     do {
 
         /*
@@ -3178,73 +3175,29 @@ int search_t::qsearch(int alpha, int beta, int depth) {
          */
 
         int gives_check = brd.gives_check(move);
-        if (!in_check && !move->capture && !move->promotion) {
-            ++pruned_nodes;
-            continue;
+
+        // After one evasion, only noisy moves passing the quiescence SEE bound remain.
+        if (ffp_enabled && in_check && searched_moves > 0 && best_score > -decisive
+                && (!(move->capture || move->promotion) || !brd.see(move, quiescence_see_threshold))) {
+            break;
         }
 
-        // Selective capture pruning; tactical moves stay searchable.
-        bool do_prune = !in_check && !gives_check && !is_eg;
+        // Futility: a losing tactical move cannot lift a hopeless stand pat.
+        const bool recapture = (stack - 1)->current_move.piece
+            && move->tsq == (stack - 1)->current_move.tsq;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        do_prune &= nnue_audit.q_delta || nnue_audit.q_see;
-#endif
-        bool pruned = false;
-        if (do_prune) {
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            const bool use_delta = nnue_audit.q_delta;
-            const bool use_see = nnue_audit.q_see;
+        const bool use_futility = nnue_audit.q_delta;
 #else
-            const bool use_delta = true;
-            const bool use_see = true;
+        const bool use_futility = ffp_enabled;
 #endif
-            // Captures only. Keep promotions and advanced pawn moves, and
-            // avoid pruning captures that enter a low-material endgame.
-            const bool advanced_pawn = (move->piece == WPAWN && move->tsq >= a6)
-                || (move->piece == BPAWN && move->tsq <= h3);
-            bool delta_prune = false;
-            bool see_prune = false;
-            if (move->capture && !move->promotion && !advanced_pawn
-                    && std::abs(alpha) < score::TABLEBASE - MAX_PLY
-                    && std::abs(beta) < score::TABLEBASE - MAX_PLY) {
-                const bool them = brd.them();
-                int remaining = 0;
-                for (int piece : {KNIGHT[them], BISHOP[them], ROOK[them], QUEEN[them]})
-                    remaining += popcnt0(brd.bb[piece]) * board::PVAL[piece];
-                if (move->capture != PAWN[them]) {
-                    remaining -= board::PVAL[move->capture];
-                }
-                if (remaining > delta_endgame_material) {
-                    if (use_delta) {
+        if (use_futility && !in_check && !gives_check && !recapture && best_score > -decisive
+                && futility <= alpha && std::abs(futility) < decisive && !brd.see(move, 1)) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-                        ++nnue_audit.counters.q_delta_candidates;
+            ++nnue_audit.counters.q_delta_prunes;
 #endif
-                        delta_prune = eval + board::PVAL[move->capture] + quiescence_delta_margin <= alpha;
-                    }
-                    // SEE estimates material on one square, not positional
-                    // compensation. Keep equal exchanges and tactical guards.
-                    if (use_see && !delta_prune) {
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-                        ++nnue_audit.counters.q_see_candidates;
-#endif
-                        see_prune = !brd.see(move, 0);
-                    }
-                }
-            }
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            nnue_audit.counters.q_delta_prunes += delta_prune;
-            nnue_audit.counters.q_see_prunes += see_prune;
-#endif
-            pruned = delta_prune || see_prune;
-            if (pruned) {
-                pruned_nodes++;
-                // Retain the same optimistic material bound used by delta
-                // pruning, rather than replacing it with the window's alpha.
-                if (delta_prune && brd.legal(move)) {
-                    best_score = std::max(best_score,
-                        eval + board::PVAL[move->capture] + quiescence_delta_margin);
-                }
-                continue;
-            }
+            ++pruned_nodes;
+            best_score = std::max(best_score, futility);
+            continue;
         }
 
         /*

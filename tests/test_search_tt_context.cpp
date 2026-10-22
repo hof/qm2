@@ -65,14 +65,14 @@ bool test_rule50_buckets() {
         score::EXACT, first->tt_context(), {0, 99});
     int value = 0, move = 0, flag = 0;
     success &= check("different counts within a bucket must retain TT score reuse",
-        same->pvs(-score::INF, score::INF, 1) == 123 && same->nodes == 1);
+        same->pvs(-score::INF, score::INF, 1) == 123 && same->nodes == 0);
     success &= check("another bucket must reject the score while retaining the move",
         !trans_table::retrieve(next->brd.stack->tt_key, 0, 1, value, move, flag,
             next->tt_context(), 30) && move == compact);
     const int warm = next->pvs(-score::INF, score::INF, 1);
     trans_table::clear();
     success &= check("cross-bucket warm search must match a fresh search",
-        warm == run(prefix + "30 203") && next->nodes > 1);
+        warm == run(prefix + "30 203") && next->nodes > 0);
     return success;
 }
 
@@ -89,7 +89,7 @@ bool test_draw_contempt() {
         set_option("DrawContempt", before);
         const auto unchanged = run_configured(draw_fen);
         success &= check("unchanged draw contempt must retain score reuse",
-            unchanged.first == original.first && unchanged.second == 1);
+            unchanged.first == original.first && unchanged.second == 0);
         set_option("DrawContempt", -before);
         const auto warm = run_configured(draw_fen);
         trans_table::clear();
@@ -159,7 +159,7 @@ bool test_matching_context_and_move_hint() {
     search_t matching(fen);
     prepare(matching);
     bool success = check("matching draw context must retain score cutoffs",
-        matching.pvs(-score::INF, score::INF, 1) == expected && matching.nodes == 1);
+        matching.pvs(-score::INF, score::INF, 1) == expected && matching.nodes == 0);
     search_t different("7k/8/8/8/8/8/8/KR6 w - - 99 1");
     prepare(different);
     int score = 0, move = 0, flag = 0;
@@ -188,7 +188,7 @@ bool test_clock_range_reuse() {
     search_t different("7k/8/8/8/8/8/8/KR6 w - - 8 1");
     prepare(different);
     bool success = check("ordinary clock differences must preserve score reuse",
-        different.pvs(-score::INF, score::INF, 1) == expected && different.nodes == 1);
+        different.pvs(-score::INF, score::INF, 1) == expected && different.nodes == 0);
     // Reusing a child entry must carry its restrictions into the parent's entry.
     trans_table::clear();
     search_t child("7k/8/8/8/8/8/8/KR6 w - - 4 1");
@@ -197,6 +197,7 @@ bool test_clock_range_reuse() {
     move_t quiet;
     quiet.set(&child.brd, "a1a2");
     child.forward(&quiet, false);
+    child.nodes = 0; // the fixture move is setup, not search
     trans_table::store(child.brd.stack->tt_key, 0, 0, 1, -500, 0,
         score::EXACT, child.tt_context(), {3, 20});
     clock_range_t clocks = {0, 101};
@@ -210,7 +211,7 @@ bool test_clock_range_reuse() {
                 child.tt_context(), clock));
     }
     success &= check("a cached child score must carry its range into the search stack",
-        child.pvs(-score::INF, score::INF, 1) == -500 && child.nodes == 1
+        child.pvs(-score::INF, score::INF, 1) == -500 && child.nodes == 0
         && child.stack->tt_clocks.min == 3 && child.stack->tt_clocks.max == 20);
     child.backward(&quiet);
     success &= check("cached child restrictions must reach the parent",
@@ -272,7 +273,7 @@ bool test_non_pv_tt_bounds() {
                     || (bound == score::LOWERBOUND && value >= alpha + 1)
                     || (bound == score::UPPERBOUND && value <= alpha);
                 success &= check("non-PV TT cutoffs must respect bound direction and equality",
-                    cutoff ? search.nodes == 1 && result == value : search.nodes > 1);
+                    cutoff ? search.nodes == 0 && result == value : search.nodes > 0);
                 success &= check("non-PV TT probes must restore board, hash and search state",
                     !search.stop_all && search.brd.to_string() == fen
                     && search.brd.ply == 0 && search.brd.stack == board_stack
@@ -315,7 +316,7 @@ bool test_non_pv_tt_compatibility() {
         prepare(cold);
         const int fresh = cold.pvs(0, 1, 2);
         success &= check("non-PV search must reject incompatible exact scores",
-            warm_nodes > 1 && warm != -123 && (warm >= 1) == (fresh >= 1));
+            warm_nodes > 0 && warm != -123 && (warm >= 1) == (fresh >= 1));
     }
     return success;
 }
@@ -330,13 +331,14 @@ bool test_non_pv_tt_mates_and_clocks() {
         quiet.set(&search.brd, "a1a2");
         const U64 parent_context = search.tt_context();
         search.forward(&quiet, false);
+        search.nodes = 0; // the fixture move is setup, not search
         // Store at another ply to exercise mate-distance decoding at this node.
         trans_table::store(search.brd.stack->tt_key, 0, 3, 1, value, 0,
             score::EXACT, search.tt_context(), {3, 8});
         const int expected = value >= score::TABLEBASE - MAX_PLY ? value + 2
             : value <= -score::TABLEBASE + MAX_PLY ? value - 2 : value;
         success &= check("non-PV exact reuse must decode mate distance at the probing ply",
-            search.pvs(0, 1, 1) == expected && search.nodes == 1);
+            search.pvs(0, 1, 1) == expected && search.nodes == 0);
         search.backward(&quiet);
         success &= check("non-PV exact clock restrictions must reach the parent",
             search.stack->tt_clocks.min == 2 && search.stack->tt_clocks.max == 7

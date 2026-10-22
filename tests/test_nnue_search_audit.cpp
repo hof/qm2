@@ -189,7 +189,7 @@ int main(int argc, char ** argv) {
     search.init(fen, nullptr);
     if (!search.evaluation_network || !search.nnue_audit.aligned_quiescence
             || search.broader_futility_enabled || search.beta_pruning || search.ffp_enabled || search.null_enabled || search.adaptive_null_enabled || search.lmr_enabled
-            || search.iid_enabled || search.nnue_audit.q_delta || search.nnue_audit.q_see) {
+            || search.iid_enabled || search.nnue_audit.q_delta) {
         return failure(__LINE__);
     }
     search.game.max_depth = 3;
@@ -207,7 +207,7 @@ int main(int argc, char ** argv) {
     options::get_option("NNUEAuditNullMove")->value = 1;
     search.init(fen, nullptr);
     if (!search.null_enabled || search.beta_pruning || search.ffp_enabled || search.lmr_enabled
-            || search.nnue_audit.q_delta || search.nnue_audit.q_see) {
+            || search.nnue_audit.q_delta) {
         return failure(__LINE__);
     }
     search.game.max_depth = 3;
@@ -230,7 +230,7 @@ int main(int argc, char ** argv) {
     options::get_option("NNUEAuditBetaPruning")->value = 1;
     search.init(fen, nullptr);
     if (!search.beta_pruning || search.null_enabled || search.ffp_enabled || search.lmr_enabled
-            || search.nnue_audit.q_delta || search.nnue_audit.q_see) {
+            || search.nnue_audit.q_delta) {
         return failure(__LINE__);
     }
     search.game.max_depth = 3;
@@ -244,12 +244,12 @@ int main(int argc, char ** argv) {
     // instead; no child main-search nodes exist at depth one to mask the result.
     search.init(fen, nullptr);
     search.pvs(expected - 81, expected - 80, 1);
-    if (search.nnue_audit.counters.beta_cutoffs || search.nodes <= 1) {
+    if (search.nnue_audit.counters.beta_cutoffs || search.nodes == 0) {
         return failure(__LINE__);
     }
     search.init(fen, nullptr);
     if (search.pvs(expected - 101, expected - 100, 1) != expected
-            || search.nnue_audit.counters.beta_cutoffs != 1 || search.nodes != 1) {
+            || search.nnue_audit.counters.beta_cutoffs != 1 || search.nodes != 0) {
         return failure(__LINE__);
     }
     for (int surplus : {49, 50}) {
@@ -296,37 +296,21 @@ int main(int argc, char ** argv) {
     options::get_option("NNUEAuditFutility")->value = 0;
     options::get_option("NNUEAuditDelta")->value = 1;
     {
-        for (const char * capture_fen : {
-                "r3k2r/ppp2ppp/2n1bn2/3p4/3Pp3/2N1BN2/PPP2PPP/R2QK2R w KQkq - 0 1",
-                "r2qk2r/ppp2ppp/2n1bn2/3pP3/3P4/2N1BN2/PPP2PPP/R3K2R b KQkq - 0 1"}) {
-            for (int surplus : {299, 300}) {
-                auto probe = std::make_unique<search_t>(capture_fen);
-                const int alpha = evaluate(probe.get()) + surplus;
-                probe->qsearch(alpha, alpha + 1, -1);
-                if (probe->nodes != uint64_t(surplus == 299 ? 3 : 1)
-                        || probe->nnue_audit.counters.q_delta_candidates != 2
-                        || probe->nnue_audit.counters.q_delta_prunes != uint64_t(surplus == 300 ? 2 : 0)
-                        || probe->nnue_audit.counters.q_see_prunes || probe->brd.ply
-                        || probe->brd.to_string() != capture_fen) {
-                    return failure(__LINE__);
-                }
+        // c4xd5 is an equal exchange: futility skips it only once stand pat
+        // plus the margin cannot reach alpha.
+        const char * equal_fen = "r3k2r/ppp2ppp/2n1bn2/3p4/2PPp3/4BN2/PPP2PPP/R2QK2R w KQkq - 0 1";
+        for (int surplus : {349, 350}) {
+            auto probe = std::make_unique<search_t>(equal_fen);
+            const int alpha = evaluate(probe.get()) + surplus;
+            probe->qsearch(alpha, alpha + 1, -1);
+            if (bool(probe->nnue_audit.counters.q_delta_prunes) != (surplus == 350)
+                    || probe->brd.ply || probe->brd.to_string() != equal_fen) {
+                return failure(__LINE__);
             }
         }
     }
-    // A low-material transition and en passant must remain searchable even
-    // far below alpha. Their legal capture sets are independently fixed here.
-    for (const char * protected_fen : {
-            "r3k2r/ppp2ppp/8/3n4/3P4/2N5/PPP2PPP/R3K2R w KQkq - 0 1",
-            "r3k2r/ppp2ppp/2n5/3pP3/8/2N5/PPP2PPP/R3K2R w KQkq d6 0 1"}) {
-        auto probe = std::make_unique<search_t>(protected_fen);
-        const int alpha = evaluate(probe.get()) + 5000;
-        probe->qsearch(alpha, alpha + 1, -1);
-        if (probe->nodes != 2 || probe->brd.ply || probe->brd.to_string() != protected_fen) {
-            return failure(__LINE__);
-        }
-    }
     search.init(fen, nullptr);
-    if (!search.nnue_audit.q_delta || search.nnue_audit.q_see) {
+    if (!search.nnue_audit.q_delta) {
         return failure(__LINE__);
     }
     search.game.max_nodes = 128;
@@ -337,75 +321,6 @@ int main(int argc, char ** argv) {
         return failure(__LINE__);
     }
     options::get_option("NNUEAuditDelta")->value = 0;
-    options::get_option("NNUEAuditSEE")->value = 1;
-    {
-        // Both knight captures lose 225 cp. SEE alone must reject them even
-        // when alpha is too close to stand pat for capture-gain delta pruning.
-        const char * losing_fen = "r3k2r/ppp2ppp/2n1bn2/3p4/3Pp3/2N1BN2/PPP2PPP/R2QK2R w KQkq - 0 1";
-        auto probe = std::make_unique<search_t>(losing_fen);
-        const int alpha = evaluate(probe.get()) + 1;
-        probe->qsearch(alpha, alpha + 1, -1);
-        if (probe->nodes != 1 || probe->nnue_audit.counters.q_see_candidates != 2
-                || probe->nnue_audit.counters.q_see_prunes != 2
-                || probe->nnue_audit.counters.q_delta_candidates || probe->brd.ply
-                || probe->brd.to_string() != losing_fen) {
-            return failure(__LINE__);
-        }
-        // The e6 pawn is pinned to e8 by Re1. Nc3xd5 wins a pawn and
-        // must survive SEE pruning in the real qsearch with either evaluator.
-        const char * pinned_fen = "rnb1kbnr/ppp3pp/4p3/3p4/8/2N5/PPP2PPP/R3R1K1 w - - 0 1";
-        probe->init(pinned_fen, nullptr);
-        move_t pinned_move;
-        pinned_move.set(WKNIGHT, c3, d5, BPAWN);
-        if (!probe->brd.legal(&pinned_move) || probe->brd.see(&pinned_move) != 100) {
-            return failure(__LINE__);
-        }
-        const int pinned_alpha = evaluate(probe.get()) + 1;
-        probe->qsearch(pinned_alpha, pinned_alpha + 1, -1);
-        if (probe->nodes <= 1 || !probe->nnue_audit.counters.q_see_candidates
-                || probe->brd.ply || probe->brd.to_string() != pinned_fen) {
-            return failure(__LINE__);
-        }
-        // c4xd5 is an equal exchange. A high alpha must not make SEE discard it.
-        const char * equal_fen = "r3k2r/ppp2ppp/2n1bn2/3p4/2PPp3/4BN2/PPP2PPP/R2QK2R w KQkq - 0 1";
-        probe->init(equal_fen, nullptr);
-        move_t equal_move;
-        equal_move.set(WPAWN, c4, d5, BPAWN);
-        if (!probe->brd.legal(&equal_move) || probe->brd.see(&equal_move) != 0) {
-            return failure(__LINE__);
-        }
-        const int high_alpha = evaluate(probe.get()) + 5000;
-        probe->qsearch(high_alpha, high_alpha + 1, -1);
-        if (probe->nodes <= 1 || !probe->nnue_audit.counters.q_see_candidates
-                || probe->brd.ply || probe->brd.to_string() != equal_fen) {
-            return failure(__LINE__);
-        }
-        // Losing captures remain searchable when they check or when the
-        // opponent is already below the post-capture material threshold.
-        for (const char * protected_fen : {
-                "r3k2r/ppp2ppp/2n5/8/2B5/2N5/PPP2PPP/R3K2R w KQkq - 0 1",
-                "r3k2r/ppp2ppp/4p3/3p4/3P4/2N5/PPP2PPP/R3K2R w KQkq - 0 1"}) {
-            probe->init(protected_fen, nullptr);
-            const int protected_alpha = evaluate(probe.get()) + 5000;
-            probe->qsearch(protected_alpha, protected_alpha + 1, -1);
-            if (probe->nodes <= 1 || probe->nnue_audit.counters.q_see_prunes
-                    || probe->brd.ply || probe->brd.to_string() != protected_fen) {
-                return failure(__LINE__);
-            }
-        }
-    }
-    search.init(fen, nullptr);
-    if (search.nnue_audit.q_delta || !search.nnue_audit.q_see) {
-        return failure(__LINE__);
-    }
-    search.game.max_nodes = 128;
-    search.game.max_depth = 3;
-    search.go();
-    if (search.nodes != 128 || !search.stop_all || search.brd.ply
-            || search.brd.to_string() != fen || evaluate(&search) != expected) {
-        return failure(__LINE__);
-    }
-    options::get_option("NNUEAuditSEE")->value = 0;
     {
         const char * queen_fen = "6k1/8/8/8/8/8/6r1/K2Q4 w - - 0 1";
         auto probe = std::make_unique<search_t>(queen_fen);
@@ -413,17 +328,16 @@ int main(int argc, char ** argv) {
         const int alpha = evaluate(probe.get()) + 5000;
         probe->qsearch(alpha, alpha + 1, 0);
         const auto & counts = probe->nnue_audit.counters;
-        if (counts.pvs_nodes || counts.q_nodes != probe->nodes
-                || counts.move_visits + 1 != counts.q_nodes || counts.null_visits
+        if (counts.pvs_nodes || counts.move_visits != probe->nodes || counts.null_visits
                 || counts.root_calls || counts.researches) {
             return failure(__LINE__);
         }
-        if (probe->nodes != 1 || probe->brd.ply || probe->brd.to_string() != queen_fen) {
+        if (probe->nodes != 0 || probe->brd.ply || probe->brd.to_string() != queen_fen) {
             return failure(__LINE__);
         }
         probe->init(queen_fen, nullptr);
         probe->qsearch(alpha, alpha + 1, -1);
-        if (probe->nodes != 1) {
+        if (probe->nodes != 0) {
             return failure(__LINE__);
         }
         const char * counter_fen = "r5k1/8/8/8/8/8/8/KQ6 w - - 0 1";
@@ -436,7 +350,7 @@ int main(int argc, char ** argv) {
             return failure(__LINE__);
         }
         probe->qsearch(-score::INF, score::INF, -1);
-        if (probe->nodes <= 1
+        if (probe->nodes == 0
                 || probe->brd.ply || probe->brd.to_string() != counter_fen) {
             return failure(__LINE__);
         }
@@ -446,13 +360,13 @@ int main(int argc, char ** argv) {
             probe->init(castle_fen, nullptr);
             const int castle_alpha = evaluate(probe.get()) + 5000;
             probe->qsearch(castle_alpha, castle_alpha + 1, 0);
-            if (probe->nodes != 1 || probe->brd.ply
+            if (probe->nodes != 0 || probe->brd.ply
                     || probe->brd.to_string() != castle_fen) {
                 return failure(__LINE__);
             }
             probe->init(castle_fen, nullptr);
             probe->qsearch(castle_alpha, castle_alpha + 1, -1);
-            if (probe->nodes != 1) {
+            if (probe->nodes != 0) {
                 return failure(__LINE__);
             }
         }
@@ -466,8 +380,7 @@ int main(int argc, char ** argv) {
         return failure(__LINE__);
     }
     const auto & work = search.nnue_audit.counters;
-    if (work.pvs_nodes + work.q_nodes != search.nodes || !work.root_calls
-            || work.move_visits + work.null_visits + work.researches != search.nodes
+    if (work.move_visits != search.nodes || !work.root_calls
             || work.root_researches > work.researches
             || work.research_fail_highs > work.researches) {
         return failure(__LINE__);

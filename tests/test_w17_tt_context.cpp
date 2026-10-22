@@ -145,7 +145,7 @@ bool test_bound_compatibility() {
                 const int beta = bound == score::EXACT ? score::INF : alpha + 1;
                 const int actual = reader->w17_pvs(alpha, beta, reader_mode, 3);
                 success &= check("losers PVS must use mode compatibility for every cutoff type",
-                    writer_mode == reader_mode ? actual == expected && reader->nodes == 1 : actual != expected);
+                    writer_mode == reader_mode ? actual == expected && reader->nodes == 0 : actual != expected);
                 success &= check("bound probes must finish at the original position",
                     !reader->stop_all && reader->brd.to_string() == fen
                     && reader->brd.ply == 0 && reader->stack == reader->root_stack);
@@ -171,7 +171,7 @@ bool test_incoming_mode() {
             search->w17_tt_context(search->brd.us()), 0) && move != 0);
     const auto matching = run(fen, -1, 1);
     success &= check("matching incoming mode must preserve useful one-node score reuse",
-        matching.value == expected && matching.nodes == 1);
+        matching.value == expected && matching.nodes == 0);
     trans_table::clear();
     const int depth = search->brd.max_mate_depth_us();
     const int deeper = search->w17_pvs(-score::INF, score::INF, -1, depth);

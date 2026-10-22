@@ -32,7 +32,7 @@ bool test_configuration_snapshot() {
     control.ponder.store(false);
     success &= check(!search.pondering(), "ponderhit must reach the active search");
     const int score = search.qsearch(-score::INF, score::INF, 0);
-    success &= check(score > 0 && search.nodes > 1 && !search.stop_all,
+    success &= check(score > 0 && search.nodes > 0 && !search.stop_all,
         "changing the caller's node limit must not abort its existing search");
     return success;
 }

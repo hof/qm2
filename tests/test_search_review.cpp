@@ -64,13 +64,14 @@ bool test_castling() {
                 search_t search(fixture.fen);
                 search.stack->in_check = search.brd.in_check();
                 search.draw_contempt = search.tablebase_limit = 0;
+                search.ffp_enabled = false; // certify the full evasion domain
                 const int result = search.qsearch(window.first, window.second, depth);
                 const bool valid = result <= window.first ? value <= result
                     : result >= window.second ? value >= result : value == result;
                 ok &= check(valid, "castling qsearch bound differs");
                 ok &= restored(search, original);
                 if (window.first == -score::INF) {
-                    ok &= check(search.nodes == tactical.size() + 1,
+                    ok &= check(search.nodes == tactical.size(),
                         "qsearch move domain differs from certified captures/evasions");
                 }
                 ++probes;
@@ -114,7 +115,7 @@ bool test_exact_pv() {
         const U64 before = search->nodes;
         const auto state = search->brd.to_string();
         const int warm = search->pvs(-score::INF, score::INF, 3);
-        ok &= check(cold == warm && search->nodes == before + 1,
+        ok &= check(cold == warm && search->nodes == before,
             "matching exact TT score was not reused");
         ok &= check(search->stack->pv_count == 0 && legal_pv(*search),
             "exact TT return exposed a stale/illegal PV");
@@ -162,7 +163,7 @@ bool test_production_integration() {
             ok &= check(!original.stop_all && legal_pv(original), "production cold search/PV invalid");
             const U64 before = original.nodes;
             const int warm = original.pvs(-score::INF, score::INF, depth);
-            ok &= check(cold == warm && original.nodes == before + 1,
+            ok &= check(cold == warm && original.nodes == before,
                 "production exact warm result differs");
             ok &= check(legal_pv(original), "production TT PV invalid");
             for (bool tt : {false, true}) {

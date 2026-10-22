@@ -17,6 +17,7 @@ void play(search_t & search, const char * text) {
         std::abort();
     }
     search.forward(&move, search.brd.gives_check(&move));
+    search.nodes = 0; // fixture moves are setup, not search
 }
 class probe_t : public search_t {
 public:

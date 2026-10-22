@@ -59,8 +59,8 @@ bool test_position(const position_case_t & test) {
         search_t & quiet_search = *quiet_storage;
         prepare_search(quiet_search);
         const int quiet_score = quiet_search.qsearch(-score::INF, score::INF, depth);
-        // Quiet checks are intentionally omitted below depth zero.
-        if (depth == 0 || test.legal_moves == 0 || test.expected_score == 0) {
+        // Quiescence has no quiet moves, so only terminal and drawn scores are exact.
+        if (test.legal_moves == 0 || test.expected_score == 0) {
             success &= check_score(test.name, "quiescence", quiet_score, test.expected_score);
         }
         success &= restored_position(quiet_search, test.fen);
@@ -146,7 +146,7 @@ bool test_pruning_terminals() {
         // This direct-root contract pins the legacy return-eval policy.
         search.broader_futility_enabled = false;
         success &= check_score("playable fail-high", "beta pruning", search.pvs(0, 1, 1), expected);
-        success &= search.nodes == 1 && !search.stop_all;
+        success &= search.nodes == 0 && !search.stop_all;
         success &= restored_position(search, fen);
     }
     return success;
@@ -166,7 +166,7 @@ bool test_quiet_evasion() {
     prepare_search(checked_search);
     const int actual_score = checked_search.qsearch(-score::INF, score::INF, -1);
     success &= check_score("only quiet check evasion", "quiescence", actual_score, expected_score);
-    success &= checked_search.nodes > 1 && !checked_search.stop_all;
+    success &= checked_search.nodes > 0 && !checked_search.stop_all;
     if (!success) {
         std::cerr << "only quiet check evasion: must search h8h7 instead of standing pat\n";
     }
@@ -241,7 +241,7 @@ bool test_recursive_stalemate() {
             // The first queen capture supplies a valid draw lower bound.
             success &= search.stack->best_move.to_string()
                 == (search.brd.us() ? "g5g6" : "g4g3");
-            success &= search.nodes > 1 && !search.stop_all;
+            success &= search.nodes > 0 && !search.stop_all;
             success &= restored_position(search, fen);
         }
     }
@@ -366,7 +366,7 @@ bool test_fifty_move_boundary() {
                 : search.pvs(-score::INF, score::INF, 1);
             success &= check_score("quiet escape at the fifty-move boundary", "search", actual, 0);
             // At 99 the escape reaches the limit; at 100 a draw is already available.
-            success &= (halfmoves >= 100 || search.nodes > 1) && !search.stop_all;
+            success &= (halfmoves >= 100 || search.nodes > 0) && !search.stop_all;
             success &= restored_position(search, fen.c_str());
         }
         const std::string capture_fen = "7k/6Q1/8/8/8/8/8/K7 b - -" + suffix;
@@ -494,7 +494,7 @@ bool test_quiet_order() {
                             actual.push_back(move->to_int());
                         }
                     }
-                    const bool enabled = depth >= 0 || search.stack->in_check;
+                    const bool enabled = depth > 0 || search.stack->in_check;
                     bool ordered = true;
                     int previous_score = std::numeric_limits<int>::max();
                     for (int code : actual) {

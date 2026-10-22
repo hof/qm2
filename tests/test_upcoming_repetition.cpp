@@ -42,6 +42,7 @@ void play(search_t & search, const char * text) {
         std::abort();
     }
     search.forward(&move, search.brd.gives_check(&move));
+    search.nodes = 0; // fixture moves are setup, not search
 }
 
 void reach_escape(search_t & search) {
@@ -188,7 +189,7 @@ bool search_bounds() {
             const int value = qsearch ? search->qsearch(draw - 1, draw, -1)
                 : search->pvs(draw - 1, draw, 3);
             success &= check("legal escape must raise alpha and cut off before children",
-                value == draw && search->nodes == 1 && search->stack->best_move.to_string() == "f6g8"
+                value == draw && search->nodes == 0 && search->stack->best_move.to_string() == "f6g8"
                 && search->stack->pv_count == 1 && search->stack->tt_clocks.min == 3
                 && search->brd.to_string() == fen && search->brd.stack->tt_key == key);
             int cached = 0, hint = 0, flag = 0;
@@ -262,7 +263,7 @@ bool cache_clock_and_stop() {
         success &= check("TT return must respect the proven draw floor without a false PV",
             result == std::max(0, cached)
             && (cached > 0 ? search->stack->pv_count == 0 && !search->stack->best_move.piece
-                : search->nodes > 1 && search->stack->pv_count > 0));
+                : search->nodes > 0 && search->stack->pv_count > 0));
     }
     trans_table::clear();
     auto search = std::make_unique<probe_search_t>(cycle_fen);
@@ -297,7 +298,7 @@ bool cache_clock_and_stop() {
     trans_table::store(winning->brd.stack->tt_key, 0, 3, 4, -500, 0,
         score::EXACT, winning->tt_context());
     success &= check("a contradictory TT score must not hide a better-than-draw continuation",
-        winning->pvs(-1000, 1000, 2) > 100 && winning->nodes > 1);
+        winning->pvs(-1000, 1000, 2) > 100 && winning->nodes > 0);
 
     search_control_t control;
     auto cancelled = std::make_unique<probe_search_t>(cycle_fen, nullptr, &control);

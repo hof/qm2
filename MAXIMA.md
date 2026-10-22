@@ -355,32 +355,21 @@ evaluation or measured strength gains. See
 [CPW futility](https://chessprogramming.org/Futility_Pruning) and
 [reverse futility](https://chessprogramming.org/Reverse_Futility_Pruning).
 
-Quiescence delta pruning uses the simple captured-piece gain plus a 200-cp
-allowance: skip a nonchecking capture when `eval + captured_value + 200 <= alpha`.
-Exclude checked nodes, promotions, advanced pawn captures, existing endgame
-flags and decisive alpha/beta windows. Require the opponent's non-pawn material
-after the capture to exceed 1300 cp, protecting low-material transitions. The
-200-cp allowance and post-capture material threshold are provisional choices,
-requiring validation in Maxima. Use the existing capture values
-(100/325/325/500/925), not inferred NNUE piece prices. Checks,
-promotions and advanced pawn moves are protected separately because their gains
-can exceed a fixed positional allowance. This remains selective pruning, not a
-proven NNUE bound. Historical delta controls below have SEE disabled.
+Outside check, quiescence searches captures and queen promotions with
+`see(move) >= -60` and stops at the first noisy move below that bound; quiet
+moves are not generated. A valid TT hint is still searched first. Futility skips
+a nonchecking, non-recapture tactical move when `eval + 350 <= alpha` and the
+move does not win material (`!see(move, 1)`); the best score rises to that
+futility value. In check, the first evasion is always searched; after it only
+noisy moves passing the quiescence SEE bound remain.
 
-Quiescence SEE pruning now skips only captures with `see(move) < 0`, after the
-same tactical, endgame, post-capture material and decisive-window exclusions.
-Equal exchanges remain searchable regardless of alpha. This replaces the former
-`eval + 50 + see(move) <= alpha` rule; delta runs first and SEE is tested only
-for captures that survive it. SEE models material exchanges on one square,
-not positional compensation, so even a negative SEE is not a proof that a
-sacrifice is unsound. The exchange estimator checks recapturers against current
-temporary occupancy, excluding captures that expose their king and king captures
-onto attacked squares. It handles changing pins, en passant and promotion gains
-without modifying board or search state. Equal-value attackers are ordered by
+The exchange estimator checks recapturers against current temporary occupancy,
+excluding captures that expose their king and king captures onto attacked
+squares. It handles changing pins, en passant and promotion gains without
+modifying board or search state. Equal-value attackers are ordered by
 piece type and source square; recapturing pawns promote to queens. This remains
 a least-valuable-attacker material model, with either side allowed to decline;
-it does not search alternative move choices or positional compensation. These
-conservative exclusions require their own strength tests.
+it does not search alternative move choices or positional compensation.
 
 The overloaded SEE interface supports both full scores and threshold tests:
 `see(move)` returns the material score, while `see(move, threshold)` returns
@@ -638,9 +627,9 @@ still exceed those intervals, so these counts are not a hard real-time guarantee
 Both centipawn and mate scores retain lower/upper-bound qualifiers. NPS uses
 reported nodes per second with the reported monotonic elapsed milliseconds; a
 zero-millisecond sample uses a one-millisecond denominator. Rates retain unsigned
-64-bit range and saturate if that range is exceeded. Reported nodes count visited
-search calls, including quiescence, using the same counter as `go nodes`;
-pruned moves are excluded from nodes and NPS. Cancellation suppresses subsequent
+64-bit range and saturate if that range is exceeded. Reported nodes count moves
+made in the search, including quiescence, using the same counter as `go nodes`;
+null moves, re-searches of an already made move and pruned moves are not counted. Cancellation suppresses subsequent
 full-window re-searches once the first pass has stopped.
 
 Each finished search emits `info string search_result SOURCE completed_depth N
@@ -1425,7 +1414,7 @@ The audit-only `nnue_search_probe` accepts
 `MODEL POSITIONS.tsv hce|nnue off|verify|full|replay|fixed|quiet POLICY NODES DEPTH [CUTOFFS.jsonl]`.
 Each TSV row is `id<TAB>FEN`; every root starts with cleared caches. Policy bits
 enable beta pruning (1), forward futility (2), null move (4), LMR (8), quiescence
-delta (16) and quiescence SEE (32). Normal policy is 63; conservative is 0.
+futility (16). Normal policy is 31; conservative is 0.
 `full` forces fresh inference; `replay` performs one full-window PVS at the
 requested depth. Optional beta-cutoff recording is capped at 128 events per
 root and restricted to irreversible nodes, allowing FEN replay without relevant
@@ -1458,20 +1447,11 @@ counters are reported as `info string audit_ffp ...` and in probe output.
 Tests cover the 299/300-cp boundary, protected tactical moves, first legal move,
 PV/deeper-node exclusions and NNUE cancellation/restoration.
 
-`NNUEAuditDelta` (default false, audit builds only) enables only delta pruning
-in the `quiet` contract; SEE stays off. Changing it stops search and clears TT.
-Worker-owned candidate/prune counters are reported as `info string audit_delta`
-and in the diagnostic probe. Tests exercise the 200-cp boundary with HCE/NNUE
-and both colors, en passant protection, low-material transitions, live neural
-parity and node-budget cancellation/restoration.
-
-`NNUEAuditSEE` (default false, audit builds only) independently enables the
-production negative-SEE rule in `quiet`. Changing it stops search and clears TT.
-Worker-owned candidate/prune counters appear as `info string audit_see` and in
-the diagnostic probe. Candidates are captures surviving delta and all common
-guards; the count is not the number of all captures. Tests cover losing and
-equal exchanges, checking sacrifices, low-material exclusions, HCE/NNUE parity
-and cancellation/restoration.
+`NNUEAuditDelta` (default false, audit builds only) enables the production
+quiescence futility rule in the `quiet` contract. Changing it stops search and
+clears TT. Worker-owned prune counts are reported as `info string audit_delta`
+and in the diagnostic probe. Tests exercise the 350-cp boundary and node-budget
+cancellation/restoration.
 
 Audit quiescence uses the same captures/promotions/evasions move domain as
 production. The obsolete quiet-check and castling audit options are removed.
@@ -1485,7 +1465,7 @@ rejected move candidates do not count as visited child positions. Fixed neural
 leaves use the quiescence/leaf counter. Work counters are worker-owned and
 restart with the node counter when resetting the self-play stack. Ordinary
 UCI node counting and search decisions are unchanged by this instrumentation.
-The standard-search visit count reconciles with `pvs_nodes + q_nodes`.
+The standard-search node count equals `move_visits`.
 
 Internal iterative deepening stays disabled in `fixed`. In `quiet`, the
 independent `NNUEAuditIID` flag defaults false. `audit_iid` reports calls; `audit_iid_work` adds eligible candidates,

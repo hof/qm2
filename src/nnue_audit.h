@@ -73,9 +73,7 @@ struct audit_counters_t {
     uint64_t tt_eval_probes = 0, tt_eval_hits = 0, neural_evaluations = 0;
     uint64_t reuses = 0, updates = 0;
     uint64_t root_refreshes = 0, king_refreshes = 0, parent_refreshes = 0;
-    uint64_t q_delta_prunes = 0, q_see_prunes = 0;
-    uint64_t q_delta_candidates = 0;
-    uint64_t q_see_candidates = 0;
+    uint64_t q_delta_prunes = 0;
     uint64_t null_attempts = 0, null_cutoffs = 0, null_adaptive = 0;
     uint64_t null_reduction_plies = 0, null_probe_visits = 0;
     uint64_t null_verifications = 0, null_rejected = 0, null_cancelled = 0;
@@ -89,7 +87,7 @@ struct audit_counters_t {
 struct audit_state_t {
     audit_mode_t mode = audit_mode_t::verify;
     audit_counters_t counters;
-    bool q_delta = true, q_see = true;
+    bool q_delta = true;
     bool fixed_horizon = false;
     bool aligned_quiescence = false;
     bool hash_moves = false;

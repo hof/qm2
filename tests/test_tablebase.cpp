@@ -61,24 +61,24 @@ bool test_search() {
         win.probe_tablebase(1, value)
         && value == score::TABLEBASE && !score::is_mate(value));
     success &= check("WDL win should cut off a narrow window",
-        win.pvs(0, 1, 1) == score::TABLEBASE && win.nodes == 1
+        win.pvs(0, 1, 1) == score::TABLEBASE && win.nodes == 0
         && win.stack->tt_clocks.min == 0 && win.stack->tt_clocks.max == 0);
     auto full_win = std::make_unique<search_t>("7k/8/8/8/8/8/8/KR6 w - - 0 1");
     prepare(*full_win);
     success &= check("Full-window search must retain the proven win",
-        full_win->pvs(-score::INF, score::INF, 1) == score::TABLEBASE && full_win->nodes == 1);
+        full_win->pvs(-score::INF, score::INF, 1) == score::TABLEBASE && full_win->nodes == 0);
     auto full_loss = std::make_unique<search_t>("7k/8/8/8/8/8/8/KR6 b - - 0 1");
     prepare(*full_loss);
     success &= check("Full-window search must retain the proven loss",
-        full_loss->pvs(-score::INF, score::INF, 1) == -score::TABLEBASE && full_loss->nodes == 1);
+        full_loss->pvs(-score::INF, score::INF, 1) == -score::TABLEBASE && full_loss->nodes == 0);
     search_t loss("7k/8/8/8/8/8/8/KR6 b - - 0 1");
     prepare(loss);
     success &= check("WDL loss should cut off a narrow window",
-        loss.pvs(-1, 0, 1) == -score::TABLEBASE && loss.nodes == 1);
+        loss.pvs(-1, 0, 1) == -score::TABLEBASE && loss.nodes == 0);
     search_t drawn("7k/6R1/8/8/8/8/8/K7 b - - 0 1");
     prepare(drawn);
     success &= check("A proven draw must stop full-window search",
-        drawn.pvs(-score::INF, score::INF, 1) == 0 && drawn.nodes == 1);
+        drawn.pvs(-score::INF, score::INF, 1) == 0 && drawn.nodes == 0);
     search_t clock("7k/8/8/8/8/8/8/KR6 w - - 99 1");
     prepare(clock);
     success &= check("A WDL win cannot override a fifty-move draw",
@@ -90,7 +90,7 @@ bool test_search() {
     search_t checked("7k/7R/8/8/8/8/8/K7 b - - 0 1");
     prepare(checked);
     success &= check("Checked nodes still search their legal evasions",
-        checked.pvs(-score::INF, score::INF, 1) == 0 && checked.nodes > 1);
+        checked.pvs(-score::INF, score::INF, 1) == 0 && checked.nodes > 0);
     trans_table::clear();
     trans_table::store(win.brd.stack->tt_key, 0, 5, 8, score::TABLEBASE - 5, 0,
         score::LOWERBOUND, 7, {0, 0});

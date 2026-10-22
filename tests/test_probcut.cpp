@@ -27,6 +27,7 @@ public:
         correction_history_enabled = singular_extensions_enabled = false;
         tablebase_limit = draw_contempt = 0;
         evaluate(this);
+        nodes = 0;
     }
     int pvs(int alpha, int beta, int depth, bool cut_node = false) override {
         calls.push_back({alpha, beta, depth, cut_node});
@@ -46,6 +47,7 @@ public:
         trans_table::store(brd.stack->tt_key, 0, brd.ply, 1, -qvalue, 0,
             score::EXACT, tt_context(), {0, 80}, tt_mode_t::quiescence_entry);
         backward(&move);
+        nodes = 0;
     }
 };
 bool test_verification() {

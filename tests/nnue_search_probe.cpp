@@ -76,7 +76,6 @@ int main(int argc, char ** argv) {
             search.null_enabled = policy & 4;
             search.lmr_enabled = policy & 8;
             search.nnue_audit.q_delta = policy & 16;
-            search.nnue_audit.q_see = policy & 32;
             search.nnue_audit.record_cutoffs = argc == 9;
             search.nnue_audit.fixed_horizon = mode == "fixed";
             search.nnue_audit.aligned_quiescence = mode == "quiet";
@@ -113,9 +112,6 @@ int main(int argc, char ** argv) {
                 << ",\"king_refreshes\":" << counts.king_refreshes
                 << ",\"parent_refreshes\":" << counts.parent_refreshes
                 << ",\"q_delta_prunes\":" << counts.q_delta_prunes
-                << ",\"q_delta_candidates\":" << counts.q_delta_candidates
-                << ",\"q_see_candidates\":" << counts.q_see_candidates
-                << ",\"q_see_prunes\":" << counts.q_see_prunes
                 << ",\"pvs_nodes\":" << counts.pvs_nodes
                 << ",\"q_nodes\":" << counts.q_nodes
                 << ",\"root_calls\":" << counts.root_calls

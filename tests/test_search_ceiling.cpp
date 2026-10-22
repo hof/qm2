@@ -59,7 +59,7 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
     const int actual = losers ? static_cast<w17_search_t &>(search).w17_pvs(alpha, beta, mode, depth)
         : depth <= 0 ? search.qsearch(alpha, beta, depth) : search.pvs(alpha, beta, depth);
     trans_table::enable();
-    const bool success = actual == expected && !search.stop_all && search.nodes == 1
+    const bool success = actual == expected && !search.stop_all && search.nodes == 0
         && search.brd.in_check() == test.checked && search.brd.to_string() == original_fen
         && search.brd.ply == ply && search.stack == &search._stack[ply]
         && search.brd.stack == &search.brd._stack[ply]
@@ -121,14 +121,16 @@ bool test_interruption(bool losers) {
     place_at_ply(search, losers ? MAX_PLY : MAX_PLY - 1);
     const auto original_fen = search.brd.to_string();
     const auto key = search.brd.stack->tt_key;
+    // A spent node budget must interrupt before the ceiling evaluation.
     search.game.max_nodes = 1;
+    search.nodes = 1;
     const int interrupted = search.pvs(-7, -6, 1);
     bool success = interrupted == -7 && search.stop_all && search.nodes == 1;
     search.game.max_nodes = 0;
     search.stop_all = false;
     const int expected = losers ? w17_evaluate(static_cast<w17_search_t *>(&search)) : evaluate(&search);
     success &= search.pvs(-score::INF, score::INF, 1) == expected && !search.stop_all
-        && search.nodes == 2 && search.brd.to_string() == original_fen
+        && search.nodes == 1 && search.brd.to_string() == original_fen
         && search.brd.stack->tt_key == key;
     if (!success) {
         std::cerr << "interrupted ceiling restart losers=" << losers << "\n";

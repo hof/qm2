@@ -23,6 +23,7 @@ public:
             move.set(&brd, text);
             forward(&move, brd.gives_check(&move));
         }
+        nodes = 0; // fixture moves are setup, not search
         (stack - 1)->move_count = 1;
         null_enabled = beta_pruning = ffp_enabled = lmr_enabled = false;
         iid_enabled = iir_enabled = main_see_enabled = razoring_enabled = false;
@@ -87,7 +88,7 @@ bool test_updates() {
                     auto after = *s->stack;
                     after.tt_key = frame.tt_key;
                     after.tt_clocks = frame.tt_clocks;
-                    ok &= value == 75 && s->nodes == 1 && s->children == 0
+                    ok &= value == 75 && s->nodes == 0 && s->children == 0
                         && std::memcmp(expected.get(), s->quiet_history.get(), sizeof(quiet_history_t)) == 0
                         && s->brd.to_string() == fen && s->brd.stack->tt_key == key
                         && s->stack == &s->_stack[black ? 5 : 6]
@@ -116,7 +117,7 @@ bool test_cutoff_contract() {
                 const bool learns = cutoff && !pv && value >= 75;
                 ok &= bool(s->quiet_history->main[s->brd.us()][move.ssq][move.tsq]) == learns
                     && s->ordinals_valid
-                    && (!cutoff || (result == value && s->nodes == 1 && s->children == 0));
+                    && (!cutoff || (result == value && s->nodes == 0 && s->children == 0));
             }
         }
     }
@@ -171,6 +172,7 @@ bool test_move_classes() {
         move_t previous{}, move{};
         previous.set(&s->brd, fixture.preceding);
         s->forward(&previous, s->brd.gives_check(&previous));
+        s->nodes = 0; // the fixture move is setup, not search
         move.set(&s->brd, fixture.hint);
         auto expected = std::make_unique<quiet_history_t>();
         if (fixture.reward) {
@@ -179,7 +181,7 @@ bool test_move_classes() {
         trans_table::clear();
         trans_table::store(s->brd.stack->tt_key, 0, 1, 4, 75, move.to_compact(),
             score::LOWERBOUND, s->tt_context(), {0, 98});
-        ok &= s->pvs(74, 75, 4) == 75 && s->nodes == 1
+        ok &= s->pvs(74, 75, 4) == 75 && s->nodes == 0
             && std::memcmp(expected.get(), s->quiet_history.get(), sizeof(quiet_history_t)) == 0;
     }
     // An actual root TT reuse has no preceding search move and must not learn.

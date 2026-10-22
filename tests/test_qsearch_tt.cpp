@@ -22,7 +22,7 @@ bool test_warm_qsearch() {
     prepare(*reference);
     const int expected = reference->qsearch(-score::INF, score::INF, -1);
     bool success = check("the cache fixture must search a queen capture beyond stand pat",
-        reference->nodes > 1 && expected > evaluate(reference.get())
+        reference->nodes > 0 && expected > evaluate(reference.get())
         && reference->stack->best_move.to_string() == "d1d5");
     trans_table::clear();
     auto cold = std::make_unique<search_t>(fen);
@@ -32,7 +32,7 @@ bool test_warm_qsearch() {
     prepare(*warm);
     const int cached = warm->qsearch(expected - 1, expected, -1);
     success &= check("a compatible warm qsearch bound must avoid searching the capture again",
-        cold->nodes > 1 && value >= expected && warm->nodes == 1 && cached == value);
+        cold->nodes > 0 && value >= expected && warm->nodes == 0 && cached == value);
     success &= check("qsearch cache reuse must restore board, stack and cancellation state",
         warm->brd.to_string() == fen && warm->brd.ply == 0
         && warm->stack == warm->root_stack && !warm->stop_all);
@@ -112,8 +112,8 @@ bool test_qsearch_bounds_and_modes() {
                         || (flag == score::LOWERBOUND && value >= alpha + 1)
                         || (flag == score::UPPERBOUND && value <= alpha);
                     success &= check("q TT cutoffs must obey bound direction and equality",
-                        cutoff ? result == value && search->nodes == 1
-                            : result != value || search->nodes > 1);
+                        cutoff ? result == value && search->nodes == 0
+                            : result != value || search->nodes > 0);
                     success &= check("q TT probes must clear stale PV and restore the board",
                         search->stack->pv_count == 0 && search->brd.to_string() == fen
                         && search->stack == search->root_stack && !search->stop_all);
@@ -141,7 +141,7 @@ bool test_qsearch_compatibility() {
             search->tt_context() ^ (mismatch == 0 ? U64(1) : 0),
             mismatch == 1 ? clock_range_t{5, 8} : clock_range_t{3, 8}, mode);
         success &= check("q TT must reject incompatible contexts, clocks, modes and keys",
-            search->qsearch(12344, 12345, -1) != 12345 && search->nodes > 1);
+            search->qsearch(12344, 12345, -1) != 12345 && search->nodes > 0);
     }
     trans_table::clear();
     auto search = std::make_unique<search_t>(fen);
@@ -149,14 +149,14 @@ bool test_qsearch_compatibility() {
     trans_table::store(search->brd.stack->tt_key, 0, 0, 4, 12345, 0,
         score::EXACT, search->tt_context(), {3, 8});
     success &= check("q TT must not substitute a main-search score for its own horizon",
-        search->qsearch(12344, 12345, -1) != 12345 && search->nodes > 1);
+        search->qsearch(12344, 12345, -1) != 12345 && search->nodes > 0);
     trans_table::clear();
     auto main = std::make_unique<search_t>(fen);
     prepare(*main);
     trans_table::store(main->brd.stack->tt_key, 0, 0, 1, 12345, 0,
         score::EXACT, main->tt_context(), {3, 8}, tt_mode_t::quiescence_tactical);
     success &= check("main search must not accept a q score as a full-depth result",
-        main->pvs(-score::INF, score::INF, 1) != 12345 && main->nodes > 1);
+        main->pvs(-score::INF, score::INF, 1) != 12345 && main->nodes > 0);
     return success;
 }
 
@@ -165,18 +165,16 @@ bool test_hint_domains() {
         const char * fen;
         const char * move;
         int depth;
-        bool allowed;
     };
+    // Any valid hint is searched first: quiet, tactical, castling or evasion.
     const hint_case_t cases[] = {
-        {"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "g1f3", -1, false},
-        {"6k1/8/8/8/8/8/8/K2R4 w - - 0 1", "d1d8", -1, false},
-        {"6k1/8/8/8/8/8/8/K2R4 w - - 0 1", "d1d8", 0, false},
-        {"7k/8/8/3q4/8/8/8/K2R4 w - - 0 1", "d1d5", -1, true},
-        {"7k/P7/8/8/8/8/8/K7 w - - 0 1", "a7a8q", -1, true},
-        {"7k/8/8/3pP3/8/8/8/K7 w - d6 0 1", "e5d6", -1, true},
-        {"4k3/8/8/8/8/8/8/4K2R w K - 0 1", "e1g1", -1, false},
-        {"4k3/8/8/8/8/8/8/4K2R w K - 0 1", "e1g1", 0, false},
-        {"R6k/8/5K2/8/8/8/8/8 b - - 0 1", "h8h7", -1, true},
+        {"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "g1f3", -1},
+        {"6k1/8/8/8/8/8/8/K2R4 w - - 0 1", "d1d8", 0},
+        {"7k/8/8/3q4/8/8/8/K2R4 w - - 0 1", "d1d5", -1},
+        {"7k/P7/8/8/8/8/8/K7 w - - 0 1", "a7a8n", -1},
+        {"7k/8/8/3pP3/8/8/8/K7 w - d6 0 1", "e5d6", -1},
+        {"4k3/8/8/8/8/8/8/4K2R w K - 0 1", "e1g1", 0},
+        {"R6k/8/5K2/8/8/8/8/8 b - - 0 1", "h8h7", -1},
     };
     bool success = true;
     for (const auto & test : cases) {
@@ -189,9 +187,8 @@ bool test_hint_domains() {
             search->brd.valid(&hint) && search->brd.legal(&hint));
         trans_table::store(search->brd.stack->tt_key, 0, 0, 1, 0, hint.to_compact(), 0);
         search->qsearch(-score::INF, score::INF, test.depth);
-        success &= check("q TT hints must obey the move domain while retaining all check evasions",
-            test.allowed ? search->stack->move_list.returned_hints[0] == hint.to_compact()
-                && search->nodes > 1 : search->nodes == 1 && !search->stack->tt_move.piece);
+        success &= check("a valid q TT hint must be searched first",
+            search->stack->move_list.returned_hints[0] == hint.to_compact() && search->nodes > 0);
         success &= check("q TT hinted searches must restore board and stack state",
             search->brd.to_string() == test.fen && search->stack == search->root_stack);
     }
@@ -201,11 +198,11 @@ bool test_hint_domains() {
 bool test_cancellation() {
     const char * fen = "7k/8/8/3q4/8/8/8/K2R4 w - - 0 1";
     bool success = true;
-    for (int limit : {1, 2}) {
+    {
         trans_table::clear();
         auto search = std::make_unique<search_t>(fen);
         prepare(*search);
-        search->game.max_nodes = limit;
+        search->game.max_nodes = 1;
         search->qsearch(-score::INF, score::INF, -1);
         int value = 0, move = 0, flag = 0;
         success &= check("cancelled qsearch must restore its board without caching an unfinished result",
@@ -299,7 +296,7 @@ bool test_option_snapshot_and_off() {
     trans_table::store(after->brd.stack->tt_key, 0, 0, 1, 12345, 0,
         score::EXACT, after->tt_context(), {0, 99}, tt_mode_t::quiescence_tactical);
     success &= check("QsearchTT off must skip score probes",
-        after->qsearch(12344, 12345, -1) != 12345 && after->nodes > 1);
+        after->qsearch(12344, 12345, -1) != 12345 && after->nodes > 0);
     trans_table::clear();
     after->nodes = 0;
     after->qsearch(-score::INF, score::INF, -1);

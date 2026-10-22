@@ -56,9 +56,8 @@ public:
             narrow.insert(fen);
         }
         if (brd.ply == 2) {
-            // Explicit two-ply contract replaces qsearch, including extensions.
-            // This isolates PVS bounds; it does not certify chess evaluation.
-            ++nodes;
+            // Explicit two-ply contract replaces qsearch. This isolates PVS
+            // bounds; it does not certify chess evaluation.
             stack->pv_count = 0;
             stack->best_move.clear();
             if (abort(false)) {
@@ -133,7 +132,7 @@ bool test_root(const node_t & node, int & probes, int & interruptions, int & res
                 if (cache == 1 && *node.legal
                         && warm.first == -score::INF && warm.second == score::INF
                         && window.first == -score::INF && window.second == score::INF) {
-                    ok &= check(search->nodes == 1, "warm exact entry was not reused", node.fen);
+                    ok &= check(search->nodes == 0, "warm exact entry was not reused", node.fen);
                 }
                 ok &= check(valid_bound(value, node.value, window.first, window.second),
                     "independent minimax bound differs", node.fen);

@@ -263,7 +263,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
 }
 
 // Standard chess returns candidates; only search decides king safety.
-move_t * move_picker_t::pop_standard(search_t * s, int phase) {
+move_t * move_picker_t::pop_standard(search_t * s, int phase, int see_threshold) {
     auto * list = &s->stack->move_list;
     while (list->first != list->last) {
         move_t * best = nullptr;
@@ -284,7 +284,7 @@ move_t * move_picker_t::pop_standard(search_t * s, int phase) {
         if (!best) {
             return nullptr;
         }
-        if (phase == promotions && !s->brd.see(best, 0)) {
+        if (phase == promotions && !s->brd.see(best, see_threshold)) {
             const int see = s->brd.see(best);
             best->score = s->capture_history_enabled
                 ? -2 * capture_history_t::limit + 16 * see + s->move_history_score(*best) : see;
@@ -369,7 +369,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
             case hash_move:
                 list->stage = captures;
                 result = &s->stack->tt_move;
-                if (result->piece && (do_quiets || result->capture || result->promotion)
+                if (result->piece
                         && board->valid(result)
                         && move::allows_evasion(*result, list->evasion_targets)) {
                     list->returned_hints[0] = result->to_compact();
@@ -379,6 +379,16 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
             case captures:
                 move::gen_captures(board, list);
                 move::gen_promotions(board, list);
+                if (!do_quiets) {
+                    // Quiescence outside check considers queen promotions only.
+                    auto * kept = list->first;
+                    for (auto * move = list->first; move != list->last; ++move) {
+                        if (!move->promotion || move->promotion == QUEEN[board->us()]) {
+                            *kept++ = *move;
+                        }
+                    }
+                    list->last = kept;
+                }
                 for (auto * move = list->first; move != list->last; ++move) {
                     const int material = board->mvvlva(move);
                     // Keep candidates positive until lazy SEE classifies them.
@@ -389,11 +399,12 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 list->stage = promotions;
                 break;
             case promotions:
-                result = pop_standard(s, promotions);
+                result = pop_standard(s, promotions, depth > 0 ? 0 : quiescence_see_threshold);
                 if (result) {
                     return result;
                 }
-                list->stage = killer_1;
+                // Quiescence outside check never searches losing noisy moves.
+                list->stage = do_quiets ? killer_1 : stop;
                 break;
             case killer_1:
             case killer_2: {

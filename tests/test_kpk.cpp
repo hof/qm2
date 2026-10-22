@@ -157,7 +157,7 @@ bool test_search() {
             trans_table::store(search.brd.stack->tt_key, 0, 0, 8, 3000, 0,
                 score::EXACT, search.tt_context());
             if (eg::probe_kpk(search.brd) != 0
-                || search.pvs(-score::INF, score::INF, 4) != 0 || search.nodes != 1
+                || search.pvs(-score::INF, score::INF, 4) != 0 || search.nodes != 0
                 || search.qsearch(-score::INF, score::INF, -1) != 0) {
                 std::cerr << "KPK draw failed: " << fen << "\n";
                 return failed(__LINE__);
@@ -183,7 +183,7 @@ bool test_search() {
         const int searched_score = search.pvs(-score::INF, score::INF, 2);
         if (eg::probe_kpk(search.brd) != 1
             || perspective * static_score <= 0
-            || perspective * searched_score <= 0 || search.nodes <= 1
+            || perspective * searched_score <= 0 || search.nodes == 0
             || search.stack->best_move.piece == 0) {
             std::cerr << "KPK scores " << static_score << "/" << searched_score << ": " << fen << "\n";
             return failed(__LINE__);
