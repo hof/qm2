@@ -257,6 +257,20 @@ def game_profile(contempt, rated, profiles=None):
             for name in profiles["equal"]}
 
 
+# How much eval (centipawns) a style move may lose against book.bin's move: experiments against
+# guests, little against equal rated opponents, more as rated opponents get weaker.
+fire_tolerances = {"unrated": 50, "equal": 15, "weaker": 50, "stronger": 10}
+
+
+def fire_tolerance(contempt, rated, tolerances=None):
+    tolerances = dict(fire_tolerances, **(tolerances or {}))
+    if not rated:
+        return tolerances["unrated"]
+    side = "weaker" if contempt is not None and contempt < 0 else "stronger"
+    share = style_share(contempt)
+    return (1 - share) * tolerances["equal"] + share * tolerances[side]
+
+
 def learned_factor(rate):
     """The engine's experience factor: x1 at 50%, about x2.6 at 65%, x0.47 at 40%, never below x0.1."""
     return 0.1 + 0.9 * (2 * rate) ** 4
@@ -273,8 +287,12 @@ class opening_book:
 
     def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
                  variety=1.0, supersede_depth=16, random_source=None, contempt=None, style_books=None,
-                 rated=True, profiles=None):
+                 rated=True, profiles=None, tolerances=None, checks=None):
         self.book_path = book_path
+        # Style moves book.bin lacks are checked by Maxima against book.bin's move (MAXIMA.md 9.7):
+        # checks maps "key move reference" to the eval loss in centipawns, shared across games.
+        self.tolerance = fire_tolerance(contempt, rated, tolerances)
+        self.checks = {} if checks is None else checks
         self.random = random_source or random.Random()
         self.weights = game_profile(contempt, rated, profiles)
         self.paths = {"book": book_path}
@@ -367,6 +385,38 @@ class opening_book:
         return any(other != move.uci() and analysis[0] >= max(self.supersede_depth, depth + 2)
                    for other, analysis in analyses.items())
 
+    @staticmethod
+    def check_key(key, move, reference):
+        return f"{key} {move.uci()} {reference.uci()}"
+
+    def reference(self, board, move):
+        """book.bin's main move when move is a style move book.bin lacks; None when no check applies."""
+        main = self.read_book(self.book_path, board)
+        if not main or move in main:
+            return None
+        return max(sorted(main, key=chess.Move.uci), key=main.get)
+
+    def vetoed(self, key, move, main):
+        """Checked style moves that lost more than this game's tolerance against book.bin's move."""
+        if not main or move in main:
+            return False
+        reference = max(sorted(main, key=chess.Move.uci), key=main.get)
+        loss = self.checks.get(self.check_key(key, move, reference))
+        return loss is not None and loss > self.tolerance
+
+    def needs_check(self, board, move):
+        """book.bin's move to compare move with, when move still needs Maxima's check."""
+        reference = self.reference(board, move)
+        key = f"{chess.polyglot.zobrist_hash(board):016x}"
+        if reference is None or self.check_key(key, move, reference) in self.checks:
+            return None
+        return reference
+
+    def record_check(self, board, move, reference, loss):
+        key = f"{chess.polyglot.zobrist_hash(board):016x}"
+        self.checks[self.check_key(key, move, reference)] = loss
+        return loss <= self.tolerance
+
     def sample(self, rate, games):
         strength = (games + self.prior) / self.variety
         return self.random.betavariate(max(rate * strength, 1e-3), max((1 - rate) * strength, 1e-3))
@@ -378,7 +428,8 @@ class opening_book:
         known = set().union(*books.values()) if books else set()
         learned = {chess.Move.from_uci(move) for (position, move) in self.layers[0] if position == key}
         candidates = {move for move in known | learned
-                      if board.is_legal(move) and not self.superseded(analyses, move)}
+                      if board.is_legal(move) and not self.superseded(analyses, move)
+                      and not self.vetoed(key, move, books.get("book"))}
         if not candidates:
             return {}, False
         in_book = bool(candidates & known)
@@ -455,8 +506,14 @@ class learner:
     """MaxDrone's experience: digests kept in memory, a fresh opening_book per game."""
 
     def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0, style_books=None,
-                 profiles=None):
+                 profiles=None, tolerances=None):
         self.experience_dir = Path(experience_dir)
+        self.tolerances = tolerances
+        self.checks_path = self.experience_dir / "checks.json"
+        try:
+            self.checks = json.loads(self.checks_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            self.checks = {}
         self.style_books = style_books
         self.profiles = profiles
         self.games_dir = Path(games_dir or self.experience_dir / "games" / "fics")
@@ -466,7 +523,15 @@ class learner:
 
     def for_game(self, opponent, group, game_type, contempt=None, rated=True):
         return opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety,
-                            contempt=contempt, style_books=self.style_books, rated=rated, profiles=self.profiles)
+                            contempt=contempt, style_books=self.style_books, rated=rated, profiles=self.profiles,
+                            tolerances=self.tolerances, checks=self.checks)
+
+    def save_checks(self):
+        """Maxima's verdicts on style moves, kept across runs (rebuildable by checking again)."""
+        self.experience_dir.mkdir(parents=True, exist_ok=True)
+        temporary = self.checks_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(self.checks, sort_keys=True), encoding="utf-8")
+        temporary.replace(self.checks_path)
 
     def add(self, game):
         record = digest(game)

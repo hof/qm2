@@ -273,7 +273,7 @@ default_settings = {
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
-    "contempt_window": 100, "layer_profiles": {}, "style_books": {},
+    "contempt_window": 100, "layer_profiles": {}, "style_books": {}, "fire_tolerances": {},
 }
 
 
@@ -608,6 +608,42 @@ class engine_player:
         except (ConnectionError, OSError) as error:
             self.on_line(f"-- could not send {line!r}: {error}")
 
+    async def choose_opening(self, board, clock, increment):
+        """The multi-layer book's move, after Maxima checked style moves book.bin lacks: each side is
+        searched briefly and a move losing more than the game's tolerance is vetoed (MAXIMA.md 9.7)."""
+        budget = learning.per_move_budget_ms(clock, increment)
+        for _ in range(3):
+            choice = self.opening.choose(board, budget)
+            if choice is None:
+                return None
+            move, reason = choice
+            reference = self.opening.needs_check(board, move)
+            if reference is None:
+                return choice
+            limit = chess.engine.Limit(depth=12, time=max(0.05, min(0.3, clock / 200)))
+            values = {}
+            for candidate in (move, reference):
+                after = board.copy()
+                after.push(candidate)
+                try:
+                    score = await self.session.evaluate(after, limit, game=self.token, timeout=5)
+                except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError):
+                    score = None
+                if score is None:
+                    return None
+                values[candidate] = -score
+            loss = values[reference] - values[move]
+            accepted = self.opening.record_check(board, move, reference, loss)
+            try:
+                self.learner.save_checks()
+            except OSError as error:
+                self.on_line(f"-- could not save checks: {error}")
+            if accepted:
+                return move, f"{reason}, checked {-loss / 100:+.2f}"
+            self.on_line(f"-- {board.san(move)} vetoed: {loss / 100:.2f} worse than {board.san(reference)}, "
+                         f"tolerance {self.opening.tolerance / 100:.2f}")
+        return None
+
     async def play(self, position, board):
         clock = (position.white_ms if board.turn == chess.WHITE else position.black_ms) / 1000
         limit = chess.engine.Limit(white_clock=position.white_ms / 1000, black_clock=position.black_ms / 1000,
@@ -625,7 +661,7 @@ class engine_player:
                 rated = bool(self.created) and self.created["rated"] == "rated"
                 self.opening = self.learner.for_game(self.opponent.name if self.opponent else None,
                                                      self.opponent_group(), game_type, self.contempt, rated)
-            choice = self.opening.choose(board, learning.per_move_budget_ms(clock, position.increment_seconds))
+            choice = await self.choose_opening(board, clock, position.increment_seconds)
             if choice is not None:
                 move, reason = choice
                 await self.send(fics_game.ics_move(move))
@@ -742,7 +778,7 @@ def load_settings(path):
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
              "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
-             "layer_profiles": dict, "style_books": dict}
+             "layer_profiles": dict, "style_books": dict, "fire_tolerances": dict}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -762,6 +798,11 @@ def load_settings(path):
         if key == "style_books" and not all(name in learning.style_names and isinstance(book, str)
                                             for name, book in value.items()):
             raise ValueError(f"{path}: style_books maps {', '.join(learning.style_names)} to Polyglot files")
+        if key == "fire_tolerances" and not all(
+                name in learning.fire_tolerances and isinstance(cp, (int, float)) and not isinstance(cp, bool)
+                and cp >= 0 for name, cp in value.items()):
+            raise ValueError(f"{path}: fire_tolerances takes centipawns >= 0 for "
+                             f"{', '.join(learning.fire_tolerances)}")
         settings[key] = value
     settings["options"] = {str(name): str(value) for name, value in (settings["options"] or {}).items()}
     return settings
@@ -802,7 +843,7 @@ def main():
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
-                             "layer_profiles, style_books); "
+                             "layer_profiles, style_books, fire_tolerances); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
@@ -892,7 +933,8 @@ def main():
             learner = learning.learner(pgn_dir.parent.parent, pgn_dir, project_root() / "book.bin",
                                        configured["variety"],
                                        style_books(configured["style_books"]),
-                                       configured["layer_profiles"] or None)
+                                       configured["layer_profiles"] or None,
+                                       configured["fire_tolerances"] or None)
             show(f"-- experience: {len(learner.records)} games")
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
                                                                   pgn_dir=pgn_dir, site=options.host, learner=learner)

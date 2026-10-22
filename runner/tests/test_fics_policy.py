@@ -190,6 +190,8 @@ class settings_tests(unittest.TestCase):
                                ({"owner": ["hof", 5]}, "list of handles"),
                                ({"layer_profiles": {"hot": {}}}, "has profiles"),
                                ({"style_books": {"gambit": "x.bin"}}, "style_books maps"),
+                               ({"fire_tolerances": {"rated": 20}}, "fire_tolerances takes"),
+                               ({"fire_tolerances": {"equal": -5}}, "fire_tolerances takes"),
                                ({"layer_profiles": {"weaker": {"style": 3}}}, "takes non-negative"),
                                ({"layer_profiles": {"weaker": {"book": -1}}}, "takes non-negative"),
                                ([], "JSON object")):

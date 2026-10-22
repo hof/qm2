@@ -1210,6 +1210,18 @@ The *search* column is the share of games that leave the book once, at a
 random ply, so the engine can bring in new moves (a per-move share would
 compound over a game).
 
+**Sanity check by Maxima.** book.bin is narrow (often one or two moves per
+position), so it cannot vouch for style moves. A style move book.bin lacks is
+checked before it is played: Maxima searches the position after it and after
+book.bin's main move (depth 12, at most 0.3 s each) and vetoes the style move
+when it loses more than the game's tolerance: 0.50 pawn in unrated games,
+0.15 against equal rated opponents rising to 0.50 at 400+ points weaker, 0.10
+against stronger ones (`fire_tolerances` in the MaxDrone config, centipawns:
+`unrated`, `equal`, `weaker`, `stronger`). Verdicts are kept as eval losses in
+`experience/checks.json`, so each position is checked once and a later game
+with another tolerance reuses them. Weights 0 and 1, which books use for known
+moves not to play, are ignored.
+
 Style books are Polyglot files beside book.bin (`fire.bin`, `solid.bin`,
 `experiment.bin`, not tracked); any Polyglot book works, and `style_books` in
 the MaxDrone config points a style at another file, e.g. `{"style_books":

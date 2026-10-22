@@ -1,5 +1,6 @@
 """Style12 parsing against a recorded FICS game, move history, and the engine player."""
 import asyncio
+import json
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -139,6 +140,7 @@ class record_tests(unittest.TestCase):
 fake_engine = '''
 import sys, time
 mode = sys.argv[1]
+last = ""
 for line in sys.stdin:
     command = line.strip()
     if command == "uci":
@@ -148,8 +150,17 @@ for line in sys.stdin:
     elif command == "isready":
         print("readyok", flush=True)
     elif command.startswith("position") or command.startswith("setoption"):
+        if command.startswith("position"):
+            last = command
         with open(sys.argv[2], "a") as log:
             log.write(command + "\\n")
+    elif command.startswith("go ") and mode.startswith("check"):
+        # Black's view after 1.e4 (the style move) and after 1.d4 (book.bin's move).
+        after_e4 = 120 if mode == "check-bad" else -20
+        score = after_e4 if last.endswith("e2e4") else -10
+        best = "e2e4" if last == "position startpos" else "e7e5"
+        print(f"info depth 12 score cp {score} nodes 100 pv {best}")
+        print(f"bestmove {best}", flush=True)
     elif command.startswith("go ") and mode == "play":
         time.sleep(0.05)
         print("info depth 3 score cp 25 nodes 100 pv e2e4")
@@ -279,6 +290,40 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         with next(folder.glob("*.pgn")).open() as stream:
             self.assertEqual(chess.pgn.read_game(stream).next().comment.split()[0], "learned")
         self.assertEqual(len(learner.records), 7)
+
+    async def style_move_check(self, mode):
+        from test_learning import polyglot_book
+        root = Path(self.directory.name)
+        polyglot_book(root / "book.bin", [(chess.Board(), "d2d4", 100)])
+        polyglot_book(root / "fire.bin", [(chess.Board(), "e2e4", 100)])
+        profiles = {name: dict(weights, book=0, fire=100, search=0)
+                    for name, weights in learning.layer_profiles.items()}
+        learner = learning.learner(root / "experience", root / "games", root / "book.bin",
+                                   style_books={"fire": root / "fire.bin"}, profiles=profiles)
+        player = await self.player(mode, learner=learner)
+        player.name = "GuestHJGC"
+        await player.handle("Creating: GuestHJGC (++++) guestNinja (1500) unrated blitz 3 0")
+        await player.handle("Finger of guestNinja:")
+        await player.handle(start)
+        await self.settle(player)
+        return player, learner
+
+    async def test_style_move_is_played_when_maxima_finds_it_sound(self):
+        player, learner = await self.style_move_check("check-good")
+        self.assertEqual(player.connection.sent[-1], "e2e4")
+        self.assertTrue(any(line.startswith("-- e4 book 100%: fire 100%, checked +0.10") for line in self.lines))
+        key = f"{chess.polyglot.zobrist_hash(chess.Board()):016x}"
+        self.assertEqual(learner.checks, {f"{key} e2e4 d2d4": -10})
+        self.assertEqual(json.loads(learner.checks_path.read_text()), learner.checks)
+
+    async def test_unsound_style_move_is_vetoed_for_this_tolerance(self):
+        player, learner = await self.style_move_check("check-bad")
+        self.assertTrue(any(line.startswith("-- e4 vetoed: 1.30 worse than d4, tolerance 0.50")
+                            for line in self.lines))
+        self.assertNotIn("e2e4 book", " ".join(self.lines))
+        opening = learner.for_game("guestNinja", None, "blitz", rated=False)
+        self.assertTrue(opening.vetoed(f"{chess.polyglot.zobrist_hash(chess.Board()):016x}",
+                                       chess.Move.from_uci("e2e4"), {chess.Move.from_uci("d2d4"): 1.0}))
 
     async def test_draw_contempt_follows_the_rating_gap(self):
         self.assertEqual(fics.draw_contempt(1800, 1800), -10)
