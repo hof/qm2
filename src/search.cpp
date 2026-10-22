@@ -893,6 +893,7 @@ int search_t::aspiration(int depth, int last_score) {
     int delta = 12 + last_score * last_score / 30155;
     int alpha = MAX(-score::INF, last_score - delta);
     int beta = MIN(score::INF, last_score + delta);
+    int fail_highs = 0;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     auto & counts = nnue_audit.counters;
     ++counts.aspiration_searches;
@@ -905,7 +906,8 @@ int search_t::aspiration(int depth, int last_score) {
         ++counts.aspiration_attempts;
         counts.aspiration_full_windows += alpha == -score::INF && beta == score::INF;
 #endif
-        const int value = pvs_root(alpha, beta, depth);
+        // A fail high needs confirmation, not the full depth.
+        const int value = pvs_root(alpha, beta, MAX(1, depth - fail_highs));
         if (stop_all) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
             ++counts.aspiration_cancelled;
@@ -925,8 +927,10 @@ int search_t::aspiration(int depth, int last_score) {
         if (value <= alpha) {
             beta = (alpha + beta) / 2;
             alpha = MAX(-score::INF, value - delta);
+            fail_highs = 0;
         } else {
             beta = MIN(score::INF, value + delta);
+            fail_highs += !score::is_win(value) && !score::is_win(-value);
         }
         delta = MIN(delta + delta / 3, score::INF);
     }
@@ -1726,6 +1730,8 @@ int search_t::ceiling_score() {
  * - Compatible with all supported wild variants
  */
 int search_t::pvs_root(int alpha, int beta, int depth) {
+    // A reduced aspiration re-search still belongs to the attempted iteration.
+    const int report_depth = std::max(depth, attempted_depth);
     stack->improving = false;
     stack->tt_pv = stack->lmr_tt_tactical = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
@@ -1795,7 +1801,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         } else if (score > best) {
             best = score;
             result_score = score;
-            result_depth = depth;
+            result_depth = report_depth;
             result_source = result_source_t::partial;
             // A searched move bounds the root from below. A fail-low move
             // cannot bound unsearched alternatives, so omit that root score.
@@ -1806,7 +1812,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             if (exact || false == move->equals(&stack->pv_moves[0])) {
                 update_pv(&rmove->move);
             }
-            uci::send_pv(best, depth, sel_depth, nodes, game.tm.elapsed(),
+            uci::send_pv(best, report_depth, sel_depth, nodes, game.tm.elapsed(),
                     pv_to_string().c_str(), result_flag, tablebase_hits);
             // A fail-high bounds the root immediately. A fail-low requires
             // searching every alternative before widening the root window.
