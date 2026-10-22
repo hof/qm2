@@ -273,7 +273,7 @@ default_settings = {
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
     "contempt_window": 100, "layer_profiles": {}, "style_books": {}, "first_move_wait": 60,
-    "whisper": False,
+    "whisper": False, "mood": "auto",
 }
 
 
@@ -360,6 +360,11 @@ def finger_notes(engine_name, owners, machine, extra=()):
     return [" ".join(note.split()) for note in notes[:10]]
 
 
+def mood_title(mood):
+    """books/moods/kings_indian.pgn -> the King's Indian."""
+    return "the " + {"kings_indian": "King's Indian", "parham": "Parham Attack (Qh5!)"}.get(mood, mood.replace("_", " ").title())
+
+
 class engine_player:
     """Play our games with a UCI engine; searches run as tasks so server lines keep flowing."""
 
@@ -368,6 +373,7 @@ class engine_player:
         self.open_session = open_session
         self.learner = learner
         self.opening = None
+        self.announced_mood = None
         self.contempt = None
         self.fingered = False
         self.pgn_dir = pgn_dir
@@ -431,11 +437,21 @@ class engine_player:
         self.cancel()
         self.name = name
         self.game = self.history = None
-        if not self.policy.guest:
-            notes = finger_notes(*self.engine_facts(), self.policy.notes)
-            for number, note in enumerate(notes, 1):
-                await self.send(f"set {number} {note}")
+        self.announced_mood = None
+        await self.announce()
         await self.seek()
+
+    async def announce(self):
+        """Finger notes for registered accounts, with the week's mood after the configured notes."""
+        if self.policy.guest:
+            return
+        mood = self.learner.today_mood() if self.learner is not None else None
+        if self.announced_mood is not None and mood == self.announced_mood:
+            return
+        extra = list(self.policy.notes) + ([f"Mood this week: {mood_title(mood)}"] if mood else [])
+        for number, note in enumerate(finger_notes(*self.engine_facts(), extra), 1):
+            await self.send(f"set {number} {note}")
+        self.announced_mood = mood or ""
 
     def engine_facts(self):
         """Engine name, owners, and machine for the finger notes, from the running engine's settings."""
@@ -570,6 +586,8 @@ class engine_player:
                     headers[f"{color}Type"] = "program" if self.opponent.is_engine else "human"
                 if self.opponent_unregistered:
                     headers[f"{color}Account"] = "unregistered"
+        if self.opening is not None and self.opening.mood:
+            headers["Mood"] = self.opening.mood
         return headers
 
     def save(self, end):
@@ -652,6 +670,7 @@ class engine_player:
                 self.opponent_ready.set()
         if self.learner is not None:
             if self.opening is None:
+                await self.announce()  # a new week may bring a new mood
                 game_type = self.created["type"].lower() if self.created else None
                 rated = bool(self.created) and self.created["rated"] == "rated"
                 self.opening = self.learner.for_game(self.opponent.name if self.opponent else None,
@@ -788,7 +807,8 @@ def load_settings(path):
     types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
              "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
-             "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float), "whisper": bool}
+             "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float), "whisper": bool,
+             "mood": str}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -803,6 +823,8 @@ def load_settings(path):
             raise ValueError(f"{path}: owner must be a handle or a list of handles")
         if key == "notes" and (len(value) > 7 or not all(isinstance(note, str) for note in value)):
             raise ValueError(f"{path}: notes must be at most 7 strings (notes 1-3 are generated)")
+        if key == "mood" and not re.fullmatch(r"[a-z0-9_]{1,32}", value):
+            raise ValueError(f"{path}: mood is auto, off, or a name from books/moods")
         if key == "layer_profiles":
             value = layer_profiles(value, path)
         if key == "style_books" and not all(name in learning.style_names and isinstance(book, str)
@@ -913,7 +935,8 @@ def run(options, parser):
             learner = learning.learner(pgn_dir.parent.parent, pgn_dir, data_root() / "book.bin",
                                        configured["variety"],
                                        style_books(configured["style_books"]),
-                                       configured["layer_profiles"] or None)
+                                       configured["layer_profiles"] or None, configured["mood"],
+                                       data_root() / "moods")
             show(f"-- experience: {len(learner.records)} games")
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
                                                                   pgn_dir=pgn_dir, site=options.host, learner=learner)

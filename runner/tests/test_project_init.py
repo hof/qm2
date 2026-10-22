@@ -89,10 +89,14 @@ class init_tests(unittest.TestCase):
         (self.root / "books").mkdir()
         source = self.root / "books/experiment.pgn"
         source.write_text('[Event "Polish"]\n[Repertoire "white"]\n\n1. b4 e5 2. Bb2 *\n')
-        state, _ = project_init.experiment_step(self.root, options(data=self.root, check=True))
+        (self.root / "books/moods").mkdir()
+        (self.root / "books/moods/parham.pgn").write_text('[Event "Qh5"]\n[Repertoire "white"]\n\n1. e4 e5 2. Qh5 *\n')
+        state, _ = project_init.repertoire_step(self.root, options(data=self.root, check=True))
         self.assertEqual(state, "missing")
-        self.assertEqual(project_init.experiment_step(self.root, options(data=self.root)), ("done", "2 entries"))
-        self.assertEqual(project_init.experiment_step(self.root, options(data=self.root))[0], "ok")
+        self.assertEqual(project_init.repertoire_step(self.root, options(data=self.root)),
+                         ("done", "experiment.bin, parham.bin"))
+        self.assertTrue((self.root / "moods/parham.bin").is_file())
+        self.assertEqual(project_init.repertoire_step(self.root, options(data=self.root))[0], "ok")
 
     def test_data_directory_follows_environment(self):
         with patch.dict(project.os.environ, {"MAXIMA_DATA_DIR": str(self.root)}):

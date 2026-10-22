@@ -1174,19 +1174,28 @@ it restores it.
 
 **Multi-layer book.** Each game gets its own multi-layer book: book.bin (the
 base: its moves are good in principle), the style books `fire` (sharp, e.g.
-gambits), `draw` (playing for the draw), and `experiment`, and the learned layers, each with a
-percentage from the game's profile:
+gambits), `draw` (playing for the draw), and `experiment`, the week's `mood`, and the
+learned layers, each with a percentage from the game's profile:
 
-| profile | book | fire | draw | experiment | global | group | opponent | search |
-|---|---|---|---|---|---|---|---|---|
-| equal | 45 | 0 | 0 | 0 | 20 | 10 | 25 | 5 |
-| much weaker | 20 | 25 | 0 | 0 | 10 | 10 | 35 | 5 |
-| much stronger | 30 | 0 | 25 | 0 | 10 | 10 | 25 | 5 |
-| unrated | 30 | 30 | 0 | 15 | 25 | 0 | 0 | 10 |
+| profile | book | fire | draw | experiment | mood | global | group | opponent | search |
+|---|---|---|---|---|---|---|---|---|---|
+| equal | 45 | 0 | 0 | 0 | 10 | 15 | 5 | 25 | 5 |
+| much weaker | 20 | 25 | 0 | 0 | 10 | 5 | 5 | 35 | 5 |
+| much stronger | 30 | 0 | 25 | 0 | 0 | 10 | 10 | 25 | 5 |
+| unrated | 30 | 30 | 0 | 10 | 15 | 15 | 0 | 0 | 10 |
 
 Rated games slide from *equal* toward *much weaker* or *much stronger* with
 the draw contempt (none within ±0.20, fully at ±1.00); unrated games (guests)
-play fire and experiment. Percentages are configurable (`layer_profiles` in the
+play fire, experiment, and the mood. book.bin is the source of truth and is never
+rewritten; other layers only add to it.
+
+**Moods.** Like a human who is "in a Dutch mood lately", Maxima plays one theme
+repertoire a week: `books/moods/<name>.pgn` (traxler, dutch, dragon, kings_indian,
+scandinavian, parham: 1.e4 e5 2.Qh5!?) built into `<data>/moods/<name>.bin`. With
+`"mood": "auto"` (default) the moods take turns by ISO week, so every machine agrees
+without state; `"mood": "dutch"` pins one and `"off"` disables the layer. Games carry
+`[Mood "dutch"]`, and registered accounts announce it in a finger note. A mood
+only plays where its book knows the position; elsewhere the other layers decide. Percentages are configurable (`layer_profiles` in the
 MaxDrone config). In each position:
 
 1. Book layers give each book's move shares; moves under a tenth of a book's

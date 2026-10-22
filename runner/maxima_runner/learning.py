@@ -1,6 +1,6 @@
 """Opening learning from MaxDrone's PGN games (MAXIMA.md 9.7): digests, player stats, and the multi-layer book."""
 import argparse
-from datetime import datetime
+from datetime import date, datetime
 import json
 from pathlib import Path
 import random
@@ -222,6 +222,12 @@ def build_repertoire(pgn_path, book_path, plies=30):
     return write_book(weights, book_path)
 
 
+def mood_sources(books_dir, output_dir):
+    """(books/moods/<name>.pgn, <data>/moods/<name>.bin) for every mood repertoire."""
+    return [(source, output_dir / "moods" / f"{source.stem}.bin")
+            for source in sorted((books_dir / "moods").glob("*.pgn"))]
+
+
 def write_book(weights, book_path):
     """Write {(zobrist key, polyglot move code): weight} as a sorted Polyglot book; returns the entries."""
     temporary = Path(book_path).with_suffix(".tmp")
@@ -235,17 +241,33 @@ def write_book(weights, book_path):
 # Multi-layer book profiles (MAXIMA.md 9.7): percentages per layer; "search" is the share of games
 # that leave the book once, at a random ply, so the engine can bring in new moves.
 style_names = ("fire", "draw", "experiment")
-layer_names = ("book",) + style_names + ("global", "group", "opponent")
+layer_names = ("book",) + style_names + ("mood", "global", "group", "opponent")
 layer_profiles = {
-    "equal": {"book": 45, "fire": 0, "draw": 0, "experiment": 0, "global": 20, "group": 10, "opponent": 25,
-              "search": 5},
-    "weaker": {"book": 20, "fire": 25, "draw": 0, "experiment": 0, "global": 10, "group": 10, "opponent": 35,
-               "search": 5},
-    "stronger": {"book": 30, "fire": 0, "draw": 25, "experiment": 0, "global": 10, "group": 10, "opponent": 25,
-                 "search": 5},
-    "unrated": {"book": 30, "fire": 30, "draw": 0, "experiment": 15, "global": 25, "group": 0, "opponent": 0,
-                "search": 10},
+    "equal": {"book": 45, "fire": 0, "draw": 0, "experiment": 0, "mood": 10, "global": 15, "group": 5,
+              "opponent": 25, "search": 5},
+    "weaker": {"book": 20, "fire": 25, "draw": 0, "experiment": 0, "mood": 10, "global": 5, "group": 5,
+               "opponent": 35, "search": 5},
+    "stronger": {"book": 30, "fire": 0, "draw": 25, "experiment": 0, "mood": 0, "global": 10, "group": 10,
+                 "opponent": 25, "search": 5},
+    "unrated": {"book": 30, "fire": 30, "draw": 0, "experiment": 10, "mood": 15, "global": 15, "group": 0,
+                "opponent": 0, "search": 10},
 }
+
+
+def mood_names(directory):
+    """The moods with a built book: <name>.bin in the moods directory."""
+    return sorted(path.stem for path in Path(directory).glob("*.bin")) if directory else []
+
+
+def current_mood(setting, available, today=None):
+    """The mood for today's games: none for "off", the configured name, or for "auto" each mood in turn for
+    an ISO week, so every machine agrees without keeping state."""
+    if setting == "off" or not available:
+        return None
+    if setting != "auto":
+        return setting if setting in available else None
+    year, week, _ = (today or date.today()).isocalendar()
+    return available[(year * 53 + week) % len(available)]
 
 
 def style_share(contempt):
@@ -279,17 +301,20 @@ def per_move_budget_ms(clock_seconds, increment_seconds):
 
 class opening_book:
     """One game's multi-layer book (MAXIMA.md 9.7): book.bin, the style books fire, draw, and experiment,
-    and the learned layers global, group, and opponent, each with a percentage from the game's profile."""
+    the week's mood, and the learned layers global, group, and opponent, each with a percentage from the
+    game's profile. style_books may carry the mood's book under "mood"."""
 
     def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
                  variety=1.0, supersede_depth=16, random_source=None, contempt=None, style_books=None,
-                 rated=True, profiles=None):
+                 rated=True, profiles=None, mood=None):
         self.book_path = book_path
+        self.mood = mood
         self.random = random_source or random.Random()
         self.weights = game_profile(contempt, rated, profiles)
         self.paths = {"book": book_path}
         self.paths.update({name: path for name, path in (style_books or {}).items()
-                           if name in style_names and self.weights.get(name) and path and Path(path).is_file()})
+                           if name in style_names + ("mood",) and self.weights.get(name) and path
+                           and Path(path).is_file()})
         self.names = dict({name: name for name in layer_names}, group=group or "group",
                           opponent=opponent or "opponent")
         # The search layer: some games leave the book once, at a random ply of ours.
@@ -499,8 +524,9 @@ class learner:
     """MaxDrone's experience: digests kept in memory, a fresh opening_book per game."""
 
     def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0, style_books=None,
-                 profiles=None):
+                 profiles=None, mood="auto", moods_dir=None):
         self.experience_dir = Path(experience_dir)
+        self.mood, self.moods_dir = mood, moods_dir
         self.style_books = style_books
         self.profiles = profiles
         self.games_dir = Path(games_dir or self.experience_dir / "games" / "fics")
@@ -508,9 +534,15 @@ class learner:
         self.variety = variety
         self.records = load_index(self.games_dir, self.experience_dir / "index")
 
+    def today_mood(self):
+        return current_mood(self.mood, mood_names(self.moods_dir))
+
     def for_game(self, opponent, group, game_type, contempt=None, rated=True):
+        mood, books = self.today_mood(), dict(self.style_books or {})
+        if mood:
+            books["mood"] = Path(self.moods_dir) / f"{mood}.bin"
         return opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety,
-                            contempt=contempt, style_books=self.style_books, rated=rated, profiles=self.profiles)
+                            contempt=contempt, style_books=books, rated=rated, profiles=self.profiles, mood=mood)
 
     def add(self, game):
         record = digest(game)
@@ -545,12 +577,17 @@ def repertoire_main():
     parser.add_argument("--output-dir", default=str(data_root()),
                         help="writes <style>.bin beside book.bin (default: the data directory)")
     parser.add_argument("--plies", type=int, default=30, help="moves per line to include (default: 30)")
-    parser.add_argument("--styles", nargs="+", choices=style_names, default=["experiment"],
-                        help="books to build (default: experiment; fire.bin and draw.bin normally come from "
-                             "maxima init or experience:fire|draw, which this would replace)")
+    parser.add_argument("--styles", nargs="+", choices=style_names + ("moods",), default=["experiment", "moods"],
+                        help="books to build (default: experiment and moods; fire.bin and draw.bin normally "
+                             "come from maxima init or experience:fire|draw, which this would replace)")
     options = parser.parse_args()
     built = 0
-    for style in options.styles:
+    if "moods" in options.styles:
+        for source, target in mood_sources(Path(options.books_dir), Path(options.output_dir)):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            print(f"{target}: {build_repertoire(source, target, options.plies)} entries from {source}")
+            built += 1
+    for style in (style for style in options.styles if style != "moods"):
         source = Path(options.books_dir) / f"{style}.pgn"
         if not source.is_file():
             continue
@@ -558,5 +595,5 @@ def repertoire_main():
         print(f"{target}: {build_repertoire(source, target, options.plies)} entries from {source}")
         built += 1
     if not built:
-        parser.error(f"no {', '.join(style + '.pgn' for style in options.styles)} in {options.books_dir}")
+        parser.error(f"no repertoire PGNs for {', '.join(options.styles)} in {options.books_dir}")
     return 0

@@ -173,17 +173,24 @@ def draw_step(root, options):
     return ("done", "draw.bin") if status == 0 else ("failed", "./maxima experience:draw")
 
 
-def experiment_step(root, options):
-    """experiment.bin, the surprise-and-gambit style book, is built from books/experiment.pgn in the checkout."""
+def repertoire_step(root, options):
+    """experiment.bin and the moods, the fun style books, are built from books/ in the checkout."""
     from . import learning
-    source, target = root / "books/experiment.pgn", options.data / "experiment.bin"
-    if not source.is_file():
-        return "skipped", "no books/experiment.pgn"
-    if target.is_file() and target.stat().st_mtime >= source.stat().st_mtime:
+    books = root / "books"
+    pairs = [(books / "experiment.pgn", options.data / "experiment.bin")]
+    pairs += learning.mood_sources(books, options.data)
+    stale = [(source, target) for source, target in pairs if source.is_file() and (
+        not target.is_file() or target.stat().st_mtime < source.stat().st_mtime)]
+    if not any(source.is_file() for source, _ in pairs):
+        return "skipped", "no repertoire PGNs in books/"
+    if not stale:
         return "ok", "up to date"
     if options.check:
-        return "missing", "./maxima init builds it from books/experiment.pgn"
-    return "done", f"{learning.build_repertoire(source, target)} entries"
+        return "missing", f"./maxima init builds {', '.join(target.name for _, target in stale)}"
+    for source, target in stale:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        learning.build_repertoire(source, target)
+    return "done", ", ".join(target.name for _, target in stale)
 
 
 def syzygy_step(root, options):
@@ -208,7 +215,7 @@ def steps(options):
     yield "network", network_step
     for name, *download in books:
         yield name, draw_step if name == "draw.bin" and options.draw else book_step(name, *download)
-    yield "experiment.bin", experiment_step
+    yield "experiment+moods", repertoire_step
     yield "syzygy", syzygy_step
 
 

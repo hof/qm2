@@ -335,6 +335,25 @@ class multi_layer_book_tests(unittest.TestCase):
         moves, _, _ = book.distribution(self.after_e5, "", {})
         self.assertEqual(book.describe(*moves[chess.Move.from_uci("g1f3")]), "book 70%: book 64%, fire 36%")
 
+    def test_mood_rotates_weekly_and_joins_the_book(self):
+        moods = ["dutch", "parham", "traxler"]
+        monday = __import__("datetime").date(2026, 10, 19)
+        weeks = [learning.current_mood("auto", moods, monday + __import__("datetime").timedelta(weeks=week))
+                 for week in range(4)]
+        self.assertEqual(len(set(weeks[:3])), 3)  # each mood gets its week in turn
+        self.assertEqual(weeks[0], weeks[3])
+        self.assertEqual(learning.current_mood("auto", moods, __import__("datetime").date(2026, 10, 25)), weeks[0])
+        self.assertEqual(learning.current_mood("parham", moods), "parham")
+        self.assertIsNone(learning.current_mood("off", moods))
+        self.assertIsNone(learning.current_mood("missing", moods))
+        (self.root / "moods").mkdir()
+        polyglot_book(self.root / "moods" / "parham.bin", [(self.after_e5, "d1h5", 100)])
+        library = learning.learner(self.root, book_path=self.main, mood="parham", moods_dir=self.root / "moods")
+        book = library.for_game(None, None, None, rated=False)
+        self.assertEqual(book.mood, "parham")
+        moves, _, _ = book.distribution(self.after_e5, "", {})
+        self.assertIn("mood", book.describe(*moves[chess.Move.from_uci("d1h5")]))
+
     def test_where_book_bin_has_nothing_its_share_goes_to_search(self):
         board = board_after("e2e4 e7e5 f2f4")
         polyglot_book(self.fire, [(board, "e5f4", 100)])
