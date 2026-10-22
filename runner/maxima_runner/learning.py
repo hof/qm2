@@ -522,12 +522,17 @@ class opening_book:
         return f"{label} {probability:.0%}: {detail}"
 
     def choose(self, board, budget_ms):
-        """(move, reason) to play without searching, or None to let the engine search."""
+        """(move, reason) to play without searching, or None to let the engine search.
+
+        why keeps the last decision for observers: ("left book",), ("book" | "learned" | "signature" |
+        "revenge", probability, parts), or ("recalled", depth, seconds)."""
+        self.why = None
         if (type(board) is not chess.Board or board.ply() >= horizon_plies or board.halfmove_clock >= 90
                 or board.is_repetition(2)):
             return None
         if self.search_ply is not None and board.ply() >= self.search_ply:
             self.search_ply = None
+            self.why = ("left book",)
             return None
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         analyses = self.analyses.get(key, {})
@@ -536,6 +541,7 @@ class opening_book:
             ordered = sorted(moves, key=chess.Move.uci)
             move = self.random.choices(ordered + [None], [moves[move][0] for move in ordered] + [search])[0]
             if move is None:
+                self.why = ("left book",)
                 return None
             rate, games = self.estimate(key, move.uci())
             analysis = analyses.get(move.uci())
@@ -544,16 +550,21 @@ class opening_book:
             revenge = self.revenge_move(board, key, moves)
             if in_book or move == revenge or (games >= 2 and rate >= 0.5) or (analysis and analysis[3] >= budget_ms):
                 reason = self.describe(*moves[move])
+                kind = reason.split()[0]
                 if move == self.signature(key, moves):
+                    kind = "signature"
                     reason = "signature " + reason
                 elif move == revenge:
+                    kind = "revenge"
                     reason = "revenge " + reason
+                self.why = (kind,) + moves[move]
                 return move, reason
         if analyses:
             text, (depth, centipawns, mate, think_ms, clock) = max(analyses.items(),
                                                                    key=lambda item: (item[1][3], item[1][0]))
             move = chess.Move.from_uci(text)
             if think_ms >= budget_ms and clock == board.halfmove_clock and board.is_legal(move):
+                self.why = ("recalled", depth, think_ms / 1000)
                 return move, f"recalled d{depth} {think_ms / 1000:.1f}s"
         return None
 

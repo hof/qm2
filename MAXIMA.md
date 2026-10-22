@@ -1449,8 +1449,12 @@ An opponent who lets a fifth of the starting clock pass (at least 15 s, at most
 without agreement until both sides have moved. Games aborted that early are
 not saved.
 The log shows each searched move with depth, score, time, and the expected line
-(`pv`); `whisper` (or `--whisper`) also whispers depth, score, and line to
-observers.
+(`pv`). `whisper` (or `--whisper`) explains every move to observers (never to the
+opponent, unlike kibitz) in plain words:
+
+    e5 | from the book (100%): book.bin 44%, fire 20%, surprise 10%, experience 26%
+    f4 | revenge! John beat me with this line (50%): book.bin 30%, vs John 70%
+    Bd6 | out of book | depth 19, +2.07 for me | expect c4 O-O cxd5 Bxd5
 
 FICS computer accounts must keep the owner, machine, and engine in their finger
 notes (`help computers`), and may only play the engine, time controls, and

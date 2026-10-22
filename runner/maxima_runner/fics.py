@@ -360,9 +360,45 @@ def finger_notes(engine_name, owners, machine, extra=()):
     return [" ".join(note.split()) for note in notes[:10]]
 
 
+mood_names = {"kings_indian": "King's Indian", "parham": "Parham Attack (Qh5!)"}
+
+
 def mood_title(mood):
     """books/moods/kings_indian.pgn -> the King's Indian."""
-    return "the " + {"kings_indian": "King's Indian", "parham": "Parham Attack (Qh5!)"}.get(mood, mood.replace("_", " ").title())
+    return "the " + mood_names.get(mood, mood.replace("_", " ").title())
+
+
+def book_whisper(san, why, opening):
+    """What observers read for a move from the multi-layer book, e.g. "Nc6 | from the book: book.bin 39%,
+    fire 39%, surprise 10%, experience 12%"."""
+    kind = why[0]
+    opponent = opening.names["opponent"]
+    if kind == "recalled":
+        return f"{san} | remembered from an earlier search: depth {why[1]}, {why[2]:.0f}s"
+    probability, parts = why[1], why[2]
+    words = {"book": "book.bin", "fire": "fire", "draw": "draw", "experiment": "surprise", "global": "experience",
+             "group": f"{opening.names['group']} experience", "opponent": f"vs {opponent}",
+             "mood": f"{mood_names.get(opening.mood, (opening.mood or '').replace('_', ' ').title())} mood"}
+    mix = ", ".join(f"{words[name]} {parts[name] / probability:.0%}" for name in learning.layer_names
+                    if parts.get(name, 0) >= 0.05 * probability)
+    lead = {"signature": f"signature line vs {opponent}: it keeps winning",
+            "revenge": f"revenge! {opponent} beat me with this line",
+            "learned": "from experience"}.get(kind, "from the book")
+    return f"{san} | {lead} ({probability:.0%}): {mix}" if mix else f"{san} | {lead} ({probability:.0%})"
+
+
+def search_whisper(san, info, turn, line, note=None):
+    """What observers read for a searched move: depth, score for Maxima, and the expected reply line."""
+    score, depth = info.get("score"), info.get("depth", 0)
+    parts = [san] + ([note] if note else [])
+    if score is not None and depth:
+        relative = score.pov(turn)
+        value = f"mate in {relative.mate()}" if relative.is_mate() and relative.mate() > 0 else (
+            f"mated in {-relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f} for me")
+        parts.append(f"depth {depth}, {value}")
+    if line:
+        parts.append(f"expect {line}")
+    return " | ".join(parts)
 
 
 class engine_player:
@@ -373,6 +409,7 @@ class engine_player:
         self.open_session = open_session
         self.learner = learner
         self.opening = None
+        self.from_book = False
         self.announced_mood = None
         self.contempt = None
         self.fingered = False
@@ -630,6 +667,7 @@ class engine_player:
             self.game, self.token, self.history = position.game, object(), history
             self.record = fics_game.game_record({})
             self.opening = None
+            self.from_book = False
             self.on_line(f"-- game {self.game}: {position.white} vs {position.black}, "
                          f"{position.initial_seconds // 60} {position.increment_seconds}")
         elif self.history.update(position) == "move":
@@ -682,6 +720,9 @@ class engine_player:
                 if self.record is not None:
                     self.record.on_search(board, move, {"source": reason})
                 self.on_line(f"-- {board.san(move)} {reason} {time.monotonic() - started:.1f}s")
+                self.from_book = True
+                if self.policy.whisper and self.opening.why:
+                    await self.send(f"whisper {book_whisper(board.san(move), self.opening.why, self.opening)}")
                 return
         try:
             result = await self.session.play(board, limit, game=self.token, opponent=self.opponent,
@@ -703,8 +744,15 @@ class engine_player:
         pv = variation(board, result.info.get("pv", []))
         self.on_line(f"-- {board.san(result.move)} {summary} {time.monotonic() - started:.1f}s"
                      + (f" pv {pv}" if pv else ""))
-        if self.policy.whisper and summary != "book":
-            await self.send(f"whisper {summary} {pv}".rstrip())
+        if self.policy.whisper:
+            note = None
+            if self.opening is not None and self.opening.why == ("left book",):
+                note = "own idea: leaving the book on purpose"
+            elif self.from_book:
+                note = "out of book"
+            reply = pv.split(" ", 1)[1] if " " in pv else ""
+            await self.send(f"whisper {search_whisper(board.san(result.move), result.info, board.turn, reply, note)}")
+        self.from_book = False
 
 
 def variation(board, moves, limit=10):

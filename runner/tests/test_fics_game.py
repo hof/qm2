@@ -209,7 +209,20 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         player = await self.player("play", policy=fics.play_policy(whisper=True))
         await player.handle(start)
         await self.settle(player)
-        self.assertEqual(player.connection.sent, ["e2e4", "whisper d3 +0.25 e4"])
+        self.assertEqual(player.connection.sent, ["e2e4", "whisper e4 | depth 3, +0.25 for me"])
+
+    def test_whispers_explain_book_choices_simply(self):
+        opening = learning.opening_book([], opponent="John", group="humans", mood="parham")
+        parts = {"book": 0.2, "fire": 0.1, "mood": 0.15, "opponent": 0.05, "global": 0.001}
+        self.assertEqual(fics.book_whisper("Qh5", ("book", 0.5, parts), opening),
+                         "Qh5 | from the book (50%): book.bin 40%, fire 20%, Parham Attack (Qh5!) mood 30%, vs John 10%")
+        self.assertTrue(fics.book_whisper("f4", ("revenge", 0.5, parts), opening).startswith(
+            "f4 | revenge! John beat me with this line (50%)"))
+        self.assertEqual(fics.book_whisper("Bd6", ("recalled", 19, 36.6), opening),
+                         "Bd6 | remembered from an earlier search: depth 19, 37s")
+        info = {"depth": 18, "score": chess.engine.PovScore(chess.engine.Mate(5), chess.BLACK)}
+        self.assertEqual(fics.search_whisper("Qd5+", info, chess.BLACK, "Qd6 c7+", "out of book"),
+                         "Qd5+ | out of book | depth 18, mate in 5 | expect Qd6 c7+")
 
     async def test_game_end_cancels_search(self):
         player = await self.player("hang")
