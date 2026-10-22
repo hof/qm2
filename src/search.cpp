@@ -2235,17 +2235,13 @@ bool search_t::prune_quiet(move_t & move, int depth, int searched_moves,
 }
 
 // SEE only models exchanges on one square. Search a legal alternative first,
-// protect tactical/draw boundaries, and allow larger sacrifices at greater depth.
-bool search_t::prune_main_see(move_t & move, int depth, int searched_moves,
-        int best, int alpha, int beta, int gives_check) {
+// protect the clock-99 draw boundary, and allow larger sacrifices at greater depth.
+bool search_t::prune_main_see(move_t & move, int depth, int searched_moves, int best) {
     const int decisive = score::TABLEBASE - MAX_PLY;
-    if (!main_see_enabled || !brd.ply || depth < 1 || depth > 6 || !searched_moves
-            || alpha + 1 != beta || stack->in_check || gives_check
+    if (!main_see_enabled || !brd.ply || depth < 1 || !searched_moves
             || iid_active || verification_mode != verification_mode_t::none
             || stack->excluded_move || brd.stack->fifty_count >= 99
-            || best <= -decisive || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
-            || !brd.has_pieces(brd.us()) || stack->metadata.endgame
-            || move.promotion || move.castle || is_advanced_passed_pawn(&move)) {
+            || best <= -decisive || !brd.has_pieces(brd.us())) {
         return false;
     }
     const int threshold = move.capture ? -main_see_capture_margin * depth
@@ -2893,7 +2889,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             }
         }
 
-        if (!pv && prune_main_see(*move, depth, searched_moves, best, alpha, beta, gives_check)) {
+        if (prune_main_see(*move, depth, searched_moves, best)) {
             continue;
         }
 

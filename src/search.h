@@ -230,8 +230,7 @@ public:
         int best, int alpha, int beta, int gives_check, int eval);
     bool prune_quiet(move_t & move, int depth, int searched_moves, int reduced_depth,
         int best, int alpha, int beta, bool dangerous);
-    bool prune_main_see(move_t & move, int depth, int searched_moves,
-        int best, int alpha, int beta, int gives_check);
+    bool prune_main_see(move_t & move, int depth, int searched_moves, int best);
     struct singular_result_t {
         uint16_t move = 0;
         int extension = 0;

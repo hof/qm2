@@ -67,8 +67,8 @@ bool see_pruning() {
     auto s = position();
     // Nxe5 loses the knight to Nxe5.
     auto losing = make(*s, "f3e5");
-    bool ok = s->prune_main_see(losing, 1, 1, 0, 0, 1, 0);
-    ok &= !s->prune_main_see(losing, 1, 0, 0, 0, 1, 0);
+    bool ok = s->prune_main_see(losing, 1, 1, 0);
+    ok &= !s->prune_main_see(losing, 1, 0, 0);
     return check(ok, "a losing capture is pruned by SEE");
 }
 
