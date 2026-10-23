@@ -46,7 +46,7 @@ class sprt_tests(unittest.TestCase):
 
     def test_parameters_and_thresholds(self):
         for parameters in [(5, 0, .05, .05), (0, math.inf, .05, .05),
-                           (math.nan, 5, .05, .05), (-201, 5, .05, .05),
+                           (math.nan, 5, .05, .05), (5, 5, .05, .05),
                            (0, 5, 0, .05), (0, 5, .6, .5)]:
             with self.subTest(parameters=parameters), self.assertRaises(ValueError):
                 validate_sprt(*parameters)

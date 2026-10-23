@@ -884,8 +884,8 @@ For strength testing, use paired-result SPRT with bounds selected before play:
 ```
 
 `--sprt ELO0 ELO1` uses logistic Elo for A relative to B, with nominal false-positive
-and false-negative targets of 0.05 each (`--sprt-alpha` and `--sprt-beta`). The
-supported bounds satisfy `-200 <= ELO0 < ELO1 <= 200`; error targets must be
+and false-negative targets of 0.05 each (`--sprt-alpha` and `--sprt-beta`). Bounds
+must be finite with `ELO0 < ELO1`; error targets must be
 positive with sum less than one. Declare all parameters and the maximum number
 of pairs before results. `--pairs` is a cap, and requires at least that many
 unique opening entries. Each completed color-swapped pair contributes to one
