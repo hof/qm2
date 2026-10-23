@@ -1259,7 +1259,8 @@ int search_t::reduction(int depth, int searched_moves, int estimate, bool root_n
             || searched_moves < (root_node ? 2 : 1)) {
         return 0;
     }
-    return std::clamp(estimate / 1024, 0, depth - 2);
+    // A negative estimate extends the move by at most one ply.
+    return std::clamp(estimate / 1024, -1, depth - 2);
 }
 
 // The unclamped reduction a move would receive at any depth, in 1/1024 plies;
