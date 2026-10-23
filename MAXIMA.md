@@ -223,28 +223,28 @@ retains its caller's expectation. Royal losers ignores this standard-only contex
 
 Each standard search frame also tracks whether its static evaluation improved
 since the nearest valid same-side position two plies earlier, falling back to
-four plies when needed. Equality, missing evaluations and checked positions do
-not count as improvement. Artificial null passes block comparisons across their
-boundary. Tracking reuses cached static evaluations without extra evaluation
+four plies when needed. Equality and checked positions do not count as
+improvement; with no evaluated same-side position (for example at ply one) the
+frame counts as improving. Comparisons cross artificial null passes. Tracking reuses cached static evaluations without extra evaluation
 calls; it never uses TT search scores. Child entry and root reset clear stale
 trends, and same-position helpers restore their caller's state. Adaptive LMR
-uses the improving flag; other pruning policies retain their own guards.
+uses the improving flag, as do LMP budgets and reverse futility.
 
 `LMP` and `HistoryPruning` are independent default-on standard-search controls.
-At non-PV descendants outside check, a completed legal alternative permits
-pruning ordinary quiet moves. LMP's searched-move budget is
+At non-root nodes outside check, including PV nodes, a completed legal
+alternative permits pruning quiet moves. LMP's searched-move budget is
 `(3 + depth * depth) / (2 - improving)` and applies when the predicted
 LMR-adjusted depth is below nine. History pruning applies below seven and
 requires learned quiet history strictly below `-2048 * depth`; equality and
 neutral history are retained, and killers are protected from history pruning.
-The predicted depth is `depth - reduction`, using the same current depth,
-move count, history and node context as the subsequent reduced search. With
-LMR disabled, this is the unreduced depth. These constants are provisional.
+The predicted depth is `depth - reduction`, where the reduction is the
+unclamped LMR estimate for the move at every depth (the applied LMR is gated and
+clamped separately). With LMR disabled, this is the unreduced depth. These constants are provisional.
 
-Each move is considered separately: later quiet checks remain available and
-picker bonuses never substitute for learned history. Captures, promotions,
-castles, advanced passed pawns and singular hints are protected. Require
-nonpawn material and a nondecisive window/best alternative; skip IID, verification,
+Each move is considered separately and picker bonuses never substitute for
+learned history. Quiet checks, castles and passer pushes are ordinary quiets;
+captures, promotions and singular hints are protected. Require
+nonpawn material and a nondecisive-loss best alternative; skip IID, verification,
 excluded searches, artificial null subtrees, repetition floors and clock 99+.
 Confirm legality before a prune and restrict its TT clock domain to at most 98.
 Pruned candidates neither advance searched-move counts nor train history.
@@ -328,7 +328,7 @@ frontier `eval+300<=alpha` rule, including its material-defined endgame exclusio
 Royal-losers and fixed/aligned diagnostic horizons keep their existing policy.
 
 Broader reverse futility covers interior non-PV depths1..8. Its margin is
-`max(25,100*depth-100*improving_without_lower_value_threat+abs(correction)/2)`;
+`100*depth-100*improving_without_lower_value_threat+abs(correction)/2`;
 correction here is the difference between corrected and raw clock-scaled static
 evaluation. The threat test uses opponent pawn/minor/rook pseudo-attacks on more
 valuable own pieces, using the same threat model as quiet ordering. A validated
@@ -345,7 +345,7 @@ quiet moves require reduced depth<6 and
 require reduced depth<8 and
 `eval+200*(1+reduced_depth)+victim_value+capture_history/64<=alpha`;
 en passant includes its off-target victim. Require a searched legal alternative
-with a nondecisive-loss score, ordinary non-PV interior search, own nonpawn
+with a nondecisive-loss score, ordinary interior search (PV included), own nonpawn
 material and nondecisive alpha/beta. Protect promotions, checks/evasions,
 castles, advanced passed-pawn quiet moves, IID/verification/excluded/repetition
 contexts and clock99. Check each candidate's legality; preserve later tactical quiets
@@ -360,8 +360,8 @@ Outside check, quiescence searches captures and queen promotions with
 moves are not generated. A valid TT hint is still searched first. Futility skips
 a nonchecking, non-recapture tactical move when `eval + 350 <= alpha` and the
 move does not win material (`!see(move, 1)`); the best score rises to that
-futility value. In check, the first evasion is always searched; after it only
-noisy moves passing the quiescence SEE bound remain.
+futility value. In check, all legal evasions are generated; after the first,
+evasions with negative SEE are skipped; quiet evasions stay searchable.
 
 The exchange estimator checks recapturers against current temporary occupancy,
 excluding captures that expose their king and king captures onto attacked
@@ -1370,23 +1370,28 @@ Audit counters record reductions by
 PV/cut context, depth range, reduced-node cutoffs, terminals and cancellation.
 The threshold keeps one-ply ordering probes out of shallow search.
 
-Standard search defaults `MainSEE=true`. At non-PV nodes with one through six
-remaining effective plies, SEE pruning can skip a move after at least one legal
-alternative has completed search. A capture must meet `-100 * depth`; a quiet
+Standard search defaults `MainSEE=true`. At any non-root node, PV included,
+SEE pruning can skip a move after at least one legal alternative has completed
+search. A capture must meet `-100 * depth`; a quiet
 must meet `-50 * depth * depth`, in the 100-cp pawn scale. Equality passes.
-A node that began PV stays protected even if its alpha rises to one point below
-beta. These simple provisional margins use full effective depth independently
+These simple provisional margins use full effective depth independently
 of LMR and history. SEE models exchanges on the destination square, so this heuristic can
 miss tactical sacrifices and still needs integrated playing-strength validation.
 
-Root nodes, checks and checking moves, promotions, castles, advanced passed
-pawns, pawn-only sides, endgame metadata, IID helpers, verification subtrees,
-excluded moves, decisive windows and clocks at least 99 are protected. The
+Root nodes, pawn-only sides, IID helpers, verification subtrees, excluded
+moves and clocks at least 99 are protected. The
 searched best value must exceed the negative mate/tablebase band. A failed SEE
 also requires final legality before recording a skip. Skips do not enter the
 searched-move history list. At least one searched legal alternative preserves
 terminal handling and a real best move; completed results retain ordinary PVS
 bound handling. Legal skips cap the propagated TT clock interval at 98.
+
+`Aspiration` (default true) searches iterations from depth two with a window
+of `12 + score*score/30155` around the previous score. A fail low moves beta to
+the window midpoint and alpha to `score - delta`; a fail high moves beta to
+`score + delta` and repeats the iteration one ply shallower per consecutive
+nondecisive fail high (reset by a fail low). Delta grows by a third per retry.
+Reports and results keep the iteration depth.
 
 Workers snapshot `MainSEE`; disabling it skips both tests and pruning, and
 changing it stops the worker and clears incompatible TT entries. Royal losers
