@@ -21,7 +21,22 @@
 
 #include "eval.h"
 #include "search.h"
-#include "progress.h"
+#include "nnue.h"
+#include <algorithm>
+
+// The network's own scale: material, tempo and shuffle damping follow the
+// NNUE path of the evaluation that trained alongside this network.
+int scale_network_score(int raw, const board_t & board, int halfmoves) {
+    constexpr int pawn = 126, knight = 781, bishop = 825, rook = 1276, queen = 2538, tempo = 28;
+    const int clock = std::clamp(halfmoves, 0, 100);
+    const int material = 2 * pawn * popcnt0(board.bb[WPAWN] | board.bb[BPAWN])
+        + knight * popcnt0(board.bb[WKNIGHT] | board.bb[BKNIGHT])
+        + bishop * popcnt0(board.bb[WBISHOP] | board.bb[BBISHOP])
+        + rook * popcnt0(board.bb[WROOK] | board.bb[BROOK])
+        + queen * popcnt0(board.bb[WQUEEN] | board.bb[BQUEEN]);
+    const int value = raw * (641 + material / 32 - 4 * clock) / 1024 + tempo;
+    return nnue::to_centipawns(value * (100 - clock) / 100);
+}
 
 int evaluate(search_t * search) {
     if (search->stack->in_check && search->brd.ply < (MAX_PLY - 1)) {
@@ -32,7 +47,8 @@ int evaluate(search_t * search) {
         return search->corrected_static_eval(search->stack->eval_result);
     }
     assert(search->evaluation_network);
-    const int result = damp_rule50(search->neural_static_score(), search->brd.stack->fifty_count);
+    const int result = scale_network_score(search->neural_static_score(), search->brd,
+        search->brd.stack->fifty_count);
     search->stack->eval_result = result;
     return search->corrected_static_eval(result);
 }

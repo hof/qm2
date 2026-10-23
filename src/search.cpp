@@ -152,7 +152,7 @@ U64 search_t::tt_context() const {
     const U64 node_kind = brd.ply == 0 ? game_history_salt
         : brd.ply < stack->repetition_start ? 0 : search_history_salt;
     const int white_contempt = root_wtm ? draw_contempt : -draw_contempt;
-    // Share score bounds within a damping bucket, retaining move hints across
+    // Share score bounds within a clock bucket, retaining move hints across
     // buckets. Existing propagated clock ranges still guard terminal draws.
     const int clock_bucket = wild == 0 ? rule50_bucket(brd.stack->fifty_count) : 0;
     return stack->tt_history ^ node_kind
@@ -212,8 +212,8 @@ void root_move_t::add_nodes(U64 count) {
  * Initializes the object, preparing to start a new search
  * @param fen string representing the board position
  */
-// Static neural scores depend on board/side and the immutable model snapshot,
-// not repetition history or the halfmove clock. Apply rule50 damping separately.
+// Raw network scores depend on board/side and the immutable model snapshot,
+// not repetition history or the halfmove clock. Scaling is applied separately.
 int search_t::neural_static_score() {
     assert(evaluation_network);
     constexpr size_t entries = 65536;
@@ -232,9 +232,9 @@ int search_t::neural_static_score() {
         }
     }
     auto & accumulator = evaluation_accumulators[brd.ply];
-    const int value = nnue::to_centipawns(evaluation_network->evaluate(brd, accumulator,
-        std::span<const nnue::accumulator_t>(evaluation_accumulators.data(), brd.ply)
-        ));
+    const int value = std::clamp(evaluation_network->evaluate(brd, accumulator,
+        std::span<const nnue::accumulator_t>(evaluation_accumulators.data(), brd.ply)),
+        -score::TABLEBASE + 1, score::TABLEBASE - 1);
     if (tt_eval_enabled) {
         trans_table::store_eval(brd.stack->tt_key, evaluation_network->fingerprint(), value, brd.root_ply);
     }
@@ -951,9 +951,8 @@ int search_t::corrected_static_eval(int raw) {
         return raw;
     }
     const int correction = correction_value();
-    // Preserve the existing reversible-clock decay, including zero at 100.
     constexpr int limit = score::TABLEBASE - MAX_PLY - 1;
-    return std::clamp(raw + damp_rule50(correction, brd.stack->fifty_count), -limit, limit);
+    return std::clamp(raw + correction, -limit, limit);
 }
 
 void search_t::update_correction_history(int value, int bound, int depth) {

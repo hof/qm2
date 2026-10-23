@@ -54,7 +54,7 @@ std::pair<int, U64> run_configured(const std::string & fen, int expected = score
 
 bool test_rule50_buckets() {
     const std::string prefix = "5B2/3k1K2/8/2R4P/5P2/8/8/7r w - - ";
-    auto first = std::make_unique<search_t>((prefix + "21 203").c_str());
+    auto first = std::make_unique<search_t>((prefix + "22 203").c_str());
     auto same = std::make_unique<search_t>((prefix + "29 203").c_str());
     auto next = std::make_unique<search_t>((prefix + "30 203").c_str());
     for (auto * search : {first.get(), same.get(), next.get()}) prepare(*search);

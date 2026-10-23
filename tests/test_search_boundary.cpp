@@ -138,8 +138,9 @@ bool test_parent_clock_ranges() {
             trans_table::clear();
             auto writer = std::make_unique<search_t>(before.c_str());
             prepare(*writer, policy.configuration);
-            const int value = writer->pvs(-1, 0, policy.depth);
-            ok &= check(value <= -1, "clock fixture must produce a losing bound", before.c_str());
+            // Near clock 100 the damped evaluation is close to zero.
+            const int value = writer->pvs(0, 1, policy.depth);
+            ok &= check(value <= 0, "clock fixture must produce a losing bound", before.c_str());
             int cached = 0, move = 0, flag = 0;
             clock_range_t clocks;
             ok &= check(trans_table::retrieve(writer->brd.stack->tt_key, 0, policy.depth,

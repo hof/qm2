@@ -1,5 +1,4 @@
 #include "engine.h"
-#include "progress.h"
 #include <memory>
 
 int main() {
@@ -89,9 +88,8 @@ int main() {
         original->brd.do_flip();
         auto flipped = std::make_unique<search_t>(original->brd.to_string().c_str());
         nnue::accumulator_t accumulator;
-        const int expected = damp_rule50(nnue::to_centipawns(
-            flipped->evaluation_network->evaluate(flipped->brd, accumulator)),
-            flipped->brd.stack->fifty_count);
+        const int expected = scale_network_score(flipped->evaluation_network->evaluate(flipped->brd, accumulator),
+            flipped->brd, flipped->brd.stack->fifty_count);
         // A trained network need not have exact color-flip symmetry.
         success &= evaluate(flipped.get()) == expected;
         original->brd.do_flip();

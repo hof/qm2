@@ -1,16 +1,10 @@
 #ifndef MAXIMA_PROGRESS_H
 #define MAXIMA_PROGRESS_H
 
-#include <algorithm>
-
-// Ten-halfmove steps: 0..9 retain full evaluation, 10..19 retain 90%, etc.
-// This is search policy; raw NNUE output and repetition identity stay unchanged.
+// Halfmove clocks 0..13 share score bounds; later clocks use buckets of eight.
+// Scores within a bucket reuse each other; clock ranges still guard draws.
 inline int rule50_bucket(int halfmoves) {
-    return std::clamp(halfmoves, 0, 100) / 10;
-}
-
-inline int damp_rule50(int value, int halfmoves) {
-    return value * (100 - 10 * rule50_bucket(halfmoves)) / 100;
+    return halfmoves < 14 ? 0 : (halfmoves - 14) / 8 + 1;
 }
 
 #endif

@@ -21,7 +21,6 @@
  */
 
 #include "engine.h"
-#include "progress.h"
 #include <memory>
 
 int main() {
@@ -34,16 +33,15 @@ int main() {
             "7k/8/8/8/8/8/3R4/K7 w - - 0 1"}) {
         auto search = std::make_unique<search_t>(fen);
         nnue::accumulator_t independent;
-        const int expected = damp_rule50(nnue::to_centipawns(
-            search->evaluation_network->evaluate(search->brd, independent)), search->brd.stack->fifty_count);
+        const int expected = scale_network_score(search->evaluation_network->evaluate(search->brd, independent),
+            search->brd, search->brd.stack->fifty_count);
         const int initial = evaluate(search.get());
         success &= initial == expected && evaluate(search.get()) == expected;
         search->brd.do_flip();
         auto flipped = std::make_unique<search_t>(search->brd.to_string().c_str());
         nnue::accumulator_t flipped_accumulator;
-        const int flipped_expected = damp_rule50(nnue::to_centipawns(
-            flipped->evaluation_network->evaluate(flipped->brd, flipped_accumulator)),
-            flipped->brd.stack->fifty_count);
+        const int flipped_expected = scale_network_score(flipped->evaluation_network->evaluate(flipped->brd, flipped_accumulator),
+            flipped->brd, flipped->brd.stack->fifty_count);
         success &= evaluate(flipped.get()) == flipped_expected;
     }
     auto search = std::make_unique<search_t>("7k/8/8/8/8/8/3R4/K7 w - - 0 1");

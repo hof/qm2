@@ -122,36 +122,35 @@ int main() {
     const char * fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     auto neural_storage = std::make_unique<search_t>(fen);
     auto & neural = *neural_storage;
-    success &= check(evaluate(&neural) == 100, "NNUE score must use the network");
-    // Raw neural scores stay constant; only the separate rule50 policy scales
-    // the result, without blending or falling back to classical evaluation.
-    for (const char * position : {
-            "7k/8/8/8/8/8/P7/K7 w - - 0 1",
-            "7k/8/8/8/8/8/P7/K7 b - - 80 1",
-            "7k/8/8/8/8/8/3Q4/K7 w - - 0 1",
-            "7k/8/8/8/8/8/3q4/K7 b - - 80 1"}) {
-        auto position_storage = std::make_unique<search_t>(position);
-        const int expected = position_storage->brd.stack->fifty_count == 80 ? 20 : 100;
-        success &= check(evaluate(position_storage.get()) == expected
-            && evaluate(position_storage.get()) == expected
-            && position_storage->neural_static_score() == 100,
-            "NNUE mode must not blend or fall back to classical scores");
-    }
-    for (const auto [clock, expected] : {std::pair{0, 100}, {9, 100}, {10, 90},
-            {19, 90}, {20, 80}, {89, 20}, {90, 10}, {99, 10}, {100, 0}}) {
-        const std::string position = "7k/8/8/8/8/8/3Q4/K7 w - - "
-            + std::to_string(clock) + " 1";
+    // The synthetic network's output bias gives every position this raw score.
+    constexpr int raw = 208;
+    const int start_score = scale_network_score(raw, neural.brd, 0);
+    success &= check(evaluate(&neural) == start_score && neural.neural_static_score() == raw,
+        "NNUE score must use the network");
+    // Scaling uses only material and the clock, never another evaluator.
+    auto queen_storage = std::make_unique<search_t>("7k/8/8/8/8/8/3Q4/K7 w - - 0 1");
+    const int queen_score = evaluate(queen_storage.get());
+    success &= check(queen_score > 0 && queen_score < start_score
+        && queen_storage->neural_static_score() == raw,
+        "Less material must scale the same raw score down");
+    int previous = queen_score;
+    for (int clock : {1, 50, 99}) {
+        const std::string position = "7k/8/8/8/8/8/3Q4/K7 w - - " + std::to_string(clock) + " 1";
         auto probe = std::make_unique<search_t>(position.c_str());
-        success &= check(evaluate(probe.get()) == expected
-            && evaluate(probe.get()) == expected && probe->neural_static_score() == 100,
-            "Rule50 bucket boundaries must scale once and preserve raw neural scores");
+        const int value = evaluate(probe.get());
+        success &= check(value < previous && value >= 0 && probe->neural_static_score() == raw,
+            "A higher clock must damp the score without changing the raw score");
+        previous = value;
     }
+    auto drawn = std::make_unique<search_t>("7k/8/8/8/8/8/3Q4/K7 w - - 100 1");
+    success &= check(evaluate(drawn.get()) == 0, "Clock 100 must damp the score to zero");
     // A repeated board at another clock reuses the undamped static score.
     // It must still apply the current clock once.
     {
         const char * cached_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 8 1";
         auto cached = std::make_unique<search_t>(cached_fen);
-        success &= check(evaluate(cached.get()) == 100, "Initial neural cache score must be undamped");
+        success &= check(evaluate(cached.get()) == scale_network_score(raw, cached->brd, 8),
+            "Initial neural cache score must be scaled at its own clock");
         const U64 key = cached->brd.stack->tt_key;
         std::array<move_t, 4> cycle;
         const char * moves[] = {"g1f3", "g8f6", "f3g1", "f6g8"};
@@ -163,7 +162,8 @@ int main() {
         }
         success &= check(cached->brd.stack->tt_key == key && cached->brd.stack->fifty_count == 12,
             "A reversible cycle must revisit the board across a rule50 bucket boundary");
-        success &= check(evaluate(cached.get()) == 90 && cached->neural_static_score() == 100
+        success &= check(evaluate(cached.get()) == scale_network_score(raw, cached->brd, 12)
+            && cached->neural_static_score() == raw
             && !cached->evaluation_accumulators[cached->brd.ply].ready[0]
             && !cached->evaluation_accumulators[cached->brd.ply].ready[1],
             "Neural cache hits must skip inference and preserve the clock contract");
@@ -172,7 +172,7 @@ int main() {
         // Isolate worker-local invalidation: shared TT evaluation can otherwise
         // legitimately leave this freshly initialized accumulator lazy.
         cached->tt_eval_enabled = false;
-        success &= check(evaluate(cached.get()) == 100
+        success &= check(evaluate(cached.get()) == scale_network_score(raw, cached->brd, 8)
             && cached->evaluation_accumulators[0].ready[0]
             && cached->evaluation_accumulators[0].ready[1],
             "Search reinitialization must discard its previous neural cache");
@@ -196,16 +196,17 @@ int main() {
     success &= check(nnue::set_path(path.string(), error), "Extreme valid-format bias must load safely");
     auto extreme_storage = std::make_unique<search_t>(fen);
     auto & extreme = *extreme_storage;
-    success &= check(evaluate(&extreme) == score::TABLEBASE - MAX_PLY - 1
+    const int extreme_score = scale_network_score(score::TABLEBASE - 1, extreme.brd, 0);
+    success &= check(evaluate(&extreme) == std::min(extreme_score, score::TABLEBASE - MAX_PLY - 1)
         && extreme.neural_static_score() == score::TABLEBASE - 1,
         "Corrected evaluation must stay below the decisive band without changing raw NNUE");
     extreme.correction_history_enabled = false;
-    success &= check(evaluate(&extreme) == score::TABLEBASE - 1,
+    success &= check(evaluate(&extreme) == extreme_score,
         "Disabled correction must preserve the original NNUE limit");
     extreme.correction_history_enabled = true;
     success &= check(extreme.tt_context() != neural.tt_context(), "Different models need different TT contexts");
     neural.stack->eval_result = score::INVALID;
-    success &= check(evaluate(&neural) == 100, "Search must own immutable model across reloads");
+    success &= check(evaluate(&neural) == start_score, "Search must own immutable model across reloads");
     auto checked_storage = std::make_unique<search_t>("7k/8/8/8/8/8/7r/K7 w - - 0 1");
     auto & checked = *checked_storage;
     checked.stack->in_check = true;
@@ -217,11 +218,11 @@ int main() {
         && losers_score != score::TABLEBASE - 1, "Royal-losers must retain material-only evaluator");
     nnue::set_path("", error);
     neural.stack->eval_result = score::INVALID;
-    success &= check(!nnue::snapshot() && evaluate(&neural) == 100,
+    success &= check(!nnue::snapshot() && evaluate(&neural) == start_score,
         "Unload must not invalidate retained snapshots");
     success &= check(nnue::set_path(path.string(), error), "A valid network must reload after internal unload");
     auto restored = std::make_unique<search_t>(fen);
-    success &= check(evaluate(restored.get()) == score::TABLEBASE - MAX_PLY - 1
+    success &= check(evaluate(restored.get()) == std::min(extreme_score, score::TABLEBASE - MAX_PLY - 1)
         && restored->neural_static_score() == score::TABLEBASE - 1
         && restored->tt_context() == extreme.tt_context(), "Reloaded model must retain its score/context identity");
     return success ? 0 : 1;

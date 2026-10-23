@@ -1,7 +1,6 @@
 #include "engine.h"
 #include "movegen.h"
 #include "nnue.h"
-#include "progress.h"
 #include <random>
 
 // Keep the independent reference's piece/color names out of the engine scope.
@@ -50,7 +49,7 @@ bool compare(search_t & search) {
         const bool correction_enabled = search.correction_history_enabled;
         search.correction_history_enabled = false;
         success &= evaluate(&search)
-            == damp_rule50(reference_score * 100 / 208, search.brd.stack->fifty_count);
+            == scale_network_score(reference_score, search.brd, search.brd.stack->fifty_count);
         search.correction_history_enabled = correction_enabled;
     }
     if (!success) {
