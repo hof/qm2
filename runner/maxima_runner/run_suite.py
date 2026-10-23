@@ -8,6 +8,8 @@ import sys
 import tempfile
 
 from .project import engine_path, project_root
+from .match_options import (engine_profile, option_assignment, validated_settings,
+                            verify_models)
 
 
 def read_suite(path):
@@ -64,7 +66,7 @@ def report_info(info):
     return result
 
 
-async def run_position(command, position, budget, hash_mb, timeout, syzygy_path=None):
+async def run_position(command, position, budget, hash_mb, timeout, syzygy_path=None, profile=None):
     import chess
     import chess.engine
     from .uci import open_engine
@@ -80,6 +82,8 @@ async def run_position(command, position, budget, hash_mb, timeout, syzygy_path=
         limit = chess.engine.Limit(time=value / 1000)
     else:
         raise ValueError("unsupported search budget")
+    profile = profile if profile is not None else engine_profile([], [])
+    verify_models(profile)
     # Fresh processes guarantee cold caches and exclude automatic opening books.
     with tempfile.TemporaryDirectory(prefix="maxima-suite-") as directory:
         async with open_engine(command, directory, timeout) as engine:
@@ -91,7 +95,7 @@ async def run_position(command, position, budget, hash_mb, timeout, syzygy_path=
                     raise RuntimeError("engine does not advertise SyzygyPath")
                 settings.update(SyzygyPath=str(Path(syzygy_path).resolve()),
                                 SyzygyProbeLimit=5)
-            applied = await engine.configure(settings)
+            applied = await engine.configure(validated_settings(engine.protocol.options, settings, profile))
             result = dict(position, first_expected_ms=None, tbhits=0)
 
             def observe(info, elapsed_ms):
@@ -105,7 +109,8 @@ async def run_position(command, position, budget, hash_mb, timeout, syzygy_path=
             move = best.move.uci() if best.move is not None else "(none)"
             result.update(bestmove=move, solved=move in position["expected_moves"],
                           elapsed_ms=round(elapsed_ms, 3))
-            return result, {"id": engine.identity, "options": applied}
+            verify_models(profile)
+            return result, {"id": engine.identity, "options": applied, "models": profile["models"]}
 
 
 def positive_int(value):
@@ -122,6 +127,10 @@ def main():
                         help="bundled name (default modern_2026) or EPD file")
     parser.add_argument("--engine", default=str(engine_path(root)),
                         help="engine executable path")
+    parser.add_argument("--option", action="append", type=option_assignment, default=[],
+                        metavar="NAME=VALUE", help="repeatable evaluator/search option")
+    parser.add_argument("--model", action="append", type=option_assignment, default=[],
+                        metavar="OPTION=PATH", help="set and hash an external model file")
     limits = parser.add_mutually_exclusive_group()
     limits.add_argument("--movetime", type=positive_int, help="milliseconds per position (default 1000)")
     limits.add_argument("--nodes", type=positive_int)
@@ -136,6 +145,7 @@ def main():
              if args.suite in bundled else Path(args.suite))
     budget = f"nodes {args.nodes}" if args.nodes else f"movetime {args.movetime or 1000}"
     try:
+        profile = engine_profile(args.option, args.model)
         suite_hash = hashlib.sha256(suite.read_bytes()).hexdigest()
         positions = read_suite(suite)
         if args.syzygy_path is not None:
@@ -148,7 +158,7 @@ def main():
         results = []
         for position in positions:
             result, metadata = asyncio.run(run_position(
-                command, position, budget, args.hash_mb, timeout, args.syzygy_path))
+                command, position, budget, args.hash_mb, timeout, args.syzygy_path, profile))
             results.append(result)
             print(f"{position['id']:>6} {'ok' if result['solved'] else 'miss':4} "
                   f"{result['bestmove']:5} expected {','.join(position['expected_moves'])} "

@@ -24,15 +24,14 @@ def render():
             for move in legal:
                 capture = board.is_capture(move)
                 castle = board.is_castling(move)
-                check = board.gives_check(move)
                 if castle:
                     castles.append(move.uci())
                 # These fixtures have no captures or promotions: every child
                 # is independently a fifty-move draw, with no checkmate.
                 assert not capture and not move.promotion
-                if board.is_check() or castle or check:
+                if board.is_check():
                     entry.append(move.uci())
-                if board.is_check() or castle:
+                if board.is_check():
                     tactical.append(move.uci())
                 board.push(move)
                 assert not board.is_checkmate() and board.halfmove_clock == 100

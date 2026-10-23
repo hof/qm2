@@ -9,7 +9,60 @@ extern std::vector<U64> position_history;
 
 namespace {
 bool check(const char * message, bool success) {
-    if (!success) std::cerr << message << '\n';
+    if (!success) {
+        std::cerr << message << '\n';
+    }
+    return success;
+}
+}
+
+namespace {
+bool policy_cache_controls() {
+    bool success = true;
+    const U64 main_key = 0x1234567812345678ULL;
+    const U64 q_key = 0x9876543298765432ULL;
+    auto seed = [&]() {
+        trans_table::clear();
+        trans_table::store(main_key, 0, 0, 4, 123, 456, score::EXACT);
+        trans_table::store(q_key, 0, 0, 0, 234, 567, score::LOWERBOUND);
+    };
+    auto retained = [&]() {
+        tt_hit_t main_hit, q_hit;
+        return trans_table::probe(main_key, 0, 0, main_hit) && main_hit.score == 123
+            && trans_table::probe(q_key, 0, 0, q_hit) && q_hit.score == 234;
+    };
+    auto cleared = [&]() {
+        tt_hit_t hit;
+        return !trans_table::probe(main_key, 0, 0, hit) && !trans_table::probe(q_key, 0, 0, hit);
+    };
+    for (const char * name : {"NullMove", "BetaPruning", "LMR", "FutilityPruning",
+            "NullVerify", "Aspiration", "IIR", "MainSEE", "Razoring", "SingularExtensions", "ProbCut", "TTHistory", "TTEval", "LMP", "HistoryPruning", "QsearchTT", "MainHistory",
+            "ContinuationHistory", "PawnHistory", "Countermoves", "Killers", "UpcomingRepetition", "CheckEvasions", "CaptureHistory", "LongContinuationHistory", "ThreatOrdering", "CheckOrdering", "CorrectionHistory", "PieceCorrection", "ContinuationCorrection", "LMRHistory",
+            "DrawContempt", "SyzygyProbeLimit", "SyzygyProbeDepth"
+            }) {
+        const int saved = options::get_value(name);
+        const std::string command = std::string("setoption name ") + name + " value ";
+        seed();
+        uci::in(command + std::to_string(saved));
+        success &= check("unchanged policy must preserve both TT modes", retained());
+        uci::in(command + "invalid");
+        success &= check("invalid policy must preserve both TT modes", retained());
+        uci::in(command + std::to_string(saved == 0 ? 1 : 0));
+        success &= check(name, cleared());
+        seed();
+        uci::in(command + std::to_string(saved));
+        success &= check("restoring policy must clear both TT modes", cleared());
+    }
+    for (const char * value : {"losers", "standard"}) {
+        seed();
+        uci::in(std::string("setoption name Wild value ") + value);
+        success &= check("variant changes must clear both TT modes", cleared());
+    }
+    seed();
+    uci::in("setoption name Move Overhead value 100");
+    success &= check("clock overhead must preserve TT", retained());
+    uci::in("setoption name Move Overhead value 50");
+    trans_table::clear();
     return success;
 }
 }
@@ -17,7 +70,7 @@ bool check(const char * message, bool success) {
 int main() {
     magic::init();
     uci::silent(true);
-    bool success = true;
+    bool success = policy_cache_controls();
     uci::in("position startpos moves g1f3 g8f6 f3g1 f6g8");
     const auto fen = uci::fen;
     const auto history = uci::position_history;
@@ -49,6 +102,61 @@ int main() {
             "setoption name Hash value 2147483648"}) {
         uci::in(command);
         success &= check(command, options::get_value("Hash") == 16);
+    }
+    success &= check("move overhead defaults to 50 ms", options::get_value("Move Overhead") == 50);
+    for (int overhead : {0, 50, 200, 5000}) {
+        uci::in("setoption name Move Overhead value " + std::to_string(overhead));
+        game_t limits;
+        limits.clock_limit = true;
+        limits.white_time = limits.black_time = 1000;
+        limits.moves_left = 2;
+        limits.init_tm(true);
+        success &= check("configured overhead reduces both clock budgets and saturates at zero",
+            limits.tm.reserved_min() == std::max(0, 250 - overhead)
+            && limits.tm.reserved_max() == std::max(0, 500 - overhead));
+        limits.movetime_limit = true;
+        limits.max_time_per_move = 300;
+        limits.init_tm(true);
+        success &= check("explicit movetime retains its requested budget",
+            limits.tm.reserved_min() == 300 && limits.tm.reserved_max() == 300);
+    }
+    for (const char * value : {"-1", "5001", "oops", "2147483648"}) {
+        uci::in(std::string("setoption name Move Overhead value ") + value);
+        success &= check("invalid overhead preserves the previous value",
+            options::get_value("Move Overhead") == 5000);
+    }
+    uci::in("setoption name Move Overhead value 50");
+    {
+        time_manager_t period_timer;
+        for (int remaining : {0, 1, 100, 999, 1000, 3999, 4000, 7338, 21363}) {
+            for (int overhead : {0, 50, 100, 200, 5000}) {
+                period_timer.set(remaining, remaining, 0, 0, 1, overhead);
+                const int expected_max = std::max(0, remaining
+                    - std::max(overhead, std::min(1000, remaining / 20)));
+                success &= check("last period move reserves clock time, scaled for low clocks",
+                    period_timer.reserved_max() == expected_max
+                    && period_timer.reserved_min() >= 0
+                    && period_timer.reserved_min() <= expected_max);
+            }
+        }
+        period_timer.set(21363, 19741, 0, 0, 1, 100);
+        success &= check("reported move-40 clock leaves one second for replenishment",
+            period_timer.reserved_max() == 20363);
+        period_timer.set(7338, 308343, 0, 0, 1, 100);
+        success &= check("reported move-80 clock retains a proportional reserve",
+            period_timer.reserved_max() == 6972);
+        period_timer.set(1000, 1000, 10000, 10000, 1, 100);
+        success &= check("last period move cannot spend increment before receiving it",
+            period_timer.reserved_max() == 900);
+        period_timer.set(5000, 5000, 0, 0, 1, 50);
+        success &= check("five-second clock never reserves a fixed second",
+            period_timer.reserved_max() == 4750);
+        period_timer.set(24000, 24000, 0, 0, 20, 100);
+        success &= check("mid-period allocation retains its previous budget",
+            period_timer.reserved_min() == 500 && period_timer.reserved_max() == 3900);
+        period_timer.set(24000, 24000, 0, 0, 0, 100);
+        success &= check("sudden-death allocation retains its previous budget",
+            period_timer.reserved_min() == 150 && period_timer.reserved_max() == 900);
     }
     uci::in("setoption name Ponder value true");
     uci::in("setoption name Ponder value maybe");
@@ -133,6 +241,17 @@ int main() {
     success &= check("large legal clocks must produce bounded positive budgets",
         timer.reserved_min() > 0 && timer.reserved_max() > 0
         && timer.reserved_min() <= large_clock && timer.reserved_max() <= large_clock);
+    game_t received_limits;
+    received_limits.clock_limit = true;
+    received_limits.white_time = 100;
+    received_limits.black_time = 100;
+    received_limits.moves_left = 1;
+    received_limits.go_started = std::chrono::steady_clock::now() - std::chrono::milliseconds(200);
+    game_t received_snapshot;
+    received_snapshot.copy(&received_limits);
+    received_snapshot.init_tm(true);
+    success &= check("Command handling and setup must consume the received clock budget",
+        received_snapshot.tm.time_is_up() && received_snapshot.tm.elapsed() >= 200);
     for (bool move_time : {false, true}) {
         game_t limits;
         limits.clock_limit = !move_time;

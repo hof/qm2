@@ -55,3 +55,6 @@ __pycache__/
 /runner/build/
 /runner/dist/
 /moods/
+
+/networks/*.nnue
+/eval.nnue

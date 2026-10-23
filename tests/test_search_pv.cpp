@@ -37,14 +37,15 @@ bool test_store_pv(table_state_t state) {
     board.init(start_fen);
     for (int i = 0; i < 4; ++i) {
         if (i > 0) {
-            int score = 0, move = 0, flag = 0;
-            const bool found = trans_table::retrieve(board.stack->tt_key, 0, 1, score, move, flag);
+            tt_hit_t hit;
+            const bool found = trans_table::probe(board.stack->tt_key, 0, 0, hit);
+            const int score = hit.score, move = hit.move, flag = hit.bound;
             const bool correct_move = found && move == search.stack->pv_moves[i].to_compact();
-            // Matching entries retain their real search bounds. New/replaced moves
-            // are ordering hints and must not masquerade as exact evaluations.
-            const bool correct_bound = state == table_state_t::matching
+            // A changed hint does not invalidate an existing score for this board.
+            // A new hint alone must not invent a scored result.
+            const bool correct_bound = state != table_state_t::empty
                 ? score == 123 + i && flag == score::EXACT
-                : score == 0 && flag == 0;
+                : flag == 0;
             success &= correct_move && correct_bound;
             if (!correct_move || !correct_bound) {
                 std::cerr << "PV storage case " << static_cast<int>(state)
@@ -52,9 +53,7 @@ bool test_store_pv(table_state_t state) {
                     << ", stored move=" << move << ", score=" << score
                     << ", flag=" << flag << "\n";
             }
-            if (state == table_state_t::matching) {
-                success &= trans_table::retrieve(board.stack->tt_key, 0, 7, score, move, flag);
-            }
+            success &= state != table_state_t::empty ? hit.depth == 7 : hit.depth == 0;
         }
         board.forward(&search.stack->pv_moves[i]);
     }
@@ -70,8 +69,9 @@ public:
     reporting_search_t(int depth, int count) : search_t(start_fen),
         interrupt_depth(depth), completed_children(count) {
         game.max_depth = 2;
+        aspiration_enabled = false;
     }
-    int pvs(int, int, int depth) override {
+    int pvs(int, int, int depth, bool = false) override {
         nodes += 10;
         pruned_nodes += 7;
         stack->pv_count = 0;
@@ -94,14 +94,21 @@ bool test_root_reporting(int interrupt_depth, int children, int expected_depth,
     std::string line, final_report;
     bool success = search.stack->best_move.piece != 0;
     while (std::getline(lines, line)) {
-        if (line.starts_with("info depth ")) final_report = line;
+        if (line.starts_with("info depth ")) {
+            final_report = line;
+        }
     }
     success &= final_report.starts_with("info depth " + std::to_string(expected_depth) + " ");
     success &= final_report.find(" nodes " + std::to_string(search.nodes) + " ") != std::string::npos;
     success &= output.str().find(std::string("info string search_result ") + provenance) != std::string::npos;
-    if (expected_score) success &= final_report.find(expected_score) != std::string::npos;
-    else success &= final_report.find(" score ") == std::string::npos;
-    if (!success) std::cerr << "incorrect root reporting:\n" << output.str();
+    if (expected_score) {
+        success &= final_report.find(expected_score) != std::string::npos;
+    } else {
+        success &= final_report.find(" score ") == std::string::npos;
+    }
+    if (!success) {
+        std::cerr << "incorrect root reporting:\n" << output.str();
+    }
     return success;
 }
 
@@ -109,7 +116,7 @@ class bounded_search_t : public search_t {
     int child_score;
 public:
     explicit bounded_search_t(int value) : search_t(start_fen), child_score(value) {}
-    int pvs(int, int, int) override {
+    int pvs(int, int, int, bool = false) override {
         ++nodes;
         stack->pv_count = 0;
         return -child_score;
@@ -126,7 +133,9 @@ bool test_partial_bounds(int value, bool fail_low) {
     // A fail-low result for just the first move says nothing about other moves.
     const bool success = fail_low ? output.str().find(" score ") == std::string::npos
         : output.str().find(" lowerbound ") != std::string::npos;
-    if (!success) std::cerr << "incorrect partial aspiration bound:\n" << output.str();
+    if (!success) {
+        std::cerr << "incorrect partial aspiration bound:\n" << output.str();
+    }
     return success;
 }
 

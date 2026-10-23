@@ -5,32 +5,32 @@
 namespace {
 
 bool check(const char * name, bool success) {
-    if (!success) std::cerr << name << '\n';
+    if (!success) {
+        std::cerr << name << '\n';
+    }
     return success;
 }
 
 struct fixture_t {
     const char * position;
-    int flags;
-    int phase;
     int value; // White-relative material score used by the playing evaluator.
 };
 
 bool test_scores() {
     const fixture_t fixtures[] = {
-        {"7k/7p/8/8/8/8/P7/K7", 3, 16, 0},
-        {"7k/7p/8/8/P7/8/8/K7", 3, 16, 0},
-        {"7k/7p/8/8/P7/2K5/8/8", 3, 16, 0},
-        {"6rk/8/8/8/8/2K5/8/1R6", 12, 14, 0},
-        {"6rk/7p/8/8/P7/8/8/KR6", 15, 14, 0},
-        {"rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR", 15, 0, 0},
+        {"7k/7p/8/8/8/8/P7/K7", 0},
+        {"7k/7p/8/8/P7/8/8/K7", 0},
+        {"7k/7p/8/8/P7/2K5/8/8", 0},
+        {"6rk/8/8/8/8/2K5/8/1R6", 0},
+        {"6rk/7p/8/8/P7/8/8/KR6", 0},
+        {"rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR", 0},
         // Specialized material classes retain their original scores.
-        {"7k/7p/8/8/8/2K5/8/1R6", 6, 15, 4900},
-        {"7k/7p/8/8/P7/2K5/8/1R6", 7, 15, 2600},
-        {"6rk/8/8/8/P7/2K5/8/8", 9, 15, -4900},
-        {"6rk/7p/8/8/P7/2K5/8/8", 11, 15, -2600},
-        {"6rk/8/8/8/P7/2K5/8/1R6", 13, 14, -4900},
-        {"6rk/7p/8/8/8/2K5/8/1R6", 14, 14, 4900},
+        {"7k/7p/8/8/8/2K5/8/1R6", 4900},
+        {"7k/7p/8/8/P7/2K5/8/1R6", 2600},
+        {"6rk/8/8/8/P7/2K5/8/8", -4900},
+        {"6rk/7p/8/8/P7/2K5/8/8", -2600},
+        {"6rk/8/8/8/P7/2K5/8/1R6", -4900},
+        {"6rk/7p/8/8/8/2K5/8/1R6", 4900},
     };
     bool success = true;
     for (const auto & fixture : fixtures) {
@@ -39,10 +39,6 @@ bool test_scores() {
             auto search = std::make_unique<w17_search_t>(fen.c_str());
             const auto original = search->brd.to_string();
             const auto tt_key = search->brd.stack->tt_key;
-            const auto pawn_hash = search->brd.stack->pawn_hash;
-            const auto material_hash = search->brd.stack->material_hash;
-            material_table::clear();
-            pawn_table::clear();
             const int expected = search->brd.us() ? fixture.value : -fixture.value;
             for (int repeat = 0; repeat < 2; ++repeat) {
                 const int actual = w17_evaluate(search.get());
@@ -50,11 +46,8 @@ bool test_scores() {
                     std::cerr << fen << " expected=" << expected << " actual=" << actual << '\n';
                     success = false;
                 }
-                success &= check("material classification and phase", search->stack->mt->flags == fixture.flags
-                    && search->stack->mt->phase == fixture.phase);
                 success &= check("evaluation preserves board, hashes and stack", original == search->brd.to_string()
-                    && search->brd.stack->tt_key == tt_key && search->brd.stack->pawn_hash == pawn_hash
-                    && search->brd.stack->material_hash == material_hash
+                    && search->brd.stack->tt_key == tt_key
                     && search->brd.ply == 0 && search->stack == search->root_stack);
             }
             board_t flipped;
@@ -63,17 +56,15 @@ bool test_scores() {
             auto mirror = std::make_unique<w17_search_t>(flipped.to_string().c_str());
             success &= check("color/rank flip preserves side-to-move score", w17_evaluate(mirror.get()) == expected);
 
-            // Shared tables must distinguish standard from royal losers in both directions.
             auto standard = std::make_unique<search_t>(fen.c_str());
             standard->stack->in_check = standard->brd.in_check();
             const int standard_cold = evaluate(standard.get());
-            success &= check("standard and losers cache identities differ",
-                standard->brd.stack->pawn_hash != search->brd.stack->pawn_hash
-                && standard->brd.stack->material_hash != search->brd.stack->material_hash);
-            success &= check("standard cache cannot contaminate losers", w17_evaluate(search.get()) == expected);
+            success &= check("standard and losers transposition identities differ",
+                standard->brd.stack->tt_key != search->brd.stack->tt_key);
+            success &= check("neural evaluation cannot change losers material", w17_evaluate(search.get()) == expected);
             auto standard_warm = std::make_unique<search_t>(fen.c_str());
             standard_warm->stack->in_check = standard_warm->brd.in_check();
-            success &= check("losers cache cannot contaminate standard", evaluate(standard_warm.get()) == standard_cold);
+            success &= check("losers material cannot change neural evaluation", evaluate(standard_warm.get()) == standard_cold);
         }
     }
     return success;

@@ -1,0 +1,242 @@
+# Move generation, picking and search
+
+Standard-chess generators produce pseudo-legal moves, including special-move
+flags. The picker orders candidates and suppresses duplicates. It does not
+establish king safety or prove that a position is mate or stalemate.
+
+PVS and quiescence apply their move-pruning rules before `try_forward`.
+That operation makes the candidate, checks the moving king, and immediately
+undoes rejected moves. Rejections do not enter searched-move counters, history
+updates, PVs or transposition-table clock constraints. Castling additionally
+requires safe origin/transit squares, checked by search before making it.
+Root, book and legal-move oracle consumers explicitly filter candidates.
+
+Royal-losers retains its existing legal picker and compulsory-capture policy.
+External UCI move validation remains independent of the interior search picker.
+
+Relevant reading: [CPW Legal Move](https://chessprogramming.org/Legal_Move),
+[Move Ordering](https://chessprogramming.org/Move_Ordering), and
+[History Heuristic](https://chessprogramming.org/History_Heuristic).
+Pseudo-legal generation with make/test/unmake is a design choice, not a proven
+speed improvement. Validate special moves, terminal scores, make/unmake, hashes,
+repetition, search counters and lifecycle; compare Release performance and
+playing strength separately.
+
+The standard picker stages are TT, SEE-nonnegative captures/promotions, two
+killers, countermove, positive-score quiets, deferred negative-SEE noisy
+moves, then remaining quiets. Quiet castling candidates share quiet ordering;
+qsearch retains its existing castling policy. Positive means strictly greater
+than zero. Stage separation does not assert tactical correctness of SEE or
+promise a cutoff. Scores are cached when each batch is generated. Returned
+hint codes suppress duplicates without making generated king-safety tests.
+Countermoves are keyed by the previous colored piece and destination; no
+continuation/countermove context is used after a null move or at a cold root.
+
+Learned quiet scores sum signed, bounded history entries:
+
+- Main: side, source square, destination square.
+- Continuation: colored piece/destination pairs from one, two and four plies
+  back and the current move. Contexts stop at the root or any intervening null.
+  Immediate and longer contexts have independent controls.
+- Pawn: an incremental colored-pawn hash modulo 512, then current colored
+  piece/destination. Collisions deliberately share heuristic scores.
+
+The deferred quiet batch adds optional ordering context to that learned score.
+`ThreatOrdering` rewards escaping attacks by lesser pieces and penalizes entering
+them: pawn attacks for minors (4000 units), pawn/minor attacks for rooks (8000),
+and pawn/minor/rook attacks for queens (12000). Equal threatened status cancels.
+Batch-local unions use parent occupancy and include pinned attackers; these are
+heuristic priorities, not safety certificates. Pawns/kings have no threat offset.
+`CheckOrdering` adds 10000 for a quiet check, including a discovered check, when
+`see(move, 0)` passes. Castling receives neither context offset. Constants remain
+provisional. Both switches default true, are snapshotted by workers, and clear
+TT results on change. Disabling both restores learned-only scoring. Good noisy
+stages, early hints and final legality retain their contracts. Quiescence scores
+its existing quiet candidate domain without generating additional move classes.
+The shared `move_history_score` accessor returns learned history only; contextual
+bonuses are neither learned nor passed to history-based search decisions.
+Adaptive LMR reads this accessor before making an eligible quiet move. Positive
+history reduces the depth reduction; negative history increases it. Depth,
+searched legal move count, PV/cut-node context and static-evaluation improvement
+also inform the bounded trial. The first three legal moves and all existing
+tactical protections remain; an alpha improvement always receives a full-depth
+re-search before it can establish a cutoff. `AdaptiveLMR=false` restores the
+fixed-one reduction, while `LMR=false` disables late-move reductions entirely.
+
+The worker owns approximately 2.2 MiB of 16-bit history entries. On a quiet
+cutoff, reward the winner and penalize previously searched ordinary quiets with
+bounded gravity. Keep the provisional bonus `32 * clamp(depth, 1, 8)^2` and
+bound 16384; these are not claimed tuned. Protect winner slots from aliasing
+penalties and update history/countermoves before mutating killer slots.
+The legacy piece/destination history remains only for royal-losers.
+
+`LMRHistory` additionally learns from completed full-depth verifications of
+reduced quiet improvements. Update only enabled continuation contexts at one,
+two and four plies with half the ordinary cutoff bonus: reward verified beta
+cutoffs, penalize refutations at or below alpha, and leave in-window outcomes
+unchanged. Main/pawn history is unaffected by this feedback. Cancelled searches,
+IID/verification helpers, null subtrees and repetition floors cannot teach it.
+Reduced fail-lows without verification supply no feedback. Existing cutoff
+learning remains independent. Both new flags default true, are worker snapshots,
+and clear TT on change; both false reproduce the previous policy. Royal-losers
+and fixed/aligned audit horizons retain their existing reduction contracts.
+
+Capture history adds 11,648 bytes of worker-owned signed entries, indexed by
+colored moving piece, destination and captured-piece type. En passant uses the
+victim recorded in the move; non-capturing promotions use the empty-victim slot.
+Promotion choices share their original pawn context. On a completed normal PVS
+beta cutoff, reward a noisy winner and penalize previously searched legal noisy
+alternatives, including when a quiet move wins. A winner's shared table slot is
+protected from penalties. Use the same provisional gravity bound and depth bonus
+as quiet history. TT, static/null, qsearch and helper-search cutoffs do not train
+this table; cancellation and rejected/pruned moves supply no parent update.
+
+With `CaptureHistory` enabled, noisy ordering combines 16 times the existing
+material score with capture history. Positive/negative stage offsets preserve
+lazy SEE classification: a negative-SEE move stays deferred irrespective of its
+history. Deferred moves combine 16 times SEE with history. Quiescence uses the
+same ordering without learning. These scales are provisional, not tuned.
+`CaptureHistory=false` skips scoring and learning and retains the previous noisy
+ordering, including for already nonzero retained entries. The setting is captured
+by each worker, and a policy change stops search and clears both TT modes.
+Royal-losers keeps its existing ordering and does not allocate this table.
+
+After joining the previous standard worker, transfer table ownership and copy
+countermoves into its successor. Normal `position`/`go` requests retain learning;
+`ucinewgame` releases the old worker and starts cold. No mutable tables are
+shared between running workers. Per-entry gravity provides aging; no full-table
+per-search clearing or scaling is added. Strength remains unmeasured.
+
+The empty-tactical qsearch path returns the same fail-low bound as a loop
+that rejects all illegal candidates. Both retain the static score below alpha
+when legal quiet play exists, following the global fail-soft qsearch contract.
+Exact mate/stalemate scores take priority.
+A regression and before/after-legality paired searches cover this contract.
+
+Validation on 2026-10-19: 37 Debug and 37 Release checks, three focused
+ASan/UBSan checks, independent oracle comparisons for 4,348 positions and
+95,618 legal children, UCI history lifetime/reset checks, and 72 paired D7
+legality-placement signatures matching scores, best moves, full PVs and nodes.
+Leak detection was disabled for the sanitizer checks.
+
+A small cold diagnostic (12 reserved D7 roots, three alternating trials) found
+that the combined candidate used 22.8% more median process CPU and searched
+4.1% more nodes than the frozen original. Positive quiets before bad noisy
+moves searched 1.1% more nodes than late quiets with the same history code;
+their timing differences were small relative to trial variation. These are
+CPU-clock observations under a duty throttle, not unthrottled wall NPS or an
+Elo result. The refactor remains an experiment with no established strength gain.
+
+
+Capture-history validation (2026-10-20): 43 Debug and 43 Release checks, eight
+focused ASan/UBSan checks with leak detection disabled, eight audit checks, and
+an independent oracle covering 4,372 positions/95,734 legal children. A 12-root
+D8 matrix completed 288 legal searches; all 96 disabled signatures exactly
+matched the frozen parent. Enabled cold nodes increased 13.92% with LMR and
+1.20% without it; retained-history nodes increased 6.06%/0.95%. Initial cold
+median CPU increased 58.89%/1.18%; an additional three-pair LMR-on confirmation
+measured +23.77% (2.65 to 3.28 seconds). Samples are short and variable and show
+no efficiency benefit. The different node effects with LMR on/off require
+integrated validation; no strength gain or tuned constants are established.
+See MAXIMA.md for the full protocol and remaining acceptance limits.
+
+
+Threat/check ordering validation (2026-10-20): 44 Debug and 44 Release checks,
+nine focused ASan/UBSan checks (leak detection disabled), nine audit checks,
+and the independent 4,372-position oracle passed. All 480 D8 searches completed
+legally; 96 disabled signatures matched the frozen parent exactly. With LMR,
+the combined policy reduced nodes 9.20% cold and 5.14% retained versus the
+disabled candidate. Without LMR, node changes were -1.04%/+1.92%. CPU results
+were mixed across cold/retained and LMR settings; no general speed or strength
+gain is established. See MAXIMA.md for timing, controls and audit results.
+
+
+Adaptive LMR/feedback validation (2026-10-20): 46 Debug and 46 Release checks,
+13 focused ASan/UBSan checks (leak detection disabled), 15 audit checks and the
+independent oracle passed. The initial Release lifecycle timing failures passed
+on an unchanged full repeat. All 384 D8 searches completed legally; 144 disabled
+signatures matched the parent exactly. Combined cold/retained nodes changed by
+-48.35%/-46.33%, with CPU -43.75%/-48.43%, versus the same-binary disabled
+control. Feedback alone had mixed tree effects; the combined sample is useful
+for integration, with playing strength still pending. See MAXIMA.md for the
+complete protocol, timing limits and activation evidence.
+
+Before picking moves, standard `IIR=true` reduces eligible PV/expected-cut nodes
+without a legal TT hint by one ply from depth six. Check, root, helper,
+verification and clock-99 protections apply. The effective depth governs both
+child searches and TT storage. IIR takes precedence over IID globally; select
+`IIR=false` to use the existing `IID` policy. Both false disables both. This
+option changes search allocation; generation and final legality remain unchanged.
+
+After picking a candidate, `MainSEE=true` may prune it before make at shallow
+non-PV nodes, after one legal alternative has completed search. Captures use a
+linear depth margin and quiets a quadratic margin; checks, special moves,
+advanced passed pawns, endgames, helpers and draw/decisive boundaries are
+protected. Original PV nodes remain protected after alpha rises. Failed SEE
+requires final legality before a skip is counted. Skipped moves never enter the
+searched-move list or its history penalties; picker stages and deferred quiet
+generation keep their existing contract. Workers snapshot the independent
+option, and changes clear incompatible TT entries. See MAXIMA.md for exact
+margins, clock propagation, validation and measurement limits.
+
+Main-search SEE validation (2026-10-20): 48 Debug and 48 Release checks, 16
+selected ASan/UBSan checks, 18 audit checks and the independent oracle passed.
+All 288 D8 searches completed legally; 96 disabled-parent signatures matched
+exactly. With LMR, cold/retained nodes fell 8.22%/8.44%; without LMR they fell
+18.20%/9.33%, with mixed CPU results. No playing-strength gain is established.
+See MAXIMA.md for the full protocol, activation counts and timing limitations.
+
+Before node pruning or picker initialization, `Razoring=true` may verify a
+shallow non-PV fail-low with entry qsearch. It saves and restores the complete
+main-search frame, so qsearch stages, hints and PV cannot leak into the main
+picker when verification fails high. Completed nondecisive fail-lows return
+without a main-depth TT store; cancellation cannot authorize a cutoff. See
+MAXIMA.md for eligibility, clock propagation and the provisional margin.
+
+Razoring validation (2026-10-20): 49 Debug and 49 Release tests, 17 selected
+ASan/UBSan tests, 19 audit tests and the independent board oracle passed. All
+288 D8 searches completed legally; 96 disabled-parent signatures matched
+exactly. With main SEE, cold/retained nodes changed -3.04%/-7.20%; without it,
++8.73%/-0.61%. CPU results were mixed and variable; playing-strength acceptance
+remains pending. See MAXIMA.md for the complete protocol and limitations.
+
+`SingularExtensions=true` may verify the current legal TT move before picker
+initialization. Its reduced excluded-move search restores the complete frame;
+the main picker then starts normally. Only compatible lower/exact main TT scores
+at sufficient depth can nominate the move. The saved identity is compact, so
+no pointer into a helper's picker survives restoration. Completed verification
+can allocate one extra ply to that move, sharing the existing check extension
+rather than adding to it. Picker stages and final legality remain unchanged.
+See MAXIMA.md for eligibility, clocks, worker controls and validation.
+
+Singular-extension validation (2026-10-20): 50 Debug and 50 Release checks,
+18 selected ASan/UBSan checks, 20 audit checks and the independent oracle passed.
+All 288 D8 searches completed legally; 96 disabled-parent signatures matched
+exactly. With IIR enabled, cold/retained nodes increased 3.80%/4.20%; without
+it, 3.81%/4.41%. This allocates extra search to nominated moves; mixed CPU
+results and tree sizes do not establish playing strength. See MAXIMA.md for
+activation counts, protocol and timing limitations.
+
+ProbCut uses a separate tactical list before initializing the ordinary main
+picker. It calls the unchanged capture/promotion generators, orders by learned
+capture history and material with a TT-hint priority, and tests SEE and legality
+before making each candidate. It generates neither quiet moves nor castles.
+The caller frame and active picker survive rejected or cancelled probes; made
+moves are undone even if verification throws. Successful verification stores a
+lower bound only at its actual child depth plus one. Its parent cutoff does not
+update ordinary move histories. See `MAXIMA.md` for the adaptive threshold/depth
+policy, worker switch, clocks and validation scope.
+
+`BroaderFutility=true` adds reduced-depth move futility after picking, under
+`FutilityPruning`. Quiet margins use the parent-position learned history;
+captures add victim value (including en passant) and capture history. Neither
+uses picker stage/material bonuses as learned history. Decisions apply to each
+legal candidate after a completed legal alternative, preserving later quiet
+checks, promotions, castling and advanced passed-pawn quiet moves. Skipped moves
+do not enter searched-move history updates or advance the legal-search ordinal. The picker and deferred generation
+remain unchanged. Before picking, the broader reverse-futility policy under
+`BetaPruning` vetoes a validated legal quiet TT hint and checks legal play before
+cutting; its temporary terminal probe does not consume the active picker.
+Workers snapshot the policy and option changes clear TT scores. False restores
+the previous futility rules; variant and fixed/aligned audit policies remain
+unchanged. See `MAXIMA.md` for guards, margins and measured limits.

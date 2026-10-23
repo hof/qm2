@@ -31,8 +31,9 @@ int main() {
     string cmd;
     magic::init();
     do {
-        if (!getline(cin, cmd))
+        if (!getline(cin, cmd)) {
             cmd = "quit";
+        }
     } while (uci::in(cmd));
     return 0;
 }

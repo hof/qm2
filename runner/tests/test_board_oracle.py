@@ -19,13 +19,22 @@ class board_oracle_tests(unittest.TestCase):
         probe = Path(engine).resolve().parent.parent / "tests" / "board_oracle_probe"
         self.assertTrue(probe.is_file(), f"missing test bridge: {probe}; rebuild with BUILD_TESTING=ON")
         records = []
+        repetition_fen = "4k1n1/8/8/8/8/8/8/4K1N1 w - - 0 1"
         fixtures = [chess.STARTING_FEN] + [fen for _, fen, _ in rule_fixtures] + [
             "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
             "4k3/3p4/8/8/8/8/8/R3K2R w KQ - 99 1",
             "4k3/P6p/8/8/8/8/8/4K3 w - - 0 1",
             "7k/6Q1/5K2/8/8/8/p7/N7 b - - 100 1",
             "7k/5Q2/5K2/8/8/8/p7/N7 b - - 100 1",
-            "4k1n1/8/8/8/8/8/8/4K1N1 w - - 0 1",
+            repetition_fen,
+        ]
+        fixtures += [
+            "4r2k/8/8/8/1b6/8/7P/R3K2R w KQ - 0 1",
+            "7k/8/8/3pP3/4K3/8/8/8 w - d6 0 1",
+            "4r2k/8/8/3pP3/4K3/8/8/8 w - d6 0 1",
+            "7k/8/8/r2pP2K/8/8/8/8 w - d6 0 1",
+            "1r5k/P7/8/8/8/8/8/1K6 w - - 0 1",
+            "7k/8/8/8/r6K/8/3P4/8 w - - 0 1",
         ]
         for variant, board_type in (("standard", chess.Board), ("losers", royal_losers_board)):
             for fen in fixtures:
@@ -41,7 +50,7 @@ class board_oracle_tests(unittest.TestCase):
                             break
                         moves = sorted(board.legal_moves, key=lambda move: move.uci())
                         board.push(rng.choice(moves))
-            board = board_type(fixtures[-1])
+            board = board_type(repetition_fen)
             for move in ["g1f3", "g8f6", "f3g1", "f6g8"] * 2:
                 board.push_uci(move)
                 records.append((variant, board.copy()))

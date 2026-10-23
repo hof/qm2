@@ -14,7 +14,6 @@ add_executable(testEvaluation test_evaluation.cpp)
 add_executable(testMates test_mates.cpp)
 add_executable(test_leaf_search test_leaf_search.cpp)
 add_executable(test_search_ownership test_search_ownership.cpp)
-add_executable(test_search_history test_search_history.cpp)
 add_executable(test_search_pv test_search_pv.cpp)
 add_executable(test_search_repetition test_search_repetition.cpp)
 
@@ -29,7 +28,6 @@ target_link_libraries(testEvaluation MAX2SRC)
 target_link_libraries(testMates MAX2SRC)
 target_link_libraries(test_leaf_search MAX2SRC)
 target_link_libraries(test_search_ownership MAX2SRC)
-target_link_libraries(test_search_history MAX2SRC)
 target_link_libraries(test_search_pv MAX2SRC)
 target_link_libraries(test_search_repetition MAX2SRC)
 
@@ -42,17 +40,12 @@ target_link_libraries(test_w17_evaluation MAX2SRC)
 add_executable(test_search_tt_context test_search_tt_context.cpp)
 target_link_libraries(test_search_tt_context MAX2SRC)
 
-add_executable(test_null_search test_null_search.cpp)
-target_link_libraries(test_null_search MAX2SRC)
-
 add_executable(test_search_ceiling test_search_ceiling.cpp)
 target_link_libraries(test_search_ceiling MAX2SRC)
 
 add_executable(test_search_boundary test_search_boundary.cpp)
 target_link_libraries(test_search_boundary MAX2SRC)
 
-add_executable(test_kpk test_kpk.cpp)
-target_link_libraries(test_kpk MAX2SRC)
 
 add_executable(test_tablebase test_tablebase.cpp)
 target_link_libraries(test_tablebase MAX2SRC)
@@ -74,11 +67,56 @@ target_link_libraries(board_oracle_probe MAX2SRC)
 add_executable(test_search_tree test_search_tree.cpp)
 target_link_libraries(test_search_tree MAX2SRC)
 
-add_executable(test_search_selectivity test_search_selectivity.cpp)
-target_link_libraries(test_search_selectivity MAX2SRC)
-
 add_executable(test_search_horizon test_search_horizon.cpp)
 target_link_libraries(test_search_horizon MAX2SRC)
 
 add_executable(test_search_review test_search_review.cpp)
 target_link_libraries(test_search_review MAX2SRC)
+
+add_executable(test_nnue test_nnue.cpp)
+target_link_libraries(test_nnue MAX2SRC)
+
+if(maxima_nnue_test_network)
+    add_library(nnue_reference STATIC
+        ../third_party/nnue_reference/nnue.cpp
+        ../third_party/nnue_reference/misc.cpp)
+    # Scalar reference deliberately differs from Maxima's native SIMD path.
+    target_compile_definitions(nnue_reference PRIVATE IS_64BIT)
+    add_executable(test_nnue_reference test_nnue_reference.cpp)
+    target_link_libraries(test_nnue_reference MAX2SRC nnue_reference)
+    add_test(NAME test_nnue_reference COMMAND test_nnue_reference "${maxima_nnue_test_network}")
+endif()
+
+add_executable(test_move_picker test_move_picker.cpp)
+target_link_libraries(test_move_picker MAX2SRC)
+add_test(NAME test_move_picker COMMAND test_move_picker)
+
+add_executable(test_qsearch_tt test_qsearch_tt.cpp)
+target_link_libraries(test_qsearch_tt MAX2SRC)
+add_test(NAME test_qsearch_tt COMMAND test_qsearch_tt)
+
+add_executable(test_search_node_context test_search_node_context.cpp)
+target_link_libraries(test_search_node_context MAX2SRC)
+add_test(NAME test_search_node_context COMMAND test_search_node_context)
+
+add_executable(test_search_verification test_search_verification.cpp)
+target_link_libraries(test_search_verification MAX2SRC)
+add_test(NAME test_search_verification COMMAND test_search_verification)
+
+add_executable(test_upcoming_repetition test_upcoming_repetition.cpp)
+target_link_libraries(test_upcoming_repetition MAX2SRC)
+add_test(NAME test_upcoming_repetition COMMAND test_upcoming_repetition)
+
+add_executable(test_check_evasions test_check_evasions.cpp)
+target_link_libraries(test_check_evasions MAX2SRC)
+add_test(NAME test_check_evasions COMMAND test_check_evasions)
+
+get_property(maxima_subdirectory_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${maxima_subdirectory_tests} PROPERTIES
+    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")
+
+add_executable(test_search_features test_search_features.cpp)
+target_link_libraries(test_search_features MAX2SRC)
+add_test(NAME test_search_features COMMAND test_search_features)
+set_tests_properties(test_search_features PROPERTIES
+    ENVIRONMENT "MAXIMA_EVAL_FILE=${maxima_nnue_test_network}")

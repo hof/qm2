@@ -16,113 +16,39 @@
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  *  
  * File: evaluate.cpp
- * Evalution functions for traditional chess
+ * Neural evaluation for standard chess
  */
 
 #include "eval.h"
 #include "search.h"
-#include "bits.h"
-#include "score.h"
+#include "nnue.h"
+#include <algorithm>
 
-#include "eval_pst.h"
-#include "eval_material.h"
-#include "eval_pieces.h"
-#include "eval_endgame.h"
-#include "eval_pawns.h"
-#include "eval_king_attack.h"
-
-/**
- * Initialize the global Piece Square Tables (PST)
- */
-
-
-namespace PST {
-
-    pst_t table;
-    
-    bool init_done = false;
-    
-    void init() {
-        if (!init_done) {
-            for (int sq = a1; sq <= h8; sq++) {
-                table[EMPTY][sq].clear();
-                table[BPAWN][sq].set(PST_PAWN_MG[sq], PST_PAWN_EG[sq]);
-                table[BKNIGHT][sq].set(PST_KNIGHT_MG[sq], PST_KNIGHT_EG[sq]);
-                table[BBISHOP][sq].set(PST_BISHOP_MG[sq], PST_BISHOP_EG[sq]);
-                table[BROOK][sq].set(PST_ROOK_MG[sq], PST_ROOK_EG[sq]);
-                table[BQUEEN][sq].set(PST_QUEEN_MG[sq], PST_QUEEN_EG[sq]);
-                table[BKING][sq].set(PST_KING_MG[sq], PST_KING_EG[sq]);
-                int fsq = FLIP_SQUARE(sq);
-                for (int pc = WPAWN; pc <= WKING; pc++) {
-                    table[pc][fsq].set(table[pc + 6][sq]);
-                }
-            }
-            init_done = true;
-        }
-        assert(table[WKING][a1].equals(table[BKING][a8]));
-    }
+// The network's own scale: material, tempo and shuffle damping follow the
+// NNUE path of the evaluation that trained alongside this network.
+int scale_network_score(int raw, const board_t & board, int halfmoves) {
+    constexpr int pawn = 126, knight = 781, bishop = 825, rook = 1276, queen = 2538, tempo = 28;
+    const int clock = std::clamp(halfmoves, 0, 100);
+    const int material = 2 * pawn * popcnt0(board.bb[WPAWN] | board.bb[BPAWN])
+        + knight * popcnt0(board.bb[WKNIGHT] | board.bb[BKNIGHT])
+        + bishop * popcnt0(board.bb[WBISHOP] | board.bb[BBISHOP])
+        + rook * popcnt0(board.bb[WROOK] | board.bb[BROOK])
+        + queen * popcnt0(board.bb[WQUEEN] | board.bb[BQUEEN]);
+    const int value = raw * (641 + material / 32 - 4 * clock) / 1024 + tempo;
+    return nnue::to_centipawns(value * (100 - clock) / 100);
 }
 
-const score_t TEMPO[2] = {S(-10, 0), S(10, 0)};
-
-/**
- * Main evaluation function (normal chess variant)
- * @param s search object
- * @return total evaluation score rounded to GRAIN_SIZE 
- */
-int evaluate(search_t * s) {
-
-    /*
-     * Return immediately if in check or if a valid evaluation score is
-     * available on the stack
-     */
-
-    if (s->stack->in_check && s->brd.ply < (MAX_PLY - 1)) {
-        s->stack->eval_result = score::INVALID;
-        return s->stack->eval_result;
+int evaluate(search_t * search) {
+    if (search->stack->in_check && search->brd.ply < (MAX_PLY - 1)) {
+        search->stack->eval_result = score::INVALID;
+        return search->stack->eval_result;
     }
-
-    if (s->stack->eval_result != score::INVALID) {
-        return s->stack->eval_result;
+    if (search->stack->eval_result != score::INVALID) {
+        return search->corrected_static_eval(search->stack->eval_result);
     }
-
-    /*
-     * Calculate evaluation score. This needs to be done in the following order:
-     * 1) Material balance. This also sets the game phase and material flags.
-     * 2) Pawn structure. Sets pawns flags, mobility masks and passers.
-     * 3) Piece evaluation. Stores king attack / defend information.
-     * 4) Passed pawn, king attack and endgame evaluation. 
-     * 
-     * The score is interpolated between midgame and endgame value.
-     */
-
-    const bool wtm = s->brd.us();
-    int result = material::eval(s); //sets stack->mt->phase and material flags
-    score_t * score = &s->stack->eval_score;
-    score->set(TEMPO[wtm]);
-    score->add(pawns::eval(s));
-    score->add(pieces::eval(s));
-    score->add(pawns::eval_passed_pawns(s, WHITE));
-    score->sub(pawns::eval_passed_pawns(s, BLACK));
-    score->add(king_attack::eval(s, WHITE));
-    score->sub(king_attack::eval(s, BLACK));
-    result += score->get(s->stack->mt->phase);
-    s->stack->eg_score = result;
-    if (material::is_eg(s)) {
-        result = eg::eval(s, result);
-    }
-
-    /*
-     * Return score for current side to move and rounded to grain size
-     */
-
-    if (!wtm) {
-        result = -result;
-        s->stack->eg_score = -s->stack->eg_score;
-    }
-
-    result = (result / GRAIN_SIZE) * GRAIN_SIZE;
-    s->stack->eval_result = result;
-    assert(result > -score::DEEPEST_MATE && result < score::DEEPEST_MATE);
-    return result;
+    assert(search->evaluation_network);
+    const int result = scale_network_score(search->neural_static_score(), search->brd,
+        search->brd.stack->fifty_count);
+    search->stack->eval_result = result;
+    return search->corrected_static_eval(result);
 }

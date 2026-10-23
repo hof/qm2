@@ -10,7 +10,9 @@
 namespace {
 
 void require(bool condition, const char * message) {
-    if (!condition) throw std::runtime_error(message);
+    if (!condition) {
+        throw std::runtime_error(message);
+    }
 }
 
 std::string state(board_t & board) {
@@ -23,7 +25,7 @@ std::string state(board_t & board) {
         const auto & entry = board._stack[i];
         out << ' ' << entry.enpassant_sq << ' ' << entry.castling_flags
             << ' ' << entry.fifty_count << ' ' << entry.wtm << ' ' << entry.legal_enpassant
-            << ' ' << entry.tt_key << ' ' << entry.material_hash << ' ' << entry.pawn_hash;
+            << ' ' << entry.tt_key;
     }
     return out.str();
 }
@@ -35,8 +37,6 @@ void check_rebuilt(board_t & board, bool losers) {
     for (int i = 0; i <= BPIECES; ++i) require(board.bb[i] == rebuilt->bb[i], "rebuilt bitboard");
     for (int i = 0; i < 64; ++i) require(board.matrix[i] == rebuilt->matrix[i], "rebuilt matrix");
     require(board.stack->tt_key == (rebuilt->stack->tt_key ^ variant_key), "rebuilt position hash");
-    require(board.stack->material_hash == (rebuilt->stack->material_hash ^ variant_key), "rebuilt material hash");
-    require(board.stack->pawn_hash == (rebuilt->stack->pawn_hash ^ variant_key), "rebuilt pawn hash");
     require(board.stack->repetition_key() == (rebuilt->stack->repetition_key() ^ variant_key), "rebuilt repetition hash");
     require(board.stack->legal_enpassant == rebuilt->stack->legal_enpassant, "rebuilt en passant legality");
 }
@@ -47,8 +47,12 @@ std::vector<move_t> legal_moves(search_t & search) {
     search.stack->killer[0].clear();
     search.stack->killer[1].clear();
     std::vector<move_t> moves;
-    for (move_t * move = move::first(&search, 1); move; move = move::next(&search, 1))
+    for (move_t * move = move::first(&search, 1); move; move = move::next(&search, 1)) {
+        if (search.wild == 0 && !search.brd.legal(move)) {
+            continue;
+        }
         moves.push_back(*move);
+    }
     return moves;
 }
 

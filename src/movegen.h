@@ -38,16 +38,22 @@ namespace move {
     class list_t {
     public:
         move_t _list[MAX_MOVES + 1];
+        U64 evasion_targets; // Non-king destinations; all squares outside restricted checks.
         int stage;
         int minimum_score;
         move_t * current;
         move_t * first;
         move_t * last;
         move_t * best;
+        uint16_t returned_hints[4];
+        move_t counter_candidate;
 
         list_t();
         void clear();
     };
+
+    U64 evasion_targets(const board_t & board);
+    bool allows_evasion(const move_t & move, U64 targets);
 
     void gen_quiet_moves(board_t * board, list_t * list);
     void gen_promotions(board_t * board, list_t * list);

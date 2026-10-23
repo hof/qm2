@@ -72,8 +72,64 @@ class match_option_tests(unittest.TestCase):
             with self.assertRaises(OSError):
                 engine_profile([], [('EvalFile', str(path) + '.missing')])
 
+    def test_models_are_applied_before_dependent_flags(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'network.nnue'
+            path.write_bytes(b'fixture')
+            profile = engine_profile([('UseNNUE', 'true')], [('EvalFile', str(path))])
+            options = {'UseNNUE': option('UseNNUE', 'check', False),
+                       'EvalFile': option('EvalFile', 'string')}
+            settings = validated_settings(options, {'UseNNUE': False}, profile)
+            self.assertEqual(list(settings), ['EvalFile', 'UseNNUE'])
+            self.assertTrue(settings['UseNNUE'])
+
 
 class match_profile_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_shared_tablebases_and_missing_support_before_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(seed=1, pairs=1, seconds=1, increment=0, max_plies=1,
+                variant='standard', timeout=1, hash_mb=1,
+                profiles=[engine_profile([], []), engine_profile([], [])],
+                syzygy_path=Path(directory), json=Path(directory) / 'results.json')
+            calls = []
+            missing_support = False
+
+            class session:
+                identity = ['name fixture']
+                def __init__(self, second):
+                    options = [option('SyzygyPath', 'string', ''),
+                               option('SyzygyProbeLimit', 'spin', 0, 0, 5),
+                               option('SyzygyProbeDepth', 'spin', 1, 1, 64)]
+                    self.protocol = SimpleNamespace(options={item.name: item for item in options})
+                    if missing_support and second:
+                        del self.protocol.options['SyzygyPath']
+                async def configure(self, settings):
+                    calls.append(settings)
+                    return settings
+
+            opened = 0
+            @asynccontextmanager
+            async def open_fixture(*unused):
+                nonlocal opened
+                opened += 1
+                yield session(opened % 2 == 0)
+
+            openings = [('draw', chess.Board('7k/8/8/8/8/8/8/K7 w - - 0 1'))]
+            with patch('maxima_runner.uci.open_engine', open_fixture):
+                await run_match([['a'], ['b']], openings, args, {'games': []}, io.StringIO())
+                self.assertEqual(calls, [dict(SyzygyPath=directory, SyzygyProbeLimit=5,
+                                              SyzygyProbeDepth=1)] * 4)
+                calls.clear()
+                missing_support = True
+                with self.assertRaisesRegex(ValueError, 'does not advertise SyzygyPath'):
+                    await run_match([['a'], ['b']], openings, args, {'games': []}, io.StringIO())
+                self.assertEqual(calls, [])
+                missing_support = False
+                args.profiles[1] = engine_profile([('SyzygyPath', 'other')], [])
+                with self.assertRaisesRegex(ValueError, 'controlled by --syzygy-path'):
+                    await run_match([['a'], ['b']], openings, args, {'games': []}, io.StringIO())
+                self.assertEqual(calls, [])
+
     async def test_distinct_profiles_and_validation_before_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
             model = Path(directory) / 'net.nnue'

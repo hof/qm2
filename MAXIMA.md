@@ -1,15 +1,17 @@
 # Maxima project documentation
 
 This is the main technical documentation for Maxima. Keep it current as the
-engine evolves. `AGENTS.md` is the quick entry for contributors and coding agents;
-optional private context lives in `.context/agents.md`, outside Git.
+engine evolves and keep it short: describe current behavior, not its history.
+`AGENTS.md` is the quick entry for contributors and coding agents; optional
+private context lives in `.context/agents.md`, outside Git. Measurement records
+and experiment logs belong under `.context/baselines/`; Git history keeps the rest.
 
 ## Contents
 
 1. [Engine and goals](#1-engine-and-goals)
 2. [Engineering conventions](#2-engineering-conventions)
 3. [Code layout](#3-code-layout)
-4. [Search correctness and caches](#4-search-correctness-and-caches)
+4. [Search and evaluation](#4-search-and-evaluation)
 5. [Build and debugging](#5-build-and-debugging)
 6. [Testing and performance](#6-testing-and-performance)
 7. [CLI and local tablebases](#7-cli-and-local-tablebases)
@@ -18,37 +20,31 @@ optional private context lives in `.context/agents.md`, outside Git.
 10. [Python runner and project CLI](#10-python-runner-and-project-cli)
 
 Keep chapter numbers stable; append new chapters rather than renumbering existing
-ones. Use descriptive headings and keep each chapter understandable independently.
-Until a dedicated documentation reader exists, list chapters with
-`rg '^## ' MAXIMA.md` and locate topics with `rg -n '<term>' MAXIMA.md`.
+ones. List chapters with `rg '^## ' MAXIMA.md` and locate topics with
+`rg -n '<term>' MAXIMA.md`.
 
 ## 1. Engine and goals
 
-Maxima2 is a C++26 UCI chess engine with bitboard move generation, classical
-search and evaluation, and experimental losers-chess support.
+Maxima2 is a C++26 UCI chess engine with bitboard move generation, PVS alpha-beta
+search, NNUE evaluation, Syzygy tablebases, and experimental royal-losers support.
 
 ### Goals
 
 - Improve playing strength, correctness, performance, and reliability.
-- Make clean, understandable code a first-class project goal. Preserve clear
-  control flow, explicit state ownership, and coherent interfaces as the engine
-  gains capabilities.
+- Make clean, understandable code a first-class goal: clear control flow,
+  explicit state ownership and coherent interfaces.
 - Preserve the engine's focus on speed: efficient chess algorithms, high search
   throughput, and compilation tuned for the target CPU.
-- Explore a learned evaluator, such as NNUE, with correctness tests and measured
-  playing-strength gains guiding integration into search.
-- Strengthen endgame play with verified KPK integration and optional tablebases
-  that respect draw rules and work with partial, user-selected coverage.
+- Keep search similar to established strong engines. Every mechanism needs a
+  counterpart in that reference set; anything without one is removed rather than
+  guarded. Evaluation-related behavior follows the engine that trained the
+  current network.
+- Standard chess uses NNUE exclusively. Lopsided endgames are a known weakness
+  of the borrowed network; tablebases cover only their installed piece counts.
 - Add multithreaded search with explicit ownership of worker state, safe shared
   caches, and reliable cancellation.
-- Make the code cleaner through focused refactoring: reduce global mutable
-  state, encapsulate invariants, clarify interfaces, and remove misleading or
-  unused behavior.
-- Preserve chess correctness and existing functionality while improving the
-  engine.
-
-These goals guide development; they do not select a parallel search algorithm
-or require every task to advance every goal.
+- Later: train our own networks (standard and royal losers), and investigate play
+  that exploits other engines' selective-search weaknesses.
 
 ## 2. Engineering conventions
 
@@ -62,6 +58,10 @@ or require every task to advance every goal.
   over complex changes aimed at marginal Elo improvements.
 - Keep heuristics understandable and independently testable. Justify added
   complexity with measured benefits.
+- During the NNUE search baseline work, use simple documented search rules and
+  conservative round margins. Apply this to every pruning/reduction/extension
+  under review. Establish a sound empirical baseline before adding adaptive
+  tweaks or tuning; cite original references and state heuristic limits.
 - Before implementing or substantially changing a chess algorithm, read the
   relevant [Chess Programming Wiki](https://chessprogramming.org/) articles.
   Follow their references to original papers and engine implementations when
@@ -75,6 +75,7 @@ or require every task to advance every goal.
   to guide hot-path changes and compiler choices. Compare Release builds with
   identical positions, limits, and compiler flags, checking NPS, time to depth,
   and playing strength rather than assuming any one metric proves improvement.
+- Always use curly braces for `if` and `else` bodies, including single returns.
 - Prefer incremental changes with clear ownership and explicit dependencies.
 - Commit each completed, tested increment with its regressions and relevant
   documentation before moving on. Use a one-line Conventional Commit message
@@ -91,75 +92,261 @@ or require every task to advance every goal.
 
 ## 3. Code layout
 
-- `src/`: engine, UCI handling, board state, move generation, search, evaluation,
-  hash tables, time management, and Polyglot opening-book support.
-- `src/w17/`: losers-chess search and evaluation.
-- `tests/`: tests for bit operations, move generation, search, static exchange
-  evaluation, Polyglot keys, hash tables, evaluation, board flipping, and mates.
-- `gen/`: KPK bitbase generator.
-
-CMake generates `generated/maxima/version.h` inside each build directory from
-`src/version.h.in`. Do not edit generated headers. The generated include directory
-propagates to engine-library consumers; any obsolete source-tree `src/version.h`
-is ignored and unused.
-
+- `src/`: engine, UCI handling, board state, move generation, search, NNUE
+  evaluation, hash tables, time management, and Polyglot opening-book support.
+- `src/w17/`: royal-losers search and material-only evaluation.
 - `src/tablebase.*`: Maxima's Syzygy adapter and probing policies.
 - `third_party/fathom/`: pinned, unmodified MIT-licensed table decoder.
+- `tests/`: native correctness tests and raw-UCI lifecycle tests.
+- `tests/data/`: independently generated certificates (SEE, search trees,
+  boundaries) and small offline Syzygy fixtures.
 - `runner/`: independently packaged Python CLI, UCI orchestration, suites,
-  tablebase downloads, experience tooling, and their tests.
-- `tests/data/syzygy/`: small offline tablebase test fixtures.
-- `tablebases/syzygy/`: downloaded user tables, ignored by Git.
+  matches, tablebase downloads, experience tooling, and their tests.
+- `tools/download_nnue.py`: fetches and verifies the pinned network.
+- `networks/`, `tablebases/syzygy/`: downloaded data, ignored by Git.
 
-## 4. Search correctness and caches
+CMake generates `generated/maxima/version.h` inside each build directory from
+`src/version.h.in`. Do not edit generated headers.
 
-Search owns its configuration and pre-root repetition history. Real game history
-requires three occurrences; cycles strictly inside search use one earlier match
-as a search heuristic. Repetition identity excludes en passant squares when no
-legal capture is available. Irreversible moves and null moves bound history scans.
-Checkmate takes precedence over a fifty-move draw. Standard quiescence detects
-stalemate at every tactical depth, including before a stand-pat cutoff; absence
-of captures or promotions alone does not imply stalemate. Standard interior
-search also verifies legal play before static beta or null-move pruning can
-run, so stalemate remains an exact draw with production pruning enabled. The
-probe uses a king escape first and fresh move generation when needed, without
-changing the active move picker.
+## 4. Search and evaluation
 
-Standard null-move pruning excludes consecutive artificial passes and runs
-endgame verification with null pruning disabled throughout its subtree. The
-setting and board/history state are restored before handling cancellation;
-an interrupted verification cannot authorize a cutoff. Node pruning excludes
-mate/tablebase score windows, and artificial null lines cannot supply reserved
-mate/tablebase scores as cutoffs. Pawn-only positions retain the non-pawn-material
-exclusion. These safeguards do not make selective search an exhaustive oracle.
+Search is fail-soft PVS with quiescence, a shared transposition table, and
+worker-owned histories. Every selective rule below is a heuristic: none is a
+proven bound, and the round constants are provisional until tuned. Royal losers
+(`Wild=losers`) has its own search in `src/w17/` and shares only the root driver;
+the rules in this chapter apply to standard chess.
 
-Static beta and null-move node pruning also stop at reversible clock 99: the
-next legal reversible move draws unless it checkmates, while static evaluation
-or an artificial pass can incorrectly claim a winning cutoff. Earlier node
-pruning restricts its compatible TT clock range through 98; parent entries
-inherit that restriction. Legal captures and pawn moves remain searchable.
+Every search-policy option is a UCI checkbox, default true, snapshotted by the
+worker. Changing one stops and joins the worker and clears the TT;
+unchanged or rejected values keep the cache. The switches are `NullMove`,
+`NullVerify`, `BetaPruning`, `FutilityPruning`, `Razoring`, `LMR`, `LMRHistory`,
+`LMP`, `HistoryPruning`, `MainSEE`, `IIR`, `ProbCut`, `SingularExtensions`,
+`Aspiration`, `UpcomingRepetition`, `CheckEvasions`, `QsearchTT`, `TTEval`,
+`TTHistory`, the history tables (`MainHistory`, `ContinuationHistory`,
+`LongContinuationHistory`, `PawnHistory`, `CaptureHistory`, `Countermoves`,
+`Killers`), ordering context (`ThreatOrdering`, `CheckOrdering`) and correction
+history (`CorrectionHistory`, `PieceCorrection`, `ContinuationCorrection`).
+`DrawContempt` (default -10 cp), the variant and tablebase settings also
+invalidate cached scores.
 
-At the search-stack ceiling, standard PVS and quiescence resolve checkmate,
-stalemate, and draws before static evaluation. Royal losers preserves king-only
-and draw precedence and resolves checkmate/stalemate wins at its ceiling.
-Playable positions, including checks with legal evasions, retain static
-evaluation when no further child stack is available. Cancellation retains its
-existing precedence; a ceiling evaluation is not a completed deeper search.
+### 4.1 Nodes and repetition
 
-Standard quiescence retains castling at entry and below entry, alongside captures
-and promotions; entry also searches quiet checks, and checked nodes search all
-legal evasions. Nonchecking castles remain subject to delta/SEE pruning.
-This is an existing bounded quiet extension, not a certified strength gain.
+One node is counted per move made, including quiescence moves; null moves,
+re-searches of a made move and pruned moves are not nodes. `go nodes` uses the
+same counter.
 
-An exact TT return can shorten the searched PV because an entry stores a score
-and move rather than a complete continuation. Search clears the stale PV before
-reuse. UCI text may append TT move hints to a short searched prefix; those hints
-are not a completed deeper search or a guaranteed line of the cached score.
-Ponder selection uses the searched prefix and can therefore be absent.
+Search owns its configuration and pre-root repetition history. At the root,
+repetition requires three occurrences; below it, the first earlier match in game
+or search history scores as a draw. Repetition identity ignores en passant
+squares without a legal capture. Irreversible moves and null moves bound history
+scans. Checkmate takes precedence over the fifty-move draw at 100 halfmoves.
 
-Per-root ordering/complexity counters use signed 64-bit values to preserve their
-initial SEE bias, add unsigned visited work with saturation, and compare without
-subtraction. They are ordering estimates; the separate unsigned visited counter
-continues to drive UCI nodes and node budgets.
+`UpcomingRepetition`: below the root, when `alpha < draw`, search checks whether a
+legal reversible move reaches an earlier position (a two-choice key-difference
+table, confirmed by full legality and the resulting key). A confirmed move
+raises alpha to the draw score before the TT probe and cuts off if that reaches
+beta; it is not a floor for later fail-soft returns. A singular search's
+excluded-move node skips this check.
+
+### 4.2 Root and iterative deepening
+
+Depth one keeps the picker's legal order; each later iteration reorders the root
+list by running the picker with the previous best move as hash move. Root LMR
+keeps the first three moves at full depth.
+
+`Aspiration` searches from depth two with a window of
+`12 + score * score / 30155` around the previous score. A fail low moves beta to
+the window midpoint and alpha to `score - delta`; a fail high moves beta to
+`score + delta` and repeats one ply shallower per consecutive nondecisive fail
+high (reset by a fail low). Delta grows by a third per retry. Reports keep the
+iteration depth.
+
+### 4.3 Interior node order
+
+1. Abort, stack ceiling, mate-distance pruning, draw adjudication, tablebase
+   probe, upcoming-repetition alpha raise.
+2. TT probe. Only non-PV nodes below halfmove clock 90 take score cutoffs, and
+   only with a legal or absent TT move: exact scores on either side of the
+   window, lower bounds at or above beta (one ply deeper than the node), upper
+   bounds at or below alpha. Proven mates need no depth. PV nodes use the entry
+   only as a move hint.
+3. Static evaluation (section 4.9) and the improving flag: the eval is above
+   that of the same side's last evaluated position two plies back, else four
+   plies back; with neither, the node counts as improving. Checked nodes are
+   never improving.
+4. Node pruning, non-PV and outside check only. A TT bound on the far side of
+   the eval refines it (exact scores always) for reverse futility.
+   - Razoring: `eval < alpha - 300 * depth` runs qsearch on the null window; a
+     nondecisive result at or below alpha returns.
+   - Reverse futility, depth 1–8:
+     `eval - (100 * depth - 100 * improving_without_threat + |correction| / 2) >= beta`
+     returns `beta + (eval - beta) / 3`. A threat is an enemy pawn/minor/rook
+     attacking a more valuable piece; a legal quiet TT move vetoes the cut.
+   - Null move at expected cut nodes with depth above two and
+     `eval + 132 * improving >= beta + 8 * depth`, never twice in a row. It is
+     skipped when a TT upper bound is below beta or a TT lower bound's move wins
+     more than two pawns. The reduced depth is
+     `depth - 4 - depth / 3 - min((eval - beta) / 174, 4)`, one more with a
+     tactical TT move. From depth 12 a cutoff is confirmed by a normal search at
+     the null depth with null moves disabled in its subtree.
+5. IIR: at PV or expected cut nodes from depth six without a legal TT move,
+   search one ply shallower.
+6. ProbCut from depth five: captures and promotions passing
+   `see >= (threshold - eval) * 3 / 4` are screened by qsearch against
+   `threshold = beta + 250 - 50 * improving`, then verified by a reduced
+   null-window search (shallower for larger margins, with a correspondingly
+   higher bar). A compatible TT upper bound below the threshold skips it.
+7. Singular extensions from depth seven, below twice the root depth, for a legal
+   TT move with a compatible lower/exact bound at `depth - 3`. A search at
+   `(depth - 1) / 2` excluding that move tests `threshold = value - depth`:
+   - below it: extend one ply; non-PV nodes extend two when the margin exceeds
+     16 cp and three for quiets beyond 64 cp, within a per-line budget of 12
+     multiple extensions;
+   - otherwise: a non-PV alternative at or above beta cuts off (multicut); a TT
+     value at or above beta reduces the move by `3 - pv` plies; a cut node
+     reduces it by two.
+   The excluded-move node skips the TT, node pruning, IIR, ProbCut, nested
+   singular tests, correction updates and the repetition floor; its children are
+   ordinary nodes. Without an alternative it returns alpha.
+8. Move loop (section 4.4), then the TT store and correction update.
+
+Node pruning never runs in check, at decisive windows, or at reversible clock 99,
+where the next reversible move draws unless it mates. Null moves also need own
+non-pawn material. Static cutoffs verify that a legal move exists, so
+stalemate stays a draw.
+
+### 4.4 Move loop: pruning and reductions
+
+All move pruning needs one searched legal alternative and a nondecisive best
+score, applies in PV nodes too, and checks legality before recording a skip.
+Move counts include every legal move considered at the node, pruned ones too.
+The predicted depth is `depth - (estimate + 2 * tt_pv - 0.4)`, where the
+estimate is the unclamped LMR value for that move in plies.
+
+- LMP: quiets after `(3 + depth^2) / (2 - improving)` considered moves when the
+  predicted depth is below nine.
+- History pruning: quiets with learned history below `-2048 * depth` when the
+  predicted depth is below seven; killers are exempt.
+- Futility: quiets need predicted depth below six and
+  `eval + 100 * (1 + d) + history / 64 <= alpha`; nonchecking captures need
+  depth below eight and `eval + 200 * (1 + d) + victim + capture_history / 64 <= alpha`.
+  Promotions, checks and evasions are exempt.
+- SEE: captures below `-100 * depth`, quiets below `-50 * depth^2`.
+
+LMR starts at depth three after the first move (the fourth at the root).
+Reductions are computed in 1/1024 plies. With `R(i) = 21.3 * ln(i + ln(i) / 4)`
+and `m` the move's count, the base is `(R(depth) * R(m) + 503) / 1024` plies, one
+more when not improving and `R(depth) * R(m) > 915`. Adjustments in plies:
++0.96 non-PV, +1.56 expected cut node, +0.98 legal tactical TT move, +1.11 TT-PV
+node whose cached score failed low, +0.38 per alpha raise; −1.26 TT-PV, −1 cached
+entry at least as deep, −0.76 quiet killer or countermove, −1 capture/promotion,
+−1.33 giving check, `−min(|corrected − raw| / 100, 2)` and
+`−clamp(history / divisor, −2, 2)` (divisor 4096 for captures, 8192 for quiets).
+The applied reduction is clamped to `[0, depth − 2]`, so LMR never extends.
+
+A reduced move that beats alpha is re-searched at full depth on the null window,
+one ply deeper when it beat the best score by `32 + 8 * (reduction + 1)` and one
+shallower when it did not beat it by `new_depth`; `LMRHistory` then rewards or
+penalizes the quiet move's continuation history. Moves after the first use a
+null window; PV nodes re-search in the full window when the score beats alpha.
+
+Hindsight: in a non-PV child of a move reduced by at least 1.39 plies, depth
+grows by one when the two static evals sum below zero; after at least 2.44
+plies it shrinks by one when they sum above 128. There are no check extensions.
+
+### 4.5 Quiescence
+
+Qsearch searches captures and promotions, plus all legal evasions in check.
+Outside check, stand pat cuts at beta (after verifying a legal move exists),
+captures need `see >= -60` and the picker stops at the first noisy move below
+that. Futility skips a nonchecking, non-recapture move that does not win
+material when `eval + 350 <= alpha`, raising the best score to that bound. In
+check, after one evasion, evasions that lose material are skipped; quiet
+evasions stay searchable. Stalemate is detected at every depth. Results are
+fail-soft. `QsearchTT` probes and stores qsearch results at depth 0 in the
+main table; null-window qsearch nodes below clock 90 take cutoffs from any
+bound, and any valid TT move is searched first.
+
+### 4.6 Move ordering and histories
+
+The picker stages are TT move, good noisy moves, killers, countermove, quiets,
+bad noisy moves. `CheckEvasions` restricts generation in check to captures of the
+checker, blocks and king moves (king moves only in double check). Quiet scores
+combine main, continuation (one and two plies; three and five with
+`LongContinuationHistory`), pawn-structure history; captures use capture history
+plus MVV/LVA. `ThreatOrdering` adds 4000/8000/12000 for a minor/rook/queen
+escaping a lower-value attack and subtracts the same for entering one;
+`CheckOrdering` adds 10000 for a quiet check with `see >= 0`. Picker bonuses
+never feed history-based decisions. `TTHistory` rewards a validated quiet TT
+move whose score caused a cutoff and penalizes the early quiet predecessor that
+allowed it. Histories persist across moves; `ucinewgame` resets them.
+
+### 4.7 Correction history
+
+The static evaluation is corrected by learned differences between search results
+and the raw evaluation, indexed by pawn structure, non-pawn material per side,
+minor and major piece keys (`PieceCorrection`) and the previous two moves
+(`ContinuationCorrection`). Updates follow completed searches whose best move is
+quiet, outside check and excluded-move nodes, below clock 90, and only when the
+bound is informative. The corrected value is clamped below the decisive band.
+
+### 4.8 Transposition table
+
+Search and qsearch share one table of 32-byte clusters holding three 10-byte
+entries: a 16-bit key tag, depth, a 5-bit age with TT-PV flag and bound, a
+compact move, the score and the raw static evaluation. The key is the position
+hash mixed with a halfmove-clock bucket (clocks 0–13 share one bucket, then
+buckets of eight), so scores never cross buckets. Mate and tablebase scores
+whose distance exceeds the remaining fifty-move budget are cut back to the
+nondecisive band on probe. Score cutoffs stop at clock 90.
+
+Replacement takes the same position or an empty slot, else the entry with the
+lowest `depth - 4 * age_distance`. An existing entry of the same position is
+overwritten by an exact bound over a non-exact one, or when
+`depth + bound + age^2 / 4 + pv` reaches two thirds of its own depth plus
+bound; otherwise it keeps its score and takes the newer move and evaluation.
+`TTEval` stores the raw network score so other workers and later searches skip
+inference; it never authorizes a cutoff. Changes to options, the model or draw
+contempt clear the table.
+
+### 4.9 NNUE evaluation
+
+Standard chess uses the Stockfish 13 network (legacy HalfKP: 41024 inputs,
+two 256-wide accumulators, 512->32->32->1 integer inference) until Maxima trains
+its own. Weights are CC0: `nn-62ef826d1a6d.nnue`, SHA-256
+`62ef826d1a6d11b9e814188025aa02a60815c037292e0ef9bbb9bf4f724e5e63`, from
+https://github.com/official-stockfish/networks. `python3 tools/download_nnue.py`
+fetches and verifies it into `networks/`.
+
+The static evaluation applies the network's own NNUE-path scaling:
+`raw * (641 + material / 32 - 4 * clock) / 1024 + 28`, then
+`* (100 - clock) / 100`, in network units (208 per pawn), converted to
+centipawns. Material counts both sides' non-pawn material plus twice the pawn
+value per pawn (126/781/825/1276/2538 for P/N/B/R/Q). Correction history is
+added afterwards without clock damping. Scores are side-to-move relative and
+clamped below the tablebase range.
+
+The default model is `eval.nnue` beside `book.bin`. Initial `isready` loads it
+before the clock starts; `MAXIMA_EVAL_FILE` overrides discovery, otherwise the
+working directory, the executable directory and its parent are checked. Missing
+or invalid models reject standard searches; a failed replacement keeps the
+previous model. Select another compatible model with
+`setoption name EvalFile value /absolute/path/to/network.nnue` and `isready`.
+Model changes stop the worker and clear incompatible TT entries; each search
+holds an immutable model snapshot. Royal losers needs no network.
+
+`src/nnue.cpp` owns the isolated loader and inference. Accumulators are per
+search and ply, updated lazily from the nearest ready ancestor; a king move
+refreshes its perspective, null moves swap perspectives. The loader checks
+size, version and architecture hashes. AVX2 feature accumulation, activation
+packing and byte dot products (`vpmaddubsw`/`vpmaddwd`) have scalar fallbacks;
+clipping keeps every intermediate exact. A per-search cache keyed by position
+holds raw network scores; clock-dependent scaling is applied on every read.
+The GPL reference probe used for exact inference tests is recorded in
+`third_party/nnue_reference/README.md`. There is no network I/O or Python
+dependency in the engine.
+
+### 4.10 UCI boundary and time management
 
 The UCI boundary validates positions and moves before committing the new FEN and
 repetition history. `position fen` requires six fields, bounded nonnegative
@@ -190,12 +377,35 @@ search settings and do not start a replacement search. As with other `go` and
 
 UCI output serializes complete lines from the command and search threads, so
 readiness responses and search reports cannot merge into a malformed line.
+Protocol logging is buffered and synchronized. Output reaches stdout before
+logging; `bestmove` then flushes the log, and a new game resets it after stopping
+the prior worker. Per-line file opens/flushes are avoided. Timed UCI searches
+start their monotonic budget when `go` enters the command handler, before
+logging, parsing, prior-worker joining, allocation, and search setup.
+The UCI `Move Overhead` option reserves 50 ms by default (range 0–5000 ms)
+from each allocated clock budget for interface and transport delays. Adjust it
+in the GUI engine options; for example, `setoption name Move Overhead value 100`.
+Budgets saturate at zero when the reserve exceeds the allocation. Explicit
+`go movetime` limits retain their requested duration. When UCI supplies
+`movestogo 1`, clock-based searches also cap both budgets to leave 5% of the
+remaining own clock, capped at 1000 ms, or `Move Overhead` if larger. This
+reserve replaces rather than adds to the interface reserve at that cap, and
+cannot grant time from an increment before the move is delivered. It scales
+with the remaining clock rather than assuming a particular period length:
+21363 ms leaves 1000 ms, 7338 ms leaves 366 ms and 5000 ms leaves 250 ms
+with a 50 ms interface reserve. Other period moves and sudden death retain
+their current allocation. The boundary follows UCI's remaining-move count,
+not the board's move number; no next-period time is available until the GUI
+credits it. Clock polling tightens
+from 5000 visits to 512 within
+250 ms of the deadline and to 64 within 50 ms; scheduling or blocking I/O can
+still exceed those intervals, so these counts are not a hard real-time guarantee.
 Both centipawn and mate scores retain lower/upper-bound qualifiers. NPS uses
 reported nodes per second with the reported monotonic elapsed milliseconds; a
 zero-millisecond sample uses a one-millisecond denominator. Rates retain unsigned
-64-bit range and saturate if that range is exceeded. Reported nodes count visited
-search calls, including quiescence, using the same counter as `go nodes`;
-pruned moves are excluded from nodes and NPS. Cancellation suppresses subsequent
+64-bit range and saturate if that range is exceeded. Reported nodes count moves
+made in the search, including quiescence, using the same counter as `go nodes`;
+null moves, re-searches of an already made move and pruned moves are not counted. Cancellation suppresses subsequent
 full-window re-searches once the first pass has stopped.
 
 Each finished search emits `info string search_result SOURCE completed_depth N
@@ -212,15 +422,6 @@ The engine result snapshot carries the same provenance, bounds and counters.
 `interrupted` describes search work, independently of the selected result source;
 for example, interruption before evaluating a new root move can leave the previous
 completed iteration selected.
-
-Accepted changes to `KingAttackShelter` or `KingAttackPieces` stop and join the
-current search, then clear the transposition table before subsequent searches.
-Unchanged or rejected values preserve cached scores. Draw contempt remains part
-of the TT score context; pawn and material cache entries do not depend on these
-king-attack weights and remain reusable.
-These are manual UCI tuning weights: 256 preserves the normal contribution,
-0 disables it, and 512 doubles it. Search captures the configured values;
-the engine does not adjust them automatically during play.
 
 Search deadlines and UCI elapsed times use a monotonic wall clock. Time spent
 preparing the search or waiting to run its worker counts toward the budget; a
@@ -249,27 +450,16 @@ remains bounded. Ordinary bounded searches publish their result when work finish
 Playable positions reach the fifty-move threshold at 100 halfmoves, including
 positions in check; checkmate does not become a draw at higher clock counts.
 
-The transposition table uses 24-byte entries: a full 64-bit position signature,
-a 64-bit context fingerprint, and packed move, score, depth, age, and halfmove
-clock-range metadata. Move hints can survive a context mismatch, but score
-cutoffs require compatible context and clock ranges. Royal-losers score context
-also includes the incoming mate-search mode (automatic, White, or Black), whose
-horizon rules differ. A node keeps that identity when it changes mode or reduces
-depth locally; incompatible modes retain move hints but cannot reuse scores.
-Material and pawn caches and the transposition table still need synchronization
-before parallel search.
-
-KPK is an embedded win/draw bitbase. Proven draws stop search with the configured
-draw score; winning positions retain search because KPK has no distance-to-zero
-information. Tests independently verify all legal normalized KPK states.
-
 ## 5. Build and debugging
 
 The default build uses C++26 and requires a compiler that supports that mode
 (tested with GCC 16), CMake 3.30 or newer, and Ninja. Engine lifecycle tests need
 Python 3.7+ with its standard library. Configure with `-DBUILD_TESTING=OFF`
 to build the engine without Python or test targets. The separately packaged
-runner needs Python 3.8+; see chapters 6.1 and 10.
+runner needs Python 3.8+; see chapters 6.1 and 10. Standard-chess tests require
+the pinned network (download with `python3 tools/download_nnue.py`), or an
+explicit `-Dmaxima_nnue_test_network=/absolute/path/to/network.nnue`. CTest
+supplies `MAXIMA_EVAL_FILE` to isolate model discovery from its working directory.
 Release builds retain `-O3 -DNDEBUG -march=native`; Debug builds retain assertions
 and debug symbols. Fathom is compiled separately as C11; a C compiler is also required.
 Native CPU tuning means the binary targets the build machine.
@@ -308,6 +498,31 @@ You can use [Visual Studio Code](https://code.visualstudio.com/) to develop and 
 [Remote Development Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack) and [Docker](https://www.docker.com/).
 
 ![Image of VS Code](vscode.png)
+
+### Windows GUI with the WSL build
+
+The local Windows GUI bundle lives at `C:\dev\maxima`. Add
+`C:\dev\maxima\maxima.exe` in En Croissant's Engines page. This executable
+is a Windows UCI bridge: it launches the bundled ordinary Linux Release engine
+through WSL distribution `Ubuntu`. WSL remains required; this is not a native
+standalone Windows engine. The bundle is tied to this directory and the CPU
+where the engine was built, but does not require the source checkout to run.
+
+The bundle includes the NNUE weights, opening book, immutable experience file,
+290 installed three/four/five-piece Syzygy WDL/DTZ tables (about 984 MB), and GCC runtime libraries.
+The bridge translates single Windows drive paths for `EvalFile`, `BookFile`,
+`ExperienceFile` and `SyzygyPath` to Linux `/mnt/<drive>/...` paths.
+`eval.nnue` beside `book.bin` loads automatically; `EvalFile` selects alternative
+networks. Use `C:\\dev\\maxima\\syzygy` for `SyzygyPath`, with
+`SyzygyProbeLimit=5` and `SyzygyProbeDepth=1`. The complete five-piece set is bundled.
+`BookFile` is `C:\dev\maxima\book.bin` and `ExperienceFile` is
+`C:\dev\maxima\experience\experience.bin`. The frozen HCE baseline remains available through its separate launcher. The bundle's README lists the configuration.
+
+Launcher source/build artifacts remain local under ignored `.tools/windows/`.
+Copied assets are SHA-256 verified in the bundle's `SHA256.json`. Checks through
+the copied Windows executable loaded NNUE/book/experience/Syzygy using Windows
+paths, completed a legal depth-three search, and reported a Syzygy root hit.
+GUI interaction itself requires the user's Windows desktop.
 
 ### 5.1 Optional Release LTO and GCC PGO
 
@@ -391,6 +606,8 @@ See [GCC profiling](https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.h
 and [GCC optimization](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)
 for the underlying flags.
 
+An LTO/PGO comparison (2026-10-17) found no stable gain beyond noise; both stay opt-in.
+
 ## 6. Testing and performance
 
 Tests must return a nonzero exit code when a check fails, so both direct execution
@@ -409,6 +626,17 @@ Release checks. When using the local toolchain, prefix these commands with
 - For documentation-only changes, review the content and diff; a build is not
   necessary.
 
+For a small sanity check of pruning/reduction changes, build first and run:
+
+```bash
+ctest --preset cpp26_debug -R '^(test_search_features|test_uci_input)$'
+```
+
+`test_search_features` holds one minimal trigger per search feature: a position
+and window where the feature must fire, plus one case where it must not. Feature
+tests never assert node counts or restate tuning formulas. The full preset
+additionally covers lifecycle, evaluation, board rules and search contracts.
+
 Use identical Release compiler flags, positions, search limits, and hash size
 for performance comparisons. Track nodes, NPS, and time to depth; only match
 testing establishes a playing-strength gain. Test score bounds and cache reuse
@@ -426,18 +654,17 @@ exercise the executable. No suite-specific UCI command or search hook is needed.
 ./maxima suite:run --nodes 200000 --json /tmp/modern.json
 ./maxima suite:run --suite /path/to/positions.epd --engine /path/to/engine
 ./maxima suite:run --suite /path/to/positions.epd --syzygy-path tablebases/syzygy
+./maxima suite:run --suite bratko-kopec --nodes 200000 \
+  --model EvalFile=networks/nn-62ef826d1a6d.nnue
 ```
 
-The default is `modern_2026`: 22 positions sampled from the 2026 Tata Steel
-Masters broadcasts, one second per position and 64 MiB hash. Stockfish 19
-labels were checked with two cold, single-thread MultiPV searches at two million
-and eight million nodes. Targets must remain stable with at least a 50 cp margin
-over the runner-up at both budgets and a final completed depth of at least 18.
-The packaged manifest records sources, hashes, options, depths, scores and legal
-PVs; source PGNs and offline provenance checks accompany it. Rebuild the corpus
-with `runner/tools/build_modern_suite.py`; see the bundled suite README for the
-exact command and limitations. JSON run reports include corpus and executable
-SHA-256 hashes; a changed corpus or executable rejects the run report.
+Repeatable `--option NAME=VALUE` and `--model OPTION=PATH` select the evaluator
+or search settings. Models are loaded before enabling evaluator options, hashed
+in the report, and checked for changes before and after each search. Requested
+options must be advertised by the engine. Use identical budgets and settings
+for comparisons; use the frozen HCE executable with its legacy `UseNNUE=false`
+option when comparing against HCE. Pass `--model EvalFile=...` explicitly so
+the runner records the model hash, including when using the default network.
 
 Use `--suite bratko-kopec` explicitly for the historical suite, now 22 positions:
 BK.03 and BK.09 were removed following their disputed targets in
@@ -525,6 +752,14 @@ as a build check.
     --seconds 10 --increment 0.1 --pgn games.pgn --json results.json
 ```
 
+Matches keep Syzygy disabled by default. `--syzygy-path /path/to/tables` enables
+the same standard-chess table directory for both engines, with probe limit five
+and probe depth one where supported. The directory must contain WDL tables,
+and both engines must advertise `SyzygyPath` and `SyzygyProbeLimit`. Unsupported
+engines or conflicting per-engine Syzygy overrides are rejected before either
+engine is configured. The report records the resolved path and applied options.
+This enables engine probing; it does not adjudicate games directly from tables.
+
 Use `--variant losers` with royal-losers openings and two engines advertising
 `Wild=losers`. Standard is the default. The opening file has this format:
 
@@ -598,14 +833,41 @@ through its response is charged, including readiness and runner overhead;
 initial process startup/configuration is excluded. A late move loses on time,
 except when the opponent has insufficient material under the selected variant.
 Legal moves are verified before being pushed. Terminal outcomes and available
-threefold/fifty-move claims are adjudicated by the independent board. There is
-no evaluation-based adjudication. `--max-plies` (default 600 searched plies,
-excluding the opening) leaves a nonterminal game unfinished, with result `*`.
+threefold/fifty-move claims are adjudicated by the independent board. Optional
+standard-chess win adjudication is enabled with `--adjudicate-win-cp 1000`.
+Starting at full move 20, it requires six consecutive plies of exact main-line
+scores at or above that threshold for the same winning color: both engines
+must agree, after converting their scores to White's perspective. Missing,
+bounded, smaller, or disagreeing scores reset the sequence. Mate scores count
+with their winning sign. Configure the sequence and earliest full move with
+`--adjudicate-win-plies` (minimum 2, default 6) and `--adjudicate-min-move`
+(default 20). Natural terminal/claimable outcomes, clock forfeits and engine
+failures take precedence; errors remain unfinished and stop the match. Reports
+record the policy and deciding scores, and PGNs mark `Termination "win adjudication"`
+with the policy and a final comment. This is an estimated result and can conceal
+conversion weaknesses; retain unadjudicated conversion checks separately.
+Adjudication is disabled by default, preserving earlier baseline protocols.
+`--max-plies` (default 600 searched plies, excluding the opening) leaves a
+nonterminal game unfinished, with result `*`.
 `--timeout` bounds each protocol response (default 30 seconds); increase it for
 long clocks. Protocol/illegal-move failures preserve the current game's partial
 PGN and error record, stop the match, and return nonzero. Completed game records
 are flushed as they finish; abrupt interruption may lose the active game.
 Output paths must be new and distinct from each other and inputs.
+
+Each game also records reported search nodes, search counts, reporting coverage,
+and charged wall time separately for White and Black in JSON `search_work`.
+Played-move PGN comments include `[%nodes N]` when the engine reports a count.
+New match records also retain per-move `search_samples`: reported depth,
+selective depth, engine time, tablebase hits, nodes and charged wall time where
+reported, plus Maxima's raw `search_result` metadata. PGN comments include
+`[%depth D]`. The reported depth may describe an interrupted iteration; use
+`completed_depth` from `search_result` when measuring completed search depth,
+and count direct tablebase/book/terminal returns separately. Older reports,
+including the completed 66-game strength gate, do not contain these samples.
+Missing node reports are tracked through `reported_searches`, not treated as
+measured zero work. Counts include searched quiescence and exclude pruned moves
+for Maxima; external engines may use other counting conventions.
 
 PGNs preserve opening history, setup FEN, clock comments, result, termination,
 and `Variant "Royal losers"` for losers. Use
@@ -640,25 +902,6 @@ are nominal model-based rates, not distribution-free finite-sample guarantees.
 Generalized SPRT has asymptotic error control and assumes independent sampled
 opening pairs and stable testing conditions. Larger independent confirmation
 at longer clocks remains necessary before promoting a playing change.
-
-Reports record hypotheses/error targets, model/provenance, five paired counts,
-LLR, thresholds and decision. SPRT reports omit fixed-sample confidence intervals;
-those are not valid after optional stopping. This mode is mutually exclusive
-with Bonferroni checkpoints. Omitting both retains fixed-sample operation for
-baselines and smoke checks. SPRT remains available for small-gain hypothesis comparisons;
-existing historical match decisions retain their predeclared methods.
-The same SPRT mode works with `--variant losers`: our independent royal-losers
-board remains responsible for compulsory captures and variant terminal rules.
-The official fast-chess v1.8.2-alpha executable supports standard/Chess960 only;
-passing `Wild=losers` to an engine would not change its arbiter's rules. The
-statistics port itself is independent of chess rules, so both variants can use
-our existing match pipeline.
-The isolated [fast-chess port](runner/maxima_runner/third_party/fastchess/README.md)
-uses the upstream constrained multinomial likelihood, with a more precise
-bisection solver and independent pinned Fishtest reference fixtures. Runtime
-needs only the existing runner dependency. MIT attribution/license is bundled.
-See [Fishtest mathematics](https://github.com/official-stockfish/fishtest/wiki/Fishtest-mathematics)
-for the paired generalized SPRT model.
 
 To stop on either a SPRT decision or evidence of a minimum gain, predeclare
 `--sprt 0 10 --sprt-min-elo-stop`. The additional rule checks a simultaneous
@@ -727,7 +970,7 @@ partial or selectively completed runs as fixed-sample evidence. Small samples
 have broad bounds; in fixed-sample mode these are score intervals, not Elo estimates or a sequential
 promotion test. Unfinished games or engine failures return nonzero.
 
-### 6.2 Bug audit and sanitizer checks
+### 6.2 Correctness tests and sanitizers
 
 `test_uci_input` covers malformed FENs and moves, atomic preservation of position
 and repetition history (including unsupported pawn counts), invalid option/search
@@ -755,19 +998,6 @@ book/tablebase shortcuts, and pause/resume deadlines on platforms with SIGSTOP/S
 `test_leaf_search` checks both colors' mate/stalemate at quiescence depths 0,
 -1, and -2, terminal score windows, captures reaching stalemate, quiet playable
 positions, board/hash restoration, and losers terminal root score signs.
-`testEvaluation` additionally checks the material lookup at sixteen pawns and
-above its supported external range; lifecycle tests reject those FENs before
-evaluating and searching the preserved position.
-`test_search_tt_context` checks each king-attack weight independently and together
-in both directions, all TT bound types, unchanged/rejected-setting reuse, and
-draw-contempt context changes. Lifecycle tests compare completed warm and cold
-UCI search scores after king-attack option changes and verify that changing either
-weight safely stops an active search before another search begins.
-`test_null_search` instruments artificial passes and endgame verification,
-including consecutive-null exclusion, verification subtree exclusion, failed
-verification, cancellation, reserved scores, pawn-endgame bounds, and state
-restoration. Reserved-score tests inject search results through the virtual
-PVS boundary and require no tablebase files.
 
 `test_search_ceiling` checks both colors' mate/stalemate and playable checked
 and quiet positions at the final stack slot, clocks 0/99/100/101, full/null
@@ -798,34 +1028,20 @@ windows, and checks state restoration and interrupted interior re-search restart
 Verify certificates with `python tests/data/search/generate_tree.py --check` in
 the runner environment; native checks need no python-chess installation.
 
-`test_search_selectivity` observes production move-futility and LMR decisions
-through synthetic child contracts at the virtual PVS boundary. Both null and
-full PV windows cover reduced improvements, full-depth re-search, cancellation
-and restart. Parent internal iterative deepening is isolated by the test
-contract; real-search coverage remains separate. Independent
-python-chess certificates supply both colors' legal moves, checks, captures,
-promotions, castling and advanced passed pawns. It checks futility margins,
-depth/check/endgame/mate exclusions, first-move retention and gain-based tactical
-pruning; protected tactical improvements must still reach a cutoff. LMR checks
-early and late move depths, dangerous-move exclusions, full-depth verification
-of a refuted reduced improvement, cancellation in either pass and restart/state
-restoration. These isolated guard probes disable node pruning and TT; they do
-not certify selective-search equality, evaluation or real quiescence. Verify
-data with `python tests/data/search/generate_selectivity.py --check`; native
-tests need no python-chess installation.
+Verify `selectivity.inc` with `python tests/data/search/generate_selectivity.py --check`.
 
 `test_search_horizon` exercises real quiescence at depths 0/-1/-2 and PVS at
 depths 0/1 on independently certified capture, recapture, promotion, en passant,
 check-evasion and mate trees, including reversible clock 99. Its exhaustive
 reference uses certified legal/tactical move sets and terminal scores, Maxima's
-static stand-pat labels and its existing SEE-based check extensions. It has no
-alpha-beta pruning, TT or move ordering; it does not independently validate
-evaluation or SEE. The sparse fixtures assert the endgame exclusion from
-quiescence capture pruning. Full/null windows, selective options enabled and
+static stand-pat labels. It has no alpha-beta pruning, TT or move ordering; it
+does not independently validate evaluation or SEE. Full/null windows, selective options enabled and
 disabled, cold/warm/disabled TT, incompatible deep entries at quiescence entry,
 real repetition histories, node-budget restart and state restoration are
-checked. This is bounded search-integration coverage, not a general proof of
-selective search. Verify certificates with
+checked. With selective search enabled, a one-node reverse-futility cutoff is
+checked against its documented static margin rather than the unpruned oracle.
+This is bounded search-integration coverage, not a general
+proof of selective search. Verify certificates with
 `python tests/data/search/generate_horizon.py --check` in the runner environment.
 Native checks require no python-chess installation.
 
@@ -846,27 +1062,12 @@ cold and disabled tables, both colors, reversible clocks, and repetition history
 It checks exact/lower/upper bounds, legal move hints, matching-mode reuse, and
 incoming-mode identity across local horizon transitions.
 
-Royal-losers playing evaluation deliberately remains material-only. The old
-positional gate required material flag 16, which its classifier never produces.
-The first restoration experiment added the existing pawn/king tables to ordinary
-classes 3, 12 and 15, preserving specialized near-win material scores. Against
-frozen ordinary Release `81f13b0`, 32 color-swapped opening pairs at 10+0.1 seconds
-scored 27 wins, 14 draws and 23 losses (53.125%; conservative 95% opening-pair
-interval 29.12–77.13%). This small screen did not establish a gain, so the
-candidate was reverted under its predeclared rule. It does not prove the tables
-are harmful. NNUE promotion requires separate correctness and match evidence.
-
-The unused W17 positional tables and helper have been removed. Its future
-positional evaluator will be a separately trained royal-losers NNUE. Standard
-chess retains its existing classical evaluation as the default and comparison
-baseline until standard NNUE passes correctness and measured strength gates.
-
 `test_w17_evaluation` checks active material-only scores, classifications and
 phase, both colors, cold/warm material caches, symmetry of the covered fixtures,
 standard/losers material-cache separation, and board/hash/stack preservation.
 King-only search terminals still precede static evaluation and draw clocks.
 
-An address/undefined-behavior audit build can be configured independently:
+An address/undefined-behavior sanitizer build can be configured independently:
 
 ```bash
 cmake -S . -B build/cpp26/sanitize -G Ninja -DCMAKE_BUILD_TYPE=Debug \
@@ -884,11 +1085,12 @@ the restricted workspace runner may require these checks to run outside its
 sandbox. Inspect sanitizer diagnostics and exit codes. Race checking remains a
 separate requirement for concurrency changes.
 
-Private audit records and benchmark artifacts live under `.context/baselines/`.
+Private measurement records and benchmark artifacts live under `.context/baselines/`.
 Record the revision, dirty-tree status, binary hashes, positions, limits, build
-configuration, and commands. A short benchmark does not establish a performance
-or playing-strength gain. The 2026-10-10 audit adds zero-time, root-restriction,
-book-shortcut, tiny-node, and losers terminal/draw regression cases.
+configuration, and commands. Complete option/model setup with an `isready` /
+`readyok` barrier before starting search CPU measurements; sending `setoption`
+alone does not wait for configuration to finish. A short benchmark does not
+establish a performance or playing-strength gain.
 
 Independent rule/state checks use `maxima_runner.variants.royal_losers_board`,
 a python-chess subclass for [FICS royal losers](https://www.freechess.org/Help/HelpFiles/losers.html).
@@ -922,12 +1124,14 @@ Download complete Syzygy WDL and DTZ sets through the project command:
 `--pieces` accepts 3, 4, 5, 6, or 7, including kings; each selection includes
 smaller tables needed for captures and promotions. The default is 4. The complete
 three- and four-piece set is 70 files, about 4.14 MiB. `--dry-run` lists total
-storage without downloading table files. `--directory /path/to/tables` selects
-another destination; the default `tablebases/syzygy/` is ignored by Git.
-Downloads check the mirror's published SHA-256 hashes, replace files atomically,
-and verify/reuse completed files when rerun. The download command is part of
-the Python 3.8+ runner and uses only the standard library; see chapter 6.1.
-Running the compiled engine requires no Python.
+storage without downloading table files. The complete up-to-five WDL/DTZ set
+listed by the mirror on 2026-10-17 contains 290 files, 983,957,920 bytes
+(938.38 MiB, about 984 MB), including the smaller prerequisites.
+`--directory /path/to/tables` selects another destination; the default
+`tablebases/syzygy/` is ignored by Git. To download separately while a game is
+running, use a staging directory such as `tablebases/syzygy-5-staging/` and leave
+the active engine's directory/settings untouched. Activate the verified set
+after the game; changing `SyzygyPath` stops the active search.
 
 ### 7.2 Engine and UCI configuration
 
@@ -950,13 +1154,18 @@ stops the active search and clears cached search scores.
 
 ### 7.3 Probing policies
 
-WDL probing supplies proven draw results and win/loss cutoffs at zero halfmove
-clock. The depth setting limits probes at the highest available piece count;
+WDL probing resolves proven outcomes at zero halfmove clock, including full
+search windows; widening a window cannot replace a solved outcome with static
+evaluation. The depth setting limits probes at the highest available piece count;
 smaller covered positions may be probed at leaves. Checked nodes retain normal
 mate/evasion search. Root DTZ probing respects the current halfmove clock and
 selects moves that make progress; ambiguous rounded results at the fifty-move
-boundary fall back to search. With known reversible game history, the root also
-keeps normal search because tablebases do not encode repetition history.
+boundary fall back to search. Unique reversible game history permits direct DTZ play: minimizing DTZ prevents
+cycles before the next capture/pawn move, so previously unique positions cannot
+become a threefold repetition. If any position has already repeated in that
+history (including the current root), retain normal history-aware search.
+Missing DTZ files, ambiguous boundary results, and an excluded DTZ move under
+`searchmoves` also retain normal search.
 Tablebase wins/losses use large centipawn scores, not invented mate distances;
 `info` output reports successful probes as `tbhits`. A root tablebase result
 still waits for `stop` during infinite analysis or `ponderhit`/`stop` while
@@ -971,14 +1180,24 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 
 ## 8. Roadmap
 
+- Finish aligning late-move reductions with the reference form: drop the
+  remaining non-reference terms, add TT-hit-rate, stat-score and capture terms,
+  plain full-depth re-searches, and retire the hindsight depth adjustment.
+  Measure each step on the depth ladder and in matches.
 - Add incremental CLI documentation lookup (`docs:list`, `docs:search`,
   `docs:section`) using the stable chapters in this file. These commands are
   planned and are not implemented yet.
 - Measure tablebase probing cost and strength before adding more probe heuristics.
-- Extend root tablebase handling across reversible repetition history.
+- Extend direct root tablebase handling across histories that already contain repetitions.
 - Explore selective asynchronous online probes separately from local probing.
 - Prepare shared caches and worker state for safe multithreaded search.
-- Evaluate learned evaluation after the search and testing foundation is sound.
+- After the final equal-depth checkpoint and baseline commit, select a new
+  development focus with measured goals. Candidate directions recorded from the
+  user: online play/operator integration; profiling and tuning under real time
+  controls; a dedicated bullet setup; a more advanced supported NNUE family;
+  and training our own royal-losers evaluator. These are alternatives for the
+  next phase, not approved simultaneous implementation tasks. Preserve the
+  single-worker NNUE baseline and use held-out strength tests for changes.
 
 No speed or Elo gain should be claimed without the corresponding measurements.
 
@@ -1275,8 +1494,7 @@ book to the engine.
 The decision is built per game at `Creating:` (opponent, group, game type, and
 budget are known then) and must be ready before our first move; if it is late,
 the global layer alone is used. Engine-side variants (rating-based draw value,
-UCI_Opponent books) wait until `feat/nnue-bootstrap` merges, as it changes
-`src/search.cpp`. Later: background analysis of positions from games that were
+UCI_Opponent books) are planned. Later: background analysis of positions from games that were
 not easy wins, as JDrone's `book_calc`.
 
 ## 10. Python runner and project CLI
