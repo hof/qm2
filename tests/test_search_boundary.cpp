@@ -133,15 +133,11 @@ bool test_parent_clock_ranges() {
                                   "kr6/8/8/8/8/8/8/7K w - - "}) {
         const std::string before = std::string(placement) + "97 1";
         const std::string boundary = std::string(placement) + "98 1";
-        struct policy_case_t { int configuration, depth; bool adaptive; };
-        // Exercise both null policies where each is eligible: the adaptive
-        // child needs depth three, while the legacy child prunes at depth one.
-        for (const auto policy : {policy_case_t{0, 2, true}, {2, 2, true},
-                                  {3, 2, false}, {3, 4, true}}) {
+        struct policy_case_t { int configuration, depth; };
+        for (const auto policy : {policy_case_t{0, 2}, {2, 2}, {3, 4}}) {
             trans_table::clear();
             auto writer = std::make_unique<search_t>(before.c_str());
             prepare(*writer, policy.configuration);
-            writer->adaptive_null_enabled = policy.adaptive;
             const int value = writer->pvs(-1, 0, policy.depth);
             ok &= check(value <= -1, "clock fixture must produce a losing bound", before.c_str());
             int cached = 0, move = 0, flag = 0;
@@ -156,7 +152,6 @@ bool test_parent_clock_ranges() {
             auto reader = std::make_unique<search_t>(boundary.c_str());
             auto original = std::make_unique<search_t>(boundary.c_str());
             prepare(*reader, policy.configuration);
-            reader->adaptive_null_enabled = policy.adaptive;
             // Two reversible plies reach the independently certified clock-100
             // children. The distant bare king cannot capture the opposing rook.
             ok &= check(reader->pvs(-1, 0, policy.depth) == 0,

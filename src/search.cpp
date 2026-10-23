@@ -49,7 +49,6 @@ constexpr U64 game_history_salt = 0x9e3779b97f4a7c15ULL;
 constexpr U64 search_history_salt = 0xd1b54a32d192ed03ULL;
 // Conservative margins in the shared 100-cp pawn scale. Keep the baseline
 // independent of history, improving flags and evaluator-specific adjustments.
-constexpr int null_move_margin = 50;
 constexpr int razoring_margin_per_ply = 300;
 constexpr int main_see_quiet_margin = 50;
 constexpr int main_see_capture_margin = 100;
@@ -268,7 +267,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     beta_pruning = options::get_value("BetaPruning");
     null_verify = options::get_value("NullVerify");
     null_enabled = options::get_value("NullMove");
-    adaptive_null_enabled = wild == 0 && options::get_value("AdaptiveNullMove");
     lmr_enabled = options::get_value("LMR");
     adaptive_lmr_enabled = wild == 0 && options::get_value("AdaptiveLMR");
     context_lmr_enabled = wild == 0 && options::get_value("ContextLMR");
@@ -1888,9 +1886,6 @@ search_t::singular_result_t search_t::singular_extension(int alpha, int beta, in
 // Stronger static evidence and deeper nodes permit a shallower artificial
 // branch. The legal tactical hint is ordering evidence, never a score bound.
 int search_t::null_search_depth(int depth, int eval, int beta) {
-    if (!adaptive_null_enabled) {
-        return depth - 4;
-    }
     auto hint = stack->tt_move;
     const bool tactical = hint.piece && (hint.capture || hint.promotion)
         && brd.valid(&hint) && brd.legal(&hint);
@@ -2073,10 +2068,8 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         && std::abs(beta) < decisive_score && brd.has_pieces(brd.us())
         && brd.stack->fifty_count < 99;
     const bool previous_null = brd.ply > 0 && !(stack - 1)->current_move.piece;
-    const bool null_policy = adaptive_null_enabled
-        ? brd.ply > 0 && cut_node && depth > 2 && normal_search
-            && !repetition_floor && eval + 132 * int(stack->improving) >= beta + 8 * depth
-        : eval >= beta + null_move_margin;
+    const bool null_policy = brd.ply > 0 && cut_node && depth > 2 && normal_search
+        && !repetition_floor && eval + 132 * int(stack->improving) >= beta + 8 * depth;
     const bool do_null = null_enabled && !previous_null && null_policy;
 
     // A null cutoff requires legal play: passing in stalemate would turn an
@@ -2101,12 +2094,11 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         } else if (null_score >= beta && std::abs(null_score) < decisive_score) {
             constexpr int verification_reduction = 5;
             const bool endgame_verification = depth > verification_reduction && stack->metadata.endgame;
-            if (null_verify && (endgame_verification || (adaptive_null_enabled && depth >= 12))) {
+            if (null_verify && (endgame_verification || depth >= 12)) {
                 // Preserve the endgame verifier's existing depth floor. Even a
                 // null probe reduced to qsearch must be confirmed by real moves.
-                const int verification_depth = adaptive_null_enabled
-                    ? std::max({1, null_depth, endgame_verification ? depth - 6 : 0})
-                    : depth - 1 - verification_reduction;
+                const int verification_depth = std::max({1, null_depth,
+                    endgame_verification ? depth - 6 : 0});
                 int verified_score = verification_search(beta - 1, beta,
                     verification_depth, cut_node, verification_mode_t::null_move);
                 if (stop_all) {

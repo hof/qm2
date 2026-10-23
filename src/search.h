@@ -183,7 +183,6 @@ public:
     int null_search_depth(int depth, int eval, int beta);
     bool null_verify;
     bool null_enabled;
-    bool adaptive_null_enabled;
     bool beta_pruning;
     bool lmr_enabled;
     bool adaptive_lmr_enabled;

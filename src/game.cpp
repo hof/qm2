@@ -33,7 +33,6 @@ namespace options {
         { "UCI_AnalyseMode", BOOL, 0, "type check default false" },
         { "UCI_Opponent", STRING, 0, "type string" },
         { "NullMove", BOOL, 1, "type check default true", true },
-        { "AdaptiveNullMove", BOOL, 1, "type check default true", true },
         { "BetaPruning", BOOL, 1, "type check default true", true },
         { "LMR", BOOL, 1, "type check default true", true },
         { "AdaptiveLMR", BOOL, 1, "type check default true", true },

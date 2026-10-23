@@ -42,7 +42,7 @@ namespace options {
         bool clears_tt = false;
     };
 
-    const int length = 51;
+    const int length = 50;
     extern option_t PARAM[length+1];
     
     option_t * get_option(const char * key);
