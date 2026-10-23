@@ -1770,9 +1770,70 @@ rejected handles stop with an error instead of retrying. JDrone could hang on
 waits without deadlines (engine readiness, a half-open socket); the client
 avoids both.
 
+### 10.3 Lichess client (MaximaEngine)
+
+`maxima lichess` plays on Lichess through the Bot API as MaximaEngine: it
+accepts challenges, plays them with the Release Maxima build, saves them as
+PGN and learns from them. The move choice is the same as on FICS
+(`runner/maxima_runner/move_choice.py`): the multi-layer book and experience
+(9.7), then the engine while the online tablebase is asked (11.4), with draw
+contempt from the rating gap.
+
+```bash
+./maxima lichess                                # bullet, blitz and rapid challenges
+./maxima lichess --speed blitz --games 20 --live-feed 8765
+./maxima lichess --config lichess.json          # settings file; flags override it
+```
+
+Setup, once: create an account that has never played a game, create a token for
+it with only the scope "Play games with the bot API" (`bot:play`), and upgrade
+it (irreversible):
+
+```bash
+curl -d '' -H "Authorization: Bearer $LICHESS_BOT_TOKEN" https://lichess.org/api/bot/account/upgrade
+```
+
+The client reads `LICHESS_BOT_TOKEN` and `LICHESS_OWNERS` (Lichess users who may
+send commands, comma-separated) from the environment or from `.env` in the
+checkout (git-ignored; the environment wins). It refuses to start unless the
+token belongs to a BOT account.
+
+Bots cannot seek, so MaximaEngine only plays challenges. It accepts standard
+chess with a clock at the configured speeds (`speeds`, `--speed`; default
+bullet, blitz and rapid; Lichess offers bots no UltraBullet), rated or casual,
+one game at a time, and declines the rest with Lichess's own reasons (`later`
+while busy or stopping, `tooFast`, `tooSlow`, `timeControl`, `standard` for
+variants). Takeback requests are declined; draw offers are ignored. When the
+opponent leaves and Lichess allows it, the win is claimed.
+
+Owners steer the bot from the game chat; the spectator room keeps it out of the
+opponent's sight. Lichess authenticates chat usernames, so no key is needed:
+`!softquit` (stop after this game), `!softrestart` (exit status 75 after this
+game, for a supervisor loop as on FICS), `!resign`, `!abort`, `!draw` (offer or
+accept) and `!help`. Commands from anyone else are logged and ignored. Between
+games, `quit` on the console or `kill -USR1 <pid>` stops it; a second `quit`
+leaves at once.
+
+Lichess keeps its own experience: `experience/lichess/games/*.pgn` with
+`index/` and `players/` beside it, since its players and rating pool are not
+FICS's. The learner maps Lichess speeds to its game types (bullet to lightning,
+rapid and classical to standard); the PGN keeps the real speed in `Event`
+(`Lichess rated blitz game`) and links the game in `Site`. Settings files take
+`engine`, `options`, `speeds`, `accept`, `games`, `pgn_dir`, `learning`,
+`variety`, `contempt_window`, `layer_profiles`, `style_books`, `mood`,
+`live_feed`, `pgn_post` and `online_tablebase`, as on FICS.
+
+Streams are read line by line; Lichess sends a keepalive every 7 seconds, so 30
+seconds of silence counts as a dead connection and the stream reconnects (the
+event stream with backoff up to a minute; a game stream gives up after eight
+failures and records the game as unfinished). After HTTP 429 every request
+waits a full minute, as Lichess asks. Only one event stream per token can be
+open, so run one client per bot account. A game's end arrives on both streams;
+it is saved, reported and posted once.
+
 ## 11. Connectors
 
-A game source plays games somewhere: FICS today (10.2), Lichess later. It reports
+A game source plays games somewhere: FICS (10.2) and Lichess (10.3). It reports
 what happens as neutral game events; connectors consume them without knowing the
 source. Both connectors below are off by default and use only the Python
 standard library (`runner/maxima_runner/connectors.py`).
@@ -1781,12 +1842,13 @@ standard library (`runner/maxima_runner/connectors.py`).
 
 Every event is one JSON object with `"v": 1` (bumped only for incompatible
 changes; new fields may appear at any time, so ignore unknown ones), `"type"`
-and `"source"` (`"fics"`). FICS game numbers are in `game`; colors are
+and `"source"` (`"fics"` or `"lichess"`). `game` is the FICS game number or the
+Lichess game id (a string such as `"pG3WSP96"`); colors are
 `"white"`/`"black"`; clocks are milliseconds; FENs are full six-field FENs.
 
 | type | when | fields |
 |---|---|---|
-| `game_start` | our game begins | `game`, `white`, `black`, `white_elo`, `black_elo` (null when unknown), `initial_seconds`, `increment_seconds`, `rated`, `variant` (FICS type, e.g. `blitz`), `our_color`, `fen`, `clock_ms` |
+| `game_start` | our game begins | `game`, `white`, `black`, `white_elo`, `black_elo` (null when unknown), `initial_seconds`, `increment_seconds`, `rated`, `variant` (FICS type or Lichess speed, e.g. `blitz`), `our_color`, `fen`, `clock_ms` |
 | `move` | after each move, ours or theirs | `game`, `ply` (after the move), `san`, `uci`, `fen` (after), `by` (`"us"`/`"them"`), `clock_ms`, `search` |
 | `position` | takeback or resync | `game`, `ply`, `fen`, `reason` (`"takeback"`/`"reset"`), `clock_ms`; drop moves after `ply` |
 | `game_end` | game over | `game`, `result` (`1-0`, `0-1`, `1/2-1/2`, `*`), `reason`, `headers`, `pgn` (null when aborted before both sides moved) |

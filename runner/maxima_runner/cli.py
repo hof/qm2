@@ -33,6 +33,7 @@ command_groups = (
     )),
     ("Online play", (
         ("fics", "Play on FICS as MaxDrone (seek, play, save PGN)"),
+        ("lichess", "Play on Lichess as a bot (accept challenges, play, save PGN)"),
     )),
 )
 
@@ -53,7 +54,7 @@ def show_help(all_commands=False):
         visible = commands if all_commands else tuple(
             item for item in commands if item[0] in (
                 "init", "uci", "build", "test", "suite:run", "match:run", "experience:show", "tablebases:syzygy:download",
-                "fics"))
+                "fics", "lichess"))
         print(styled("-" * 72, "36"))
         print(styled(title, "1"))
         print(styled("-" * 72, "36"))
@@ -168,7 +169,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
         "init, uci, build, test, suite:run, match:run, experience:import|export|show|analyze|build|repertoire|draw|fire, "
-        "tablebases:syzygy:download, fics (no command: run engine)"))
+        "tablebases:syzygy:download, fics, lichess (no command: run engine)"))
     if not arguments and sys.stdin.isatty() and sys.stdout.isatty():
         arguments = ["--help"]
     if arguments and arguments[0] in ("--help", "-h"):
@@ -223,6 +224,9 @@ def main(argv=None):
         elif command == "fics":
             from . import fics_cli
             entrypoint = fics_cli.main
+        elif command == "lichess":
+            from . import lichess_cli
+            entrypoint = lichess_cli.main
         else:
             parser.error(f"unknown command: {command}")
         # Existing subcommands retain their argparse interfaces.

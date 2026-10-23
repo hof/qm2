@@ -25,6 +25,7 @@ signature_share = 0.7
 signature_eval = 0.45
 revenge_plies = 24  # the opening of a lost game whose moves we play back at the opponent
 game_types = ("lightning", "blitz", "standard")
+lichess_speeds = {"bullet": "lightning", "blitz": "blitz", "rapid": "standard", "classical": "standard"}
 
 
 def expected_score(centipawns):
@@ -33,8 +34,10 @@ def expected_score(centipawns):
 
 
 def game_type(event):
+    """FICS type from the Event tag; Lichess speeds map to the nearest one."""
     words = event.lower().split()
-    return next((word for word in words if word in game_types), None)
+    return next((lichess_speeds.get(word, word) for word in words if word in game_types or word in lichess_speeds),
+                None)
 
 
 def opponent_group(headers, color):
