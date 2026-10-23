@@ -1224,8 +1224,8 @@ int search_t::reduction(int depth, int searched_moves, int estimate, bool root_n
             || searched_moves < (root_node ? 2 : 1)) {
         return 0;
     }
-    // The estimate includes the normal ply; below it the move extends by at most one ply.
-    return std::clamp(estimate / 1024 - 1, -1, depth - 2);
+    // The estimate includes the normal ply; a reduction never extends the move.
+    return std::clamp(estimate / 1024 - 1, 0, depth - 2);
 }
 
 // The unclamped depth decrement a move would receive at any depth, including the
