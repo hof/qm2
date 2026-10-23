@@ -1658,7 +1658,7 @@ bool search_t::reverse_futility(int beta, int depth, int eval, int & value) {
             || !brd.ply || stack->in_check || stop_all
             || stack->excluded_move
             || brd.stack->fifty_count >= 99
-            || !brd.has_pieces(brd.us()) || std::abs(beta) >= decisive
+            || std::abs(beta) >= decisive
             || std::abs(eval) >= decisive || eval < beta) {
         return false;
     }
@@ -1689,7 +1689,7 @@ bool search_t::prune_futility(move_t & move, int reduced_depth, int searched_mov
     const int decisive = score::TABLEBASE - MAX_PLY;
     if (wild != 0 || !ffp_enabled || !brd.ply || !searched_moves
             || stack->in_check || gives_check || stop_all
-            || brd.stack->fifty_count >= 99 || !brd.has_pieces(brd.us())
+            || brd.stack->fifty_count >= 99
             || best <= -decisive || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
             || move.promotion) {
         return false;
@@ -1718,7 +1718,7 @@ bool search_t::prune_quiet(move_t & move, int depth, int searched_moves,
     if ((!lmp_enabled && !history_pruning_enabled) || !brd.ply || depth < 1
             || !searched_moves || stack->in_check || stop_all
             || move.capture || move.promotion || best <= -decisive
-            || brd.stack->fifty_count >= 99 || !brd.has_pieces(brd.us())) {
+            || brd.stack->fifty_count >= 99) {
         return false;
     }
     // Quadratic depth growth, with a larger budget for improving positions.
@@ -1744,7 +1744,7 @@ bool search_t::prune_main_see(move_t & move, int depth, int searched_moves, int 
     const int decisive = score::TABLEBASE - MAX_PLY;
     if (!main_see_enabled || !brd.ply || depth < 1 || !searched_moves
             || brd.stack->fifty_count >= 99
-            || best <= -decisive || !brd.has_pieces(brd.us())) {
+            || best <= -decisive) {
         return false;
     }
     const int threshold = move.capture ? -main_see_capture_margin * depth
