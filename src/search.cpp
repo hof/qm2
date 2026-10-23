@@ -275,7 +275,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     tt_history_enabled = wild == 0 && options::get_value("TTHistory");
     probcut_enabled = wild == 0 && options::get_value("ProbCut");
     singular_extensions_enabled = wild == 0 && options::get_value("SingularExtensions");
-    singular_policy_enabled = wild == 0 && options::get_value("SingularPolicy");
     razoring_enabled = wild == 0 && options::get_value("Razoring");
     main_see_enabled = wild == 0 && options::get_value("MainSEE");
     iir_enabled = wild == 0 && options::get_value("IIR");
@@ -1841,11 +1840,11 @@ search_t::singular_result_t search_t::singular_extension(int alpha, int beta, in
         result = {candidate, 1};
         // Extra depth belongs to non-PV forced lines. A line budget prevents
         // repeated multiple extensions from sustaining the remaining depth.
-        if (singular_policy_enabled && !pv && stack->multiple_extensions < 12
+        if (!pv && stack->multiple_extensions < 12
                 && alternative < threshold - 16) {
             result.extension = 2 + int(quiet && alternative < threshold - 64);
         }
-    } else if (singular_policy_enabled) {
+    } else {
         // Reuse the alternative's fail-soft lower bound only above our beta.
         // Decisive scores from reduced work must not masquerade as proven mates.
         if (!pv && alternative >= beta && std::abs(alternative) < decisive) {

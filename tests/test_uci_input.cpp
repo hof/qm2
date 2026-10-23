@@ -42,7 +42,7 @@ bool policy_cache_controls() {
         return main_clear && !q_hit && move == 0;
     };
     for (const char * name : {"NullMove", "BetaPruning", "LMR", "FutilityPruning",
-            "NullVerify", "Aspiration", "IIR", "MainSEE", "Razoring", "SingularExtensions", "SingularPolicy", "ProbCut", "TTHistory", "TTEval", "LMP", "HistoryPruning", "QsearchTT", "MainHistory",
+            "NullVerify", "Aspiration", "IIR", "MainSEE", "Razoring", "SingularExtensions", "ProbCut", "TTHistory", "TTEval", "LMP", "HistoryPruning", "QsearchTT", "MainHistory",
             "ContinuationHistory", "PawnHistory", "Countermoves", "Killers", "UpcomingRepetition", "CheckEvasions", "CaptureHistory", "LongContinuationHistory", "ThreatOrdering", "CheckOrdering", "CorrectionHistory", "PieceCorrection", "ContinuationCorrection", "LMRHistory",
             "DrawContempt", "SyzygyProbeLimit", "SyzygyProbeDepth"
             }) {

@@ -189,7 +189,6 @@ public:
     bool aspiration_enabled;
     bool probcut_enabled;
     bool singular_extensions_enabled;
-    bool singular_policy_enabled;
     bool razoring_enabled;
     bool main_see_enabled;
     bool iir_enabled;
