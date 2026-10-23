@@ -14,7 +14,7 @@ import chess.engine
 import chess.pgn
 import chess.polyglot
 
-from maxima_runner import connectors, experience, fics, fics_game, learning
+from maxima_runner import connectors, experience, fics, fics_game, learning, online_tablebase
 from maxima_runner.uci import open_engine
 
 observed = (Path(__file__).parent / "data" / "fics_observed_game.txt").read_text().splitlines()
@@ -306,7 +306,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
                   "GuestHJGC guestNinja 1 3 0 5 0 180000 180000 1 none (0:00.000) none 0 0 0")
         player = await self.player("think", online_tablebase=True)
         found = {"move": chess.Move.from_uci("a1a7"), "category": "win", "dtz": 15, "dtm": 15}
-        with patch.object(fics.online_tablebase, "probe", return_value=found):
+        with patch.object(online_tablebase, "probe", return_value=found):
             await player.handle(ending)
             await self.settle(player)
         self.assertEqual(player.connection.sent, ["a1a7"])
@@ -316,11 +316,11 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         ending = ("<12> ----k--- -------- -------- -------- -------- -------- ----P--- R---K--- W -1 0 0 0 0 0 17 "
                   "GuestHJGC guestNinja 1 3 0 5 0 180000 180000 1 none (0:00.000) none 0 0 0")
         player = await self.player("play", online_tablebase=True)
-        with patch.object(fics.online_tablebase, "probe", side_effect=OSError("offline")) as probe:
+        with patch.object(online_tablebase, "probe", side_effect=OSError("offline")) as probe:
             await player.handle(ending)
             await self.settle(player)
         self.assertEqual(player.connection.sent, ["e2e4"])
-        self.assertGreater(player.tablebase_pause, 0)
+        self.assertGreater(player.tablebase.pause, 0)
         probe.assert_called_once()
 
     async def test_engine_move_stands_when_the_tablebase_is_late(self):
@@ -328,7 +328,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
                   "GuestHJGC guestNinja 1 3 0 5 0 180000 180000 1 none (0:00.000) none 0 0 0")
         player = await self.player("play", online_tablebase=True)
         late = {"move": chess.Move.from_uci("a1a7"), "category": "win", "dtz": 15, "dtm": 15}
-        with patch.object(fics.online_tablebase, "probe", side_effect=lambda *unused: time.sleep(0.5) or late):
+        with patch.object(online_tablebase, "probe", side_effect=lambda *unused: time.sleep(0.5) or late):
             await player.handle(ending)
             await self.settle(player)
         self.assertEqual(player.connection.sent, ["e2e4"])

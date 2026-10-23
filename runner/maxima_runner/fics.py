@@ -16,7 +16,8 @@ import time
 import chess
 import chess.engine
 
-from . import connectors, fics_game, learning, online_tablebase
+from . import connectors, fics_game, learning, move_choice
+from .move_choice import describe, search_summary, speed, variation
 from .project import data_root, engine_path
 from .uci import open_engine
 
@@ -416,15 +417,6 @@ def learning_report(game, record, records):
     return lines
 
 
-def speed(nps):
-    """Nodes per second the short way: 850nps, 500Knps, 1.2Mnps."""
-    if nps >= 1_000_000:
-        return f"{nps / 1_000_000:.1f}Mnps"
-    if nps >= 1_000:
-        return f"{nps / 1_000:.0f}Knps"
-    return f"{nps}nps"
-
-
 def search_whisper(info, turn, line, note=None, seconds=None):
     """A searched move for observers: "d15 +4.52 TB 9. Bg2 d5 10. d4 Nbd7 (out of book)"; the line starts
     with our move, already cut at whisper_plies."""
@@ -454,8 +446,7 @@ class engine_player:
         self.events = events
         self.our_color = None
         self.learner = learner
-        self.online_tablebase = online_tablebase
-        self.tablebase_pause = 0.0
+        self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line)
         self.opening = None
         self.from_book = False
         self.announced_mood = None
@@ -868,156 +859,51 @@ class engine_player:
                 await asyncio.wait_for(self.opponent_ready.wait(), self.finger_wait)
             except asyncio.TimeoutError:
                 self.opponent_ready.set()
-        if self.learner is not None:
-            if self.opening is None:
-                await self.announce()  # a new week may bring a new mood
-                game_type = self.created["type"].lower() if self.created else None
-                rated = bool(self.created) and self.created["rated"] == "rated"
-                self.opening = self.learner.for_game(self.opponent.name if self.opponent else None,
-                                                     self.opponent_group(), game_type, self.contempt, rated)
-            choice = self.opening.choose(board, learning.per_move_budget_ms(clock, position.increment_seconds))
-            if choice is not None:
-                move, reason = choice
-                await self.send(fics_game.ics_move(move))
-                if self.record is not None:
-                    self.record.on_search(board, move, {"source": reason})
-                self.on_line(f"-- {board.san(move)} {reason} {time.monotonic() - started:.1f}s")
-                self.from_book = True
-                if (self.whispering or self.followers) and self.opening.why:
-                    await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
-                return
-        # The engine searches while the online tablebase is asked, so a slow answer costs no clock time.
-        lookup = self.ask_tablebase(board)
-        search = asyncio.ensure_future(self.session.play(board, limit, game=self.token, opponent=self.opponent,
-                                                         timeout=max(clock, 1) + self.margin,
-                                                         options={"DrawContempt": self.contempt}))
+        if self.learner is not None and self.opening is None:
+            await self.announce()  # a new week may bring a new mood
+            game_type = self.created["type"].lower() if self.created else None
+            rated = bool(self.created) and self.created["rated"] == "rated"
+            self.opening = self.learner.for_game(self.opponent.name if self.opponent else None,
+                                                 self.opponent_group(), game_type, self.contempt, rated)
         try:
-            answer = await tablebase_first(lookup, search)
-            if answer is not None:
-                search.cancel()
-                await asyncio.wait({search})
-                await self.play_tablebase(board, answer, started)
-                return
-            result = await search
-        except asyncio.CancelledError:
-            search.cancel()
-            raise
+            move, info, kind = await move_choice.choose_move(
+                self.session, board, limit, opening=self.opening,
+                budget_ms=learning.per_move_budget_ms(clock, position.increment_seconds), tablebase=self.tablebase,
+                game=self.token, opponent=self.opponent, timeout=max(clock, 1) + self.margin,
+                options={"DrawContempt": self.contempt})
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
             self.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
             await self.stop_engine()
             await self.start()
             await self.send("refresh")
             return
-        if result.move is None or not board.is_legal(result.move):
+        if move is None or not board.is_legal(move):
             self.on_line(f"-- engine returned no legal move in {board.fen()}")
             return
-        await self.send(fics_game.ics_move(result.move))
+        await self.send(fics_game.ics_move(move))
         if self.record is not None:
-            self.record.on_search(board, result.move, result.info)
-        summary = describe(result.info, board.turn)
-        pv = variation(board, result.info.get("pv", []))
-        self.on_line(f"-- {board.san(result.move)} {summary} {time.monotonic() - started:.1f}s"
-                     + (f" pv {pv}" if pv else ""))
-        if self.whispering or self.followers:
+            self.record.on_search(board, move, info)
+        seconds = time.monotonic() - started
+        explaining = self.whispering or self.followers
+        if kind != "engine":
+            self.on_line(f"-- {board.san(move)} {info['source']} {seconds:.1f}s")
+            if explaining and kind == "book" and self.opening.why:
+                await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
+            elif explaining and kind == "tablebase":
+                await self.explain(f"{board.variation_san([move])} {info['source']}")
+            self.from_book = kind == "book"
+            return
+        pv = variation(board, info.get("pv", []))
+        self.on_line(f"-- {board.san(move)} {describe(info, board.turn)} {seconds:.1f}s" + (f" pv {pv}" if pv else ""))
+        if explaining:
             note = None
             if self.opening is not None and self.opening.why == ("left book",):
                 note = "own idea"
             elif self.from_book:
                 note = "out of book"
-            line = variation(board, result.info.get("pv", [])[:whisper_plies]) or board.variation_san([result.move])
-            await self.explain(search_whisper(result.info, board.turn, line, note, time.monotonic() - started))
+            line = variation(board, info.get("pv", [])[:whisper_plies]) or board.variation_san([move])
+            await self.explain(search_whisper(info, board.turn, line, note, seconds))
         self.from_book = False
-
-
-    def ask_tablebase(self, board):
-        """Start an online lookup with seven or fewer pieces; None when it does not apply."""
-        if not self.online_tablebase or time.monotonic() < self.tablebase_pause or not online_tablebase.covers(board):
-            return None
-        lookup = asyncio.get_running_loop().run_in_executor(None, online_tablebase.probe, board.copy(),
-                                                            tablebase_wait)
-        lookup.add_done_callback(self.tablebase_failed)
-        return lookup
-
-    def tablebase_failed(self, lookup):
-        error = None if lookup.cancelled() else lookup.exception()
-        if error is not None:
-            # Offline, rate limited or slow: rest a minute rather than ask on every move.
-            self.tablebase_pause = time.monotonic() + 60
-            self.on_line(f"-- online tablebase unavailable ({error or type(error).__name__}); searching")
-
-    async def play_tablebase(self, board, answer, started):
-        move = answer["move"]
-        await self.send(fics_game.ics_move(move))
-        reason = tablebase_reason(answer)
-        if self.record is not None:
-            self.record.on_search(board, move, {"source": reason, "tablebase": answer})
-        self.on_line(f"-- {board.san(move)} {reason} {time.monotonic() - started:.1f}s")
-        if self.whispering or self.followers:
-            await self.explain(f"{board.variation_san([move])} {reason}")
-        self.from_book = False
-
-
-tablebase_wait = 1.0  # seconds at most; the engine's move stands when the answer is later
-
-
-async def tablebase_first(lookup, search):
-    """The tablebase answer when it arrives before the engine's move, otherwise None."""
-    if lookup is None:
-        return None
-    await asyncio.wait({lookup, search}, return_when=asyncio.FIRST_COMPLETED)
-    if not lookup.done() or lookup.exception() is not None:
-        return None
-    return lookup.result()
-
-
-def tablebase_reason(answer):
-    distance = f" DTM {abs(answer['dtm'])}" if answer.get("dtm") else (
-        f" DTZ {abs(answer['dtz'])}" if answer.get("dtz") else "")
-    return f"tablebase: {answer['category']}{distance}"
-
-
-def search_summary(board, info):
-    """Our search for the live feed: scores from White's side; book and tablebase moves carry their reason."""
-    if "tablebase" in info:
-        answer = info["tablebase"]
-        return {"tablebase": {"category": answer["category"], "dtz": answer.get("dtz"), "dtm": answer.get("dtm")}}
-    score = info.get("score")
-    if score is None:
-        return {"book": info.get("source", "book")}
-    white = score.white()
-    pv, replay = [], board.copy()
-    for move in info.get("pv", []):
-        if not replay.is_legal(move):
-            break
-        pv.append(replay.san(move))
-        replay.push(move)
-    summary = {"depth": info.get("depth"), "seldepth": info.get("seldepth"), "nodes": info.get("nodes"),
-               "nps": info.get("nps"), "time_ms": round(info["time"] * 1000) if "time" in info else None,
-               "pv_san": pv}
-    summary["score"] = {"mate": white.mate()} if white.is_mate() else {"cp": white.score()}
-    return summary
-
-
-def variation(board, moves, limit=10):
-    """The engine's expected line in numbered SAN ("12...Rfe8 13. b3 b5"), up to limit moves or the first
-    illegal one."""
-    replay, legal = board.copy(), []
-    for move in moves[:limit]:
-        if not replay.is_legal(move):
-            break
-        legal.append(move)
-        replay.push(move)
-    return board.variation_san(legal) if legal else ""
-
-
-def describe(info, turn):
-    score = info.get("score")
-    depth = info.get("depth", 0)
-    if score is None or not depth:
-        return "book"
-    relative = score.pov(turn)
-    value = f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}"
-    return f"d{depth} {value}" + (f" {speed(info['nps'])}" if info.get("nps") else "")
 
 
 async def serve(connection, commands, on_line, probe_interval=300, probe_timeout=60, player=None):
