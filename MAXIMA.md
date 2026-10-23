@@ -117,7 +117,7 @@ proven bound, and the round constants are provisional until tuned. Royal losers
 the rules in this chapter apply to standard chess.
 
 Every search-policy option is a UCI checkbox, default true, snapshotted by the
-worker. Changing one stops and joins the worker and clears both TT modes;
+worker. Changing one stops and joins the worker and clears the TT;
 unchanged or rejected values keep the cache. The switches are `NullMove`,
 `NullVerify`, `BetaPruning`, `FutilityPruning`, `Razoring`, `LMR`, `LMRHistory`,
 `LMP`, `HistoryPruning`, `MainSEE`, `IIR`, `ProbCut`, `SingularExtensions`,
@@ -144,15 +144,15 @@ scans. Checkmate takes precedence over the fifty-move draw at 100 halfmoves.
 `UpcomingRepetition`: below the root, when `alpha < draw`, search checks whether a
 legal reversible move reaches an earlier position (a two-choice key-difference
 table, confirmed by full legality and the resulting key). A confirmed move
-raises alpha to the draw score before the TT probe, cuts off if that reaches
-beta, and stays a floor for fail-soft returns. A singular search's excluded-move
-node skips this check.
+raises alpha to the draw score before the TT probe and cuts off if that reaches
+beta; it is not a floor for later fail-soft returns. A singular search's
+excluded-move node skips this check.
 
 ### 4.2 Root and iterative deepening
 
 Depth one keeps the picker's legal order; each later iteration reorders the root
 list by running the picker with the previous best move as hash move. Root LMR
-keeps the first two moves at full depth.
+keeps the first three moves at full depth.
 
 `Aspiration` searches from depth two with a window of
 `12 + score * score / 30155` around the previous score. A fail low moves beta to
@@ -164,16 +164,18 @@ iteration depth.
 ### 4.3 Interior node order
 
 1. Abort, stack ceiling, mate-distance pruning, draw adjudication, tablebase
-   probe, upcoming-repetition floor.
-2. TT probe. Only non-PV nodes take score cutoffs: exact scores on either side
-   of the window, lower bounds at or above beta, upper bounds at or below alpha.
-   Every score needs sufficient depth, matching context and a clock inside the
-   entry's validity range. PV nodes use the entry only as a move hint.
+   probe, upcoming-repetition alpha raise.
+2. TT probe. Only non-PV nodes below halfmove clock 90 take score cutoffs, and
+   only with a legal or absent TT move: exact scores on either side of the
+   window, lower bounds at or above beta (one ply deeper than the node), upper
+   bounds at or below alpha. Proven mates need no depth. PV nodes use the entry
+   only as a move hint.
 3. Static evaluation (section 4.9) and the improving flag: the eval is above
    that of the same side's last evaluated position two plies back, else four
    plies back; with neither, the node counts as improving. Checked nodes are
    never improving.
-4. Node pruning, non-PV and outside check only:
+4. Node pruning, non-PV and outside check only. A TT bound on the far side of
+   the eval refines it (exact scores always) for reverse futility.
    - Razoring: `eval < alpha - 300 * depth` runs qsearch on the null window; a
      nondecisive result at or below alpha returns.
    - Reverse futility, depth 1–8:
@@ -181,10 +183,12 @@ iteration depth.
      returns `beta + (eval - beta) / 3`. A threat is an enemy pawn/minor/rook
      attacking a more valuable piece; a legal quiet TT move vetoes the cut.
    - Null move at expected cut nodes with depth above two and
-     `eval + 132 * improving >= beta + 8 * depth`, never twice in a row. The
-     reduced depth is `depth - 4 - depth / 3 - min((eval - beta) / 174, 4)`, one
-     more with a tactical TT move. From depth 12 a cutoff is confirmed by a
-     normal search at the null depth with null moves disabled in its subtree.
+     `eval + 132 * improving >= beta + 8 * depth`, never twice in a row. It is
+     skipped when a TT upper bound is below beta or a TT lower bound's move wins
+     more than two pawns. The reduced depth is
+     `depth - 4 - depth / 3 - min((eval - beta) / 174, 4)`, one more with a
+     tactical TT move. From depth 12 a cutoff is confirmed by a normal search at
+     the null depth with null moves disabled in its subtree.
 5. IIR: at PV or expected cut nodes from depth six without a legal TT move,
    search one ply shallower.
 6. ProbCut from depth five: captures and promotions passing
@@ -215,10 +219,11 @@ stalemate stays a draw.
 
 All move pruning needs one searched legal alternative and a nondecisive best
 score, applies in PV nodes too, and checks legality before recording a skip.
-The predicted depth is `depth - estimate`, where the estimate is the unclamped
-LMR value for that move.
+Move counts include every legal move considered at the node, pruned ones too.
+The predicted depth is `depth - (estimate + 2 * tt_pv - 0.4)`, where the
+estimate is the unclamped LMR value for that move in plies.
 
-- LMP: quiets after `(3 + depth^2) / (2 - improving)` searched moves when the
+- LMP: quiets after `(3 + depth^2) / (2 - improving)` considered moves when the
   predicted depth is below nine.
 - History pruning: quiets with learned history below `-2048 * depth` when the
   predicted depth is below seven; killers are exempt.
@@ -228,20 +233,26 @@ LMR value for that move.
   Promotions, checks and evasions are exempt.
 - SEE: captures below `-100 * depth`, quiets below `-50 * depth^2`.
 
-LMR starts at depth three after the first move (two at the root). The base is
-`floor(1 + ln(depth) * ln(move + 1) / 3)`; add two for an expected cut node, one
-when not improving, one for a legal tactical TT move and `min(alpha_raises / 2, 2)`;
-subtract one each for a PV node, a persistent TT-PV flag, giving check, being in
-check, a capture/promotion and a quiet killer or countermove, plus the
-correction uncertainty `min(|corrected - raw| / 100, 2)` and
-`clamp(history / divisor, -2, 2)` (divisor 4096 for captures, 8192 for quiets).
-The applied reduction is clamped to `[0, depth - 2]`. A reduced move that beats
-alpha is re-searched at full depth and window. `LMRHistory` then rewards (result
-at or above beta) or penalizes (at or below alpha) the quiet move's continuation
-history.
+LMR starts at depth three after the first move (the fourth at the root).
+Reductions are computed in 1/1024 plies. With `R(i) = 21.3 * ln(i + ln(i) / 4)`
+and `m` the move's count, the base is `(R(depth) * R(m) + 503) / 1024` plies, one
+more when not improving and `R(depth) * R(m) > 915`. Adjustments in plies:
++0.96 non-PV, +1.56 expected cut node, +0.98 legal tactical TT move, +1.11 TT-PV
+node whose cached score failed low, +0.38 per alpha raise; −1.26 TT-PV, −1 cached
+entry at least as deep, −0.76 quiet killer or countermove, −1 capture/promotion,
+−1.33 giving check, `−min(|corrected − raw| / 100, 2)` and
+`−clamp(history / divisor, −2, 2)` (divisor 4096 for captures, 8192 for quiets).
+The applied reduction is clamped to `[0, depth − 2]`, so LMR never extends.
 
-Moves after the first use a null window; PV nodes re-search in the full window
-when the score beats alpha. There are no check extensions.
+A reduced move that beats alpha is re-searched at full depth on the null window,
+one ply deeper when it beat the best score by `32 + 8 * (reduction + 1)` and one
+shallower when it did not beat it by `new_depth`; `LMRHistory` then rewards or
+penalizes the quiet move's continuation history. Moves after the first use a
+null window; PV nodes re-search in the full window when the score beats alpha.
+
+Hindsight: in a non-PV child of a move reduced by at least 1.39 plies, depth
+grows by one when the two static evals sum below zero; after at least 2.44
+plies it shrinks by one when they sum above 128. There are no check extensions.
 
 ### 4.5 Quiescence
 
@@ -252,8 +263,9 @@ that. Futility skips a nonchecking, non-recapture move that does not win
 material when `eval + 350 <= alpha`, raising the best score to that bound. In
 check, after one evasion, evasions that lose material are skipped; quiet
 evasions stay searchable. Stalemate is detected at every depth. Results are
-fail-soft. `QsearchTT` stores entry and tactical qsearch bounds in their own TT
-modes; scores never cross modes, move hints do.
+fail-soft. `QsearchTT` probes and stores qsearch results at depth 0 in the
+main table; null-window qsearch nodes below clock 90 take cutoffs from any
+bound, and any valid TT move is searched first.
 
 ### 4.6 Move ordering and histories
 
@@ -280,21 +292,22 @@ bound is informative. The corrected value is clamped below the decisive band.
 
 ### 4.8 Transposition table
 
-Entries are 40 bytes: 64-bit position signature, 64-bit search-context
-fingerprint, packed move/score/depth/age/clock-range/mode, a 64-bit model
-fingerprint with a signed 16-bit raw evaluation, and a TT-PV flag. The context
-covers repetition history, draw contempt, the model, and the halfmove-clock
-bucket: clocks 0–13 share one bucket, then buckets of eight. Scores are reused
-within a bucket; other buckets keep move hints. Every score also carries the clock
-range over which its subtree is valid; reuse merges that range into the parent,
-so fifty-move boundaries are never crossed. Selective cuts near clock 99 cap
-the range at 98.
+Search and qsearch share one table of 32-byte clusters holding three 10-byte
+entries: a 16-bit key tag, depth, a 5-bit age with TT-PV flag and bound, a
+compact move, the score and the raw static evaluation. The key is the position
+hash mixed with a halfmove-clock bucket (clocks 0–13 share one bucket, then
+buckets of eight), so scores never cross buckets. Mate and tablebase scores
+whose distance exceeds the remaining fifty-move budget are cut back to the
+nondecisive band on probe. Score cutoffs stop at clock 90.
 
-Replacement prefers empty slots, then move-only entries, then older and
-shallower entries; a deeper non-exact entry of the same context survives a
-shallower write. Move-only and evaluation writes never evict scores. `TTEval`
-stores the raw network score so other workers and later searches skip inference;
-it never authorizes a cutoff.
+Replacement takes the same position or an empty slot, else the entry with the
+lowest `depth - 4 * age_distance`. An existing entry of the same position is
+overwritten by an exact bound over a non-exact one, or when
+`depth + bound + age^2 / 4 + pv` reaches two thirds of its own depth plus
+bound; otherwise it keeps its score and takes the newer move and evaluation.
+`TTEval` stores the raw network score so other workers and later searches skip
+inference; it never authorizes a cutoff. Changes to options, the model or draw
+contempt clear the table.
 
 ### 4.9 NNUE evaluation
 
@@ -1166,6 +1179,10 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 
 ## 8. Roadmap
 
+- Finish aligning late-move reductions with the reference form: drop the
+  remaining non-reference terms, add TT-hit-rate, stat-score and capture terms,
+  plain full-depth re-searches, and retire the hindsight depth adjustment.
+  Measure each step on the depth ladder and in matches.
 - Add incremental CLI documentation lookup (`docs:list`, `docs:search`,
   `docs:section`) using the stable chapters in this file. These commands are
   planned and are not implemented yet.

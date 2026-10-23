@@ -1682,7 +1682,7 @@ bool search_t::prune_quiet(move_t & move, int depth, int searched_moves,
         return false;
     }
     // Quadratic depth growth, with a larger budget for improving positions.
-    // Count only completed legal searches, never picker candidates or prunes.
+    // Count every legal move considered, pruned ones included.
     const int move_limit = (3 + depth * depth) / (2 - int(stack->improving));
     const bool lmp_candidate = lmp_enabled && reduced_depth < 9;
     const bool history_candidate = history_pruning_enabled && reduced_depth < 7
