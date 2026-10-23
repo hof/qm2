@@ -20,7 +20,7 @@ std::unique_ptr<search_t> position() {
     s->forward(&move, s->brd.gives_check(&move));
     s->tablebase_limit = s->draw_contempt = 0;
     s->stack->in_check = s->brd.in_check();
-    evaluate(s.get());
+    s->stack->static_eval = evaluate(s.get());
     return s;
 }
 

@@ -1634,7 +1634,7 @@ bool search_t::reverse_futility(int beta, int depth, int eval, int & value) {
     }
     // Correction magnitude expresses uncertainty in the raw evaluator. A
     // threatened valuable piece must not strengthen the improving discount.
-    const int correction = std::abs(eval - int(stack->eval_result));
+    const int correction = std::abs(stack->static_eval - int(stack->eval_result));
     const int margin = 100 * depth
         - 100 * int(stack->improving && !lower_value_threat(brd)) + correction / 2;
     if (eval - margin < beta) {
@@ -1969,6 +1969,12 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
     stack->static_eval = eval;
+    // A cached bound beyond the static evaluation refines it for static cutoffs.
+    int refined_eval = eval;
+    if (tt_hit && (tt_flag == score::EXACT || (tt_flag == score::UPPERBOUND && tt_score < eval)
+            || (tt_flag == score::LOWERBOUND && tt_score > eval))) {
+        refined_eval = tt_score;
+    }
     stack->improving = is_improving();
     // Hindsight: a reduced move whose static evals disagree with the reduction adjusts depth.
     const auto & parent = *(stack - 1);
@@ -1997,10 +2003,14 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     }
     const int decisive_score = score::TABLEBASE - MAX_PLY;
     int futility_score = beta;
-    if (!pv && reverse_futility(beta, depth, eval, futility_score)) {
+    if (!pv && reverse_futility(beta, depth, refined_eval, futility_score)) {
         return futility_score;
     }
-    const bool do_prune_node = !excluded_move && eval >= beta && !in_check && !pv
+    // Skip a null move when the cache predicts that it fails or that a capture wins.
+    const auto & hint = stack->tt_move;
+    const bool tt_refutes_null = tt_hit && ((tt_flag == score::UPPERBOUND && tt_score < beta)
+        || (tt_flag == score::LOWERBOUND && hint.piece && brd.max_gain(&hint) > 2 * board::PVAL[WPAWN]));
+    const bool do_prune_node = !excluded_move && !in_check && !pv && !tt_refutes_null
         && std::abs(beta) < decisive_score && brd.has_pieces(brd.us());
     const bool previous_null = brd.ply > 0 && !(stack - 1)->current_move.piece;
     const bool null_policy = brd.ply > 0 && cut_node && depth > 2 && normal_search
