@@ -206,9 +206,9 @@ iteration depth.
    ordinary nodes. Without an alternative it returns alpha.
 8. Move loop (section 4.4), then the TT store and correction update.
 
-Node pruning and null moves never run in check, at decisive windows, without own
-non-pawn material, or at reversible clock 99, where the next reversible move
-draws unless it mates. Static cutoffs verify that a legal move exists, so
+Node pruning never runs in check, at decisive windows, or at reversible clock 99,
+where the next reversible move draws unless it mates. Null moves also need own
+non-pawn material. Static cutoffs verify that a legal move exists, so
 stalemate stays a draw.
 
 ### 4.4 Move loop: pruning and reductions
