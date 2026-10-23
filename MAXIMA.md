@@ -1806,11 +1806,18 @@ while busy or stopping, `tooFast`, `tooSlow`, `timeControl`, `standard` for
 variants). Takeback requests are declined; draw offers are accepted only in dead
 draws (below). When the opponent leaves and Lichess allows it, the win is claimed.
 
+In the player chat MaximaEngine greets at the start and says "Good game" at the
+end; it posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
+authors, repository) or `!eval` (our last move with depth, score and expected
+line; answered in the spectator room only, never to the opponent). Answers to
+non-owners come at most every 5 seconds per game, so chat spam cannot push the
+bot into Lichess's rate limit, which would also hold up its moves.
+
 Owners steer the bot from the game chat; the spectator room keeps it out of the
 opponent's sight. Lichess authenticates chat usernames, so no key is needed:
 `!softquit` (stop after this game), `!softrestart` (exit status 75 after this
 game, for a supervisor loop as on FICS), `!resign`, `!abort`, `!draw` (offer or
-accept) and `!help`. Commands from anyone else are logged and ignored. Between
+accept). These commands from anyone else are logged and ignored. Between
 games, `quit` on the console or `kill -USR1 <pid>` stops it; a second `quit`
 leaves at once.
 

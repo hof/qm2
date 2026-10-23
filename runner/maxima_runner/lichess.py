@@ -26,7 +26,10 @@ speeds = ("bullet", "blitz", "rapid", "classical")
 speed_rank = {name: rank for rank, name in enumerate(("ultraBullet",) + speeds + ("correspondence",))}
 stream_timeout = 30  # seconds of silence before a stream counts as dead; Lichess sends keepalives every 7 s
 rate_limit_pause = 60  # Lichess asks clients to wait a full minute after HTTP 429
-remote_commands = ("softquit", "softrestart", "resign", "abort", "draw", "help")
+owner_commands = ("softquit", "softrestart", "resign", "abort", "draw")
+public_commands = ("help", "name", "eval")
+public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
+credits = "Maxima, a chess engine by hof and hajewiet: github.com/hof/qm2"
 reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate", "timeout": "opponent left",
            "draw": "draw", "outoftime": "time forfeit", "cheat": "cheat detected", "noStart": "no first move",
            "aborted": "aborted", "unknownFinish": "unknown finish", "variantEnd": "variant end"}
@@ -282,6 +285,8 @@ class lichess_game:
         self.task = self.searching = None
         self.searched = None
         self.clocks = {}
+        self.last_eval = None
+        self.answered = 0.0
         self.over = self.draw_offered = False
 
     def start(self):
@@ -349,6 +354,7 @@ class lichess_game:
             group = "engines" if title == "BOT" else "masters" if title in chess_titles else "humans"
             self.opening = bot.learner.for_game(them.get("name"), group, learning.lichess_speeds.get(full["speed"]),
                                                 self.contempt, full.get("rated", False))
+        self.chat("player", f"Hi, I'm {credits}. Good luck! Type !help for commands.")
         clock = full.get("clock") or {}
         bot.on_line(f"-- game {self.id}: {full['white'].get('name')} vs {full['black'].get('name')}, "
                     f"{full['speed']} {'rated' if full.get('rated') else 'casual'} {bot.api.server}/{self.id}")
@@ -443,33 +449,54 @@ class lichess_game:
         seconds = time.monotonic() - started
         if kind == "engine":
             pv = variation(board, info.get("pv", []))
+            self.last_eval = f"{board.san(move)} {describe(info, board.turn)}" + (f", expecting {pv}" if pv else "")
             bot.on_line(f"-- {board.san(move)} {describe(info, board.turn)} {seconds:.1f}s" + (f" pv {pv}" if pv else ""))
         else:
+            self.last_eval = f"{board.san(move)} {info['source']}"
             bot.on_line(f"-- {board.san(move)} {info['source']} {seconds:.1f}s")
 
+    def chat(self, room, text):
+        """Post to a chat room without holding up the game; failures are only logged."""
+        asyncio.ensure_future(self.bot.api.post(self.path("chat"), {"room": room, "text": text}))
+
     async def on_chat(self, event):
-        """Owner commands, from either chat room: !softquit, !softrestart, !resign, !abort, !draw, !help."""
+        """Commands typed in either chat room: !help, !name and !eval for anyone; owners may also
+        !softquit, !softrestart, !resign, !abort and !draw."""
         bot = self.bot
         name, text, room = event.get("username", ""), event.get("text", "").strip(), event.get("room", "player")
         if name.lower() in (bot.id, "lichess") or not text.startswith("!"):
             return
         command = text[1:].split()[0].lower() if len(text) > 1 else ""
-        if command not in remote_commands:
+        owner = name.lower() in bot.owners
+        if command in public_commands:
+            now = time.monotonic()
+            if not owner and now - self.answered < public_gap:
+                return
+            self.answered = now
+            if command == "help":
+                listed = public_commands + (owner_commands if owner else ())
+                self.chat(room, "Commands: " + ", ".join(f"!{name}" for name in listed))
+            elif command == "name":
+                engine = bot.session.protocol.id.get("name") if bot.session is not None else "Maxima"
+                self.chat(room, f"{engine}. {credits}")
+            elif room != "spectator":
+                self.chat(room, "I share my evaluation with spectators only.")
+            else:
+                self.chat(room, self.last_eval or "No search yet.")
             return
-        if name.lower() not in bot.owners:
+        if command not in owner_commands:
+            return
+        if not owner:
             bot.on_line(f"-- command {text!r} from {name} refused: not an owner")
             return
         bot.on_line(f"-- {name}: {command}")
         if command in ("softquit", "softrestart"):
             bot.soft_quit(restart=command == "softrestart")
-            reply = f"OK, I {'restart' if bot.restart else 'stop'} after this game."
-        elif command == "help":
-            reply = "Commands: " + ", ".join(f"!{name}" for name in remote_commands)
+            self.chat(room, f"OK, I {'restart' if bot.restart else 'stop'} after this game.")
         else:
             path = "draw/yes" if command == "draw" else command
-            reply = None if await bot.api.post(self.path(path)) else f"Could not {command}."
-        if reply:
-            await bot.api.post(self.path("chat"), {"room": room, "text": reply})
+            if not await bot.api.post(self.path(path)):
+                self.chat(room, f"Could not {command}.")
 
     async def finish(self, status, winner):
         """Save, learn and report once, whichever of the game stream and the event stream ends it first."""
@@ -487,6 +514,8 @@ class lichess_game:
             result = "1/2-1/2"
         reason = reasons.get(status, status)
         bot.on_line(f"-- game {self.id} over: {reason} {result}")
+        if status not in ("aborted", "noStart"):
+            self.chat("player", "Good game, thanks for playing!")
         game = self.pgn(result, reason, status)
         if game is not None and bot.pgn_dir is not None:
             self.save(game)

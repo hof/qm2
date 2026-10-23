@@ -55,20 +55,36 @@ class challenge_tests(unittest.TestCase):
 
 
 class command_tests(unittest.IsolatedAsyncioTestCase):
-    async def test_only_owners_steer_the_game(self):
+    def game(self):
         api, lines = stub_api(), []
         bot = lichess.lichess_bot(api, None, lines.append, owners=["SirHajewiet"])
         bot.id = "maximaengine"
-        game = lichess.lichess_game(bot, "g1")
-        await game.on_chat({"username": "Someone", "text": "!resign", "room": "player"})
-        await game.on_chat({"username": "MaximaEngine", "text": "!resign", "room": "player"})
+        return api, lines, bot, lichess.lichess_game(bot, "g1")
+
+    async def say(self, game, name, text, room="spectator"):
+        await game.on_chat({"username": name, "text": text, "room": room})
+        await asyncio.sleep(0)  # chat replies are posted in the background
+
+    async def test_only_owners_steer_the_game(self):
+        api, lines, bot, game = self.game()
+        await self.say(game, "Someone", "!resign", "player")
+        await self.say(game, "MaximaEngine", "!resign", "player")
         self.assertEqual(api.posts, [])
-        await game.on_chat({"username": "sirhajewiet", "text": "!resign", "room": "spectator"})
-        await game.on_chat({"username": "SirHajewiet", "text": "!softquit", "room": "spectator"})
-        self.assertEqual([path for path, _ in api.posts],
-                         ["/api/bot/game/g1/resign", "/api/bot/game/g1/chat"])
+        await self.say(game, "sirhajewiet", "!resign")
+        await self.say(game, "SirHajewiet", "!softquit")
+        self.assertEqual([path for path, _ in api.posts], ["/api/bot/game/g1/resign", "/api/bot/game/g1/chat"])
         self.assertTrue(bot.stopping)
         self.assertTrue(any("refused" in line for line in lines))
+
+    async def test_anyone_may_ask_but_eval_stays_with_spectators(self):
+        api, lines, bot, game = self.game()
+        game.last_eval = "e4 d20 +0.30"
+        await self.say(game, "Someone", "!eval", "player")
+        game.answered = 0
+        await self.say(game, "Someone", "!eval")
+        await self.say(game, "Someone", "!name")  # within the gap: ignored
+        replies = [data["text"] for _, data in api.posts]
+        self.assertEqual(replies, ["I share my evaluation with spectators only.", "e4 d20 +0.30"])
 
 
 class stub_session:
@@ -89,8 +105,9 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         game.setup(full)
         await game.on_state(dict(full["state"], bdraw=True))
         await game.searching
-        self.assertEqual(api.posts[0][0], "/api/bot/game/g1/draw/yes")
-        self.assertTrue(api.posts[1][0].startswith("/api/bot/game/g1/move/"))
+        actions = [path for path, _ in api.posts if not path.endswith("/chat")]
+        self.assertEqual(actions[0], "/api/bot/game/g1/draw/yes")
+        self.assertTrue(actions[1].startswith("/api/bot/game/g1/move/"))
 
 
 class fake_lichess(http.server.ThreadingHTTPServer):
