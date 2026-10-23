@@ -75,7 +75,7 @@ public:
 struct search_stack_t {
     move::list_t move_list;
     move_t searched[256];
-    int move_count; // One-based legal main-search ordinal; zero outside a move loop.
+    int move_count; // One-based ordinal among considered legal moves; zero outside a move loop.
     move_t current_move;
     move_t best_move;
     move_t tt_move;

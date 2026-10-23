@@ -2087,12 +2087,15 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     //prepare and do the loop
     int best = -score::INF;
     int searched_moves = 0;
+    // Late-move pruning and reductions count every legal move considered, pruned ones included.
+    int considered_moves = 0;
     const int score_max = score::MATE - brd.ply - 1;
     stack->best_move.clear();
     do {
         if (excluded_move && move->to_compact() == excluded_move) {
             continue;
         }
+        ++considered_moves;
 
         assert(brd.valid(move));
         assert(!stack->best_move.equals(move));
@@ -2109,10 +2112,10 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         const bool nominated = singular_result.move && move->to_compact() == singular_result.move;
         const bool singular = nominated && singular_result.extension > 0;
         const int estimate = singular ? 0
-            : reduction_estimate(depth, searched_moves, *move, pv, cut_node, gives_check);
+            : reduction_estimate(depth, considered_moves - 1, *move, pv, cut_node, gives_check);
         const int reduce = singular ? 0 : reduction(depth, searched_moves, estimate);
         const int lmr_depth = std::max(0, depth - (estimate + 2057 * stack->tt_pv - 400) / 1024);
-        if (!singular && prune_quiet(*move, depth, searched_moves,
+        if (!singular && prune_quiet(*move, depth, searched_moves ? considered_moves : 0,
                 lmr_depth, best)) {
             continue;
         }
@@ -2138,10 +2141,11 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
          */
 
         if (!try_forward(move, gives_check)) {
+            --considered_moves;
             continue;
         }
         stack->multiple_extensions += extend >= 2;
-        (stack - 1)->move_count = searched_moves + 1;
+        (stack - 1)->move_count = considered_moves;
         int score;
         bool lmr_researched = false;
         if (searched_moves == 0) {
