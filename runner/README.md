@@ -90,11 +90,6 @@ fixed-sample tests retain their original interpretation. No extra runtime
 statistics dependency is needed; the isolated fast-chess port retains its MIT
 license and upstream attribution.
 
-For the first decision from either SPRT or a repeated-check confidence bound,
-use `--sprt 0 10 --sprt-min-elo-stop`. The additional rule can establish a
-minimum +10 Elo gain or a gain below that target, and reports which rule stopped
-play. Error budgets are split; plain SPRT acceptance alone does not certify
-at least +10 Elo. For that stricter claim, use `--min-elo 10` instead: success
-requires the simultaneous 95% lower score bound to exceed the +10 Elo target.
-Declare the pair cap before play. See MAXIMA.md for allocation, assumptions,
-confidence and capped-inconclusive semantics.
+`--min-elo 10` is a separate, non-SPRT mode: success requires the simultaneous
+95% lower score bound to exceed the +10 Elo target. Declare the pair cap before
+play. See MAXIMA.md for assumptions and capped-inconclusive semantics.

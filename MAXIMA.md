@@ -903,30 +903,11 @@ Generalized SPRT has asymptotic error control and assumes independent sampled
 opening pairs and stable testing conditions. Larger independent confirmation
 at longer clocks remains necessary before promoting a playing change.
 
-To stop on either a SPRT decision or evidence of a minimum gain, predeclare
-`--sprt 0 10 --sprt-min-elo-stop`. The additional rule checks a simultaneous
-confidence interval after every complete pair and compares it with the logistic
-score corresponding to ELO1 (about 51.44% for +10 Elo). It stops with
-`minimum_gain_established` when the lower bound is strictly above that score,
-or `below_minimum_gain` when the upper bound is below it. The first condition
-establishes at least the requested gain at the reported confidence level;
-the second establishes a smaller gain, which can still be a useful improvement.
-Whichever this rule or SPRT decides first ends the run. If both decide on the
-same pair, the minimum-gain decision determines the stop reason. Each test's
-own decision remains visible; `accept_h1` alone still does not certify ELO1.
-
-Adding a rule requires allocating the error budget. Hybrid mode gives SPRT
-half the requested alpha and beta, and the confidence bound an error budget
-of `min(alpha, beta) / 2`. At defaults this is 0.025 for each SPRT target and
-97.5% simultaneous coverage for the bound. By a union bound, positive errors
-at ELO0 and negative errors at ELO1 retain the requested nominal overall targets;
-the SPRT contribution remains asymptotic/model-based. Tightening its thresholds
-can lengthen small-gain tests compared with plain SPRT. This is not a promise
-of universally fastest stopping.
-
-For a positive decision that must establish a minimum gain, use `--min-elo 10`
-instead. It uses simultaneous 95% coverage and never accepts an ordinary SPRT
-decision. All stopping modes are exclusive except the explicit SPRT hybrid flag.
+`--sprt` is plain SPRT and has no other stopping rule; choose bounds that fit
+the expected difference. For a positive decision that must establish a minimum
+gain, use the separate `--min-elo 10` mode. It checks simultaneous 95% bounds
+after every complete pair and stops with `minimum_gain_established` or
+`below_minimum_gain`. All stopping modes are exclusive.
 Minimum gains must be finite within [0, 200] logistic Elo, always A relative
 to B; put the candidate in A. Reports identify the mode, target score, minimum
 Elo, allocated budgets, declared number of checks, bounds and stop reason.
