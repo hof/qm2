@@ -16,7 +16,7 @@ import time
 import chess
 import chess.engine
 
-from . import fics_game, learning
+from . import connectors, fics_game, learning
 from .project import data_root, engine_path
 from .uci import open_engine
 
@@ -283,7 +283,7 @@ default_settings = {
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
     "contempt_window": 100, "layer_profiles": {}, "style_books": {}, "first_move_wait": 60,
-    "whisper": False, "mood": "auto",
+    "whisper": False, "mood": "auto", "live_feed": None, "pgn_post": None,
 }
 
 
@@ -448,8 +448,10 @@ class engine_player:
     """Play our games with a UCI engine; searches run as tasks so server lines keep flowing."""
 
     def __init__(self, open_session, on_line, margin=5, policy=None, finger_wait=2, pgn_dir=None,
-                 site="freechess.org", learner=None):
+                 site="freechess.org", learner=None, events=None):
         self.open_session = open_session
+        self.events = events
+        self.our_color = None
         self.learner = learner
         self.opening = None
         self.from_book = False
@@ -690,7 +692,10 @@ class engine_player:
         self.cancel()
         self.on_line(f"-- game {self.game} over: {end['reason']} {end['result']}")
         opponent = end["black"] if self.name and end["white"].lower() == self.name.lower() else end["white"]
-        self.save(end)
+        game = self.finished_game(end)
+        self.save(game)
+        self.emit("game_end", game=self.game, result=end["result"], reason=end["reason"],
+                  headers=dict(game.headers) if game else None, pgn=str(game) if game else None)
         self.game = self.history = self.opponent = self.record = self.created = self.opening = self.contempt = None
         self.opponent_ready.set()
         self.played += 1
@@ -738,13 +743,18 @@ class engine_player:
             headers["Mood"] = self.opening.mood
         return headers
 
-    def save(self, end):
-        if self.pgn_dir is None or self.record is None or self.history is None or not self.history.board.move_stack:
-            return
+    def finished_game(self, end):
+        """The annotated PGN game, or None when nothing was played."""
+        if self.record is None or self.history is None or not self.history.board.move_stack:
+            return None
         if end["result"] == "*" and self.history.board.ply() < 2:
-            return  # aborted before both sides moved: nothing to learn
+            return None  # aborted before both sides moved: nothing to learn
         self.record.headers.update(self.headers(end))
-        game = self.record.game(self.history.board, end["result"], end["reason"])
+        return self.record.game(self.history.board, end["result"], end["reason"])
+
+    def save(self, game):
+        if self.pgn_dir is None or game is None:
+            return
         try:
             path = fics_game.save_game(game, self.pgn_dir, self.record.started)
         except OSError as error:
@@ -772,6 +782,10 @@ class engine_player:
             return "engines"
         return "masters" if self.opponent.title else "humans"
 
+    def emit(self, kind, **fields):
+        if self.events is not None:
+            self.events.emit(kind, source="fics", **fields)
+
     def on_board(self, position):
         if position.relation not in (fics_game.playing_my_move, fics_game.playing_their_move):
             return
@@ -782,11 +796,19 @@ class engine_player:
             self.record = fics_game.game_record({})
             self.opening = None
             self.from_book = False
+            self.our_color = position.turn if position.relation == fics_game.playing_my_move else not position.turn
             self.on_line(f"-- game {self.game}: {position.white} vs {position.black}, "
                          f"{position.initial_seconds // 60} {position.increment_seconds}")
-        elif self.history.update(position) == "move":
-            mover_ms = position.black_ms if position.turn == chess.WHITE else position.white_ms
-            self.record.on_move(self.history.board, mover_ms / 1000, position.elapsed)
+            self.emit_start(position)
+        else:
+            change = self.history.update(position)
+            if change == "move":
+                mover_ms = position.black_ms if position.turn == chess.WHITE else position.white_ms
+                self.record.on_move(self.history.board, mover_ms / 1000, position.elapsed)
+                self.emit_move(position)
+            elif change:
+                self.emit("position", game=self.game, ply=self.history.board.ply(), fen=self.history.board.fen(),
+                          reason=change, clock_ms={"white": position.white_ms, "black": position.black_ms})
         self.watch_first_move(position)
         if position.relation != fics_game.playing_my_move:
             return
@@ -798,6 +820,29 @@ class engine_player:
         self.searched = key
         self.task = asyncio.ensure_future(self.play(position, board.copy()))
         self.task.add_done_callback(self.report)
+
+    def emit_start(self, position):
+        created = self.created if self.created and {self.created["white"], self.created["black"]} == {
+            position.white, position.black} else {}
+        self.emit("game_start", game=self.game, white=position.white, black=position.black,
+                  white_elo=rating_of(created.get("white_rating", "")) or None,
+                  black_elo=rating_of(created.get("black_rating", "")) or None,
+                  initial_seconds=position.initial_seconds, increment_seconds=position.increment_seconds,
+                  rated=created.get("rated") == "rated" if created else None,
+                  variant=created.get("type") if created else None,
+                  our_color="white" if self.our_color == chess.WHITE else "black",
+                  fen=self.history.board.fen(), clock_ms={"white": position.white_ms, "black": position.black_ms})
+
+    def emit_move(self, position):
+        board = self.history.board
+        move = board.peek()
+        before = board.copy()
+        before.pop()
+        search = self.record.searches.get(before.ply())
+        self.emit("move", game=self.game, ply=board.ply(), san=before.san(move), uci=move.uci(), fen=board.fen(),
+                  by="us" if before.turn == self.our_color else "them",
+                  clock_ms={"white": position.white_ms, "black": position.black_ms},
+                  search=search_summary(before, search[1]) if search and search[0] == move else None)
 
     def report(self, task):
         if not task.cancelled() and task.exception() is not None:
@@ -867,6 +912,25 @@ class engine_player:
             line = variation(board, result.info.get("pv", [])[:whisper_plies]) or board.variation_san([result.move])
             await self.explain(search_whisper(result.info, board.turn, line, note, time.monotonic() - started))
         self.from_book = False
+
+
+def search_summary(board, info):
+    """Our search for the live feed: scores from White's side; book moves carry their reason."""
+    score = info.get("score")
+    if score is None:
+        return {"book": info.get("source", "book")}
+    white = score.white()
+    pv, replay = [], board.copy()
+    for move in info.get("pv", []):
+        if not replay.is_legal(move):
+            break
+        pv.append(replay.san(move))
+        replay.push(move)
+    summary = {"depth": info.get("depth"), "seldepth": info.get("seldepth"), "nodes": info.get("nodes"),
+               "nps": info.get("nps"), "time_ms": round(info["time"] * 1000) if "time" in info else None,
+               "pv_san": pv}
+    summary["score"] = {"mate": white.mate()} if white.is_mate() else {"cp": white.score()}
+    return summary
 
 
 def variation(board, moves, limit=10):
@@ -971,7 +1035,7 @@ def load_settings(path):
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
              "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
              "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float), "whisper": bool,
-             "mood": str}
+             "mood": str, "live_feed": str, "pgn_post": str}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -1036,7 +1100,8 @@ def run(options, parser):
         parser.error(str(error))
     flags = {"host": options.host, "port": options.port, "handle": options.handle, "engine": options.engine,
              "seeks": options.seek, "seeks_at_once": options.seeks_at_once, "rematches": options.rematches,
-             "games": options.games, "pgn_dir": options.pgn_dir, "variety": options.variety}
+             "games": options.games, "pgn_dir": options.pgn_dir, "variety": options.variety,
+             "live_feed": options.live_feed, "pgn_post": options.pgn_post}
     configured.update({key: value for key, value in flags.items() if value is not None})
     if options.no_seek:
         configured["seeks"] = []
@@ -1059,6 +1124,14 @@ def run(options, parser):
         if not separator or not name.strip():
             parser.error(f"--option expects NAME=VALUE, got {item!r}")
         settings[name.strip()] = value.strip()
+    feed_address = None
+    if configured["live_feed"]:
+        host, _, port = configured["live_feed"].rpartition(":")
+        if not port.isdigit():
+            parser.error(f"live feed must look like 8765 or 127.0.0.1:8765, got {configured['live_feed']!r}")
+        feed_address = (host or "127.0.0.1", int(port))
+    if configured["pgn_post"] and not re.match(r"https?://", configured["pgn_post"]):
+        parser.error(f"PGN post needs an http(s) URL, got {configured['pgn_post']!r}")
     for spec in configured["seeks"]:
         if not seek_pattern.fullmatch(spec):
             parser.error(f"seek spec must look like '3 0' or '5 2 u', got {spec!r}")
@@ -1103,9 +1176,23 @@ def run(options, parser):
                                        configured["layer_profiles"] or None, configured["mood"],
                                        data_root() / "moods")
             show(f"-- experience: {len(learner.records)} games")
+        events = connectors.game_events() if feed_address or configured["pgn_post"] else None
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
-                                                                  pgn_dir=pgn_dir, site=options.host, learner=learner)
+                                                                  pgn_dir=pgn_dir, site=options.host, learner=learner,
+                                                                  events=events)
+        feed = None
+        if feed_address:
+            def about():
+                engine = player.session.protocol.id.get("name") if player and player.session else None
+                return {"source": "fics", "server": options.host, "handle": player.name if player else None,
+                        "engine": engine}
+            feed = connectors.websocket_feed(events, *feed_address, about=about, on_line=show)
+        if configured["pgn_post"]:
+            events.subscribe(connectors.pgn_poster(configured["pgn_post"],
+                                                   os.environ.get("MAXDRONE_POST_TOKEN") or None, show))
         try:
+            if feed is not None:
+                await feed.start()
             if player is not None:
                 await player.start()
             status = await run_client(options, commands, show, transcript=transcript, player=player)
@@ -1113,6 +1200,8 @@ def run(options, parser):
         finally:
             if player is not None:
                 await player.close()
+            if feed is not None:
+                await feed.close()
 
     return asyncio.run(session())
 

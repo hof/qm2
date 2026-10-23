@@ -8,7 +8,8 @@ def parser():
         prog="maxima fics", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="environment:\n"
                "  FICS_PASSWORD   password for --handle (never logged)\n"
-               "  MAXDRONE_KEY    remote-control key (masked in logs)\n\n"
+               "  MAXDRONE_KEY    remote-control key (masked in logs)\n"
+               "  MAXDRONE_POST_TOKEN  bearer token for --pgn-post (never logged)\n\n"
                "remote control, from any FICS account:\n"
                "  tell <name> <key> follow       explain each move to you by tell\n"
                "  tell <name> unfollow           stop those tells\n"
@@ -22,7 +23,7 @@ def parser():
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
-                             "layer_profiles, style_books, first_move_wait, whisper, mood); "
+                             "layer_profiles, style_books, first_move_wait, whisper, mood, live_feed, pgn_post); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
@@ -50,6 +51,10 @@ def parser():
     parser.add_argument("--no-pgn", action="store_true", help="do not save games")
     parser.add_argument("--no-learning", action="store_true",
                         help="let the engine use its own book instead of MaxDrone's experience")
+    parser.add_argument("--live-feed", metavar="[HOST:]PORT",
+                        help="serve game events as JSON over WebSocket (default host 127.0.0.1; MAXIMA.md 11)")
+    parser.add_argument("--pgn-post", metavar="URL",
+                        help="POST each finished game as JSON to this URL (MAXIMA.md 11)")
     parser.add_argument("--variety", type=float,
                         help="opening variety: above 1 explores more, below 1 repeats winners (default: 1)")
     return parser

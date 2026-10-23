@@ -13,7 +13,7 @@ import chess.engine
 import chess.pgn
 import chess.polyglot
 
-from maxima_runner import experience, fics, fics_game, learning
+from maxima_runner import connectors, experience, fics, fics_game, learning
 from maxima_runner.uci import open_engine
 
 observed = (Path(__file__).parent / "data" / "fics_observed_game.txt").read_text().splitlines()
@@ -282,6 +282,21 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         info = {"depth": 18, "score": chess.engine.PovScore(chess.engine.Mate(5), chess.BLACK), "tbhits": 3}
         self.assertEqual(fics.search_whisper(info, chess.BLACK, "21...Qd5+ 22. Qd6", "out of book"),
                          "d18 #5 TB 21...Qd5+ 22. Qd6 (out of book)")
+
+    async def test_game_events_follow_the_game(self):
+        events = connectors.game_events()
+        seen = []
+        events.subscribe(seen.append)
+        player = await self.player("play", events=events)
+        await player.handle(start)
+        await self.settle(player)
+        await player.handle(after_e4)
+        await player.handle("{Game 17 (GuestHJGC vs. guestNinja) guestNinja resigns} 1-0")
+        self.assertEqual([event["type"] for event in seen], ["game_start", "move", "game_end"])
+        start_event, move, end = seen
+        self.assertEqual((start_event["our_color"], start_event["white"]), ("white", "GuestHJGC"))
+        self.assertEqual((move["san"], move["by"], move["search"]["score"]), ("e4", "us", {"cp": 25}))
+        self.assertIn("1. e4", end["pgn"])
 
     async def test_game_end_cancels_search(self):
         player = await self.player("hang")
