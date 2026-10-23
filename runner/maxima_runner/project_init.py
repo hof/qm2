@@ -17,7 +17,7 @@ from .project import data_root, project_root
 
 # Chris Whittington's polyglot-books collection: Noomen's Rebel book and his gambit-minded Daring.
 polyglot_books = "https://github.com/ChrisWhittington/polyglot-books/releases/download/v1.0/"
-polyglot_credit = "Chris Whittington's polyglot-books. Thanks Chris!"
+polyglot_credit = "Chris Whittington's polyglot-books collection"
 # Our own books, built by maxima experience:draw and experience:fire (MAXIMA.md 9.7).
 maxima_books = "https://github.com/hof/qm2/releases/download/books-v1/"
 # Pinned downloads: file, archive URL, archive member, size, SHA-256, source.
@@ -26,7 +26,7 @@ books = (
      "5b2f1794c20f095e23364a966f682b1c235afd46ec1f1acbc6e4bf72f1f92bfe", polyglot_credit),
     ("fire.bin", maxima_books + "fire.zip", "fire.bin", 312768,
      "a44687218c01a4f29c42fcee1359e1b489b87e7db45cce91f8df04696f64f34f",
-     "Maxima's books-v1 release: Noomen's Daring carried on by Lichess masters; thanks Chris!"),
+     "Maxima's books-v1 release: Daring by Jeroen Noomen, extended with Lichess masters moves"),
     ("draw.bin", maxima_books + "draw.zip", "draw.bin", 19904,
      "d8aeb8ebee8281a5a59435c16bcbcf5517118dc3837ce972aa3481d2b8f8daca", "Maxima's books-v1 release"),
 )
