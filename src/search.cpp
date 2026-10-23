@@ -1259,12 +1259,12 @@ int search_t::reduction(int depth, int searched_moves, int estimate, bool root_n
             || searched_moves < (root_node ? 2 : 1)) {
         return 0;
     }
-    // A negative estimate extends the move by at most one ply.
-    return std::clamp(estimate / 1024, -1, depth - 2);
+    // The estimate includes the normal ply; below it the move extends by at most one ply.
+    return std::clamp(estimate / 1024 - 1, -1, depth - 2);
 }
 
-// The unclamped reduction a move would receive at any depth, in 1/1024 plies;
-// pruning uses it to estimate the move's searched depth.
+// The unclamped depth decrement a move would receive at any depth, including the
+// normal ply, in 1/1024 plies; pruning uses it to estimate the move's searched depth.
 int search_t::reduction_estimate(int depth, int searched_moves, const move_t & move,
         bool pv, bool cut_node, int gives_check) {
     if (!lmr_enabled) {
