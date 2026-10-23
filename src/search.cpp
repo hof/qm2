@@ -2068,13 +2068,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         if (stop_all) {
             return alpha;
         } else if (null_score >= beta && std::abs(null_score) < decisive_score) {
-            constexpr int verification_reduction = 5;
-            const bool endgame_verification = depth > verification_reduction && stack->metadata.endgame;
-            if (null_verify && (endgame_verification || depth >= 12)) {
-                // Preserve the endgame verifier's existing depth floor. Even a
-                // null probe reduced to qsearch must be confirmed by real moves.
-                const int verification_depth = std::max({1, null_depth,
-                    endgame_verification ? depth - 6 : 0});
+            if (null_verify && depth >= 12) {
+                // Even a null probe reduced to qsearch must be confirmed by real moves.
+                const int verification_depth = std::max(1, null_depth);
                 int verified_score = verification_search(beta - 1, beta,
                     verification_depth, cut_node, verification_mode_t::null_move);
                 if (stop_all) {
