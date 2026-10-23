@@ -33,11 +33,17 @@ void set_option(const char * name, int value) {
     uci::in(std::string("setoption name ") + name + " value " + std::to_string(value));
 }
 
-std::pair<int, U64> run_configured(const std::string & fen) {
+// Cached score cutoffs apply only to non-PV windows, so reuse probes use one.
+int probe(search_t & search, int expected) {
+    return search.pvs(expected - 1, expected, 1, true);
+}
+
+std::pair<int, U64> run_configured(const std::string & fen, int expected = score::INVALID) {
     auto search = std::make_unique<search_t>(fen.c_str());
     prepare(*search);
     search->draw_contempt = options::get_value("DrawContempt");
-    const int result = search->pvs(-score::INF, score::INF, 1);
+    const int result = expected == score::INVALID ? search->pvs(-score::INF, score::INF, 1)
+        : probe(*search, expected);
     if (search->stop_all || search->brd.ply != 0 || search->brd.to_string() != fen
             || search->stack != search->root_stack) {
         std::cerr << "option test search aborted or failed to restore state\n";
@@ -65,7 +71,7 @@ bool test_rule50_buckets() {
         score::EXACT, first->tt_context(), {0, 99});
     int value = 0, move = 0, flag = 0;
     success &= check("different counts within a bucket must retain TT score reuse",
-        same->pvs(-score::INF, score::INF, 1) == 123 && same->nodes == 0);
+        probe(*same, 123) == 123 && same->nodes == 0);
     success &= check("another bucket must reject the score while retaining the move",
         !trans_table::retrieve(next->brd.stack->tt_key, 0, 1, value, move, flag,
             next->tt_context(), 30) && move == compact);
@@ -87,7 +93,7 @@ bool test_draw_contempt() {
         trans_table::clear();
         const auto original = run_configured(draw_fen);
         set_option("DrawContempt", before);
-        const auto unchanged = run_configured(draw_fen);
+        const auto unchanged = run_configured(draw_fen, original.first);
         success &= check("unchanged draw contempt must retain score reuse",
             unchanged.first == original.first && unchanged.second == 0);
         set_option("DrawContempt", -before);
@@ -159,7 +165,7 @@ bool test_matching_context_and_move_hint() {
     search_t matching(fen);
     prepare(matching);
     bool success = check("matching draw context must retain score cutoffs",
-        matching.pvs(-score::INF, score::INF, 1) == expected && matching.nodes == 0);
+        probe(matching, expected) == expected && matching.nodes == 0);
     search_t different("7k/8/8/8/8/8/8/KR6 w - - 99 1");
     prepare(different);
     int score = 0, move = 0, flag = 0;
@@ -188,7 +194,7 @@ bool test_clock_range_reuse() {
     search_t different("7k/8/8/8/8/8/8/KR6 w - - 8 1");
     prepare(different);
     bool success = check("ordinary clock differences must preserve score reuse",
-        different.pvs(-score::INF, score::INF, 1) == expected && different.nodes == 0);
+        probe(different, expected) == expected && different.nodes == 0);
     // Reusing a child entry must carry its restrictions into the parent's entry.
     trans_table::clear();
     search_t child("7k/8/8/8/8/8/8/KR6 w - - 4 1");
@@ -211,7 +217,7 @@ bool test_clock_range_reuse() {
                 child.tt_context(), clock));
     }
     success &= check("a cached child score must carry its range into the search stack",
-        child.pvs(-score::INF, score::INF, 1) == -500 && child.nodes == 0
+        probe(child, -500) == -500 && child.nodes == 0
         && child.stack->tt_clocks.min == 3 && child.stack->tt_clocks.max == 20);
     child.backward(&quiet);
     success &= check("cached child restrictions must reach the parent",

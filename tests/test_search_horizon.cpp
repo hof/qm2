@@ -166,8 +166,9 @@ bool test_root(const char * fen, int & probes, int & interrupted, int & exact_re
                             ++probes;
                             if (cache == 1 && mode == 1 && !direct
                                     && warm.first == -score::INF && warm.second == score::INF
-                                    && window.first == -score::INF && window.second == score::INF
+                                    && window.first == value - 1 && window.second == value
                                     && oracle.at(fen)->terminal == score::INVALID) {
+                                // Only non-PV windows take cached score cutoffs.
                                 ++exact_reuses;
                                 ok &= check(search->nodes == 0, "nonterminal exact TT was not reused", fen);
                             }

@@ -78,7 +78,8 @@ bool test_tt() {
     const int expected = cold.pvs(-score::INF, score::INF, 8);
     search_t warm(fen);
     warm.stack->in_check = warm.brd.in_check();
-    const int actual = warm.pvs(-score::INF, score::INF, 8);
+    // Only non-PV windows take cached score cutoffs.
+    const int actual = warm.pvs(expected - 1, expected, 8, true);
     if (cold.stop_all || warm.stop_all || cold.nodes == 0 || warm.nodes != 0
             || actual != expected || warm.brd.to_string() != fen) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=matching-context score reuse failed" << std::endl;

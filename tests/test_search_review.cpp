@@ -112,7 +112,9 @@ bool test_exact_pv() {
         ok &= check(search->stack->pv_count > 0 && legal_pv(*search), "cold PV invalid");
         const U64 before = search->nodes;
         const auto state = search->brd.to_string();
-        const int warm = search->pvs(-score::INF, score::INF, 3);
+        // The standard search takes cached score cutoffs only in non-PV windows.
+        const int warm = wild == 0 ? search->pvs(cold - 1, cold, 3, true)
+            : search->pvs(-score::INF, score::INF, 3);
         ok &= check(cold == warm && search->nodes == before,
             "matching exact TT score was not reused");
         ok &= check(search->stack->pv_count == 0 && legal_pv(*search),
@@ -130,7 +132,7 @@ bool test_exact_pv() {
         trans_table::store(parent.brd.stack->tt_key, 0, parent.brd.ply, 3,
             42, 0, score::EXACT, context);
         parent.stack->pv_count = 2; // stale data must be discarded on entry
-        ok &= check(parent.pvs(-score::INF, score::INF, 3) == 42
+        ok &= check(parent.pvs(41, 42, 3, true) == 42
             && parent.stack->pv_count == 0, "exact score with no move retained stale PV");
         parent.backward(&root_move);
         parent.update_pv(&root_move);
@@ -160,7 +162,7 @@ bool test_production_integration() {
             const int cold = original.pvs(-score::INF, score::INF, depth);
             ok &= check(!original.stop_all && legal_pv(original), "production cold search/PV invalid");
             const U64 before = original.nodes;
-            const int warm = original.pvs(-score::INF, score::INF, depth);
+            const int warm = original.pvs(cold - 1, cold, depth, true);
             ok &= check(cold == warm && original.nodes == before,
                 "production exact warm result differs");
             ok &= check(legal_pv(original), "production TT PV invalid");

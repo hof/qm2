@@ -252,7 +252,9 @@ bool cache_clock_and_stop() {
         reach_escape(*search);
         trans_table::store(search->brd.stack->tt_key, 0, 3, 4, cached, 0,
             score::EXACT, search->tt_context());
-        const int result = search->pvs(-1000, 1000, 2);
+        // Cached score cutoffs apply only to non-PV windows.
+        const int result = cached > 0 ? search->pvs(cached - 1, cached, 2, true)
+            : search->pvs(-1000, 1000, 2);
         success &= check("TT return must respect the proven draw floor without a false PV",
             result == std::max(0, cached)
             && (cached > 0 ? search->stack->pv_count == 0 && !search->stack->best_move.piece

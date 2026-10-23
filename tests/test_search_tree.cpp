@@ -39,7 +39,7 @@ public:
     explicit tree_search_t(const char * fen) : search_t(fen) {
         beta_pruning = null_enabled = ffp_enabled = lmr_enabled = false;
         // This artificial child contract isolates bounds/history from pruning.
-        lmp_enabled = history_pruning_enabled = main_see_enabled = false;
+        lmp_enabled = history_pruning_enabled = main_see_enabled = razoring_enabled = false;
         tablebase_limit = draw_contempt = 0;
         stack->in_check = brd.in_check();
     }
@@ -131,7 +131,8 @@ bool test_root(const node_t & node, int & probes, int & interruptions, int & res
                 researches += search->researches;
                 if (cache == 1 && *node.legal
                         && warm.first == -score::INF && warm.second == score::INF
-                        && window.first == -score::INF && window.second == score::INF) {
+                        && window.first == node.value - 1 && window.second == node.value) {
+                    // Only non-PV windows take cached score cutoffs.
                     ok &= check(search->nodes == 0, "warm exact entry was not reused", node.fen);
                 }
                 ok &= check(valid_bound(value, node.value, window.first, window.second),
