@@ -329,7 +329,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     correction_history = wild == 0 ? std::make_unique<correction_history_t>() : nullptr;
     stack->eval_result = score::INVALID;
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     stack->excluded_move = 0;
     stack->move_count = 0;
@@ -726,7 +726,7 @@ void search_t::forward() {
     stack->in_check = false;
     stack->eval_result = score::INVALID;
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     stack->excluded_move = 0;
     stack->move_count = 0;
@@ -770,7 +770,7 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->tt_clocks = {0, 101};
     stack->eval_result = score::INVALID;
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     stack->excluded_move = 0;
     stack->move_count = 0;
@@ -1259,11 +1259,11 @@ int search_t::reduction(int depth, int searched_moves, int estimate, bool root_n
             || searched_moves < (root_node ? 2 : 1)) {
         return 0;
     }
-    return std::clamp(estimate, 0, depth - 2);
+    return std::clamp(estimate / 1024, 0, depth - 2);
 }
 
-// The unclamped reduction a move would receive at any depth; pruning uses it
-// to estimate the move's searched depth.
+// The unclamped reduction a move would receive at any depth, in 1/1024 plies;
+// pruning uses it to estimate the move's searched depth.
 int search_t::reduction_estimate(int depth, int searched_moves, const move_t & move,
         bool pv, bool cut_node, int gives_check) {
     if (!lmr_enabled) {
@@ -1275,7 +1275,7 @@ int search_t::reduction_estimate(int depth, int searched_moves, const move_t & m
         std::array<std::array<int, 64>, 64> table{};
         for (int d = 1; d < 64; ++d) {
             for (int m = 1; m < 64; ++m) {
-                table[d][m] = int(1.0 + std::log(d) * std::log(m) / 3.0);
+                table[d][m] = int(1014 + std::log(d) * std::log(m) * 1024 / 2.6);
             }
         }
         return table;
@@ -1284,9 +1284,6 @@ int search_t::reduction_estimate(int depth, int searched_moves, const move_t & m
     const bool noisy = move.capture || move.promotion;
     // Captures have one bounded history component; quiets combine several.
     const int history_divisor = noisy ? 4096 : 8192;
-    int reduce = base_reductions[std::min(depth, 63)][std::min(searched_moves + 1, 63)]
-        + int(cut_node) + int(!stack->improving) - int(pv)
-        - std::clamp(history / history_divisor, -2, 2);
     bool refutation = false;
     if (!noisy) {
         const auto compact = move.to_compact();
@@ -1297,10 +1294,13 @@ int search_t::reduction_estimate(int depth, int searched_moves, const move_t & m
             refutation |= previous.piece && compact == countermoves[previous.piece][previous.tsq];
         }
     }
-    reduce += int(cut_node) + int(stack->lmr_tt_tactical)
-        + std::min(stack->lmr_alpha_raises / 2, 2);
-    reduce -= int(stack->tt_pv) + int(gives_check != 0) + int(stack->in_check)
-        + int(noisy) + int(refutation) + stack->lmr_correction;
+    int reduce = base_reductions[std::min(depth, 63)][std::min(searched_moves + 1, 63)] + 226;
+    reduce += 987 * !pv + 1601 * cut_node + 613 * !stack->improving
+        + 999 * stack->lmr_tt_tactical + 1136 * stack->lmr_tt_fail_low
+        + 384 * stack->lmr_alpha_raises;
+    reduce -= std::clamp(history * 1024 / history_divisor, -2048, 2048);
+    reduce -= 1289 * stack->tt_pv + 775 * refutation + 1024 * noisy
+        + 1361 * (gives_check != 0) + stack->lmr_correction;
     return reduce;
 }
 
@@ -1349,7 +1349,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     // A reduced aspiration re-search still belongs to the attempted iteration.
     const int report_depth = std::max(depth, attempted_depth);
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
 
     assert(root.move_count > 0);
@@ -1362,7 +1362,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     stack->tt_pv = wild == 0 && lmr_enabled;
     if (stack->tt_pv && depth >= 3 && !stack->in_check) {
         const int eval = evaluate(this);
-        stack->lmr_correction = std::min(2, std::abs(eval - stack->eval_result) / 100);
+        stack->lmr_correction = std::min(2048, std::abs(eval - stack->eval_result) * 1024 / 100);
     }
 
     /*
@@ -1891,7 +1891,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     if (!stack->excluded_move) {
         stack->tt_pv = false;
     }
-    stack->lmr_tt_tactical = false;
+    stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     assert(!cut_node || alpha + 1 == beta);
 
@@ -1974,6 +1974,12 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         tt_mode_t::main_search, &cached_pv);
     if (normal_search) {
         stack->tt_pv = lmr_enabled && (pv || cached_pv);
+        // A main-line node whose cached score already failed low is reduced more.
+        int cached_score = 0, cached_move = 0, cached_flag = 0;
+        stack->lmr_tt_fail_low = stack->tt_pv && (usable_tt_score
+            ? tt_score <= alpha
+            : trans_table::retrieve(stack->tt_key, brd.ply, 0, cached_score, cached_move,
+                cached_flag, context, brd.stack->fifty_count, nullptr) && cached_score <= alpha);
     }
     // A cached score below a legal draw escape cannot resolve this node.
     // Retain its move hint, but continue searching for something better.
@@ -2011,7 +2017,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         stack->lmr_tt_tactical = hint.piece && (hint.capture || hint.promotion)
             && brd.valid(&hint) && brd.legal(&hint);
         if (!in_check && stack->eval_result != score::INVALID) {
-            stack->lmr_correction = std::min(2, std::abs(eval - stack->eval_result) / 100);
+            stack->lmr_correction = std::min(2048, std::abs(eval - stack->eval_result) * 1024 / 100);
         }
     }
     int razor_score = alpha;
@@ -2140,7 +2146,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         const int estimate = singular ? 0
             : reduction_estimate(depth, searched_moves, *move, pv, cut_node, gives_check);
         const int reduce = singular ? 0 : reduction(depth, searched_moves, estimate);
-        const int lmr_depth = depth - estimate;
+        const int lmr_depth = std::max(0, depth - (estimate + 2057 * stack->tt_pv - 400) / 1024);
         if (!repetition_floor && !singular && prune_quiet(*move, depth, searched_moves,
                 lmr_depth, best)) {
             continue;
@@ -2279,7 +2285,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     stack->best_move.clear();
     stack->tt_move.clear();
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
 
     assert(depth <= 0);
@@ -2506,7 +2512,7 @@ void search_t::reset_stack() {
     stack = root_stack;
     stack->eval_result = score::INVALID;
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     stack->excluded_move = 0;
     stack->move_count = 0;

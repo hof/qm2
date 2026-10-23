@@ -88,6 +88,7 @@ struct search_stack_t {
     bool improving;
     bool tt_pv;
     bool lmr_tt_tactical;
+    bool lmr_tt_fail_low;
     int lmr_correction;
     int lmr_alpha_raises;
     int multiple_extensions; // Multiple-extension events on the current line.
