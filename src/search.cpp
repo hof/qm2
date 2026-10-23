@@ -1218,10 +1218,10 @@ void root_t::sort_moves(move_t * best_move) {
 }
 
 // The parent position owns both the history lookup and the node context.
-// At the real root, keep two alternatives at nominal depth before reducing.
+// At the real root, keep three alternatives at nominal depth before reducing.
 int search_t::reduction(int depth, int searched_moves, int estimate, bool root_node) {
     if (depth < 3 || !lmr_enabled
-            || searched_moves < (root_node ? 2 : 1)) {
+            || searched_moves < (root_node ? 3 : 1)) {
         return 0;
     }
     // The estimate includes the normal ply; a reduction never extends the move.
@@ -1237,12 +1237,10 @@ int search_t::reduction_estimate(int depth, int searched_moves, const move_t & m
     }
     // Immutable shared table: avoid logarithms and initialization in the loop.
     // Saturation keeps unusually deep/wide positions within the sampled range.
-    static const auto base_reductions = [] {
-        std::array<std::array<int, 64>, 64> table{};
-        for (int d = 1; d < 64; ++d) {
-            for (int m = 1; m < 64; ++m) {
-                table[d][m] = int(1014 + std::log(d) * std::log(m) * 1024 / 2.6);
-            }
+    static const auto reductions = [] {
+        std::array<int, 256> table{};
+        for (int i = 1; i < 256; ++i) {
+            table[i] = int(21.3 * std::log(i + 0.25 * std::log(i)));
         }
         return table;
     }();
@@ -1260,8 +1258,10 @@ int search_t::reduction_estimate(int depth, int searched_moves, const move_t & m
             refutation |= previous.piece && compact == countermoves[previous.piece][previous.tsq];
         }
     }
-    int reduce = base_reductions[std::min(depth, 63)][std::min(searched_moves + 1, 63)] + 226;
-    reduce += 987 * !pv + 1601 * cut_node + 613 * !stack->improving
+    // Base reduction plus the normal ply; non-improving nodes reduce one ply more.
+    const int base = reductions[std::min(depth, 255)] * reductions[std::min(searched_moves + 1, 255)];
+    int reduce = base + 503 + 1024 + 1024 * (!stack->improving && base > 915);
+    reduce += 987 * !pv + 1601 * cut_node
         + 999 * stack->lmr_tt_tactical + 1136 * stack->lmr_tt_fail_low
         + 384 * stack->lmr_alpha_raises;
     reduce -= std::clamp(history * 1024 / history_divisor, -2048, 2048);
@@ -1355,7 +1355,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         } else {
             int new_depth = depth;
             const int reduced_depth = depth - 1 - reduce;
-            stack->reduction = wild == 0 && depth >= 3 && lmr_enabled && i >= 2 ? estimate : 1024;
+            stack->reduction = wild == 0 && depth >= 3 && lmr_enabled && i >= 3 ? estimate : 1024;
             score = -pvs(-alpha - 1, -alpha, reduced_depth, true);
             stack->reduction = 1024;
             if (!stop_all && score > alpha && reduce > 0) {
