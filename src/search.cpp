@@ -1643,9 +1643,8 @@ bool search_t::probcut(int alpha, int beta, int depth, int eval, bool cut_node, 
 // itself. The full main-search frame must survive a rejected same-position probe.
 bool search_t::razor_node(int alpha, int beta, int depth, int eval, int & value) {
     const int decisive = score::TABLEBASE - MAX_PLY;
-    if (!razoring_enabled || !brd.ply || depth < 1 || depth > 3
-            || alpha + 1 != beta || stack->in_check || stack->metadata.endgame
-            || !brd.has_pieces(brd.us()) || stack->excluded_move
+    if (!razoring_enabled || !brd.ply || depth < 1
+            || alpha + 1 != beta || stack->in_check || stack->excluded_move
             || verification_mode != verification_mode_t::none
             || brd.stack->fifty_count >= 99 || std::abs(alpha) >= decisive
             || std::abs(beta) >= decisive || std::abs(eval) >= decisive
