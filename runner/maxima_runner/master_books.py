@@ -4,7 +4,6 @@ master lines that still score well wherever Daring has no move."""
 import argparse
 import heapq
 import json
-import os
 from pathlib import Path
 import struct
 import time
@@ -16,6 +15,7 @@ import chess
 import chess.polyglot
 
 from . import learning
+from .project import env_value
 
 explorer_url = "https://explorer.lichess.ovh/masters"
 
@@ -39,15 +39,8 @@ def sharpness(white, draws, black, color, floor=0.45):
 
 
 def lichess_token(root):
-    """LICHESS_TOKEN from the environment, else from <project>/.env; never logged."""
-    token = os.environ.get("LICHESS_TOKEN")
-    env = Path(root) / ".env"
-    if not token and env.is_file():
-        for line in env.read_text(encoding="utf-8").splitlines():
-            name, _, value = line.partition("=")
-            if name.strip() == "LICHESS_TOKEN":
-                token = value.strip().strip('"').strip("'")
-    return token or None
+    """LICHESS_TOKEN for the explorer (environment or .env)."""
+    return env_value("LICHESS_TOKEN", root)
 
 
 class explorer:
