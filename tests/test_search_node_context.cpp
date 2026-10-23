@@ -69,7 +69,7 @@ public:
     int entry_ply = 0;
     bool force_research = false, refute_reduction = false, cancel = false;
     explicit context_probe_t() : search_t(start) {
-        null_enabled = beta_pruning = ffp_enabled = iid_enabled = false;
+        null_enabled = beta_pruning = ffp_enabled = false;
         tablebase_limit = 0;
     }
     int pvs(int alpha, int beta, int depth, bool cut_node = false) override {

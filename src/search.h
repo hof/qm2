@@ -200,9 +200,7 @@ public:
     bool razoring_enabled;
     bool main_see_enabled;
     bool iir_enabled;
-    bool iid_enabled;
     bool q_tt_enabled;
-    bool iid_active;
     verification_mode_t verification_mode;
     bool ffp_enabled;
 
@@ -239,7 +237,6 @@ public:
     };
     singular_result_t singular_extension(int alpha, int beta, int depth, bool cut_node);
     int internal_search_depth(int depth, bool pv, bool cut_node);
-    void prepare_iid_move(int alpha, int beta, int depth);
     int verification_search(int alpha, int beta, int depth, bool cut_node,
         verification_mode_t mode, uint16_t excluded_move = 0);
     bool book_lookup();

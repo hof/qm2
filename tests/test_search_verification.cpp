@@ -40,7 +40,6 @@ public:
         ++calls;
         valid &= !null_enabled && verification_mode != verification_mode_t::none
             && alpha == 0 && beta == 1 && depth == 2 && cut_node;
-        prepare_iid_move(-100, 100, 4);
         nodes += 2;
         stack->tt_key = 999;
         stack->tt_history = 777;
@@ -55,7 +54,6 @@ public:
         stack->move_list.first = stack->searched;
         stack->excluded_move = 1234;
         stack->tt_clocks = {0, 80};
-        iid_active = !iid_active;
         stop_all = cancel;
         if (fail) {
             throw std::runtime_error("verification fixture");
@@ -71,12 +69,11 @@ bool test_scope() {
             auto search = std::make_unique<scope_probe_t>(start);
             prepare(*search);
             search->null_enabled = outcome != 1;
-            search->iid_active = outcome == 1;
             search->stack->improving = true;
             search->stack->tt_clocks = {0, 90};
             search->stack->move_list.evasion_targets = BIT(e2);
             const auto before = *search->stack;
-            const bool previous_null = search->null_enabled, previous_iid = search->iid_active;
+            const bool previous_null = search->null_enabled;
             search->cancel = outcome == 1;
             search->fail = outcome == 2;
             const auto excluded = mode == verification_mode_t::excluded_move ? compact(*search, "g1f3") : 0;
@@ -91,7 +88,7 @@ bool test_scope() {
             success &= check(search->calls == 1 && search->valid && caught == search->fail
                 && (caught || value == (search->cancel ? 0 : 50)) && search->nodes == 2
                 && search->stop_all == search->cancel && search->null_enabled == previous_null
-                && search->iid_active == previous_iid && restored(*search, start),
+                && restored(*search, start),
                 "verification must restore worker policy and retain work/cancellation on return or exception");
             success &= check(after.tt_key == before.tt_key && after.tt_history == before.tt_history
                 && after.repetition_start == before.repetition_start && after.eval_result == before.eval_result

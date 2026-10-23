@@ -52,7 +52,6 @@ namespace options {
         { "ExperienceDepth", INT, 16, "type spin default 16 min 1 max 128" },
         { "EvalFile", STRING, 0, "type string default eval.nnue" },
         { "Aspiration", BOOL, 1, "type check default true", true },
-        { "IID", BOOL, 1, "type check default true", true },
         { "IIR", BOOL, 1, "type check default true", true },
         { "Razoring", BOOL, 1, "type check default true", true },
         { "LMP", BOOL, 1, "type check default true", true },
@@ -85,7 +84,6 @@ namespace options {
         , { "NNUEAuditFutility", BOOL, 0, "type check default false", true }
         , { "NNUEAuditLMR", BOOL, 0, "type check default false", true }
         , { "NNUEAuditHashMoves", BOOL, 0, "type check default false", true }
-        , { "NNUEAuditIID", BOOL, 0, "type check default false", true }
         , { "NNUEAuditAspiration", BOOL, 0, "type check default false", true }
         , { "NNUEAuditDelta", BOOL, 0, "type check default false", true }
 #endif

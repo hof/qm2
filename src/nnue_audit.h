@@ -49,9 +49,7 @@ struct audit_counters_t {
     uint64_t iir_reductions = 0, iir_pv = 0, iir_cut = 0;
     uint64_t iir_cutoffs = 0, iir_cancelled = 0, iir_terminals = 0;
     uint64_t min_iir_depth = 0, max_iir_depth = 0;
-    uint64_t iid_calls = 0, iid_candidates = 0, iid_moves = 0, iid_cancelled = 0, iid_visits = 0;
     uint64_t verification_calls = 0, excluded_calls = 0, verification_cancelled = 0, verification_visits = 0;
-    uint64_t min_iid_depth = 0, max_iid_depth = 0, min_iid_probe_depth = 0;
     uint64_t aspiration_searches = 0, aspiration_attempts = 0;
     uint64_t aspiration_fail_lows = 0, aspiration_fail_highs = 0;
     uint64_t aspiration_successes = 0, aspiration_cancelled = 0, aspiration_full_windows = 0;

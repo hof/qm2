@@ -29,7 +29,7 @@ public:
 void prepare(search_t & search) {
     search.draw_contempt = 0;
     search.null_enabled = search.beta_pruning = search.ffp_enabled = false;
-    search.lmr_enabled = search.iid_enabled = false;
+    search.lmr_enabled = false;
     search.tablebase_limit = 0;
     search.stack->in_check = search.brd.in_check();
 }

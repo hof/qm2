@@ -98,7 +98,7 @@ struct search_frame_scope_t {
     search_t & search;
     search_stack_t * frame;
     search_stack_t previous;
-    bool null_enabled, iid_active;
+    bool null_enabled;
     verification_mode_t mode;
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     U64 nodes_before = search.nodes;
@@ -106,7 +106,7 @@ struct search_frame_scope_t {
 
     explicit search_frame_scope_t(search_t & search)
         : search(search), frame(search.stack), previous(*search.stack),
-          null_enabled(search.null_enabled), iid_active(search.iid_active),
+          null_enabled(search.null_enabled),
           mode(search.verification_mode) {}
 
     ~search_frame_scope_t() {
@@ -121,7 +121,6 @@ struct search_frame_scope_t {
         *frame = previous;
         frame->tt_clocks.include_child(clocks, 0);
         search.null_enabled = null_enabled;
-        search.iid_active = iid_active;
         search.verification_mode = mode;
     }
 };
@@ -312,7 +311,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     razoring_enabled = wild == 0 && options::get_value("Razoring");
     main_see_enabled = wild == 0 && options::get_value("MainSEE");
     iir_enabled = wild == 0 && options::get_value("IIR");
-    iid_enabled = options::get_value("IID");
     q_tt_enabled = wild == 0 && options::get_value("QsearchTT");
     quiet_history_policy = {options::get_value("MainHistory") != 0,
         options::get_value("ContinuationHistory") != 0, options::get_value("PawnHistory") != 0};
@@ -328,7 +326,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     killers_enabled = options::get_value("Killers");
     upcoming_repetition_enabled = wild == 0 && options::get_value("UpcomingRepetition");
     evasions_enabled = wild == 0 && options::get_value("CheckEvasions");
-    iid_active = false;
     verification_mode = verification_mode_t::none;
     ffp_enabled = options::get_value("FutilityPruning");
     draw_contempt = options::get_value("DrawContempt");
@@ -361,14 +358,13 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         correction_history_enabled = false;
         upcoming_repetition_enabled = false;
         q_tt_enabled = false;
-        beta_pruning = ffp_enabled = null_enabled = lmr_enabled = aspiration_enabled = iid_enabled = false;
+        beta_pruning = ffp_enabled = null_enabled = lmr_enabled = aspiration_enabled = false;
         nnue_audit.q_delta = false;
         null_enabled = horizon == 2 && options::get_value("NNUEAuditNullMove");
         beta_pruning = horizon == 2 && options::get_value("NNUEAuditBetaPruning");
         ffp_enabled = horizon == 2 && options::get_value("NNUEAuditFutility");
         lmr_enabled = horizon == 2 && options::get_value("NNUEAuditLMR");
         aspiration_enabled = horizon == 2 && options::get_value("NNUEAuditAspiration");
-        iid_enabled = horizon == 2 && options::get_value("NNUEAuditIID");
         nnue_audit.q_delta = horizon == 2 && options::get_value("NNUEAuditDelta");
     }
 #endif
@@ -591,15 +587,6 @@ void search_t::go() {
             + " first " + std::to_string(counts.hash_first)
             + " rejected " + std::to_string(counts.hash_rejected)
             + " score_cutoffs " + std::to_string(counts.hash_score_cutoffs));
-        uci::out("info string audit_iid calls " + std::to_string(counts.iid_calls));
-        uci::out("info string audit_iid_work candidates " + std::to_string(counts.iid_candidates)
-            + " calls " + std::to_string(counts.iid_calls)
-            + " moves " + std::to_string(counts.iid_moves)
-            + " cancelled " + std::to_string(counts.iid_cancelled)
-            + " visits " + std::to_string(counts.iid_visits)
-            + " min_depth " + std::to_string(counts.min_iid_depth)
-            + " max_depth " + std::to_string(counts.max_iid_depth)
-            + " min_probe " + std::to_string(counts.min_iid_probe_depth));
         uci::out("info string audit_tt_eval probes " + std::to_string(counts.tt_eval_probes)
             + " hits " + std::to_string(counts.tt_eval_hits)
             + " evaluations " + std::to_string(counts.neural_evaluations));
@@ -1217,8 +1204,7 @@ int search_t::corrected_static_eval(int raw) {
 void search_t::update_correction_history(int value, int bound, int depth) {
     constexpr int decisive = score::TABLEBASE - MAX_PLY;
     const auto & move = stack->best_move;
-    if (!correction_history_enabled || stop_all || stack->in_check
-            || iid_active || verification_mode != verification_mode_t::none
+    if (!correction_history_enabled || stop_all || stack->in_check || verification_mode != verification_mode_t::none
             || stack->excluded_move || stack->repetition_start > 0 || depth < 1 || !move.piece
             || move.capture || move.promotion || stack->eval_result == score::INVALID
             || std::abs(value) >= decisive || std::abs(stack->eval_result) >= decisive
@@ -1370,7 +1356,7 @@ int search_t::move_history_score(const move_t & move) {
 
 // Cached fail-highs supply ordering evidence even though no move was searched here.
 void search_t::update_tt_history(int compact_move, int depth) {
-    if (!tt_history_enabled || !brd.ply || stop_all || iid_active
+    if (!tt_history_enabled || !brd.ply || stop_all
             || verification_mode != verification_mode_t::none || stack->excluded_move
             || stack->repetition_start > 0 || brd.stack->fifty_count >= 99) {
         return;
@@ -1421,7 +1407,7 @@ void search_t::update_tt_history(int compact_move, int depth) {
 void search_t::update_quiet_cutoff(move_t * move, int depth, int searched_moves) {
     // Existing immediate-history learning is unchanged; longer contexts learn
     // only from completed ordinary searches, never same-position helpers.
-    const auto contexts = !iid_active && verification_mode == verification_mode_t::none
+    const auto contexts = verification_mode == verification_mode_t::none
         ? long_continuation_contexts() : std::array<const move_t *, 2>{};
     const auto * previous = brd.ply > 0 ? &(stack - 1)->current_move : nullptr;
     // Retain the provisional depth-weighted gravity rule; no tuning sweep.
@@ -1578,8 +1564,7 @@ int search_t::reduction(int depth, int searched_moves, bool is_dangerous, int es
     if (depth < 3 || !lmr_enabled || stack->excluded_move) {
         return 0;
     }
-    const bool contextual = context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled
-        && !iid_active && verification_mode == verification_mode_t::none;
+    const bool contextual = context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled && verification_mode == verification_mode_t::none;
     // Verification helpers retain the established tactical/ordinal guards.
     // At the real root, keep two alternatives at nominal depth before reducing.
     if (contextual ? searched_moves < (root_node ? 2 : 1)
@@ -1599,7 +1584,7 @@ int search_t::reduction_estimate(int depth, int searched_moves, const move_t & m
     if (!lmr_enabled || !adaptive_lmr_enabled) {
         return 0;
     }
-    const bool contextual = context_lmr_enabled && !iid_active
+    const bool contextual = context_lmr_enabled
         && verification_mode == verification_mode_t::none;
     // Immutable shared table: avoid logarithms and initialization in the loop.
     // Saturation keeps unusually deep/wide positions within the sampled range.
@@ -1663,7 +1648,7 @@ void search_t::record_lmr(const move_t & move, int depth, int searched_moves,
         const uint64_t child = depth - 1 - reduce + extend;
         counts.min_lmr_child_depth = counts.min_lmr_child_depth
             ? std::min(counts.min_lmr_child_depth, child) : child;
-        if (context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled && !iid_active
+        if (context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled
                 && verification_mode == verification_mode_t::none) {
             ++counts.lmr_context;
             counts.lmr_root += root_node;
@@ -1683,7 +1668,7 @@ void search_t::record_lmr(const move_t & move, int depth, int searched_moves,
 void search_t::update_lmr_history(const move_t & move, int depth, int value, int alpha, int beta) {
     // Learn only from a completed full-depth verification of a reduced trial.
     // Helpers and artificial null paths must not teach ordinary move history.
-    if (!lmr_enabled || !lmr_history_enabled || stop_all || iid_active
+    if (!lmr_enabled || !lmr_history_enabled || stop_all
             || verification_mode != verification_mode_t::none || stack->excluded_move
             || stack->repetition_start > 0 || stack->in_check
             || move.capture || move.promotion || move.castle || depth < 3
@@ -1955,7 +1940,7 @@ bool search_t::probcut(int alpha, int beta, int depth, int eval, bool cut_node, 
     const int decisive = score::TABLEBASE - MAX_PLY;
     const int threshold = beta + margin - improving_margin * int(stack->improving);
     if (!probcut_enabled || !brd.ply || depth < 5 || alpha + 1 != beta
-            || stack->in_check || iid_active || stack->excluded_move
+            || stack->in_check || stack->excluded_move
             || verification_mode != verification_mode_t::none
             || brd.ply >= MAX_PLY - 2 || brd.stack->fifty_count >= 99
             || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
@@ -2074,7 +2059,7 @@ bool search_t::razor_node(int alpha, int beta, int depth, int eval, int & value)
     const int decisive = score::TABLEBASE - MAX_PLY;
     if (!razoring_enabled || !brd.ply || depth < 1 || depth > 3
             || alpha + 1 != beta || stack->in_check || stack->metadata.endgame
-            || !brd.has_pieces(brd.us()) || iid_active || stack->excluded_move
+            || !brd.has_pieces(brd.us()) || stack->excluded_move
             || verification_mode != verification_mode_t::none
             || brd.stack->fifty_count >= 99 || std::abs(alpha) >= decisive
             || std::abs(beta) >= decisive || std::abs(eval) >= decisive
@@ -2119,7 +2104,7 @@ bool search_t::razor_node(int alpha, int beta, int depth, int eval, int & value)
 bool search_t::reverse_futility(int beta, int depth, int eval, int & value) {
     const int decisive = score::TABLEBASE - MAX_PLY;
     if (!broader_futility_enabled || !beta_pruning || depth < 1 || depth >= 9
-            || !brd.ply || stack->in_check || stop_all || iid_active
+            || !brd.ply || stack->in_check || stop_all
             || verification_mode != verification_mode_t::none || stack->excluded_move
             || stack->repetition_start > 0 || brd.stack->fifty_count >= 99
             || !brd.has_pieces(brd.us()) || std::abs(beta) >= decisive
@@ -2160,8 +2145,7 @@ bool search_t::prune_futility(move_t & move, int reduced_depth, int searched_mov
         int best, int alpha, int beta, int gives_check, int eval) {
     const int decisive = score::TABLEBASE - MAX_PLY;
     if (!broader_futility_enabled || !ffp_enabled || !brd.ply || !searched_moves
-            || stack->in_check || gives_check || stop_all
-            || iid_active || verification_mode != verification_mode_t::none
+            || stack->in_check || gives_check || stop_all || verification_mode != verification_mode_t::none
             || stack->excluded_move || stack->repetition_start > 0
             || brd.stack->fifty_count >= 99 || !brd.has_pieces(brd.us())
             || best <= -decisive || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
@@ -2199,8 +2183,7 @@ bool search_t::prune_quiet(move_t & move, int depth, int searched_moves,
     const int decisive = score::TABLEBASE - MAX_PLY;
     if ((!lmp_enabled && !history_pruning_enabled) || !brd.ply || depth < 1
             || !searched_moves || stack->in_check || stop_all
-            || move.capture || move.promotion || best <= -decisive
-            || iid_active || verification_mode != verification_mode_t::none
+            || move.capture || move.promotion || best <= -decisive || verification_mode != verification_mode_t::none
             || stack->excluded_move || stack->repetition_start > 0
             || brd.stack->fifty_count >= 99 || !brd.has_pieces(brd.us())) {
         return false;
@@ -2236,8 +2219,7 @@ bool search_t::prune_quiet(move_t & move, int depth, int searched_moves,
 // protect the clock-99 draw boundary, and allow larger sacrifices at greater depth.
 bool search_t::prune_main_see(move_t & move, int depth, int searched_moves, int best) {
     const int decisive = score::TABLEBASE - MAX_PLY;
-    if (!main_see_enabled || !brd.ply || depth < 1 || !searched_moves
-            || iid_active || verification_mode != verification_mode_t::none
+    if (!main_see_enabled || !brd.ply || depth < 1 || !searched_moves || verification_mode != verification_mode_t::none
             || stack->excluded_move || brd.stack->fifty_count >= 99
             || best <= -decisive || !brd.has_pieces(brd.us())) {
         return false;
@@ -2273,7 +2255,7 @@ bool search_t::prune_main_see(move_t & move, int depth, int searched_moves, int 
 // once; all downstream consumers, including TT storage, use the searched depth.
 int search_t::internal_search_depth(int depth, bool pv, bool cut_node) {
     if (!iir_enabled || !brd.ply || depth < 6 || (!pv && !cut_node)
-            || stack->in_check || iid_active || verification_mode != verification_mode_t::none
+            || stack->in_check || verification_mode != verification_mode_t::none
             || stack->excluded_move || brd.stack->fifty_count >= 99) {
         return depth;
     }
@@ -2292,50 +2274,6 @@ int search_t::internal_search_depth(int depth, bool pv, bool cut_node) {
     return depth - 1;
 }
 
-// A shallow PV search supplies only a move-ordering hint. Restore this
-// frame before searching the original depth, even when the helper is stopped.
-void search_t::prepare_iid_move(int alpha, int beta, int depth) {
-    if (iir_enabled || iid_active || verification_mode != verification_mode_t::none
-            || depth < 4 || alpha + 1 >= beta || stack->tt_move.piece) {
-        return;
-    }
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    ++nnue_audit.counters.iid_candidates;
-#endif
-    if (!iid_enabled) {
-        return;
-    }
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    const U64 nodes_before = nodes;
-    auto & counts = nnue_audit.counters;
-    ++counts.iid_calls;
-    counts.min_iid_depth = counts.min_iid_depth
-        ? std::min(counts.min_iid_depth, uint64_t(depth)) : depth;
-    counts.max_iid_depth = std::max(counts.max_iid_depth, uint64_t(depth));
-    counts.min_iid_probe_depth = counts.min_iid_probe_depth
-        ? std::min(counts.min_iid_probe_depth, uint64_t(depth - 2)) : depth - 2;
-#endif
-    // Keep the helper subtree free of additional IID probes.
-    move_t hint{};
-    int hint_value;
-    {
-        search_frame_scope_t scope(*this);
-        iid_active = true;
-        hint_value = pvs(alpha, beta, depth - 2, false);
-        hint = stack->best_move;
-    }
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    counts.iid_visits += nodes - nodes_before;
-    counts.iid_cancelled += stop_all;
-#endif
-    if (!stop_all && hint_value > alpha && hint.piece && brd.valid(&hint) && brd.legal(&hint)) {
-        stack->tt_move.set(&hint);
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        ++counts.iid_moves;
-#endif
-    }
-}
-
 // Only a compatible lower/exact main-search score can nominate an only move.
 // Verification owns an isolated same-position frame; retain a compact move,
 // never a pointer into its picker. A failed-low alternative is a heuristic
@@ -2345,7 +2283,7 @@ search_t::singular_result_t search_t::singular_extension(int alpha, int beta, in
     const int root_depth = attempted_depth ? attempted_depth : depth;
     if (!singular_extensions_enabled || !brd.ply || depth < 7
             || brd.ply >= 2 * root_depth || brd.ply >= MAX_PLY - 2
-            || stack->in_check || iid_active || stack->excluded_move
+            || stack->in_check || stack->excluded_move
             || verification_mode != verification_mode_t::none
             || brd.stack->fifty_count >= 99
             || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
@@ -2639,7 +2577,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
     stack->improving = is_improving();
-    if (context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled && normal_search && !iid_active) {
+    if (context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled && normal_search) {
         auto & hint = stack->tt_move;
         stack->lmr_tt_tactical = hint.piece && (hint.capture || hint.promotion)
             && brd.valid(&hint) && brd.legal(&hint);
@@ -2664,7 +2602,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         && brd.stack->fifty_count < 99;
     const bool previous_null = brd.ply > 0 && !(stack - 1)->current_move.piece;
     const bool null_policy = adaptive_null_enabled
-        ? brd.ply > 0 && cut_node && depth > 2 && normal_search && !iid_active
+        ? brd.ply > 0 && cut_node && depth > 2 && normal_search
             && !repetition_floor && eval + 132 * int(stack->improving) >= beta + 8 * depth
         : eval >= beta + null_move_margin;
     const bool do_null = null_enabled && !previous_null && null_policy;
@@ -2774,10 +2712,6 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
     const bool iir_reduced = depth != depth_before_iir;
 #endif
-    prepare_iid_move(alpha, beta, depth);
-    if (stop_all) {
-        return alpha;
-    }
 
     int probcut_score = alpha;
     if (!pv && !repetition_floor && probcut(alpha, beta, depth, eval, cut_node, probcut_score)) {
@@ -2909,8 +2843,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         (stack - 1)->move_count = searched_moves + 1;
         record_lmr(*move, depth, searched_moves, reduce, extend, gives_check, false);
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        const bool contextual = context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled
-            && !iid_active && verification_mode == verification_mode_t::none;
+        const bool contextual = context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled && verification_mode == verification_mode_t::none;
         if (!excluded_move && depth >= 3 && (contextual ? searched_moves >= 1
                 : searched_moves >= 3 && !is_dangerous)) {
             ++nnue_audit.counters.lmr_candidates;
@@ -2967,7 +2900,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
                 if (!repetition_floor) {
                     update_correction_history(score, score::LOWERBOUND, depth);
                 }
-                if (normal_search && !iid_active) {
+                if (normal_search) {
                     update_capture_cutoff(*move, depth, searched_moves);
                 }
                 if (normal_search && !move->capture && !move->promotion && !move->castle) {
@@ -2976,11 +2909,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
                         countermoves[previous.piece][previous.tsq] = move->to_compact();
                     }
 #ifdef MAXIMA_NNUE_SEARCH_AUDIT
-                    if (!iid_active) {
-                        ++nnue_audit.counters.quiet_ordering_cutoffs;
-                        nnue_audit.counters.quiet_ordering_rank_sum += searched_moves + 1;
-                        nnue_audit.counters.quiet_ordering_first += searched_moves == 0;
-                    }
+                    ++nnue_audit.counters.quiet_ordering_cutoffs;
+                    nnue_audit.counters.quiet_ordering_rank_sum += searched_moves + 1;
+                    nnue_audit.counters.quiet_ordering_first += searched_moves == 0;
 #endif
                     update_quiet_cutoff(move, depth, searched_moves);
                     // A returned move can alias killer[1]; update killers last.
@@ -3325,10 +3256,7 @@ void search_t::reset_stack() {
     counts.iir_reductions = counts.iir_pv = counts.iir_cut = 0;
     counts.min_iir_depth = counts.max_iir_depth = 0;
     counts.iir_cutoffs = counts.iir_cancelled = counts.iir_terminals = 0;
-    counts.iid_calls = counts.iid_candidates = counts.iid_moves = 0;
     counts.verification_calls = counts.excluded_calls = counts.verification_cancelled = counts.verification_visits = 0;
-    counts.iid_cancelled = counts.iid_visits = 0;
-    counts.min_iid_depth = counts.max_iid_depth = counts.min_iid_probe_depth = 0;
 #endif
     pruned_nodes = 0;
     stack->pv_count = 0;
