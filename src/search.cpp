@@ -1981,30 +1981,29 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     const U64 context = normal_search ? tt_context() : 0;
     clock_range_t tt_clocks;
     int tt_move = 0, tt_flag = 0, tt_score;
-    const bool probe_tt = normal_search, use_tt_scores = normal_search;
     bool cached_pv = false;
-    const bool usable_tt_score = probe_tt && trans_table::retrieve(stack->tt_key, brd.ply,
+    const bool usable_tt_score = normal_search && trans_table::retrieve(stack->tt_key, brd.ply,
         depth, tt_score, tt_move, tt_flag, context, brd.stack->fifty_count, &tt_clocks,
         tt_mode_t::main_search, &cached_pv);
     stack->tt_pv = lmr_enabled && (pv || cached_pv);
     // A cached score below a legal draw escape cannot resolve this node.
     // Retain its move hint, but continue searching for something better.
-    if (usable_tt_score && use_tt_scores && (!repetition_floor || tt_score >= draw_score())) {
-        // A compatible exact score resolves either side of a non-PV window too.
+    if (!pv && usable_tt_score && (!repetition_floor || tt_score >= draw_score())) {
+        // A compatible exact score resolves either side of the window.
         if (tt_flag == score::EXACT) {
-            if (!pv && !repetition_floor && tt_score >= beta
+            if (!repetition_floor && tt_score >= beta
                     && std::abs(tt_score) < score::TABLEBASE - MAX_PLY) {
                 update_tt_history(tt_move, depth);
             }
             stack->tt_clocks.include_child(tt_clocks, 0);
             return tt_score;
-        } else if (!pv && tt_score >= beta && tt_flag == score::LOWERBOUND) {
+        } else if (tt_score >= beta && tt_flag == score::LOWERBOUND) {
             if (!repetition_floor && std::abs(tt_score) < score::TABLEBASE - MAX_PLY) {
                 update_tt_history(tt_move, depth);
             }
             stack->tt_clocks.include_child(tt_clocks, 0);
             return tt_score;
-        } else if (!pv && tt_score <= alpha && tt_flag == score::UPPERBOUND) {
+        } else if (tt_score <= alpha && tt_flag == score::UPPERBOUND) {
             stack->tt_clocks.include_child(tt_clocks, 0);
             return tt_score;
         }
