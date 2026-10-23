@@ -16,36 +16,12 @@
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  *  
  * File: evaluate.cpp
- * Neural evaluation and search metadata for standard chess
+ * Neural evaluation for standard chess
  */
 
 #include "eval.h"
 #include "search.h"
 #include "progress.h"
-
-search_metadata_t search_metadata(const board_t & board) {
-    search_metadata_t result{};
-    const U64 white = board.bb[WPAWN];
-    const U64 black = board.bb[BPAWN];
-    const U64 white_files = white | ((white & ~FILE_A) >> 1) | ((white & ~FILE_H) << 1);
-    const U64 black_files = black | ((black & ~FILE_A) >> 1) | ((black & ~FILE_H) << 1);
-    result.passed_pawns = (white & ~(fill_south(white | black_files) >> 8))
-        | (black & ~(fill_north(black | white_files) << 8));
-    result.endgame = max_1(white) || max_1(black);
-    if (!result.endgame) {
-        for (bool us : {false, true}) {
-            if (board.bb[ROOK[us]] || board.bb[QUEEN[us]]) {
-                continue;
-            }
-            const int minors = popcnt0(board.bb[KNIGHT[us]] | board.bb[BISHOP[us]]);
-            if (minors < 2 || (minors == 2 && !board.bb[BISHOP[us]])) {
-                result.endgame = true;
-                break;
-            }
-        }
-    }
-    return result;
-}
 
 int evaluate(search_t * search) {
     if (search->stack->in_check && search->brd.ply < (MAX_PLY - 1)) {
@@ -56,7 +32,6 @@ int evaluate(search_t * search) {
         return search->corrected_static_eval(search->stack->eval_result);
     }
     assert(search->evaluation_network);
-    search->stack->metadata = search_metadata(search->brd);
     const int result = damp_rule50(search->neural_static_score(), search->brd.stack->fifty_count);
     search->stack->eval_result = result;
     return search->corrected_static_eval(result);

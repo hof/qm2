@@ -39,8 +39,6 @@ bool test_castling() {
         original.stack->in_check = original.brd.in_check();
         original.draw_contempt = original.tablebase_limit = 0;
         const int eval = evaluate(&original);
-        ok &= check(original.stack->in_check || original.stack->metadata.endgame,
-            "castling oracle requires unpruned endgame or check evasions");
         original.init_root_moves();
         std::set<std::string> legal, castles;
         for (int i = 0; i < original.root.move_count; ++i) {

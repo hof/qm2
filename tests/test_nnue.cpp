@@ -51,163 +51,6 @@ bool check_activation_clipping() {
     return true;
 }
 
-U64 reference_passers(const board_t & board) {
-    U64 result = 0;
-    for (int from = 8; from < 56; ++from) {
-        const int piece = board.matrix[from];
-        if (piece != WPAWN && piece != BPAWN) {
-            continue;
-        }
-        const int step = piece == WPAWN ? 1 : -1;
-        bool passed = true;
-        for (int rank = RANK(from) + step; rank >= 0 && rank < 8; rank += step) {
-            for (int file = MAX(0, FILE(from) - 1); file <= MIN(7, FILE(from) + 1); ++file) {
-                const int ahead = board.matrix[rank * 8 + file];
-                if (ahead == (piece == WPAWN ? BPAWN : WPAWN)
-                        || (file == FILE(from) && ahead == piece)) {
-                    passed = false;
-                }
-            }
-        }
-        if (passed) {
-            result |= BIT(from);
-        }
-    }
-    return result;
-}
-
-bool check_search_metadata(search_t & search) {
-    auto & board = search.brd;
-    bool endgame = false;
-    for (bool us : {false, true}) {
-        const int pawns = board.count(PAWN[us]);
-        const int knights = board.count(KNIGHT[us]);
-        const int bishops = board.count(BISHOP[us]);
-        endgame |= pawns <= 1 || (!board.count(ROOK[us]) && !board.count(QUEEN[us])
-            && (knights + bishops < 2 || (knights == 2 && bishops == 0)));
-    }
-    search.stack->metadata = search_metadata(board);
-    return check(search.stack->metadata.endgame == endgame
-        && search.stack->metadata.passed_pawns == reference_passers(board),
-        "Search pruning metadata must match independent material and square-scan references");
-}
-
-bool check_metadata_positions() {
-    std::mt19937_64 random(20261017);
-    // Compare independent search metadata on every legal child, null and undo.
-    for (const char * fen : {
-            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-            "r3k2r/ppp2ppp/8/8/8/8/PPP2PPP/R3K2R w KQkq - 0 1",
-            "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
-            "1r5k/Pppppppp/8/8/8/8/1PPPPPPP/K7 w - - 0 1",
-            "4r1k1/8/8/8/8/8/3B4/4K3 w - - 0 1",
-            "7k/8/5KQ1/8/8/8/8/8 w - - 99 1"}) {
-        auto search = std::make_unique<search_t>(fen);
-        if (!check_search_metadata(*search)) {
-            return false;
-        }
-        const U64 parent_passers = search->stack->metadata.passed_pawns;
-        const bool parent_endgame = search->stack->metadata.endgame;
-        std::vector<move_t> moves;
-        for (auto * move = move::first(search.get(), 1); move; move = move::next(search.get(), 1)) {
-            if (!search->brd.legal(move)) {
-                continue;
-            }
-            moves.push_back(*move);
-        }
-        for (auto & move : moves) {
-            search->forward(&move, search->brd.gives_check(&move));
-            if (!check_search_metadata(*search)) {
-                return false;
-            }
-            search->backward(&move);
-            if (!check(search->stack->metadata.passed_pawns == parent_passers
-                    && search->stack->metadata.endgame == parent_endgame,
-                    "A child metadata update must not change its parent")) {
-                return false;
-            }
-        }
-        if (!search->brd.in_check()) {
-            search->forward();
-            if (!check_search_metadata(*search)) {
-                return false;
-            }
-            search->backward();
-        }
-        if (!check_search_metadata(*search)) {
-            return false;
-        }
-    }
-    // Actual legal play checks retained metadata with
-    // evolving material, king moves and both sides to move.
-    for (int game = 0; game < 24; ++game) {
-        auto search = std::make_unique<search_t>(
-            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-        std::vector<move_t> played;
-        for (int ply = 0; ply < 100; ++ply) {
-            if (!check_search_metadata(*search)) {
-                return false;
-            }
-            std::vector<move_t> moves;
-            for (auto * move = move::first(search.get(), 1); move; move = move::next(search.get(), 1)) {
-                if (!search->brd.legal(move)) {
-                    continue;
-                }
-                moves.push_back(*move);
-            }
-            if (moves.empty()) {
-                break;
-            }
-            played.push_back(moves[random() % moves.size()]);
-            auto & move = played.back();
-            search->forward(&move, search->brd.gives_check(&move));
-        }
-        while (!played.empty()) {
-            search->backward(&played.back());
-            played.pop_back();
-            if (!check_search_metadata(*search)) {
-                return false;
-            }
-        }
-    }
-    // Arbitrary disjoint pawn sets stress edge files, doubled/tripled pawns
-    // and same-rank enemies. No evaluation is needed for these synthetic boards.
-    auto synthetic = std::make_unique<search_t>("7k/8/8/8/8/8/8/K7 w - - 0 1");
-    for (int trial = 0; trial < 20000; ++trial) {
-        for (int square = 8; square < 56; ++square) {
-            synthetic->brd.matrix[square] = EMPTY;
-        }
-        synthetic->brd.bb[WPAWN] = synthetic->brd.bb[BPAWN] = 0;
-        for (bool us : {false, true}) {
-            for (int count = int(random() % 9); count > 0; --count) {
-                const int square = 8 + random() % 48;
-                if (synthetic->brd.matrix[square] == EMPTY) {
-                    synthetic->brd.matrix[square] = PAWN[us];
-                    synthetic->brd.bb[PAWN[us]] |= BIT(square);
-                }
-            }
-        }
-        U64 occupied = synthetic->brd.bb[WPAWN] | synthetic->brd.bb[BPAWN]
-            | synthetic->brd.bb[WKING] | synthetic->brd.bb[BKING];
-        for (bool us : {false, true}) {
-            for (int piece : {KNIGHT[us], BISHOP[us], ROOK[us], QUEEN[us]}) {
-                synthetic->brd.bb[piece] = 0;
-                for (int count = int(random() % 5); count > 0; --count) {
-                    const int square = random() % 64;
-                    if (!(occupied & BIT(square))) {
-                        synthetic->brd.bb[piece] |= BIT(square);
-                        occupied |= BIT(square);
-                    }
-                }
-            }
-        }
-        if (!check_search_metadata(*synthetic)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 // Independent wide arithmetic also checks the scalar production fallback.
 template<size_t input_size>
 bool check_affine() {
@@ -277,11 +120,9 @@ int main() {
         return 1;
     }
     const char * fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    success &= check_metadata_positions();
     auto neural_storage = std::make_unique<search_t>(fen);
     auto & neural = *neural_storage;
-    success &= check(evaluate(&neural) == 100 && neural.stack->metadata == search_metadata(neural.brd),
-        "NNUE score must retain only the required search metadata");
+    success &= check(evaluate(&neural) == 100, "NNUE score must use the network");
     // Raw neural scores stay constant; only the separate rule50 policy scales
     // the result, without blending or falling back to classical evaluation.
     for (const char * position : {
@@ -306,7 +147,7 @@ int main() {
             "Rule50 bucket boundaries must scale once and preserve raw neural scores");
     }
     // A repeated board at another clock reuses the undamped static score.
-    // It must still populate owned metadata and apply the current clock once.
+    // It must still apply the current clock once.
     {
         const char * cached_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 8 1";
         auto cached = std::make_unique<search_t>(cached_fen);
@@ -323,10 +164,9 @@ int main() {
         success &= check(cached->brd.stack->tt_key == key && cached->brd.stack->fifty_count == 12,
             "A reversible cycle must revisit the board across a rule50 bucket boundary");
         success &= check(evaluate(cached.get()) == 90 && cached->neural_static_score() == 100
-            && cached->stack->metadata == search_metadata(cached->brd)
             && !cached->evaluation_accumulators[cached->brd.ply].ready[0]
             && !cached->evaluation_accumulators[cached->brd.ply].ready[1],
-            "Neural cache hits must skip inference and preserve clock/metadata contracts");
+            "Neural cache hits must skip inference and preserve the clock contract");
         for (size_t i = cycle.size(); i > 0; --i) cached->backward(&cycle[i - 1]);
         cached->init(cached_fen, nullptr, nullptr);
         // Isolate worker-local invalidation: shared TT evaluation can otherwise

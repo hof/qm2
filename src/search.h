@@ -92,7 +92,6 @@ struct search_stack_t {
     int lmr_alpha_raises;
     int multiple_extensions; // Multiple-extension events on the current line.
     uint16_t excluded_move;
-    search_metadata_t metadata;
     U64 tt_key;
     U64 tt_history;
     clock_range_t tt_clocks;
@@ -284,26 +283,6 @@ public:
         assert(brd.ply > 0);
         move_t * prev_move = &(stack - 1)->current_move;
         return move->capture && prev_move->capture && move->tsq == prev_move->tsq;
-    }
-
-    bool is_passed_pawn(const move_t * move) {
-        if (move->piece != WPAWN && move->piece != BPAWN) {
-            return false;
-        }
-        if (move->capture || stack->in_check || stack->eval_result == score::INVALID) {
-            return false;
-        }
-        return BIT(move->ssq) & stack->metadata.passed_pawns & SIDE[brd.them()];
-    }
-    
-    bool is_advanced_passed_pawn(const move_t * move) {
-        if (move->piece == WPAWN && move->tsq >= a6 && is_passed_pawn(move)) {
-            return true;
-        } else if (move->piece == BPAWN && move->tsq <= h3 && is_passed_pawn(move)) {
-            return true;
-        } else {
-            return false;
-        }
     }
 
     search_stack_t * get_stack(int ply) {

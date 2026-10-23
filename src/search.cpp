@@ -1196,7 +1196,7 @@ int search_t::init_root_moves() {
         }
         int gives_check = brd.gives_check(move);
         const bool is_dangerous = wild != 0 && (root.in_check || gives_check
-            || move->capture || move->promotion || is_passed_pawn(move));
+            || move->capture || move->promotion);
         root_move_t * rmove = &root.moves[root.move_count++];
         rmove->init(move, gives_check, is_dangerous, wild != 0 ? brd.see(move) : 0);
     }
@@ -1310,8 +1310,7 @@ int search_t::reduction_estimate(int depth, int searched_moves, const move_t & m
     reduce += int(cut_node) + int(stack->lmr_tt_tactical)
         + std::min(stack->lmr_alpha_raises / 2, 2);
     reduce -= int(stack->tt_pv) + int(gives_check != 0) + int(stack->in_check)
-        + int(noisy) + int(refutation) + stack->lmr_correction
-        + int(!noisy && is_advanced_passed_pawn(&move));
+        + int(noisy) + int(refutation) + stack->lmr_correction;
     return reduce;
 }
 
@@ -1708,7 +1707,7 @@ bool search_t::prune_futility(move_t & move, int reduced_depth, int searched_mov
             || stack->excluded_move || stack->repetition_start > 0
             || brd.stack->fifty_count >= 99 || !brd.has_pieces(brd.us())
             || best <= -decisive || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
-            || move.promotion || move.castle || is_advanced_passed_pawn(&move)) {
+            || move.promotion) {
         return false;
     }
     const bool capture = move.capture;
