@@ -331,6 +331,8 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     stack->improving = false;
     stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
+    stack->reduction = 1024;
+    stack->static_eval = score::INVALID;
     stack->excluded_move = 0;
     stack->move_count = 0;
     stack->multiple_extensions = 0;
@@ -728,6 +730,8 @@ void search_t::forward() {
     stack->improving = false;
     stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
+    stack->reduction = 1024;
+    stack->static_eval = score::INVALID;
     stack->excluded_move = 0;
     stack->move_count = 0;
     brd.forward();
@@ -772,6 +776,8 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->improving = false;
     stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
+    stack->reduction = 1024;
+    stack->static_eval = score::INVALID;
     stack->excluded_move = 0;
     stack->move_count = 0;
     brd.forward(move);
@@ -1352,6 +1358,8 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     stack->improving = false;
     stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
+    stack->reduction = 1024;
+    stack->static_eval = score::INVALID;
 
     assert(root.move_count > 0);
     int best = -score::INF;
@@ -1363,6 +1371,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     stack->tt_pv = wild == 0 && lmr_enabled;
     if (stack->tt_pv && depth >= 3 && !stack->in_check) {
         const int eval = evaluate(this);
+        stack->static_eval = eval;
         stack->lmr_correction = std::min(2048, std::abs(eval - stack->eval_result) * 1024 / 100);
     }
 
@@ -1894,6 +1903,8 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     }
     stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
+    stack->reduction = 1024;
+    stack->static_eval = score::INVALID;
     assert(!cut_node || alpha + 1 == beta);
 
     assert(alpha < beta);
@@ -2012,7 +2023,18 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
+    stack->static_eval = eval;
     stack->improving = is_improving();
+    // Hindsight: a reduced move whose static evals disagree with the reduction adjusts depth.
+    const auto & parent = *(stack - 1);
+    if (brd.ply > 0 && !pv && !in_check && normal_search && parent.static_eval != score::INVALID) {
+        if (parent.reduction >= 1419 && eval + parent.static_eval < 0) {
+            ++depth;
+        }
+        if (depth >= 2 && parent.reduction >= 2494 && eval + parent.static_eval > 128) {
+            --depth;
+        }
+    }
     if (lmr_enabled && normal_search) {
         auto & hint = stack->tt_move;
         stack->lmr_tt_tactical = hint.piece && (hint.capture || hint.promotion)
@@ -2185,13 +2207,19 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         } else {
             int new_depth = depth + extend;
             const int reduced_depth = new_depth - 1 - reduce;
+            stack->reduction = depth >= 3 && lmr_enabled && !singular ? estimate : 1024;
             score = -pvs(-alpha - 1, -alpha, reduced_depth, reduce > 0 || !cut_node);
+            stack->reduction = 1024;
             if (!stop_all && score > alpha && reduce > 0) {
                 // Adjust the full-depth re-search by how far the reduced result beat the best score.
                 lmr_researched = true;
-                new_depth += int(score > best + 32 + 8 * (reduce + 1)) - int(score < best + new_depth);
+                const bool deeper = score > best + 32 + 8 * (reduce + 1);
+                const bool shallower = score < best + new_depth;
+                new_depth += int(deeper) - int(shallower);
                 if (new_depth - 1 > reduced_depth && score < score::TABLEBASE - MAX_PLY) {
+                    stack->reduction = 1024 * (1 + int(shallower) - int(deeper));
                     score = -pvs(-alpha - 1, -alpha, new_depth - 1, !cut_node);
+                    stack->reduction = 1024;
                 }
             }
             if (!stop_all && pv && score > alpha && score < beta) {
@@ -2288,6 +2316,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     stack->improving = false;
     stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
+    stack->reduction = 1024;
+    stack->static_eval = score::INVALID;
 
     assert(depth <= 0);
     assert(!stack->excluded_move);
@@ -2515,6 +2545,8 @@ void search_t::reset_stack() {
     stack->improving = false;
     stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
+    stack->reduction = 1024;
+    stack->static_eval = score::INVALID;
     stack->excluded_move = 0;
     stack->move_count = 0;
     stack->multiple_extensions = 0;

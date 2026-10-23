@@ -89,6 +89,8 @@ struct search_stack_t {
     bool tt_pv;
     bool lmr_tt_tactical;
     bool lmr_tt_fail_low;
+    int reduction; // Depth decrement of the move being searched, in 1/1024 plies.
+    int static_eval; // Corrected static evaluation, invalid in check.
     int lmr_correction;
     int lmr_alpha_raises;
     int multiple_extensions; // Multiple-extension events on the current line.
