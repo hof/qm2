@@ -20,7 +20,7 @@ def archive(member, data):
 
 
 def options(**overrides):
-    values = dict(check=False, build=False, debug=False, syzygy=0, draw=False, force=False, data=None)
+    values = dict(check=False, build=False, debug=False, books=True, syzygy=0, draw=False, force=False, data=None)
     values.update(overrides)
     return argparse.Namespace(**values)
 
@@ -97,6 +97,34 @@ class init_tests(unittest.TestCase):
                          ("done", "experiment.bin, parham.bin"))
         self.assertTrue((self.root / "moods/parham.bin").is_file())
         self.assertEqual(project_init.repertoire_step(self.root, options(data=self.root))[0], "ok")
+
+    def test_network_precedes_builds_and_books_can_be_skipped(self):
+        names = [name for name, _ in project_init.steps(options(build=True, books=False))]
+        self.assertLess(names.index("network"), names.index("release build"))
+        self.assertEqual(dict(project_init.steps(options(books=False)))["book.bin"](
+            self.root, options())[0], "skipped")
+
+    def test_network_needs_both_copies(self):
+        (self.root / "tools").mkdir()
+        (self.root / "tools/download_nnue.py").write_text("")
+        (self.root / "eval.nnue").write_bytes(b"net")
+        self.assertEqual(project_init.network_step(self.root, options(data=self.root, check=True))[0], "missing")
+        (self.root / "networks").mkdir()
+        (self.root / "networks/nn-test.nnue").write_bytes(b"net")
+        self.assertEqual(project_init.network_step(self.root, options(data=self.root, check=True))[0], "ok")
+
+    def test_path_toolchain_requires_gcc_16(self):
+        def versions(gcc):
+            outputs = {"cmake": "cmake version 3.31.6", "-dumpfullversion": gcc, "--version": "c++ (GCC)"}
+            def run(command, **unused):
+                key = command[0] if command[0] == "cmake" else command[1]
+                return argparse.Namespace(stdout=outputs[key])
+            return patch.object(project_init.subprocess, "run", side_effect=run)
+        with patch.object(project_init.shutil, "which", return_value="/usr/bin/tool"):
+            with versions("13.3.0"):
+                self.assertEqual(project_init.path_toolchain(), "GCC 16+")
+            with versions("16.2.0"):
+                self.assertIsNone(project_init.path_toolchain())
 
     def test_data_directory_follows_environment(self):
         with patch.dict(project.os.environ, {"MAXIMA_DATA_DIR": str(self.root)}):
