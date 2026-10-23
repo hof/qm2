@@ -282,7 +282,7 @@ class lichess_game:
         self.task = self.searching = None
         self.searched = None
         self.clocks = {}
-        self.over = False
+        self.over = self.draw_offered = False
 
     def start(self):
         self.task = asyncio.ensure_future(self.follow())
@@ -383,6 +383,7 @@ class lichess_game:
         if state.get("status") not in ("created", "started"):
             await self.finish(state.get("status", "unknownFinish"), state.get("winner"))
             return
+        self.draw_offered = bool(state.get("wdraw" if self.color == chess.BLACK else "bdraw"))
         if state.get("wtakeback" if self.color == chess.BLACK else "btakeback"):
             await self.bot.api.post(self.path("takeback/no"))
         key = len(self.board.move_stack)
@@ -431,6 +432,10 @@ class lichess_game:
         if move is None or not board.is_legal(move):
             bot.on_line(f"-- engine returned no legal move in {board.fen()}")
             return
+        if self.draw_offered and move_choice.dead_draw(board, info):
+            # Accept, and move too: a withdrawn offer must not leave our clock running.
+            bot.on_line(f"-- game {self.id}: accepting the draw offer: dead draw")
+            await bot.api.post(self.path("draw/yes"))
         # Recorded before sending: the stream may report the move before the POST returns.
         self.record.on_search(board, move, info)
         if not await bot.api.post(self.path(f"move/{move.uci()}")):

@@ -1803,8 +1803,8 @@ chess with a clock at the configured speeds (`speeds`, `--speed`; default
 bullet, blitz and rapid; Lichess offers bots no UltraBullet), rated or casual,
 one game at a time, and declines the rest with Lichess's own reasons (`later`
 while busy or stopping, `tooFast`, `tooSlow`, `timeControl`, `standard` for
-variants). Takeback requests are declined; draw offers are ignored. When the
-opponent leaves and Lichess allows it, the win is claimed.
+variants). Takeback requests are declined; draw offers are accepted only in dead
+draws (below). When the opponent leaves and Lichess allows it, the win is claimed.
 
 Owners steer the bot from the game chat; the spectator room keeps it out of the
 opponent's sight. Lichess authenticates chat usernames, so no key is needed:
@@ -1830,6 +1830,17 @@ failures and records the game as unfinished). After HTTP 429 every request
 waits a full minute, as Lichess asks. Only one event stream per token can be
 open, so run one client per bot account. A game's end arrives on both streams;
 it is saved, reported and posted once.
+
+Draw offers, on both servers, are judged on our next move with the fresh choice
+for the current position, so an offer made right after a blunder is not
+accepted on an old evaluation. The draw is accepted when no side has mating
+material, when the online tablebase says draw for us (including cursed win and
+blessed loss, which the fifty-move rule makes draws), or when the search reached
+the tablebases and scores exactly 0.00 with seven pieces or fewer
+(`move_choice.dead_draw`). Otherwise the move declines it. The move is sent
+anyway, so an offer withdrawn meanwhile does not leave our clock running. FICS
+offers are read from `<name> offers you a draw.`, Lichess offers from the game
+state.
 
 ## 11. Connectors
 

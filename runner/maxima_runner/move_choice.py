@@ -3,9 +3,12 @@ tablebase is asked. Servers only send the move and explain it."""
 import asyncio
 import time
 
+import chess
+
 from . import online_tablebase
 
 tablebase_wait = 1.0  # seconds at most; the engine's move stands when the answer is later
+draw_categories = ("draw", "cursed-win", "blessed-loss")  # the last two are draws under the fifty-move rule
 
 
 class tablebase_lookups:
@@ -63,6 +66,18 @@ async def choose_move(session, board, limit, *, opening=None, budget_ms=None, ta
         searching.cancel()
         raise
     return result.move, result.info, "engine"
+
+
+def dead_draw(board, info):
+    """Whether to accept a draw offer, judged on our own choice for board: no mating material, a tablebase
+    draw for us, or a search that reached the tablebases and scores exactly zero with seven pieces or fewer."""
+    if board.is_insufficient_material():
+        return True
+    if "tablebase" in info:
+        return info["tablebase"]["category"] in draw_categories
+    score = info.get("score")
+    return (score is not None and bool(info.get("tbhits")) and not score.is_mate()
+            and chess.popcount(board.occupied) <= online_tablebase.max_pieces and score.relative.score() == 0)
 
 
 def tablebase_reason(answer):

@@ -274,6 +274,7 @@ gone_pattern = re.compile(r"^(?P<name>[A-Za-z]{3,17}) is not logged in\.$")
 remote_commands = ("follow", "softquit", "softrestart", "help", "!abort", "!resign", "!draw")
 # Exit status after softrestart (EX_TEMPFAIL): a supervisor loop starts MaxDrone again with the latest code.
 restart_status = 75
+draw_offer_pattern = re.compile(r"^(?:Your opponent|[A-Za-z]+) offers you a draw\.")
 finger_pattern = re.compile(r"^Finger of (?P<name>[A-Za-z]+)(?P<titles>(?:\([A-Z*]+\))*):")
 playable_types = ("lightning", "blitz", "standard")
 chess_titles = ("GM", "IM", "FM", "WGM", "WIM", "WFM", "CM", "WCM", "NM")
@@ -448,7 +449,7 @@ class engine_player:
         self.learner = learner
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line)
         self.opening = None
-        self.from_book = False
+        self.from_book = self.draw_offered = False
         self.announced_mood = None
         self.contempt = None
         self.fingered = False
@@ -630,6 +631,9 @@ class engine_player:
         elif line.startswith("Illegal move") and self.game is not None and self.retried != self.searched:
             self.retried = self.searched
             await self.send("refresh")
+        elif draw_offer_pattern.match(line) and self.game is not None:
+            self.draw_offered = True
+            self.on_line("-- draw offered; accepted on our move only in a dead draw")
         elif creating_pattern.match(line):
             await self.on_creating(creating_pattern.match(line))
         elif challenge_pattern.match(line):
@@ -789,7 +793,7 @@ class engine_player:
             self.game, self.token, self.history = position.game, object(), history
             self.record = fics_game.game_record({})
             self.opening = None
-            self.from_book = False
+            self.from_book = self.draw_offered = False
             self.our_color = position.turn if position.relation == fics_game.playing_my_move else not position.turn
             self.on_line(f"-- game {self.game}: {position.white} vs {position.black}, "
                          f"{position.initial_seconds // 60} {position.increment_seconds}")
@@ -880,6 +884,11 @@ class engine_player:
         if move is None or not board.is_legal(move):
             self.on_line(f"-- engine returned no legal move in {board.fen()}")
             return
+        if self.draw_offered and move_choice.dead_draw(board, info):
+            # Accept, and move too: a withdrawn offer must not leave our clock running.
+            self.on_line("-- accepting the draw offer: dead draw")
+            await self.send("draw")
+        self.draw_offered = False
         await self.send(fics_game.ics_move(move))
         if self.record is not None:
             self.record.on_search(board, move, info)

@@ -323,6 +323,17 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(player.tablebase.pause, 0)
         probe.assert_called_once()
 
+    async def test_draw_offer_is_accepted_in_a_tablebase_draw(self):
+        ending = ("<12> ----k--- -------- -------- -------- -------- -------- ----P--- R---K--- W -1 0 0 0 0 0 17 "
+                  "GuestHJGC guestNinja 1 3 0 5 0 180000 180000 1 none (0:00.000) none 0 0 0")
+        player = await self.player("think", online_tablebase=True)
+        drawn = {"move": chess.Move.from_uci("a1a7"), "category": "draw", "dtz": 0, "dtm": None}
+        with patch.object(online_tablebase, "probe", side_effect=lambda *unused: time.sleep(0.2) or drawn):
+            await player.handle(ending)
+            await player.handle("guestNinja offers you a draw.")
+            await self.settle(player)
+        self.assertEqual(player.connection.sent, ["draw", "a1a7"])
+
     async def test_engine_move_stands_when_the_tablebase_is_late(self):
         ending = ("<12> ----k--- -------- -------- -------- -------- -------- ----P--- R---K--- W -1 0 0 0 0 0 17 "
                   "GuestHJGC guestNinja 1 3 0 5 0 180000 180000 1 none (0:00.000) none 0 0 0")

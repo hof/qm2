@@ -40,3 +40,17 @@ class online_tablebase_tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class dead_draw_tests(unittest.TestCase):
+    def test_accepts_only_dead_draws(self):
+        from maxima_runner.move_choice import dead_draw
+        import chess.engine
+        bishop = chess.Board("8/8/8/4k3/8/8/8/4KB2 b - - 0 1")
+        self.assertTrue(dead_draw(bishop, {}))
+        self.assertTrue(dead_draw(rook_ending, {"tablebase": {"category": "blessed-loss"}}))
+        self.assertFalse(dead_draw(rook_ending, {"tablebase": {"category": "win"}}))
+        level = chess.engine.PovScore(chess.engine.Cp(0), chess.WHITE)
+        self.assertTrue(dead_draw(rook_ending, {"score": level, "tbhits": 12}))
+        self.assertFalse(dead_draw(rook_ending, {"score": level}))
+        self.assertFalse(dead_draw(chess.Board(), {"score": level, "tbhits": 12}))

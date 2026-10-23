@@ -9,6 +9,9 @@ import tempfile
 import threading
 import unittest
 
+import chess
+import chess.engine
+
 from maxima_runner import connectors, lichess
 from maxima_runner.uci import open_engine
 from test_fics_game import fake_engine
@@ -66,6 +69,28 @@ class command_tests(unittest.IsolatedAsyncioTestCase):
                          ["/api/bot/game/g1/resign", "/api/bot/game/g1/chat"])
         self.assertTrue(bot.stopping)
         self.assertTrue(any("refused" in line for line in lines))
+
+
+class stub_session:
+    async def play(self, board, limit, **unused):
+        move = next(iter(board.legal_moves))
+        return chess.engine.PlayResult(move, None, {"score": chess.engine.PovScore(chess.engine.Cp(0), board.turn),
+                                                    "tbhits": 3})
+
+
+class draw_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_draw_offer_is_accepted_in_a_tablebase_draw(self):
+        api = stub_api()
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot.id, bot.session = "maximaengine", stub_session()
+        game = lichess.lichess_game(bot, "g1")
+        full = game_full()
+        full["initialFen"] = "8/8/8/4k3/8/8/2r5/R3K3 w - - 0 1"
+        game.setup(full)
+        await game.on_state(dict(full["state"], bdraw=True))
+        await game.searching
+        self.assertEqual(api.posts[0][0], "/api/bot/game/g1/draw/yes")
+        self.assertTrue(api.posts[1][0].startswith("/api/bot/game/g1/move/"))
 
 
 class fake_lichess(http.server.ThreadingHTTPServer):
