@@ -130,10 +130,17 @@ def speed(nps):
 
 
 def describe(info, turn):
+    """A searched move for the log: "d20 +0.35 480Knps"; the engine's own tablebase moves come without a
+    search ("TB win")."""
     score = info.get("score")
     depth = info.get("depth", 0)
-    if score is None or not depth:
-        return "book"
+    if score is None:
+        return "no score"
     relative = score.pov(turn)
+    if not depth:
+        if not info.get("tbhits"):
+            return "no search"
+        value = relative.score(mate_score=100000)
+        return "TB " + ("win" if value > 0 else "loss" if value < 0 else "draw")
     value = f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}"
     return f"d{depth} {value}" + (f" {speed(info['nps'])}" if info.get("nps") else "")

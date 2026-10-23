@@ -1806,8 +1806,8 @@ while busy or stopping, `tooFast`, `tooSlow`, `timeControl`, `standard` for
 variants). Takeback requests are declined; draw offers are accepted only in dead
 draws (below). When the opponent leaves and Lichess allows it, the win is claimed.
 
-In the player chat MaximaEngine greets at the start and says "Good game" at the
-end; it posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
+In both chat rooms (players and spectators) MaximaEngine greets at the start and
+says "Good game" at the end; it posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
 authors, repository) or `!eval` (our last move with depth, score and expected
 line; answered in the spectator room only, never to the opponent). Answers to
 non-owners come at most every 5 seconds per game, so chat spam cannot push the

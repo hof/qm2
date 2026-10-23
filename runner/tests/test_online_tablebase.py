@@ -54,3 +54,13 @@ class dead_draw_tests(unittest.TestCase):
         self.assertTrue(dead_draw(rook_ending, {"score": level, "tbhits": 12}))
         self.assertFalse(dead_draw(rook_ending, {"score": level}))
         self.assertFalse(dead_draw(chess.Board(), {"score": level, "tbhits": 12}))
+
+
+class describe_tests(unittest.TestCase):
+    def test_engine_tablebase_moves_are_not_called_book(self):
+        from maxima_runner.move_choice import describe
+        import chess.engine
+        won = chess.engine.PovScore(chess.engine.Cp(28000), chess.WHITE)
+        self.assertEqual(describe({"score": won, "depth": 0, "tbhits": 1}, chess.WHITE), "TB win")
+        self.assertEqual(describe({"score": won, "depth": 0, "tbhits": 1}, chess.BLACK), "TB loss")
+        self.assertTrue(describe({"score": won, "depth": 20}, chess.WHITE).startswith("d20 +280.00"))

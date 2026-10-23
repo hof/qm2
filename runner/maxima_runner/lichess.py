@@ -354,7 +354,8 @@ class lichess_game:
             group = "engines" if title == "BOT" else "masters" if title in chess_titles else "humans"
             self.opening = bot.learner.for_game(them.get("name"), group, learning.lichess_speeds.get(full["speed"]),
                                                 self.contempt, full.get("rated", False))
-        self.chat("player", f"Hi, I'm {credits}. Good luck! Type !help for commands.")
+        for room in ("player", "spectator"):
+            self.chat(room, f"Hi, I'm {credits}. Good luck! Type !help for commands.")
         clock = full.get("clock") or {}
         bot.on_line(f"-- game {self.id}: {full['white'].get('name')} vs {full['black'].get('name')}, "
                     f"{full['speed']} {'rated' if full.get('rated') else 'casual'} {bot.api.server}/{self.id}")
@@ -515,7 +516,8 @@ class lichess_game:
         reason = reasons.get(status, status)
         bot.on_line(f"-- game {self.id} over: {reason} {result}")
         if status not in ("aborted", "noStart"):
-            self.chat("player", "Good game, thanks for playing!")
+            for room in ("player", "spectator"):
+                self.chat(room, "Good game, thanks for playing!")
         game = self.pgn(result, reason, status)
         if game is not None and bot.pgn_dir is not None:
             self.save(game)
