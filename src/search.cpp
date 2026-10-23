@@ -2176,12 +2176,19 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         if (searched_moves == 0) {
             score = -pvs(-beta, -alpha, depth - 1 + extend, !pv && !cut_node);
         } else {
-            score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce + extend, reduce > 0 || !cut_node);
-            if (!stop_all && score > alpha && (pv || reduce > 0)) { //open window research without reductions
-                lmr_researched = reduce > 0;
-                const clock_range_t previous_clocks = stack->tt_clocks;
-                score = -pvs(-beta, -alpha, depth - 1 + extend, !pv && !cut_node);
-                stack->tt_clocks.include_child(previous_clocks, 0);
+            int new_depth = depth + extend;
+            const int reduced_depth = new_depth - 1 - reduce;
+            score = -pvs(-alpha - 1, -alpha, reduced_depth, reduce > 0 || !cut_node);
+            if (!stop_all && score > alpha && reduce > 0) {
+                // Adjust the full-depth re-search by how far the reduced result beat the best score.
+                lmr_researched = true;
+                new_depth += int(score > best + 32 + 8 * (reduce + 1)) - int(score < best + new_depth);
+                if (new_depth - 1 > reduced_depth && score < score::TABLEBASE - MAX_PLY) {
+                    score = -pvs(-alpha - 1, -alpha, new_depth - 1, !cut_node);
+                }
+            }
+            if (!stop_all && pv && score > alpha && score < beta) {
+                score = -pvs(-beta, -alpha, new_depth - 1, false);
             }
         }
         backward(move);

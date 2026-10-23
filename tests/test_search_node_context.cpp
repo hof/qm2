@@ -83,7 +83,7 @@ public:
                 return -10;
             }
             if (refute_reduction && visits.size() == 4) {
-                return -1;
+                return -10;
             }
             return 0;
         }
