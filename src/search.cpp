@@ -1372,7 +1372,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     } else if (depth > 1) {
         order_root_moves(depth);
     }
-    stack->tt_pv = lmr_enabled;
+    stack->tt_pv = wild == 0 && lmr_enabled;
     if (stack->tt_pv && depth >= 3 && !stack->in_check) {
         const int eval = evaluate(this);
         stack->lmr_correction = std::min(2, std::abs(eval - stack->eval_result) / 100);
