@@ -886,12 +886,22 @@ class engine_player:
                 if (self.whispering or self.followers) and self.opening.why:
                     await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
                 return
-        if await self.play_tablebase(board, clock, started):
-            return
+        # The engine searches while the online tablebase is asked, so a slow answer costs no clock time.
+        lookup = self.ask_tablebase(board)
+        search = asyncio.ensure_future(self.session.play(board, limit, game=self.token, opponent=self.opponent,
+                                                         timeout=max(clock, 1) + self.margin,
+                                                         options={"DrawContempt": self.contempt}))
         try:
-            result = await self.session.play(board, limit, game=self.token, opponent=self.opponent,
-                                             timeout=max(clock, 1) + self.margin,
-                                             options={"DrawContempt": self.contempt})
+            answer = await tablebase_first(lookup, search)
+            if answer is not None:
+                search.cancel()
+                await asyncio.wait({search})
+                await self.play_tablebase(board, answer, started)
+                return
+            result = await search
+        except asyncio.CancelledError:
+            search.cancel()
+            raise
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
             self.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
             await self.stop_engine()
@@ -919,20 +929,23 @@ class engine_player:
         self.from_book = False
 
 
-    async def play_tablebase(self, board, clock, started):
-        """Play the online tablebase move with seven or fewer pieces; any failure leaves it to the engine."""
+    def ask_tablebase(self, board):
+        """Start an online lookup with seven or fewer pieces; None when it does not apply."""
         if not self.online_tablebase or time.monotonic() < self.tablebase_pause or not online_tablebase.covers(board):
-            return False
-        try:
-            answer = await asyncio.get_running_loop().run_in_executor(
-                None, online_tablebase.probe, board, min(2.0, clock / 20))
-        except (OSError, ValueError, KeyError) as error:
-            # Offline, rate limited or slow: rest a minute rather than delay every move.
+            return None
+        lookup = asyncio.get_running_loop().run_in_executor(None, online_tablebase.probe, board.copy(),
+                                                            tablebase_wait)
+        lookup.add_done_callback(self.tablebase_failed)
+        return lookup
+
+    def tablebase_failed(self, lookup):
+        error = None if lookup.cancelled() else lookup.exception()
+        if error is not None:
+            # Offline, rate limited or slow: rest a minute rather than ask on every move.
             self.tablebase_pause = time.monotonic() + 60
             self.on_line(f"-- online tablebase unavailable ({error or type(error).__name__}); searching")
-            return False
-        if answer is None:
-            return False
+
+    async def play_tablebase(self, board, answer, started):
         move = answer["move"]
         await self.send(fics_game.ics_move(move))
         reason = tablebase_reason(answer)
@@ -942,7 +955,19 @@ class engine_player:
         if self.whispering or self.followers:
             await self.explain(f"{board.variation_san([move])} {reason}")
         self.from_book = False
-        return True
+
+
+tablebase_wait = 1.0  # seconds at most; the engine's move stands when the answer is later
+
+
+async def tablebase_first(lookup, search):
+    """The tablebase answer when it arrives before the engine's move, otherwise None."""
+    if lookup is None:
+        return None
+    await asyncio.wait({lookup, search}, return_when=asyncio.FIRST_COMPLETED)
+    if not lookup.done() or lookup.exception() is not None:
+        return None
+    return lookup.result()
 
 
 def tablebase_reason(answer):

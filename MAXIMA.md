@@ -1878,12 +1878,13 @@ HTTPServer(("0.0.0.0", 9000), games).serve_forever()
 ### 11.4 Online tablebase
 
 With seven or fewer pieces and no castling rights, MaxDrone asks
-`https://tablebase.lichess.ovh/standard?fen=<FEN>` before searching and plays the
-first move of the answer (the 7-man Syzygy tables, DTZ-optimal so the fifty-move
-rule is respected). A lookup takes about 0.75 s and its timeout is the smaller of
-2 s and a twentieth of our clock. Unknown positions fall through to the engine;
-an error (offline, rate limited, timeout) also falls through and pauses lookups
-for a minute. The move is logged, whispered and sent to the live feed as
+`https://tablebase.lichess.ovh/standard?fen=<FEN>` while the engine already
+searches, and plays the first move of the answer (the 7-man Syzygy tables,
+DTZ-optimal so the fifty-move rule is respected) when it arrives before the
+engine's move; the search is then stopped. A lookup takes about 0.75 s and gives
+up after 1 s, so it never costs clock time: in a hurry the engine simply moves
+first. Unknown positions leave the move to the engine; an error (offline, rate
+limited, timeout) also pauses lookups for a minute. The move is logged, whispered and sent to the live feed as
 `"search": {"tablebase": {"category", "dtz", "dtm"}}` (category `win`, `draw`,
 `loss`, `cursed-win`, `blessed-loss`, ...), and the PGN comment reads e.g.
 `tablebase: win DTM 27`. It is on by default; `--no-online-tablebase` (or

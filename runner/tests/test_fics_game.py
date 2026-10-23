@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -155,6 +156,8 @@ for line in sys.stdin:
         time.sleep(0.05)
         print("info depth 3 score cp 25 nodes 100 pv e2e4")
         print("bestmove e2e4", flush=True)
+    elif command == "stop" and mode == "think":
+        print("bestmove e1e2", flush=True)
     elif command == "quit":
         break
 '''
@@ -299,28 +302,36 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("1. e4", end["pgn"])
 
     async def test_endgame_move_comes_from_the_online_tablebase(self):
-        ending = ("<12> ----k--- -------- -------- -------- -------- -------- -------- R---K--- W -1 0 0 0 0 0 17 "
+        ending = ("<12> ----k--- -------- -------- -------- -------- -------- ----P--- R---K--- W -1 0 0 0 0 0 17 "
                   "GuestHJGC guestNinja 1 3 0 5 0 180000 180000 1 none (0:00.000) none 0 0 0")
-        player = await self.player("play", online_tablebase=True)
+        player = await self.player("think", online_tablebase=True)
         found = {"move": chess.Move.from_uci("a1a7"), "category": "win", "dtz": 15, "dtm": 15}
         with patch.object(fics.online_tablebase, "probe", return_value=found):
             await player.handle(ending)
             await self.settle(player)
         self.assertEqual(player.connection.sent, ["a1a7"])
-        self.assertFalse(self.positions.exists())
         self.assertTrue(any("tablebase: win DTM 15" in line for line in self.lines))
 
     async def test_unavailable_tablebase_leaves_the_move_to_the_engine(self):
-        ending = ("<12> ----k--- -------- -------- -------- -------- -------- -------- R---K--- W -1 0 0 0 0 0 17 "
+        ending = ("<12> ----k--- -------- -------- -------- -------- -------- ----P--- R---K--- W -1 0 0 0 0 0 17 "
                   "GuestHJGC guestNinja 1 3 0 5 0 180000 180000 1 none (0:00.000) none 0 0 0")
         player = await self.player("play", online_tablebase=True)
         with patch.object(fics.online_tablebase, "probe", side_effect=OSError("offline")) as probe:
             await player.handle(ending)
             await self.settle(player)
-        self.assertEqual(len(player.connection.sent), 1)
-        self.assertTrue(self.positions.exists())
+        self.assertEqual(player.connection.sent, ["e2e4"])
         self.assertGreater(player.tablebase_pause, 0)
         probe.assert_called_once()
+
+    async def test_engine_move_stands_when_the_tablebase_is_late(self):
+        ending = ("<12> ----k--- -------- -------- -------- -------- -------- ----P--- R---K--- W -1 0 0 0 0 0 17 "
+                  "GuestHJGC guestNinja 1 3 0 5 0 180000 180000 1 none (0:00.000) none 0 0 0")
+        player = await self.player("play", online_tablebase=True)
+        late = {"move": chess.Move.from_uci("a1a7"), "category": "win", "dtz": 15, "dtm": 15}
+        with patch.object(fics.online_tablebase, "probe", side_effect=lambda *unused: time.sleep(0.5) or late):
+            await player.handle(ending)
+            await self.settle(player)
+        self.assertEqual(player.connection.sent, ["e2e4"])
 
     async def test_game_end_cancels_search(self):
         player = await self.player("hang")
