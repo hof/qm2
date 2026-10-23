@@ -184,18 +184,16 @@ bool search_bounds() {
             const int draw = search->draw_score();
             const auto fen = search->brd.to_string();
             const U64 key = search->brd.stack->tt_key;
-            const U64 context = search->tt_context();
+            const U64 tt_key = search->position_key();
             const int value = qsearch ? search->qsearch(draw - 1, draw, -1)
                 : search->pvs(draw - 1, draw, 3);
             success &= check("legal escape must raise alpha and cut off before children",
                 value == draw && search->nodes == 0 && search->stack->best_move.to_string() == "f6g8"
-                && search->stack->pv_count == 1 && search->stack->tt_clocks.min == 3
+                && search->stack->pv_count == 1
                 && search->brd.to_string() == fen && search->brd.stack->tt_key == key);
-            int cached = 0, hint = 0, flag = 0;
+            tt_hit_t hit;
             success &= check("early proof must not store an ordinary TT result",
-                !trans_table::retrieve(key, search->brd.ply, 1, cached, hint, flag,
-                    context, 3, nullptr, qsearch ? tt_mode_t::quiescence_tactical : tt_mode_t::main_search)
-                && hint == 0);
+                !trans_table::probe(tt_key, search->brd.ply, 3, hit));
             move_t witness{};
             int alpha = draw;
             success &= check("alpha at draw must skip optional detection",
@@ -247,8 +245,7 @@ bool cache_clock_and_stop() {
         auto search = std::make_unique<probe_search_t>(cycle_fen);
         prepare(*search);
         reach_escape(*search);
-        trans_table::store(search->brd.stack->tt_key, 0, 3, 4, cached, 0,
-            score::EXACT, search->tt_context());
+        trans_table::store(search->position_key(), 0, 3, 4, cached, 0, score::EXACT);
         // Cached score cutoffs apply only to non-PV windows.
         const int result = cached > 0 ? search->pvs(cached - 1, cached, 2, true)
             : search->pvs(-1000, 1000, 2);
@@ -261,22 +258,9 @@ bool cache_clock_and_stop() {
     auto search = std::make_unique<probe_search_t>(cycle_fen);
     prepare(*search);
     reach_escape(*search);
-    const auto key = search->brd.stack->tt_key;
-    const auto context = search->tt_context();
     success &= check("wide search must retain the proven draw as its best move",
         search->pvs(-1000, 1000, 1) == 0 && search->stack->best_move.to_string() == "f6g8"
         && search->stack->pv_count >= 1);
-    int value = 0, move = 0, flag = 0;
-    clock_range_t clocks{};
-    success &= check("completed result must retain proof's minimum reversible clock",
-        trans_table::retrieve(key, 3, 1, value, move, flag, context, 3, &clocks)
-        && value == 0 && clocks.min == 3
-        && !trans_table::retrieve(key, 3, 1, value, move, flag, context, 2) && move != 0);
-    move_t last{};
-    last.set(WKNIGHT, f3, g1);
-    search->backward(&last);
-    success &= check("undo must propagate proof's minimum clock to its parent",
-        search->stack->tt_clocks.min == 2 && search->brd.stack->fifty_count == 2);
 
     // A better stand pat must not present the drawing witness as its winning PV.
     auto winning = std::make_unique<probe_search_t>("6nk/8/8/8/8/8/8/KR4N1 b - - 0 1");
@@ -287,8 +271,7 @@ bool cache_clock_and_stop() {
     success &= check("stand pat above draw must clear the witness PV",
         winning->qsearch(-1000, 1000, -1) > 100 && winning->stack->pv_count == 0);
     trans_table::clear();
-    trans_table::store(winning->brd.stack->tt_key, 0, 3, 4, -500, 0,
-        score::EXACT, winning->tt_context());
+    trans_table::store(winning->position_key(), 0, 3, 4, -500, 0, score::EXACT);
     success &= check("a contradictory TT score must not hide a better-than-draw continuation",
         winning->pvs(-1000, 1000, 2) > 100 && winning->nodes > 0);
 

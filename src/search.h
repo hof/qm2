@@ -97,7 +97,6 @@ struct search_stack_t {
     int multiple_extensions; // Multiple-extension events on the current line.
     uint16_t excluded_move;
     U64 tt_key;
-    clock_range_t tt_clocks;
 };
 
 enum class result_source_t { none, partial, complete, fallback, book, terminal, tablebase };
@@ -265,7 +264,7 @@ public:
     bool is_killer(move_t * const move);
     bool in_searched(move_t * move, int searched_moves);
     void reset_stack();
-    U64 tt_context() const;
+    U64 position_key() const;
     int reduction(int depth, int searched_moves, int estimate, bool root_node = false);
     int reduction_estimate(int depth, int searched_moves, const move_t & move,
         bool pv, bool cut_node, int gives_check);

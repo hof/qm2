@@ -61,8 +61,7 @@ bool test_search() {
         win.probe_tablebase(1, value)
         && value == score::TABLEBASE && !score::is_mate(value));
     success &= check("WDL win should cut off a narrow window",
-        win.pvs(0, 1, 1) == score::TABLEBASE && win.nodes == 0
-        && win.stack->tt_clocks.min == 0 && win.stack->tt_clocks.max == 0);
+        win.pvs(0, 1, 1) == score::TABLEBASE && win.nodes == 0);
     auto full_win = std::make_unique<search_t>("7k/8/8/8/8/8/8/KR6 w - - 0 1");
     prepare(*full_win);
     success &= check("Full-window search must retain the proven win",
@@ -92,12 +91,14 @@ bool test_search() {
     success &= check("Checked nodes still search their legal evasions",
         checked.pvs(-score::INF, score::INF, 1) == 0 && checked.nodes > 0);
     trans_table::clear();
-    trans_table::store(win.brd.stack->tt_key, 0, 5, 8, score::TABLEBASE - 5, 0,
-        score::LOWERBOUND, 7, {0, 0});
-    int move, flag;
+    trans_table::store(win.brd.stack->tt_key, 0, 5, 8, score::TABLEBASE - 5, 0, score::LOWERBOUND);
+    tt_hit_t hit;
     success &= check("Cached tablebase bounds must preserve distance across plies",
-        trans_table::retrieve(win.brd.stack->tt_key, 2, 1, value, move, flag, 7, 0)
-        && value == score::TABLEBASE - 2);
+        trans_table::probe(win.brd.stack->tt_key, 2, 0, hit) && hit.score == score::TABLEBASE - 2);
+    trans_table::store(win.brd.stack->tt_key, 0, 0, 8, score::MATE - 20, 0, score::LOWERBOUND);
+    success &= check("Cached mates beyond the fifty-move horizon must not stay decisive",
+        trans_table::probe(win.brd.stack->tt_key, 0, 99, hit)
+        && hit.score == score::TABLEBASE - MAX_PLY - 1);
     return success;
 }
 

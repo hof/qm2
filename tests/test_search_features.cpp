@@ -96,8 +96,8 @@ bool tt_cutoff() {
     auto s = position();
     const int cold = s->pvs(-score::INF, score::INF, 4);
     const U64 work = s->nodes;
-    // A repeated non-PV search makes no moves and returns the stored score.
-    const int warm = s->pvs(cold - 1, cold, 4, true);
+    // A repeated non-PV fail-low search makes no moves and returns the stored score.
+    const int warm = s->pvs(cold, cold + 1, 4, true);
     return check(s->nodes == work && warm == cold, "an exact TT entry answers a repeated non-PV search");
 }
 }

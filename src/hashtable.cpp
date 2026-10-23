@@ -21,9 +21,9 @@
 
 #include "hashtable.h"
 
-
 trans_table_t::trans_table_t(int size_in_MB) {
-    table = NULL;
+    table = nullptr;
+    cluster_count = 0;
     enabled = true;
     size_in_mb = -1;
     set_size(size_in_MB);
@@ -34,13 +34,11 @@ void trans_table_t::set_size(int size_in_MB) {
         return;
     }
     if (table) {
-        delete[] table;
+        ::operator delete[](table, std::align_val_t(alignof(cluster_t)));
     }
-    int entry_size = sizeof (entry_t);
-    int max_entries = (size_in_MB * 1024 * 1024) / entry_size;
-    cluster_count = MAX(1, max_entries / BUCKETS);
-    size = cluster_count * BUCKETS;
-    table = new entry_t[size];
+    cluster_count = std::max<size_t>(1, size_t(size_in_MB) * 1024 * 1024 / sizeof(cluster_t));
+    table = static_cast<cluster_t *>(::operator new[](sizeof(cluster_t) * cluster_count,
+        std::align_val_t(alignof(cluster_t))));
     size_in_mb = size_in_MB;
     clear();
 }
@@ -54,175 +52,101 @@ int trans_table_t::make_score(int score, int ply) {
     return score;
 }
 
-int trans_table_t::unmake_score(int score, int ply) {
-    if (score >= score::TABLEBASE - MAX_PLY) {
-        return score - ply;
-    } else if (score <= -score::TABLEBASE + MAX_PLY) {
-        return score + ply;
+// A decisive score that cannot be realised before the fifty-move rule is
+// returned as the best non-decisive bound.
+int trans_table_t::unmake_score(int score, int ply, int clock) {
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    if (score >= decisive) {
+        const int distance = score > score::DEEPEST_MATE ? score::MATE - score : score::TABLEBASE - score;
+        return distance > 100 - clock ? decisive - 1 : score - ply;
+    } else if (score <= -decisive) {
+        const int distance = score < -score::DEEPEST_MATE ? score::MATE + score : score::TABLEBASE + score;
+        return distance > 100 - clock ? -decisive + 1 : score + ply;
     }
     return score;
 }
 
-void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int flags, U64 context, clock_range_t clocks, tt_mode_t mode, bool pv) {
-    assert(depth > 0);
-    entry_t * best_entry = nullptr;
-    entry_t * empty_entry = nullptr;
-    int best_score = -score::INF;
-    age %= 64;
-    score = make_score(score, ply);
-    U64 value = encode(age, depth, score, move, flags, clocks, mode);
-    const int ix = index(key);
-    for (int i = 0; i < BUCKETS; ++i) {
-        entry_t & entry = table[ix + i];
-        const int stored_depth = decode_depth(entry.value);
-        if (!stored_depth) {
-            if (!empty_entry) {
-                empty_entry = &entry;
+void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int bound, int eval, bool pv) {
+    assert(depth >= 0 && depth < 255);
+    assert(bound >= 0 && bound <= 3);
+    const int current_age = age % AGES;
+    auto & entries = cluster(key).entries;
+    const uint16_t key_tag = tag(key);
+    const auto age_distance = [current_age](const entry_t & entry) {
+        return (AGES + current_age - trans_table_t::age(entry)) % AGES;
+    };
+    // Prefer the same position or an empty slot, else the shallowest, oldest entry.
+    entry_t * slot = &entries[0];
+    if (!(slot->depth == 0 || slot->tag == key_tag)) {
+        for (int i = 1; i < BUCKETS; ++i) {
+            entry_t & entry = entries[i];
+            if (entry.depth == 0 || entry.tag == key_tag) {
+                slot = &entry;
+                break;
             }
-            continue;
-        }
-        if ((entry.key ^ entry.value) == key) {
-            if (!move) {
-                value |= decode_move(entry.value);
+            if (slot->depth - 4 * age_distance(*slot) > entry.depth - 4 * age_distance(entry)) {
+                slot = &entry;
             }
-            // Scores from different contexts or clock domains are not competing
-            // bounds. Keep the current search's result rather than stranding it.
-            const clock_range_t stored_clocks = decode_clocks(entry.value);
-            const bool same_domain = entry.context == context
-                && stored_clocks.min == clocks.min && stored_clocks.max == clocks.max;
-            const auto stored_mode = decode_mode(entry.value);
-            const bool keep_main_score = decode_flag(entry.value)
-                && stored_mode == tt_mode_t::main_search && mode != tt_mode_t::main_search
-                && same_domain && age == decode_age(entry.value);
-            const bool replace_score = flags != 0 && !keep_main_score && (!decode_flag(entry.value)
-                || flags == score::EXACT || !same_domain || mode != stored_mode
-                || age != decode_age(entry.value) || depth >= stored_depth);
-            if (replace_score) {
-                entry.pv = pv && mode == tt_mode_t::main_search;
-                entry.context = context;
-                entry.value = value;
-            } else {
-                // A useful move does not require replacing the deeper score.
-                entry.value = (entry.value & ~U64(65535)) | decode_move(value);
-            }
-            entry.key = entry.value ^ key;
-            return;
-        }
-        const int age_diff = (age + 64 - decode_age(entry.value)) % 64;
-        const int replacement_score = decode_flag(entry.value)
-            ? age_diff * 256 + 256 - stored_depth : score::INF;
-        if (replacement_score > best_score) {
-            best_score = replacement_score;
-            best_entry = &entry;
         }
     }
-    // Finish checking the cluster for a matching key before using an empty slot.
-    best_entry = empty_entry ? empty_entry : best_entry;
-    assert(best_entry != nullptr);
-    if (!flags && decode_flag(best_entry->value)) {
-        return;
+    const bool same = slot->depth != 0 && slot->tag == key_tag;
+    if (!move && same) {
+        move = slot->move;
     }
-    best_entry->pv = pv && mode == tt_mode_t::main_search;
-    best_entry->raw_eval = score::INVALID;
-    best_entry->eval_model = 0;
-    best_entry->context = context;
-    best_entry->value = value;
-    best_entry->key = value ^ key;
+    if (eval == score::INVALID && same) {
+        eval = slot->eval;
+    }
+    const int distance = age_distance(*slot);
+    const int stored_bound = slot->meta & 3;
+    const int insert_priority = depth + bound + distance * distance / 4 + int(pv);
+    const int record_priority = (slot->depth ? slot->depth - 1 : 0) + stored_bound;
+    if (!same || (bound == score::EXACT && stored_bound != score::EXACT)
+            || insert_priority * 3 >= record_priority * 2) {
+        slot->tag = key_tag;
+        slot->depth = uint8_t(depth + 1);
+        slot->meta = uint8_t((current_age << 3) | (int(pv) << 2) | bound);
+        slot->move = uint16_t(move);
+        slot->score = int16_t(bound ? make_score(score, ply) : 0);
+        slot->eval = int16_t(eval);
+    } else if (move || eval != slot->eval) {
+        // Keep the stronger score, but retain the newest move and evaluation.
+        slot->move = uint16_t(move);
+        slot->eval = int16_t(eval);
+    }
 }
 
-bool trans_table_t::retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode, bool * pv) {
-    assert(depth >= 0);
-    move = 0;
-    if (pv) {
-        *pv = false;
-    }
-    if (enabled) {
-        int ix = index(key);
-        int bix = ix;
-        for (int i = 0; i < BUCKETS; i++) {
-            bix = ix + i;
-            entry_t & entry = table[bix];
-            if (decode_depth(entry.value) && (entry.key ^ entry.value) == key) {
-                move = decode_move(entry.value);
-                score = unmake_score(decode_score(entry.value), ply);
-                flags = decode_flag(entry.value);
-                int entry_depth = decode_depth(entry.value);
-                const clock_range_t stored_clocks = decode_clocks(entry.value);
-                const auto stored_mode = decode_mode(entry.value);
-                const bool compatible_mode = stored_mode == mode;
-                const bool same_domain = compatible_mode && entry.context == context
-                    && stored_clocks.contains(clock);
-                if (pv) {
-                    *pv = same_domain && flags && mode == tt_mode_t::main_search && entry.pv;
-                }
-                const bool usable = same_domain && entry_depth >= depth;
-                if (usable && clocks) {
-                    *clocks = stored_clocks;
-                }
-                return usable;
-            }
-        }
-    }
-    return false;
-}
-
-bool trans_table_t::retrieve_eval(U64 key, U64 model, int & value) {
+bool trans_table_t::probe(U64 key, int ply, int clock, tt_hit_t & hit) {
+    hit = {};
     if (!enabled) {
         return false;
     }
-    const int ix = index(key);
-    for (int i = 0; i < BUCKETS; ++i) {
-        const auto & entry = table[ix + i];
-        if (decode_depth(entry.value) && (entry.key ^ entry.value) == key
-                && entry.eval_model == model && entry.raw_eval != score::INVALID) {
-            value = entry.raw_eval;
+    const uint16_t key_tag = tag(key);
+    for (const auto & entry : cluster(key).entries) {
+        if (entry.depth != 0 && entry.tag == key_tag) {
+            hit.move = entry.move;
+            hit.depth = entry.depth - 1;
+            hit.bound = entry.meta & 3;
+            hit.pv = (entry.meta >> 2) & 1;
+            hit.score = hit.bound ? unmake_score(entry.score, ply, clock) : score::INVALID;
+            hit.eval = entry.eval;
             return true;
         }
     }
     return false;
 }
 
-void trans_table_t::store_eval(U64 key, U64 model, int value, int age) {
-    assert(value > -score::TABLEBASE && value < score::TABLEBASE);
-    if (!enabled) {
-        return;
-    }
-    const int ix = index(key);
-    // Preserve every existing score, move and domain when attaching evaluation.
-    // A miss uses the ordinary no-bound replacement policy: never evict a bound.
-    for (int pass = 0; pass < 2; ++pass) {
-        for (int i = 0; i < BUCKETS; ++i) {
-            auto & entry = table[ix + i];
-            if (decode_depth(entry.value) && (entry.key ^ entry.value) == key) {
-                entry.eval_model = model;
-                entry.raw_eval = static_cast<int16_t>(value);
-                return;
-            }
-        }
-        if (pass == 0) {
-            store(key, age, 0, 1, 0, 0, 0);
-        }
-    }
-}
-
 namespace trans_table {
 
     trans_table_t _global_table(TABLE_SIZE);
 
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context, clock_range_t clocks, tt_mode_t mode, bool pv) {
-        _global_table.store(key, age, ply, depth, score, move, flag, context, clocks, mode, pv);
+    void store(U64 key, int age, int ply, int depth, int score, int move, int bound, int eval, bool pv) {
+        if (_global_table.enabled) {
+            _global_table.store(key, age, ply, depth, score, move, bound, eval, pv);
+        }
     }
 
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context, int clock, clock_range_t * clocks, tt_mode_t mode, bool * pv) {
-        return _global_table.retrieve(key, ply, depth, score, move, flags, context, clock, clocks, mode, pv);
-    }
-
-    bool retrieve_eval(U64 key, U64 model, int & value) {
-        return _global_table.retrieve_eval(key, model, value);
-    }
-
-    void store_eval(U64 key, U64 model, int value, int age) {
-        _global_table.store_eval(key, model, value, age);
+    bool probe(U64 key, int ply, int clock, tt_hit_t & hit) {
+        return _global_table.probe(key, ply, clock, hit);
     }
 
     void clear() {
@@ -240,4 +164,4 @@ namespace trans_table {
     void disable() {
         _global_table.enabled = false;
     }
-};
+}

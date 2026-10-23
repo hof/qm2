@@ -22,13 +22,13 @@ result_t run(const std::string & fen, int mode, int depth,
     search->stack->in_check = search->brd.in_check();
     const auto original_fen = search->brd.to_string();
     const U64 key = search->brd.stack->tt_key;
-    const U64 context = search->tt_context();
+    const U64 context = search->position_key();
     const bool repeated = search->is_repetition();
     const int value = search->w17_pvs(-score::INF, score::INF, mode, depth);
     if (!check("losers search must finish and restore board, hashes, history and stacks",
             !search->stop_all && search->brd.to_string() == original_fen
             && search->brd.stack->tt_key == key
-            && search->tt_context() == context && search->is_repetition() == repeated
+            && search->position_key() == context && search->is_repetition() == repeated
             && search->brd.ply == 0 && search->stack == search->root_stack
             && search->brd.stack == search->brd._stack)) {
         std::exit(EXIT_FAILURE);
@@ -118,25 +118,12 @@ bool test_bound_compatibility() {
             for (int bound : {score::LOWERBOUND, score::UPPERBOUND, score::EXACT}) {
                 trans_table::clear();
                 const int expected = bound == score::UPPERBOUND ? -12345 : 12345;
-                trans_table::store(writer->brd.stack->tt_key, 0, 0, 3, expected,
-                    hint, bound, writer->w17_tt_context(writer_mode), {4, 8});
-                for (int depth : {1, 3, 4}) {
-                    for (int clock : {4, 8, 99}) {
-                        int value = 0, move = 0, flag = 0;
-                        const bool usable = trans_table::retrieve(writer->brd.stack->tt_key,
-                            0, depth, value, move, flag, writer->w17_tt_context(reader_mode), clock);
-                        success &= check("each bound requires compatible mode, depth and clock",
-                            usable == (writer_mode == reader_mode && depth <= 3 && clock <= 8));
-                        move_t decoded;
-                        decoded.set_compact(&writer->brd, move);
-                        success &= check("incompatible scores must retain their legal move hint",
-                            move == hint && writer->brd.valid(&decoded) && writer->brd.legal(&decoded));
-                        if (usable) {
-                            success &= check("compatible bounds must retain their value and type",
-                                value == expected && flag == bound);
-                        }
-                    }
-                }
+                trans_table::store(writer->w17_tt_key(writer_mode), 0, 0, 3, expected, hint, bound);
+                tt_hit_t hit;
+                const bool found = trans_table::probe(writer->w17_tt_key(reader_mode), 0, 4, hit);
+                success &= check("each mode must have its own entries",
+                    found == (writer_mode == reader_mode)
+                    && (!found || (hit.score == expected && hit.bound == bound && hit.move == hint)));
                 // Exercise all three actual cutoff paths, not just the table API.
                 auto reader = std::make_unique<w17_search_t>(fen);
                 reader->draw_contempt = 0;
@@ -162,13 +149,12 @@ bool test_incoming_mode() {
     search->stack->in_check = search->brd.in_check();
     trans_table::clear();
     const int expected = search->w17_pvs(-score::INF, score::INF, -1, 1);
-    int value = 0, move = 0, flag = 0;
+    tt_hit_t hit;
     bool success = check("auto-mode node must store under its incoming mode",
-        trans_table::retrieve(search->brd.stack->tt_key, 0, 1, value, move, flag,
-            search->w17_tt_context(-1), 0) && value == expected && flag == score::EXACT);
+        trans_table::probe(search->w17_tt_key(-1), 0, 0, hit) && hit.depth >= 1
+        && hit.score == expected && hit.bound == score::EXACT);
     success &= check("auto-to-forced transition must not relabel the parent's score",
-        !trans_table::retrieve(search->brd.stack->tt_key, 0, 1, value, move, flag,
-            search->w17_tt_context(search->brd.us()), 0) && move != 0);
+        !trans_table::probe(search->w17_tt_key(search->brd.us()), 0, 0, hit));
     const auto matching = run(fen, -1, 1);
     success &= check("matching incoming mode must preserve useful one-node score reuse",
         matching.value == expected && matching.nodes == 0);
@@ -176,10 +162,8 @@ bool test_incoming_mode() {
     const int depth = search->brd.max_mate_depth_us();
     const int deeper = search->w17_pvs(-score::INF, score::INF, -1, depth);
     success &= check("quiet depth reduction must preserve incoming mode and conservative depth",
-        trans_table::retrieve(search->brd.stack->tt_key, 0, depth - 1, value, move, flag,
-            search->w17_tt_context(-1), 0) && value == deeper
-        && !trans_table::retrieve(search->brd.stack->tt_key, 0, depth, value, move, flag,
-            search->w17_tt_context(-1), 0));
+        trans_table::probe(search->w17_tt_key(-1), 0, 0, hit) && hit.score == deeper
+        && hit.depth == depth - 1);
     return success;
 }
 

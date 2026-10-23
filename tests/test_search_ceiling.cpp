@@ -21,7 +21,6 @@ void place_at_ply(search_t & search, int ply) {
     search.stack = &search._stack[ply];
     search.stack->in_check = search.brd.in_check();
     search.stack->repetition_start = ply;
-    search.stack->tt_clocks = {0, 101};
     search.draw_contempt = 0;
 }
 
@@ -39,7 +38,7 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
     place_at_ply(search, ply);
     const auto original_fen = search.brd.to_string();
     const auto key = search.brd.stack->tt_key;
-    const auto context = search.tt_context();
+    const auto context = search.position_key();
     const auto history_start = search.stack->repetition_start;
     const bool repeated = search.is_repetition();
     const int sign = losers ? test.losers_sign : test.standard_sign;
@@ -47,9 +46,9 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
         : clock >= 100 ? 0 : losers ? w17_evaluate(static_cast<w17_search_t *>(&search)) : evaluate(&search);
     trans_table::clear();
     if (table_state == 1) {
-        const U64 tt_context = losers ? static_cast<w17_search_t &>(search).w17_tt_context(mode) : context;
+        const U64 tt_key = losers ? static_cast<w17_search_t &>(search).w17_tt_key(mode) : context;
         // A stale cached evaluation must not hide the ceiling's terminal result.
-        trans_table::store(key, 0, ply, 6, 1234, 0, score::EXACT, tt_context);
+        trans_table::store(tt_key, 0, ply, 6, 1234, 0, score::EXACT);
     }
     if (table_state == 2) {
         trans_table::disable();
@@ -63,7 +62,7 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
         && search.brd.ply == ply && search.stack == &search._stack[ply]
         && search.brd.stack == &search.brd._stack[ply]
         && search.brd.stack->tt_key == key
-        && search.tt_context() == context
+        && search.position_key() == context
         && search.stack->repetition_start == history_start && search.is_repetition() == repeated;
     if (!success) {
         std::cerr << "ceiling: " << fen << " losers=" << losers << " mode=" << mode
@@ -87,7 +86,7 @@ bool test_transition(bool losers) {
     place_at_ply(search, ply);
     const auto original_fen = search.brd.to_string();
     const auto key = search.brd.stack->tt_key;
-    const auto context = search.tt_context();
+    const auto context = search.position_key();
     move_t move;
     move.set(&search.brd, "g6g7");
     if (!search.brd.valid(&move) || !search.brd.legal(&move)) {
@@ -99,7 +98,7 @@ bool test_transition(bool losers) {
     search.backward(&move);
     const bool success = actual == expected && !search.stop_all
         && search.brd.to_string() == original_fen && search.brd.stack->tt_key == key
-        && search.tt_context() == context && search.brd.ply == ply
+        && search.position_key() == context && search.brd.ply == ply
         && search.stack == &search._stack[ply] && search.brd.stack == &search.brd._stack[ply];
     if (!success) {
         std::cerr << "ceiling transition losers=" << losers
@@ -150,7 +149,7 @@ bool test_repetition(bool losers) {
     place_at_ply(search, ply);
     const auto original_fen = search.brd.to_string();
     const auto key = search.brd.stack->tt_key;
-    const auto context = search.tt_context();
+    const auto context = search.position_key();
     const char * cycle[] = {"b1c3", "g8f6", "c3b1", "f6g8"};
     move_t moves[4];
     for (int i = 0; i < 4; ++i) {
@@ -167,7 +166,7 @@ bool test_repetition(bool losers) {
     }
     for (int i = 3; i >= 0; --i) search.backward(&moves[i]);
     success &= search.brd.to_string() == original_fen && search.brd.stack->tt_key == key
-        && search.tt_context() == context && !search.is_repetition()
+        && search.position_key() == context && !search.is_repetition()
         && search.brd.ply == ply && search.stack == &search._stack[ply];
     if (!success) {
         std::cerr << "ceiling repetition losers=" << losers << "\n";

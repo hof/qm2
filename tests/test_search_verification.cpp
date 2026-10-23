@@ -51,7 +51,6 @@ public:
         stack->move_list.stage = 99;
         stack->move_list.first = stack->searched;
         stack->excluded_move = 1234;
-        stack->tt_clocks = {0, 80};
         stop_all = cancel;
         if (fail) {
             throw std::runtime_error("verification fixture");
@@ -68,7 +67,6 @@ bool test_scope() {
             prepare(*search);
             search->null_enabled = outcome != 1;
             search->stack->improving = true;
-            search->stack->tt_clocks = {0, 90};
             search->stack->move_list.evasion_targets = BIT(e2);
             const auto before = *search->stack;
             const bool previous_null = search->null_enabled;
@@ -98,9 +96,8 @@ bool test_scope() {
                 && after.current_move.piece == before.current_move.piece && after.killer[0].piece == before.killer[0].piece
                 && after.pv_count == before.pv_count && after.move_list.stage == before.move_list.stage
                 && after.move_list.first == before.move_list.first
-                && after.move_list.evasion_targets == before.move_list.evasion_targets
-                && after.tt_clocks.min == 0 && after.tt_clocks.max == 80,
-                "verification must restore picker/PV/evaluation/history state and merge clock restrictions");
+                && after.move_list.evasion_targets == before.move_list.evasion_targets,
+                "verification must restore picker/PV/evaluation/history state");
         }
     }
     return success;
@@ -133,8 +130,8 @@ bool test_filter_and_cache() {
         prepare(*search);
         const char * excluded_text = fen == queen ? "d1d5" : fen == start ? "g1f3" : "a7a8q";
         const auto excluded = compact(*search, excluded_text);
-        const auto key = search->brd.stack->tt_key, context = search->tt_context();
-        trans_table::store(key, 0, 0, 8, 12345, excluded, score::EXACT, context);
+        const auto key = search->position_key();
+        trans_table::store(key, 0, 0, 8, 12345, excluded, score::EXACT);
         const int alpha = fen == start ? -10001 : -1000, beta = fen == start ? -10000 : 1000;
         const int value = search->singular_search(alpha, beta, 1, fen == start, excluded);
         success &= check(value == (fen == queen || fen == start ? 0 : 70)
@@ -144,9 +141,9 @@ bool test_filter_and_cache() {
             success &= check(search->children.contains("a7a8r") && search->children.contains("a7a8b")
                 && search->children.contains("a7a8n"), "excluding a queen promotion must preserve underpromotions");
         }
-        int score = 0, move = 0, flag = 0;
-        success &= check(trans_table::retrieve(key, 0, 8, score, move, flag, context)
-            && score == 12345 && move == excluded && flag == score::EXACT,
+        tt_hit_t hit;
+        success &= check(trans_table::probe(key, 0, 0, hit)
+            && hit.score == 12345 && hit.move == excluded && hit.bound == score::EXACT,
             "excluded search must not overwrite the ordinary position's cached score or hint");
     }
     return success;

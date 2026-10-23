@@ -24,22 +24,16 @@ bool policy_cache_controls() {
     auto seed = [&]() {
         trans_table::clear();
         trans_table::store(main_key, 0, 0, 4, 123, 456, score::EXACT);
-        trans_table::store(q_key, 0, 0, 1, 234, 567, score::LOWERBOUND,
-            0, {0, 101}, tt_mode_t::quiescence_entry);
+        trans_table::store(q_key, 0, 0, 0, 234, 567, score::LOWERBOUND);
     };
     auto retained = [&]() {
-        int value = 0, move = 0, flag = 0;
-        return trans_table::retrieve(main_key, 0, 4, value, move, flag) && value == 123
-            && trans_table::retrieve(q_key, 0, 1, value, move, flag,
-                0, 0, nullptr, tt_mode_t::quiescence_entry) && value == 234;
+        tt_hit_t main_hit, q_hit;
+        return trans_table::probe(main_key, 0, 0, main_hit) && main_hit.score == 123
+            && trans_table::probe(q_key, 0, 0, q_hit) && q_hit.score == 234;
     };
     auto cleared = [&]() {
-        int value = 0, move = 0, flag = 0;
-        const bool main_hit = trans_table::retrieve(main_key, 0, 4, value, move, flag);
-        const bool main_clear = !main_hit && move == 0;
-        const bool q_hit = trans_table::retrieve(q_key, 0, 1, value, move, flag,
-            0, 0, nullptr, tt_mode_t::quiescence_entry);
-        return main_clear && !q_hit && move == 0;
+        tt_hit_t hit;
+        return !trans_table::probe(main_key, 0, 0, hit) && !trans_table::probe(q_key, 0, 0, hit);
     };
     for (const char * name : {"NullMove", "BetaPruning", "LMR", "FutilityPruning",
             "NullVerify", "Aspiration", "IIR", "MainSEE", "Razoring", "SingularExtensions", "ProbCut", "TTHistory", "TTEval", "LMP", "HistoryPruning", "QsearchTT", "MainHistory",

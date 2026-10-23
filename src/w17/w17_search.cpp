@@ -52,25 +52,19 @@ bool w17_search_t::w17_is_draw() {
             if (!brd.legal(move)) {
                 continue;
             }
-            if (fifty_move) {
-                stack->tt_clocks = {100, 101};
-            } else {
-                stack->tt_clocks.max = MIN(stack->tt_clocks.max, 99);
-            }
             return true;
         }
         return false;
     }
-    stack->tt_clocks.max = MIN(stack->tt_clocks.max, 99);
     return false;
 }
 
-U64 w17_search_t::w17_tt_context(int in_mate_search) const {
+U64 w17_search_t::w17_tt_key(int in_mate_search) const {
     assert(in_mate_search >= -1 && in_mate_search <= 1);
     constexpr U64 mode_salts[] = {
         0x243f6a8885a308d3ULL, 0x13198a2e03707344ULL, 0xa4093822299f31d0ULL,
     };
-    return tt_context() ^ mode_salts[in_mate_search + 1];
+    return position_key() ^ mode_salts[in_mate_search + 1];
 }
 
 int w17_search_t::pvs(int alpha, int beta, int depth, bool) {
@@ -79,7 +73,6 @@ int w17_search_t::pvs(int alpha, int beta, int depth, bool) {
 
 int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
 
-    stack->tt_clocks = {0, 101};
     stack->pv_count = 0;
 
     //win by having no more pieces
@@ -139,21 +132,20 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
      * Transposition table lookup
      */
 
-    stack->tt_key = brd.stack->tt_key;
-    // Cache the incoming horizon semantics, before a quiet node changes mode
-    // or reduces depth. Descendants compute their own context from that mode.
-    const U64 context = w17_tt_context(in_mate_search);
-    clock_range_t tt_clocks;
-    int tt_move = 0, tt_flag = 0, tt_score;
-    if (depth > 0 && trans_table::retrieve(stack->tt_key, brd.ply, depth, tt_score, tt_move, tt_flag, context,
-            brd.stack->fifty_count, &tt_clocks)) {
+    // Key the incoming horizon semantics, before a quiet node changes mode
+    // or reduces depth. Descendants compute their own key from that mode.
+    stack->tt_key = w17_tt_key(in_mate_search);
+    tt_hit_t tt;
+    if (depth > 0 && trans_table::probe(stack->tt_key, brd.ply, brd.stack->fifty_count, tt)
+            && tt.bound && tt.depth >= depth && brd.stack->fifty_count < 90) {
+        const int tt_flag = tt.bound, tt_score = tt.score;
         if ((tt_flag == score::LOWERBOUND && tt_score >= beta)
                 || (tt_flag == score::UPPERBOUND && tt_score <= alpha)
                 || tt_flag == score::EXACT) {
-            stack->tt_clocks.include_child(tt_clocks, 0);
             return tt_score;
         }
     }
+    const int tt_move = tt.move;
 
     /*
      * First move
@@ -219,9 +211,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
             score = -w17_pvs(-alpha - 1, -alpha, in_mate_search, depth - 1 + extend);
             if (!stop_all && pv && score > alpha) {
                 //full window research
-                const clock_range_t previous_clocks = stack->tt_clocks;
                 score = -w17_pvs(-beta, -alpha, in_mate_search, depth - 1 + extend);
-                stack->tt_clocks.include_child(previous_clocks, 0);
             }
         }
         backward(move);
@@ -237,7 +227,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
             if (score >= beta) {
 
                 if (depth > 0) {
-                    trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND, context, stack->tt_clocks);
+                    trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND);
                 }
 
                 if (depth > 0 && !move->capture && !move->promotion && !move->castle) {
@@ -276,7 +266,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
 
     if (depth > 0) {
         int flag = score::flags(best, alpha1, beta); 
-        trans_table::store(brd.stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_compact(), flag, context, stack->tt_clocks);
+        trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_compact(), flag);
     }
 
     return best;

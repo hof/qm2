@@ -165,9 +165,10 @@ bool test_root(const char * fen, int & probes, int & interrupted, int & exact_re
                             ++probes;
                             if (cache == 1 && mode == 1 && !direct
                                     && warm.first == -score::INF && warm.second == score::INF
-                                    && window.first == value - 1 && window.second == value
-                                    && oracle.at(fen)->terminal == score::INVALID) {
-                                // Only non-PV windows take cached score cutoffs.
+                                    && window.first == value && window.second == value + 1
+                                    && oracle.at(fen)->terminal == score::INVALID
+                                    && search->brd.stack->fifty_count < 90) {
+                                // Only non-PV windows take cached score cutoffs; at equal depth only fail-lows.
                                 ++exact_reuses;
                                 ok &= check(search->nodes == 0, "nonterminal exact TT was not reused", fen);
                             }
@@ -191,8 +192,7 @@ bool test_root(const char * fen, int & probes, int & interrupted, int & exact_re
                 trans_table::clear();
                 auto search = std::make_unique<search_t>(fen);
                 prepare(*search, false);
-                trans_table::store(search->brd.stack->tt_key, 0, 0, 8, value + 500, 0,
-                    flag, search->tt_context());
+                trans_table::store(search->position_key(), 0, 0, 8, value + 500, 0, flag);
                 ok &= check(run(*search, -score::INF, score::INF, mode, mode < 0) == value,
                     "deep TT entry contaminated quiescence", fen);
                 ok &= restored(*search, *original, fen);

@@ -37,14 +37,15 @@ bool test_store_pv(table_state_t state) {
     board.init(start_fen);
     for (int i = 0; i < 4; ++i) {
         if (i > 0) {
-            int score = 0, move = 0, flag = 0;
-            const bool found = trans_table::retrieve(board.stack->tt_key, 0, 1, score, move, flag);
+            tt_hit_t hit;
+            const bool found = trans_table::probe(board.stack->tt_key, 0, 0, hit);
+            const int score = hit.score, move = hit.move, flag = hit.bound;
             const bool correct_move = found && move == search.stack->pv_moves[i].to_compact();
             // A changed hint does not invalidate an existing score for this board.
             // A new hint alone must not invent a scored result.
             const bool correct_bound = state != table_state_t::empty
                 ? score == 123 + i && flag == score::EXACT
-                : score == 0 && flag == 0;
+                : flag == 0;
             success &= correct_move && correct_bound;
             if (!correct_move || !correct_bound) {
                 std::cerr << "PV storage case " << static_cast<int>(state)
@@ -52,12 +53,7 @@ bool test_store_pv(table_state_t state) {
                     << ", stored move=" << move << ", score=" << score
                     << ", flag=" << flag << "\n";
             }
-            if (state != table_state_t::empty) {
-                success &= trans_table::retrieve(board.stack->tt_key, 0, 7, score, move, flag);
-            } else {
-                success &= !trans_table::retrieve(board.stack->tt_key, 0, 7, score, move, flag)
-                    && move == search.stack->pv_moves[i].to_compact();
-            }
+            success &= state != table_state_t::empty ? hit.depth == 7 : hit.depth == 0;
         }
         board.forward(&search.stack->pv_moves[i]);
     }

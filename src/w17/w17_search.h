@@ -49,7 +49,7 @@ public:
     }
     
     int w17_pvs(int alpha, int beta, int in_mate_search, int depth);
-    U64 w17_tt_context(int in_mate_search) const;
+    U64 w17_tt_key(int in_mate_search) const;
     
 };
 

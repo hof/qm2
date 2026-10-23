@@ -37,17 +37,19 @@ bool test_tt() {
     int age = 1;
     int ply = 2;
     int depth = 10;
-    int score, move, flag;
-    U64 keys[4] = {0x1000000123, 0x2000000123, 0x3000000123, 0x4000000123};
-    for (int i = 0; i < 4; i++) { //test all buckets
+    tt_hit_t hit;
+    // Distinct tags in one cluster fill its three entries.
+    U64 keys[3] = {0x1000000001, 0x1000000002, 0x1000000003};
+    for (int i = 0; i < 3; i++) {
         trans_table::store(keys[i], age, ply, depth, i + 10, i + 100, 3);
     }
-    for (int i = 0; i < 4; i++) {
-        bool result = trans_table::retrieve(keys[i], ply, depth, score, move, flag);
+    for (int i = 0; i < 3; i++) {
+        bool result = trans_table::probe(keys[i], ply, 0, hit);
         if (result == false
-                || score != i + 10
-                || move != i + 100
-                || flag != 3) {
+                || hit.score != i + 10
+                || hit.move != i + 100
+                || hit.depth != depth
+                || hit.bound != 3) {
             std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=store/retrieve error" << std::endl;
             delete s;
             return false;
@@ -57,13 +59,12 @@ bool test_tt() {
     move_t * tmove = move::first(s, 1);
     trans_table::store(s->brd.stack->tt_key, s->brd.root_ply, s->brd.ply, 123, -12345, tmove->to_compact(), 3);
 
-    bool result = trans_table::retrieve(s->brd.stack->tt_key, s->brd.ply, 123, score, move, flag);
-
+    bool result = trans_table::probe(s->brd.stack->tt_key, s->brd.ply, 0, hit);
 
     if (result == false
-            || score != -12345
-            || flag != 3
-            || move != tmove->to_compact()) {
+            || hit.score != -12345
+            || hit.bound != 3
+            || hit.move != tmove->to_compact()) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=store/retrieve error" << std::endl;
         delete s;
         return false;
@@ -78,8 +79,8 @@ bool test_tt() {
     const int expected = cold.pvs(-score::INF, score::INF, 8);
     search_t warm(fen);
     warm.stack->in_check = warm.brd.in_check();
-    // Only non-PV windows take cached score cutoffs.
-    const int actual = warm.pvs(expected - 1, expected, 8, true);
+    // Only non-PV windows take cached score cutoffs; a fail-high needs one extra ply.
+    const int actual = warm.pvs(expected - 1, expected, 7, true);
     if (cold.stop_all || warm.stop_all || cold.nodes == 0 || warm.nodes != 0
             || actual != expected || warm.brd.to_string() != fen) {
         std::cout << "%TEST_FAILED% time=0 testname=test_tt (test_transpositiontable) message=matching-context score reuse failed" << std::endl;

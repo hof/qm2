@@ -126,42 +126,6 @@ bool test_windows(const certificate_t & test, int & probes) {
     return ok;
 }
 
-bool test_parent_clock_ranges() {
-    bool ok = true;
-    for (const char * placement : {"7k/8/8/8/8/8/8/KR6 b - - ",
-                                  "kr6/8/8/8/8/8/8/7K w - - "}) {
-        const std::string before = std::string(placement) + "97 1";
-        const std::string boundary = std::string(placement) + "98 1";
-        struct policy_case_t { int configuration, depth; };
-        for (const auto policy : {policy_case_t{0, 2}, {2, 2}, {3, 4}}) {
-            trans_table::clear();
-            auto writer = std::make_unique<search_t>(before.c_str());
-            prepare(*writer, policy.configuration);
-            // Near clock 100 the damped evaluation is close to zero.
-            const int value = writer->pvs(0, 1, policy.depth);
-            ok &= check(value <= 0, "clock fixture must produce a losing bound", before.c_str());
-            int cached = 0, move = 0, flag = 0;
-            clock_range_t clocks;
-            ok &= check(trans_table::retrieve(writer->brd.stack->tt_key, 0, policy.depth,
-                cached, move, flag, writer->tt_context(), 97, &clocks)
-                && flag == score::UPPERBOUND && clocks.max <= 97,
-                "pruned child's clock restriction did not reach parent", before.c_str());
-            ok &= check(!trans_table::retrieve(writer->brd.stack->tt_key, 0, policy.depth,
-                cached, move, flag, writer->tt_context(), 98) && move != 0,
-                "boundary must reject score and retain move hint", boundary.c_str());
-            auto reader = std::make_unique<search_t>(boundary.c_str());
-            auto original = std::make_unique<search_t>(boundary.c_str());
-            prepare(*reader, policy.configuration);
-            // Two reversible plies reach the independently certified clock-100
-            // children. The distant bare king cannot capture the opposing rook.
-            ok &= check(reader->pvs(-1, 0, policy.depth) == 0,
-                "warm parent bypassed boundary guard", boundary.c_str());
-            ok &= restored(*reader, *original, boundary.c_str());
-        }
-    }
-    return ok;
-}
-
 bool test_interruption() {
     bool ok = true;
     for (const auto & test : certificates) {
@@ -227,7 +191,6 @@ int main() {
         ok &= validate_certificate(test);
         ok &= test_windows(test, probes);
     }
-    ok &= test_parent_clock_ranges();
     ok &= test_interruption();
     ok &= test_clock_resets();
     std::cout << probes << " independent terminal/window/cache probes\n";

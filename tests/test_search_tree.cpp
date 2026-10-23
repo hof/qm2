@@ -130,8 +130,8 @@ bool test_root(const node_t & node, int & probes, int & interruptions, int & res
                 researches += search->researches;
                 if (cache == 1 && *node.legal
                         && warm.first == -score::INF && warm.second == score::INF
-                        && window.first == node.value - 1 && window.second == node.value) {
-                    // Only non-PV windows take cached score cutoffs.
+                        && window.first == node.value && window.second == node.value + 1) {
+                    // Only non-PV windows take cached score cutoffs; at equal depth only fail-lows.
                     ok &= check(search->nodes == 0, "warm exact entry was not reused", node.fen);
                 }
                 ok &= check(valid_bound(value, node.value, window.first, window.second),
