@@ -49,9 +49,7 @@ constexpr U64 game_history_salt = 0x9e3779b97f4a7c15ULL;
 constexpr U64 search_history_salt = 0xd1b54a32d192ed03ULL;
 // Conservative margins in the shared 100-cp pawn scale. Keep the baseline
 // independent of history, improving flags and evaluator-specific adjustments.
-constexpr int reverse_futility_margin_per_ply = 100;
 constexpr int null_move_margin = 50;
-constexpr int forward_futility_margin = 300;
 constexpr int razoring_margin_per_ply = 300;
 constexpr int main_see_quiet_margin = 50;
 constexpr int main_see_capture_margin = 100;
@@ -267,7 +265,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     _experience_depth = options::get_value("ExperienceDepth");
     _experience = experience::snapshot();
     _book_seeded = false;
-    broader_futility_enabled = wild == 0 && options::get_value("BroaderFutility");
     beta_pruning = options::get_value("BetaPruning");
     null_verify = options::get_value("NullVerify");
     null_enabled = options::get_value("NullMove");
@@ -1700,7 +1697,7 @@ bool search_t::razor_node(int alpha, int beta, int depth, int eval, int & value)
 // Static evaluation supplies a selective fail-high premise, not a legal pass.
 bool search_t::reverse_futility(int beta, int depth, int eval, int & value) {
     const int decisive = score::TABLEBASE - MAX_PLY;
-    if (!broader_futility_enabled || !beta_pruning || depth < 1 || depth >= 9
+    if (wild != 0 || !beta_pruning || depth < 1 || depth >= 9
             || !brd.ply || stack->in_check || stop_all
             || verification_mode != verification_mode_t::none || stack->excluded_move
             || stack->repetition_start > 0 || brd.stack->fifty_count >= 99
@@ -1733,7 +1730,7 @@ bool search_t::reverse_futility(int beta, int depth, int eval, int & value) {
 bool search_t::prune_futility(move_t & move, int reduced_depth, int searched_moves,
         int best, int alpha, int beta, int gives_check, int eval) {
     const int decisive = score::TABLEBASE - MAX_PLY;
-    if (!broader_futility_enabled || !ffp_enabled || !brd.ply || !searched_moves
+    if (wild != 0 || !ffp_enabled || !brd.ply || !searched_moves
             || stack->in_check || gives_check || stop_all || verification_mode != verification_mode_t::none
             || stack->excluded_move || stack->repetition_start > 0
             || brd.stack->fifty_count >= 99 || !brd.has_pieces(brd.us())
@@ -2082,29 +2079,15 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         : eval >= beta + null_move_margin;
     const bool do_null = null_enabled && !previous_null && null_policy;
 
-    // A static/null cutoff requires legal play: passing in stalemate would
-    // turn an exact draw into a heuristic fail-high. Probe only when pruning
-    // can run; the ordinary move loop handles the remaining terminal nodes.
-    const int beta_margin = reverse_futility_margin_per_ply * depth;
-    // Adaptive null verification must confirm with real moves, rather than
-    // reusing the same static premise through reverse futility.
-    const bool verification_pruning = !adaptive_null_enabled
-        || verification_mode != verification_mode_t::null_move;
-    const bool beta_cutoff = !broader_futility_enabled && depth < 4 && beta_pruning && verification_pruning
-        && eval - beta_margin >= beta;
-    // At clock 99 a reversible move draws unless it mates; static evaluation and
+    // A null cutoff requires legal play: passing in stalemate would turn an
+    // exact draw into a heuristic fail-high. At clock 99 a reversible move draws unless it mates; static evaluation and
     // an artificial pass can still claim a win. Search legal moves there.
     // Propagate this restriction so cached parents cannot bypass the guard.
-    if (do_prune_node && (beta_cutoff || do_null)) {
+    if (do_prune_node && do_null) {
         stack->tt_clocks.max = MIN(stack->tt_clocks.max, 98);
     }
-    if (do_prune_node && (beta_cutoff || do_null) && !has_legal_move(brd)) {
+    if (do_prune_node && do_null && !has_legal_move(brd)) {
         return draw_score();
-    }
-
-    // beta pruning
-    if (do_prune_node && beta_cutoff) {
-        return eval;
     }
 
     //null move pruning
@@ -2174,12 +2157,6 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
 
-    // Frontier-only quiet-move futility. The positional allowance is a
-    // heuristic, not a proven bound on the neural evaluation.
-    const bool can_ffp = !broader_futility_enabled && !excluded_move && ffp_enabled && depth == 1 && !pv && !in_check
-        && std::abs(alpha) < decisive_score && std::abs(beta) < decisive_score
-        && !stack->metadata.endgame;
-
     //prepare and do the loop
     int best = repetition_floor ? draw_score() : -score::INF;
     int searched_moves = 0;
@@ -2224,15 +2201,6 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         if (!repetition_floor && !singular && prune_futility(*move,
                 lmr_depth, searched_moves, best, alpha, beta, gives_check, eval)) {
             continue;
-        }
-
-        bool pruned = false;
-        if (can_ffp && searched_moves > 0 && best > -decisive_score && !is_dangerous) {
-            pruned = eval + forward_futility_margin <= alpha;
-            if (pruned) {
-                pruned_nodes++;
-                continue;
-            }
         }
 
         if (prune_main_see(*move, depth, searched_moves, best)) {

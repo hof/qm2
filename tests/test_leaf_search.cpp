@@ -132,23 +132,6 @@ bool test_pruning_terminals() {
             }
         }
     }
-    // Playable fail-highs must retain the useful static cutoff, including when
-    // the king has no escape and the legal-move probe must find a rook move.
-    for (const char * fen : {"7k/8/8/8/8/8/8/KR6 w - - 0 1",
-                            "8/8/8/8/8/p1k5/P1P5/KB5R w - - 0 1"}) {
-        auto storage = std::make_unique<search_t>(fen);
-        search_t & search = *storage;
-        prepare_search(search);
-        search.beta_pruning = true;
-        search.null_enabled = true;
-        const int expected = evaluate(&search);
-        success &= expected >= 101 && search.init_root_moves() > 0;
-        // This direct-root contract pins the legacy return-eval policy.
-        search.broader_futility_enabled = false;
-        success &= check_score("playable fail-high", "beta pruning", search.pvs(0, 1, 1), expected);
-        success &= search.nodes == 0 && !search.stop_all;
-        success &= restored_position(search, fen);
-    }
     return success;
 }
 

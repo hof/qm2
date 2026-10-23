@@ -184,7 +184,6 @@ public:
     bool null_verify;
     bool null_enabled;
     bool adaptive_null_enabled;
-    bool broader_futility_enabled;
     bool beta_pruning;
     bool lmr_enabled;
     bool adaptive_lmr_enabled;
