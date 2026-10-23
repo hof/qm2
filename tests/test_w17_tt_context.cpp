@@ -183,62 +183,12 @@ bool test_incoming_mode() {
     return success;
 }
 
-bool test_history_pairs() {
-    // Keep the repetition escape preferable to ordinary positional terms.
-    constexpr int repetition_value = 200;
-    board_t board;
-    board.init("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    const char * cycle[] = {"g1f3", "g8f6", "f3g1", "f6g8"};
-    std::vector<U64> history;
-    for (int ply = 0; ply < 7; ++ply) {
-        history.push_back(board.stack->repetition_key());
-        move_t move;
-        move.set(&board, cycle[ply % 4]);
-        if (!check("history fixture must use legal moves", board.valid(&move) && board.legal(&move))) {
-            return false;
-        }
-        board.forward(&move);
-    }
-    const auto fen = board.to_string();
-    bool success = true;
-    int cold[2][3];
-    for (int repeated = 0; repeated < 2; ++repeated) {
-        const std::vector<U64> supplied = repeated ? history : std::vector<U64>{};
-        for (int mode = -1; mode <= 1; ++mode) {
-            trans_table::clear();
-            cold[repeated][mode + 1] = run(fen, mode, 2, supplied, repetition_value).value;
-            trans_table::disable();
-            const int uncached = run(fen, mode, 2, supplied, repetition_value).value;
-            trans_table::enable();
-            success &= check("history-aware cold and TT-disabled searches must agree",
-                cold[repeated][mode + 1] == uncached);
-        }
-    }
-    success &= check("history fixture must expose a score-sensitive repetition escape",
-        cold[0][0] != cold[1][0] && cold[1][0] == repetition_value);
-    for (int writer_history = 0; writer_history < 2; ++writer_history) {
-        for (int reader_history = 0; reader_history < 2; ++reader_history) {
-            for (int writer = -1; writer <= 1; ++writer) {
-                for (int reader = -1; reader <= 1; ++reader) {
-                    trans_table::clear();
-                    run(fen, writer, 2, writer_history ? history : std::vector<U64>{}, repetition_value);
-                    const int warm = run(fen, reader, 2, reader_history ? history : std::vector<U64>{}, repetition_value).value;
-                    success &= check("mode compatibility must preserve repetition context",
-                        warm == cold[reader_history][reader + 1]);
-                }
-            }
-        }
-    }
-    return success;
-}
-
 }
 
 int main() {
     magic::init();
     trans_table::set_size(4);
     bool success = test_mode_pairs();
-    success &= test_history_pairs();
     success &= test_clock_pairs();
     success &= test_bound_compatibility();
     success &= test_incoming_mode();

@@ -97,7 +97,6 @@ struct search_stack_t {
     int multiple_extensions; // Multiple-extension events on the current line.
     uint16_t excluded_move;
     U64 tt_key;
-    U64 tt_history;
     clock_range_t tt_clocks;
 };
 
@@ -120,7 +119,6 @@ private:
 protected:
     // Repetition keys before the root, oldest first; never includes the root itself.
     std::vector<U64> _position_history;
-    void init_tt_history();
     static bool has_legal_move(board_t & brd);
     int ceiling_score();
     bool raise_repetition_alpha(int & alpha, int beta, move_t & witness);

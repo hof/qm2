@@ -76,7 +76,6 @@ public:
 bool restored(tree_search_t & search, search_t & original, const char * fen) {
     return check(search.valid && search.brd.to_string() == original.brd.to_string()
         && search.brd.stack->tt_key == original.brd.stack->tt_key
-        && search.stack->tt_history == original.stack->tt_history
         && search.stack->repetition_start == original.stack->repetition_start
         && search.brd.ply == 0 && search.stack == search.root_stack,
         "state restoration failed", fen);

@@ -44,8 +44,6 @@
 
 namespace {
 
-constexpr U64 game_history_salt = 0x9e3779b97f4a7c15ULL;
-constexpr U64 search_history_salt = 0xd1b54a32d192ed03ULL;
 // Conservative margins in the shared 100-cp pawn scale. Keep the baseline
 // independent of history, improving flags and evaluator-specific adjustments.
 constexpr int razoring_margin_per_ply = 300;
@@ -139,24 +137,12 @@ bool search_t::has_legal_move(board_t & brd) {
     return false;
 }
 
-// A multiset fingerprint preserves occurrence counts without requiring the
-// same move order. Game history and search history have different draw policies.
-void search_t::init_tt_history() {
-    stack->tt_history = 0;
-    for (U64 key : _position_history) {
-        stack->tt_history += mix_context(key ^ game_history_salt);
-    }
-}
-
 U64 search_t::tt_context() const {
-    const U64 node_kind = brd.ply == 0 ? game_history_salt
-        : brd.ply < stack->repetition_start ? 0 : search_history_salt;
     const int white_contempt = root_wtm ? draw_contempt : -draw_contempt;
     // Share score bounds within a clock bucket, retaining move hints across
     // buckets. Existing propagated clock ranges still guard terminal draws.
     const int clock_bucket = wild == 0 ? rule50_bucket(brd.stack->fifty_count) : 0;
-    return stack->tt_history ^ node_kind
-        ^ (clock_bucket ? mix_context(U64(clock_bucket) ^ 0x72756c6535303031ULL) : 0)
+    return (clock_bucket ? mix_context(U64(clock_bucket) ^ 0x72756c6535303031ULL) : 0)
         ^ mix_context(static_cast<U64>(white_contempt) ^ 0xa0761d6478bd642fULL)
         ^ (wild == 0 && evaluation_network
             ? mix_context(evaluation_network->fingerprint() ^ 0x48414c464b503032ULL) : 0);
@@ -337,7 +323,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     stack->move_count = 0;
     stack->multiple_extensions = 0;
     stack->repetition_start = -static_cast<int>(_position_history.size());
-    init_tt_history();
     stack->tt_clocks = {0, 101};
 }
 
@@ -740,7 +725,6 @@ void search_t::forward() {
     }
     // A null move is not part of legal game history.
     stack->repetition_start = brd.ply + 1;
-    stack->tt_history = 0;
     stack->tt_clocks = {0, 101};
     assert(stack == &_stack[brd.ply]);
 }
@@ -768,7 +752,6 @@ void search_t::forward(move_t * move, bool gives_check) {
     (stack + 1)->multiple_extensions = stack->multiple_extensions;
     stack->current_move.set(move);
     (stack + 1)->repetition_start = stack->repetition_start;
-    (stack + 1)->tt_history = stack->tt_history;
     stack++;
     stack->in_check = gives_check;
     stack->tt_clocks = {0, 101};
@@ -783,12 +766,6 @@ void search_t::forward(move_t * move, bool gives_check) {
     brd.forward(move);
     if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, move, evaluation_accumulators[brd.ply]);
-    }
-    if (brd.stack->fifty_count == 0) {
-        stack->tt_history = 0;
-    } else if (brd.ply - 1 >= stack->repetition_start) {
-        stack->tt_history += mix_context((brd.stack - 1)->repetition_key()
-            ^ (brd.ply == 1 ? game_history_salt : search_history_salt));
     }
     assert(stack == &_stack[brd.ply]);
 }
@@ -2562,7 +2539,6 @@ void search_t::reset_stack() {
     stack->move_count = 0;
     stack->multiple_extensions = 0;
     stack->repetition_start = -static_cast<int>(_position_history.size());
-    init_tt_history();
     stack->tt_clocks = {0, 101};
     brd._stack[0].copy(brd.stack);
     brd.stack = &brd._stack[0];

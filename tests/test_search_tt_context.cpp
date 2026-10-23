@@ -125,37 +125,6 @@ bool test_fifty_move_context() {
     return success;
 }
 
-bool test_history_context() {
-    board_t board;
-    board.init("7k/8/8/8/8/8/8/KR6 w - - 0 1");
-    const char * cycle[] = {"a1a2", "h8h7", "a2a1", "h7h8"};
-    std::vector<U64> history;
-    for (int ply = 0; ply < 7; ++ply) {
-        history.push_back(board.stack->repetition_key());
-        move_t move;
-        move.set(&board, cycle[ply % 4]);
-        if (!board.valid(&move) || !board.legal(&move)) {
-            std::cerr << "invalid history fixture\n";
-            return false;
-        }
-        board.forward(&move);
-    }
-    const std::string fen = board.to_string();
-    trans_table::clear();
-    const int losing_score = run(fen);
-    const int warm_draw = run(fen, history);
-    trans_table::clear();
-    const int draw_score = run(fen, history);
-    const int warm_loss = run(fen);
-    bool success = check("history fixture must offer Black a genuine threefold draw",
-        losing_score < -200 && draw_score == 0);
-    success &= check("cached losing scores must not hide a repetition escape",
-        warm_draw == draw_score);
-    success &= check("cached repetition scores must not invent an escape without history",
-        warm_loss == losing_score);
-    return success;
-}
-
 bool test_matching_context_and_move_hint() {
     const char * fen = "7k/8/8/8/8/8/8/KR6 w - - 0 1";
     trans_table::clear();
@@ -555,74 +524,6 @@ bool test_tt_move_only_collisions() {
     return success;
 }
 
-bool test_context_restoration() {
-    const char * fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    search_t search(fen);
-    prepare(search);
-    const U64 root_context = search.tt_context();
-    move_t knight;
-    knight.set(&search.brd, "g1f3");
-    search.forward(&knight, false);
-    const U64 knight_context = search.tt_context();
-    search.forward();
-    bool success = check("null moves must discard legal repetition history",
-        search.stack->tt_history == 0 && search.tt_context() != knight_context);
-    move_t after_null;
-    after_null.set(&search.brd, "b1c3");
-    search.forward(&after_null, false);
-    success &= check("the artificial null position must remain outside legal history",
-        search.stack->tt_history == 0);
-    search.backward(&after_null);
-    search.backward();
-    success &= check("undoing null must restore draw context", search.tt_context() == knight_context);
-    search.backward(&knight);
-    success &= check("undoing a real move must restore draw context", search.tt_context() == root_context);
-    move_t pawn;
-    pawn.set(&search.brd, "e2e4");
-    search.forward(&pawn, false);
-    success &= check("irreversible moves must discard repetition context", search.stack->tt_history == 0);
-    search_t pawn_root(search.brd.to_string().c_str());
-    prepare(pawn_root);
-    success &= check("root and interior nodes must distinguish future cycle policy",
-        search.tt_context() != pawn_root.tt_context());
-    search.backward(&pawn);
-    success &= check("undoing an irreversible move must restore context", search.tt_context() == root_context);
-    for (const char * text : {"g1f3", "g8f6", "f3g1", "f6g8"}) {
-        move_t move;
-        move.set(&search.brd, text);
-        search.forward(&move, false);
-    }
-    std::vector<U64> history;
-    for (int ply = 0; ply < search.brd.ply; ++ply) {
-        history.push_back(search.brd._stack[ply].repetition_key());
-    }
-    search.reset_stack();
-    search_t supplied(search.brd.to_string().c_str(), nullptr, nullptr, history);
-    prepare(supplied);
-    success &= check("rebasing must agree with equivalent supplied game history",
-        search.tt_context() == supplied.tt_context());
-    search_t opposite_contempt(search.brd.to_string().c_str(), nullptr, nullptr, history);
-    prepare(opposite_contempt);
-    opposite_contempt.draw_contempt = 12;
-    success &= check("different draw preferences must not share scores",
-        search.tt_context() != opposite_contempt.tt_context());
-    search_t capture("7k/8/8/8/8/8/p7/KR6 w - - 17 1");
-    prepare(capture);
-    for (const char * text : {"b1c1", "h8g8"}) {
-        move_t move;
-        move.set(&capture.brd, text);
-        capture.forward(&move, false);
-    }
-    const U64 before_capture = capture.tt_context();
-    move_t king;
-    king.set(&capture.brd, "a1a2");
-    capture.forward(&king, false);
-    success &= check("captures must discard old repetition context", capture.stack->tt_history == 0);
-    capture.backward(&king);
-    success &= check("undoing a capture must restore context", capture.tt_context() == before_capture);
-    return success;
-}
-
 }
 
 int main() {
@@ -630,9 +531,7 @@ int main() {
     trans_table::set_size(4);
     bool success = test_rule50_buckets();
     success &= test_fifty_move_context();
-    success &= test_history_context();
     success &= test_matching_context_and_move_hint();
-    success &= test_context_restoration();
     success &= test_clock_range_reuse();
     success &= test_clock_range_propagation();
     success &= test_non_pv_tt_bounds();

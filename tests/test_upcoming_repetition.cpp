@@ -22,7 +22,6 @@ public:
     void supply_history(std::vector<U64> keys) {
         _position_history = std::move(keys);
         stack->repetition_start = -int(_position_history.size());
-        init_tt_history();
     }
 };
 

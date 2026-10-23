@@ -21,7 +21,6 @@ void place_at_ply(search_t & search, int ply) {
     search.stack = &search._stack[ply];
     search.stack->in_check = search.brd.in_check();
     search.stack->repetition_start = ply;
-    search.stack->tt_history = 0;
     search.stack->tt_clocks = {0, 101};
     search.draw_contempt = 0;
 }

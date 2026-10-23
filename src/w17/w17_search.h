@@ -46,7 +46,6 @@ public:
         for (U64 & key : _position_history) {
             key ^= hash::codes[13][17];
         }
-        init_tt_history();
     }
     
     int w17_pvs(int alpha, int beta, int in_mate_search, int depth);

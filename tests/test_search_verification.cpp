@@ -41,7 +41,6 @@ public:
             && alpha == 0 && beta == 1 && depth == 2 && cut_node;
         nodes += 2;
         stack->tt_key = 999;
-        stack->tt_history = 777;
         stack->repetition_start = 55;
         stack->eval_result = 123;
         stack->improving = false;
@@ -93,7 +92,7 @@ bool test_scope() {
                 && search->stop_all == search->cancel && search->null_enabled == previous_null
                 && restored(*search, start),
                 "verification must restore worker policy and retain work/cancellation on return or exception");
-            success &= check(after.tt_key == before.tt_key && after.tt_history == before.tt_history
+            success &= check(after.tt_key == before.tt_key
                 && after.repetition_start == before.repetition_start && after.eval_result == before.eval_result
                 && after.improving == before.improving && after.best_move.piece == before.best_move.piece
                 && after.current_move.piece == before.current_move.piece && after.killer[0].piece == before.killer[0].piece
