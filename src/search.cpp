@@ -1385,22 +1385,32 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         U64 nodes_before = nodes;
         int score = 0;
 
-        const int reduce = wild == 0
-            ? reduction(depth, i,
-                reduction_estimate(depth, i, *move, true, false, rmove->gives_check), true) : 0;
+        const int estimate = wild == 0
+            ? reduction_estimate(depth, i, *move, true, false, rmove->gives_check) : 0;
+        const int reduce = wild == 0 ? reduction(depth, i, estimate, true) : 0;
         //go forward and search one level deeper
         stack->move_count = i + 1;
         forward(move, rmove->gives_check);
         if (i == 0) {
             score = -pvs(-beta, -alpha, depth - 1, false);
         } else {
-            score = -pvs(-alpha - 1, -alpha, depth - 1 - reduce, true);
-            if (!stop_all && score > alpha) { //open window research w/o reductions
-                const auto previous_clocks = stack->tt_clocks;
-                score = -pvs(-beta, -alpha, depth - 1, false);
-                if (lmr_enabled) {
-                    stack->tt_clocks.include_child(previous_clocks, 0);
+            int new_depth = depth;
+            const int reduced_depth = depth - 1 - reduce;
+            stack->reduction = wild == 0 && depth >= 3 && lmr_enabled && i >= 2 ? estimate : 1024;
+            score = -pvs(-alpha - 1, -alpha, reduced_depth, true);
+            stack->reduction = 1024;
+            if (!stop_all && score > alpha && reduce > 0) {
+                const bool deeper = score > best + 32 + 8 * (reduce + 1);
+                const bool shallower = score < best + new_depth;
+                new_depth += int(deeper) - int(shallower);
+                if (new_depth - 1 > reduced_depth && score < score::TABLEBASE - MAX_PLY) {
+                    stack->reduction = 1024 * (1 + int(shallower) - int(deeper));
+                    score = -pvs(-alpha - 1, -alpha, new_depth - 1, false);
+                    stack->reduction = 1024;
                 }
+            }
+            if (!stop_all && score > alpha && score < beta) {
+                score = -pvs(-beta, -alpha, new_depth - 1, false);
             }
         }
         backward(move);
