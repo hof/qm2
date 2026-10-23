@@ -18,6 +18,7 @@ and experiment logs belong under `.context/baselines/`; Git history keeps the re
 8. [Roadmap](#8-roadmap)
 9. [Opening books and persistent experience](#9-opening-books-and-persistent-experience)
 10. [Python runner and project CLI](#10-python-runner-and-project-cli)
+11. [Connectors](#11-connectors)
 
 Keep chapter numbers stable; append new chapters rather than renumbering existing
 ones. List chapters with `rg '^## ' MAXIMA.md` and locate topics with
@@ -1512,12 +1513,15 @@ commands discover the checkout from the current directory or
 current directory. Benchmark positions ship with the installed package.
 
 `./maxima init` prepares a checkout in one command and skips what is already
-ready, so it is safe to rerun and suits CI:
+ready, so it is safe to rerun and suits CI. In order:
 
-- toolchain (creates `.tools/cpp26` with micromamba when no compilers are found)
 - runner (`.tools/runner` with python-chess, unless the current Python has it)
+- network: `networks/nn-62ef826d1a6d.nnue` (the build registers its tests
+  against it) and its copy `eval.nnue`, through `tools/download_nnue.py`
+- toolchain: GCC 16+, CMake 3.30+ and Ninja on PATH are used as they are;
+  otherwise `.tools/cpp26` is created with micromamba, which is itself
+  downloaded (pinned 2.9.0, verified by size and SHA-256) on Linux x86-64
 - Release and Debug builds (Ninja's no-op check decides "up to date")
-- `eval.nnue` through `tools/download_nnue.py`, for engines that use a network
 - `book.bin` from the pinned polyglot-books v1.0 archive, verified by size and
   SHA-256; a different existing file is kept unless `--force`
 - `fire.bin` (Noomen's Daring carried on by `experience:fire`) and `draw.bin` from
@@ -1526,8 +1530,21 @@ ready, so it is safe to rerun and suits CI:
 - Syzygy tables up to `--syzygy N` pieces (default 5, about 940 MiB; 0 skips),
   skipped offline when the manifest lists the complete set
 
+- `experiment.bin` and the mood books, built from `books/*.pgn` when stale
+
 `--check` changes nothing, reports each item, and exits 1 when something is
-missing. `--no-build` and `--no-debug` skip builds.
+missing. `--no-build` and `--no-debug` skip builds; `--no-books` skips all
+books (about 180 MB, not needed by tests).
+
+For CI, a fresh clone needs only git and Python 3.8+ with `venv`:
+
+```bash
+./maxima init --no-debug --no-books --syzygy 0
+./maxima test
+```
+
+Cache `.tools/`, `build/` and `networks/` between runs; init then finds every
+step ready and only Ninja's incremental build does work.
 
 `MAXIMA_DATA_DIR` moves the data out of the checkout, for example onto a
 persistent volume: books (`book.bin`, `fire.bin`, `draw.bin`), `eval.nnue`,
@@ -1614,7 +1631,8 @@ for every data command remain a planned documentation improvement.
 
 `maxima fics` connects to freechess.org:5000, logs in, keeps the session
 alive, seeks, plays its games with the Release Maxima build, and saves them as
-PGN.
+PGN. `--live-feed` and `--pgn-post` (or `live_feed` and `pgn_post` in the config)
+attach the connectors of chapter 11.
 
 ```bash
 ./maxima fics                                   # guest login, plays with Maxima
@@ -1751,3 +1769,108 @@ within a minute counts as a dead connection. Lost connections reconnect after
 rejected handles stop with an error instead of retrying. JDrone could hang on
 waits without deadlines (engine readiness, a half-open socket); the client
 avoids both.
+
+## 11. Connectors
+
+A game source plays games somewhere: FICS today (10.2), Lichess later. It reports
+what happens as neutral game events; connectors consume them without knowing the
+source. Both connectors below are off by default and use only the Python
+standard library (`runner/maxima_runner/connectors.py`).
+
+### 11.1 Game events
+
+Every event is one JSON object with `"v": 1` (bumped only for incompatible
+changes; new fields may appear at any time, so ignore unknown ones), `"type"`
+and `"source"` (`"fics"`). FICS game numbers are in `game`; colors are
+`"white"`/`"black"`; clocks are milliseconds; FENs are full six-field FENs.
+
+| type | when | fields |
+|---|---|---|
+| `game_start` | our game begins | `game`, `white`, `black`, `white_elo`, `black_elo` (null when unknown), `initial_seconds`, `increment_seconds`, `rated`, `variant` (FICS type, e.g. `blitz`), `our_color`, `fen`, `clock_ms` |
+| `move` | after each move, ours or theirs | `game`, `ply` (after the move), `san`, `uci`, `fen` (after), `by` (`"us"`/`"them"`), `clock_ms`, `search` |
+| `position` | takeback or resync | `game`, `ply`, `fen`, `reason` (`"takeback"`/`"reset"`), `clock_ms`; drop moves after `ply` |
+| `game_end` | game over | `game`, `result` (`1-0`, `0-1`, `1/2-1/2`, `*`), `reason`, `headers`, `pgn` (null when aborted before both sides moved) |
+
+`search` is null for the opponent's moves. For our book moves it is
+`{"book": "<reason>"}`; for searched moves it is `{"depth", "seldepth", "nodes",
+"nps", "time_ms", "score", "pv_san"}` with `score` either `{"cp": n}` or
+`{"mate": n}` from White's point of view, and `pv_san` the expected line in SAN
+starting with the move played.
+
+```json
+{"v": 1, "type": "move", "source": "fics", "game": 17, "ply": 1, "san": "e4", "uci": "e2e4",
+ "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", "by": "us",
+ "clock_ms": {"white": 179500, "black": 180000},
+ "search": {"depth": 18, "seldepth": 24, "nodes": 2100000, "nps": 850000, "time_ms": 2470,
+            "score": {"cp": 25}, "pv_san": ["e4", "e5", "Nf3"]}}
+```
+
+### 11.2 WebSocket live feed
+
+```bash
+./maxima fics --live-feed 8765              # ws://127.0.0.1:8765/
+./maxima fics --live-feed 0.0.0.0:8765      # reachable from other machines
+```
+
+Any path is accepted. Each event is one WebSocket text message. On connect a
+viewer first gets `{"v": 1, "type": "hello", "source", "server", "handle",
+"engine", "game"}`, where `game` is null between games or
+`{"start": <game_start>, "moves": [<move>, ...]}` for the game in progress, so a
+late viewer can draw the board at once. Viewers do not send anything; pings are
+answered. A viewer that falls 256 messages behind is disconnected. There is no
+authentication: keep the default `127.0.0.1` and publish it through a reverse
+proxy when it must be public.
+
+A minimal browser viewer:
+
+```html
+<pre id="log"></pre>
+<script>
+const feed = new WebSocket("ws://127.0.0.1:8765/");
+feed.onmessage = (message) => {
+  const event = JSON.parse(message.data);
+  const text = event.type === "move"
+    ? `${event.ply}. ${event.san} (${event.by}) ${event.search?.score ? JSON.stringify(event.search.score) : ""}`
+    : `${event.type} ${event.game ?? ""}`;
+  document.getElementById("log").textContent += text + "\n";
+};
+</script>
+```
+
+The FEN in every `move` and `game_start` is enough for a board library such as
+chessboard.js; `clock_ms` drives the clocks.
+
+### 11.3 PGN post
+
+```bash
+MAXDRONE_POST_TOKEN=... ./maxima fics --pgn-post https://example.org/games
+```
+
+After each finished game with moves, MaxDrone sends `POST <url>` with
+`Content-Type: application/json` and, when `MAXDRONE_POST_TOKEN` is set,
+`Authorization: Bearer <token>` (the token comes only from the environment and
+is never logged). The body is the `game_end` event without its type:
+
+```json
+{"v": 1, "source": "fics", "game": 17, "result": "1-0", "reason": "guestNinja resigns",
+ "headers": {"Event": "FICS unrated blitz game", "White": "MaxDrone", "...": "..."},
+ "pgn": "[Event \"FICS unrated blitz game\"]\n...\n1. e4 {[%clk 0:02:59.5]} ... 1-0"}
+```
+
+Any 2xx status counts as delivered. The request times out after 10 seconds;
+failures are logged and not retried, since the game is already saved locally
+(10.2). A receiving server can be this small:
+
+```python
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
+
+class games(BaseHTTPRequestHandler):
+    def do_POST(self):
+        game = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        print(game["game"], game["result"], len(game["pgn"]))  # store it here
+        self.send_response(204)
+        self.end_headers()
+
+HTTPServer(("0.0.0.0", 9000), games).serve_forever()
+```
