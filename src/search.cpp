@@ -329,7 +329,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     correction_history = wild == 0 ? std::make_unique<correction_history_t>() : nullptr;
     stack->eval_result = score::INVALID;
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     stack->reduction = 1024;
     stack->static_eval = score::INVALID;
@@ -728,7 +728,7 @@ void search_t::forward() {
     stack->in_check = false;
     stack->eval_result = score::INVALID;
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     stack->reduction = 1024;
     stack->static_eval = score::INVALID;
@@ -774,7 +774,7 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->tt_clocks = {0, 101};
     stack->eval_result = score::INVALID;
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     stack->reduction = 1024;
     stack->static_eval = score::INVALID;
@@ -1306,7 +1306,7 @@ int search_t::reduction_estimate(int depth, int searched_moves, const move_t & m
         + 999 * stack->lmr_tt_tactical + 1136 * stack->lmr_tt_fail_low
         + 384 * stack->lmr_alpha_raises;
     reduce -= std::clamp(history * 1024 / history_divisor, -2048, 2048);
-    reduce -= 1289 * stack->tt_pv + 775 * refutation + 1024 * noisy
+    reduce -= 1289 * stack->tt_pv + 1024 * stack->lmr_tt_deep + 775 * refutation + 1024 * noisy
         + 1361 * (gives_check != 0) + stack->lmr_correction;
     return reduce;
 }
@@ -1356,7 +1356,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     // A reduced aspiration re-search still belongs to the attempted iteration.
     const int report_depth = std::max(depth, attempted_depth);
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     stack->reduction = 1024;
     stack->static_eval = score::INVALID;
@@ -1911,7 +1911,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     if (!stack->excluded_move) {
         stack->tt_pv = false;
     }
-    stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
+    stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     stack->reduction = 1024;
     stack->static_eval = score::INVALID;
@@ -1996,6 +1996,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         tt_mode_t::main_search, &cached_pv);
     if (normal_search) {
         stack->tt_pv = lmr_enabled && (pv || cached_pv);
+        stack->lmr_tt_deep = usable_tt_score;
         // A main-line node whose cached score already failed low is reduced more.
         int cached_score = 0, cached_move = 0, cached_flag = 0;
         stack->lmr_tt_fail_low = stack->tt_pv && (usable_tt_score
@@ -2324,7 +2325,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     stack->best_move.clear();
     stack->tt_move.clear();
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     stack->reduction = 1024;
     stack->static_eval = score::INVALID;
@@ -2553,7 +2554,7 @@ void search_t::reset_stack() {
     stack = root_stack;
     stack->eval_result = score::INVALID;
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = false;
+    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     stack->reduction = 1024;
     stack->static_eval = score::INVALID;
