@@ -1804,7 +1804,7 @@ bullet, blitz and rapid; Lichess offers bots no UltraBullet), rated or casual,
 one game at a time, and declines the rest with Lichess's own reasons (`later`
 while busy or stopping, `tooFast`, `tooSlow`, `timeControl`, `standard` for
 variants). Takeback requests are declined; draw offers are accepted only in dead
-draws (below). When the opponent leaves and Lichess allows it, the win is claimed.
+draws or when a draw is worth at least our score (below). When the opponent leaves and Lichess allows it, the win is claimed.
 
 In both chat rooms (players and spectators) MaximaEngine greets at the start and
 says "Good game" at the end; it posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
@@ -1842,9 +1842,13 @@ Draw offers, on both servers, are judged on our next move with the fresh choice
 for the current position, so an offer made right after a blunder is not
 accepted on an old evaluation. The draw is accepted when no side has mating
 material, when the online tablebase says draw for us (including cursed win and
-blessed loss, which the fifty-move rule makes draws), or when the search reached
-the tablebases and scores exactly 0.00 with seven pieces or fewer
-(`move_choice.dead_draw`). Otherwise the move declines it. The move is sent
+blessed loss, which the fifty-move rule makes draws), when the search reached
+the tablebases and scores exactly 0.00 with seven pieces or fewer, or when our
+score is no better than the engine's own draw value, the game's `DrawContempt`
+(10.2; -10 cp without ratings). So against a stronger opponent, where a draw is
+worth a little more, a repetition the engine sees is accepted; while we are
+better than a draw, never (`move_choice.accept_draw`). Otherwise the move
+declines it. The move is sent
 anyway, so an offer withdrawn meanwhile does not leave our clock running. FICS
 offers are read from `<name> offers you a draw.`, Lichess offers from the game
 state.

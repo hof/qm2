@@ -633,7 +633,7 @@ class engine_player:
             await self.send("refresh")
         elif draw_offer_pattern.match(line) and self.game is not None:
             self.draw_offered = True
-            self.on_line("-- draw offered; accepted on our move only in a dead draw")
+            self.on_line("-- draw offered; judged on our move")
         elif creating_pattern.match(line):
             await self.on_creating(creating_pattern.match(line))
         elif challenge_pattern.match(line):
@@ -884,9 +884,9 @@ class engine_player:
         if move is None or not board.is_legal(move):
             self.on_line(f"-- engine returned no legal move in {board.fen()}")
             return
-        if self.draw_offered and move_choice.dead_draw(board, info):
+        if self.draw_offered and move_choice.accept_draw(board, info, self.contempt):
             # Accept, and move too: a withdrawn offer must not leave our clock running.
-            self.on_line("-- accepting the draw offer: dead draw")
+            self.on_line("-- accepting the draw offer")
             await self.send("draw")
         self.draw_offered = False
         await self.send(fics_game.ics_move(move))

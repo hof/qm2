@@ -439,9 +439,9 @@ class lichess_game:
         if move is None or not board.is_legal(move):
             bot.on_line(f"-- engine returned no legal move in {board.fen()}")
             return
-        if self.draw_offered and move_choice.dead_draw(board, info):
+        if self.draw_offered and move_choice.accept_draw(board, info, self.contempt):
             # Accept, and move too: a withdrawn offer must not leave our clock running.
-            bot.on_line(f"-- game {self.id}: accepting the draw offer: dead draw")
+            bot.on_line(f"-- game {self.id}: accepting the draw offer")
             await bot.api.post(self.path("draw/yes"))
         # Recorded before sending: the stream may report the move before the POST returns.
         self.record.on_search(board, move, info)

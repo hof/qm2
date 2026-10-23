@@ -91,7 +91,7 @@ class stub_session:
     async def play(self, board, limit, **unused):
         move = next(iter(board.legal_moves))
         return chess.engine.PlayResult(move, None, {"score": chess.engine.PovScore(chess.engine.Cp(0), board.turn),
-                                                    "tbhits": 3})
+                                                    "depth": 20, "tbhits": 3})
 
 
 class draw_tests(unittest.IsolatedAsyncioTestCase):

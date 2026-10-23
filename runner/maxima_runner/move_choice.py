@@ -9,6 +9,7 @@ from . import online_tablebase
 
 tablebase_wait = 1.0  # seconds at most; the engine's move stands when the answer is later
 draw_categories = ("draw", "cursed-win", "blessed-loss")  # the last two are draws under the fifty-move rule
+engine_draw_value = -10  # the engine's DrawContempt default, in cp from our side
 
 
 class tablebase_lookups:
@@ -68,16 +69,22 @@ async def choose_move(session, board, limit, *, opening=None, budget_ms=None, ta
     return result.move, result.info, "engine"
 
 
-def dead_draw(board, info):
+def accept_draw(board, info, contempt=None):
     """Whether to accept a draw offer, judged on our own choice for board: no mating material, a tablebase
-    draw for us, or a search that reached the tablebases and scores exactly zero with seven pieces or fewer."""
+    draw for us, a search that reached the tablebases and scores exactly zero with seven pieces or fewer, or
+    a search that values the position no higher than a draw. The engine scores a draw as its DrawContempt
+    (contempt, cp from our side), so the last case never accepts while we are better than that."""
     if board.is_insufficient_material():
         return True
     if "tablebase" in info:
         return info["tablebase"]["category"] in draw_categories
     score = info.get("score")
-    return (score is not None and bool(info.get("tbhits")) and not score.is_mate()
-            and chess.popcount(board.occupied) <= online_tablebase.max_pieces and score.relative.score() == 0)
+    if score is None or score.is_mate() or not info.get("depth"):
+        return False
+    ours = score.relative.score()
+    if info.get("tbhits") and chess.popcount(board.occupied) <= online_tablebase.max_pieces and ours == 0:
+        return True
+    return ours <= (engine_draw_value if contempt is None else contempt)
 
 
 def tablebase_reason(answer):
