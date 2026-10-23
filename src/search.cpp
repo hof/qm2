@@ -3185,10 +3185,10 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
         int gives_check = brd.gives_check(move);
 
-        // After one evasion, only noisy moves passing the quiescence SEE bound remain.
+        // After one evasion, skip evasions that lose material.
         if (ffp_enabled && in_check && searched_moves > 0 && best_score > -decisive
-                && (!(move->capture || move->promotion) || !brd.see(move, quiescence_see_threshold))) {
-            break;
+                && !brd.see(move, 0)) {
+            continue;
         }
 
         // Futility: a losing tactical move cannot lift a hopeless stand pat.
