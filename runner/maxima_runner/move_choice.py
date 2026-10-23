@@ -13,15 +13,17 @@ engine_draw_value = -10  # the engine's DrawContempt default, in cp from our sid
 
 
 class tablebase_lookups:
-    """Online tablebase lookups for one player; errors pause them for a minute."""
+    """Online tablebase lookups for one player, for positions beyond the engine's local tables (local_pieces);
+    errors pause them for a minute."""
 
-    def __init__(self, enabled, on_line):
-        self.enabled, self.on_line = enabled, on_line
+    def __init__(self, enabled, on_line, local_pieces=0):
+        self.enabled, self.on_line, self.local_pieces = enabled, on_line, local_pieces
         self.pause = 0.0
 
     def ask(self, board):
         """Start a lookup with seven or fewer pieces; None when it does not apply."""
-        if not self.enabled or time.monotonic() < self.pause or not online_tablebase.covers(board):
+        if (not self.enabled or time.monotonic() < self.pause or not online_tablebase.covers(board)
+                or chess.popcount(board.occupied) <= self.local_pieces):
             return None
         lookup = asyncio.get_running_loop().run_in_executor(None, online_tablebase.probe, board.copy(),
                                                             tablebase_wait)

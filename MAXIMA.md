@@ -1961,7 +1961,9 @@ HTTPServer(("0.0.0.0", 9000), games).serve_forever()
 
 ### 11.4 Online tablebase
 
-With seven or fewer pieces and no castling rights, MaxDrone asks
+With seven or fewer pieces and no castling rights, and more pieces than the
+engine's local Syzygy set covers (the largest complete set in `SyzygyPath`, e.g.
+5 after `maxima init`; there the engine answers from its own tables), MaxDrone asks
 `https://tablebase.lichess.ovh/standard?fen=<FEN>` while the engine already
 searches, and plays the first move of the answer (the 7-man Syzygy tables,
 DTZ-optimal so the fifty-move rule is respected) when it arrives before the

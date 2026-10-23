@@ -69,3 +69,21 @@ class describe_tests(unittest.TestCase):
         self.assertEqual(describe({"score": won, "depth": 0, "tbhits": 1}, chess.WHITE), "TB win")
         self.assertEqual(describe({"score": won, "depth": 0, "tbhits": 1}, chess.BLACK), "TB loss")
         self.assertTrue(describe({"score": won, "depth": 20}, chess.WHITE).startswith("d20 +280.00"))
+
+
+class local_tables_tests(unittest.TestCase):
+    def test_online_lookups_start_beyond_complete_local_sets(self):
+        import tempfile
+        from pathlib import Path
+        from maxima_runner import move_choice
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(online_tablebase.local_pieces(directory), 0)
+            for name in (f"K{piece}vK" for piece in "QRBNP"):  # the complete 3-man WDL set
+                (Path(directory) / f"{name}.rtbw").write_bytes(b"")
+            self.assertEqual(online_tablebase.local_pieces(directory), 3)
+            (Path(directory) / "KQvKR.rtbw").write_bytes(b"")  # an incomplete 4-man set does not count
+            self.assertEqual(online_tablebase.local_pieces(directory), 3)
+        lookups = move_choice.tablebase_lookups(True, lambda line: None, local_pieces=3)
+        with patch.object(online_tablebase, "probe") as probe:
+            self.assertIsNone(lookups.ask(chess.Board("8/8/8/4k3/8/8/8/4K2R w - - 0 1")))
+            probe.assert_not_called()

@@ -14,7 +14,7 @@ import urllib.request
 import chess
 import chess.engine
 
-from . import connectors, fics_game, learning, move_choice
+from . import connectors, fics_game, learning, move_choice, online_tablebase
 from .fics import chess_titles, draw_contempt, layer_profiles, learning_report, read_commands, restart_status, \
     style_books
 from .move_choice import describe, search_summary, variation
@@ -130,12 +130,12 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100,
-                 margin=5):
+                 margin=5, local_pieces=0):
         self.api, self.open_session, self.on_line = api, open_session, on_line
         self.speeds, self.accept, self.games = tuple(speeds), accept, games
         self.owners = {name.lower() for name in owners}
         self.learner, self.pgn_dir, self.events = learner, pgn_dir, events
-        self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line)
+        self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.contempt_window, self.margin = contempt_window, margin
         self.context = self.session = None
         self.id = self.name = None
@@ -672,7 +672,8 @@ def run(options, parser):
         bot = lichess_bot(api, engine_session, show, speeds=configured["speeds"], accept=configured["accept"],
                           games=configured["games"], owners=owners, learner=learner, pgn_dir=pgn_dir, events=events,
                           online_tablebase=configured["online_tablebase"],
-                          contempt_window=configured["contempt_window"])
+                          contempt_window=configured["contempt_window"],
+                          local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))
         feed = None
         if feed_address:
             def about():

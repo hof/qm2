@@ -16,7 +16,7 @@ import time
 import chess
 import chess.engine
 
-from . import connectors, fics_game, learning, move_choice
+from . import connectors, fics_game, learning, move_choice, online_tablebase
 from .move_choice import describe, search_summary, speed, variation
 from .project import data_root, engine_path
 from .uci import open_engine
@@ -442,12 +442,12 @@ class engine_player:
     """Play our games with a UCI engine; searches run as tasks so server lines keep flowing."""
 
     def __init__(self, open_session, on_line, margin=5, policy=None, finger_wait=2, pgn_dir=None,
-                 site="freechess.org", learner=None, events=None, online_tablebase=False):
+                 site="freechess.org", learner=None, events=None, online_tablebase=False, local_pieces=0):
         self.open_session = open_session
         self.events = events
         self.our_color = None
         self.learner = learner
-        self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line)
+        self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.opening = None
         self.from_book = self.draw_offered = False
         self.announced_mood = None
@@ -1087,6 +1087,7 @@ def run(options, parser):
         if not separator or not name.strip():
             parser.error(f"--option expects NAME=VALUE, got {item!r}")
         settings[name.strip()] = value.strip()
+    local_pieces = online_tablebase.local_pieces(settings.get("SyzygyPath"))
     feed_address = None
     if configured["live_feed"]:
         host, _, port = configured["live_feed"].rpartition(":")
@@ -1143,7 +1144,8 @@ def run(options, parser):
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
                                                                   pgn_dir=pgn_dir, site=options.host, learner=learner,
                                                                   events=events,
-                                                                  online_tablebase=configured["online_tablebase"])
+                                                                  online_tablebase=configured["online_tablebase"],
+                                                                  local_pieces=local_pieces)
         feed = None
         if feed_address:
             def about():
