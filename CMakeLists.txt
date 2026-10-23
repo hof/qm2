@@ -61,7 +61,6 @@ add_custom_target(release
 
 add_definitions("-Wall -Wextra")
 add_subdirectory(src)
-add_subdirectory(gen)
 include(CTest)
 if(BUILD_TESTING)
     set(maxima_nnue_test_network "${PROJECT_SOURCE_DIR}/networks/nn-62ef826d1a6d.nnue"
@@ -134,7 +133,6 @@ if(BUILD_TESTING)
     add_test(test_search_review tests/test_search_review)
     add_test(test_w17_tt_context tests/test_w17_tt_context)
     add_test(test_w17_evaluation tests/test_w17_evaluation)
-    add_test(test_kpk tests/test_kpk)
     add_test(test_tablebase tests/test_tablebase)
     set_tests_properties(test_search_ownership PROPERTIES TIMEOUT 10)
     add_test(test_search_lifecycle ${Python3_EXECUTABLE}

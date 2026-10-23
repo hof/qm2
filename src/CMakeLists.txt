@@ -10,7 +10,6 @@ add_library(MAX2SRC
 	book.cpp
         experience.cpp
         tablebase.cpp
-        eval_endgame.cpp
         nnue.cpp
 	eval.cpp
 	search.cpp
