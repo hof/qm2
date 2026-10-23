@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-from .project import engine_path, project_root
+from .project import data_root, engine_path, project_root
 
 
 command_groups = (
@@ -150,6 +150,13 @@ def development_command(command, arguments):
     # Fail explicitly rather than silently skipping dependency-dependent tests.
     import chess
     environment = dict(os.environ, MAXIMA_ENGINE=str(binary), MAXIMA_PROJECT_DIR=str(root))
+    # Runner tests start the engine in temporary directories, where it cannot find eval.nnue itself.
+    if not environment.get("MAXIMA_EVAL_FILE"):
+        networks = [data_root() / "eval.nnue", *sorted((root / "networks").glob("*.nnue"))]
+        network = next((path for path in networks if path.is_file()), None)
+        if network is None:
+            raise ValueError("no network found; run ./maxima init")
+        environment["MAXIMA_EVAL_FILE"] = str(network)
     source = str(root / "runner")
     environment["PYTHONPATH"] = source + os.pathsep + environment.get("PYTHONPATH", "")
     return run_command([sys.executable, "-m", "unittest", "discover", "-s",
