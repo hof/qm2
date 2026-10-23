@@ -1479,21 +1479,13 @@ int search_t::upcoming_repetition(move_t & witness) {
     return 0;
 }
 
-bool search_t::raise_repetition_alpha(int & alpha, int beta, move_t & witness) {
+bool search_t::raise_repetition_alpha(int & alpha) {
+    move_t witness;
     if (!upcoming_repetition_enabled || brd.ply == 0
-            || stack->excluded_move || alpha >= draw_score()) {
-        return false;
-    }
-    const int distance = upcoming_repetition(witness);
-    if (!distance) {
+            || stack->excluded_move || alpha >= draw_score() || !upcoming_repetition(witness)) {
         return false;
     }
     alpha = draw_score();
-    if (alpha >= beta) {
-        stack->best_move = witness;
-        stack->pv_moves[0] = witness;
-        stack->pv_count = 1;
-    }
     return true;
 }
 
@@ -1918,9 +1910,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     }
 
     const bool pv = alpha + 1 < beta;
-    move_t repetition_move{};
-    const bool repetition_floor = raise_repetition_alpha(alpha, beta, repetition_move);
-    if (repetition_floor && alpha >= beta) {
+    if (raise_repetition_alpha(alpha) && alpha >= beta) {
         return alpha;
     }
 
@@ -1953,19 +1943,16 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         hint.set_compact(&brd, tt_move);
         tt_move_legal = hint.piece && brd.valid(&hint) && brd.legal(&hint);
     }
-    // A cached score below a legal draw escape cannot resolve this node.
-    // Retain its move hint, but continue searching for something better.
-    if (!pv && usable_tt_score && tt_move_legal && brd.stack->fifty_count < 90
-            && (!repetition_floor || tt_score >= draw_score())) {
+    if (!pv && usable_tt_score && tt_move_legal && brd.stack->fifty_count < 90) {
         // A compatible exact score resolves either side of the window.
         if (tt_flag == score::EXACT) {
-            if (!repetition_floor && tt_score >= beta
+            if (tt_score >= beta
                     && std::abs(tt_score) < score::TABLEBASE - MAX_PLY) {
                 update_tt_history(tt_move, depth);
             }
             return tt_score;
         } else if (tt_score >= beta && tt_flag == score::LOWERBOUND) {
-            if (!repetition_floor && std::abs(tt_score) < score::TABLEBASE - MAX_PLY) {
+            if (std::abs(tt_score) < score::TABLEBASE - MAX_PLY) {
                 update_tt_history(tt_move, depth);
             }
             return tt_score;
@@ -2002,7 +1989,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         }
     }
     int razor_score = alpha;
-    if (!pv && !repetition_floor && razor_node(alpha, beta, depth, eval, razor_score)) {
+    if (!pv && razor_node(alpha, beta, depth, eval, razor_score)) {
         return razor_score;
     }
     if (stop_all) {
@@ -2010,14 +1997,14 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     }
     const int decisive_score = score::TABLEBASE - MAX_PLY;
     int futility_score = beta;
-    if (!pv && !repetition_floor && reverse_futility(beta, depth, eval, futility_score)) {
+    if (!pv && reverse_futility(beta, depth, eval, futility_score)) {
         return futility_score;
     }
     const bool do_prune_node = !excluded_move && eval >= beta && !in_check && !pv
         && std::abs(beta) < decisive_score && brd.has_pieces(brd.us());
     const bool previous_null = brd.ply > 0 && !(stack - 1)->current_move.piece;
     const bool null_policy = brd.ply > 0 && cut_node && depth > 2 && normal_search
-        && !repetition_floor && eval + 132 * int(stack->improving) >= beta + 8 * depth;
+        && eval + 132 * int(stack->improving) >= beta + 8 * depth;
     const bool do_null = null_enabled && !previous_null && null_policy;
 
     // A null cutoff requires legal play: passing in stalemate would turn an
@@ -2056,7 +2043,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     depth = internal_search_depth(depth, pv, cut_node);
 
     int probcut_score = alpha;
-    if (!pv && !repetition_floor && probcut(alpha, beta, depth, eval, cut_node, probcut_score)) {
+    if (!pv && probcut(alpha, beta, depth, eval, cut_node, probcut_score)) {
         return probcut_score;
     }
     if (stop_all) {
@@ -2067,8 +2054,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
      * Moves loop
      */
 
-    const auto singular_result = repetition_floor ? singular_result_t{}
-        : singular_extension(alpha, beta, depth, cut_node);
+    const auto singular_result = singular_extension(alpha, beta, depth, cut_node);
     if (stop_all) {
         return alpha;
     }
@@ -2089,23 +2075,17 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     }
 
     //prepare and do the loop
-    int best = repetition_floor ? draw_score() : -score::INF;
+    int best = -score::INF;
     int searched_moves = 0;
     const int score_max = score::MATE - brd.ply - 1;
-    if (repetition_floor) {
-        stack->best_move = repetition_move;
-        stack->pv_moves[0] = repetition_move;
-        stack->pv_count = 1;
-    } else {
-        stack->best_move.clear();
-    }
+    stack->best_move.clear();
     do {
         if (excluded_move && move->to_compact() == excluded_move) {
             continue;
         }
 
         assert(brd.valid(move));
-        assert(!stack->best_move.equals(move) || (repetition_floor && repetition_move.equals(move)));
+        assert(!stack->best_move.equals(move));
         assert(in_searched(move, searched_moves) == false);
 
         const int gives_check = brd.gives_check(move);
@@ -2122,12 +2102,12 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             : reduction_estimate(depth, searched_moves, *move, pv, cut_node, gives_check);
         const int reduce = singular ? 0 : reduction(depth, searched_moves, estimate);
         const int lmr_depth = std::max(0, depth - (estimate + 2057 * stack->tt_pv - 400) / 1024);
-        if (!repetition_floor && !singular && prune_quiet(*move, depth, searched_moves,
+        if (!singular && prune_quiet(*move, depth, searched_moves,
                 lmr_depth, best)) {
             continue;
         }
 
-        if (!repetition_floor && !singular && prune_futility(*move,
+        if (!singular && prune_futility(*move,
                 lmr_depth, searched_moves, best, alpha, beta, gives_check, eval)) {
             continue;
         }
@@ -2179,7 +2159,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             }
         }
         backward(move);
-        if (lmr_researched && !repetition_floor) {
+        if (lmr_researched) {
             update_lmr_history(*move, depth, score, alpha, beta);
         }
 
@@ -2196,9 +2176,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
                     trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND,
                         score::INVALID, stack->tt_pv);
                 }
-                if (!repetition_floor) {
-                    update_correction_history(score, score::LOWERBOUND, depth);
-                }
+                update_correction_history(score, score::LOWERBOUND, depth);
                 if (normal_search) {
                     update_capture_cutoff(*move, depth, searched_moves);
                 }
@@ -2245,9 +2223,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     assert(brd.legal(&stack->best_move));
 
     int flag = score::flags(best, alpha1, beta);
-    if (!repetition_floor) {
-        update_correction_history(best, flag, depth);
-    }
+    update_correction_history(best, flag, depth);
     if (normal_search) {
         trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_compact(), flag,
             score::INVALID, stack->tt_pv);
@@ -2313,9 +2289,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return tablebase_score;
     }
 
-    move_t repetition_move{};
-    const bool repetition_floor = raise_repetition_alpha(alpha, beta, repetition_move);
-    if (repetition_floor && alpha >= beta) {
+    if (raise_repetition_alpha(alpha) && alpha >= beta) {
         return alpha;
     }
 
@@ -2327,8 +2301,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         tt_hit_t tt;
         const bool usable = trans_table::probe(key, brd.ply, brd.stack->fifty_count, tt) && tt.bound;
         const int tt_score = tt.score, tt_flag = tt.bound;
-        if (usable && (!repetition_floor || tt_score >= draw_score())
-                && alpha + 1 == beta && brd.stack->fifty_count < 90 && (tt_flag == score::EXACT
+        if (usable && alpha + 1 == beta && brd.stack->fifty_count < 90 && (tt_flag == score::EXACT
                 || (tt_flag == score::LOWERBOUND && tt_score >= beta)
                 || (tt_flag == score::UPPERBOUND && tt_score <= alpha))) {
             return tt_score;
@@ -2342,11 +2315,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     }
     // Only completed results reach this helper; qsearch stores at depth 0.
     const auto finish = [&](int value, int flag) {
-        if (repetition_floor && value == draw_score() && !stack->best_move.piece) {
-            stack->best_move = repetition_move;
-            stack->pv_moves[0] = repetition_move;
-            stack->pv_count = 1;
-        }
         if (use_q_tt) {
             trans_table::store(key, brd.root_ply, brd.ply, 0, value,
                 stack->best_move.to_compact(), flag);
@@ -2370,7 +2338,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         // Match the normal fail-low path even when the picker is empty.
         // Merely having an illegal tactical candidate must not change the bound.
         return !has_legal_move(brd) ? finish(draw_score(), score::EXACT)
-            : finish(repetition_floor ? std::max(eval, draw_score()) : eval, score::UPPERBOUND);
+            : finish(eval, score::UPPERBOUND);
     }
     if (eval > alpha && !in_check) {
         alpha = eval;
@@ -2381,12 +2349,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      */
 
     // Keep the best searched score independently of the window: a fail-low
-    // still carries a useful upper bound below alpha. A legal repetition
-    // escape remains a floor even when the static score is lower.
+    // still carries a useful upper bound below alpha.
     int best_score = in_check ? -score::INF : eval;
-    if (repetition_floor) {
-        best_score = std::max(best_score, draw_score());
-    }
     int searched_moves = 0;
     const int decisive = score::TABLEBASE - MAX_PLY;
     const int futility = eval + quiescence_futility_margin;

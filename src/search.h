@@ -120,7 +120,7 @@ protected:
     std::vector<U64> _position_history;
     static bool has_legal_move(board_t & brd);
     int ceiling_score();
-    bool raise_repetition_alpha(int & alpha, int beta, move_t & witness);
+    bool raise_repetition_alpha(int & alpha);
 
 public:
     search_stack_t _stack[MAX_PLY + 1];

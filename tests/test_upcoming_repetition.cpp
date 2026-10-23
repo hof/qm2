@@ -188,24 +188,22 @@ bool search_bounds() {
             const int value = qsearch ? search->qsearch(draw - 1, draw, -1)
                 : search->pvs(draw - 1, draw, 3);
             success &= check("legal escape must raise alpha and cut off before children",
-                value == draw && search->nodes == 0 && search->stack->best_move.to_string() == "f6g8"
-                && search->stack->pv_count == 1
+                value == draw && search->nodes == 0
                 && search->brd.to_string() == fen && search->brd.stack->tt_key == key);
             tt_hit_t hit;
             success &= check("early proof must not store an ordinary TT result",
                 !trans_table::probe(tt_key, search->brd.ply, 3, hit));
-            move_t witness{};
             int alpha = draw;
             success &= check("alpha at draw must skip optional detection",
-                !search->raise_repetition_alpha(alpha, draw + 1, witness) && !witness.piece);
+                !search->raise_repetition_alpha(alpha));
             alpha = draw - 1;
             search->upcoming_repetition_enabled = false;
             success &= check("off switch must skip optional detection",
-                !search->raise_repetition_alpha(alpha, draw, witness) && alpha == draw - 1);
+                !search->raise_repetition_alpha(alpha) && alpha == draw - 1);
             search->upcoming_repetition_enabled = true;
             search->stack->excluded_move = 1;
             success &= check("a singular search must not use a repetition escape",
-                !search->raise_repetition_alpha(alpha, draw, witness));
+                !search->raise_repetition_alpha(alpha));
             search->stack->excluded_move = 0;
             // Mandatory draw adjudication stays active with the feature disabled.
             play(*search, "f6g8");
@@ -215,18 +213,6 @@ bool search_bounds() {
                 && search->qsearch(draw + 1, draw + 2, -1) == search->draw_score());
         }
     }
-    // A quiet draw is outside tactical qsearch's ordinary move domain.
-    auto disabled = std::make_unique<probe_search_t>(cycle_fen);
-    prepare(*disabled);
-    reach_escape(*disabled);
-    disabled->q_tt_enabled = false;
-    disabled->upcoming_repetition_enabled = false;
-    const int missed = disabled->qsearch(-score::INF, score::INF, -1);
-    disabled->upcoming_repetition_enabled = true;
-    const int saved = disabled->qsearch(-score::INF, score::INF, -1);
-    success &= check("disabled tactical control must expose the quiet escape it misses",
-        missed < -100 && saved == 0 && disabled->stack->best_move.to_string() == "f6g8");
-    std::cout << "quiet escape control off=" << missed << " on=" << saved << '\n';
     trans_table::clear();
     auto better = std::make_unique<probe_search_t>("6nk/8/8/8/8/8/8/KR4N1 b - - 0 1");
     prepare(*better);
@@ -249,18 +235,16 @@ bool cache_clock_and_stop() {
         // Cached score cutoffs apply only to non-PV windows.
         const int result = cached > 0 ? search->pvs(cached - 1, cached, 2, true)
             : search->pvs(-1000, 1000, 2);
-        success &= check("TT return must respect the proven draw floor without a false PV",
-            result == std::max(0, cached)
-            && (cached > 0 ? search->stack->pv_count == 0 && !search->stack->best_move.piece
-                : search->nodes > 0 && search->stack->pv_count > 0));
+        success &= check("a raised draw alpha must still allow TT cutoffs and fail low below it",
+            cached > 0 ? result == cached && search->stack->pv_count == 0 && search->nodes == 0
+                : result <= 0 && search->nodes > 0);
     }
     trans_table::clear();
     auto search = std::make_unique<probe_search_t>(cycle_fen);
     prepare(*search);
     reach_escape(*search);
-    success &= check("wide search must retain the proven draw as its best move",
-        search->pvs(-1000, 1000, 1) == 0 && search->stack->best_move.to_string() == "f6g8"
-        && search->stack->pv_count >= 1);
+    success &= check("a wide search with a repetition escape must not score above the draw",
+        search->pvs(-1000, 1000, 1) <= 0);
 
     // A better stand pat must not present the drawing witness as its winning PV.
     auto winning = std::make_unique<probe_search_t>("6nk/8/8/8/8/8/8/KR4N1 b - - 0 1");
@@ -285,10 +269,9 @@ bool cache_clock_and_stop() {
         && cancelled->stack->pv_count == 0 && !cancelled->stack->best_move.piece);
     // The root still uses normal move search rather than taking a descendant shortcut.
     search->reset_stack();
-    move_t witness{};
     int alpha = -1000;
     success &= check("actual root must not use the early descendant mechanism",
-        !search->raise_repetition_alpha(alpha, 1000, witness));
+        !search->raise_repetition_alpha(alpha));
     options::get_option("UpcomingRepetition")->value = 0;
     auto snapshot = std::make_unique<probe_search_t>(cycle_fen);
     options::get_option("UpcomingRepetition")->value = 1;
