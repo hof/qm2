@@ -75,8 +75,8 @@ bool see_pruning() {
 bool late_move_reduction() {
     auto s = position();
     auto quiet = make(*s, "d2d3");
-    bool ok = s->reduction(10, 20, false, s->reduction_estimate(10, 20, quiet, false, true, 0)) > 0;
-    ok &= s->reduction(10, 0, false, s->reduction_estimate(10, 0, quiet, true, false, 0)) == 0;
+    bool ok = s->reduction(10, 20, s->reduction_estimate(10, 20, quiet, false, true, 0)) > 0;
+    ok &= s->reduction(10, 0, s->reduction_estimate(10, 0, quiet, true, false, 0)) == 0;
     return check(ok, "late quiet moves are reduced, the first move is not");
 }
 

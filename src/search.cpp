@@ -268,8 +268,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     null_verify = options::get_value("NullVerify");
     null_enabled = options::get_value("NullMove");
     lmr_enabled = options::get_value("LMR");
-    adaptive_lmr_enabled = wild == 0 && options::get_value("AdaptiveLMR");
-    context_lmr_enabled = wild == 0 && options::get_value("ContextLMR");
     lmr_history_enabled = wild == 0 && options::get_value("LMRHistory");
     aspiration_enabled = options::get_value("Aspiration");
     lmp_enabled = wild == 0 && options::get_value("LMP");
@@ -1266,20 +1264,11 @@ void root_t::sort_moves(move_t * best_move) {
 }
 
 // The parent position owns both the history lookup and the node context.
-int search_t::reduction(int depth, int searched_moves, bool is_dangerous, int estimate,
-        bool root_node) {
-    if (depth < 3 || !lmr_enabled || stack->excluded_move) {
+// At the real root, keep two alternatives at nominal depth before reducing.
+int search_t::reduction(int depth, int searched_moves, int estimate, bool root_node) {
+    if (depth < 3 || !lmr_enabled || stack->excluded_move
+            || searched_moves < (root_node ? 2 : 1)) {
         return 0;
-    }
-    const bool contextual = context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled && verification_mode == verification_mode_t::none;
-    // Verification helpers retain the established tactical/ordinal guards.
-    // At the real root, keep two alternatives at nominal depth before reducing.
-    if (contextual ? searched_moves < (root_node ? 2 : 1)
-            : (root_node || is_dangerous || searched_moves < 3)) {
-        return 0;
-    }
-    if (!adaptive_lmr_enabled) {
-        return 1;
     }
     return std::clamp(estimate, 0, depth - 2);
 }
@@ -1288,11 +1277,9 @@ int search_t::reduction(int depth, int searched_moves, bool is_dangerous, int es
 // to estimate the move's searched depth.
 int search_t::reduction_estimate(int depth, int searched_moves, const move_t & move,
         bool pv, bool cut_node, int gives_check) {
-    if (!lmr_enabled || !adaptive_lmr_enabled) {
+    if (!lmr_enabled) {
         return 0;
     }
-    const bool contextual = context_lmr_enabled
-        && verification_mode == verification_mode_t::none;
     // Immutable shared table: avoid logarithms and initialization in the loop.
     // Saturation keeps unusually deep/wide positions within the sampled range.
     static const auto base_reductions = [] {
@@ -1307,35 +1294,26 @@ int search_t::reduction_estimate(int depth, int searched_moves, const move_t & m
     const int history = move_history_score(move);
     const bool noisy = move.capture || move.promotion;
     // Captures have one bounded history component; quiets combine several.
-    const int history_divisor = contextual && noisy ? 4096 : 8192;
+    const int history_divisor = noisy ? 4096 : 8192;
     int reduce = base_reductions[std::min(depth, 63)][std::min(searched_moves + 1, 63)]
         + int(cut_node) + int(!stack->improving) - int(pv)
         - std::clamp(history / history_divisor, -2, 2);
-    if (contextual) {
-        bool refutation = false;
-        if (!noisy) {
-            const auto compact = move.to_compact();
-            refutation = killers_enabled && (compact == stack->killer[0].to_compact()
-                || compact == stack->killer[1].to_compact());
-            if (countermoves_enabled && brd.ply > 0) {
-                const auto & previous = (stack - 1)->current_move;
-                refutation |= previous.piece && compact == countermoves[previous.piece][previous.tsq];
-            }
+    bool refutation = false;
+    if (!noisy) {
+        const auto compact = move.to_compact();
+        refutation = killers_enabled && (compact == stack->killer[0].to_compact()
+            || compact == stack->killer[1].to_compact());
+        if (countermoves_enabled && brd.ply > 0) {
+            const auto & previous = (stack - 1)->current_move;
+            refutation |= previous.piece && compact == countermoves[previous.piece][previous.tsq];
         }
-        reduce += int(cut_node) + int(stack->lmr_tt_tactical)
-            + std::min(stack->lmr_alpha_raises / 2, 2);
-        reduce -= int(stack->tt_pv) + int(gives_check != 0) + int(stack->in_check)
-            + int(noisy) + int(refutation) + stack->lmr_correction
-            + int(!noisy && is_advanced_passed_pawn(&move));
     }
+    reduce += int(cut_node) + int(stack->lmr_tt_tactical)
+        + std::min(stack->lmr_alpha_raises / 2, 2);
+    reduce -= int(stack->tt_pv) + int(gives_check != 0) + int(stack->in_check)
+        + int(noisy) + int(refutation) + stack->lmr_correction
+        + int(!noisy && is_advanced_passed_pawn(&move));
     return reduce;
-}
-
-// Record only searched legal moves, after the make/legality boundary.
-void search_t::record_lmr(const move_t & move, int depth, int searched_moves,
-        int reduce, int extend, int gives_check, bool root_node) {
-    (void) move; (void) depth; (void) searched_moves; (void) reduce;
-    (void) extend; (void) gives_check; (void) root_node;
 }
 
 void search_t::update_lmr_history(const move_t & move, int depth, int value, int alpha, int beta) {
@@ -1396,7 +1374,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     } else if (depth > 1) {
         order_root_moves(depth);
     }
-    stack->tt_pv = context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled;
+    stack->tt_pv = lmr_enabled;
     if (stack->tt_pv && depth >= 3 && !stack->in_check) {
         const int eval = evaluate(this);
         stack->lmr_correction = std::min(2, std::abs(eval - stack->eval_result) / 100);
@@ -1413,12 +1391,11 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         int score = 0;
 
         const int reduce = wild == 0
-            ? reduction(depth, i, true,
+            ? reduction(depth, i,
                 reduction_estimate(depth, i, *move, true, false, rmove->gives_check), true) : 0;
         //go forward and search one level deeper
         stack->move_count = i + 1;
         forward(move, rmove->gives_check);
-        record_lmr(*move, depth, i, reduce, 0, rmove->gives_check, true);
         if (i == 0) {
             score = -pvs(-beta, -alpha, depth - 1, false);
         } else {
@@ -1426,7 +1403,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             if (!stop_all && score > alpha) { //open window research w/o reductions
                 const auto previous_clocks = stack->tt_clocks;
                 score = -pvs(-beta, -alpha, depth - 1, false);
-                if (context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled) {
+                if (lmr_enabled) {
                     stack->tt_clocks.include_child(previous_clocks, 0);
                 }
             }
@@ -2012,7 +1989,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     const bool usable_tt_score = probe_tt && trans_table::retrieve(stack->tt_key, brd.ply,
         depth, tt_score, tt_move, tt_flag, context, brd.stack->fifty_count, &tt_clocks,
         tt_mode_t::main_search, &cached_pv);
-    stack->tt_pv = context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled && (pv || cached_pv);
+    stack->tt_pv = lmr_enabled && (pv || cached_pv);
     // A cached score below a legal draw escape cannot resolve this node.
     // Retain its move hint, but continue searching for something better.
     if (usable_tt_score && use_tt_scores && (!repetition_floor || tt_score >= draw_score())) {
@@ -2044,7 +2021,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     const bool in_check = stack->in_check;
     const int eval = evaluate(this);
     stack->improving = is_improving();
-    if (context_lmr_enabled && adaptive_lmr_enabled && lmr_enabled && normal_search) {
+    if (lmr_enabled && normal_search) {
         auto & hint = stack->tt_move;
         stack->lmr_tt_tactical = hint.piece && (hint.capture || hint.promotion)
             && brd.valid(&hint) && brd.legal(&hint);
@@ -2176,14 +2153,13 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
          * Move pruning: skip all futile moves
          */
 
-        const bool is_dangerous = in_check || gives_check || move->capture || move->promotion || move->castle || is_advanced_passed_pawn(move);
 
         const bool nominated = singular_result.move && move->to_compact() == singular_result.move;
         const bool singular = nominated && singular_result.extension > 0;
         const int estimate = excluded_move || singular ? 0
             : reduction_estimate(depth, searched_moves, *move, pv, cut_node, gives_check);
         const int reduce = excluded_move || singular ? 0
-            : reduction(depth, searched_moves, is_dangerous, estimate);
+            : reduction(depth, searched_moves, estimate);
         const int lmr_depth = depth - estimate;
         if (!repetition_floor && !singular && prune_quiet(*move, depth, searched_moves,
                 lmr_depth, best)) {
@@ -2215,7 +2191,6 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         }
         stack->multiple_extensions += extend >= 2;
         (stack - 1)->move_count = searched_moves + 1;
-        record_lmr(*move, depth, searched_moves, reduce, extend, gives_check, false);
         int score;
         bool lmr_researched = false;
         if (searched_moves == 0) {

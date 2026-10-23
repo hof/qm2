@@ -43,7 +43,7 @@ bool policy_cache_controls() {
     };
     for (const char * name : {"NullMove", "BetaPruning", "LMR", "FutilityPruning",
             "NullVerify", "Aspiration", "IIR", "MainSEE", "Razoring", "SingularExtensions", "SingularPolicy", "ProbCut", "TTHistory", "TTEval", "LMP", "HistoryPruning", "QsearchTT", "MainHistory",
-            "ContinuationHistory", "PawnHistory", "Countermoves", "Killers", "UpcomingRepetition", "CheckEvasions", "CaptureHistory", "LongContinuationHistory", "ThreatOrdering", "CheckOrdering", "CorrectionHistory", "PieceCorrection", "ContinuationCorrection", "AdaptiveLMR", "ContextLMR", "LMRHistory",
+            "ContinuationHistory", "PawnHistory", "Countermoves", "Killers", "UpcomingRepetition", "CheckEvasions", "CaptureHistory", "LongContinuationHistory", "ThreatOrdering", "CheckOrdering", "CorrectionHistory", "PieceCorrection", "ContinuationCorrection", "LMRHistory",
             "DrawContempt", "SyzygyProbeLimit", "SyzygyProbeDepth"
             }) {
         const int saved = options::get_value(name);

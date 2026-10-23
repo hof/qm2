@@ -185,8 +185,6 @@ public:
     bool null_enabled;
     bool beta_pruning;
     bool lmr_enabled;
-    bool adaptive_lmr_enabled;
-    bool context_lmr_enabled;
     bool lmr_history_enabled;
     bool aspiration_enabled;
     bool probcut_enabled;
@@ -271,12 +269,9 @@ public:
     bool in_searched(move_t * move, int searched_moves);
     void reset_stack();
     U64 tt_context() const;
-    int reduction(int depth, int searched_moves, bool is_dangerous, int estimate,
-        bool root_node = false);
+    int reduction(int depth, int searched_moves, int estimate, bool root_node = false);
     int reduction_estimate(int depth, int searched_moves, const move_t & move,
         bool pv, bool cut_node, int gives_check);
-    void record_lmr(const move_t & move, int depth, int searched_moves, int reduce,
-        int extend, int gives_check, bool root_node);
     void update_lmr_history(const move_t & move, int depth, int value, int alpha, int beta);
 
     int draw_score() {

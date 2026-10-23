@@ -35,8 +35,6 @@ namespace options {
         { "NullMove", BOOL, 1, "type check default true", true },
         { "BetaPruning", BOOL, 1, "type check default true", true },
         { "LMR", BOOL, 1, "type check default true", true },
-        { "AdaptiveLMR", BOOL, 1, "type check default true", true },
-        { "ContextLMR", BOOL, 1, "type check default true", true },
         { "LMRHistory", BOOL, 1, "type check default true", true },
         { "FutilityPruning", BOOL, 1, "type check default true", true },
         { "NullVerify", BOOL, 1, "type check default true", true },
