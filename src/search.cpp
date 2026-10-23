@@ -96,12 +96,10 @@ struct search_frame_scope_t {
     search_stack_t * frame;
     search_stack_t previous;
     bool null_enabled;
-    verification_mode_t mode;
 
     explicit search_frame_scope_t(search_t & search)
         : search(search), frame(search.stack), previous(*search.stack),
-          null_enabled(search.null_enabled),
-          mode(search.verification_mode) {}
+          null_enabled(search.null_enabled) {}
 
     ~search_frame_scope_t() {
         assert(search.stack == frame);
@@ -109,7 +107,6 @@ struct search_frame_scope_t {
         *frame = previous;
         frame->tt_clocks.include_child(clocks, 0);
         search.null_enabled = null_enabled;
-        search.verification_mode = mode;
     }
 };
 
@@ -293,7 +290,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     killers_enabled = options::get_value("Killers");
     upcoming_repetition_enabled = wild == 0 && options::get_value("UpcomingRepetition");
     evasions_enabled = wild == 0 && options::get_value("CheckEvasions");
-    verification_mode = verification_mode_t::none;
     ffp_enabled = options::get_value("FutilityPruning");
     draw_contempt = options::get_value("DrawContempt");
     evaluation_network.reset();
@@ -964,7 +960,7 @@ int search_t::corrected_static_eval(int raw) {
 void search_t::update_correction_history(int value, int bound, int depth) {
     constexpr int decisive = score::TABLEBASE - MAX_PLY;
     const auto & move = stack->best_move;
-    if (!correction_history_enabled || stop_all || stack->in_check || verification_mode != verification_mode_t::none
+    if (!correction_history_enabled || stop_all || stack->in_check
             || stack->excluded_move || depth < 1 || !move.piece
             || move.capture || move.promotion || stack->eval_result == score::INVALID
             || std::abs(value) >= decisive || std::abs(stack->eval_result) >= decisive
@@ -1080,8 +1076,7 @@ int search_t::move_history_score(const move_t & move) {
 // Cached fail-highs supply ordering evidence even though no move was searched here.
 void search_t::update_tt_history(int compact_move, int depth) {
     if (!tt_history_enabled || !brd.ply || stop_all
-            || verification_mode != verification_mode_t::none || stack->excluded_move
-            || brd.stack->fifty_count >= 99) {
+            || stack->excluded_move || brd.stack->fifty_count >= 99) {
         return;
     }
     move_t move{};
@@ -1122,10 +1117,7 @@ void search_t::update_tt_history(int compact_move, int depth) {
 }
 
 void search_t::update_quiet_cutoff(move_t * move, int depth, int searched_moves) {
-    // Existing immediate-history learning is unchanged; longer contexts learn
-    // only from completed ordinary searches, never same-position helpers.
-    const auto contexts = verification_mode == verification_mode_t::none
-        ? long_continuation_contexts() : std::array<const move_t *, 2>{};
+    const auto contexts = long_continuation_contexts();
     const auto * previous = brd.ply > 0 ? &(stack - 1)->current_move : nullptr;
     // Retain the provisional depth-weighted gravity rule; no tuning sweep.
     const int d = std::clamp(depth, 1, 8);
@@ -1265,7 +1257,7 @@ void root_t::sort_moves(move_t * best_move) {
 // The parent position owns both the history lookup and the node context.
 // At the real root, keep two alternatives at nominal depth before reducing.
 int search_t::reduction(int depth, int searched_moves, int estimate, bool root_node) {
-    if (depth < 3 || !lmr_enabled || stack->excluded_move
+    if (depth < 3 || !lmr_enabled
             || searched_moves < (root_node ? 2 : 1)) {
         return 0;
     }
@@ -1316,10 +1308,7 @@ int search_t::reduction_estimate(int depth, int searched_moves, const move_t & m
 
 void search_t::update_lmr_history(const move_t & move, int depth, int value, int alpha, int beta) {
     // Learn only from a completed full-depth verification of a reduced trial.
-    // Helpers and artificial null paths must not teach ordinary move history.
-    if (!lmr_enabled || !lmr_history_enabled || stop_all
-            || verification_mode != verification_mode_t::none || stack->excluded_move
-            || stack->in_check
+    if (!lmr_enabled || !lmr_history_enabled || stop_all || stack->in_check
             || move.capture || move.promotion || move.castle || depth < 3
             || (value > alpha && value < beta)) {
         return;
@@ -1517,7 +1506,7 @@ int search_t::upcoming_repetition(move_t & witness) {
 
 bool search_t::raise_repetition_alpha(int & alpha, int beta, move_t & witness) {
     if (!upcoming_repetition_enabled || brd.ply == 0
-            || verification_mode != verification_mode_t::none || alpha >= draw_score()) {
+            || stack->excluded_move || alpha >= draw_score()) {
         return false;
     }
     const int distance = upcoming_repetition(witness);
@@ -1560,7 +1549,6 @@ bool search_t::probcut(int alpha, int beta, int depth, int eval, bool cut_node, 
     const int threshold = beta + margin - improving_margin * int(stack->improving);
     if (!probcut_enabled || !brd.ply || depth < 5 || alpha + 1 != beta
             || stack->in_check || stack->excluded_move
-            || verification_mode != verification_mode_t::none
             || brd.ply >= MAX_PLY - 2 || brd.stack->fifty_count >= 99
             || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
             || std::abs(eval) >= decisive || threshold >= decisive) {
@@ -1644,7 +1632,6 @@ bool search_t::razor_node(int alpha, int beta, int depth, int eval, int & value)
     const int decisive = score::TABLEBASE - MAX_PLY;
     if (!razoring_enabled || !brd.ply || depth < 1
             || alpha + 1 != beta || stack->in_check || stack->excluded_move
-            || verification_mode != verification_mode_t::none
             || brd.stack->fifty_count >= 99 || std::abs(alpha) >= decisive
             || std::abs(beta) >= decisive || std::abs(eval) >= decisive
             || eval >= alpha - razoring_margin_per_ply * depth) {
@@ -1671,7 +1658,7 @@ bool search_t::reverse_futility(int beta, int depth, int eval, int & value) {
     const int decisive = score::TABLEBASE - MAX_PLY;
     if (wild != 0 || !beta_pruning || depth < 1 || depth >= 9
             || !brd.ply || stack->in_check || stop_all
-            || verification_mode != verification_mode_t::none || stack->excluded_move
+            || stack->excluded_move
             || brd.stack->fifty_count >= 99
             || !brd.has_pieces(brd.us()) || std::abs(beta) >= decisive
             || std::abs(eval) >= decisive || eval < beta) {
@@ -1703,8 +1690,7 @@ bool search_t::prune_futility(move_t & move, int reduced_depth, int searched_mov
         int best, int alpha, int beta, int gives_check, int eval) {
     const int decisive = score::TABLEBASE - MAX_PLY;
     if (wild != 0 || !ffp_enabled || !brd.ply || !searched_moves
-            || stack->in_check || gives_check || stop_all || verification_mode != verification_mode_t::none
-            || stack->excluded_move
+            || stack->in_check || gives_check || stop_all
             || brd.stack->fifty_count >= 99 || !brd.has_pieces(brd.us())
             || best <= -decisive || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
             || move.promotion) {
@@ -1733,8 +1719,7 @@ bool search_t::prune_quiet(move_t & move, int depth, int searched_moves,
     const int decisive = score::TABLEBASE - MAX_PLY;
     if ((!lmp_enabled && !history_pruning_enabled) || !brd.ply || depth < 1
             || !searched_moves || stack->in_check || stop_all
-            || move.capture || move.promotion || best <= -decisive || verification_mode != verification_mode_t::none
-            || stack->excluded_move
+            || move.capture || move.promotion || best <= -decisive
             || brd.stack->fifty_count >= 99 || !brd.has_pieces(brd.us())) {
         return false;
     }
@@ -1759,8 +1744,8 @@ bool search_t::prune_quiet(move_t & move, int depth, int searched_moves,
 // protect the clock-99 draw boundary, and allow larger sacrifices at greater depth.
 bool search_t::prune_main_see(move_t & move, int depth, int searched_moves, int best) {
     const int decisive = score::TABLEBASE - MAX_PLY;
-    if (!main_see_enabled || !brd.ply || depth < 1 || !searched_moves || verification_mode != verification_mode_t::none
-            || stack->excluded_move || brd.stack->fifty_count >= 99
+    if (!main_see_enabled || !brd.ply || depth < 1 || !searched_moves
+            || brd.stack->fifty_count >= 99
             || best <= -decisive || !brd.has_pieces(brd.us())) {
         return false;
     }
@@ -1783,7 +1768,7 @@ bool search_t::prune_main_see(move_t & move, int depth, int searched_moves, int 
 // once; all downstream consumers, including TT storage, use the searched depth.
 int search_t::internal_search_depth(int depth, bool pv, bool cut_node) {
     if (!iir_enabled || !brd.ply || depth < 6 || (!pv && !cut_node)
-            || stack->in_check || verification_mode != verification_mode_t::none
+            || stack->in_check
             || stack->excluded_move || brd.stack->fifty_count >= 99) {
         return depth;
     }
@@ -1803,7 +1788,6 @@ search_t::singular_result_t search_t::singular_extension(int alpha, int beta, in
     if (!singular_extensions_enabled || !brd.ply || depth < 7
             || brd.ply >= 2 * root_depth || brd.ply >= MAX_PLY - 2
             || stack->in_check || stack->excluded_move
-            || verification_mode != verification_mode_t::none
             || brd.stack->fifty_count >= 99
             || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
             || !stack->tt_move.piece || !brd.valid(&stack->tt_move)
@@ -1828,8 +1812,8 @@ search_t::singular_result_t search_t::singular_extension(int alpha, int beta, in
     const bool pv = beta > alpha + 1;
     const bool quiet = !stack->tt_move.capture && !stack->tt_move.promotion;
     const auto candidate = uint16_t(move);
-    const int alternative = verification_search(threshold - 1, threshold,
-        (depth - 1) / 2, cut_node, verification_mode_t::excluded_move, candidate);
+    const int alternative = singular_search(threshold - 1, threshold,
+        (depth - 1) / 2, cut_node, candidate);
     if (stop_all) {
         return {};
     }
@@ -1867,26 +1851,28 @@ int search_t::null_search_depth(int depth, int eval, int beta) {
     return std::max(0, depth - 4 - depth / 3 - surplus - int(tactical));
 }
 
-// Verification searches cannot establish normal TT bounds or train ordinary
-// ordering history. Only this frame excludes a move; children remain legal chess.
-int search_t::verification_search(int alpha, int beta, int depth, bool cut_node,
-        verification_mode_t mode, uint16_t excluded_move) {
-    assert(wild == 0 && verification_mode == verification_mode_t::none);
-    assert(mode == verification_mode_t::null_move || mode == verification_mode_t::excluded_move);
-    assert((mode == verification_mode_t::excluded_move) == (excluded_move != 0));
-    assert(!excluded_move || (depth > 0 && brd.ply < MAX_PLY - 1));
+// Search this position again without one move. Only this frame skips the
+// TT and node pruning; its children are ordinary searches.
+int search_t::singular_search(int alpha, int beta, int depth, bool cut_node,
+        uint16_t excluded_move) {
+    assert(wild == 0 && excluded_move && depth > 0 && brd.ply < MAX_PLY - 1);
     assert(alpha < beta && (!cut_node || alpha + 1 == beta));
-    if (excluded_move) {
-        move_t move{};
-        move.set_compact(&brd, excluded_move);
-        assert(brd.valid(&move) && brd.legal(&move));
-    }
     int value;
     {
         search_frame_scope_t scope(*this);
-        verification_mode = mode;
-        null_enabled = false;
         stack->excluded_move = excluded_move;
+        value = pvs(alpha, beta, depth, cut_node);
+    }
+    return stop_all ? alpha : value;
+}
+
+// Confirm a null-move cutoff with real moves and no further null moves.
+int search_t::null_verification(int alpha, int beta, int depth, bool cut_node) {
+    assert(wild == 0 && alpha < beta && (!cut_node || alpha + 1 == beta));
+    int value;
+    {
+        search_frame_scope_t scope(*this);
+        null_enabled = false;
         value = pvs(alpha, beta, depth, cut_node);
     }
     return stop_all ? alpha : value;
@@ -1903,10 +1889,13 @@ int search_t::verification_search(int alpha, int beta, int depth, bool cut_node,
 int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     stack->tt_clocks = {0, 101};
     stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = false;
+    // A singular search keeps the main-line flag of the node it re-searches.
+    if (!stack->excluded_move) {
+        stack->tt_pv = false;
+    }
+    stack->lmr_tt_tactical = false;
     stack->lmr_correction = stack->lmr_alpha_raises = 0;
     assert(!cut_node || alpha + 1 == beta);
-    assert(!stack->excluded_move || verification_mode == verification_mode_t::excluded_move);
 
     assert(alpha < beta);
     assert(alpha >= -score::INF);
@@ -1975,8 +1964,8 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     /*
      * Transposition table lookup
      */
-    const bool normal_search = verification_mode == verification_mode_t::none;
     const auto excluded_move = stack->excluded_move;
+    const bool normal_search = !excluded_move;
     stack->tt_key = brd.stack->tt_key;
     const U64 context = normal_search ? tt_context() : 0;
     clock_range_t tt_clocks;
@@ -1985,7 +1974,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     const bool usable_tt_score = normal_search && trans_table::retrieve(stack->tt_key, brd.ply,
         depth, tt_score, tt_move, tt_flag, context, brd.stack->fifty_count, &tt_clocks,
         tt_mode_t::main_search, &cached_pv);
-    stack->tt_pv = lmr_enabled && (pv || cached_pv);
+    if (normal_search) {
+        stack->tt_pv = lmr_enabled && (pv || cached_pv);
+    }
     // A cached score below a legal draw escape cannot resolve this node.
     // Retain its move hint, but continue searching for something better.
     if (!pv && usable_tt_score && (!repetition_floor || tt_score >= draw_score())) {
@@ -2068,8 +2059,8 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             if (null_verify && depth >= 12) {
                 // Even a null probe reduced to qsearch must be confirmed by real moves.
                 const int verification_depth = std::max(1, null_depth);
-                int verified_score = verification_search(beta - 1, beta,
-                    verification_depth, cut_node, verification_mode_t::null_move);
+                int verified_score = null_verification(beta - 1, beta,
+                    verification_depth, cut_node);
                 if (stop_all) {
                     return alpha;
                 }
@@ -2148,10 +2139,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 
         const bool nominated = singular_result.move && move->to_compact() == singular_result.move;
         const bool singular = nominated && singular_result.extension > 0;
-        const int estimate = excluded_move || singular ? 0
+        const int estimate = singular ? 0
             : reduction_estimate(depth, searched_moves, *move, pv, cut_node, gives_check);
-        const int reduce = excluded_move || singular ? 0
-            : reduction(depth, searched_moves, estimate);
+        const int reduce = singular ? 0 : reduction(depth, searched_moves, estimate);
         const int lmr_depth = depth - estimate;
         if (!repetition_floor && !singular && prune_quiet(*move, depth, searched_moves,
                 lmr_depth, best)) {
@@ -2339,7 +2329,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     const bool in_check = stack->in_check;
     const auto mode = depth == 0 ? tt_mode_t::quiescence_entry : tt_mode_t::quiescence_tactical;
     const U64 key = brd.stack->tt_key;
-    const bool use_q_tt = q_tt_enabled && verification_mode == verification_mode_t::none;
+    const bool use_q_tt = q_tt_enabled;
     const U64 context = use_q_tt ? tt_context() : 0;
     stack->tt_key = key;
     if (use_q_tt) {

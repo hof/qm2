@@ -97,8 +97,6 @@ struct search_stack_t {
     clock_range_t tt_clocks;
 };
 
-enum class verification_mode_t { none, null_move, excluded_move };
-
 enum class result_source_t { none, partial, complete, fallback, book, terminal, tablebase };
 
 class search_t {
@@ -192,7 +190,6 @@ public:
     bool main_see_enabled;
     bool iir_enabled;
     bool q_tt_enabled;
-    verification_mode_t verification_mode;
     bool ffp_enabled;
 
     search_t(const char * fen, const game_t * g = NULL,
@@ -228,8 +225,8 @@ public:
     };
     singular_result_t singular_extension(int alpha, int beta, int depth, bool cut_node);
     int internal_search_depth(int depth, bool pv, bool cut_node);
-    int verification_search(int alpha, int beta, int depth, bool cut_node,
-        verification_mode_t mode, uint16_t excluded_move = 0);
+    int singular_search(int alpha, int beta, int depth, bool cut_node, uint16_t excluded_move);
+    int null_verification(int alpha, int beta, int depth, bool cut_node);
     bool book_lookup();
     bool tablebase_lookup();
     bool probe_tablebase(int depth, int & value);

@@ -206,12 +206,10 @@ bool search_bounds() {
             success &= check("off switch must skip optional detection",
                 !search->raise_repetition_alpha(alpha, draw, witness) && alpha == draw - 1);
             search->upcoming_repetition_enabled = true;
-            for (auto mode : {verification_mode_t::null_move, verification_mode_t::excluded_move}) {
-                search->verification_mode = mode;
-                success &= check("verification must not use an ordinary repetition escape",
-                    !search->raise_repetition_alpha(alpha, draw, witness));
-            }
-            search->verification_mode = verification_mode_t::none;
+            search->stack->excluded_move = 1;
+            success &= check("a singular search must not use a repetition escape",
+                !search->raise_repetition_alpha(alpha, draw, witness));
+            search->stack->excluded_move = 0;
             // Mandatory draw adjudication stays active with the feature disabled.
             play(*search, "f6g8");
             search->upcoming_repetition_enabled = false;
