@@ -111,10 +111,6 @@ move_t * move_picker_t::first(search_t * s, int depth) {
     list->clear();
     if (s->wild == 0 && s->evasions_enabled && s->stack->in_check) {
         list->evasion_targets = move::evasion_targets(s->brd);
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        ++s->nnue_audit.counters.evasion_nodes;
-        s->nnue_audit.counters.double_check_nodes += list->evasion_targets == 0;
-#endif
     }
     list->stage = hash_move;
     return next(s, depth);
@@ -337,22 +333,11 @@ void move_picker_t::score_quiets(search_t * s, move_t * begin, move_t * end) {
             const bool escaping = lesser[type] & BIT(move->ssq);
             const bool entering = lesser[type] & BIT(move->tsq);
             score += weight * (int(escaping) - int(entering));
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            if (s->threat_ordering_enabled) {
-                ++s->nnue_audit.counters.threat_ordering_scores;
-                s->nnue_audit.counters.threat_escapes += escaping && !entering;
-                s->nnue_audit.counters.threat_entries += entering && !escaping;
-            }
-#endif
             if (s->check_ordering_enabled && board.gives_check(move)) {
                 const bool safe = board.see(move, 0);
                 if (safe) {
                     score += 10000;
                 }
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-                ++s->nnue_audit.counters.check_ordering_candidates;
-                s->nnue_audit.counters.check_ordering_bonuses += safe;
-#endif
             }
         }
         move->score = score;

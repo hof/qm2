@@ -45,11 +45,6 @@ bool policy_cache_controls() {
             "NullVerify", "Aspiration", "IIR", "MainSEE", "Razoring", "SingularExtensions", "SingularPolicy", "ProbCut", "TTHistory", "TTEval", "LMP", "HistoryPruning", "QsearchTT", "MainHistory",
             "ContinuationHistory", "PawnHistory", "Countermoves", "Killers", "UpcomingRepetition", "CheckEvasions", "CaptureHistory", "LongContinuationHistory", "ThreatOrdering", "CheckOrdering", "CorrectionHistory", "PieceCorrection", "ContinuationCorrection", "AdaptiveLMR", "ContextLMR", "LMRHistory",
             "DrawContempt", "SyzygyProbeLimit", "SyzygyProbeDepth"
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            , "NNUEAuditNullMove", "NNUEAuditBetaPruning", "NNUEAuditFutility",
-            "NNUEAuditLMR", "NNUEAuditHashMoves", "NNUEAuditAspiration",
-            "NNUEAuditDelta"
-#endif
             }) {
         const int saved = options::get_value(name);
         const std::string command = std::string("setoption name ") + name + " value ";
@@ -69,13 +64,6 @@ bool policy_cache_controls() {
         uci::in(std::string("setoption name Wild value ") + value);
         success &= check("variant changes must clear both TT modes", cleared());
     }
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    for (const char * value : {"fixed", "quiet", "normal"}) {
-        seed();
-        uci::in(std::string("setoption name NNUEAuditHorizon value ") + value);
-        success &= check("horizon changes must clear both TT modes", cleared());
-    }
-#endif
     seed();
     uci::in("setoption name Move Overhead value 100");
     success &= check("clock overhead must preserve TT", retained());

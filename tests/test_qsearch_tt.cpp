@@ -261,25 +261,6 @@ bool test_mates_clocks_and_terminals() {
     return success;
 }
 
-bool test_audit_isolation() {
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    auto * horizon = options::get_option("NNUEAuditHorizon");
-    const int saved = horizon->value;
-    bool success = true;
-    for (int value : {1, 2, 0}) {
-        horizon->value = value;
-        auto search = std::make_unique<search_t>("7k/8/8/3q4/8/8/8/K2R4 w - - 0 1");
-        success &= check("fixed and aligned audits must isolate q cache reuse",
-            search->q_tt_enabled == (value == 0));
-    }
-    horizon->value = saved;
-    trans_table::clear();
-    return success;
-#else
-    return true;
-#endif
-}
-
 bool test_option_snapshot_and_off() {
     const int saved = options::get_value("QsearchTT");
     uci::silent(true);
@@ -327,7 +308,6 @@ int main() {
     success &= test_hint_domains();
     success &= test_cancellation();
     success &= test_mates_clocks_and_terminals();
-    success &= test_audit_isolation();
     success &= test_option_snapshot_and_off();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

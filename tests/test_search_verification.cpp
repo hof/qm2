@@ -99,13 +99,6 @@ bool test_scope() {
                 && after.move_list.evasion_targets == before.move_list.evasion_targets
                 && after.tt_clocks.min == 0 && after.tt_clocks.max == 80,
                 "verification must restore picker/PV/evaluation/history state and merge clock restrictions");
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            const auto & counts = search->nnue_audit.counters;
-            success &= check(counts.verification_calls == 1 && counts.verification_visits == 2
-                && counts.excluded_calls == (mode == verification_mode_t::excluded_move)
-                && counts.verification_cancelled == search->cancel,
-                "verification audit work must survive cancellation and local exceptions");
-#endif
         }
     }
     return success;

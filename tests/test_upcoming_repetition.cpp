@@ -197,13 +197,6 @@ bool search_bounds() {
                 !trans_table::retrieve(key, search->brd.ply, 1, cached, hint, flag,
                     context, 3, nullptr, qsearch ? tt_mode_t::quiescence_tactical : tt_mode_t::main_search)
                 && hint == 0);
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            success &= check("proof counters must record hit/cutoff",
-                search->nnue_audit.counters.repetition_attempts == 1
-                && search->nnue_audit.counters.repetition_hits == 1
-                && search->nnue_audit.counters.repetition_cutoffs == 1
-                && search->nnue_audit.counters.q_repetition_hits == unsigned(qsearch));
-#endif
             move_t witness{};
             int alpha = draw;
             success &= check("alpha at draw must skip optional detection",
@@ -314,15 +307,6 @@ bool cache_clock_and_stop() {
     int alpha = -1000;
     success &= check("actual root must not use the early descendant mechanism",
         !search->raise_repetition_alpha(alpha, 1000, witness));
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    for (int horizon : {1, 2}) {
-        options::get_option("NNUEAuditHorizon")->value = horizon;
-        auto audit = std::make_unique<probe_search_t>(cycle_fen);
-        success &= check("fixed/aligned audits must disable the new horizon extension",
-            !audit->upcoming_repetition_enabled);
-    }
-    options::get_option("NNUEAuditHorizon")->value = 0;
-#endif
     options::get_option("UpcomingRepetition")->value = 0;
     auto snapshot = std::make_unique<probe_search_t>(cycle_fen);
     options::get_option("UpcomingRepetition")->value = 1;

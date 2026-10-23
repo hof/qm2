@@ -10,7 +10,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(-march=native)
 
 option(maxima_lto "Enable link-time optimization for Release builds" OFF)
-option(maxima_nnue_search_audit "Enable diagnostic NNUE search verification and counters" OFF)
 set(maxima_pgo_mode "off" CACHE STRING "GCC Release profiling: off, generate, or use")
 set_property(CACHE maxima_pgo_mode PROPERTY STRINGS off generate use)
 set(maxima_pgo_dir "" CACHE PATH "Directory containing GCC training profiles")

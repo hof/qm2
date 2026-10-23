@@ -310,11 +310,6 @@ int main() {
     {
         const char * cached_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 8 1";
         auto cached = std::make_unique<search_t>(cached_fen);
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        // Verification mode intentionally bypasses score reuse; this fixture
-        // checks the production cache behavior instead.
-        cached->nnue_audit.mode = nnue::audit_mode_t::off;
-#endif
         success &= check(evaluate(cached.get()) == 100, "Initial neural cache score must be undamped");
         const U64 key = cached->brd.stack->tt_key;
         std::array<move_t, 4> cycle;
@@ -337,9 +332,6 @@ int main() {
         // Isolate worker-local invalidation: shared TT evaluation can otherwise
         // legitimately leave this freshly initialized accumulator lazy.
         cached->tt_eval_enabled = false;
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        cached->nnue_audit.mode = nnue::audit_mode_t::off;
-#endif
         success &= check(evaluate(cached.get()) == 100
             && cached->evaluation_accumulators[0].ready[0]
             && cached->evaluation_accumulators[0].ready[1],

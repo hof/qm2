@@ -52,21 +52,6 @@ int evaluate(search_t * search) {
         search->stack->eval_result = score::INVALID;
         return search->stack->eval_result;
     }
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    if (search->nnue_audit.mode == nnue::audit_mode_t::off) {
-        ++search->nnue_audit.counters.calls;
-        if (search->stack->eval_result != score::INVALID) {
-            ++search->nnue_audit.counters.cached_returns;
-        }
-    } else {
-        const int result = nnue::audit_evaluate(*search);
-        if (search->stack->eval_result == score::INVALID) {
-            search->stack->metadata = search_metadata(search->brd);
-            search->stack->eval_result = result;
-        }
-        return search->corrected_static_eval(result);
-    }
-#endif
     if (search->stack->eval_result != score::INVALID) {
         return search->corrected_static_eval(search->stack->eval_result);
     }

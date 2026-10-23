@@ -77,16 +77,6 @@ namespace options {
         { "CorrectionHistory", BOOL, 1, "type check default true", true },
         { "PieceCorrection", BOOL, 1, "type check default true", true },
         { "ContinuationCorrection", BOOL, 1, "type check default true", true }
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        , { "NNUEAuditHorizon", STRING, 0, "type combo default normal var normal var fixed var quiet", true }
-        , { "NNUEAuditNullMove", BOOL, 0, "type check default false", true }
-        , { "NNUEAuditBetaPruning", BOOL, 0, "type check default false", true }
-        , { "NNUEAuditFutility", BOOL, 0, "type check default false", true }
-        , { "NNUEAuditLMR", BOOL, 0, "type check default false", true }
-        , { "NNUEAuditHashMoves", BOOL, 0, "type check default false", true }
-        , { "NNUEAuditAspiration", BOOL, 0, "type check default false", true }
-        , { "NNUEAuditDelta", BOOL, 0, "type check default false", true }
-#endif
     };
     
     option_t * get_option(const char * key) {

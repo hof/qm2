@@ -94,13 +94,6 @@ bool picker(const char * fen, bool enabled) {
             }
         }
     }
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-    const auto & counters = search.nnue_audit.counters;
-    if ((counters.evasion_nodes != 0) != enabled
-            || (enabled && move::evasion_targets(search.brd) == 0 && !counters.double_check_nodes)) {
-        return false;
-    }
-#endif
     return true;
 }
 }

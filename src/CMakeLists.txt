@@ -23,10 +23,6 @@ add_library(MAX2SRC
 )
 
 target_include_directories(MAX2SRC PUBLIC "${PROJECT_BINARY_DIR}/generated")
-if(maxima_nnue_search_audit)
-    target_sources(MAX2SRC PRIVATE nnue_audit.cpp)
-    target_compile_definitions(MAX2SRC PUBLIC MAXIMA_NNUE_SEARCH_AUDIT)
-endif()
 
 include_directories(${MAX2_SOURCE_DIR}/src)
 link_directories(${MAX2_BINARY_DIR}/src)

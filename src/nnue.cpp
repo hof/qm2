@@ -146,32 +146,18 @@ void network_t::prepare(const board_t & board, const move_t * move, accumulator_
 
 int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
         const accumulator_t * previous
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        , audit_counters_t * counters
-#endif
         ) const {
     return evaluate(board, accumulator,
         previous ? std::span<const accumulator_t>(previous, 1) : std::span<const accumulator_t>()
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        , counters
-#endif
         );
 }
 
 int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
         std::span<const accumulator_t> ancestors
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        , audit_counters_t * counters
-#endif
         ) const {
     const auto * previous = ancestors.empty() ? nullptr : &ancestors.back();
     for (bool color : {false, true}) {
         if (accumulator.ready[color]) {
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            if (counters) {
-                ++counters->reuses;
-            }
-#endif
             continue;
         }
         const accumulator_t * base = previous;
@@ -197,25 +183,9 @@ int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
             base = &ancestors[begin - 1];
         }
         if (!base || !base->ready[color] || base->kings[color] != accumulator.kings[color]) {
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-            if (counters) {
-                if (!board.ply) {
-                    ++counters->root_refreshes;
-                } else if (previous && previous->kings[color] != accumulator.kings[color]) {
-                    ++counters->king_refreshes;
-                } else {
-                    ++counters->parent_refreshes;
-                }
-            }
-#endif
             refresh(board, accumulator, color);
             continue;
         }
-#ifdef MAXIMA_NNUE_SEARCH_AUDIT
-        if (counters) {
-            ++counters->updates;
-        }
-#endif
         accumulator.values[color] = base->values[color];
         auto apply = [&](const accumulator_t & state) {
             for (int i = 0; i < state.change_count; ++i) {
