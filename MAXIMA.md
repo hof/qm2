@@ -1792,7 +1792,7 @@ and `"source"` (`"fics"`). FICS game numbers are in `game`; colors are
 | `game_end` | game over | `game`, `result` (`1-0`, `0-1`, `1/2-1/2`, `*`), `reason`, `headers`, `pgn` (null when aborted before both sides moved) |
 
 `search` is null for the opponent's moves. For our book moves it is
-`{"book": "<reason>"}`; for searched moves it is `{"depth", "seldepth", "nodes",
+`{"book": "<reason>"}`, for online tablebase moves `{"tablebase": {...}}` (11.4); for searched moves it is `{"depth", "seldepth", "nodes",
 "nps", "time_ms", "score", "pv_san"}` with `score` either `{"cp": n}` or
 `{"mate": n}` from White's point of view, and `pv_san` the expected line in SAN
 starting with the move played.
@@ -1874,3 +1874,19 @@ class games(BaseHTTPRequestHandler):
 
 HTTPServer(("0.0.0.0", 9000), games).serve_forever()
 ```
+
+### 11.4 Online tablebase
+
+With seven or fewer pieces and no castling rights, MaxDrone asks
+`https://tablebase.lichess.ovh/standard?fen=<FEN>` before searching and plays the
+first move of the answer (the 7-man Syzygy tables, DTZ-optimal so the fifty-move
+rule is respected). A lookup takes about 0.75 s and its timeout is the smaller of
+2 s and a twentieth of our clock. Unknown positions fall through to the engine;
+an error (offline, rate limited, timeout) also falls through and pauses lookups
+for a minute. The move is logged, whispered and sent to the live feed as
+`"search": {"tablebase": {"category", "dtz", "dtm"}}` (category `win`, `draw`,
+`loss`, `cursed-win`, `blessed-loss`, ...), and the PGN comment reads e.g.
+`tablebase: win DTM 27`. It is on by default; `--no-online-tablebase` (or
+`"online_tablebase": false`) leaves endgames to the engine and its local tables
+(7). The module is `runner/maxima_runner/online_tablebase.py`; it needs no
+account or token.

@@ -23,7 +23,7 @@ def parser():
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
-                             "layer_profiles, style_books, first_move_wait, whisper, mood, live_feed, pgn_post); "
+                             "layer_profiles, style_books, first_move_wait, whisper, mood, live_feed, pgn_post, online_tablebase); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
@@ -51,6 +51,8 @@ def parser():
     parser.add_argument("--no-pgn", action="store_true", help="do not save games")
     parser.add_argument("--no-learning", action="store_true",
                         help="let the engine use its own book instead of MaxDrone's experience")
+    parser.add_argument("--no-online-tablebase", action="store_true",
+                        help="search endgames with up to seven pieces instead of asking tablebase.lichess.ovh")
     parser.add_argument("--live-feed", metavar="[HOST:]PORT",
                         help="serve game events as JSON over WebSocket (default host 127.0.0.1; MAXIMA.md 11)")
     parser.add_argument("--pgn-post", metavar="URL",

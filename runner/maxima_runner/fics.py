@@ -16,7 +16,7 @@ import time
 import chess
 import chess.engine
 
-from . import connectors, fics_game, learning
+from . import connectors, fics_game, learning, online_tablebase
 from .project import data_root, engine_path
 from .uci import open_engine
 
@@ -284,6 +284,7 @@ default_settings = {
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
     "contempt_window": 100, "layer_profiles": {}, "style_books": {}, "first_move_wait": 60,
     "whisper": False, "mood": "auto", "live_feed": None, "pgn_post": None,
+    "online_tablebase": True,
 }
 
 
@@ -448,11 +449,13 @@ class engine_player:
     """Play our games with a UCI engine; searches run as tasks so server lines keep flowing."""
 
     def __init__(self, open_session, on_line, margin=5, policy=None, finger_wait=2, pgn_dir=None,
-                 site="freechess.org", learner=None, events=None):
+                 site="freechess.org", learner=None, events=None, online_tablebase=False):
         self.open_session = open_session
         self.events = events
         self.our_color = None
         self.learner = learner
+        self.online_tablebase = online_tablebase
+        self.tablebase_pause = 0.0
         self.opening = None
         self.from_book = False
         self.announced_mood = None
@@ -883,6 +886,8 @@ class engine_player:
                 if (self.whispering or self.followers) and self.opening.why:
                     await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
                 return
+        if await self.play_tablebase(board, clock, started):
+            return
         try:
             result = await self.session.play(board, limit, game=self.token, opponent=self.opponent,
                                              timeout=max(clock, 1) + self.margin,
@@ -914,8 +919,43 @@ class engine_player:
         self.from_book = False
 
 
+    async def play_tablebase(self, board, clock, started):
+        """Play the online tablebase move with seven or fewer pieces; any failure leaves it to the engine."""
+        if not self.online_tablebase or time.monotonic() < self.tablebase_pause or not online_tablebase.covers(board):
+            return False
+        try:
+            answer = await asyncio.get_running_loop().run_in_executor(
+                None, online_tablebase.probe, board, min(2.0, clock / 20))
+        except (OSError, ValueError, KeyError) as error:
+            # Offline, rate limited or slow: rest a minute rather than delay every move.
+            self.tablebase_pause = time.monotonic() + 60
+            self.on_line(f"-- online tablebase unavailable ({error or type(error).__name__}); searching")
+            return False
+        if answer is None:
+            return False
+        move = answer["move"]
+        await self.send(fics_game.ics_move(move))
+        reason = tablebase_reason(answer)
+        if self.record is not None:
+            self.record.on_search(board, move, {"source": reason, "tablebase": answer})
+        self.on_line(f"-- {board.san(move)} {reason} {time.monotonic() - started:.1f}s")
+        if self.whispering or self.followers:
+            await self.explain(f"{board.variation_san([move])} {reason}")
+        self.from_book = False
+        return True
+
+
+def tablebase_reason(answer):
+    distance = f" DTM {abs(answer['dtm'])}" if answer.get("dtm") else (
+        f" DTZ {abs(answer['dtz'])}" if answer.get("dtz") else "")
+    return f"tablebase: {answer['category']}{distance}"
+
+
 def search_summary(board, info):
-    """Our search for the live feed: scores from White's side; book moves carry their reason."""
+    """Our search for the live feed: scores from White's side; book and tablebase moves carry their reason."""
+    if "tablebase" in info:
+        answer = info["tablebase"]
+        return {"tablebase": {"category": answer["category"], "dtz": answer.get("dtz"), "dtm": answer.get("dtm")}}
     score = info.get("score")
     if score is None:
         return {"book": info.get("source", "book")}
@@ -1035,7 +1075,8 @@ def load_settings(path):
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
              "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
              "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float), "whisper": bool,
-             "mood": str, "live_feed": str, "pgn_post": str}
+             "mood": str, "live_feed": str, "pgn_post": str,
+             "online_tablebase": bool}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -1111,6 +1152,8 @@ def run(options, parser):
         configured["whisper"] = True
     if options.no_learning or options.no_pgn:
         configured["learning"] = False
+    if options.no_online_tablebase:
+        configured["online_tablebase"] = False
     for name in ("host", "port", "handle", "engine"):
         setattr(options, name, configured[name])
     settings = dict(configured["options"])
@@ -1179,7 +1222,8 @@ def run(options, parser):
         events = connectors.game_events() if feed_address or configured["pgn_post"] else None
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
                                                                   pgn_dir=pgn_dir, site=options.host, learner=learner,
-                                                                  events=events)
+                                                                  events=events,
+                                                                  online_tablebase=configured["online_tablebase"])
         feed = None
         if feed_address:
             def about():
