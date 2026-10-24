@@ -95,6 +95,10 @@ public:
     void store(U64 key, int age, int ply, int depth, int score, int move, int bound, int eval, bool pv);
     bool probe(U64 key, int ply, int clock, tt_hit_t & hit);
 
+    void prefetch(U64 key) {
+        __builtin_prefetch(&cluster(key));
+    }
+
     ~trans_table_t() {
         ::operator delete[](table, std::align_val_t(alignof(cluster_t)));
     }
@@ -105,10 +109,17 @@ public:
 };
 
 namespace trans_table {
+    extern trans_table_t _global_table;
     const int TABLE_SIZE = options::get_value("Hash");
     void store(U64 key, int age, int ply, int depth, int score, int move, int bound,
         int eval = score::INVALID, bool pv = false);
     bool probe(U64 key, int ply, int clock, tt_hit_t & hit);
+
+    // Starts loading the key's cluster so a probe soon after finds it cached.
+    inline void prefetch(U64 key) {
+        _global_table.prefetch(key);
+    }
+
     void clear();
     void set_size(int size_in_MB);
     void enable();

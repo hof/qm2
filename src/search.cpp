@@ -751,6 +751,7 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->excluded_move = 0;
     stack->move_count = 0;
     brd.forward(move);
+    trans_table::prefetch(position_key());
     if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, move, evaluation_accumulators[brd.ply]);
     }
