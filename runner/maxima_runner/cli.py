@@ -193,6 +193,8 @@ def main(argv=None):
                 raise ValueError("build Maxima first: ./maxima build")
             os.execv(str(binary), [str(binary)])
         command, remaining = arguments[0], arguments[1:]
+        if sys.stdout.isatty():
+            show_logo()
         if command == "uci":
             return uci_command(remaining)
         if command in ("build", "test"):
