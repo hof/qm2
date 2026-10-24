@@ -1843,6 +1843,9 @@ accept). These commands from anyone else are logged and ignored. The same
 commands work on the console without the `!`, and each one answers there; `help`
 lists them. `quit` (or `kill -USR1 <pid>`) stops after the game; a second `quit`
 leaves at once. Every `maxima` command shows the Maxima header in a terminal.
+The console logs each move with its number and the mover's clock: the
+opponent's moves, and the bot's with eval, depth, time and PV, or the book
+layers behind a book move.
 
 Lichess keeps its own experience: `experience/lichess/games/*.pgn` with
 `index/` and `players/` beside it, since its players and rating pool are not

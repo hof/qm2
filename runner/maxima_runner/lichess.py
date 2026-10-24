@@ -564,6 +564,10 @@ class lichess_game:
             elapsed = max(0, previous - remaining + increment) / 1000 if previous is not None else 0
             self.record.on_move(self.board, remaining / 1000, elapsed)
             self.clocks[mover] = remaining
+        if before.turn != self.color:
+            left = f", {clock_text(remaining / 1000)} left" if remaining is not None else ""
+            name = self.player(not self.color).get("name") or "them"
+            self.bot.on_line(f"-- {before.variation_san([move])} by {name}{left}")
         search = self.record.searches.get(before.ply())
         self.emit("move", ply=self.board.ply(), san=before.san(move), uci=move.uci(), fen=self.board.fen(),
                   by="us" if before.turn == self.color else "them", clock_ms=clock_ms,
@@ -603,19 +607,21 @@ class lichess_game:
         self.record.on_search(board, move, info)
         if not await bot.api.post(self.path(f"move/{move.uci()}")):
             return
-        seconds = time.monotonic() - started
+        seconds, numbered = time.monotonic() - started, board.variation_san([move])
+        left = f", {clock_text(max(0.0, clock - seconds))} left"
+        why = self.opening.why if kind == "book" and self.opening is not None else None
+        if why and why[0] in ("book", "learned", "signature", "revenge"):
+            self.last_book, self.left_book = book_line(numbered, why, self.opening.names), None
+        elif self.last_book and self.left_book is None:
+            self.left_book = numbered
         if kind == "engine":
             pv = variation(board, info.get("pv", []))
             self.last_eval = f"{board.san(move)} {describe(info, board.turn)}" + (f", expecting {pv}" if pv else "")
-            bot.on_line(f"-- {board.san(move)} {describe(info, board.turn)} {seconds:.1f}s" + (f" pv {pv}" if pv else ""))
+            bot.on_line(f"-- {numbered} {describe(info, board.turn)} {seconds:.1f}s{left}" + (f" pv {pv}" if pv else ""))
         else:
             self.last_eval = f"{board.san(move)} {info['source']}"
-            bot.on_line(f"-- {board.san(move)} {info['source']} {seconds:.1f}s")
-        why = self.opening.why if kind == "book" and self.opening is not None else None
-        if why and why[0] in ("book", "learned", "signature", "revenge"):
-            self.last_book, self.left_book = book_line(board.variation_san([move]), why, self.opening.names), None
-        elif self.last_book and self.left_book is None:
-            self.left_book = board.variation_san([move])
+            source = self.last_book if why and self.left_book is None else f"{numbered} {info['source']}"
+            bot.on_line(f"-- {source} {seconds:.1f}s{left}")
 
     def stats_line(self):
         """Our record against the opponent and on Lichess, from the experience."""
@@ -767,6 +773,12 @@ def refresh_experience(learner, on_line):
         learner.refresh()
     except (OSError, ValueError) as error:
         on_line(f"-- could not refresh experience: {error}")
+
+
+def clock_text(seconds):
+    """Clock as m:ss."""
+    minutes, rest = divmod(int(seconds), 60)
+    return f"{minutes}:{rest:02d}"
 
 
 def book_line(move, why, names):
