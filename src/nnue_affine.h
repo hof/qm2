@@ -45,13 +45,13 @@ std::array<uint8_t, 32> affine(const std::array<uint8_t, input_size> & input,
         const std::array<int8_t, input_size * 32> & weights,
         const std::array<int32_t, 32> & biases) {
     static_assert(input_size % 32 == 0 && input_size <= 512);
-    std::array<uint8_t, 32> output;
-    for (size_t row = 0; row < 32; ++row) {
-        // Inputs are [0,127], weights [-128,127], at most 512 products:
-        // the dot product fits int32 even for extreme external weights.
-        int32_t dot = 0;
+    // Inputs are [0,127], weights [-128,127], at most 512 products:
+    // the dot product fits int32 even for extreme external weights.
+    std::array<int32_t, 32> dots{};
 #ifdef __AVX2__
-        if constexpr (use_simd) {
+    if constexpr (use_simd) {
+        // Eight partial int32 sums of one row's dot product.
+        auto row_sums = [&](size_t row) {
             auto sums = _mm256_setzero_si256();
             const auto ones = _mm256_set1_epi16(1);
             for (size_t column = 0; column < input_size; column += 32) {
@@ -63,18 +63,29 @@ std::array<uint8_t, 32> affine(const std::array<uint8_t, input_size> & input,
                 const auto pairs = _mm256_maddubs_epi16(values, packed_weights);
                 sums = _mm256_add_epi32(sums, _mm256_madd_epi16(pairs, ones));
             }
-            auto total = _mm_add_epi32(_mm256_castsi256_si128(sums), _mm256_extracti128_si256(sums, 1));
-            total = _mm_hadd_epi32(total, total);
-            total = _mm_hadd_epi32(total, total);
-            dot = _mm_cvtsi128_si32(total);
-        } else
-#endif
-        {
-            for (size_t column = 0; column < input_size; ++column)
-                dot += int(input[column]) * int(weights[row * input_size + column]);
+            return sums;
+        };
+        // Four rows share one horizontal reduction instead of one each.
+        for (size_t row = 0; row < 32; row += 4) {
+            const auto sums01 = _mm256_hadd_epi32(row_sums(row), row_sums(row + 1));
+            const auto sums23 = _mm256_hadd_epi32(row_sums(row + 2), row_sums(row + 3));
+            const auto sums0123 = _mm256_hadd_epi32(sums01, sums23);
+            const auto four = _mm_add_epi32(_mm256_castsi256_si128(sums0123), _mm256_extracti128_si256(sums0123, 1));
+            _mm_storeu_si128(reinterpret_cast<__m128i *>(dots.data() + row), four);
         }
+    } else
+#endif
+    {
+        for (size_t row = 0; row < 32; ++row) {
+            for (size_t column = 0; column < input_size; ++column) {
+                dots[row] += int(input[column]) * int(weights[row * input_size + column]);
+            }
+        }
+    }
+    std::array<uint8_t, 32> output;
+    for (size_t row = 0; row < 32; ++row) {
         // Biases are unrestricted int32 in the file. Add them in wide arithmetic.
-        const int64_t sum = int64_t(biases[row]) + dot;
+        const int64_t sum = int64_t(biases[row]) + dots[row];
         output[row] = static_cast<uint8_t>(std::clamp(sum >> 6, int64_t(0), int64_t(127)));
     }
     return output;
