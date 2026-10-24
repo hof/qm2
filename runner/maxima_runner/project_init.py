@@ -303,7 +303,7 @@ def main():
     show_logo()
     if not (root / "CMakePresets.json").is_file():
         raise ValueError("init requires a Maxima checkout; set MAXIMA_PROJECT_DIR")
-    where = ("the project root; set MAXIMA_DATA_DIR to keep them elsewhere, e.g. on a persistent volume"
+    where = ("the project root; set MAXIMA_DATA_DIR to keep them elsewhere"
              if options.data == root else "MAXIMA_DATA_DIR")
     print(f"books, network, tablebases and experience in {options.data}\n({where})\n")
     results = []
