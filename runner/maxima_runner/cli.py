@@ -9,7 +9,7 @@ from .project import data_root, engine_path, project_root
 
 command_groups = (
     ("Setup", (
-        ("init", "Prepare everything: toolchain, runner, builds, books, tablebases (skips what is ready)"),
+        ("init", "Set up toolchain, builds, books and tablebases"),
     )),
     ("Engine", (
         ("uci", "Run a UCI engine (Maxima2 by default)"),
@@ -25,15 +25,15 @@ command_groups = (
         ("experience:export", "Export an engine experience snapshot"),
         ("experience:show", "Inspect experience"),
         ("experience:analyze", "Analyze experience positions"),
-        ("experience:build", "Digest FICS games into the learning index and player stats"),
-        ("experience:repertoire", "Build the fire, draw and experiment style books from books/*.pgn"),
-        ("experience:draw", "Build draw.bin from master games: lines that lose least, draw most"),
-        ("experience:fire", "Build fire.bin: Daring carried on by decisive master lines that still score"),
+        ("experience:build", "Build the learning index and player stats"),
+        ("experience:repertoire", "Build the fire, draw and experiment books"),
+        ("experience:draw", "Build draw.bin from master games"),
+        ("experience:fire", "Build fire.bin from master games"),
         ("tablebases:syzygy:download", "Download selected Syzygy tablebases"),
     )),
     ("Online play", (
         ("fics", "Play on FICS as MaxDrone (seek, play, save PGN)"),
-        ("lichess", "Play on Lichess as a bot (accept challenges, play, save PGN)"),
+        ("lichess", "Play on Lichess as a bot (accept, play, save PGN)"),
     )),
 )
 
