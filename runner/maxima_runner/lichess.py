@@ -31,6 +31,8 @@ owner_commands = ("softquit", "softrestart", "resign", "abort", "draw", "challen
 public_commands = ("help", "name", "eval")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
+# Each room gets its own wording: Lichess silently drops a line equal to one of our previous two.
+player_greeting = "Hi, I'm Maxima running on MaxDrone. Good luck!"
 greeting = "Hi, I'm Maxima running on MaxDrone. Type !help for help."
 player_farewells = ("Good game, thanks for playing!", "Thanks for the game!")
 # Our own challenges after idle time: (limit, increment) seconds per speed and each speed's share.
@@ -458,7 +460,7 @@ class lichess_game:
             history = tuple(stats.get(outcome, 0) for outcome in ("wins", "draws", "losses"))
         else:
             history = None
-        self.chat("player", greeting)
+        self.chat("player", player_greeting)
         self.chat("spectator", greeting, *filter(None, [record_line(history, them.get("name") or "you")]))
         clock = full.get("clock") or {}
         bot.on_line(f"-- game {self.id}: {full['white'].get('name')} vs {full['black'].get('name')}, "

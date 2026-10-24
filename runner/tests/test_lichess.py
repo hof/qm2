@@ -108,6 +108,7 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         await game.searching
         actions = [path for path, _ in api.posts if not path.endswith("/chat")]
         greetings = [data["text"] for path, data in api.posts if path.endswith("/chat")]
+        self.assertEqual(len(set(greetings)), len(greetings))  # Lichess drops a repeated line
         self.assertTrue(greetings and not any("/" in text for text in greetings))  # Lichess blanks lines with links
         self.assertEqual(actions[0], "/api/bot/game/g1/draw/yes")
         self.assertTrue(actions[1].startswith("/api/bot/game/g1/move/"))
