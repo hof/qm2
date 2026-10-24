@@ -55,10 +55,6 @@ enum castle_flag_t {
     CASTLE_WHITE = 3, CASTLE_BLACK = 12, CASTLE_ANY = 15, CASTLE_NONE = 0
 };
 
-enum endgame_t {
-    OPP_BISHOPS, KBBKN, KBPSK, KNPK, KRKP, KQKP, KRPKR, KQPSKQ, KQPSKQPS
-};
-
 const piece_t PAWN[2] = {BPAWN, WPAWN};
 const piece_t QUEEN[2] = {BQUEEN, WQUEEN};
 const piece_t ROOK[2] = {BROOK, WROOK};
@@ -79,10 +75,13 @@ public:
     int fifty_count;
     bool wtm; //white to move
     bool legal_enpassant; //cached legality for repetition identity
+    U64 pawn_key; //colored-pawn structure, independent of side and rights
+    U64 nonpawn_key[2]; //colored nonpawns, including kings
+    U64 minor_key; //knights, bishops and kings of both colors
+    U64 major_key; //rooks, queens and kings of both colors
     U64 tt_key; //transposition table (hash) key
-    U64 material_hash;
-    U64 pawn_hash;
 
+    void update_piece_keys(int piece, U64 delta);
     void do_flip();
 
     U64 repetition_key() const {
@@ -137,9 +136,8 @@ public:
     void add_piece(const int piece, const int sq, const bool hash);
     void remove_piece(const int piece, const int sq, const bool hash);
     void move_piece(const int piece, const int ssq, const int tsq, const bool hash);
-    bool is_eg(endgame_t eg, bool us);
-    U64 smallest_attacker(const U64 attacks, const bool wtm, int &piece);
-    int see(const move_t * capture);
+    int see(const move_t * move);
+    bool see(const move_t * move, int threshold);
     bool is_gain(const move_t * move);
     int max_gain(const move_t * capture);
     int mvvlva(const move_t * capture);
@@ -148,7 +146,7 @@ public:
      * Gets side to move
      * @return boolean 1: white to move, 0: black to move
      */
-    bool us() {
+    bool us() const {
         return stack->wtm;
     }
     
@@ -174,7 +172,7 @@ public:
      * @param pc piece type (WPAWN..BKING)
      * @return square_t a1..h8
      */
-    int get_sq(const int pc) {
+    int get_sq(const int pc) const {
         return bsf(bb[pc]);
     }
 
@@ -298,16 +296,6 @@ public:
     }
 
     /**
-     * Test if a side has the bishop pair
-     * @param us side to test
-     * @return true: side has bishop pair, false: side does not have the bishop pair
-     */
-    bool has_bishop_pair(const bool us) {
-        const int pc = BISHOP[us];
-        return (bb[pc] & WHITE_SQUARES) && (bb[pc] & BLACK_SQUARES);
-    }
-
-    /**
      * Test if the actual position is legal, e.g. no king can be captured
      * @return true: legal, false: not legal
      */
@@ -342,13 +330,18 @@ public:
      * @param sq the square to investigate
      * @return bitboard populated with all pieces attacking the square
      */
-    U64 attacks_to(const int sq) {
-        return (KNIGHT_MOVES[sq] & (bb[WKNIGHT] | bb[BKNIGHT]))
+    U64 attacks_to(const int sq) const {
+        return attacks_to(sq, bb[ALLPIECES]);
+    }
+
+    // Occupancy may remove original pieces, as in a simulated exchange.
+    U64 attacks_to(const int sq, const U64 occupied) const {
+        return ((KNIGHT_MOVES[sq] & (bb[WKNIGHT] | bb[BKNIGHT]))
                 | (PAWN_CAPTURES[BLACK][sq] & bb[WPAWN])
                 | (PAWN_CAPTURES[WHITE][sq] & bb[BPAWN])
                 | (KING_MOVES[sq] & (bb[WKING] | bb[BKING]))
-                | (magic::bishop_moves(sq, bb[ALLPIECES]) & (bb[WBISHOP] | bb[WQUEEN] | bb[BBISHOP] | bb[BQUEEN]))
-                | (magic::rook_moves(sq, bb[ALLPIECES]) & (bb[WROOK] | bb[WQUEEN] | bb[BROOK] | bb[BQUEEN]));
+                | (magic::bishop_moves(sq, occupied) & (bb[WBISHOP] | bb[WQUEEN] | bb[BBISHOP] | bb[BQUEEN]))
+                | (magic::rook_moves(sq, occupied) & (bb[WROOK] | bb[WQUEEN] | bb[BROOK] | bb[BQUEEN]))) & occupied;
     }
     
     /**

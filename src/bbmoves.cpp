@@ -40,7 +40,9 @@ namespace magic {
         int i;
         U64 ret = 0;
         for (i = 0; i < num_squares; i++)
-            if (linocc & (((U64) (1)) << i)) ret |= (((U64) (1)) << squares[i]);
+            if (linocc & (((U64) (1)) << i)) {
+                ret |= (((U64) (1)) << squares[i]);
+            }
         return ret;
     }
 
@@ -61,14 +63,20 @@ namespace magic {
         bit = (((U64) (1)) << square);
         do {
             bit <<= 1;
-            if (bit & rowbits) ret |= bit;
-            else break;
+            if (bit & rowbits) {
+                ret |= bit;
+            } else {
+                break;
+            }
         } while (!(bit & occ));
         bit = (((U64) (1)) << square);
         do {
             bit >>= 1;
-            if (bit & rowbits) ret |= bit;
-            else break;
+            if (bit & rowbits) {
+                ret |= bit;
+            } else {
+                break;
+            }
         } while (!(bit & occ));
         return ret;
     }
@@ -83,32 +91,44 @@ namespace magic {
         do {
             bit <<= 8 - 1;
             bit2 >>= 1;
-            if (bit2 & rowbits) ret |= bit;
-            else break;
+            if (bit2 & rowbits) {
+                ret |= bit;
+            } else {
+                break;
+            }
         } while (bit && !(bit & occ));
         bit = (((U64) (1)) << square);
         bit2 = bit;
         do {
             bit <<= 8 + 1;
             bit2 <<= 1;
-            if (bit2 & rowbits) ret |= bit;
-            else break;
+            if (bit2 & rowbits) {
+                ret |= bit;
+            } else {
+                break;
+            }
         } while (bit && !(bit & occ));
         bit = (((U64) (1)) << square);
         bit2 = bit;
         do {
             bit >>= 8 - 1;
             bit2 <<= 1;
-            if (bit2 & rowbits) ret |= bit;
-            else break;
+            if (bit2 & rowbits) {
+                ret |= bit;
+            } else {
+                break;
+            }
         } while (bit && !(bit & occ));
         bit = (((U64) (1)) << square);
         bit2 = bit;
         do {
             bit >>= 8 + 1;
             bit2 >>= 1;
-            if (bit2 & rowbits) ret |= bit;
-            else break;
+            if (bit2 & rowbits) {
+                ret |= bit;
+            } else {
+                break;
+            }
         } while (bit && !(bit & occ));
         return ret;
     }

@@ -24,6 +24,7 @@
 
 #include "board.h"
 #include "hashcodes.h"
+#include <type_traits>
 
 /**
  * Flips board stack (e.g. the castling rights and side to move)
@@ -52,6 +53,21 @@ void board_stack_t::do_flip() {
     }
 }
 
+void board_stack_t::update_piece_keys(int piece, U64 delta) {
+    if (piece == WPAWN || piece == BPAWN) {
+        pawn_key ^= delta;
+    } else {
+        nonpawn_key[piece > WKING] ^= delta;
+        const int type = (piece - 1) % WKING + 1;
+        if (type == WKNIGHT || type == WBISHOP || type == WKING) {
+            minor_key ^= delta;
+        }
+        if (type == WROOK || type == WQUEEN || type == WKING) {
+            major_key ^= delta;
+        }
+    }
+}
+
 /**
  * Empty and initialize the board structure
  */
@@ -72,11 +88,8 @@ void board_t::clear() {
  */
 void board_t::add_piece(const int piece, const int sq, const bool hash = false) {
     if (hash) {
-        HASH_ADD_PIECE(stack->material_hash, piece, count(piece));
         HASH_ADD_PIECE(stack->tt_key, piece, sq);
-        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
-            HASH_ADD_PIECE(stack->pawn_hash, piece, sq);
-        }
+        stack->update_piece_keys(piece, hash::codes[piece][sq]);
     }
     U64 bit = BIT(sq);
     bb[piece] ^= bit;
@@ -98,11 +111,8 @@ void board_t::remove_piece(const int piece, const int sq, const bool hash = fals
     bb[ALLPIECES] ^= bit;
     matrix[sq] = EMPTY;
     if (hash) {
-        HASH_REMOVE_PIECE(stack->material_hash, piece, count(piece));
         HASH_REMOVE_PIECE(stack->tt_key, piece, sq);
-        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
-            HASH_REMOVE_PIECE(stack->pawn_hash, piece, sq);
-        }
+        stack->update_piece_keys(piece, hash::codes[piece][sq]);
     }
 }
 
@@ -122,9 +132,7 @@ void board_t::move_piece(const int piece, const int ssq, int tsq, const bool has
     matrix[tsq] = piece;
     if (hash) {
         HASH_MOVE_PIECE(stack->tt_key, piece, ssq, tsq);
-        if (piece == WPAWN || piece == BPAWN || piece == WKING || piece == BKING) {
-            HASH_MOVE_PIECE(stack->pawn_hash, piece, ssq, tsq);
-        }
+        stack->update_piece_keys(piece, hash::codes[piece][ssq] ^ hash::codes[piece][tsq]);
     }
 }
 
@@ -222,22 +230,18 @@ void board_t::forward(const move_t * move) {
         if (has_castle_right(CASTLE_K) && (ssq == h1 || ssq == e1 || tsq == h1)) {
             stack->castling_flags ^= CASTLE_K;
             HASH_CASTLE_K(stack->tt_key);
-            HASH_CASTLE_K(stack->pawn_hash);
         }
         if (has_castle_right(CASTLE_Q) && (ssq == a1 || ssq == e1 || tsq == a1)) {
             stack->castling_flags ^= CASTLE_Q;
             HASH_CASTLE_Q(stack->tt_key);
-            HASH_CASTLE_Q(stack->pawn_hash);
         }
         if (has_castle_right(CASTLE_k) && (ssq == h8 || ssq == e8 || tsq == h8)) {
             stack->castling_flags ^= CASTLE_k;
             HASH_CASTLE_k(stack->tt_key);
-            HASH_CASTLE_k(stack->pawn_hash);
         }
         if (has_castle_right(CASTLE_q) && (ssq == a8 || ssq == e8 || tsq == a8)) {
             stack->castling_flags ^= CASTLE_q;
             HASH_CASTLE_q(stack->tt_key);
-            HASH_CASTLE_q(stack->pawn_hash);
         }
 
     }
@@ -333,6 +337,10 @@ void board_t::backward() {
  */
 bool board_t::valid(const move_t * move) {
     int piece = move->piece;
+    if (piece < WPAWN || piece > BKING || move->ssq >= 64 || move->tsq >= 64
+            || move->ssq == move->tsq || move->capture == WKING || move->capture == BKING) {
+        return false;
+    }
     if (stack->wtm != (piece <= WKING)) {
         return false;
     }
@@ -341,7 +349,28 @@ bool board_t::valid(const move_t * move) {
         return false;
     }
     int tsq = move->tsq;
+    const bool pawn = piece == WPAWN || piece == BPAWN;
+    const bool us = stack->wtm;
+    if (move->promotion) {
+        if (!pawn || !(BIT(tsq) & RANK[us][8])
+                || move->promotion < KNIGHT[us] || move->promotion > QUEEN[us]) {
+            return false;
+        }
+    } else if (pawn && (BIT(tsq) & RANK[us][8])) {
+        return false;
+    }
+    if (move->castle && (piece != KING[us] || ssq != (us ? e1 : e8)
+            || move->castle != (us ? (tsq == g1 ? CASTLE_K : tsq == c1 ? CASTLE_Q : 0)
+                : (tsq == g8 ? CASTLE_k : tsq == c8 ? CASTLE_q : 0)))) {
+        return false;
+    }
     if (move->en_passant) {
+        if (!pawn || move->promotion || move->castle || move->capture != PAWN[!us]
+                || !(BIT(tsq) & RANK[us][6])
+                || !(PAWN_CAPTURES[us][ssq] & BIT(tsq))) {
+            return false;
+        }
+
         return tsq == stack->enpassant_sq && matrix[tsq] == EMPTY && ((stack->wtm && piece == WPAWN && matrix[tsq - 8] == BPAWN)
                 || (!stack->wtm && piece == BPAWN && matrix[tsq + 8] == WPAWN));
     } else if (move->castle) {
@@ -353,23 +382,19 @@ bool board_t::valid(const move_t * move) {
             case EMPTY:
                 break;
             case CASTLE_K:
-                return matrix[h1] == WROOK && matrix[f1] == EMPTY && matrix[g1] == EMPTY
-                        && !is_attacked(f1, BLACK) && !is_attacked(g1, BLACK) && !is_attacked(e1, BLACK);
+                return matrix[h1] == WROOK && matrix[f1] == EMPTY && matrix[g1] == EMPTY;
             case CASTLE_Q:
-                return matrix[a1] == WROOK && matrix[b1] == EMPTY && matrix[c1] == EMPTY && matrix[d1] == EMPTY
-                        && !is_attacked(e1, BLACK) && !is_attacked(d1, BLACK) && !is_attacked(c1, BLACK);
+                return matrix[a1] == WROOK && matrix[b1] == EMPTY && matrix[c1] == EMPTY && matrix[d1] == EMPTY;
             case CASTLE_k:
-                return matrix[h8] == BROOK && matrix[f8] == EMPTY && matrix[g8] == EMPTY
-                        && !is_attacked(f8, WHITE) && !is_attacked(g8, WHITE) && !is_attacked(e8, WHITE);
+                return matrix[h8] == BROOK && matrix[f8] == EMPTY && matrix[g8] == EMPTY;
             case CASTLE_q:
-                return matrix[a8] == BROOK && matrix[b8] == EMPTY && matrix[c8] == EMPTY && matrix[d8] == EMPTY
-                        && !is_attacked(e8, WHITE) && !is_attacked(d8, WHITE) && !is_attacked(c8, WHITE);
+                return matrix[a8] == BROOK && matrix[b8] == EMPTY && matrix[c8] == EMPTY && matrix[d8] == EMPTY;
             default:
                 assert(false);
         }
     }
     int captured = move->capture; //empty for non-captures
-    if (matrix[tsq] != captured) {
+    if (matrix[tsq] != captured || (captured && (captured <= WKING) == us)) {
         return false;
     }
 
@@ -382,9 +407,11 @@ bool board_t::valid(const move_t * move) {
             assert(false);
             return false;
         case WPAWN:
-            return captured || tsq - ssq == 8 || matrix[ssq + 8] == EMPTY;
+            return captured ? bool(PAWN_CAPTURES[WHITE][ssq] & BIT(tsq))
+                : tsq - ssq == 8 || (ssq >= a2 && ssq <= h2 && tsq - ssq == 16
+                    && matrix[ssq + 8] == EMPTY);
         case WKNIGHT:
-            return true;
+            return KNIGHT_MOVES[ssq] & BIT(tsq);
         case WBISHOP:
             return magic::bishop_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case WROOK:
@@ -392,11 +419,13 @@ bool board_t::valid(const move_t * move) {
         case WQUEEN:
             return magic::queen_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case WKING:
-            return true;
+            return KING_MOVES[ssq] & BIT(tsq);
         case BPAWN:
-            return captured || ssq - tsq == 8 || matrix[tsq + 8] == EMPTY;
+            return captured ? bool(PAWN_CAPTURES[BLACK][ssq] & BIT(tsq))
+                : ssq - tsq == 8 || (ssq >= a7 && ssq <= h7 && ssq - tsq == 16
+                    && matrix[ssq - 8] == EMPTY);
         case BKNIGHT:
-            return true;
+            return KNIGHT_MOVES[ssq] & BIT(tsq);
         case BBISHOP:
             return magic::bishop_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case BROOK:
@@ -404,7 +433,7 @@ bool board_t::valid(const move_t * move) {
         case BQUEEN:
             return magic::queen_moves(ssq, bb[ALLPIECES]) & BIT(tsq);
         case BKING:
-            return true;
+            return KING_MOVES[ssq] & BIT(tsq);
         default:
             assert(false);
             return false;
@@ -693,25 +722,6 @@ int board_t::gives_check(const move_t * move) {
 }
 
 /**
- * Get the smallest attacking piece. This function is used in the SEE routine
- * @param attacks bitboard with attack information
- * @param wtm side to move, white(1) or black(0)
- * @param piece this will be set to the piece type 
- * @return bitboard with the location of the smallest attacker
- */
-U64 board_t::smallest_attacker(const U64 attacks, const bool wtm, int & piece) {
-    if (attacks & all(wtm)) {
-        for (piece = PAWN[wtm]; piece <= KING[wtm]; piece++) {
-            U64 subset = attacks & bb[piece];
-            if (subset) {
-                return subset & -subset;
-            }
-        }
-    }
-    return 0;
-}
-
-/**
  * Returns MVVLVA score 
  * @return 
  */
@@ -729,94 +739,153 @@ int board_t::max_gain(const move_t * move) {
 
 bool board_t::is_gain(const move_t * move) {
     if (move->capture) {
-        return see(move) > 0;
+        return see(move, 1);
     }
     if (move->promotion == WQUEEN || move->promotion == BQUEEN) {
-        return see(move) >= 0;
+        return see(move, 0);
     }
     return false;
 }
 
-/**
- * SEE, Static Exchange Evaluator. Verify if a move or capture wins or looses material
- * @param move the move to verify
- * @return expected gain or loss by playing this move as a number in centipawns (e.g +300 when winning a knight)
- */
-int board_t::see(const move_t * move) {
-    int captured_piece = move->capture;
-    int moving_piece = move->piece;
-    int captured_val = board::PVAL[captured_piece];
+namespace {
 
-    /*
-     * 1. A capture by a king is always a gain
-     */
-
-    if (moving_piece == WKING || moving_piece == BKING) {
-        return captured_val;
+// Both public overloads share the recapture selection and legality checks.
+// Compile-time specialization removes threshold logic from full-score calls
+// and the gain list/backward fold from threshold calls.
+template<bool threshold_test>
+std::conditional_t<threshold_test, bool, int>
+see_exchange(board_t & board, const move_t * move, int threshold) {
+    const int initial_gain = move->castle ? 0 : board.max_gain(move);
+    if (move->castle || move->piece == WKING || move->piece == BKING) {
+        if constexpr (threshold_test) {
+            return initial_gain >= threshold;
+        } else {
+            return initial_gain;
+        }
+    }
+    // The opponent can decline, so the initial gain is an upper bound.
+    if constexpr (threshold_test) {
+        if (initial_gain < threshold) {
+            return false;
+        }
     }
 
-    /*
-     * 2. If a lower value piece captures a higher value piece, it's a gain
-     * (e.g. pawn x knight)
-     */
-
-    int piece_val = board::PVAL[moving_piece];
-    if (piece_val < captured_val) {
-        return captured_val - piece_val;
+    const int target = move->tsq;
+    const U64 target_bit = BIT(target);
+    U64 occupied = (board.bb[ALLPIECES] & ~BIT(move->ssq)) | target_bit;
+    if (move->en_passant) {
+        occupied &= ~BIT(target + (move->piece == WPAWN ? -8 : 8));
     }
 
-    /*
-     * 3. If a piece captures a lower value piece that is defended by
-     * a pawn, it's a loss
-     * (e.g. rook captures knight that is defended by a pawn)
-     */
-
-    int tsq = move->tsq;
-    bool wtm = moving_piece > WKING;
-    if (captured_val && piece_val > captured_val && is_attacked_by_pawn(tsq, wtm)) {
-        return captured_val - piece_val;
-    }
-
-    /*
-     * 4. full static exchange evaluation using the swap algorithm
-     */
-
-    U64 attacks = attacks_to(tsq);
     int gain[32];
     int depth = 0;
-    U64 from_bit = BIT(move->ssq);
-    U64 occ = bb[ALLPIECES];
-    const U64 queens = bb[WQUEEN] | bb[BQUEEN];
-    const U64 diag_sliders = bb[WBISHOP] | bb[BBISHOP] | queens;
-    const U64 hor_ver_sliders = bb[WROOK] | bb[BROOK] | queens;
-    const U64 xrays = diag_sliders | hor_ver_sliders | bb[WPAWN] | bb[BPAWN];
-    gain[0] = captured_val;
-
-    //set the non-capturing pawn move ssq bit in the attacks bitboard, so it
-    //will be removed again in the swap loop
-    if (!captured_piece && (moving_piece == WPAWN || moving_piece == BPAWN)) {
-        attacks ^= from_bit;
+    if constexpr (!threshold_test) {
+        gain[0] = initial_gain;
     }
+    int occupant = move->promotion ? move->promotion : move->piece;
+    bool side = move->piece > WKING; // Opponent of the initial mover.
+    const int king_square[2] = {board.get_sq(BKING), board.get_sq(WKING)};
+    // Root score >= threshold iff the opponent's optional gain <= limit.
+    // For W = max(0, capture_gain - next_W), each exchange flips <= to >=.
+    int64_t limit = int64_t(initial_gain) - threshold;
+    bool at_least = false;
 
-    //swap loop
-    do {
-        depth++;
-        gain[depth] = board::PVAL[moving_piece] - gain[depth - 1];
-        attacks ^= from_bit;
-        occ ^= from_bit;
-        if (from_bit & xrays) {
-            attacks |= magic::bishop_moves(tsq, occ) & occ & diag_sliders;
-            attacks |= magic::rook_moves(tsq, occ) & occ & hor_ver_sliders;
+    while (depth < 31) {
+        const bool promotion_rank = side ? target >= a8 : target <= h1;
+        if constexpr (threshold_test) {
+            if (at_least && limit <= 0) {
+                return true;
+            }
+            if (!at_least && limit < 0) {
+                return false;
+            }
+            const int upper = board::PVAL[occupant]
+                + (promotion_rank ? board::PVAL[WQUEEN] - board::PVAL[WPAWN] : 0);
+            if (at_least && upper < limit) {
+                return false;
+            }
+            if (!at_least && upper <= limit) {
+                return true;
+            }
         }
-        from_bit = smallest_attacker(attacks, wtm, moving_piece);
-        wtm = !wtm;
-    } while (from_bit);
-
-    //calculate and return final material gain
-    while (--depth) {
-        gain[depth - 1] = -MAX(-gain[depth - 1], gain[depth]);
+        // Original bitboards remain valid at every source still occupied.
+        // The target occupant is tracked separately and must be masked out.
+        const U64 attackers = board.attacks_to(target, occupied) & board.all(side) & ~target_bit;
+        U64 from_bit = 0;
+        int piece = PAWN[side];
+        for (; piece <= KING[side]; ++piece) {
+            U64 candidates = attackers & board.bb[piece];
+            while (candidates) {
+                const U64 candidate = candidates & -candidates;
+                candidates &= candidates - 1;
+                const U64 next_occupied = occupied & ~candidate;
+                const int king = piece == KING[side] ? target : king_square[side];
+                if (!(board.attacks_to(king, next_occupied) & board.all(!side) & ~target_bit)) {
+                    from_bit = candidate;
+                    break;
+                }
+            }
+            if (from_bit) {
+                break;
+            }
+        }
+        if (!from_bit) {
+            break;
+        }
+        occupied &= ~from_bit;
+        const bool promotes = piece == PAWN[side] && promotion_rank;
+        const int next_occupant = promotes ? QUEEN[side] : piece;
+        const int promotion_gain = promotes ? board::PVAL[next_occupant] - board::PVAL[piece] : 0;
+        const int capture_gain = board::PVAL[occupant] + promotion_gain;
+        if constexpr (threshold_test) {
+            // A legal king capture ends the exchange; otherwise declining
+            // bounds W between zero and this actual capture's gain.
+            if (piece == KING[side]) {
+                return at_least ? capture_gain >= limit : capture_gain <= limit;
+            }
+            if (at_least && capture_gain < limit) {
+                return false;
+            }
+            if (!at_least && capture_gain <= limit) {
+                return true;
+            }
+            limit = capture_gain - limit;
+            at_least = !at_least;
+        } else {
+            gain[depth + 1] = capture_gain - gain[depth];
+        }
+        ++depth;
+        occupant = next_occupant;
+        if (piece == KING[side]) {
+            break;
+        }
+        side = !side;
     }
-    return gain[0];
+    if constexpr (threshold_test) {
+        return at_least ? 0 >= limit : 0 <= limit;
+    } else {
+        while (depth > 0) {
+            gain[depth - 1] = -MAX(-gain[depth - 1], gain[depth]);
+            --depth;
+        }
+        return gain[0];
+    }
+}
+
+}
+
+/**
+ * Material estimate for a legal move followed by least-valuable legal
+ * recaptures on its target square. Either side may decline an exchange.
+ * Temporary occupancy keeps x-rays and king safety current without mutating
+ * the board. This does not search positional compensation or other squares.
+ */
+int board_t::see(const move_t * move) {
+    return see_exchange<false>(*this, move, 0);
+}
+
+bool board_t::see(const move_t * move, int threshold) {
+    return see_exchange<true>(*this, move, threshold);
 }
 
 /**
@@ -857,68 +926,6 @@ bool board_t::has_legal_enpassant() {
         }
     }
     return false;
-}
-
-bool board_t::is_eg(endgame_t eg, bool us) {
-    const bool them = !us;
-    switch (eg) {
-        case OPP_BISHOPS:
-            return bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && is_1(bb[WBISHOP]) && is_1(bb[BBISHOP])
-                    && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0
-                    && bool(bb[WBISHOP] & WHITE_SQUARES) == bool(bb[BBISHOP] & BLACK_SQUARES);
-        case KBBKN:
-            return bb[WPAWN] == 0 && bb[BPAWN] == 0
-                    && bb[KNIGHT[us]] == 0 && is_1(bb[KNIGHT[them]])
-                    && has_bishop_pair(us) && bb[BISHOP[them]] == 0
-                    && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
-        case KBPSK:
-            return bb[PAWN[them]] == 0 && bb[PAWN[us]] != 0
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && is_1(bb[BISHOP[us]]) && bb[BISHOP[them]] == 0
-                    && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
-        case KNPK:
-            return bb[PAWN[them]] == 0 && is_1(bb[PAWN[us]])
-                    && is_1(bb[KNIGHT[us]]) && bb[KNIGHT[them]] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
-        case KRKP:
-            return bb[PAWN[us]] == 0 && is_1(bb[PAWN[them]])
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && is_1(bb[ROOK[us]]) && bb[ROOK[them]] == 0
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
-        case KQKP:
-            return bb[PAWN[us]] == 0 && is_1(bb[PAWN[them]])
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && bb[WROOK] == 0 && bb[BROOK] == 0
-                    && is_1(bb[QUEEN[us]]) && bb[QUEEN[them]] == 0;
-        case KRPKR:
-            return is_1(bb[PAWN[us]]) && bb[PAWN[them]] == 0
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && is_1(bb[ROOK[us]]) && is_1(bb[ROOK[them]])
-                    && bb[WQUEEN] == 0 && bb[BQUEEN] == 0;
-        case KQPSKQ:
-            return bb[PAWN[us]] != 0 && bb[PAWN[them]] == 0
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && bb[ROOK[us]] == 0 && bb[ROOK[them]] == 0
-                    && is_1(bb[WQUEEN]) && is_1(bb[BQUEEN]);
-        case KQPSKQPS:
-            return bb[PAWN[us]] != 0 && bb[PAWN[them]] != 0
-                    && bb[WKNIGHT] == 0 && bb[BKNIGHT] == 0
-                    && bb[WBISHOP] == 0 && bb[BBISHOP] == 0
-                    && bb[ROOK[us]] == 0 && bb[ROOK[them]] == 0
-                    && is_1(bb[WQUEEN]) && is_1(bb[BQUEEN]);
-        default:
-            return false;
-    }
 }
 
 /**
@@ -1039,25 +1046,21 @@ void board_t::init(const char* fen) {
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_k;
                 HASH_CASTLE_k(stack->tt_key);
-                HASH_CASTLE_k(stack->pawn_hash);
                 break;
             case 'q':
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_q;
                 HASH_CASTLE_q(stack->tt_key);
-                HASH_CASTLE_q(stack->pawn_hash);
                 break;
             case 'K':
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_K;
                 HASH_CASTLE_K(stack->tt_key);
-                HASH_CASTLE_K(stack->pawn_hash);
                 break;
             case 'Q':
                 castle_dash = false;
                 stack->castling_flags |= CASTLE_Q;
                 HASH_CASTLE_Q(stack->tt_key);
-                HASH_CASTLE_Q(stack->pawn_hash);
                 break;
             case ' ':
                 break;
@@ -1208,4 +1211,12 @@ void board_t::do_flip() {
         }
     }
     stack->do_flip();
+    stack->pawn_key = stack->minor_key = stack->major_key = 0;
+    stack->nonpawn_key[0] = stack->nonpawn_key[1] = 0;
+    for (int piece = WPAWN; piece <= BKING; ++piece) {
+        U64 pieces = bb[piece];
+        while (pieces) {
+            stack->update_piece_keys(piece, hash::codes[piece][pop(pieces)]);
+        }
+    }
 }

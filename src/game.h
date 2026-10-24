@@ -39,9 +39,10 @@ namespace options {
         int type;
         int value;
         const char * uci_option; 
+        bool clears_tt = false;
     };
 
-    const int length = 21;
+    const int length = 47;
     extern option_t PARAM[length+1];
     
     option_t * get_option(const char * key);
@@ -52,6 +53,7 @@ namespace options {
 class game_t {
 public:
     time_manager_t tm;
+    std::chrono::steady_clock::time_point go_started;
     move_t target_move;
     U64 max_nodes;
     U64 max_time_per_move;

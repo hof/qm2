@@ -18,117 +18,44 @@ void prepare(search_t & search) {
     search.ffp_enabled = false;
 }
 
-int run(const std::string & fen, const std::vector<U64> & history = {}) {
-    search_t search(fen.c_str(), nullptr, nullptr, history);
+int run(const std::string & fen) {
+    search_t search(fen.c_str());
     prepare(search);
     const int result = search.pvs(-score::INF, score::INF, 1);
     if (search.stop_all || search.brd.ply != 0 || search.brd.to_string() != fen) {
-        std::cerr << "context test search aborted or failed to restore the board\n";
+        std::cerr << "TT test search aborted or failed to restore the board\n";
         std::exit(EXIT_FAILURE);
     }
     return result;
 }
 
-void set_option(const char * name, int value) {
-    uci::in(std::string("setoption name ") + name + " value " + std::to_string(value));
-}
-
-std::pair<int, U64> run_configured(const std::string & fen) {
-    auto search = std::make_unique<search_t>(fen.c_str());
-    prepare(*search);
-    search->draw_contempt = options::get_value("DrawContempt");
-    const int result = search->pvs(-score::INF, score::INF, 1);
-    if (search->stop_all || search->brd.ply != 0 || search->brd.to_string() != fen
-            || search->stack != search->root_stack) {
-        std::cerr << "option test search aborted or failed to restore state\n";
-        std::exit(EXIT_FAILURE);
-    }
-    return {result, search->nodes};
-}
-
-bool test_evaluation_options() {
-    const std::string fen = "r4rk1/1p2ppbp/p2pbnp1/q7/3BPPP1/2N2B2/PPP4P/R2Q1RK1 b - - 0 1";
-    const int saved_shelter = options::get_value("KingAttackShelter");
-    const int saved_pieces = options::get_value("KingAttackPieces");
-    const int saved_contempt = options::get_value("DrawContempt");
-    uci::silent(true);
-    set_option("DrawContempt", 0);
-    bool success = true;
-    for (const char * name : {"KingAttackShelter", "KingAttackPieces", "both"}) {
-        for (int before : {0, 512}) {
-            const int after = 512 - before;
-            const auto configure = [name](int value) {
-                set_option("KingAttackShelter", std::string(name) == "KingAttackPieces" ? 0 : value);
-                set_option("KingAttackPieces", std::string(name) == "KingAttackShelter" ? 0 : value);
-            };
-            configure(before);
-            trans_table::clear();
-            const auto original = run_configured(fen);
-            configure(before);
-            const auto unchanged = run_configured(fen);
-            success &= check("unchanged evaluation options must retain score reuse",
-                unchanged.first == original.first && unchanged.second == 1);
-            configure(after);
-            const auto warm = run_configured(fen);
-            trans_table::clear();
-            const auto cold = run_configured(fen);
-            success &= check("changed evaluation options must reject stale score reuse",
-                warm.first == cold.first && warm.second > 1);
-            success &= check("each evaluation option fixture must affect the score",
-                original.first != cold.first);
-        }
-    }
-    for (const char * name : {"KingAttackShelter", "KingAttackPieces"}) {
-        for (int before : {0, 512}) {
-            for (int bound : {score::LOWERBOUND, score::UPPERBOUND, score::EXACT}) {
-                set_option(name, before);
-                auto search = std::make_unique<search_t>(fen.c_str());
-                trans_table::store(search->brd.stack->tt_key, 0, 0, 1, 123, 0,
-                    bound, search->tt_context());
-                int value = 0, move = 0, flag = 0;
-                success &= check("bound fixture must be cached before the option change",
-                    trans_table::retrieve(search->brd.stack->tt_key, 0, 1,
-                        value, move, flag, search->tt_context()) && value == 123 && flag == bound);
-                set_option(name, 512 - before);
-                success &= check("option changes must invalidate every TT bound type",
-                    !trans_table::retrieve(search->brd.stack->tt_key, 0, 1,
-                        value, move, flag, search->tt_context()));
-            }
-        }
-        set_option(name, 256);
-        trans_table::clear();
-        const auto original = run_configured(fen);
-        for (const char * value : {"-1", "513", "garbage", "256junk", "2147483648"}) {
-            uci::in(std::string("setoption name ") + name + " value " + value);
-            const auto retained = run_configured(fen);
-            success &= check("rejected evaluation values must preserve settings and score reuse",
-                options::get_value(name) == 256 && retained.first == original.first
-                && retained.second == 1);
-        }
-    }
-    for (int before : {-12, 12}) {
-        const std::string draw_fen = "7k/8/8/8/8/8/8/KR6 w - - 99 1";
-        set_option("DrawContempt", before);
-        trans_table::clear();
-        const auto original = run_configured(draw_fen);
-        set_option("DrawContempt", before);
-        const auto unchanged = run_configured(draw_fen);
-        success &= check("unchanged draw contempt must retain score reuse",
-            unchanged.first == original.first && unchanged.second == 1);
-        set_option("DrawContempt", -before);
-        const auto warm = run_configured(draw_fen);
-        trans_table::clear();
-        const auto cold = run_configured(draw_fen);
-        success &= check("changed draw contempt must retain context protection",
-            original.first != cold.first && warm.first == cold.first && warm.second > 1);
-    }
-    set_option("KingAttackShelter", saved_shelter);
-    set_option("KingAttackPieces", saved_pieces);
-    set_option("DrawContempt", saved_contempt);
+bool test_rule50_buckets() {
+    const std::string prefix = "5B2/3k1K2/8/2R4P/5P2/8/8/7r w - - ";
+    auto first = std::make_unique<search_t>((prefix + "22 203").c_str());
+    auto same = std::make_unique<search_t>((prefix + "29 203").c_str());
+    auto next = std::make_unique<search_t>((prefix + "30 203").c_str());
+    auto early = std::make_unique<search_t>((prefix + "0 203").c_str());
+    auto late = std::make_unique<search_t>((prefix + "13 203").c_str());
+    for (auto * search : {first.get(), same.get(), next.get()}) prepare(*search);
+    bool success = check("clock buckets must not change board or repetition identity",
+        first->brd.stack->tt_key == next->brd.stack->tt_key
+        && first->brd.stack->repetition_key() == next->brd.stack->repetition_key());
+    success &= check("TT keys must share within a bucket and differ across buckets",
+        first->position_key() == same->position_key() && first->position_key() != next->position_key()
+        && early->position_key() == late->position_key()
+        && early->position_key() == early->brd.stack->tt_key);
+    trans_table::clear();
+    trans_table::store(first->position_key(), 0, 0, 2, 123, 0, score::EXACT);
+    success &= check("different counts within a bucket must reuse TT scores",
+        same->pvs(122, 123, 1, true) == 123 && same->nodes == 0);
+    const int warm = next->pvs(-score::INF, score::INF, 1);
+    trans_table::clear();
+    success &= check("another bucket must search like a fresh table",
+        warm == run(prefix + "30 203") && next->nodes > 0);
     return success;
 }
 
-bool test_fifty_move_context() {
+bool test_fifty_move_horizon() {
     const std::string fresh = "7k/8/8/8/8/8/8/KR6 w - - 0 1";
     const std::string near_draw = "7k/8/8/8/8/8/8/KR6 w - - 99 1";
     trans_table::clear();
@@ -143,139 +70,59 @@ bool test_fifty_move_context() {
         warm_draw == draw_score);
     success &= check("cached draw scores must not erase a fresh rook advantage",
         warm_win == winning_score);
+    // Near the fifty-move limit cached scores are not trusted for cutoffs.
+    for (int clock : {89, 90}) {
+        const std::string fen = "7k/8/8/8/8/8/8/KR6 w - - " + std::to_string(clock) + " 1";
+        trans_table::clear();
+        search_t search(fen.c_str());
+        prepare(search);
+        trans_table::store(search.position_key(), 0, 0, 4, 5000, 0, score::EXACT);
+        const int value = search.pvs(4999, 5000, 1, true);
+        success &= check("TT cutoffs must stop at a halfmove clock of 90",
+            clock < 90 ? value == 5000 && search.nodes == 0 : search.nodes > 0);
+    }
     return success;
 }
 
-bool test_history_context() {
-    board_t board;
-    board.init("7k/8/8/8/8/8/8/KR6 w - - 0 1");
-    const char * cycle[] = {"a1a2", "h8h7", "a2a1", "h7h8"};
-    std::vector<U64> history;
-    for (int ply = 0; ply < 7; ++ply) {
-        history.push_back(board.stack->repetition_key());
-        move_t move;
-        move.set(&board, cycle[ply % 4]);
-        if (!board.valid(&move) || !board.legal(&move)) {
-            std::cerr << "invalid history fixture\n";
-            return false;
+bool test_non_pv_tt_bounds() {
+    const char * fen = "7k/8/8/8/8/8/8/KR6 w - - 4 1";
+    bool success = true;
+    for (int bound : {score::EXACT, score::LOWERBOUND, score::UPPERBOUND}) {
+        for (int value : {-123, 123}) {
+            // Include equality at alpha and beta as well as values beyond them.
+            for (int alpha : {value - 2, value - 1, value, value + 1}) {
+                trans_table::clear();
+                search_t search(fen);
+                prepare(search);
+                const U64 key = search.brd.stack->tt_key;
+                search.stack->pv_count = 1;
+                trans_table::store(search.position_key(), 0, 0, 2, value, 0, bound);
+                const int result = search.pvs(alpha, alpha + 1, 1);
+                const bool cutoff = bound == score::EXACT
+                    || (bound == score::LOWERBOUND && value >= alpha + 1)
+                    || (bound == score::UPPERBOUND && value <= alpha);
+                success &= check("non-PV TT cutoffs must respect bound direction and equality",
+                    cutoff ? search.nodes == 0 && result == value && search.stack->pv_count == 0
+                        : search.nodes > 0);
+                success &= check("non-PV TT probes must restore board and search state",
+                    !search.stop_all && search.brd.to_string() == fen && search.brd.ply == 0
+                    && search.brd.stack->tt_key == key && search.stack == search.root_stack);
+            }
         }
-        board.forward(&move);
     }
-    const std::string fen = board.to_string();
+    // A fail-high needs one ply more than the searched depth; mates need none.
     trans_table::clear();
-    const int losing_score = run(fen);
-    const int warm_draw = run(fen, history);
+    search_t shallow(fen);
+    prepare(shallow);
+    trans_table::store(shallow.position_key(), 0, 0, 1, 123, 0, score::LOWERBOUND);
+    success &= check("a lower bound at equal depth must not cut off",
+        shallow.pvs(122, 123, 1) >= -score::INF && shallow.nodes > 0);
     trans_table::clear();
-    const int draw_score = run(fen, history);
-    const int warm_loss = run(fen);
-    bool success = check("history fixture must offer Black a genuine threefold draw",
-        losing_score < -200 && draw_score == 0);
-    success &= check("cached losing scores must not hide a repetition escape",
-        warm_draw == draw_score);
-    success &= check("cached repetition scores must not invent an escape without history",
-        warm_loss == losing_score);
-    return success;
-}
-
-bool test_matching_context_and_move_hint() {
-    const char * fen = "7k/8/8/8/8/8/8/KR6 w - - 0 1";
-    trans_table::clear();
-    search_t original(fen);
-    prepare(original);
-    const int expected = original.pvs(-score::INF, score::INF, 1);
-    search_t matching(fen);
-    prepare(matching);
-    bool success = check("matching draw context must retain score cutoffs",
-        matching.pvs(-score::INF, score::INF, 1) == expected && matching.nodes == 1);
-    search_t different("7k/8/8/8/8/8/8/KR6 w - - 99 1");
-    prepare(different);
-    int score = 0, move = 0, flag = 0;
-    success &= check("an out-of-range clock must retain the move but reject the score",
-        !trans_table::retrieve(different.brd.stack->tt_key, 0, 1,
-            score, move, flag, different.tt_context(), different.brd.stack->fifty_count)
-        && move == original.stack->best_move.to_compact());
-    for (int bound : {score::LOWERBOUND, score::UPPERBOUND, score::EXACT}) {
-        trans_table::store(original.brd.stack->tt_key, 0, 0, 1, expected,
-            move, bound, original.tt_context(), original.stack->tt_clocks);
-        success &= check("all bound types must validate the clock range",
-            !trans_table::retrieve(different.brd.stack->tt_key, 0, 1,
-                score, move, flag, different.tt_context(), different.brd.stack->fifty_count)
-            && trans_table::retrieve(original.brd.stack->tt_key, 0, 1,
-                score, move, flag, original.tt_context(), original.brd.stack->fifty_count)
-            && score == expected && flag == bound);
-    }
-    return success;
-}
-
-bool test_clock_range_reuse() {
-    trans_table::clear();
-    search_t original("7k/8/8/8/8/8/8/KR6 w - - 4 1");
-    prepare(original);
-    const int expected = original.pvs(-score::INF, score::INF, 1);
-    search_t different("7k/8/8/8/8/8/8/KR6 w - - 8 1");
-    prepare(different);
-    bool success = check("ordinary clock differences must preserve score reuse",
-        different.pvs(-score::INF, score::INF, 1) == expected && different.nodes == 1);
-    // Reusing a child entry must carry its restrictions into the parent's entry.
-    trans_table::clear();
-    search_t child("7k/8/8/8/8/8/8/KR6 w - - 4 1");
-    prepare(child);
-    child.stack->tt_clocks = {0, 99};
-    move_t quiet;
-    quiet.set(&child.brd, "a1a2");
-    child.forward(&quiet, false);
-    trans_table::store(child.brd.stack->tt_key, 0, 0, 1, -500, 0,
-        score::EXACT, child.tt_context(), {3, 20});
-    clock_range_t clocks = {0, 101};
-    int score = 0, move = 0, flag = 0;
-    success &= check("cached scores must return their clock validity range",
-        trans_table::retrieve(child.brd.stack->tt_key, 0, 1, score, move, flag,
-            child.tt_context(), 5, &clocks) && clocks.min == 3 && clocks.max == 20);
-    for (int clock : {2, 21, 99}) {
-        success &= check("out-of-range scores must not be reusable",
-            !trans_table::retrieve(child.brd.stack->tt_key, 0, 1, score, move, flag,
-                child.tt_context(), clock));
-    }
-    success &= check("a cached child score must carry its range into the search stack",
-        child.pvs(-score::INF, score::INF, 1) == -500 && child.nodes == 1
-        && child.stack->tt_clocks.min == 3 && child.stack->tt_clocks.max == 20);
-    child.backward(&quiet);
-    success &= check("cached child restrictions must reach the parent",
-        child.stack->tt_clocks.min == 2 && child.stack->tt_clocks.max == 19);
-    return success;
-}
-
-bool test_clock_range_propagation() {
-    search_t search("7k/8/8/8/8/8/8/KR6 w - - 95 1");
-    prepare(search);
-    search.stack->tt_clocks = {0, 99};
-    move_t move;
-    move.set(&search.brd, "a1a2");
-    search.forward(&move, false);
-    search.stack->tt_clocks = {96, 98};
-    search.backward(&move);
-    bool success = check("quiet moves must translate child clock constraints by one",
-        search.stack->tt_clocks.min == 95 && search.stack->tt_clocks.max == 97);
-    search.forward();
-    search.stack->tt_clocks = {95, 98};
-    search.backward();
-    success &= check("null moves must preserve the clock rather than advance it",
-        search.stack->tt_clocks.min == 95 && search.stack->tt_clocks.max == 97);
-    search_t pawn("7k/8/8/8/8/8/P7/KR6 w - - 95 1");
-    prepare(pawn);
-    pawn.stack->tt_clocks = {0, 99};
-    move.set(&pawn.brd, "a2a3");
-    pawn.forward(&move, false);
-    pawn.stack->tt_clocks = {0, 2};
-    pawn.backward(&move);
-    success &= check("a pawn reset must disconnect child clock restrictions",
-        pawn.stack->tt_clocks.min == 0 && pawn.stack->tt_clocks.max == 99);
-    search_t near_draw("7k/8/8/8/8/8/8/KR6 w - - 99 1");
-    prepare(near_draw);
-    const int result = near_draw.pvs(-score::INF, score::INF, 1);
-    success &= check("a real draw-dependent search must narrow its reusable clock range",
-        result == 0 && near_draw.stack->tt_clocks.min == 99
-        && near_draw.stack->tt_clocks.max == 99);
+    search_t mate(fen);
+    prepare(mate);
+    trans_table::store(mate.position_key(), 0, 0, 1, score::MATE - 9, 0, score::LOWERBOUND);
+    success &= check("a proven mate bound must cut off at any depth",
+        mate.pvs(0, 1, 5) == score::MATE - 9 && mate.nodes == 0);
     return success;
 }
 
@@ -300,16 +147,14 @@ bool test_compact_moves() {
             move_t decoded{};
             decoded.castle = CASTLE_Q;
             decoded.en_passant = true;
-            table.store(search.brd.stack->tt_key, 63, 0, 255, -1234,
-                original.to_compact(), score::EXACT, 0x123456789abcdef0ULL, {7, 101});
-            int score = 0, move = 0, flag = 0;
-            clock_range_t clocks{};
-            success &= check("packed entries must preserve move, score, depth, context and clocks",
-                table.retrieve(search.brd.stack->tt_key, 0, 255, score, move, flag,
-                    0x123456789abcdef0ULL, 99, &clocks)
-                && score == -1234 && flag == score::EXACT
-                && clocks.min == 7 && clocks.max == 101);
-            decoded.set_compact(&search.brd, move);
+            table.store(search.brd.stack->tt_key, 31, 0, 254, -1234,
+                original.to_compact(), score::EXACT, 77, true);
+            tt_hit_t hit;
+            success &= check("packed entries must preserve move, score, depth, eval and PV",
+                table.probe(search.brd.stack->tt_key, 0, 0, hit)
+                && hit.score == -1234 && hit.bound == score::EXACT && hit.depth == 254
+                && hit.eval == 77 && hit.pv);
+            decoded.set_compact(&search.brd, hit.move);
             success &= check(original.to_string().c_str(),
                 decoded.to_int() == original.to_int() && decoded.score == score::INVALID);
             castles += original.castle != 0;
@@ -325,100 +170,31 @@ bool test_compact_moves() {
     return success;
 }
 
-bool test_table_boundaries() {
-    bool success = true;
-    for (int size_in_mb : {0, 1}) {
-        trans_table_t table(size_in_mb);
-        int score = 0, move = 0, flag = 0;
-        success &= check("an empty table must not match the zero key",
-            !table.retrieve(0, 0, 0, score, move, flag));
-        const U64 context = 0xfedcba9876543210ULL;
-        const U64 keys[] = {~U64(0), ~U64(0) - 1, ~U64(0) - 2, ~U64(0) - 3};
-        for (int i = 0; i < 4; ++i) {
-            table.store(keys[i], 63, 0, 255, i % 2 ? 31000 : -31000,
-                65535 - i, score::EXACT, context, {7, 101});
-        }
-        for (int i = 0; i < 4; ++i) {
-            success &= check("the final cluster must preserve all four full keys",
-                table.retrieve(keys[i], 0, 255, score, move, flag, context, 100)
-                && score == (i % 2 ? 31000 : -31000) && move == 65535 - i);
-            success &= check("context comparison must retain its high bits",
-                !table.retrieve(keys[i], 0, 255, score, move, flag,
-                    context ^ (U64(1) << 63), 100));
-        }
-        table.clear();
-        table.store(0, 0, 0, 1, 12, 0, score::EXACT);
-        success &= check("a stored zero key must remain retrievable",
-            table.retrieve(0, 0, 1, score, move, flag) && score == 12);
+bool test_replacement() {
+    trans_table_t table(1);
+    const U64 key = 0x1234567800000001ULL;
+    tt_hit_t hit;
+    table.store(key, 0, 0, 0, 0, 0, 0, score::INVALID, false);
+    bool success = check("an empty table must not match", !table.probe(0x42, 0, 0, hit));
+    table.store(key, 0, 0, 12, 50, 111, score::LOWERBOUND, score::INVALID, false);
+    table.store(key, 0, 0, 2, 70, 222, score::UPPERBOUND, score::INVALID, false);
+    success &= check("a much shallower bound must keep the deeper score but take the new move",
+        table.probe(key, 0, 0, hit) && hit.depth == 12 && hit.score == 50 && hit.move == 222);
+    table.store(key, 0, 0, 2, 60, 0, score::EXACT, score::INVALID, false);
+    success &= check("an exact bound must replace a non-exact score and keep the move",
+        table.probe(key, 0, 0, hit) && hit.bound == score::EXACT && hit.score == 60 && hit.move == 222);
+    table.store(key, 0, 0, 0, 0, 0, 0, 33, false);
+    success &= check("an evaluation-only store must keep the score and attach the evaluation",
+        table.probe(key, 0, 0, hit) && hit.bound == score::EXACT && hit.eval == 33);
+    // Three tags share one cluster; a fourth evicts the shallowest entry.
+    trans_table_t small(1);
+    for (int i = 1; i <= 3; ++i) {
+        small.store(0x1000 + i, 0, 0, i * 4, i, 0, score::EXACT, score::INVALID, false);
     }
-    return success;
-}
-
-bool test_context_restoration() {
-    const char * fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    search_t search(fen);
-    prepare(search);
-    const U64 root_context = search.tt_context();
-    move_t knight;
-    knight.set(&search.brd, "g1f3");
-    search.forward(&knight, false);
-    const U64 knight_context = search.tt_context();
-    search.forward();
-    bool success = check("null moves must discard legal repetition history",
-        search.stack->tt_history == 0 && search.tt_context() != knight_context);
-    move_t after_null;
-    after_null.set(&search.brd, "b1c3");
-    search.forward(&after_null, false);
-    success &= check("the artificial null position must remain outside legal history",
-        search.stack->tt_history == 0);
-    search.backward(&after_null);
-    search.backward();
-    success &= check("undoing null must restore draw context", search.tt_context() == knight_context);
-    search.backward(&knight);
-    success &= check("undoing a real move must restore draw context", search.tt_context() == root_context);
-    move_t pawn;
-    pawn.set(&search.brd, "e2e4");
-    search.forward(&pawn, false);
-    success &= check("irreversible moves must discard repetition context", search.stack->tt_history == 0);
-    search_t pawn_root(search.brd.to_string().c_str());
-    prepare(pawn_root);
-    success &= check("root and interior nodes must distinguish future cycle policy",
-        search.tt_context() != pawn_root.tt_context());
-    search.backward(&pawn);
-    success &= check("undoing an irreversible move must restore context", search.tt_context() == root_context);
-    for (const char * text : {"g1f3", "g8f6", "f3g1", "f6g8"}) {
-        move_t move;
-        move.set(&search.brd, text);
-        search.forward(&move, false);
-    }
-    std::vector<U64> history;
-    for (int ply = 0; ply < search.brd.ply; ++ply) {
-        history.push_back(search.brd._stack[ply].repetition_key());
-    }
-    search.reset_stack();
-    search_t supplied(search.brd.to_string().c_str(), nullptr, nullptr, history);
-    prepare(supplied);
-    success &= check("rebasing must agree with equivalent supplied game history",
-        search.tt_context() == supplied.tt_context());
-    search_t opposite_contempt(search.brd.to_string().c_str(), nullptr, nullptr, history);
-    prepare(opposite_contempt);
-    opposite_contempt.draw_contempt = 12;
-    success &= check("different draw preferences must not share scores",
-        search.tt_context() != opposite_contempt.tt_context());
-    search_t capture("7k/8/8/8/8/8/p7/KR6 w - - 17 1");
-    prepare(capture);
-    for (const char * text : {"b1c1", "h8g8"}) {
-        move_t move;
-        move.set(&capture.brd, text);
-        capture.forward(&move, false);
-    }
-    const U64 before_capture = capture.tt_context();
-    move_t king;
-    king.set(&capture.brd, "a1a2");
-    capture.forward(&king, false);
-    success &= check("captures must discard old repetition context", capture.stack->tt_history == 0);
-    capture.backward(&king);
-    success &= check("undoing a capture must restore context", capture.tt_context() == before_capture);
+    small.store(0x1004, 0, 0, 20, 4, 0, score::EXACT, score::INVALID, false);
+    success &= check("replacement must evict the shallowest entry",
+        !small.probe(0x1001, 0, 0, hit) && small.probe(0x1002, 0, 0, hit)
+        && small.probe(0x1003, 0, 0, hit) && small.probe(0x1004, 0, 0, hit));
     return success;
 }
 
@@ -427,14 +203,10 @@ bool test_context_restoration() {
 int main() {
     magic::init();
     trans_table::set_size(4);
-    bool success = test_fifty_move_context();
-    success &= test_history_context();
-    success &= test_matching_context_and_move_hint();
-    success &= test_context_restoration();
-    success &= test_clock_range_reuse();
-    success &= test_clock_range_propagation();
+    bool success = test_rule50_buckets();
+    success &= test_fifty_move_horizon();
+    success &= test_non_pv_tt_bounds();
     success &= test_compact_moves();
-    success &= test_table_boundaries();
-    success &= test_evaluation_options();
+    success &= test_replacement();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

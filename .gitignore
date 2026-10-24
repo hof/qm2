@@ -50,3 +50,6 @@ __pycache__/
 *.egg-info/
 /runner/build/
 /runner/dist/
+
+/networks/*.nnue
+/eval.nnue

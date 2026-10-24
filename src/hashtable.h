@@ -27,192 +27,62 @@
 #include "board.h"
 #include "score.h"
 #include "game.h"
+#include <new>
 
-namespace material_table {
-
-    const int TABLE_SIZE = 8; //MB
-
-    struct entry_t {
-        U64 key;
-        int16_t score;
-        uint8_t phase; 
-        uint8_t attack_force[2];
-        uint8_t flags;
-    };
-
-    class table_t {
-    private:
-        int size_in_mb;
-        int size;
-        int max_hash_key;
-        entry_t * table;
-
-        int index(U64 hash_code) {
-            return hash_code & max_hash_key;
-        }
-
-    public:
-        table_t(int size_in_MB);
-        void set_size(int size_in_MB);
-
-        ~table_t() {
-            delete [] table;
-        }
-
-        void clear() {
-            memset(table, 0, sizeof (entry_t) * size);
-        }
-
-        entry_t * retrieve(U64 key) {
-            return &table[index(key)];
-        }
-
-    };
-
-    entry_t * retrieve(U64 key);
-    void clear();
-    void set_size(int size_in_MB);
-};
-
-
-namespace pawn_table {
-    
-    const int TABLE_SIZE = 64;
-    
-    const uint8_t FLAG_CLOSED_CENTER = 1;
-
-    struct entry_t {
-        U64 key;
-        U64 passers;
-        U64 mob[2];
-        U64 attack[2];
-        score_t score; //32
-        int8_t king_attack[2]; //16 
-        uint8_t open_files[2]; //16
-        uint8_t flags; //8 
-        uint8_t width[2]; //16 
-        uint8_t count[2]; //16 
-
-        bool is_open_file(int sq, bool us) {
-            return open_files[us] & (1 << FILE(sq));
-        }
-    };
-
-    class table_t {
-    private:
-        int size_in_mb;
-        int size;
-        int max_hash_key;
-        entry_t * table;
-
-        int index(U64 hash_code) {
-            return hash_code & max_hash_key;
-        }
-
-    public:
-        table_t(int size_in_MB);
-        void set_size(int size_in_MB);
-
-        ~table_t() {
-            delete [] table;
-        }
-
-        void clear() {
-            memset(table, 0, sizeof (entry_t) * size);
-        }
-
-        entry_t * retrieve(U64 key) {
-            return &table[index(key)];
-        }
-
-    };
-
-    //global access
-    entry_t * retrieve(U64 key);
-    void clear();
-    void set_size(int size_in_mb);
-
-};
-
-// Clock values for which the searched result remains valid. Child constraints
-// include quiescence and TT cutoffs; 101 denotes no upper limit.
-struct clock_range_t {
-    uint8_t min;
-    uint8_t max;
-
-    bool contains(int clock) const {
-        return clock >= min && (max == 101 || clock <= max);
-    }
-
-    void include_child(clock_range_t child, int advance) {
-        min = MAX(min, MAX(0, int(child.min) - advance));
-        if (child.max != 101) {
-            max = MIN(max, MAX(0, int(child.max) - advance));
-        }
-    }
+// A probed entry. Scores are relative to the probing node; eval is the raw
+// static evaluation stored with the entry, or score::INVALID.
+struct tt_hit_t {
+    int move = 0;
+    int depth = 0;
+    int bound = 0;
+    int score = score::INVALID;
+    int eval = score::INVALID;
+    bool pv = false;
 };
 
 class trans_table_t {
 private:
 
-    static const int BUCKETS = 4;
-
+    // Ten bytes: key tag, depth (+1, zero marks an empty slot), age/pv/bound,
+    // move, score and static evaluation.
     struct entry_t {
-        U64 key;
-        U64 value;
-        U64 context;
+        uint16_t tag;
+        uint8_t depth;
+        uint8_t meta;
+        uint16_t move;
+        int16_t score;
+        int16_t eval;
     };
-    static_assert(sizeof(entry_t) == 24);
+    static_assert(sizeof(entry_t) == 10);
+
+    static const int BUCKETS = 3;
+    static const int AGES = 32;
+
+    // Three entries fill one aligned 32-byte cluster.
+    struct alignas(32) cluster_t {
+        entry_t entries[BUCKETS];
+        uint16_t padding;
+    };
+    static_assert(sizeof(cluster_t) == 32);
 
     int size_in_mb;
-    int size;
-    int cluster_count;
-    entry_t * table;
+    size_t cluster_count;
+    cluster_t * table;
 
-    int index(U64 hash_code) {
-        return int((static_cast<__uint128_t>(hash_code) * cluster_count) >> 64) * BUCKETS;
+    cluster_t & cluster(U64 key) {
+        return table[size_t((static_cast<__uint128_t>(key) * cluster_count) >> 64)];
     }
 
-    // Move 16, bound 2, score 16, depth 8, age 6, clock limits 7 each.
-    U64 encode(int age, int depth, int score, int move, int flag, clock_range_t clocks) {
-        assert(age >= 0 && age <= 63);
-        assert(depth > 0 && depth <= 255);
-        assert(score < score::INF && score > -score::INF);
-        assert(move >= 0 && move <= 65535);
-        assert(flag >= 0 && flag <= 3);
-        assert(clocks.min <= clocks.max && clocks.max <= 101);
-        return U64(move) | (U64(flag) << 16) | (U64(uint16_t(score)) << 18)
-            | (U64(depth) << 34) | (U64(age) << 42)
-            | (U64(clocks.min) << 48) | (U64(clocks.max) << 55);
+    static uint16_t tag(U64 key) {
+        return uint16_t(key);
     }
 
-    uint16_t decode_move(U64 value) {
-        return value & 65535;
+    static int age(const entry_t & entry) {
+        return entry.meta >> 3;
     }
 
-    uint8_t decode_flag(U64 value) {
-        return (value >> 16) & 3;
-    }
-
-    int16_t decode_score(U64 value) {
-        return (value >> 18) & 65535;
-    }
-
-    uint8_t decode_depth(U64 value) {
-        return (value >> 34) & 255;
-    }
-
-    uint8_t decode_age(U64 value) {
-        return (value >> 42) & 63;
-    }
-
-    clock_range_t decode_clocks(U64 value) {
-        return {uint8_t((value >> 48) & 127), uint8_t((value >> 55) & 127)};
-    }
-
-    int make_score(int score, int ply);
-
-    int unmake_score(int score, int ply);
+    static int make_score(int score, int ply);
+    static int unmake_score(int score, int ply, int clock);
 
 public:
     bool enabled;
@@ -220,23 +90,25 @@ public:
     trans_table_t(int size_in_MB);
     void set_size(int size_in_MB);
 
-    // Moves use move_t::to_compact(); score validation retains both full keys.
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101});
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr);
+    // Moves use move_t::to_compact(). Depth 0 is quiescence; a zero bound
+    // stores only a move and evaluation.
+    void store(U64 key, int age, int ply, int depth, int score, int move, int bound, int eval, bool pv);
+    bool probe(U64 key, int ply, int clock, tt_hit_t & hit);
 
     ~trans_table_t() {
-        delete [] table;
+        ::operator delete[](table, std::align_val_t(alignof(cluster_t)));
     }
 
     void clear() {
-        memset(table, 0, sizeof (entry_t) * size);
+        memset(static_cast<void *>(table), 0, sizeof(cluster_t) * cluster_count);
     }
 };
 
 namespace trans_table {
     const int TABLE_SIZE = options::get_value("Hash");
-    void store(U64 key, int age, int ply, int depth, int score, int move, int flag, U64 context = 0, clock_range_t clocks = {0, 101});
-    bool retrieve(U64 key, int ply, int depth, int & score, int & move, int & flags, U64 context = 0, int clock = 0, clock_range_t * clocks = nullptr);
+    void store(U64 key, int age, int ply, int depth, int score, int move, int bound,
+        int eval = score::INVALID, bool pv = false);
+    bool probe(U64 key, int ply, int clock, tt_hit_t & hit);
     void clear();
     void set_size(int size_in_MB);
     void enable();

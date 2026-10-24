@@ -23,6 +23,74 @@
 
 #include "board.h"
 #include "move.h"
+#include <memory>
+#include <limits>
+#include <sstream>
+
+namespace {
+struct certificate_t {
+    const char * name;
+    const char * fen;
+    const char * move;
+    int expected;
+};
+const certificate_t certificates[] = {
+#include "data/see/legality.inc"
+};
+
+std::string state(const board_t & board) {
+    std::ostringstream out;
+    for (U64 value : board.bb) out << value << ' ';
+    for (int value : board.matrix) out << value << ' ';
+    out << board.ply << ' ' << board.root_ply << ' ' << board.stack;
+    for (int ply = 0; ply <= board.ply; ++ply) {
+        const auto & entry = board._stack[ply];
+        out << ' ' << entry.tt_key
+            << ' ' << entry.fifty_count << ' ' << entry.castling_flags
+            << ' ' << entry.enpassant_sq << ' ' << entry.wtm << ' ' << entry.legal_enpassant;
+    }
+    return out.str();
+}
+
+bool legal_exchange_certificates() {
+    auto board = std::make_unique<board_t>();
+    bool success = true;
+    for (const auto & certificate : certificates) {
+        board->init(certificate.fen);
+        move_t move;
+        move.set(board.get(), certificate.move);
+        if (!board->valid(&move) || !board->legal(&move)) {
+            std::cerr << "Invalid SEE certificate: " << certificate.name << '\n';
+            return false;
+        }
+        const auto before = state(*board);
+        const int result = board->see(&move);
+        // Test both equality boundaries and a wide range of thresholds
+        // against the independent material certificate, including overflow edges.
+        for (int threshold : {std::numeric_limits<int>::min(), std::numeric_limits<int>::max(),
+                certificate.expected - 1, certificate.expected, certificate.expected + 1, 0, 1}) {
+            if (board->see(&move, threshold) != (certificate.expected >= threshold)) {
+                std::cerr << certificate.name << " threshold " << threshold << " differs\n";
+                success = false;
+            }
+        }
+        for (int threshold = -1500; threshold <= 1500; threshold += 25) {
+            if (board->see(&move, threshold) != (certificate.expected >= threshold)) {
+                std::cerr << certificate.name << " threshold " << threshold << " differs\n";
+                success = false;
+            }
+        }
+        if (result != certificate.expected || state(*board) != before) {
+            std::cerr << certificate.name << " SEE " << result << " expected "
+                << certificate.expected << ": " << certificate.fen << ' ' << certificate.move << '\n';
+            success = false;
+        }
+    }
+    std::cout << std::size(certificates) << " independent legal exchange certificates checked\n";
+    std::cout << std::size(certificates) * 128 << " threshold comparisons checked\n";
+    return success;
+}
+}
 
 /*
  * Simple C++ Test Suite
@@ -59,6 +127,12 @@ int main() {
     brd.init("r1bqkbnr/pppppppp/2n5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 1");
     mv.set(WPAWN, d2, d4);
     success &= assert_see(&brd, &mv, 0);
+
+    brd.init("r3k2r/ppp2ppp/8/8/8/8/PPP2PPP/R3K2R w KQkq - 0 1");
+    move_t castle_move{};
+    castle_move.set(&brd, "e1g1");
+    success &= brd.valid(&castle_move) && brd.legal(&castle_move);
+    success &= brd.see(&castle_move) == 0 && brd.see(&castle_move, 0) && !brd.see(&castle_move, 1);
     
     int vpawn = board::PVAL[WPAWN];
     int vminor = board::PVAL[WKNIGHT];
@@ -71,7 +145,8 @@ int main() {
     mv.set(WKNIGHT, e3, f5, BKNIGHT);
     success &= assert_see(&brd, &mv, vpawn);
     mv.set(WQUEEN, d3, f5, BKNIGHT);
-    success &= assert_see(&brd, &mv, -vrook-vpawn);
+    // Legal exchange oracle: ...exf5, Bxf5, declining the losing ...Rxf5.
+    success &= assert_see(&brd, &mv, -vrook);
     mv.set(BBISHOP, a4, c2, WPAWN);
     success &= assert_see(&brd, &mv, -vminor + vpawn);
     mv.set(BPAWN, c4, d3, WQUEEN);
@@ -85,7 +160,7 @@ int main() {
     mv.set(WBISHOP, c3, b2, BBISHOP);
     success &= assert_see(&brd, &mv, vpawn);
     
-    brd.init("1r6/1r1q4/1p6/8/8/1R6/KR6/1Q6 w - - 0 1");
+    brd.init("1r5k/1r1q4/1p6/8/8/1R6/KR6/1Q6 w - - 0 1");
     mv.set(WROOK, b3, b6, BPAWN);
     success &= assert_see(&brd, &mv, vpawn);
     
@@ -105,6 +180,7 @@ int main() {
     std::cout << "%TEST_FINISHED% time=0 testPolyglotKeys (test_polyglot)" << std::endl;
     std::cout << "%SUITE_FINISHED% time=" << difftime(now, begin) << std::endl;
 
+    success &= legal_exchange_certificates();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

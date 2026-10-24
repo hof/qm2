@@ -59,6 +59,20 @@ Read royal-losers match PGNs with `maxima_runner.matches.read_match_pgn`;
 ordinary readers may not recognize this variant. See MAXIMA.md for result and
 confidence-interval semantics.
 
+Match JSON includes per-color `search_work` totals for reported nodes, searches,
+reporting coverage and charged wall time; played-move PGN comments retain each
+reported node count. Use those fields to include node counts in result tables.
+
+For standard chess, add `--adjudicate-win-cp 1000` to stop a clearly decided
+game once both engines agree on the winning side for six consecutive plies,
+starting at full move 20. Scores must meet the threshold without bound flags;
+missing scores or disagreement reset the sequence. Change the sequence length
+with `--adjudicate-win-plies` and the earliest move with `--adjudicate-min-move`.
+PGN/JSON records distinguish adjudication from a rules-based result and retain
+the deciding score evidence. This is off by default; it does not replace
+separate checks that the engine can convert won positions. Crashes and illegal
+moves remain errors, not losses.
+
 Match profiles accept repeatable `--option-a NAME=VALUE` / `--option-b NAME=VALUE`
 assignments, validated against each engine's advertised option types and bounds.
 For example, compare the same binary with `--option-a LMR=true --option-b LMR=false`.

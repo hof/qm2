@@ -62,6 +62,9 @@ void move_t::set(int pc, int from, int to, int captured_piece, int promotion_pie
     tsq = to;
     promotion = promotion_piece;
     capture = captured_piece;
+    castle = 0;
+    en_passant = false;
+    score = score::INVALID;
 }
 
 /**

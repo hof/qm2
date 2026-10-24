@@ -19,8 +19,7 @@
  * Move Picker class to use by the search. The move picker handles ordered move 
  * generation in phases, typically following this order:
  
- * All moves returned are legal. If the move picker does not return any move, 
- * it's a (stale)mate.
+ * Standard chess returns pseudo-legal candidates. Callers own king safety.
  *
  * Created on 11 mei 2011, 19:25
  */
@@ -33,20 +32,31 @@
 class search_t;
 
 enum move_stage_t {
-    HASH,
-    CAPTURES,
-    PROMOTIONS,
-    KILLER1,
-    KILLER2,
-    MINORPROMOTIONS,
-    CASTLING,
-    QUIET_MOVES,
-    STOP
+    hash_move,
+    captures,
+    promotions,
+    killer_1,
+    killer_2,
+    minor_promotions,
+    castling,
+    quiet_moves,
+    stop,
+    countermove,
+    quiet_init,
+    good_quiets,
+    bad_noisy,
+    bad_quiets
 };
+
+// Quiescence searches noisy moves down to this static exchange value.
+constexpr int quiescence_see_threshold = -60;
 
 class move_picker_t {
 private:
     move_t * pop(search_t * s, move::list_t * list);
+    move_t * pop_standard(search_t * s, int phase, int see_threshold = 0);
+    move_t * next_standard(search_t * s, int depth);
+    void score_quiets(search_t * s, move_t * begin, move_t * end);
 
 public:
     move_t * first(search_t * s, int depth);

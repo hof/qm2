@@ -74,8 +74,10 @@ bool test_pv_format() {
         success &= line.find("nodes 18446744073709551615 time " + std::to_string(elapsed)
             + " nps 18446744073709551615 ") != std::string::npos;
     }
-    if (!success) std::cerr << "PV scores must retain bounds and NPS must use milliseconds without narrowing\n"
-        << output.str();
+    if (!success) {
+        std::cerr << "PV scores must retain bounds and NPS must use milliseconds without narrowing\n"
+            << output.str();
+    }
     return success;
 }
 

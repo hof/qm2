@@ -35,8 +35,14 @@
 #include "experience.h"
 #include <random>
 #include "search_control.h"
+#include "nnue.h"
+#include <array>
+#include "quiet_history.h"
+#include "capture_history.h"
+#include "correction_history.h"
 #include "movepicker.h"
 #include "hashtable.h"
+#include "eval.h"
 
 
 class root_move_t {
@@ -69,6 +75,7 @@ public:
 struct search_stack_t {
     move::list_t move_list;
     move_t searched[256];
+    int move_count; // One-based ordinal among considered legal moves; zero outside a move loop.
     move_t current_move;
     move_t best_move;
     move_t tt_move;
@@ -78,23 +85,29 @@ struct search_stack_t {
     int repetition_start;
     uint8_t pv_count;
     int16_t eval_result;
-    int16_t eg_score;
-    score_t eval_score;
-    score_t pc_score[BKING + 1];
-    score_t passer_score[2];
-    pawn_table::entry_t * pt;
-    material_table::entry_t * mt;
+    bool improving;
+    bool tt_pv;
+    bool lmr_tt_tactical;
+    bool lmr_tt_fail_low;
+    bool lmr_tt_deep;
+    int reduction; // Depth decrement of the move being searched, in 1/1024 plies.
+    int static_eval; // Corrected static evaluation, invalid in check.
+    int lmr_correction;
+    int lmr_alpha_raises;
+    int multiple_extensions; // Multiple-extension events on the current line.
+    uint16_t excluded_move;
     U64 tt_key;
-    U64 tt_history;
-    clock_range_t tt_clocks;
-    U64 attack[BKING + 1];
-    uint8_t king_attack[BKING+1];
 };
 
 enum class result_source_t { none, partial, complete, fallback, book, terminal, tablebase };
 
 class search_t {
 private:
+    struct neural_cache_entry_t {
+        U64 key = 0;
+        int value = score::INVALID;
+    };
+    std::vector<neural_cache_entry_t> _neural_cache;
     const search_control_t * _control;
     std::shared_ptr<const experience::book_t> _experience;
     std::mt19937_64 _book_random;
@@ -105,13 +118,16 @@ private:
 protected:
     // Repetition keys before the root, oldest first; never includes the root itself.
     std::vector<U64> _position_history;
-    void init_tt_history();
     static bool has_legal_move(board_t & brd);
     int ceiling_score();
+    bool raise_repetition_alpha(int & alpha);
 
 public:
     search_stack_t _stack[MAX_PLY + 1];
     game_t game;
+    std::shared_ptr<const nnue::network_t> evaluation_network;
+    std::vector<nnue::accumulator_t> evaluation_accumulators;
+    int neural_static_score();
     board_t brd;
     root_t root;
     search_stack_t * stack;
@@ -131,24 +147,56 @@ public:
     int attempted_depth;
     bool interrupted;
     result_source_t result_source;
-    int history[BKING + 1][64];
+    int history[BKING + 1][64]; //legacy royal-losers ordering
+    std::unique_ptr<quiet_history_t> quiet_history;
+    std::unique_ptr<capture_history_t> capture_history;
+    std::unique_ptr<correction_history_t> correction_history;
+    bool correction_history_enabled;
+    bool piece_correction_enabled;
+    bool continuation_correction_enabled;
+    std::array<U64, 2> correction_context_keys() const;
+    int correction_value() const;
+    bool tt_eval_enabled;
+    int corrected_static_eval(int raw);
+    void update_correction_history(int value, int bound, int depth);
+    bool lmp_enabled;
+    bool history_pruning_enabled;
+    bool tt_history_enabled;
+    bool capture_history_enabled;
+    bool long_continuation_enabled;
+    bool threat_ordering_enabled;
+    bool check_ordering_enabled;
+    quiet_history_policy_t quiet_history_policy;
+    bool countermoves_enabled;
+    bool killers_enabled;
+    bool upcoming_repetition_enabled;
+    bool evasions_enabled;
+    uint16_t countermoves[BKING + 1][64];
     move_t ponder_move;
     std::string book_name;
     bool root_wtm;
     int wild;
-    int king_attack_shelter;
-    int king_attack_pieces;
     int draw_contempt;
+    // Total reduction includes the artificial pass itself.
+    int null_search_depth(int depth, int eval, int beta);
     bool null_verify;
     bool null_enabled;
     bool beta_pruning;
     bool lmr_enabled;
+    bool lmr_history_enabled;
+    bool aspiration_enabled;
+    bool probcut_enabled;
+    bool singular_extensions_enabled;
+    bool razoring_enabled;
+    bool main_see_enabled;
+    bool iir_enabled;
+    bool q_tt_enabled;
     bool ffp_enabled;
 
     search_t(const char * fen, const game_t * g = NULL,
             const search_control_t * control = NULL,
-            const std::vector<U64> & position_history = {}) {
-        init(fen, g, control, position_history);
+            const std::vector<U64> & position_history = {}, int variant = 0) {
+        init(fen, g, control, position_history, variant);
     }
 
     virtual ~search_t() {
@@ -157,24 +205,45 @@ public:
     search_t & operator=(const search_t &) = delete;
     void init(const char * fen, const game_t * g,
             const search_control_t * control = NULL,
-            const std::vector<U64> & position_history = {});
+            const std::vector<U64> & position_history = {}, int variant = 0);
     void go();
     void book_calc();
     void iterative_deepening();
     int aspiration(int depth, int last_score);
+    bool probcut(int alpha, int beta, int depth, int eval, bool cut_node, int & value);
+    bool razor_node(int alpha, int beta, int depth, int eval, int & value);
+    bool reverse_futility(int beta, int depth, int eval, int & value);
+    bool prune_futility(move_t & move, int reduced_depth, int searched_moves,
+        int best, int alpha, int beta, int gives_check, int eval);
+    bool prune_quiet(move_t & move, int depth, int searched_moves, int reduced_depth,
+        int best);
+    bool prune_main_see(move_t & move, int depth, int searched_moves, int best);
+    struct singular_result_t {
+        uint16_t move = 0;
+        int extension = 0;
+        bool cutoff = false;
+        int value = 0;
+    };
+    singular_result_t singular_extension(int alpha, int beta, int depth, bool cut_node);
+    int internal_search_depth(int depth, bool pv, bool cut_node);
+    int singular_search(int alpha, int beta, int depth, bool cut_node, uint16_t excluded_move);
+    int null_verification(int alpha, int beta, int depth, bool cut_node);
     bool book_lookup();
     bool tablebase_lookup();
-    bool probe_tablebase(int alpha, int beta, int depth, int & value);
+    bool probe_tablebase(int depth, int & value);
     int pvs_root(int alpha, int beta, int depth);
-    virtual int pvs(int alpha, int beta, int depth);
+    virtual int pvs(int alpha, int beta, int depth, bool cut_node = false);
     int qsearch(int alpha, int beta, int depth);
     int qstatic(int beta, int gain);
     std::string pv_to_string();
     bool is_draw();
     bool is_repetition() const;
+    int upcoming_repetition(move_t & witness);
+    bool is_improving() const;
     bool abort(bool force_poll);
     bool pondering();
     int init_root_moves();
+    void order_root_moves(int depth);
     void store_pv();
     void debug_print_search(int alpha, int beta, int depth);
     void trace_root(int alpha, int beta, int depth);
@@ -182,14 +251,24 @@ public:
     void backward();
     void forward(move_t * move, bool givesCheck);
     void backward(move_t * move);
+    bool try_forward(move_t * move, bool gives_check);
     void update_history(move_t * move);
+    std::array<const move_t *, 2> long_continuation_contexts() const;
+    // Standard search: learned history only, queried before making the move.
+    int move_history_score(const move_t & move);
+    void update_capture_cutoff(const move_t & move, int depth, int searched_moves);
+    void take_history(search_t & previous);
+    void update_tt_history(int compact_move, int depth);
+    void update_quiet_cutoff(move_t * move, int depth, int searched_moves);
     void update_killers(move_t * move);
     bool is_killer(move_t * const move);
     bool in_searched(move_t * move, int searched_moves);
     void reset_stack();
-    U64 tt_context() const;
-    int extension(move_t * move, int gives_check);
-    int reduction(int depth, int searched_moves, bool is_dangerous);
+    U64 position_key() const;
+    int reduction(int depth, int searched_moves, int estimate, bool root_node = false);
+    int reduction_estimate(int depth, int searched_moves, const move_t & move,
+        bool pv, bool cut_node, int gives_check);
+    void update_lmr_history(const move_t & move, int depth, int value, int alpha, int beta);
 
     int draw_score() {
         return brd.stack->wtm == root_wtm? draw_contempt: - draw_contempt;
@@ -202,26 +281,6 @@ public:
         assert(brd.ply > 0);
         move_t * prev_move = &(stack - 1)->current_move;
         return move->capture && prev_move->capture && move->tsq == prev_move->tsq;
-    }
-
-    bool is_passed_pawn(move_t * move) {
-        if (move->piece != WPAWN && move->piece != BPAWN) {
-            return false;
-        }
-        if (move->capture || stack->in_check || stack->eval_result == score::INVALID) {
-            return false;
-        }
-        return BIT(move->ssq) & stack->pt->passers & SIDE[brd.them()];
-    }
-    
-    bool is_advanced_passed_pawn(move_t * move) {
-        if (move->piece == WPAWN && move->tsq >= a6 && is_passed_pawn(move)) {
-            return true;
-        } else if (move->piece == BPAWN && move->tsq <= h3 && is_passed_pawn(move)) {
-            return true;
-        } else {
-            return false;
-        }
     }
 
     search_stack_t * get_stack(int ply) {

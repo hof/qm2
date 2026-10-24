@@ -30,13 +30,15 @@
 class w17_search_t : public search_t {
 public:
 
-    virtual int pvs(int alpha, int beta, int depth);
+    int pvs(int alpha, int beta, int depth, bool cut_node = false) override;
     bool w17_is_draw();
 
     w17_search_t(const char * fen, const game_t * g = NULL,
             const search_control_t * control = NULL,
-            const std::vector<U64> & position_history = {}) : search_t(fen, g, control, position_history) {
+            const std::vector<U64> & position_history = {}) : search_t(fen, g, control, position_history, 17) {
         wild = 17;
+        evaluation_network.reset();
+        evaluation_accumulators.clear();
         book_name = "book.w17.bin";
         
         //use different hash codes for w17
@@ -44,13 +46,10 @@ public:
         for (U64 & key : _position_history) {
             key ^= hash::codes[13][17];
         }
-        init_tt_history();
-        brd.stack->material_hash ^= hash::codes[13][17];
-        brd.stack->pawn_hash ^= hash::codes[13][17];
     }
     
     int w17_pvs(int alpha, int beta, int in_mate_search, int depth);
-    U64 w17_tt_context(int in_mate_search) const;
+    U64 w17_tt_key(int in_mate_search) const;
     
 };
 

@@ -8,15 +8,12 @@ add_library(MAX2SRC
 	movegen.cpp
 	movepicker.cpp
 	book.cpp
-        eval_material.cpp
-        eval_pieces.cpp
         experience.cpp
         tablebase.cpp
-        eval_endgame.cpp
-        eval_pawns.cpp
-        eval_king_attack.cpp
+        nnue.cpp
 	eval.cpp
 	search.cpp
+        repetition.cpp
         game.cpp      
         engine.cpp
         uci_console.cpp

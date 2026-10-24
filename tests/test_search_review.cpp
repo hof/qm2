@@ -1,6 +1,5 @@
 #include "engine.h"
 #include "w17/w17_search.h"
-#include "eval_material.h"
 #include <limits>
 #include <set>
 #include <sstream>
@@ -12,7 +11,9 @@ const fixture_t fixtures[] = {
 #include "data/search/review.inc"
 };
 bool check(bool ok, const char * message) {
-    if (!ok) std::cerr << message << '\n';
+    if (!ok) {
+        std::cerr << message << '\n';
+    }
     return ok;
 }
 std::set<std::string> words(const std::string & text) {
@@ -24,9 +25,6 @@ std::set<std::string> words(const std::string & text) {
 bool restored(search_t & search, search_t & original) {
     return check(search.brd.to_string() == original.brd.to_string()
         && search.brd.stack->tt_key == original.brd.stack->tt_key
-        && search.brd.stack->pawn_hash == original.brd.stack->pawn_hash
-        && search.brd.stack->material_hash == original.brd.stack->material_hash
-        && search.stack->tt_history == original.stack->tt_history
         && search.stack->repetition_start == original.stack->repetition_start
         && search.brd.ply == 0 && search.stack == search.root_stack,
         "review search did not restore state");
@@ -40,14 +38,14 @@ bool test_castling() {
         original.stack->in_check = original.brd.in_check();
         original.draw_contempt = original.tablebase_limit = 0;
         const int eval = evaluate(&original);
-        ok &= check(original.stack->in_check || material::is_eg(&original),
-            "castling oracle requires unpruned endgame or check evasions");
         original.init_root_moves();
         std::set<std::string> legal, castles;
         for (int i = 0; i < original.root.move_count; ++i) {
             auto & move = original.root.moves[i].move;
             legal.insert(move.to_string());
-            if (move.castle) castles.insert(move.to_string());
+            if (move.castle) {
+                castles.insert(move.to_string());
+            }
         }
         ok &= check(legal == words(fixture.legal) && castles == words(fixture.castles),
             "independent castling legal set differs");
@@ -63,14 +61,15 @@ bool test_castling() {
                 search_t search(fixture.fen);
                 search.stack->in_check = search.brd.in_check();
                 search.draw_contempt = search.tablebase_limit = 0;
+                search.ffp_enabled = false; // certify the full evasion domain
                 const int result = search.qsearch(window.first, window.second, depth);
                 const bool valid = result <= window.first ? value <= result
                     : result >= window.second ? value >= result : value == result;
                 ok &= check(valid, "castling qsearch bound differs");
                 ok &= restored(search, original);
                 if (window.first == -score::INF) {
-                    ok &= check(search.nodes == tactical.size() + 1,
-                        "qsearch did not visit certified castles/checks");
+                    ok &= check(search.nodes == tactical.size(),
+                        "qsearch move domain differs from certified captures/evasions");
                 }
                 ++probes;
             }
@@ -87,7 +86,9 @@ bool legal_pv(search_t & search) {
     for (std::string name; pv >> name;) {
         move_t move;
         move.set(&board, name.c_str());
-        if (!board.valid(&move) || !board.legal(&move)) return false;
+        if (!board.valid(&move) || !board.legal(&move)) {
+            return false;
+        }
         board.forward(&move);
     }
     return true;
@@ -99,16 +100,22 @@ bool test_exact_pv() {
     for (int wild : {0, 17}) {
         trans_table::clear();
         std::unique_ptr<search_t> search;
-        if (wild == 0) search = std::make_unique<search_t>(fen);
-        else search = std::make_unique<w17_search_t>(fen);
+        if (wild == 0) {
+            search = std::make_unique<search_t>(fen);
+        } else {
+            search = std::make_unique<w17_search_t>(fen);
+        }
         search->stack->in_check = search->brd.in_check();
         search->draw_contempt = search->tablebase_limit = 0;
         const int cold = search->pvs(-score::INF, score::INF, 3);
         ok &= check(search->stack->pv_count > 0 && legal_pv(*search), "cold PV invalid");
         const U64 before = search->nodes;
         const auto state = search->brd.to_string();
-        const int warm = search->pvs(-score::INF, score::INF, 3);
-        ok &= check(cold == warm && search->nodes == before + 1,
+        // The standard search takes cached score cutoffs only in non-PV windows;
+        // at equal depth an exact score answers a fail-low.
+        const int warm = wild == 0 ? search->pvs(cold, cold + 1, 3, true)
+            : search->pvs(-score::INF, score::INF, 3);
+        ok &= check(cold == warm && search->nodes == before,
             "matching exact TT score was not reused");
         ok &= check(search->stack->pv_count == 0 && legal_pv(*search),
             "exact TT return exposed a stale/illegal PV");
@@ -121,11 +128,10 @@ bool test_exact_pv() {
         root_move.set(&parent.brd, "e2e4");
         parent.forward(&root_move, false);
         trans_table::clear();
-        const U64 context = parent.tt_context();
-        trans_table::store(parent.brd.stack->tt_key, 0, parent.brd.ply, 3,
-            42, 0, score::EXACT, context);
+        // A fail-high cutoff needs one ply more than the searched depth.
+        trans_table::store(parent.position_key(), 0, parent.brd.ply, 4, 42, 0, score::EXACT);
         parent.stack->pv_count = 2; // stale data must be discarded on entry
-        ok &= check(parent.pvs(-score::INF, score::INF, 3) == 42
+        ok &= check(parent.pvs(41, 42, 3, true) == 42
             && parent.stack->pv_count == 0, "exact score with no move retained stale PV");
         parent.backward(&root_move);
         parent.update_pv(&root_move);
@@ -155,13 +161,17 @@ bool test_production_integration() {
             const int cold = original.pvs(-score::INF, score::INF, depth);
             ok &= check(!original.stop_all && legal_pv(original), "production cold search/PV invalid");
             const U64 before = original.nodes;
-            const int warm = original.pvs(-score::INF, score::INF, depth);
-            ok &= check(cold == warm && original.nodes == before + 1,
+            // A cached fail-high serves one ply less than its stored depth.
+            const int warm = original.pvs(cold - 1, cold, depth - 1, true);
+            ok &= check(cold == warm && original.nodes == before,
                 "production exact warm result differs");
             ok &= check(legal_pv(original), "production TT PV invalid");
             for (bool tt : {false, true}) {
-                if (tt) trans_table::enable();
-                else trans_table::disable();
+                if (tt) {
+                    trans_table::enable();
+                } else {
+                    trans_table::disable();
+                }
                 trans_table::clear();
                 search_t baseline(fixture.fen);
                 baseline.stack->in_check = baseline.brd.in_check();
@@ -201,8 +211,10 @@ bool test_production_integration() {
 
 class large_root_search_t : public search_t {
 public:
+    std::vector<uint16_t> visited;
     explicit large_root_search_t(const char * fen) : search_t(fen) {}
-    int pvs(int, int, int) override {
+    int pvs(int, int, int, bool = false) override {
+        visited.push_back((stack - 1)->current_move.to_compact());
         nodes += U64{1} << 32;
         stack->pv_count = 0;
         return 0;
@@ -234,6 +246,22 @@ bool test_root_counts() {
     first.add_nodes(U64{1} << 63);
     ok &= check(first.nodes == std::numeric_limits<int64_t>::max() - 19,
         "negative ordering bias lost at signed boundary");
+    // D1 must preserve the picker's legal order even when a separate root
+    // priority would promote a later move. No completed iteration exists yet.
+    large_root_search_t first_pass("r1bq1rk1/pp2ppbp/3p1np1/8/2PB4/1P2P3/P3BPPP/RN1Q1RK1 b - - 0 1");
+    first_pass.init_root_moves();
+    std::vector<uint16_t> picker_order;
+    for (int i = 0; i < first_pass.root.move_count; ++i) {
+        picker_order.push_back(first_pass.root.moves[i].move.to_compact());
+        ok &= check(first_pass.root.moves[i].nodes == 0,
+            "standard root work must not contain an initial SEE/danger bonus");
+    }
+    auto & promoted = first_pass.root.moves[first_pass.root.move_count - 1];
+    promoted.nodes = int64_t{1} << 40;
+    first_pass.stack->best_move = promoted.move;
+    first_pass.pvs_root(-score::INF, score::INF, 1);
+    ok &= check(first_pass.visited == picker_order,
+        "D1 root search overrode the picker's move order");
     large_root_search_t search("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     search.init_root_moves();
     std::ostringstream output;

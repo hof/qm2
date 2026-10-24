@@ -35,10 +35,53 @@ namespace move {
      * Clears move list
      */
     void list_t::clear() {
+        evasion_targets = ~U64(0);
         stage = 0;
+        memset(returned_hints, 0, sizeof(returned_hints));
+        counter_candidate.clear();
         minimum_score = 0;
         current = first = last = &_list[0];
         best = &_list[MAX_MOVES];
+    }
+
+    // A single checker can be captured or its ray blocked. King safety, pins
+    // and en-passant discoveries remain the caller's post-make responsibility.
+    U64 evasion_targets(const board_t & board) {
+        const int king = board.get_sq(KING[board.us()]);
+        U64 checkers = board.attacks_to(king) & board.bb[board.us() ? BPIECES : WPIECES];
+        if (!checkers) {
+            return ~U64(0);
+        }
+        if (checkers & (checkers - 1)) {
+            return 0;
+        }
+        const int checker = pop(checkers);
+        U64 targets = BIT(checker);
+        const int piece = board.matrix[checker];
+        if (piece == BISHOP[!board.us()] || piece == ROOK[!board.us()]
+                || piece == QUEEN[!board.us()]) {
+            const int file_delta = (checker % 8 > king % 8) - (checker % 8 < king % 8);
+            const int rank_delta = (checker / 8 > king / 8) - (checker / 8 < king / 8);
+            const int step = file_delta + 8 * rank_delta;
+            for (int square = king + step; square != checker; square += step) {
+                targets |= BIT(square);
+            }
+        }
+        return targets;
+    }
+
+    bool allows_evasion(const move_t & move, U64 targets) {
+        if (targets == ~U64(0)) {
+            return true;
+        }
+        if (move.castle) {
+            return false;
+        }
+        if (move.piece == WKING || move.piece == BKING) {
+            return true;
+        }
+        // EP may capture a checking pawn or block a slider on another square.
+        return targets && (move.en_passant || (BIT(move.tsq) & targets));
     }
 
     /**
@@ -53,14 +96,14 @@ namespace move {
         const bool us = board->us();
         const bool them = !us;
         const U64 occ = board->bb[ALLPIECES];
-        const U64 targets = board->all(them);
+        const U64 targets = board->all(them) & list->evasion_targets;
         U64 moves;
         int ssq, tsq;
         int pc = PAWN[us];
 
         //pawn captures (including en-passant and promotion captures):
         U64 pawn_caps = targets;
-        if (board->stack->enpassant_sq) {
+        if (board->stack->enpassant_sq && list->evasion_targets) {
             pawn_caps |= BIT(board->stack->enpassant_sq);
         }
         pawn_caps &= board->pawn_attacks(us);
@@ -70,7 +113,8 @@ namespace move {
             while (moves) {
                 ssq = pop(moves);
                 if (tsq == board->stack->enpassant_sq && tsq > 0) {
-                    (current++)->set(pc, ssq, tsq, PAWN[them]);
+                    current->set(pc, ssq, tsq, PAWN[them]);
+                    (current++)->en_passant = true;
                 } else if ((BIT(tsq) & RANK[us][8]) == 0) {
                     (current++)->set(pc, ssq, tsq, board->matrix[tsq]);
                 } else {
@@ -128,7 +172,7 @@ namespace move {
 
         //king captures:
         int kpos = board->get_sq(++pc);
-        moves = KING_MOVES[kpos] & targets;
+        moves = KING_MOVES[kpos] & board->all(them);
         while (moves) {
             tsq = pop(moves);
             (current++)->set(pc, kpos, tsq, board->matrix[tsq]);
@@ -151,7 +195,7 @@ namespace move {
         while (pieces) {
             int ssq = pop(pieces);
             int tsq = ssq + PAWN_DIRECTION[us];
-            if (board->matrix[tsq] == EMPTY) {
+            if (board->matrix[tsq] == EMPTY && (BIT(tsq) & list->evasion_targets)) {
                 (current++)->set(pc, ssq, tsq, 0, QUEEN[us]);
                 (current++)->set(pc, ssq, tsq, 0, KNIGHT[us]);
                 (current++)->set(pc, ssq, tsq, 0, ROOK[us]);
@@ -170,30 +214,42 @@ namespace move {
     void gen_castles(board_t * board, move::list_t * list) {
         move_t * current = list->last;
         list->current = current;
-        if (board->has_castle_right(CASTLE_ANY)) {
+        if (list->evasion_targets == ~U64(0) && board->has_castle_right(CASTLE_ANY)) {
             if (board->us()) {
                 if (board->has_castle_right(CASTLE_K)
+                        && board->matrix[e1] == WKING
+                        && board->matrix[h1] == WROOK
                         && board->matrix[f1] == EMPTY
                         && board->matrix[g1] == EMPTY) {
-                    (current++)->set(WKING, e1, g1);
+                    current->set(WKING, e1, g1);
+                    (current++)->castle = CASTLE_K;
                 }
                 if (board->has_castle_right(CASTLE_Q)
+                        && board->matrix[e1] == WKING
+                        && board->matrix[a1] == WROOK
                         && board->matrix[d1] == EMPTY
                         && board->matrix[c1] == EMPTY
                         && board->matrix[b1] == EMPTY) {
-                    (current++)->set(WKING, e1, c1);
+                    current->set(WKING, e1, c1);
+                    (current++)->castle = CASTLE_Q;
                 }
             } else {
                 if (board->has_castle_right(CASTLE_k)
+                        && board->matrix[e8] == BKING
+                        && board->matrix[h8] == BROOK
                         && board->matrix[f8] == EMPTY
                         && board->matrix[g8] == EMPTY) {
-                    (current++)->set(BKING, e8, g8);
+                    current->set(BKING, e8, g8);
+                    (current++)->castle = CASTLE_k;
                 }
                 if (board->has_castle_right(CASTLE_q)
+                        && board->matrix[e8] == BKING
+                        && board->matrix[a8] == BROOK
                         && board->matrix[d8] == EMPTY
                         && board->matrix[c8] == EMPTY
                         && board->matrix[b8] == EMPTY) {
-                    (current++)->set(BKING, e8, c8);
+                    current->set(BKING, e8, c8);
+                    (current++)->castle = CASTLE_q;
                 }
             }
         }
@@ -211,7 +267,7 @@ namespace move {
         list->current = current;
         U64 moves;
         const U64 occ = board->bb[ALLPIECES];
-        const U64 targets = ~occ;
+        const U64 targets = ~occ & list->evasion_targets;
         const bool us = board->us();
         const int pawn_up = PAWN_DIRECTION[us];
         int pc = PAWN[us];
@@ -225,10 +281,12 @@ namespace move {
             if (board->matrix[tsq] != EMPTY) {
                 continue;
             }
-            (current++)->set(pc, ssq, tsq);
+            if (BIT(tsq) & targets) {
+                (current++)->set(pc, ssq, tsq);
+            }
             if (BIT(ssq) & RANK[us][2]) {
                 tsq += pawn_up;
-                if (board->matrix[tsq] == EMPTY) {
+                if (BIT(tsq) & targets) {
                     (current++)->set(pc, ssq, tsq);
                 }
             }
@@ -276,7 +334,7 @@ namespace move {
 
         //king moves:
         int kpos = board->get_sq(++pc);
-        moves = KING_MOVES[kpos] & targets;
+        moves = KING_MOVES[kpos] & ~occ;
         while (moves) {
             (current++)->set(pc, kpos, pop(moves));
         }

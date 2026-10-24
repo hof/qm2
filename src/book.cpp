@@ -262,7 +262,9 @@ int book_t::find(board_t * brd, move::list_t * list) {
         if (entry.weight == 0) {
             continue;
         }
-        if (list->last == list->first + move::MAX_MOVES) break;
+        if (list->last == list->first + move::MAX_MOVES) {
+            break;
+        }
         move_t * move = list->last++;
         read_polyglot_move(brd, move, entry.move);
         move->score = entry.weight;
@@ -325,8 +327,9 @@ void book_t::read_polyglot_move(board_t * brd, move_t * move, int polyglot_move)
  * Closes a book file
  */
 void book_t::close() {
-    if (is_open())
+    if (is_open()) {
         ifstream::close();
+    }
 }
 
 /**

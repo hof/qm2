@@ -30,8 +30,12 @@ int max_pieces() {
 }
 
 int probe_wdl(board_t & board, int limit, int depth, int probe_depth) {
-    if (board.stack->fifty_count != 0 || !eligible(board, limit)) return -3;
-    if (popcnt0(board.all()) == std::min(limit, max_pieces()) && depth < probe_depth) return -3;
+    if (board.stack->fifty_count != 0 || !eligible(board, limit)) {
+        return -3;
+    }
+    if (popcnt0(board.all()) == std::min(limit, max_pieces()) && depth < probe_depth) {
+        return -3;
+    }
     const unsigned result = tb_probe_wdl(board.all(WHITE), board.all(BLACK),
         board.bb[WKING] | board.bb[BKING], board.bb[WQUEEN] | board.bb[BQUEEN],
         board.bb[WROOK] | board.bb[BROOK], board.bb[WBISHOP] | board.bb[BBISHOP],
@@ -41,24 +45,34 @@ int probe_wdl(board_t & board, int limit, int depth, int probe_depth) {
 }
 
 bool probe_root(board_t & board, int limit, root_result_t & result) {
-    if (!eligible(board, limit) || board.stack->fifty_count >= 100) return false;
+    if (!eligible(board, limit) || board.stack->fifty_count >= 100) {
+        return false;
+    }
     TbRootMoves moves;
     // Always rank wins by progress rather than treating all winning moves as equal.
     if (!tb_probe_root_dtz(board.all(WHITE), board.all(BLACK),
         board.bb[WKING] | board.bb[BKING], board.bb[WQUEEN] | board.bb[BQUEEN],
         board.bb[WROOK] | board.bb[BROOK], board.bb[WBISHOP] | board.bb[BBISHOP],
         board.bb[WKNIGHT] | board.bb[BKNIGHT], board.bb[WPAWN] | board.bb[BPAWN], board.stack->fifty_count, 0,
-            board.stack->enpassant_sq, board.us(), true, true, &moves) || moves.size == 0) return false;
+            board.stack->enpassant_sq, board.us(), true, true, &moves) || moves.size == 0) {
+        return false;
+    }
     const TbRootMove * best = &moves.moves[0];
     for (unsigned i = 1; i < moves.size; ++i) {
-        if (moves.moves[i].tbRank > best->tbRank) best = &moves.moves[i];
+        if (moves.moves[i].tbRank > best->tbRank) {
+            best = &moves.moves[i];
+        }
     }
     // Rounded DTZ can be ambiguous exactly at the fifty-move boundary.
-    if (best->tbRank == 900 || best->tbRank == -900) return false;
+    if (best->tbRank == 900 || best->tbRank == -900) {
+        return false;
+    }
     const int promotions[] = {0, QUEEN[board.us()], ROOK[board.us()],
         BISHOP[board.us()], KNIGHT[board.us()]};
     const unsigned promotion = TB_MOVE_PROMOTES(best->move);
-    if (promotion > 4) return false;
+    if (promotion > 4) {
+        return false;
+    }
     result = {int(TB_MOVE_FROM(best->move)), int(TB_MOVE_TO(best->move)),
         promotions[promotion], best->tbRank > 900 ? 1 : best->tbRank < -900 ? -1 : 0};
     return true;

@@ -27,25 +27,51 @@ namespace options {
         { "", INT, 0, ""}, //dummy value
         { "Revision", STRING, 1, "type string default " MAXIMA_REVISION },
         { "Hash", INT, 256, "type spin default 256 min 0 max 1024"},
+        { "Move Overhead", INT, 50, "type spin default 50 min 0 max 5000" },
         { "Ponder", BOOL, 1, "type check default true"},
         { "OwnBook", BOOL, 1, "type check default true" },
         { "UCI_AnalyseMode", BOOL, 0, "type check default false" },
         { "UCI_Opponent", STRING, 0, "type string" },
-        { "NullMove", BOOL, 1, "type check default true" },
-        { "BetaPruning", BOOL, 1, "type check default true" },
-        { "LMR", BOOL, 1, "type check default true" },
-        { "FutilityPruning", BOOL, 1, "type check default true" },
-        { "NullVerify", BOOL, 1, "type check default true" },
-        { "Wild", STRING, 0, "type combo default standard var standard var losers" },
-        { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100" },
-        { "KingAttackShelter", INT, 256, "type spin default 256 min 0 max 512" },
-        { "KingAttackPieces", INT, 256, "type spin default 256 min 0 max 512" },
+        { "NullMove", BOOL, 1, "type check default true", true },
+        { "BetaPruning", BOOL, 1, "type check default true", true },
+        { "LMR", BOOL, 1, "type check default true", true },
+        { "LMRHistory", BOOL, 1, "type check default true", true },
+        { "FutilityPruning", BOOL, 1, "type check default true", true },
+        { "NullVerify", BOOL, 1, "type check default true", true },
+        { "Wild", STRING, 0, "type combo default standard var standard var losers", true },
+        { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100", true },
         { "SyzygyPath", STRING, 0, "type string default <empty>" },
-        { "SyzygyProbeLimit", INT, 5, "type spin default 5 min 0 max 5" },
-        { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64" },
+        { "SyzygyProbeLimit", INT, 5, "type spin default 5 min 0 max 5", true },
+        { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64", true },
         { "BookFile", STRING, 0, "type string default book.bin" },
         { "ExperienceFile", STRING, 0, "type string default <empty>" },
-        { "ExperienceDepth", INT, 16, "type spin default 16 min 1 max 128" }
+        { "ExperienceDepth", INT, 16, "type spin default 16 min 1 max 128" },
+        { "EvalFile", STRING, 0, "type string default eval.nnue" },
+        { "Aspiration", BOOL, 1, "type check default true", true },
+        { "IIR", BOOL, 1, "type check default true", true },
+        { "Razoring", BOOL, 1, "type check default true", true },
+        { "LMP", BOOL, 1, "type check default true", true },
+        { "HistoryPruning", BOOL, 1, "type check default true", true },
+        { "TTEval", BOOL, 1, "type check default true", true },
+        { "TTHistory", BOOL, 1, "type check default true", true },
+        { "ProbCut", BOOL, 1, "type check default true", true },
+        { "SingularExtensions", BOOL, 1, "type check default true", true },
+        { "MainSEE", BOOL, 1, "type check default true", true },
+        { "QsearchTT", BOOL, 1, "type check default true", true },
+        { "MainHistory", BOOL, 1, "type check default true", true },
+        { "ContinuationHistory", BOOL, 1, "type check default true", true },
+        { "PawnHistory", BOOL, 1, "type check default true", true },
+        { "Countermoves", BOOL, 1, "type check default true", true },
+        { "Killers", BOOL, 1, "type check default true", true },
+        { "UpcomingRepetition", BOOL, 1, "type check default true", true },
+        { "CheckEvasions", BOOL, 1, "type check default true", true },
+        { "CaptureHistory", BOOL, 1, "type check default true", true },
+        { "LongContinuationHistory", BOOL, 1, "type check default true", true },
+        { "ThreatOrdering", BOOL, 1, "type check default true", true },
+        { "CheckOrdering", BOOL, 1, "type check default true", true },
+        { "CorrectionHistory", BOOL, 1, "type check default true", true },
+        { "PieceCorrection", BOOL, 1, "type check default true", true },
+        { "ContinuationCorrection", BOOL, 1, "type check default true", true }
     };
     
     option_t * get_option(const char * key) {
@@ -68,6 +94,7 @@ namespace options {
 
 void game_t::clear() {
     tm.clear();
+    go_started = {};
     target_move.clear();
     max_depth = MAX_PLY;
     max_time_per_move = 0;
@@ -104,15 +131,17 @@ void game_t::copy(game_t* game) {
     search_moves = game->search_moves;
     learn_factor = game->learn_factor;
     tm = game->tm;
+    go_started = game->go_started;
 }
 
 void game_t::init_tm(bool us, std::chrono::steady_clock::time_point started) {
-    tm.set_start(started);
+    tm.set_start(go_started == std::chrono::steady_clock::time_point{} ? started : go_started);
     if (movetime_limit || max_time_per_move) {
         tm.set_min(max_time_per_move);
         tm.set_max(max_time_per_move);
     } else if (clock_limit || white_time || black_time) {
-        tm.set(time(us), time(!us), increment(us), increment(!us), moves_left);
+        tm.set(time(us), time(!us), increment(us), increment(!us), moves_left,
+            options::get_value("Move Overhead"));
     } else {
         tm.set_min(time_man::INFINITE_TIME);
         tm.set_max(time_man::INFINITE_TIME);

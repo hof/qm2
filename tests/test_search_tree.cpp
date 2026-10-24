@@ -16,7 +16,9 @@ const node_t certificates[] = {
 std::map<std::string, const node_t *> oracle;
 
 bool check(bool ok, const char * message, const char * fen) {
-    if (!ok) std::cerr << message << ": " << fen << '\n';
+    if (!ok) {
+        std::cerr << message << ": " << fen << '\n';
+    }
     return ok;
 }
 
@@ -36,11 +38,13 @@ public:
 
     explicit tree_search_t(const char * fen) : search_t(fen) {
         beta_pruning = null_enabled = ffp_enabled = lmr_enabled = false;
+        // This artificial child contract isolates bounds/history from pruning.
+        lmp_enabled = history_pruning_enabled = main_see_enabled = razoring_enabled = false;
         tablebase_limit = draw_contempt = 0;
         stack->in_check = brd.in_check();
     }
 
-    int pvs(int alpha, int beta, int depth) override {
+    int pvs(int alpha, int beta, int depth, bool cut_node = false) override {
         const auto fen = brd.to_string();
         if (brd.ply > 0 && beta - alpha > 1 && narrow.erase(fen)) {
             ++researches;
@@ -52,36 +56,38 @@ public:
             narrow.insert(fen);
         }
         if (brd.ply == 2) {
-            // Explicit two-ply contract replaces qsearch, including extensions.
-            // This isolates PVS bounds; it does not certify chess evaluation.
-            ++nodes;
+            // Explicit two-ply contract replaces qsearch. This isolates PVS
+            // bounds; it does not certify chess evaluation.
             stack->pv_count = 0;
             stack->best_move.clear();
-            if (abort(false)) return alpha;
+            if (abort(false)) {
+                return alpha;
+            }
             auto found = oracle.find(fen);
             valid &= check(found != oracle.end() && found->second->ply == 2,
                 "uncertified leaf", fen.c_str());
             return found == oracle.end() ? 0 : found->second->value;
         }
         valid &= check(depth > 0, "unexpected early horizon", fen.c_str());
-        return search_t::pvs(alpha, beta, depth);
+        return search_t::pvs(alpha, beta, depth, cut_node);
     }
 };
 
 bool restored(tree_search_t & search, search_t & original, const char * fen) {
     return check(search.valid && search.brd.to_string() == original.brd.to_string()
         && search.brd.stack->tt_key == original.brd.stack->tt_key
-        && search.brd.stack->pawn_hash == original.brd.stack->pawn_hash
-        && search.brd.stack->material_hash == original.brd.stack->material_hash
-        && search.stack->tt_history == original.stack->tt_history
         && search.stack->repetition_start == original.stack->repetition_start
         && search.brd.ply == 0 && search.stack == search.root_stack,
         "state restoration failed", fen);
 }
 
 bool valid_bound(int result, int value, int alpha, int beta) {
-    if (result <= alpha) return value <= result;
-    if (result >= beta) return value >= result;
+    if (result <= alpha) {
+        return value <= result;
+    }
+    if (result >= beta) {
+        return value >= result;
+    }
     return result == value;
 }
 
@@ -108,8 +114,11 @@ bool test_root(const node_t & node, int & probes, int & interruptions, int & res
         for (auto warm : windows) {
             for (auto window : windows) {
                 trans_table::clear();
-                if (cache == 2) trans_table::disable();
-                else trans_table::enable();
+                if (cache == 2) {
+                    trans_table::disable();
+                } else {
+                    trans_table::enable();
+                }
                 if (cache == 1) {
                     auto writer = std::make_unique<tree_search_t>(node.fen);
                     writer->pvs(warm.first, warm.second, 2);
@@ -121,8 +130,9 @@ bool test_root(const node_t & node, int & probes, int & interruptions, int & res
                 researches += search->researches;
                 if (cache == 1 && *node.legal
                         && warm.first == -score::INF && warm.second == score::INF
-                        && window.first == -score::INF && window.second == score::INF) {
-                    ok &= check(search->nodes == 1, "warm exact entry was not reused", node.fen);
+                        && window.first == node.value && window.second == node.value + 1) {
+                    // Only non-PV windows take cached score cutoffs; at equal depth only fail-lows.
+                    ok &= check(search->nodes == 0, "warm exact entry was not reused", node.fen);
                 }
                 ok &= check(valid_bound(value, node.value, window.first, window.second),
                     "independent minimax bound differs", node.fen);
@@ -133,7 +143,9 @@ bool test_root(const node_t & node, int & probes, int & interruptions, int & res
     }
     trans_table::enable();
     for (U64 budget : {1, 2, 5, 10}) {
-        if (!*node.legal) continue;
+        if (!*node.legal) {
+            continue;
+        }
         trans_table::clear();
         auto search = std::make_unique<tree_search_t>(node.fen);
         search->game.max_nodes = budget;
@@ -174,7 +186,9 @@ int main() {
     bool ok = validate_nodes();
     int probes = 0, interruptions = 0, researches = 0, cancelled_researches = 0;
     for (const auto & node : certificates) {
-        if (node.ply == 0) ok &= test_root(node, probes, interruptions, researches, cancelled_researches);
+        if (node.ply == 0) {
+            ok &= test_root(node, probes, interruptions, researches, cancelled_researches);
+        }
     }
     ok &= check(researches > 0 && interruptions > 0 && cancelled_researches > 0,
         "missing re-search/interruption coverage", "all fixtures");
