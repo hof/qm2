@@ -7,7 +7,9 @@ on Lichess, where anyone can challenge it, and on [FICS](https://www.freechess.o
 ### History
 
 Maxima began in 1996 as BugChess, written with Borland C++ Builder and played
-through its own graphical interface made in Delphi. From the start it also played
+through its own graphical interface made in Delphi. We named it BugChess because
+it was probably full of bugs. We did not know that a French engine was also
+called BugChess, and probably just as full of bugs. From the start it also played
 losers chess (FICS wild 17), and along the way it found, for example, that 1. a3 d6
 is a win for White. It played the 18th Dutch Open Computer Chess Championship in
 1998 on a Pentium II at 450 MHz, and spent the late nineties on ICC, first as
