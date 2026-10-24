@@ -45,6 +45,7 @@ namespace move {
         move_t * first;
         move_t * last;
         move_t * best;
+        move_t * quiets; // standard picker: first quiet once quiets are generated
         uint16_t returned_hints[4];
         move_t counter_candidate;
 

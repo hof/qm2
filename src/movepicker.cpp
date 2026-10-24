@@ -258,29 +258,51 @@ move_t * move_picker_t::next(search_t * s, int depth) {
     return result;
 }
 
+namespace {
+// Whether the hash move, a killer or the countermove already returned this move.
+bool returned_before(const move::list_t & list, const move_t & move) {
+    const auto code = move.to_compact();
+    for (auto hint : list.returned_hints) {
+        if (hint == code) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Stable insertion sort, best score first. The lists are short and most nodes
+// cut off before reaching them, so this stays cheaper than repeated scans.
+void sort_by_score(move_t * begin, move_t * end) {
+    if (begin == end) {
+        return;
+    }
+    for (auto * next = begin + 1; next != end; ++next) {
+        const move_t move = *next;
+        auto * slot = next;
+        for (; slot != begin && (slot - 1)->score < move.score; --slot) {
+            *slot = *(slot - 1);
+        }
+        *slot = move;
+    }
+}
+}
+
 // Standard chess returns candidates; only search decides king safety.
-move_t * move_picker_t::pop_standard(search_t * s, int phase, int see_threshold) {
+// Picks the best remaining noisy move that passes SEE. A failing move gets a
+// negative score and waits for the bad noisy stage.
+move_t * move_picker_t::pop_good_noisy(search_t * s, int see_threshold) {
     auto * list = &s->stack->move_list;
-    while (list->first != list->last) {
+    for (;;) {
         move_t * best = nullptr;
-        const int maximum = phase == bad_quiets ? list->best->score
-            : std::numeric_limits<int>::max();
         for (auto * move = list->first; move != list->last; ++move) {
-            const bool noisy = move->capture || move->promotion;
-            const bool eligible = phase == promotions ? noisy && move->score >= 0
-                : phase == good_quiets ? !noisy && move->score > 0
-                : phase == bad_noisy ? noisy : !noisy;
-            if (eligible && (!best || move->score > best->score)) {
+            if (move->score >= 0 && (!best || move->score > best->score)) {
                 best = move;
-                if (phase == bad_quiets && best->score == maximum) {
-                    break;
-                }
             }
         }
         if (!best) {
             return nullptr;
         }
-        if (phase == promotions && !s->brd.see(best, see_threshold)) {
+        if (!s->brd.see(best, see_threshold)) {
             const int see = s->brd.see(best);
             best->score = s->capture_history_enabled
                 ? -2 * capture_history_t::limit + 16 * see + s->move_history_score(*best) : see;
@@ -288,13 +310,19 @@ move_t * move_picker_t::pop_standard(search_t * s, int phase, int see_threshold)
         }
         *list->best = *best;
         *best = *--list->last;
-        const auto code = list->best->to_compact();
-        bool duplicate = false;
-        for (auto hint : list->returned_hints) {
-            duplicate |= hint == code;
-        }
-        if (!duplicate) {
+        if (!returned_before(*list, *list->best)) {
             return list->best;
+        }
+    }
+}
+
+// Returns the next move of a sorted range that scores at least minimum.
+move_t * move_picker_t::pop_sorted(search_t * s, move_t *& cursor, move_t * end, int minimum) {
+    const auto & list = s->stack->move_list;
+    while (cursor != end && cursor->score >= minimum) {
+        move_t * move = cursor++;
+        if (!returned_before(list, *move)) {
+            return move;
         }
     }
     return nullptr;
@@ -384,7 +412,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 list->stage = promotions;
                 break;
             case promotions:
-                result = pop_standard(s, promotions, depth > 0 ? 0 : quiescence_see_threshold);
+                result = pop_good_noisy(s, depth > 0 ? 0 : quiescence_see_threshold);
                 if (result) {
                     return result;
                 }
@@ -433,28 +461,30 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                     move::gen_quiet_moves(board, list);
                 }
                 score_quiets(s, begin, list->last);
+                // From here on the bad noisy moves [first, quiets) and the
+                // quiets [quiets, last) are each walked in score order.
+                sort_by_score(list->first, begin);
+                sort_by_score(begin, list->last);
+                list->quiets = list->current = begin;
                 list->stage = good_quiets;
                 break;
             }
             case good_quiets:
-                result = pop_standard(s, good_quiets);
+                result = pop_sorted(s, list->current, list->last, 1);
                 if (result) {
                     return result;
                 }
                 list->stage = bad_noisy;
                 break;
             case bad_noisy:
-                result = pop_standard(s, bad_noisy);
+                result = pop_sorted(s, list->first, list->quiets, std::numeric_limits<int>::min());
                 if (result) {
                     return result;
                 }
-                // Only quiets remain. The preceding maximum bounds subsequent
-                // selections, preserving the cheap all-equal-history path.
-                list->best->score = std::numeric_limits<int>::max();
                 list->stage = bad_quiets;
                 break;
             case bad_quiets:
-                result = pop_standard(s, bad_quiets);
+                result = pop_sorted(s, list->current, list->last, std::numeric_limits<int>::min());
                 if (result) {
                     return result;
                 }

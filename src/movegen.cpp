@@ -40,7 +40,7 @@ namespace move {
         memset(returned_hints, 0, sizeof(returned_hints));
         counter_candidate.clear();
         minimum_score = 0;
-        current = first = last = &_list[0];
+        current = first = last = quiets = &_list[0];
         best = &_list[MAX_MOVES];
     }
 

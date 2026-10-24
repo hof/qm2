@@ -54,7 +54,8 @@ constexpr int quiescence_see_threshold = -60;
 class move_picker_t {
 private:
     move_t * pop(search_t * s, move::list_t * list);
-    move_t * pop_standard(search_t * s, int phase, int see_threshold = 0);
+    move_t * pop_good_noisy(search_t * s, int see_threshold);
+    move_t * pop_sorted(search_t * s, move_t *& cursor, move_t * end, int minimum);
     move_t * next_standard(search_t * s, int depth);
     void score_quiets(search_t * s, move_t * begin, move_t * end);
 
