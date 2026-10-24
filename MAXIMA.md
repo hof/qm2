@@ -1808,7 +1808,7 @@ draws or when a draw is worth at least our score (below). When the opponent leav
 
 In both chat rooms (players and spectators) MaximaEngine greets at the start and
 says "Good game" at the end; it posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
-authors, repository) or `!eval` (our last move with depth, score and expected
+authors; no links, which Lichess blanks in chat) or `!eval` (our last move with depth, score and expected
 line; answered in the spectator room only, never to the opponent). Answers to
 non-owners come at most every 5 seconds per game, so chat spam cannot push the
 bot into Lichess's rate limit, which would also hold up its moves.

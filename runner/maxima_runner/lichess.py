@@ -29,7 +29,7 @@ rate_limit_pause = 60  # Lichess asks clients to wait a full minute after HTTP 4
 owner_commands = ("softquit", "softrestart", "resign", "abort", "draw")
 public_commands = ("help", "name", "eval")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
-credits = "Maxima, a chess engine by hof and hajewiet: github.com/hof/qm2"
+credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
 reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate", "timeout": "opponent left",
            "draw": "draw", "outoftime": "time forfeit", "cheat": "cheat detected", "noStart": "no first move",
            "aborted": "aborted", "unknownFinish": "unknown finish", "variantEnd": "variant end"}
