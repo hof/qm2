@@ -19,14 +19,15 @@ magic bitboard move generation, a search built on late move reductions with fewe
 extensions and more pruning, and a tapered evaluation tuned by an integrated
 self-matching test. Maxima also became a UCI engine.
 
-In 2026 Maxima moved to a neural network evaluation (NNUE), starting from the
-Stockfish 13 network, and its search was brought up to current standards: the
-transposition table, null-move and reverse futility pruning, and late move
-reductions from logarithmic tables. With the same network, the search work alone
-is worth about 380 Elo. Endgames use Syzygy tablebases, locally up to five pieces
-and online up to seven, and a multi-layer opening book learns from every game and
-every opponent. MaxDrone, the runner that plays Maxima on FICS and Lichess, can
-stream games live over WebSocket and post finished games to a database.
+In 2026, again after almost a decade of rest, Maxima moved to a neural network
+evaluation (NNUE), starting from the Stockfish 13 network, and its search was
+brought up to current standards: the transposition table, null-move and reverse
+futility pruning, and late move reductions from logarithmic tables. With the same
+network, the search work alone is worth about 380 Elo. Endgames use Syzygy
+tablebases, locally up to five pieces and online up to seven, and a multi-layer
+opening book learns from every game and every opponent. MaxDrone, the runner that
+plays Maxima on FICS and Lichess, can stream games live over WebSocket and post
+finished games to a database.
 
 The opening book mixes several layers on every move: a broad base book, style
 books (sharp gambits, solid drawing lines, experiments, and a mood that changes
