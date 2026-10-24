@@ -16,7 +16,8 @@ def parser():
                "  !softrestart   restart after this game (exit 75, for a supervisor loop)\n"
                "  !resign, !abort, !draw   act on the game now\n"
                "  !challenge, !nochallenge   challenge other bots when idle, or only accept\n"
-               "between games: type quit here, or kill -USR1 <pid>, to stop\n\n"
+               "the same commands work typed here, without the !; help lists them;\n"
+               "quit stops after the game and a second quit at once; kill -USR1 <pid> also stops\n\n"
                "examples:\n"
                "  maxima lichess\n"
                "  maxima lichess --speed blitz --speed rapid --games 20 --live-feed 8765")

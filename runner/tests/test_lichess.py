@@ -87,6 +87,20 @@ class command_tests(unittest.IsolatedAsyncioTestCase):
         replies = [data["text"] for _, data in api.posts]
         self.assertEqual(replies, ["I share that with spectators only.", "e4 d20 +0.30"])
 
+    async def test_console_answers_every_command(self):
+        api, lines, bot, game = self.game()
+        self.assertFalse(await bot.console("help"))
+        self.assertFalse(await bot.console("resign"))
+        self.assertEqual(api.posts, [])
+        bot.game = game
+        self.assertFalse(await bot.console("!resign"))
+        self.assertFalse(await bot.console("softquit"))
+        self.assertFalse(await bot.console("bogus"))
+        self.assertTrue(await bot.console("quit"))
+        self.assertEqual([path for path, _ in api.posts], ["/api/bot/game/g1/resign"])
+        self.assertTrue(bot.stopping)
+        self.assertEqual(len(lines), 5)
+
 
 class stub_session:
     async def play(self, board, limit, **unused):

@@ -28,6 +28,7 @@ speed_rank = {name: rank for rank, name in enumerate(("ultraBullet",) + speeds +
 stream_timeout = 30  # seconds of silence before a stream counts as dead; Lichess sends keepalives every 7 s
 rate_limit_pause = 60  # Lichess asks clients to wait a full minute after HTTP 429
 owner_commands = ("softquit", "softrestart", "resign", "abort", "draw", "challenge", "nochallenge")
+console_commands = ("help", "quit") + owner_commands
 public_commands = ("help", "name", "eval", "stats", "book")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
@@ -271,6 +272,7 @@ class lichess_bot:
         await self.start_engine()
         self.on_line(f"-- logged in as {self.name}; accepting {', '.join(self.speeds)}"
                      + (f"; owners {', '.join(sorted(self.owners))}" if self.owners else "; no owners for commands"))
+        self.on_line("-- type help for console commands")
 
     async def start_engine(self):
         self.context = self.open_session()
@@ -288,8 +290,38 @@ class lichess_bot:
 
     def soft_quit(self, restart=False):
         self.stopping, self.restart = True, restart
-        if self.game is not None:
-            self.on_line(f"-- {'restarting' if restart else 'stopping'} after this game")
+        action = "restarting" if restart else "stopping"
+        self.on_line(f"-- {action} after this game; quit again to stop now" if self.game is not None
+                     else f"-- {action}")
+
+    def set_challenging(self, enabled):
+        self.matchmaker.enabled = enabled and bool(self.matchmaker.speeds)
+        return "challenge other bots when idle" if self.matchmaker.enabled else "only accept challenges"
+
+    async def console(self, text):
+        """Run a console command (a leading ! is optional); True stops at once (quit while stopping)."""
+        words = text.strip().lstrip("!").lower().split()
+        if not words:
+            return False
+        command = "quit" if words[0] in ("exit", "softquit") else words[0]
+        if command in ("quit", "softrestart"):
+            if self.stopping and command == "quit":
+                return True
+            self.soft_quit(restart=command == "softrestart")
+        elif command in ("challenge", "nochallenge"):
+            self.on_line(f"-- {self.set_challenging(command == 'challenge')}")
+        elif command in ("resign", "abort", "draw"):
+            if self.game is None:
+                self.on_line(f"-- no game to {command}")
+            elif await self.api.post(self.game.path("draw/yes" if command == "draw" else command)):
+                self.on_line(f"-- {command} sent")
+            else:
+                self.on_line(f"-- could not {command}")
+        elif command == "help":
+            self.on_line("-- commands: " + ", ".join(console_commands) + "; quit stops after the game")
+        else:
+            self.on_line(f"-- unknown command {words[0]!r}; type help")
+        return False
 
     async def run(self, commands):
         """Follow the event stream until stopped; console quit stops after the game, a second quit at once."""
@@ -306,10 +338,8 @@ class lichess_bot:
                     except OSError as error:
                         self.on_line(f"-- could not look for an opponent: {error}")
                 if command in done:
-                    if command.result().strip().lower() in ("quit", "exit"):
-                        if self.stopping:
-                            break
-                        self.soft_quit()
+                    if await self.console(command.result()):
+                        break
                     command = asyncio.ensure_future(commands.get())
             return restart_status if self.restart else 0
         finally:
@@ -645,8 +675,7 @@ class lichess_game:
             return
         bot.on_line(f"-- {name}: {command}")
         if command in ("challenge", "nochallenge"):
-            bot.matchmaker.enabled = command == "challenge" and bool(bot.matchmaker.speeds)
-            self.chat(room, f"OK, I {'challenge other bots when idle' if bot.matchmaker.enabled else 'only accept challenges'}.")
+            self.chat(room, f"OK, I {bot.set_challenging(command == 'challenge')}.")
         elif command in ("softquit", "softrestart"):
             bot.soft_quit(restart=command == "softrestart")
             self.chat(room, f"OK, I {'restart' if bot.restart else 'stop'} after this game.")

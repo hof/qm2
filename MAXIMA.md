@@ -1839,9 +1839,10 @@ Owners steer the bot from the game chat; the spectator room keeps it out of the
 opponent's sight. Lichess authenticates chat usernames, so no key is needed:
 `!softquit` (stop after this game), `!softrestart` (exit status 75 after this
 game, for a supervisor loop as on FICS), `!resign`, `!abort`, `!draw` (offer or
-accept). These commands from anyone else are logged and ignored. Between
-games, `quit` on the console or `kill -USR1 <pid>` stops it; a second `quit`
-leaves at once.
+accept). These commands from anyone else are logged and ignored. The same
+commands work on the console without the `!`, and each one answers there; `help`
+lists them. `quit` (or `kill -USR1 <pid>`) stops after the game; a second `quit`
+leaves at once. Every `maxima` command shows the Maxima header in a terminal.
 
 Lichess keeps its own experience: `experience/lichess/games/*.pgn` with
 `index/` and `players/` beside it, since its players and rating pool are not
