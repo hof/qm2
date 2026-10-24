@@ -259,14 +259,18 @@ class rematch_tests(unittest.IsolatedAsyncioTestCase):
         class api:
             calls = []
 
+            sent = []
+
             async def call(self, method, path, data=None):
                 self.calls.append(path)
+                self.sent.append(data)
                 return {"id": "r1"}
 
         bot = lichess.lichess_bot(api(), None, lambda line: None, challenge_idle=30)
         bot.matchmaker.busy("Ferrite")
-        await bot.matchmaker.rematch(bot, "Ferrite", "ferrite", "blitz", 180, 2, delay=0)
+        await bot.matchmaker.rematch(bot, "Ferrite", "ferrite", "blitz", 180, 2, rated=False, delay=0)
         self.assertEqual(api.calls, ["/api/challenge/Ferrite"])
+        self.assertEqual(api.sent[-1]["rated"], "false")  # the same terms as the game
         bot.matchmaker.busy("Ferrite")  # the rematch was played
         await bot.matchmaker.rematch(bot, "Ferrite", "ferrite", "blitz", 180, 2, delay=0)
         self.assertEqual(len(api.calls), 1)

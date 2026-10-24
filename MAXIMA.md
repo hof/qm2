@@ -1808,7 +1808,7 @@ speeds), a random clock of that speed (1+0, 1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
 once a minute; an unanswered challenge is cancelled after a minute, and a bot
 that declined or did not answer is left alone for that speed for a day. Owners
 switch it with `!challenge` and `!nochallenge` in a game's chat. Five seconds
-after a game against a bot it offers that bot one rematch with the same clock,
+after a game against a bot it offers that bot one rematch with the same clock and rating mode,
 never a second in a row, and not while challenges are switched off.
 
 It accepts standard
