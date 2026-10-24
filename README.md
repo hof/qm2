@@ -29,8 +29,8 @@ stream games live over WebSocket and post finished games to a database.
 The Chess Programming Wiki has more on [BugChess NL](https://www.chessprogramming.org/BugChess_NL)
 and [Maxima2](https://www.chessprogramming.org/Maxima2).
 
-Standard chess is the main target. Losers chess, where it all started, has
-experimental support in `src/w17/`, and more FICS wild variants will follow.
+Maxima plays standard chess and losers chess, where it all started (`src/w17/`);
+more FICS wild variants will follow.
 
 ### Getting started
 
