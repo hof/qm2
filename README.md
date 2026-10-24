@@ -26,6 +26,14 @@ and online up to seven, and a multi-layer opening book learns from every game an
 every opponent. MaxDrone, the runner that plays Maxima on FICS and Lichess, can
 stream games live over WebSocket and post finished games to a database.
 
+The opening book mixes several layers on every move: a broad base book, style
+books (sharp gambits, solid drawing lines, experiments, and a mood that changes
+weekly), and what Maxima learned from its own games, overall, against a group of
+players (humans, masters or engines) and against this particular opponent. The
+mix follows the rating gap: more gambits against weaker players, more solid
+lines against stronger ones. A lost game is remembered, and its winning line may
+be played back at the same opponent later.
+
 The Chess Programming Wiki has more on [BugChess NL](https://www.chessprogramming.org/BugChess_NL)
 and [Maxima2](https://www.chessprogramming.org/Maxima2).
 
