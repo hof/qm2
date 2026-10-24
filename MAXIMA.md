@@ -1162,10 +1162,13 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 
 ## 8. Roadmap
 
-- Finish aligning late-move reductions with the reference form: drop the
-  remaining non-reference terms, add TT-hit-rate, stat-score and capture terms,
-  plain full-depth re-searches, and retire the hindsight depth adjustment.
-  Measure each step on the depth ladder and in matches.
+- Raise single-thread speed without changing the search: prefetch the child's
+  TT entry after make-move, pick moves per phase instead of rescanning the
+  whole list, keep the NNUE accumulator in registers across feature updates,
+  and compute `gives_check` only where it is used. Bench node counts must stay
+  identical; report NPS.
+- Bring the D8 and D10 depth-ladder totals within the 1.40× limit (1.64× and
+  1.55× at the 2026-10-23 baseline; D12 passes at 1.32×).
 - Add incremental CLI documentation lookup (`docs:list`, `docs:search`,
   `docs:section`) using the stable chapters in this file. These commands are
   planned and are not implemented yet.
@@ -1173,13 +1176,17 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 - Extend direct root tablebase handling across histories that already contain repetitions.
 - Explore selective asynchronous online probes separately from local probing.
 - Prepare shared caches and worker state for safe multithreaded search.
-- After the final equal-depth checkpoint and baseline commit, select a new
-  development focus with measured goals. Candidate directions recorded from the
-  user: online play/operator integration; profiling and tuning under real time
-  controls; a dedicated bullet setup; a more advanced supported NNUE family;
-  and training our own royal-losers evaluator. These are alternatives for the
-  next phase, not approved simultaneous implementation tasks. Preserve the
+- Further directions, one at a time with measured goals: profiling and tuning
+  under real time controls; a dedicated bullet setup; a more advanced supported
+  NNUE family; and training our own royal-losers evaluator. Preserve the
   single-worker NNUE baseline and use held-out strength tests for changes.
+
+Late-move reductions now follow the reference form described in 4.4, and the
+online play integration has landed (9.7, 10.2). The 2026-10-23 baseline
+(`9370042`) passed SPRT against the previous master (147 wins, 9 draws, no
+losses at 5+0.05 s). Its effective branching factor, `sqrt(N(d+2) / N(d))` on
+the depth-ladder totals, is 1.85 from D8 to D10 and 1.68 from D10 to D12,
+below the required 2.
 
 No speed or Elo gain should be claimed without the corresponding measurements.
 
