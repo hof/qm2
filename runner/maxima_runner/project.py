@@ -14,6 +14,24 @@ def project_root():
     return Path.cwd()
 
 
+def env_value(name, root=None):
+    """A setting from the environment, else from <project>/.env (git-ignored); never logged."""
+    value = os.environ.get(name)
+    env = Path(root or project_root()) / ".env"
+    if not value and env.is_file():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            key, _, found = line.partition("=")
+            if key.strip() == name:
+                value = found.strip().strip('"').strip("'")
+    return value or None
+
+
+def data_root():
+    """Books, network, tablebases and experience: MAXIMA_DATA_DIR (e.g. a persistent volume), else the checkout."""
+    configured = os.environ.get("MAXIMA_DATA_DIR")
+    return Path(configured).expanduser().resolve() if configured else project_root()
+
+
 def engine_path(root=None):
     root = root or project_root()
     for mode in ("release", "debug"):

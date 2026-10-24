@@ -42,6 +42,10 @@
 __pycache__/
 
 /book.bin
+/.env
+/fire.bin
+/draw.bin
+/experiment.bin
 
 /book.bin:Zone.Identifier
 
@@ -50,6 +54,7 @@ __pycache__/
 *.egg-info/
 /runner/build/
 /runner/dist/
+/moods/
 
 /networks/*.nnue
 /eval.nnue

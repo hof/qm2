@@ -11,7 +11,7 @@ import struct
 import tempfile
 import os
 import sys
-from .project import engine_path, project_root
+from .project import data_root, engine_path, project_root
 
 
 header = struct.Struct('<8sQ')
@@ -269,8 +269,8 @@ def main():
     root = project_root()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=('import', 'export', 'show', 'analyze'))
-    parser.add_argument('--database', type=Path, default=root / 'experience/experience.sqlite')
-    parser.add_argument('--output', type=Path, default=root / 'experience/experience.bin')
+    parser.add_argument('--database', type=Path, default=data_root() / 'experience/experience.sqlite')
+    parser.add_argument('--output', type=Path, default=data_root() / 'experience/experience.bin')
     parser.add_argument('--pgn', type=Path)
     parser.add_argument('--player', action='append', help='player aliases; default Maxima and BugChess')
     parser.add_argument('--max-ply', type=positive_int, default=32)

@@ -7,8 +7,8 @@ from .third_party.fastchess.llr import logistic_llr
 def validate_sprt(elo0, elo1, alpha, beta):
     if not all(math.isfinite(value) for value in (elo0, elo1, alpha, beta)):
         raise ValueError('SPRT parameters must be finite')
-    if not -200 <= elo0 < elo1 <= 200:
-        raise ValueError('SPRT requires -200 <= elo0 < elo1 <= 200 (logistic Elo)')
+    if not elo0 < elo1:
+        raise ValueError('SPRT requires elo0 < elo1 (logistic Elo)')
     if not (0 < alpha < 1 and 0 < beta < 1 and alpha + beta < 1):
         raise ValueError('SPRT requires positive alpha/beta with sum less than one')
 

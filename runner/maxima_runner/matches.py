@@ -83,18 +83,13 @@ def paired_summary(games, requested_pairs=None, *, confidence=0.95):
 def match_summary(games, args):
     bounds = getattr(args, 'sprt', None)
     minimum = getattr(args, 'min_elo', None)
-    hybrid = getattr(args, 'sprt_min_elo_stop', False)
-    if minimum is not None or hybrid:
+    if minimum is not None:
         from .strength import min_elo_summary
-        alpha = min(args.sprt_alpha, args.sprt_beta) / 2 if hybrid else 0.05
-        strength = min_elo_summary(games, bounds[1] if hybrid else minimum, args.pairs, alpha)
+        strength = min_elo_summary(games, minimum, args.pairs, 0.05)
         summary = paired_summary(games, args.pairs)
         summary.update(confidence=strength['confidence'], score_interval=strength['score_interval'],
                        interval_method=strength['method'], a_score=strength['a_score'],
                        minimum_gain=strength)
-        if hybrid:
-            from .sprt import sprt_summary
-            summary['sprt'] = sprt_summary(games, *bounds, args.sprt_alpha / 2, args.sprt_beta / 2)
         return summary
     if bounds is not None:
         from .sprt import sprt_summary
@@ -388,7 +383,7 @@ async def run_match(commands, openings, args, report, pgn_stream):
                     report['stop_reason'] = strength['decision']
                     report['stopped_early'] = pair + 1 < args.pairs
                 if sprt is not None and sprt['decision'] != 'continue':
-                    report['stop_reason'] = report.get('stop_reason') or sprt['decision']
+                    report['stop_reason'] = sprt['decision']
                     report['stopped_early'] = pair + 1 < args.pairs
                 args.json.write_text(json.dumps(report, indent=2) + '\n')
                 if record['error'] is not None:
@@ -436,8 +431,6 @@ def main():
                         help='check significance every N pairs with a 95%% joint Bonferroni bound')
     parser.add_argument('--sprt-alpha', type=float, default=0.05, help='SPRT false-positive target')
     parser.add_argument('--sprt-beta', type=float, default=0.05, help='SPRT false-negative target')
-    parser.add_argument('--sprt-min-elo-stop', action='store_true',
-                        help='also check confidence bounds against ELO1; reserve half each error budget for SPRT')
     parser.add_argument('--seed', type=int, default=2026)
     parser.add_argument('--seconds', type=positive_float, default=10)
     parser.add_argument('--increment', type=nonnegative_float, default=0.1)
@@ -472,13 +465,8 @@ def main():
         if args.sprt is not None:
             from .sprt import validate_sprt
             validate_sprt(*args.sprt, args.sprt_alpha, args.sprt_beta)
-            if args.sprt_min_elo_stop:
-                from .strength import validate_min_elo
-                validate_min_elo(args.sprt[1], args.pairs, min(args.sprt_alpha, args.sprt_beta) / 2)
         elif args.sprt_alpha != 0.05 or args.sprt_beta != 0.05:
             raise ValueError('SPRT error targets require --sprt')
-        if args.sprt_min_elo_stop and args.sprt is None:
-            raise ValueError('--sprt-min-elo-stop requires --sprt')
         if args.min_elo is not None:
             from .strength import validate_min_elo
             validate_min_elo(args.min_elo, args.pairs, 0.05)
@@ -511,18 +499,14 @@ def main():
                   'openings_sha256': hashlib.sha256(args.openings.read_bytes()).hexdigest(),
                   'games': [], 'complete': False, 'stopped_early': False, 'stop_reason': None,
                   'sequential_check_pairs': args.sequential_check_pairs,
-                  'minimum_gain': {'minimum_elo': args.sprt[1] if args.sprt_min_elo_stop else args.min_elo,
-                                   'alpha': min(args.sprt_alpha, args.sprt_beta) / 2 if args.sprt_min_elo_stop else 0.05,
+                  'minimum_gain': {'minimum_elo': args.min_elo, 'alpha': 0.05,
                                    'planned_checks': args.pairs, 'elo_model': 'logistic'}
-                                  if args.min_elo is not None or args.sprt_min_elo_stop else None,
-                  'stopping_mode': 'sprt_or_minimum_gain' if args.sprt_min_elo_stop else
-                                   'minimum_gain' if args.min_elo is not None else
+                                  if args.min_elo is not None else None,
+                  'stopping_mode': 'minimum_gain' if args.min_elo is not None else
                                    'sprt' if args.sprt is not None else
                                    'sequential_checkpoints' if args.sequential_check_pairs else 'fixed_sample',
                   'sprt': {'elo0': args.sprt[0], 'elo1': args.sprt[1],
-                           'alpha': args.sprt_alpha / 2 if args.sprt_min_elo_stop else args.sprt_alpha,
-                           'beta': args.sprt_beta / 2 if args.sprt_min_elo_stop else args.sprt_beta,
-                           'requested_alpha': args.sprt_alpha, 'requested_beta': args.sprt_beta,
+                           'alpha': args.sprt_alpha, 'beta': args.sprt_beta,
                            'elo_model': 'logistic', 'upstream': 'Disservin/fast-chess',
                            'upstream_revision': 'ebfd64cb7fac80d4822c50b07dca4fe934779d21'}
                            if args.sprt is not None else None}

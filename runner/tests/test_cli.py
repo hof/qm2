@@ -30,6 +30,12 @@ class cli_tests(unittest.TestCase):
         (build / 'CMakeCache.txt').write_text('BUILD_TESTING:BOOL=ON\n')
         (build / 'src/maxima2').touch()
 
+    def test_help_fits_an_80_column_terminal(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            cli.show_help(all_commands=True)
+        self.assertLessEqual(max(map(len, output.getvalue().splitlines())), 80)
+
     def test_help_and_build_do_not_import_chess(self):
         with patch.dict(sys.modules, {'chess': None}), contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(cli.main(['--help']), 0)
@@ -67,7 +73,8 @@ class cli_tests(unittest.TestCase):
         self.assertEqual(run.call_args.args[0], ['ctest', '--preset', 'cpp26_release', '--no-tests=error'])
 
     def test_subcommand_help_needs_no_chess(self):
-        for command in ('uci', 'suite:run', 'match:run', 'experience:show', 'tablebases:syzygy:download'):
+        for command in ('uci', 'suite:run', 'match:run', 'experience:show', 'tablebases:syzygy:download',
+                        'fics', 'init'):
             with patch.dict(sys.modules, {'chess': None}), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as result:
                     cli.main([command, '--help'])

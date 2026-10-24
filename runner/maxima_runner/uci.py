@@ -27,7 +27,7 @@ class engine_session:
         return {name: str(value).lower() if isinstance(value, bool) else str(value)
                 for name, value in applied.items()}
 
-    async def search(self, board, limit, *, game=None, on_info=None):
+    def variant_settings(self, board):
         if not board.is_valid():
             raise ValueError("invalid chess position")
         if board.chess960:
@@ -46,6 +46,23 @@ class engine_session:
                 settings["Wild"] = "standard"
         else:
             raise ValueError("unsupported board variant")
+        return settings
+
+    async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None):
+        """Choose a move under game clocks; a new game token makes python-chess send ucinewgame.
+
+        options are per-search UCI settings, applied only when the engine has them; None restores the
+        option's default, since python-chess keeps the last value sent."""
+        settings = {name: self.protocol.options[name].default if value is None else value
+                    for name, value in (options or {}).items() if name in self.protocol.options}
+        settings.update(self.variant_settings(board))
+        return await asyncio.wait_for(
+            self.protocol.play(board, limit, game=game, info=chess.engine.INFO_ALL,
+                               options=settings, opponent=opponent),
+            self.timeout if timeout is None else timeout)
+
+    async def search(self, board, limit, *, game=None, on_info=None):
+        settings = self.variant_settings(board)
         started = time.monotonic()
         analysis = None
 

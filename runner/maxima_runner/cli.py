@@ -4,10 +4,13 @@ import os
 import subprocess
 import sys
 
-from .project import engine_path, project_root
+from .project import data_root, engine_path, project_root
 
 
 command_groups = (
+    ("Setup", (
+        ("init", "Set up toolchain, builds, books and tablebases"),
+    )),
     ("Engine", (
         ("uci", "Run a UCI engine (Maxima2 by default)"),
     )),
@@ -22,26 +25,40 @@ command_groups = (
         ("experience:export", "Export an engine experience snapshot"),
         ("experience:show", "Inspect experience"),
         ("experience:analyze", "Analyze experience positions"),
+        ("experience:build", "Build the learning index and player stats"),
+        ("experience:repertoire", "Build the fire, draw and experiment books"),
+        ("experience:draw", "Build draw.bin from master games"),
+        ("experience:fire", "Build fire.bin from master games"),
         ("tablebases:syzygy:download", "Download selected Syzygy tablebases"),
+    )),
+    ("Online play", (
+        ("fics", "Play on FICS as MaxDrone (seek, play, save PGN)"),
+        ("lichess", "Play on Lichess as a bot (accept, play, save PGN)"),
     )),
 )
 
 
-def show_help(all_commands=False):
-    use_color = sys.stdout.isatty() and "NO_COLOR" not in os.environ
+def styled(value, code):
+    """Terminal colour when stdout is a terminal and NO_COLOR is unset."""
+    return f"\033[{code}m{value}\033[0m" if sys.stdout.isatty() and "NO_COLOR" not in os.environ else value
 
-    def styled(value, code):
-        return f"\033[{code}m{value}\033[0m" if use_color else value
 
+def show_logo():
     print(styled(".       .\n|\\ /^\\ /|\n| V   V |\n'-------'", "33"))
     print(styled("M A X I M A", "1"))
     print("Chess engine & ops\n")
+
+
+def show_help(all_commands=False):
+    show_logo()
     print("Usage: maxima <command> [options]")
-    print("       maxima                  Run the native UCI engine\n")
+    print("       maxima                  Run the native UCI engine (from a GUI or pipe)")
+    print("       maxima uci              Run it in this terminal\n")
     for title, commands in command_groups:
         visible = commands if all_commands else tuple(
             item for item in commands if item[0] in (
-                "uci", "build", "test", "suite:run", "match:run", "experience:show", "tablebases:syzygy:download"))
+                "init", "uci", "build", "test", "suite:run", "match:run", "experience:show", "tablebases:syzygy:download",
+                "fics", "lichess"))
         print(styled("-" * 72, "36"))
         print(styled(title, "1"))
         print(styled("-" * 72, "36"))
@@ -60,6 +77,16 @@ def toolchain_prefix(root):
     if micromamba.is_file() and os.access(micromamba, os.X_OK) and environment.is_dir():
         return [str(micromamba), "run", "-p", str(environment)]
     return []
+
+
+def toolchain(root):
+    """Command prefix and environment for the local compiler environment, else tools on PATH."""
+    prefix = toolchain_prefix(root)
+    environment = dict(os.environ)
+    if prefix:
+        environment.setdefault("MAMBA_ROOT_PREFIX", str(root / ".tools/mamba"))
+        environment.setdefault("XDG_CACHE_HOME", str(root / ".tools/cache"))
+    return prefix, environment
 
 
 def run_command(command, root, env=None):
@@ -107,11 +134,7 @@ def development_command(command, arguments):
         raise ValueError("build/test requires a Maxima checkout; set MAXIMA_PROJECT_DIR")
     mode = "debug" if args.debug else "release"
     preset = f"cpp26_{mode}"
-    prefix = toolchain_prefix(root)
-    environment = dict(os.environ)
-    if prefix:
-        environment.setdefault("MAMBA_ROOT_PREFIX", str(root / ".tools/mamba"))
-        environment.setdefault("XDG_CACHE_HOME", str(root / ".tools/cache"))
+    prefix, environment = toolchain(root)
     if command == "build":
         status = run_command(prefix + ["cmake", "--preset", preset], root, environment)
         if status:
@@ -132,6 +155,13 @@ def development_command(command, arguments):
     # Fail explicitly rather than silently skipping dependency-dependent tests.
     import chess
     environment = dict(os.environ, MAXIMA_ENGINE=str(binary), MAXIMA_PROJECT_DIR=str(root))
+    # Runner tests start the engine in temporary directories, where it cannot find eval.nnue itself.
+    if not environment.get("MAXIMA_EVAL_FILE"):
+        networks = [data_root() / "eval.nnue", *sorted((root / "networks").glob("*.nnue"))]
+        network = next((path for path in networks if path.is_file()), None)
+        if network is None:
+            raise ValueError("no network found; run ./maxima init")
+        environment["MAXIMA_EVAL_FILE"] = str(network)
     source = str(root / "runner")
     environment["PYTHONPATH"] = source + os.pathsep + environment.get("PYTHONPATH", "")
     return run_command([sys.executable, "-m", "unittest", "discover", "-s",
@@ -142,8 +172,10 @@ def main(argv=None):
     arguments = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
-        "uci, build, test, suite:run, match:run, experience:import|export|show|analyze, "
-        "tablebases:syzygy:download (no command: run engine)"))
+        "init, uci, build, test, suite:run, match:run, experience:import|export|show|analyze|build|repertoire|draw|fire, "
+        "tablebases:syzygy:download, fics, lichess (no command: run engine)"))
+    if not arguments and sys.stdin.isatty() and sys.stdout.isatty():
+        arguments = ["--help"]
     if arguments and arguments[0] in ("--help", "-h"):
         show_help()
         return 0
@@ -161,16 +193,33 @@ def main(argv=None):
                 raise ValueError("build Maxima first: ./maxima build")
             os.execv(str(binary), [str(binary)])
         command, remaining = arguments[0], arguments[1:]
+        if sys.stdout.isatty():
+            show_logo()
         if command == "uci":
             return uci_command(remaining)
         if command in ("build", "test"):
             return development_command(command, remaining)
-        if command == "suite:run":
+        if command == "init":
+            from . import project_init
+            entrypoint = project_init.main
+        elif command == "suite:run":
             from . import run_suite
             entrypoint = run_suite.main
         elif command == "match:run":
             from . import matches
             entrypoint = matches.main
+        elif command == "experience:build":
+            from . import learning
+            entrypoint = learning.main
+        elif command == "experience:repertoire":
+            from . import learning
+            entrypoint = learning.repertoire_main
+        elif command == "experience:draw":
+            from . import master_books
+            entrypoint = master_books.main
+        elif command == "experience:fire":
+            from . import master_books
+            entrypoint = master_books.fire_main
         elif command in ("experience:import", "experience:export", "experience:show", "experience:analyze"):
             from . import experience
             remaining.insert(0, command.split(":", 1)[1])
@@ -178,6 +227,12 @@ def main(argv=None):
         elif command == "tablebases:syzygy:download":
             from . import download_tablebases
             entrypoint = download_tablebases.main
+        elif command == "fics":
+            from . import fics_cli
+            entrypoint = fics_cli.main
+        elif command == "lichess":
+            from . import lichess_cli
+            entrypoint = lichess_cli.main
         else:
             parser.error(f"unknown command: {command}")
         # Existing subcommands retain their argparse interfaces.

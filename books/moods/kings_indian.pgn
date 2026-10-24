@@ -1,0 +1,42 @@
+; Mood: the King's Indian. Black builds ...g6, ...Bg7, ...d6 and ...e5 or the Pirc; White plays the
+; King's Indian Attack. Each game is one line; [Repertoire] is our side.
+
+[Event "King's Indian, Classical"]
+[Repertoire "black"]
+
+1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6 5. Nf3 O-O 6. Be2 e5 7. O-O Nc6 8. d5 Ne7 *
+
+[Event "King's Indian, Samisch"]
+[Repertoire "black"]
+
+1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6 5. f3 O-O 6. Be3 e5 7. d5 c6 *
+
+[Event "King's Indian vs the Fianchetto"]
+[Repertoire "black"]
+
+1. d4 Nf6 2. Nf3 g6 3. g3 Bg7 4. Bg2 O-O 5. O-O d6 6. c4 Nbd7 *
+
+[Event "King's Indian vs 1.c4"]
+[Repertoire "black"]
+
+1. c4 Nf6 2. Nc3 g6 3. e4 d6 4. d4 Bg7 5. Nf3 O-O *
+
+[Event "Pirc, Austrian"]
+[Repertoire "black"]
+
+1. e4 d6 2. d4 Nf6 3. Nc3 g6 4. f4 Bg7 5. Nf3 O-O 6. Bd3 Na6 *
+
+[Event "King's Indian Attack vs ...d5"]
+[Repertoire "white"]
+
+1. Nf3 d5 2. g3 Nf6 3. Bg2 c6 4. O-O Bg4 5. d3 Nbd7 6. Nbd2 e5 7. e4 *
+
+[Event "King's Indian Attack vs ...Nf6"]
+[Repertoire "white"]
+
+1. Nf3 Nf6 2. g3 g6 3. Bg2 Bg7 4. O-O O-O 5. d3 d6 6. e4 *
+
+[Event "King's Indian Attack vs ...c5"]
+[Repertoire "white"]
+
+1. Nf3 c5 2. g3 Nc6 3. Bg2 g6 4. O-O Bg7 5. d3 *

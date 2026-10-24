@@ -1,0 +1,32 @@
+; Mood: the Parham Attack. 1.e4 e5 2.Qh5!? eyes f7 and e5: nobody expects it from a computer.
+; White only; as Black the other layers decide. Each game is one line; [Repertoire] is our side.
+
+[Event "Parham, 2...Nc6"]
+[Repertoire "white"]
+
+1. e4 e5 2. Qh5 Nc6 3. Bc4 g6 4. Qf3 Nf6 5. Ne2 Bg7 6. Nbc3 d6 7. d3 *
+
+[Event "Parham, 3...Qe7"]
+[Repertoire "white"]
+
+1. e4 e5 2. Qh5 Nc6 3. Bc4 Qe7 4. Nc3 Nf6 5. Qh4 Nd4 6. Nd5 *
+
+[Event "Parham, 2...Nf6?"]
+[Repertoire "white"]
+
+1. e4 e5 2. Qh5 Nf6 3. Qxe5+ Be7 4. Nc3 O-O 5. Nf3 *
+
+[Event "Parham, 2...d6"]
+[Repertoire "white"]
+
+1. e4 e5 2. Qh5 d6 3. Bc4 g6 4. Qf3 Nf6 5. Ne2 *
+
+[Event "Parham, 2...Qf6"]
+[Repertoire "white"]
+
+1. e4 e5 2. Qh5 Qf6 3. Nc3 c6 4. Nf3 d6 5. d4 *
+
+[Event "Parham, 2...g6"]
+[Repertoire "white"]
+
+1. e4 e5 2. Qh5 g6 3. Qxe5+ Qe7 4. Qxh8 Nf6 5. d3 *
