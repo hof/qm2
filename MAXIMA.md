@@ -1810,8 +1810,7 @@ MaximaEngine keeps the player room short: "Hi, I'm Maxima, running on MaxDrone.
 Good luck!" at the start and a thank-you for the game at the end. The spectator
 room gets the same greeting with our record against the opponent (their lead
 when they are ahead, level scores, otherwise the game number; "First game
-against ..." for a new opponent) and, at the end, the updated score with
-"Thanks for watching!". Chat lines carry no links, which Lichess blanks. It
+against ..." for a new opponent) and "Thanks for watching!" at the end. Chat lines carry no links, which Lichess blanks. It
 posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
 authors; no links, which Lichess blanks in chat) or `!eval` (our last move with depth, score and expected
 line; answered in the spectator room only, never to the opponent). Answers to

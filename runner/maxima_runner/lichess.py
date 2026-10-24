@@ -291,7 +291,6 @@ class lichess_game:
         self.last_eval = None
         self.answered = 0.0
         self.over = self.draw_offered = False
-        self.history = None  # (wins, draws, losses) against this opponent before the game, when learning
 
     def start(self):
         self.task = asyncio.ensure_future(self.follow())
@@ -359,9 +358,11 @@ class lichess_game:
             self.opening = bot.learner.for_game(them.get("name"), group, learning.lichess_speeds.get(full["speed"]),
                                                 self.contempt, full.get("rated", False))
             stats = learning.player_stats(bot.learner.records).get((them.get("name") or "").lower(), {})
-            self.history = tuple(stats.get(outcome, 0) for outcome in ("wins", "draws", "losses"))
+            history = tuple(stats.get(outcome, 0) for outcome in ("wins", "draws", "losses"))
+        else:
+            history = None
         self.chat("player", f"{greeting} Good luck!")
-        self.chat("spectator", spectator_greeting(them.get("name") or "my opponent", self.history))
+        self.chat("spectator", spectator_greeting(them.get("name") or "my opponent", history))
         clock = full.get("clock") or {}
         bot.on_line(f"-- game {self.id}: {full['white'].get('name')} vs {full['black'].get('name')}, "
                     f"{full['speed']} {'rated' if full.get('rated') else 'casual'} {bot.api.server}/{self.id}")
@@ -523,10 +524,7 @@ class lichess_game:
         bot.on_line(f"-- game {self.id} over: {reason} {result}")
         if status not in ("aborted", "noStart"):
             self.chat("player", random.choice(player_farewells))
-            if result != "*":
-                ours = 0.5 if result == "1/2-1/2" else float((result == "1-0") == (self.color == chess.WHITE))
-                name = self.player(not self.color).get("name") or "my opponent"
-                self.chat("spectator", spectator_farewell(name, self.history, ours))
+            self.chat("spectator", "Thanks for watching!")
         game = self.pgn(result, reason, status)
         if game is not None and bot.pgn_dir is not None:
             self.save(game)
@@ -608,19 +606,6 @@ def spectator_greeting(name, history):
     else:
         line = f"Game {wins + draws + losses + 1} against {name}."
     return f"{greeting} {line} I learned from our games."
-
-
-def spectator_farewell(name, history, score):
-    """The spectator room's closing line: the score after this game (our points first), the first game's
-    result, or only the thanks without learning."""
-    if history is None:
-        return "Thanks for watching!"
-    wins, draws, losses = history
-    if not wins + draws + losses:
-        outcome = "a draw" if score == 0.5 else "won by Maxima" if score else f"won by {name}"
-        return f"First game against {name}: {outcome}. Thanks for watching!"
-    wins, draws, losses = wins + (score == 1), draws + (score == 0.5), losses + (score == 0)
-    return f"Score against {name} now {wins}–{losses}{with_draws(draws)}. Thanks for watching!"
 
 
 def load_settings(path):
