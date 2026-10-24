@@ -5,10 +5,13 @@ written by Erik van het Hof (hof) and Hermen Reitsma (hajewiet). We work on it a
 once per decade, and every time we catch up with what computer chess learned in
 between. See you in 2036.
 
-**1996: QueenMaxima and BugChess NL.** The original engines, playing on the
-internet chess servers of the time.
+**1996–2000: BugChess.** The original engine, at first focused on losing chess.
+It played the 18th Dutch Open Computer Chess Championship in 1998 on a Pentium II
+at 450 MHz, and on ICC as BugChess and later QueenMaxima(C). More history on
+the Chess Programming Wiki: [BugChess NL](https://www.chessprogramming.org/BugChess_NL)
+and [Maxima2](https://www.chessprogramming.org/Maxima2).
 
-**2013–2015: Maxima 2.** A complete rewrite:
+**2013–2015: Maxima 2.** A complete rewrite, released as open source under the GPL:
 - 64-bit architecture with bitboards and magic bitboard move generation.
 - Late Move Reductions (LMR) in the search; fewer extensions, more pruning.
 - Tapered evaluation, tuned with an integrated self-matching test.
