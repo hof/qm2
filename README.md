@@ -6,10 +6,11 @@ on Lichess, where anyone can challenge it, and on [FICS](https://www.freechess.o
 
 ### History
 
-Maxima began in 1996 as BugChess, an engine that first focused on losing chess.
-It played the 18th Dutch Open Computer Chess Championship in 1998 on a Pentium II
-at 450 MHz, and spent the late nineties on ICC, first as BugChess and later as
-QueenMaxima(C). That original code is on GitHub as [QueenMaxima](http://www.github.com/hof/queenmaxima).
+Maxima began in 1996 as BugChess, written with Borland C++ Builder and played
+through its own graphical interface made in Delphi. It played the 18th Dutch Open
+Computer Chess Championship in 1998 on a Pentium II at 450 MHz, and spent the
+late nineties on ICC, first as BugChess and later as QueenMaxima(C). That
+original code is on GitHub as [QueenMaxima](http://www.github.com/hof/queenmaxima).
 
 Between 2013 and 2015 we rewrote it from scratch as Maxima 2 and released it as
 open source under the GPL. The rewrite brought it to 64 bits, with bitboards and
@@ -37,8 +38,8 @@ be played back at the same opponent later.
 The Chess Programming Wiki has more on [BugChess NL](https://www.chessprogramming.org/BugChess_NL)
 and [Maxima2](https://www.chessprogramming.org/Maxima2).
 
-Maxima plays standard chess and losers chess, where it all started (`src/w17/`);
-more FICS wild variants will follow.
+Maxima plays standard chess and losers chess (`src/w17/`); more FICS wild
+variants will follow.
 
 ### Getting started
 
