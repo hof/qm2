@@ -15,6 +15,7 @@ def parser():
                "  !softquit      stop after this game\n"
                "  !softrestart   restart after this game (exit 75, for a supervisor loop)\n"
                "  !resign, !abort, !draw   act on the game now\n"
+               "  !challenge, !nochallenge   challenge other bots when idle, or only accept\n"
                "between games: type quit here, or kill -USR1 <pid>, to stop\n\n"
                "examples:\n"
                "  maxima lichess\n"
@@ -41,6 +42,9 @@ def parser():
     parser.add_argument("--pgn-post", metavar="URL", help="POST each finished game as JSON to this URL (MAXIMA.md 11)")
     parser.add_argument("--variety", type=float,
                         help="opening variety: above 1 explores more, below 1 repeats winners (default: 1)")
+    parser.add_argument("--challenge-idle", type=int, metavar="MINUTES",
+                        help="challenge an online bot after this many idle minutes (default 30)")
+    parser.add_argument("--no-challenge", action="store_true", help="never challenge, only accept")
     parser.add_argument("--server", default="https://lichess.org", help=argparse.SUPPRESS)
     return parser
 

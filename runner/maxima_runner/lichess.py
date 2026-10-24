@@ -27,12 +27,18 @@ speeds = ("bullet", "blitz", "rapid", "classical")
 speed_rank = {name: rank for rank, name in enumerate(("ultraBullet",) + speeds + ("correspondence",))}
 stream_timeout = 30  # seconds of silence before a stream counts as dead; Lichess sends keepalives every 7 s
 rate_limit_pause = 60  # Lichess asks clients to wait a full minute after HTTP 429
-owner_commands = ("softquit", "softrestart", "resign", "abort", "draw")
+owner_commands = ("softquit", "softrestart", "resign", "abort", "draw", "challenge", "nochallenge")
 public_commands = ("help", "name", "eval")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
 greeting = "Hi, I'm Maxima running on MaxDrone. Type !help for help."
 player_farewells = ("Good game, thanks for playing!", "Thanks for the game!")
+# Our own challenges after idle time: (limit, increment) seconds per speed and each speed's share.
+challenge_clocks = {"bullet": ((60, 0), (60, 1), (120, 1)), "blitz": ((180, 0), (180, 2), (300, 0), (300, 3)),
+                    "rapid": ((600, 0), (600, 5), (900, 10))}
+challenge_shares = {"bullet": 30, "blitz": 50, "rapid": 20}
+challenge_wait = 60  # seconds for an answer before we cancel, and between attempts
+challenge_rest = 24 * 3600  # seconds a bot is left alone for a speed after it declined
 reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate", "timeout": "opponent left",
            "draw": "draw", "outoftime": "time forfeit", "cheat": "cheat detected", "noStart": "no first move",
            "aborted": "aborted", "unknownFinish": "unknown finish", "variantEnd": "variant end"}
@@ -41,6 +47,7 @@ default_settings = {
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
+    "challenge_idle": 30, "challenge_window": 300,
 }
 
 
@@ -128,12 +135,92 @@ class lichess_api:
             stop.set()
 
 
+class matchmaker:
+    """Challenge another online bot after idle minutes: rated, a random clock weighted by speed, opponents
+    within window rating points, never the last opponent or a bot that declined that speed recently."""
+
+    def __init__(self, idle_minutes, window, speeds, on_line, choose=random):
+        self.idle, self.window, self.on_line, self.random = idle_minutes * 60, window, on_line, choose
+        self.speeds = [speed for speed in challenge_clocks if speed in speeds]
+        self.enabled = bool(idle_minutes) and bool(self.speeds)
+        self.idle_since = self.next_try = time.monotonic()
+        self.pending = None  # (challenge id, opponent id, speed, sent)
+        self.resting = {}  # (opponent id, speed) -> monotonic time until which we leave it alone
+        self.last_opponent = None
+
+    def busy(self, opponent=None):
+        """A game started or ended: the idle time starts again."""
+        self.idle_since = time.monotonic()
+        self.pending = None
+        if opponent:
+            self.last_opponent = opponent.lower()
+
+    def due(self, now):
+        return (self.enabled and self.pending is None and now >= self.next_try
+                and now - self.idle_since >= self.idle)
+
+    def pick(self, bots, ratings, own_id, now):
+        """(name, opponent id, speed, limit, increment) for a challenge, or None without a fitting bot."""
+        speed = self.random.choices(self.speeds, [challenge_shares[name] for name in self.speeds])[0]
+        ours = ratings.get(speed)
+        if ours is None:
+            return None
+        fitting = [bot for bot in bots if bot.get("id") not in (own_id, self.last_opponent)
+                   and not bot.get("disabled") and not bot.get("tosViolation")
+                   and self.resting.get((bot.get("id"), speed), 0) <= now
+                   and abs(bot.get("perfs", {}).get(speed, {}).get("rating", ours + self.window + 1) - ours)
+                   <= self.window]
+        if not fitting:
+            return None
+        bot = self.random.choice(fitting)
+        limit, increment = self.random.choice(challenge_clocks[speed])
+        return bot.get("username", bot["id"]), bot["id"], speed, limit, increment
+
+    async def tick(self, bot):
+        """Send one challenge when due; cancel an unanswered one after challenge_wait seconds."""
+        now = time.monotonic()
+        if self.pending is not None:
+            challenge_id, opponent, speed, sent = self.pending
+            if now - sent >= challenge_wait:
+                self.pending, self.next_try = None, now + challenge_wait
+                self.resting[(opponent, speed)] = now + challenge_rest
+                await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
+            return
+        if not self.due(now) or bot.game is not None or bot.stopping or bot.accepted[0]:
+            return
+        self.next_try = now + challenge_wait
+        account = await bot.api.call("GET", "/api/account")
+        bots = [line async for line in bot.api.stream("/api/bot/online?nb=100")]
+        ratings = {speed: perf["rating"] for speed, perf in (account or {}).get("perfs", {}).items()
+                   if isinstance(perf, dict) and "rating" in perf}
+        choice = self.pick(bots, ratings, bot.id, now)
+        if choice is None:
+            return
+        name, opponent, speed, limit, increment = choice
+        answer = await bot.api.call("POST", f"/api/challenge/{name}", {
+            "rated": "true", "clock.limit": limit, "clock.increment": increment, "color": "random",
+            "variant": "standard"})
+        challenge_id = ((answer or {}).get("challenge") or answer or {}).get("id")
+        if challenge_id:
+            self.pending = (challenge_id, opponent, speed, now)
+            self.on_line(f"-- challenging {name} ({speed} {limit // 60}+{increment}, rated)")
+
+    def declined(self, challenge):
+        """Our challenge was declined: leave that bot alone for that speed."""
+        if self.pending is not None and self.pending[0] == challenge.get("id"):
+            _, opponent, speed, _ = self.pending
+            now = time.monotonic()
+            self.pending, self.next_try = None, now + challenge_wait
+            self.resting[(opponent, speed)] = now + challenge_rest
+            self.on_line(f"-- {opponent} declined: {challenge.get('declineReasonKey') or challenge.get('declineReason')}")
+
+
 class lichess_bot:
     """Accept challenges one game at a time and play them; owners steer it from the game chat."""
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100,
-                 margin=5, local_pieces=0):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300):
         self.api, self.open_session, self.on_line = api, open_session, on_line
         self.speeds, self.accept, self.games = tuple(speeds), accept, games
         self.owners = {name.lower() for name in owners}
@@ -146,6 +233,7 @@ class lichess_bot:
         self.accepted = (None, 0.0)  # a challenge accepted whose game has not started yet
         self.played = 0
         self.stopping = self.restart = False
+        self.matchmaker = matchmaker(challenge_idle, challenge_window, self.speeds, on_line)
 
     @property
     def finished(self):
@@ -190,6 +278,11 @@ class lichess_bot:
                 done, _ = await asyncio.wait({events, command}, timeout=1, return_when=asyncio.FIRST_COMPLETED)
                 if events in done:
                     events.result()
+                if not self.stopping and (self.games is None or self.played < self.games):
+                    try:
+                        await self.matchmaker.tick(self)
+                    except OSError as error:
+                        self.on_line(f"-- could not look for an opponent: {error}")
                 if command in done:
                     if command.result().strip().lower() in ("quit", "exit"):
                         if self.stopping:
@@ -223,11 +316,14 @@ class lichess_bot:
             await self.on_challenge(event["challenge"], event.get("compat", {}))
         elif kind == "challengeCanceled" and event["challenge"]["id"] == self.accepted[0]:
             self.accepted = (None, 0.0)
+        elif kind == "challengeDeclined":
+            self.matchmaker.declined(event["challenge"])
         elif kind == "gameStart":
             game_id = event["game"]["gameId"]
             if self.accepted[0] == game_id:
                 self.accepted = (None, 0.0)
             if self.game is None:
+                self.matchmaker.busy((event["game"].get("opponent") or {}).get("id"))
                 self.game = lichess_game(self, game_id)
                 self.game.start()
             elif self.game.id != game_id:
@@ -272,6 +368,7 @@ class lichess_bot:
 
     def ended(self):
         self.game = None
+        self.matchmaker.busy()
         self.played += 1
         if self.games is not None and self.played >= self.games:
             self.on_line(f"-- played {self.played} games; stopping")
@@ -501,7 +598,10 @@ class lichess_game:
             bot.on_line(f"-- command {text!r} from {name} refused: not an owner")
             return
         bot.on_line(f"-- {name}: {command}")
-        if command in ("softquit", "softrestart"):
+        if command in ("challenge", "nochallenge"):
+            bot.matchmaker.enabled = command == "challenge" and bool(bot.matchmaker.speeds)
+            self.chat(room, f"OK, I {'challenge other bots when idle' if bot.matchmaker.enabled else 'only accept challenges'}.")
+        elif command in ("softquit", "softrestart"):
             bot.soft_quit(restart=command == "softrestart")
             self.chat(room, f"OK, I {'restart' if bot.restart else 'stop'} after this game.")
         else:
@@ -611,7 +711,8 @@ def load_settings(path):
         raise ValueError(f"{path}: expected a JSON object")
     types = {"engine": str, "options": dict, "speeds": list, "accept": bool, "games": int, "pgn_dir": str,
              "learning": bool, "variety": (int, float), "contempt_window": int, "layer_profiles": dict,
-             "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool}
+             "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
+             "challenge_idle": int, "challenge_window": int}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -642,6 +743,10 @@ def run(options, parser):
         configured["learning"] = False
     if options.no_online_tablebase:
         configured["online_tablebase"] = False
+    if options.challenge_idle is not None:
+        configured["challenge_idle"] = options.challenge_idle
+    if options.no_challenge or options.no_accept:
+        configured["challenge_idle"] = 0
     token = env_value("LICHESS_BOT_TOKEN")
     if not token:
         parser.error("set LICHESS_BOT_TOKEN (environment or .env) to the bot account's token (MAXIMA.md 10.3)")
@@ -694,6 +799,8 @@ def run(options, parser):
                           games=configured["games"], owners=owners, learner=learner, pgn_dir=pgn_dir, events=events,
                           online_tablebase=configured["online_tablebase"],
                           contempt_window=configured["contempt_window"],
+                          challenge_idle=configured["challenge_idle"] or 0,
+                          challenge_window=configured["challenge_window"],
                           local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))
         feed = None
         if feed_address:

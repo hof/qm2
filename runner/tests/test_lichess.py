@@ -7,6 +7,7 @@ import queue
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
 import chess
@@ -205,3 +206,38 @@ class chat_line_tests(unittest.TestCase):
         self.assertEqual(record((0, 1, 0)), "We played 1 game. W/D/L: 0/1/0")
         self.assertEqual(lichess.record_line((0, 1, 0), "Ferrite", choose=lambda: 0.1),
                          "I learned from previous games against Ferrite.")
+
+
+class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_challenges_a_fitting_bot_after_idle_time_and_rests_after_a_decline(self):
+        bots = [{"id": "near", "username": "Near", "perfs": {"blitz": {"rating": 2900}}},
+                {"id": "far", "username": "Far", "perfs": {"blitz": {"rating": 2000}}},
+                {"id": "last", "username": "Last", "perfs": {"blitz": {"rating": 2950}}}]
+
+        class api:
+            calls = []
+
+            async def call(self, method, path, data=None):
+                self.calls.append((method, path, data))
+                return {"perfs": {"blitz": {"rating": 2924}}} if path == "/api/account" else {"id": "c1"}
+
+            async def stream(self, path):
+                for item in bots:
+                    yield item
+
+        bot = lichess.lichess_bot(api(), None, lambda line: None, speeds=("blitz",), challenge_idle=30)
+        bot.id, maker = "maximaengine", bot.matchmaker
+        maker.busy("Last")
+        await maker.tick(bot)
+        self.assertEqual(api.calls, [])  # not idle long enough
+        maker.idle_since = maker.next_try = time.monotonic() - 31 * 60
+        await maker.tick(bot)
+        method, path, data = api.calls[-1]
+        self.assertEqual((method, path, data["rated"]), ("POST", "/api/challenge/Near", "true"))
+        self.assertIn((data["clock.limit"], data["clock.increment"]), lichess.challenge_clocks["blitz"])
+        maker.declined({"id": "c1", "declineReasonKey": "later"})
+        self.assertIsNone(maker.pending)
+        maker.next_try = 0
+        calls = len(api.calls)
+        await maker.tick(bot)
+        self.assertFalse(any(path.startswith("/api/challenge/") for _, path, _ in api.calls[calls:]))

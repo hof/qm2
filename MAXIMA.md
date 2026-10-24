@@ -1798,7 +1798,18 @@ send commands, comma-separated) from the environment or from `.env` in the
 checkout (git-ignored; the environment wins). It refuses to start unless the
 token belongs to a BOT account.
 
-Bots cannot seek, so MaximaEngine only plays challenges. It accepts standard
+Bots cannot seek, so MaximaEngine plays challenges, its own and others'.
+After `challenge_idle` minutes without a game (default 30, `--challenge-idle`;
+0 or `--no-challenge` turns it off) it challenges one online bot to a rated
+game: a speed by share (bullet 30, blitz 50, rapid 20, among the configured
+speeds), a random clock of that speed (1+0, 1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
+10+0, 10+5, 15+10), and a bot within `challenge_window` rating points (default
+300) at that speed, never the last opponent. Lichess is asked only then, at most
+once a minute; an unanswered challenge is cancelled after a minute, and a bot
+that declined or did not answer is left alone for that speed for a day. Owners
+switch it with `!challenge` and `!nochallenge` in a game's chat.
+
+It accepts standard
 chess with a clock at the configured speeds (`speeds`, `--speed`; default
 bullet, blitz and rapid; Lichess offers bots no UltraBullet), rated or casual,
 one game at a time, and declines the rest with Lichess's own reasons (`later`
