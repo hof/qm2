@@ -32,35 +32,6 @@ class strength_tests(unittest.TestCase):
             if radius < 1:
                 self.assertAlmostEqual(2 * math.exp(-2 * n * radius ** 2), .05 / 200)
 
-    def test_sprt_acceptance_is_not_a_minimum_gain_claim(self):
-        # A 75% score can favor +10 against 0 while a small sample cannot
-        # establish +10. A two-million-pair cap makes the bound conservative.
-        args = SimpleNamespace(sprt=[0, 10], sprt_alpha=.05, sprt_beta=.05,
-                               sprt_min_elo_stop=True, pairs=2_000_000)
-        summary = match_summary(pair_records([(2, 1)] * 150), args)
-        self.assertEqual(summary['sprt']['decision'], 'accept_h1')
-        self.assertEqual(summary['minimum_gain']['decision'], 'continue')
-        self.assertEqual(summary['sprt']['alpha'], .025)
-        self.assertEqual(summary['sprt']['beta'], .025)
-        self.assertEqual(summary['minimum_gain']['alpha'], .025)
-
-    def test_hybrid_allocates_requested_budgets_at_every_prefix(self):
-        games = pair_records([(2, 2)] * 120)
-        from maxima_runner.sprt import sprt_summary
-        for alpha, beta in ((.05, .05), (.08, .03), (.002, .2)):
-            args = SimpleNamespace(sprt=[0, 10], sprt_alpha=alpha, sprt_beta=beta,
-                                   sprt_min_elo_stop=True, pairs=200)
-            for n in range(1, len(games) + 1):
-                summary = match_summary(games[:n], args)
-                self.assertEqual(summary['sprt'], sprt_summary(games[:n], 0, 10, alpha / 2, beta / 2))
-                bound_alpha = summary['minimum_gain']['alpha']
-                self.assertEqual(bound_alpha, min(alpha, beta) / 2)
-                self.assertLessEqual(summary['sprt']['alpha'] + bound_alpha, alpha)
-                self.assertLessEqual(summary['sprt']['beta'] + bound_alpha, beta)
-            if alpha == beta == .05:
-                self.assertAlmostEqual(summary['sprt']['upper_bound'], math.log(39))
-                self.assertEqual(summary['minimum_gain']['confidence'], .975)
-
     def test_pair_integrity_and_parameters(self):
         games = pair_records([(2, 2)] * 100)
         for records in (games[:-1], games + [{**games[0], 'pair': 100}]):
@@ -87,15 +58,15 @@ class strength_match_tests(unittest.IsolatedAsyncioTestCase):
         @asynccontextmanager
         async def open_fixture(*unused):
             yield session()
-        cases = [(2, [0, 10], None, True, 200, 'minimum_gain_established'),
-                 (2, [0, 200], None, True, 200, 'accept_h1'),
-                 (0, [0, 10], None, True, 200, 'below_minimum_gain'),
-                 (2, None, 10, False, 200, 'minimum_gain_established'),
-                 (1, None, 10, False, 1, None)]
+        cases = [(2, [0, 200], None, 200, 'accept_h1'),
+                 (0, [0, 200], None, 200, 'accept_h0'),
+                 (2, None, 10, 200, 'minimum_gain_established'),
+                 (0, None, 10, 200, 'below_minimum_gain'),
+                 (1, None, 10, 1, None)]
         with tempfile.TemporaryDirectory() as directory:
-            for score, sprt, minimum, hybrid, maximum, decision in cases:
+            for score, sprt, minimum, maximum, decision in cases:
                 args = SimpleNamespace(pairs=maximum, sprt=sprt, min_elo=minimum,
-                    sprt_min_elo_stop=hybrid, sprt_alpha=.05, sprt_beta=.05,
+                    sprt_alpha=.05, sprt_beta=.05,
                     seed=1, timeout=1, hash_mb=1, variant='standard', seconds=1,
                     increment=0, max_plies=1, json=Path(directory) / 'result.json')
                 async def play_fixture(*unused, **settings):
@@ -115,9 +86,8 @@ class strength_match_tests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(report['games']) % 2, 0)
                 if decision:
                     prior = match_summary(report['games'][:-2], args)
-                    self.assertEqual(prior['minimum_gain']['decision'], 'continue')
-                    if sprt:
-                        self.assertEqual(prior['sprt']['decision'], 'continue')
+                    rule = prior['sprt'] if sprt else prior['minimum_gain']
+                    self.assertEqual(rule['decision'], 'continue')
                 else:
                     self.assertEqual(len(report['games']), 2 * maximum)
                 self.assertEqual(json.loads(args.json.read_text())['games'], report['games'])
@@ -135,31 +105,33 @@ class strength_cli_tests(unittest.TestCase):
                          '--openings', str(opening), '--pairs', '1', '--pgn', str(pgn),
                          '--json', str(output)]
             for extra in [['--min-elo', 'nan'], ['--min-elo', '-1'], ['--min-elo', '201'],
-                          ['--sprt-min-elo-stop'], ['--sprt', '-10', '-5', '--sprt-min-elo-stop']]:
+                          ['--sprt', '5', '5'], ['--sprt-alpha', '.1']]:
                 with patch.object(sys, 'argv', arguments + extra), patch('sys.stderr', io.StringIO()):
                     self.assertEqual(main(), 1)
                 self.assertFalse(pgn.exists())
                 self.assertFalse(output.exists())
             for extra in [['--min-elo', '10', '--sprt', '0', '10'],
-                          ['--min-elo', '10', '--sequential-check-pairs', '1']]:
+                          ['--min-elo', '10', '--sequential-check-pairs', '1'],
+                          ['--sprt', '0', '10', '--sprt-min-elo-stop']]:
                 with patch.object(sys, 'argv', arguments + extra), patch('sys.stderr', io.StringIO()):
                     with self.assertRaises(SystemExit):
                         main()
             async def cap_fixture(commands, openings, args, report, stream):
                 report['games'] = pair_records([(1, 1)])
                 report['summary'] = match_summary(report['games'], args)
-            for extra in [['--min-elo', '10'], ['--sprt', '0', '10', '--sprt-min-elo-stop',
+            for extra in [['--min-elo', '10'], ['--sprt', '0', '10',
                                                '--sprt-alpha', '.1', '--sprt-beta', '.04']]:
                 with patch.object(sys, 'argv', arguments + extra), \
                         patch('maxima_runner.matches.run_match', cap_fixture), redirect_stdout(io.StringIO()):
                     self.assertEqual(main(), 0)
                 report = json.loads(output.read_text())
                 self.assertEqual(report['stop_reason'], 'maximum_pairs')
-                self.assertEqual(report['summary']['minimum_gain']['decision'], 'inconclusive')
                 if report['sprt']:
-                    self.assertEqual(report['sprt']['alpha'], .05)
-                    self.assertEqual(report['sprt']['beta'], .02)
-                    self.assertEqual(report['minimum_gain']['alpha'], .02)
+                    self.assertEqual(report['sprt']['alpha'], .1)
+                    self.assertEqual(report['sprt']['beta'], .04)
+                    self.assertIsNone(report['minimum_gain'])
                     self.assertEqual(report['summary']['sprt']['decision'], 'inconclusive')
+                else:
+                    self.assertEqual(report['summary']['minimum_gain']['decision'], 'inconclusive')
                 output.unlink()
                 pgn.unlink()

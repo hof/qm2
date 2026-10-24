@@ -1,0 +1,42 @@
+; Mood: the Dragon. Black plays the Sicilian Dragon and its g6 cousins; White plays the English as a
+; Dragon reversed. Each game is one line; [Repertoire] is our side.
+
+[Event "Dragon, Yugoslav"]
+[Repertoire "black"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 g6 6. Be3 Bg7 7. f3 O-O 8. Qd2 Nc6 9. Bc4 Bd7 *
+
+[Event "Dragon, Classical"]
+[Repertoire "black"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 g6 6. Be2 Bg7 7. O-O O-O 8. Be3 Nc6 *
+
+[Event "Sicilian, Closed with g6"]
+[Repertoire "black"]
+
+1. e4 c5 2. Nc3 Nc6 3. g3 g6 4. Bg2 Bg7 5. d3 d6 *
+
+[Event "Sicilian vs the Alapin"]
+[Repertoire "black"]
+
+1. e4 c5 2. c3 Nf6 3. e5 Nd5 4. d4 cxd4 5. Nf3 Nc6 *
+
+[Event "Modern Benoni"]
+[Repertoire "black"]
+
+1. d4 Nf6 2. c4 c5 3. d5 e6 4. Nc3 exd5 5. cxd5 d6 6. e4 g6 *
+
+[Event "English, Dragon reversed"]
+[Repertoire "white"]
+
+1. c4 e5 2. Nc3 Nf6 3. g3 d5 4. cxd5 Nxd5 5. Bg2 Nb6 6. Nf3 Nc6 7. O-O *
+
+[Event "English, Symmetrical"]
+[Repertoire "white"]
+
+1. c4 c5 2. Nc3 Nc6 3. g3 g6 4. Bg2 Bg7 5. Nf3 *
+
+[Event "English vs ...g6"]
+[Repertoire "white"]
+
+1. c4 Nf6 2. Nc3 g6 3. g3 Bg7 4. Bg2 O-O 5. e4 *

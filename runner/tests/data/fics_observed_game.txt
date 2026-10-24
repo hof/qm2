@@ -1,0 +1,17 @@
+<12> r---k--r -p--bppp p-np---- q--Qp--- ----P--- -------- PPPNBPPP ---RK--R W -1 1 0 1 1 5 15 GuestMCZL GuestVHRM 0 5 0 32 32 258712 268143 14 Q/d8-a5 (0:09.302) Qa5 0 1 0
+<12> r---k--r -p--bppp p-np---- Q---p--- ----P--- -------- PPPNBPPP ---RK--R B -1 1 0 1 1 0 15 GuestMCZL GuestVHRM 0 5 0 32 23 250867 268143 14 Q/d5-a5 (0:10.615) Qxa5 0 1 299
+<12> r---k--r -p--bppp p--p---- n---p--- ----P--- -------- PPPNBPPP ---RK--R W -1 1 0 1 1 0 15 GuestMCZL GuestVHRM 0 5 0 23 23 250867 266448 15 N/c6-a5 (0:01.695) Nxa5 0 1 163
+<12> r---k--r -p--bppp p--p---- n---p--- ----P--- --P----- PP-NBPPP ---RK--R B -1 1 0 1 1 0 15 GuestMCZL GuestVHRM 0 5 0 23 23 249555 266448 15 P/c2-c3 (0:01.312) c3 0 1 226
+<12> --kr---r -p--bppp p--p---- n---p--- ----P--- --P----- PP-NBPPP ---RK--R W -1 1 0 0 0 1 15 GuestMCZL GuestVHRM 0 5 0 23 23 249555 254356 16 o-o-o (0:12.092) O-O-O 0 1 175
+<12> --kr---r -p--bppp p--p---- n---p--- -P--P--- --P----- P--NBPPP ---RK--R B 1 1 0 0 0 0 15 GuestMCZL GuestVHRM 0 5 0 23 23 247177 254356 16 P/b2-b4 (0:02.378) b4 0 1 143
+<12> --kr---r -p--bppp p-np---- ----p--- -P--P--- --P----- P--NBPPP ---RK--R W -1 1 0 0 0 1 15 GuestMCZL GuestVHRM 0 5 0 23 23 247177 249514 17 N/a5-c6 (0:04.842) Nc6 0 1 207
+<12> --kr---r -p--bppp p-np---- ----p--- -PN-P--- --P----- P---BPPP ---RK--R B -1 1 0 0 0 2 15 GuestMCZL GuestVHRM 0 5 0 23 23 246467 249514 17 N/d2-c4 (0:00.710) Nc4 0 1 139
+<12> ---r---r -pk-bppp p-np---- ----p--- -PN-P--- --P----- P---BPPP ---RK--R W -1 1 0 0 0 3 15 GuestMCZL GuestVHRM 0 5 0 23 23 246467 242407 18 K/c8-c7 (0:07.107) Kc7 0 1 145
+<12> ---r---r -pk-bppp p-np---- ----p--- -P--P--- --P-N--- P---BPPP ---RK--R B -1 1 0 0 0 4 15 GuestMCZL GuestVHRM 0 5 0 23 23 240686 242407 18 N/c4-e3 (0:05.781) Ne3 0 1 243
+<12> ---r---r -pk--ppp p-np---- ----p-b- -P--P--- --P-N--- P---BPPP ---RK--R W -1 1 0 0 0 5 15 GuestMCZL GuestVHRM 0 5 0 23 23 240686 237063 19 B/e7-g5 (0:05.344) Bg5 0 1 202
+<12> ---r---r -pk--ppp p-np---- ---Np-b- -P--P--- --P----- P---BPPP ---RK--R B -1 1 0 0 0 6 15 GuestMCZL GuestVHRM 0 5 0 23 23 237684 237063 19 N/e3-d5 (0:03.002) Nd5+ 0 1 144
+<12> ---r---r -p-k-ppp p-np---- ---Np-b- -P--P--- --P----- P---BPPP ---RK--R W -1 1 0 0 0 7 15 GuestMCZL GuestVHRM 0 5 0 23 23 237684 229461 20 K/c7-d7 (0:07.602) Kd7 0 1 218
+<12> ---r---r -p-k-ppp p-np---- ---Np-b- -P--P--P --P----- P---BPP- ---RK--R B 7 1 0 0 0 0 15 GuestMCZL GuestVHRM 0 5 0 23 23 236555 229461 20 P/h2-h4 (0:01.129) h4 0 1 127
+<12> ---r---r -p-k-ppp p-np---b ---Np--- -P--P--P --P----- P---BPP- ---RK--R W -1 1 0 0 0 1 15 GuestMCZL GuestVHRM 0 5 0 23 23 236555 225800 21 B/g5-h6 (0:03.661) Bh6 0 1 236
+<12> ---r---r -p-k-ppp p-np---b ---Np--- -P--P-BP --P----- P----PP- ---RK--R B -1 1 0 0 0 2 15 GuestMCZL GuestVHRM 0 5 0 23 23 231851 225800 21 B/e2-g4 (0:04.704) Bg4+ 0 1 198
+{Game 15 (GuestMCZL vs. GuestVHRM) GuestVHRM resigns} 1-0

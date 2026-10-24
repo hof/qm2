@@ -1,12 +1,16 @@
 #!/bin/sh
 # Project entry point; Python is only needed for tooling commands.
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+runner_python="$project_dir/.tools/runner/bin/python"
+if [ ! -x "$runner_python" ]; then
+    runner_python="$project_dir/.tools/suites/bin/python"
+fi
+if [ ! -x "$runner_python" ]; then runner_python=python3; fi
+# In a terminal, show the commands; GUIs and pipes get the engine directly.
+if [ "$#" -eq 0 ] && [ -t 0 ] && [ -t 1 ] && command -v "$runner_python" >/dev/null 2>&1; then
+    set -- --help
+fi
 if [ "$#" -gt 0 ]; then
-    runner_python="$project_dir/.tools/runner/bin/python"
-    if [ ! -x "$runner_python" ]; then
-        runner_python="$project_dir/.tools/suites/bin/python"
-    fi
-    if [ ! -x "$runner_python" ]; then runner_python=python3; fi
     export MAXIMA_PROJECT_DIR="$project_dir"
     export PYTHONPATH="$project_dir/runner${PYTHONPATH:+:$PYTHONPATH}"
     exec "$runner_python" -m maxima_runner "$@"

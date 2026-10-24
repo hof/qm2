@@ -18,6 +18,7 @@ and experiment logs belong under `.context/baselines/`; Git history keeps the re
 8. [Roadmap](#8-roadmap)
 9. [Opening books and persistent experience](#9-opening-books-and-persistent-experience)
 10. [Python runner and project CLI](#10-python-runner-and-project-cli)
+11. [Connectors](#11-connectors)
 
 Keep chapter numbers stable; append new chapters rather than renumbering existing
 ones. List chapters with `rg '^## ' MAXIMA.md` and locate topics with
@@ -884,8 +885,8 @@ For strength testing, use paired-result SPRT with bounds selected before play:
 ```
 
 `--sprt ELO0 ELO1` uses logistic Elo for A relative to B, with nominal false-positive
-and false-negative targets of 0.05 each (`--sprt-alpha` and `--sprt-beta`). The
-supported bounds satisfy `-200 <= ELO0 < ELO1 <= 200`; error targets must be
+and false-negative targets of 0.05 each (`--sprt-alpha` and `--sprt-beta`). Bounds
+must be finite with `ELO0 < ELO1`; error targets must be
 positive with sum less than one. Declare all parameters and the maximum number
 of pairs before results. `--pairs` is a cap, and requires at least that many
 unique opening entries. Each completed color-swapped pair contributes to one
@@ -903,30 +904,11 @@ Generalized SPRT has asymptotic error control and assumes independent sampled
 opening pairs and stable testing conditions. Larger independent confirmation
 at longer clocks remains necessary before promoting a playing change.
 
-To stop on either a SPRT decision or evidence of a minimum gain, predeclare
-`--sprt 0 10 --sprt-min-elo-stop`. The additional rule checks a simultaneous
-confidence interval after every complete pair and compares it with the logistic
-score corresponding to ELO1 (about 51.44% for +10 Elo). It stops with
-`minimum_gain_established` when the lower bound is strictly above that score,
-or `below_minimum_gain` when the upper bound is below it. The first condition
-establishes at least the requested gain at the reported confidence level;
-the second establishes a smaller gain, which can still be a useful improvement.
-Whichever this rule or SPRT decides first ends the run. If both decide on the
-same pair, the minimum-gain decision determines the stop reason. Each test's
-own decision remains visible; `accept_h1` alone still does not certify ELO1.
-
-Adding a rule requires allocating the error budget. Hybrid mode gives SPRT
-half the requested alpha and beta, and the confidence bound an error budget
-of `min(alpha, beta) / 2`. At defaults this is 0.025 for each SPRT target and
-97.5% simultaneous coverage for the bound. By a union bound, positive errors
-at ELO0 and negative errors at ELO1 retain the requested nominal overall targets;
-the SPRT contribution remains asymptotic/model-based. Tightening its thresholds
-can lengthen small-gain tests compared with plain SPRT. This is not a promise
-of universally fastest stopping.
-
-For a positive decision that must establish a minimum gain, use `--min-elo 10`
-instead. It uses simultaneous 95% coverage and never accepts an ordinary SPRT
-decision. All stopping modes are exclusive except the explicit SPRT hybrid flag.
+`--sprt` is plain SPRT and has no other stopping rule; choose bounds that fit
+the expected difference. For a positive decision that must establish a minimum
+gain, use the separate `--min-elo 10` mode. It checks simultaneous 95% bounds
+after every complete pair and stops with `minimum_gain_established` or
+`below_minimum_gain`. All stopping modes are exclusive.
 Minimum gains must be finite within [0, 200] logistic Elo, always A relative
 to B; put the candidate in A. Reports identify the mode, target score, minimum
 Elo, allocated budgets, declared number of checks, bounds and stop reason.
@@ -1136,7 +1118,8 @@ after the game; changing `SyzygyPath` stops the active search.
 ### 7.2 Engine and UCI configuration
 
 After a Release build, `./maxima` starts the engine (falls back to the Debug build
-if Release is absent). Enable local tables with UCI commands:
+if Release is absent) when a GUI or pipe launches it; started bare in a terminal it
+shows the command help instead, and `./maxima uci` runs the engine there. Enable local tables with UCI commands:
 
 ```text
 setoption name SyzygyPath value /absolute/path/to/tablebases/syzygy
@@ -1345,6 +1328,157 @@ Tests cover confidence smoothing, both-side result attribution, duplicate and
 repeated-position handling, stronger annotations, unfinished games, atomic
 publication, legal selection, rejected reloads, OwnBook, and unchanged book bytes.
 
+
+### 9.7 Online opening learning (MaxDrone)
+
+Status: implemented in `learning.py` and MaxDrone (`maxima fics`); thresholds
+are first guesses awaiting measurement. `./maxima experience:build` refreshes
+the index and player stats by hand; MaxDrone does it after every saved game.
+It replaces the SQLite store for online play; the engine
+snapshot path above stays for GUI use.
+
+**Storage.** PGN under `experience/games/fics/` is the only source of truth
+(10.2). Everything else is derived and rebuildable: a game index cache under
+`experience/index/` (per game: players, colour, account, title, computer flag,
+group, game type, ratings, result, opening moves with their eval and result
+values, and our analyses), and readable `experience/players/<handle>.json` stats. No database.
+
+**Learning signal (Maxima's eval).** Maxima's own `[%eval]` is the source of
+truth; an eval can miss something, but not for long. Every opening move (both
+sides, first 40 plies) gets two values from the mover's point of view:
+
+- *eval*: the mean expected score of our next four searched evals from that
+  move on (`1 / (1 + 10^(-cp/400))`: +1.00 ≈ 64%, +3.00 ≈ 85%), so book moves
+  are judged by the position they led to, and an opponent's move that left us
+  at -1.00 counts as a good move for that side;
+- *result*: the game result (1, ½, 0), time forfeits included, since an
+  opening that sets the opponent thinking is a real gain.
+
+A move's value is `0.8 × eval + 0.2 × result`; either one alone when the other
+is missing (book tails, unfinished games). A game teaches only when it lasted
+10 moves and Maxima searched at least four of its moves: early resignations,
+aborts, disconnects, and book-only wins carry a result but no judgement. In the result part a draw is
+worth `0.5 + 0.45 × DrawContempt/100` (JDrone's draw factor), so draws are
+welcome against stronger opponents and near-losses against weaker ones.
+
+**Learned layers.** Global (all games: what suits Maxima), group (engines `(C)`,
+masters with a title, other registered humans), and opponent. A move's rate in
+each layer is shrunk toward the layer below (global toward 50%) with a prior of
+8 games. Evidence weights: same FICS game type (lightning, blitz, standard) 1,
+other types ½; unregistered opponents (`Account "unregistered"`) count in the
+global layer only, at ½.
+
+**Soundness from analysis.** Each position keeps the strongest analysis per
+move (think time, then depth). A move is unsound while a clearly deeper search
+in the same position preferred a different move; a later deeper search choosing
+it restores it.
+
+**Multi-layer book.** Each game gets its own multi-layer book: book.bin (the
+base: its moves are good in principle), the style books `fire` (sharp, e.g.
+gambits), `draw` (playing for the draw), and `experiment`, the week's `mood`, and the
+learned layers, each with a percentage from the game's profile:
+
+| profile | book | fire | draw | experiment | mood | global | group | opponent | search | revenge |
+|---|---|---|---|---|---|---|---|---|---|---|
+| equal | 45 | 0 | 0 | 0 | 10 | 15 | 5 | 25 | 5 | 30 |
+| much weaker | 20 | 25 | 0 | 0 | 10 | 5 | 5 | 35 | 5 | 40 |
+| much stronger | 30 | 0 | 25 | 0 | 0 | 10 | 10 | 25 | 5 | 15 |
+| unrated | 30 | 30 | 0 | 10 | 15 | 15 | 0 | 0 | 10 | 50 |
+
+The layers sum to 100. `search` is the chance per game to leave the book once at a random
+ply, so the engine can bring in new moves; `revenge` is the least probability of the
+opponent's own winning line (below).
+
+Rated games slide from *equal* toward *much weaker* or *much stronger* with
+the draw contempt (none within ±0.20, fully at ±1.00); unrated games (guests)
+play fire, experiment, and the mood. book.bin is the source of truth and is never
+rewritten; other layers only add to it.
+
+**Revenge.** When an opponent (guest or registered) beats Maxima, their moves from the
+first 24 plies become our line for their colour: next time Maxima has that colour against
+them, each of those moves gets at least the profile's `revenge` probability where it is
+legal and no deeper search preferred another move, labelled `revenge` in the log. A win
+with that colour serves the revenge; a newer loss replaces the line.
+
+**Moods.** Like a human who is "in a Dutch mood lately", Maxima plays one theme
+repertoire a week: `books/moods/<name>.pgn` (traxler, dutch, dragon, kings_indian,
+scandinavian, parham: 1.e4 e5 2.Qh5!?) built into `<data>/moods/<name>.bin`. With
+`"mood": "auto"` (default) the moods take turns by ISO week, so every machine agrees
+without state; `"mood": "dutch"` pins one and `"off"` disables the layer. Games carry
+`[Mood "dutch"]`, and registered accounts announce it in a finger note. A mood
+only plays where its book knows the position; elsewhere the other layers decide. Percentages are configurable (`layer_profiles` in the
+MaxDrone config). In each position:
+
+1. Book layers give each book's move shares; moves under a tenth of a book's
+   heaviest weight are dropped within that book.
+2. Each learned layer reweights the books' mix by its sampled rate, with the
+   engine's experience factor `0.1 + 0.9 × (2·rate)^4` (×1 at 50%, ≈×2.6 at 65%,
+   ≈×0.5 at 40%). Rates are Thompson samples, so untried moves keep a chance
+   and `variety` (setting or `--variety`) widens (2) or narrows (0.5) them.
+   Moves only experience knows (an opponent's good move, an engine novelty) get
+   a base share that grows with their games.
+3. A learned layer counts at its percentage × `n / (n + 8)`, n = its games in
+   the position; weight a layer cannot use goes proportionally to the others,
+   except book.bin's: book.bin is the know-all base, so where it has no move
+   its percentage becomes the chance to search instead (unrated: fire 30 against
+   search 30), and a style book never decides alone.
+   So book.bin and the style books keep their floor, and John's layer counts more as
+   games against John accumulate.
+4. Proven losers (at least 4 games, rate under 30%) are multiplied by 0.1 in
+   every layer, book.bin included.
+5. Signature lines, for psychology: when our move beat this registered opponent
+   three times in a row, each time with our eval after it at 45% or better, it
+   gets 70% of the choice there (`signature` in the PGN comment); the rest keeps
+   its proportions, so some variety stays. The streak counts games, not time, so
+   the line returns when the opponent comes back months later; a loss or a poor
+   eval with it resets the streak.
+6. The move is drawn from the result. Out of book a learned move is played only
+   with real evidence (two games at 50% or more, or an analysis that took this
+   game's budget); otherwise an analysis longer than the per-move budget
+   (about remaining/30 + increment) is `recalled`, else the engine searches.
+
+The *search* column is the share of games that leave the book once, at a
+random ply, so the engine can bring in new moves (a per-move share would
+compound over a game).
+
+Style books are Polyglot files beside book.bin (`fire.bin`, `draw.bin`,
+`experiment.bin`, not tracked); any Polyglot book works, and `style_books` in
+the MaxDrone config points a style at another file, e.g. `{"style_books":
+{"fire": "ph-gambitbook.bin"}}` (relative to the project root). A missing file
+leaves that style's percentage to the other layers.
+
+No published book aims at safe, drawish positions, so `./maxima
+experience:draw` builds `draw.bin` from the Lichess masters explorer. Our
+moves are scored `draw% - 2 × loss%` for the side to move (at least 50 master
+games); moves within 0.05 of the safest stay, weighted 100 down to 10.
+Opponent replies played in at least 5% of games are followed, most likely
+positions first, to 16 plies and up to 2000 positions per colour. The explorer
+needs a Lichess token without scopes, from `LICHESS_TOKEN` or `.env` in the
+project root (git-ignored); answers are cached in `experience/explorer/`, and
+rate limits wait a minute as Lichess asks. A first build takes a few hours.
+
+`experiment.bin` is for fun in unrated games: gambits and surprise first moves
+(1.b4, 1.b3, 1.a3, 1.Nc3; 1...b6, 1...a6, 1...Nc6) that unsettle humans, while the
+learned layers measure whether they work. `./maxima init` and `./maxima
+experience:repertoire` build it from `books/experiment.pgn`, one line per game
+tagged `[Repertoire "white"|"black"]` so only our side's moves enter the book.
+`--styles fire draw` builds those from their PGNs too, replacing the
+downloaded books.
+
+Moves are labelled in the terminal and PGN comment with the label, the move's
+probability, and each layer's share of it, e.g. `learned 65%: fire 45%, global
+13%, humans 13%, John 29%`; `book` when the books gave most, `learned` when the
+learned layers did, `recalled d20 60.0s` for earlier analysis. These shares are
+logged for tuning the profiles. Superseding analysis needs depth 16 and two
+plies more; the horizon is 40 plies. `--no-learning` (or `--no-pgn`) leaves the
+book to the engine.
+
+The decision is built per game at `Creating:` (opponent, group, game type, and
+budget are known then) and must be ready before our first move; if it is late,
+the global layer alone is used. Engine-side variants (rating-based draw value,
+UCI_Opponent books) are planned. Later: background analysis of positions from games that were
+not easy wins, as JDrone's `book_calc`.
+
 ## 10. Python runner and project CLI
 
 One repository contains two independently usable components: the C++ engine and
@@ -1377,6 +1511,48 @@ commands discover the checkout from the current directory or
 `MAXIMA_PROJECT_DIR`; outside a checkout, generic suite commands accept
 `--engine /absolute/path/to/engine` and experience/download data defaults to the
 current directory. Benchmark positions ship with the installed package.
+
+`./maxima init` prepares a checkout in one command and skips what is already
+ready, so it is safe to rerun and suits CI. In order:
+
+- runner (`.tools/runner` with python-chess, unless the current Python has it)
+- network: `networks/nn-62ef826d1a6d.nnue` (the build registers its tests
+  against it) and its copy `eval.nnue`, through `tools/download_nnue.py`
+- toolchain: GCC 16+, CMake 3.30+ and Ninja on PATH are used as they are;
+  otherwise `.tools/cpp26` is created with micromamba, which is itself
+  downloaded (pinned 2.9.0, verified by size and SHA-256) on Linux x86-64
+- Release and Debug builds (Ninja's no-op check decides "up to date")
+- `book.bin` from the pinned polyglot-books v1.0 archive, verified by size and
+  SHA-256; a different existing file is kept unless `--force`
+- `fire.bin` (Noomen's Daring carried on by `experience:fire`) and `draw.bin` from
+  Maxima's `books-v1` release; `--draw` rebuilds it from the
+  Lichess masters explorer instead (needs a Lichess token, see 9.7)
+- Syzygy tables up to `--syzygy N` pieces (default 5, about 940 MiB; 0 skips),
+  skipped offline when the manifest lists the complete set
+
+- `experiment.bin` and the mood books, built from `books/*.pgn` when stale
+
+`--check` changes nothing, reports each item, and exits 1 when something is
+missing. `--no-build` and `--no-debug` skip builds; `--no-books` skips all
+books (about 180 MB, not needed by tests).
+
+For CI, a fresh clone needs only git and Python 3.8+ with `venv`:
+
+```bash
+./maxima init --no-debug --no-books --syzygy 0
+./maxima test
+```
+
+Cache `.tools/`, `build/` and `networks/` between runs; init then finds every
+step ready and only Ninja's incremental build does work.
+
+`MAXIMA_DATA_DIR` moves the data out of the checkout, for example onto a
+persistent volume: books (`book.bin`, `fire.bin`, `draw.bin`), `eval.nnue`,
+`tablebases/` and `experience/` (PGN games, learning index, player stats).
+`init`, the download and experience commands and `maxima fics` all use it; the
+engine runs in that directory, so its relative `book.bin` and `eval.nnue`
+resolve there. MaxDrone sets `SyzygyPath` to `tablebases/syzygy` there unless
+configured otherwise. The `.env` token file stays in the checkout.
 
 ```bash
 ./maxima build                 # configure and compile Release
@@ -1420,10 +1596,10 @@ the runner still fails and reaps the process. Async lifecycle checks require
 local socket access for asyncio's event-loop wake-up mechanism.
 
 JDrone's Java implementation remains operational in its own existing checkout.
-The next migration increment is FICS transport, game/clock orchestration,
-automation, and PGN capture built on this async runner. ICC, legacy database
-migration, remote control, and notifications are deferred. Learning writes stay
-in Python; snapshot reading and move selection stay in Maxima.
+FICS play is being migrated onto this async runner (see 10.2); game/clock
+orchestration, automation, and PGN capture follow the transport. ICC, legacy
+database migration, remote control, and notifications are deferred. Learning
+writes stay in Python; snapshot reading and move selection stay in Maxima.
 
 ### 10.1 Documentation and CLI interface
 
@@ -1440,8 +1616,8 @@ the tagline "Chess engine & ops" and
 commands, `maxima help` for the full implemented command listing, and
 `maxima help COMMAND` or `maxima COMMAND --help` for detailed usage, options,
 and defaults. Build/test help includes examples. Current command groups are
-engine operation, development, and chess data; online-play commands will be added
-when implemented. Existing colon-style commands and the
+engine operation, development, chess data, and online play (`fics`). Existing
+colon-style commands and the
 no-argument native-engine launch are preserved.
 
 Help must work without an engine build, credentials, network access, or optional
@@ -1450,3 +1626,388 @@ guidance. Output must remain readable when redirected; any styling is limited to
 terminals and respects `NO_COLOR`: the crown is gold, separators cyan, and titles
 bold. Native UCI streams remain free of banners and styling. Detailed examples
 for every data command remain a planned documentation improvement.
+
+### 10.2 FICS client (MaxDrone)
+
+`maxima fics` connects to freechess.org:5000, logs in, keeps the session
+alive, seeks, plays its games with the Release Maxima build, and saves them as
+PGN. `--live-feed` and `--pgn-post` (or `live_feed` and `pgn_post` in the config)
+attach the connectors of chapter 11.
+
+```bash
+./maxima fics                                   # guest login, plays with Maxima
+FICS_PASSWORD=... ./maxima fics --handle Maxima # registered account
+./maxima fics --debug fics.log                  # wire transcript, password masked
+./maxima fics --engine /path/to/engine --option Hash=256
+./maxima fics --no-engine                       # connect only
+./maxima fics --config fics.json --games 20     # settings file; flags override it
+```
+
+Play policy, as JDrone's `ics.seeks`/`autoaccept`/`autorematch`, from a JSON file
+(`--config`) or flags:
+
+```json
+{"seeks": ["3 0", "3 1", "5 2"], "seeks_at_once": 2, "accept": true, "rematches": 0,
+ "games": 20, "handle": "guest", "engine": null, "options": {"Hash": "256"},
+ "owner": ["hof", "hajewiet"], "notes": ["Unrated test games welcome"]}
+```
+
+After login and after each game the client posts `seeks_at_once` random seeks
+from the pool (`--seek`, `--seeks-at-once`, `--no-seek`); guests add ` u`.
+After `reseek_minutes` (default 10, 0 off) without a game it draws again, so
+the other time controls get their turn and new players see the seeks announced.
+Challenges are accepted only for standard lightning, blitz, or standard chess
+with a clock and only when idle (`--no-accept` declines all); a game created
+with a variant is aborted. Rematches are off by default; `rematches` (or
+`--rematches`) offers `rematch` up to that many games in a row per opponent. At `Creating:` it
+fingers the opponent; the first search waits up to two seconds for the reply so
+`UCI_Opponent` carries the rating, title, and computer flag. `--games N` quits
+after N games; `quit` during a game stops seeking and leaves after the game,
+and a second `quit` leaves at once. Unknown settings or wrong types are errors.
+An opponent who lets a fifth of the starting clock pass (at least 15 s, at most
+`first_move_wait`, default 60 s) before their first move is aborted: FICS aborts
+without agreement until both sides have moved. Games aborted that early are
+not saved.
+The log shows each searched move with depth, score, time, and the expected line
+(`pv`). `whisper` (or `--whisper`) explains every move to observers (never to the
+opponent, unlike kibitz) in plain words:
+
+    1...e5 book: fire (base 44%, fire 20%, surprise 10%, experience 26%)
+    2. f4 book: revenge vs John (base 30%, vs John 70%)
+    d19 +2.07 36.6s 7...Bd6 8. c4 O-O 9. cxd5 Bxd5 10. Bxd5 (out of book)
+    learned: 24 moves | vs John +2 =0 -1
+
+Searched moves show depth, score (`#5` for mate), `TB` when tablebases were hit, the
+time, the speed (`850Knps`, `1.2Mnps`), and the first six plies of the line in numbered SAN, starting with the move played. Book moves name the layer
+with the largest share (ties to the more specific layer), then the mix; `base` is book.bin.
+
+FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and stops
+whispering. With `MAXDRONE_KEY` set in the environment (never in a file it writes or a
+log: the key is masked in the terminal and wire logs), the owner can steer it by tell:
+`tell <name> <key> follow` sends the same explanations as tells (`unfollow` stops),
+`softquit` stops after the game, `softrestart` stops after the game with exit status 75
+so a supervisor loop (`while ...; [ $? -eq 75 ]`) starts it again with the latest code,
+`help` lists the commands, and `!abort`, `!resign`,
+`!draw` act on the current game. After each saved game, followers also get what
+Maxima learned: the opening moves it kept, the score against that opponent, and on a
+loss the revenge line it filed. FICS queues guest tells sent too fast, so MaxDrone paces
+them itself (one tell every two seconds, joining what waits with ` | `) and drops a
+follower who is no longer logged in. Only this fixed list is accepted; a wrong key gets no
+answer.
+
+FICS computer accounts must keep the owner, machine, and engine in their finger
+notes (`help computers`), and may only play the engine, time controls, and
+variants the computer committee approved. On a registered login the client
+writes note 1 (`<engine name and version> on MaxDrone`), note 2 (`owner`, a handle
+or a list), note 3 (CPU model with the engine's `Threads` and `Hash`, and the
+OS), then up to seven `notes`. Guest accounts may test engines freely and get no
+notes.
+
+The multi-layer book (9.7) chooses opening moves; `layer_profiles` in the
+config overrides its percentages per profile, e.g. `{"layer_profiles": {"weaker":
+{"fire": 35, "book": 10}}}` (layers `book`, `fire`, `draw`, `experiment`,
+`global`, `group`, `opponent`, `search`; profiles `equal`, `weaker`, `stronger`,
+`unrated`).
+
+Draw contempt follows the rating gap: at `Creating:` MaxDrone sets the engine's
+`DrawContempt` (cp, our view) to the default -10 plus a quarter of the opponent's
+rating minus ours, clamped to `contempt_window` (default ±100 cp = ±1 pawn; 0
+disables). Equal ratings keep -10; 200 points stronger gives +40 (a draw is
+welcome); 400 or more weaker gives -100 (avoid draws). Without both ratings
+(guests, unrated) the engine default is sent, as python-chess would otherwise
+keep the previous game's value.
+
+Every game with at least one move is appended to
+`experience/games/fics/<YYYY-MM>.pgn` (UTC month; `pgn_dir` or `--pgn-dir`,
+`--no-pgn` to disable) and fsynced. Tags: `Event` (`FICS unrated blitz game`),
+`Site`, `Date` (local) and `UTCDate`/`UTCTime` at game start, `White`/`Black`, `WhiteElo`/
+`BlackElo` when rated, `TimeControl` (`180+0`), `Termination` (`normal`,
+`time forfeit`, `abandoned`, `adjudication`), our side's `Type "program"` and
+`Engine` (full engine id), and the opponent's `Title` and `Type` (`program` for a
+(C) account, `human` otherwise) when finger answered, and `WhiteAccount`/
+`BlackAccount "unregistered"` for guests and other `(U)` logins. Every move has `[%clk]`
+(mover's clock after the move) and `[%emt]` (time FICS charged); our searched
+moves add `[%eval score,depth]`, `[%pv ...]` (SAN, up to 12 plies), and
+`[%nodes]`; moves from the multi-layer book carry its label and layer shares
+(9.7); the server's reason ends the game.
+`experience:import` reads these annotations. A takeback rewinds the move list;
+a board that does not follow (missed update) restarts it with a `FEN` tag. A
+game cut off by a lost connection has no result line and is not saved. Unregistered
+names (guests, and `(U)` logins such as `zahrani`) are not stable identities, so
+per-opponent learning should skip `Account "unregistered"` opponents; their games
+are kept as a record.
+
+The engine runs in the project root, so its relative `eval.nnue` and `book.bin`
+defaults resolve. Login sets `iset ms 1`, so style12 clocks are milliseconds.
+Each style12 board of our own game (relation 1 or -1) is checked and applied to a
+python-chess board holding the whole game, so the engine receives
+`position startpos moves …` and can see repetitions. A board that does not
+follow from the previous one (takeback, missed update, resumed game) restarts
+the history from the server position; invalid boards are ignored. On our move
+the engine searches with both clocks and the increment; a new game number gives
+a new python-chess game token, which sends `ucinewgame`. Moves go out in
+coordinate form, promotions as `e7e8=Q`. Searches run as tasks, so server
+lines, pings, and commands keep flowing; a new board or a game end cancels a
+stale search. A search that misses our clock plus five seconds, or an engine
+that fails, is restarted and the board requested again with `refresh`; an
+`Illegal move` reply also triggers one `refresh`. The terminal shows each move
+with its number and the mover's clock: the opponent's moves, and ours with
+depth, score, time and PV, or the book layers behind a book move. Style 12
+board lines are left out of the terminal; `--debug` transcripts keep them.
+
+Lines typed at the terminal go to the server verbatim, except the console's own
+`help`, `quit`, `softquit` and `softrestart`; `help <topic>` still reaches the
+server. When the bot plays, `quit` stops after the game and a second `quit`
+leaves at once; without a player it logs off.
+Handles are validated before connecting (3–17 letters, or `guest`); the
+password is read only from `FICS_PASSWORD`. Login applies style 12, seek/shout
+silence, autoflag, noescape, width 240, and nowrap.
+
+Outgoing lines use timeseal v1 so the server charges thinking time, not network
+lag. FICS decodes timeseal input only after the client's `TIMESTAMP|…|` hello;
+without it, the encoded login name is rejected. Each line carries milliseconds
+since connecting; the server's `[G]` pings (sent during games) are answered with
+the encoded `\x02` `9` reply. `--no-timeseal` sends plain lines.
+
+Every wait has a deadline. After five minutes without output from the server,
+or without input from us (`--probe-interval`), the client sends `date`; no reply
+within a minute counts as a dead connection. Probing on our silence also keeps
+FICS from logging us off after an hour without input. Lost connections reconnect after
+5, 10, 30, then every 60 seconds. Wrong passwords, unregistered names, and
+rejected handles stop with an error instead of retrying. JDrone could hang on
+waits without deadlines (engine readiness, a half-open socket); the client
+avoids both.
+
+### 10.3 Lichess client (MaximaEngine)
+
+`maxima lichess` plays on Lichess through the Bot API as MaximaEngine: it
+accepts challenges, plays them with the Release Maxima build, saves them as
+PGN and learns from them. The move choice is the same as on FICS
+(`runner/maxima_runner/move_choice.py`): the multi-layer book and experience
+(9.7), then the engine while the online tablebase is asked (11.4), with draw
+contempt from the rating gap.
+
+```bash
+./maxima lichess                                # bullet, blitz and rapid challenges
+./maxima lichess --speed blitz --games 20 --live-feed 8765
+./maxima lichess --config lichess.json          # settings file; flags override it
+```
+
+Setup, once: create an account that has never played a game, create a token for
+it with only the scope "Play games with the bot API" (`bot:play`), and upgrade
+it (irreversible):
+
+```bash
+curl -d '' -H "Authorization: Bearer $LICHESS_BOT_TOKEN" https://lichess.org/api/bot/account/upgrade
+```
+
+The client reads `LICHESS_BOT_TOKEN` and `LICHESS_OWNERS` (Lichess users who may
+send commands, comma-separated) from the environment or from `.env` in the
+checkout (git-ignored; the environment wins). It refuses to start unless the
+token belongs to a BOT account.
+
+Bots cannot seek, so MaximaEngine plays challenges, its own and others'.
+After `challenge_idle` minutes without a game (default 30, `--challenge-idle`;
+0 or `--no-challenge` turns it off) it challenges one online bot to a rated
+game: a speed by share (bullet 30, blitz 50, rapid 20, among the configured
+speeds), a random clock of that speed (1+0, 1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
+10+0, 10+5, 15+10), and a bot within `challenge_window` rating points (default
+300) at that speed, never the last opponent. Lichess is asked only then, at most
+once a minute; an unanswered challenge is cancelled after a minute, and a bot
+that declined or did not answer is left alone for that speed for a day. Owners
+switch it with `!challenge` and `!nochallenge` in a game's chat. Five seconds
+after a game against a bot it offers that bot one rematch with the same clock and rating mode,
+never a second in a row, and not while challenges are switched off.
+
+It accepts standard
+chess with a clock at the configured speeds (`speeds`, `--speed`; default
+bullet, blitz and rapid; Lichess offers bots no UltraBullet), rated or casual,
+one game at a time, and declines the rest with Lichess's own reasons (`later`
+while busy or stopping, `tooFast`, `tooSlow`, `timeControl`, `standard` for
+variants). Takeback requests are declined; draw offers are accepted only in dead
+draws or when a draw is worth at least our score (below). When the opponent leaves and Lichess allows it, the win is claimed.
+
+The player room opens with "Hi, I'm Maxima running on MaxDrone. Good luck!",
+the spectator room with "Hi, I'm Maxima running on MaxDrone. Type !help for
+help."; Lichess silently drops a line equal to one of the sender's previous two,
+so no line repeats across rooms. Spectators also get our record against a known opponent ("We played 6
+games. W/D/L: 1/2/3", from Maxima's side) or, half the time, "I learned from
+previous games against ..."; nothing for a first game or without learning. At the end the player room gets a thank-you for the game and the
+spectator room "Thanks for watching!". Chat lines carry no links, which Lichess
+blanks. MaximaEngine posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
+authors; no links, which Lichess blanks in chat), `!eval` (our last move with
+depth, score and expected line), `!stats` (our record against the opponent and
+on Lichess) or `!book` (the layers that chose our last book move, e.g. "5...Nc6
+from book: base 95%, fire 5%", or where we left the book); the last three are
+answered in the spectator room only, never to the opponent. Answers to
+non-owners come at most every 5 seconds per game, so chat spam cannot push the
+bot into Lichess's rate limit, which would also hold up its moves.
+
+Owners steer the bot from the game chat; the spectator room keeps it out of the
+opponent's sight. Lichess authenticates chat usernames, so no key is needed:
+`!softquit` (stop after this game), `!softrestart` (exit status 75 after this
+game, for a supervisor loop as on FICS), `!resign`, `!abort`, `!draw` (offer or
+accept). These commands from anyone else are logged and ignored. The same
+commands work on the console without the `!`, and each one answers there; `help`
+lists them. `quit` (or `kill -USR1 <pid>`) stops after the game; a second `quit`
+leaves at once. Every `maxima` command shows the Maxima header in a terminal.
+The console logs each move with its number and the mover's clock: the
+opponent's moves, and the bot's with eval, depth, time and PV, or the book
+layers behind a book move.
+
+Lichess keeps its own experience: `experience/lichess/games/*.pgn` with
+`index/` and `players/` beside it, since its players and rating pool are not
+FICS's. The learner maps Lichess speeds to its game types (bullet to lightning,
+rapid and classical to standard); the PGN keeps the real speed in `Event`
+(`Lichess rated blitz game`) and links the game in `Site`. Settings files take
+`engine`, `options`, `speeds`, `accept`, `games`, `pgn_dir`, `learning`,
+`variety`, `contempt_window`, `layer_profiles`, `style_books`, `mood`,
+`live_feed`, `pgn_post` and `online_tablebase`, as on FICS.
+
+Streams are read line by line; Lichess sends a keepalive every 7 seconds, so 30
+seconds of silence counts as a dead connection and the stream reconnects (the
+event stream with backoff up to a minute; a game stream gives up after eight
+failures and records the game as unfinished). After HTTP 429 every request
+waits a full minute, as Lichess asks. Only one event stream per token can be
+open, so run one client per bot account. A game's end arrives on both streams;
+it is saved, reported and posted once.
+
+Draw offers, on both servers, are judged on our next move with the fresh choice
+for the current position, so an offer made right after a blunder is not
+accepted on an old evaluation. The draw is accepted when no side has mating
+material, when the online tablebase says draw for us (including cursed win and
+blessed loss, which the fifty-move rule makes draws), when the search reached
+the tablebases and scores exactly 0.00 with seven pieces or fewer, or when our
+score is no better than the engine's own draw value, the game's `DrawContempt`
+(10.2; -10 cp without ratings). So against a stronger opponent, where a draw is
+worth a little more, a repetition the engine sees is accepted; while we are
+better than a draw, never (`move_choice.accept_draw`). Otherwise the move
+declines it. The move is sent
+anyway, so an offer withdrawn meanwhile does not leave our clock running. FICS
+offers are read from `<name> offers you a draw.`, Lichess offers from the game
+state.
+
+## 11. Connectors
+
+A game source plays games somewhere: FICS (10.2) and Lichess (10.3). It reports
+what happens as neutral game events; connectors consume them without knowing the
+source. Both connectors below are off by default and use only the Python
+standard library (`runner/maxima_runner/connectors.py`).
+
+### 11.1 Game events
+
+Every event is one JSON object with `"v": 1` (bumped only for incompatible
+changes; new fields may appear at any time, so ignore unknown ones), `"type"`
+and `"source"` (`"fics"` or `"lichess"`). `game` is the FICS game number or the
+Lichess game id (a string such as `"pG3WSP96"`); colors are
+`"white"`/`"black"`; clocks are milliseconds; FENs are full six-field FENs.
+
+| type | when | fields |
+|---|---|---|
+| `game_start` | our game begins | `game`, `white`, `black`, `white_elo`, `black_elo` (null when unknown), `initial_seconds`, `increment_seconds`, `rated`, `variant` (FICS type or Lichess speed, e.g. `blitz`), `our_color`, `fen`, `clock_ms` |
+| `move` | after each move, ours or theirs | `game`, `ply` (after the move), `san`, `uci`, `fen` (after), `by` (`"us"`/`"them"`), `clock_ms`, `search` |
+| `position` | takeback or resync | `game`, `ply`, `fen`, `reason` (`"takeback"`/`"reset"`), `clock_ms`; drop moves after `ply` |
+| `game_end` | game over | `game`, `result` (`1-0`, `0-1`, `1/2-1/2`, `*`), `reason`, `headers`, `pgn` (null when aborted before both sides moved) |
+
+`search` is null for the opponent's moves. For our book moves it is
+`{"book": "<reason>"}`, for online tablebase moves `{"tablebase": {...}}` (11.4); for searched moves it is `{"depth", "seldepth", "nodes",
+"nps", "time_ms", "score", "pv_san"}` with `score` either `{"cp": n}` or
+`{"mate": n}` from White's point of view, and `pv_san` the expected line in SAN
+starting with the move played.
+
+```json
+{"v": 1, "type": "move", "source": "fics", "game": 17, "ply": 1, "san": "e4", "uci": "e2e4",
+ "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", "by": "us",
+ "clock_ms": {"white": 179500, "black": 180000},
+ "search": {"depth": 18, "seldepth": 24, "nodes": 2100000, "nps": 850000, "time_ms": 2470,
+            "score": {"cp": 25}, "pv_san": ["e4", "e5", "Nf3"]}}
+```
+
+### 11.2 WebSocket live feed
+
+```bash
+./maxima fics --live-feed 8765              # ws://127.0.0.1:8765/
+./maxima fics --live-feed 0.0.0.0:8765      # reachable from other machines
+```
+
+Any path is accepted. Each event is one WebSocket text message. On connect a
+viewer first gets `{"v": 1, "type": "hello", "source", "server", "handle",
+"engine", "game"}`, where `game` is null between games or
+`{"start": <game_start>, "moves": [<move>, ...]}` for the game in progress, so a
+late viewer can draw the board at once. Viewers do not send anything; pings are
+answered. A viewer that falls 256 messages behind is disconnected. There is no
+authentication: keep the default `127.0.0.1` and publish it through a reverse
+proxy when it must be public.
+
+A minimal browser viewer:
+
+```html
+<pre id="log"></pre>
+<script>
+const feed = new WebSocket("ws://127.0.0.1:8765/");
+feed.onmessage = (message) => {
+  const event = JSON.parse(message.data);
+  const text = event.type === "move"
+    ? `${event.ply}. ${event.san} (${event.by}) ${event.search?.score ? JSON.stringify(event.search.score) : ""}`
+    : `${event.type} ${event.game ?? ""}`;
+  document.getElementById("log").textContent += text + "\n";
+};
+</script>
+```
+
+The FEN in every `move` and `game_start` is enough for a board library such as
+chessboard.js; `clock_ms` drives the clocks.
+
+### 11.3 PGN post
+
+```bash
+MAXDRONE_POST_TOKEN=... ./maxima fics --pgn-post https://example.org/games
+```
+
+After each finished game with moves, MaxDrone sends `POST <url>` with
+`Content-Type: application/json` and, when `MAXDRONE_POST_TOKEN` is set,
+`Authorization: Bearer <token>` (the token comes only from the environment and
+is never logged). The body is the `game_end` event without its type:
+
+```json
+{"v": 1, "source": "fics", "game": 17, "result": "1-0", "reason": "guestNinja resigns",
+ "headers": {"Event": "FICS unrated blitz game", "White": "MaxDrone", "...": "..."},
+ "pgn": "[Event \"FICS unrated blitz game\"]\n...\n1. e4 {[%clk 0:02:59.5]} ... 1-0"}
+```
+
+Any 2xx status counts as delivered. The request times out after 10 seconds;
+failures are logged and not retried, since the game is already saved locally
+(10.2). A receiving server can be this small:
+
+```python
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
+
+class games(BaseHTTPRequestHandler):
+    def do_POST(self):
+        game = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        print(game["game"], game["result"], len(game["pgn"]))  # store it here
+        self.send_response(204)
+        self.end_headers()
+
+HTTPServer(("0.0.0.0", 9000), games).serve_forever()
+```
+
+### 11.4 Online tablebase
+
+With seven or fewer pieces and no castling rights, and more pieces than the
+engine's local Syzygy set covers (the largest complete set in `SyzygyPath`, e.g.
+5 after `maxima init`; there the engine answers from its own tables), MaxDrone asks
+`https://tablebase.lichess.ovh/standard?fen=<FEN>` while the engine already
+searches, and plays the first move of the answer (the 7-man Syzygy tables,
+DTZ-optimal so the fifty-move rule is respected) when it arrives before the
+engine's move; the search is then stopped. A lookup takes about 0.75 s and gives
+up after 1 s, so it never costs clock time: in a hurry the engine simply moves
+first. Unknown positions leave the move to the engine; an error (offline, rate
+limited, timeout) also pauses lookups for a minute. The move is logged, whispered and sent to the live feed as
+`"search": {"tablebase": {"category", "dtz", "dtm"}}` (category `win`, `draw`,
+`loss`, `cursed-win`, `blessed-loss`, ...), and the PGN comment reads e.g.
+`tablebase: win DTM 27`. It is on by default; `--no-online-tablebase` (or
+`"online_tablebase": false`) leaves endgames to the engine and its local tables
+(7). The module is `runner/maxima_runner/online_tablebase.py`; it needs no
+account or token.

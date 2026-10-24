@@ -1,0 +1,47 @@
+; Mood: the Dutch. Black answers 1.d4, 1.c4 and 1.Nf3 with ...f5; White plays the Bird, the Dutch
+; reversed. Each game is one line; [Repertoire] is our side.
+
+[Event "Leningrad Dutch"]
+[Repertoire "black"]
+
+1. d4 f5 2. c4 Nf6 3. g3 g6 4. Bg2 Bg7 5. Nf3 O-O 6. O-O d6 7. Nc3 Qe8 *
+
+[Event "Dutch vs 2.Nc3"]
+[Repertoire "black"]
+
+1. d4 f5 2. Nc3 Nf6 3. Bg5 d5 4. Bxf6 exf6 5. e3 c6 *
+
+[Event "Dutch vs 2.Bg5"]
+[Repertoire "black"]
+
+1. d4 f5 2. Bg5 h6 3. Bh4 g5 4. Bg3 Nf6 5. e3 d6 *
+
+[Event "Dutch vs the Staunton"]
+[Repertoire "black"]
+
+1. d4 f5 2. e4 fxe4 3. Nc3 Nf6 4. Bg5 Nc6 5. d5 Ne5 *
+
+[Event "Dutch vs 1.c4"]
+[Repertoire "black"]
+
+1. c4 f5 2. Nc3 Nf6 3. g3 g6 4. Bg2 Bg7 5. Nf3 O-O *
+
+[Event "Dutch vs 1.Nf3"]
+[Repertoire "black"]
+
+1. Nf3 f5 2. g3 Nf6 3. Bg2 g6 4. O-O Bg7 5. d3 O-O *
+
+[Event "Bird, 1...d5"]
+[Repertoire "white"]
+
+1. f4 d5 2. Nf3 Nf6 3. e3 g6 4. Be2 Bg7 5. O-O O-O 6. d3 *
+
+[Event "Bird vs the From"]
+[Repertoire "white"]
+
+1. f4 e5 2. fxe5 d6 3. exd6 Bxd6 4. Nf3 g5 5. d4 g4 6. Ne5 *
+
+[Event "Bird, 1...Nf6"]
+[Repertoire "white"]
+
+1. f4 Nf6 2. Nf3 g6 3. e3 Bg7 4. Be2 O-O 5. O-O d6 6. d3 *
