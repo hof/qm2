@@ -29,13 +29,14 @@ opening book learns from every game and every opponent. MaxDrone, the runner tha
 plays Maxima on FICS and Lichess, works with any UCI engine; it can stream games
 live over WebSocket and post finished games to a database.
 
-The opening book mixes several layers on every move: a broad base book, style
-books (sharp gambits, solid drawing lines, experiments, and a temporary mood), and
-what Maxima learned from its own games, overall, against a group of players
-(humans, masters or engines) and against this particular opponent. The mix follows
-the rating gap: more gambits against weaker players, more solid lines against
-stronger ones. A lost game is remembered, and its winning line may be played back
-at the same opponent later.
+Playing strength is not our only goal: Maxima should also be an interesting,
+varied opponent to play against. The opening book serves that goal. It mixes
+several layers on every move: a broad base book, style books (sharp gambits, solid
+drawing lines, experiments, and a temporary mood), and what Maxima learned from
+its own games, overall, against a group of players (humans, masters or engines)
+and against this particular opponent. The mix follows the rating gap: more gambits
+against weaker players, more solid lines against stronger ones. A lost game is
+remembered, and its winning line may be played back at the same opponent later.
 
 The Chess Programming Wiki has more on [BugChess NL](https://www.chessprogramming.org/BugChess_NL)
 and [Maxima2](https://www.chessprogramming.org/Maxima2).
