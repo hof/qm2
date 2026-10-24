@@ -41,7 +41,7 @@ remembered, and its winning line may be played back at the same opponent later.
 The Chess Programming Wiki has more on [BugChess NL](https://www.chessprogramming.org/BugChess_NL)
 and [Maxima2](https://www.chessprogramming.org/Maxima2).
 
-Maxima plays standard chess and losers chess (`src/w17/`); more wild variants,
+Maxima plays standard chess and losers chess (`src/w17/`); more chess variants,
 such as Chess960, will follow.
 
 ### Getting started
