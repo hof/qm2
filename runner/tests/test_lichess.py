@@ -194,3 +194,17 @@ class game_tests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class chat_line_tests(unittest.TestCase):
+    def test_spectator_lines_follow_the_record(self):
+        greeting = lichess.spectator_greeting
+        self.assertEqual(greeting("Ferrite", None), lichess.greeting)
+        self.assertTrue(greeting("Ferrite", (0, 0, 0)).endswith("First game against Ferrite."))
+        self.assertIn("Ferrite leads 3–1 so far, with 2 draws.", greeting("Ferrite", (1, 2, 3)))
+        self.assertIn("Level against Ferrite: 2–2, with 1 draw.", greeting("Ferrite", (2, 1, 2)))
+        self.assertIn("Game 6 against Ferrite.", greeting("Ferrite", (3, 1, 1)))
+        farewell = lichess.spectator_farewell
+        self.assertEqual(farewell("Ferrite", (0, 0, 0), 0.5), "First game against Ferrite: a draw. Thanks for watching!")
+        self.assertIn("now 2–3, with 2 draws.", farewell("Ferrite", (1, 2, 3), 1.0))
+        self.assertEqual(farewell("Ferrite", None, 1.0), "Thanks for watching!")

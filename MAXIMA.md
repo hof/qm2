@@ -1806,8 +1806,13 @@ while busy or stopping, `tooFast`, `tooSlow`, `timeControl`, `standard` for
 variants). Takeback requests are declined; draw offers are accepted only in dead
 draws or when a draw is worth at least our score (below). When the opponent leaves and Lichess allows it, the win is claimed.
 
-In both chat rooms (players and spectators) MaximaEngine greets at the start and
-says "Good game" at the end; it posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
+MaximaEngine keeps the player room short: "Hi, I'm Maxima, running on MaxDrone.
+Good luck!" at the start and a thank-you for the game at the end. The spectator
+room gets the same greeting with our record against the opponent (their lead
+when they are ahead, level scores, otherwise the game number; "First game
+against ..." for a new opponent) and, at the end, the updated score with
+"Thanks for watching!". Chat lines carry no links, which Lichess blanks. It
+posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
 authors; no links, which Lichess blanks in chat) or `!eval` (our last move with depth, score and expected
 line; answered in the spectator room only, never to the opponent). Answers to
 non-owners come at most every 5 seconds per game, so chat spam cannot push the
