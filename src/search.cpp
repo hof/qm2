@@ -199,18 +199,9 @@ void root_move_t::add_nodes(U64 count) {
 // not repetition history or the halfmove clock. Scaling is applied separately.
 int search_t::neural_static_score() {
     assert(evaluation_network);
-    constexpr size_t entries = 65536;
-    if (_neural_cache.empty()) {
-        _neural_cache.resize(entries);
-    }
-    auto & cached = _neural_cache[brd.stack->tt_key & (entries - 1)];
-    if (cached.key == brd.stack->tt_key && cached.value != score::INVALID) {
-        return cached.value;
-    }
     tt_hit_t hit;
     if (tt_eval_enabled && trans_table::probe(position_key(), brd.ply, brd.stack->fifty_count, hit)
             && hit.eval != score::INVALID) {
-        cached = {brd.stack->tt_key, hit.eval};
         return hit.eval;
     }
     auto & accumulator = evaluation_accumulators[brd.ply];
@@ -220,7 +211,6 @@ int search_t::neural_static_score() {
     if (tt_eval_enabled) {
         trans_table::store(position_key(), brd.root_ply, brd.ply, 0, 0, 0, 0, value);
     }
-    cached = {brd.stack->tt_key, value};
     return value;
 }
 
@@ -281,7 +271,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         }
         evaluation_network = nnue::snapshot();
     }
-    _neural_cache.clear();
     evaluation_accumulators.clear();
     if (evaluation_network) {
         evaluation_accumulators.resize(MAX_PLY + 1);

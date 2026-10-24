@@ -205,6 +205,7 @@ int main() {
     success &= check(evaluate(&extreme) == extreme_score,
         "Disabled correction must preserve the original NNUE limit");
     extreme.correction_history_enabled = true;
+    trans_table::clear(); // as on every model change; the TT holds the other model's evaluations
     neural.stack->eval_result = score::INVALID;
     success &= check(evaluate(&neural) == start_score, "Search must own immutable model across reloads");
     auto checked_storage = std::make_unique<search_t>("7k/8/8/8/8/8/7r/K7 w - - 0 1");
@@ -217,6 +218,7 @@ int main() {
     success &= check(!losers.evaluation_network && losers.evaluation_accumulators.empty()
         && losers_score != score::TABLEBASE - 1, "Royal-losers must retain material-only evaluator");
     nnue::set_path("", error);
+    trans_table::clear();
     neural.stack->eval_result = score::INVALID;
     success &= check(!nnue::snapshot() && evaluate(&neural) == start_score,
         "Unload must not invalidate retained snapshots");

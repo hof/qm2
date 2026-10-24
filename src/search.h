@@ -103,11 +103,6 @@ enum class result_source_t { none, partial, complete, fallback, book, terminal, 
 
 class search_t {
 private:
-    struct neural_cache_entry_t {
-        U64 key = 0;
-        int value = score::INVALID;
-    };
-    std::vector<neural_cache_entry_t> _neural_cache;
     const search_control_t * _control;
     std::shared_ptr<const experience::book_t> _experience;
     std::mt19937_64 _book_random;
