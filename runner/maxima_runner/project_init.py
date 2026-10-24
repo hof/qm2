@@ -299,6 +299,8 @@ def main():
     parser.add_argument("--force", action="store_true", help="replace books that differ from the pinned files")
     options = parser.parse_args()
     options.data = data_root()
+    from .cli import show_logo
+    show_logo()
     if not (root / "CMakePresets.json").is_file():
         raise ValueError("init requires a Maxima checkout; set MAXIMA_PROJECT_DIR")
     print(f"data in {options.data} (set MAXIMA_DATA_DIR to move it, e.g. to a persistent volume)\n")

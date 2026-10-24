@@ -38,15 +38,19 @@ command_groups = (
 )
 
 
-def show_help(all_commands=False):
-    use_color = sys.stdout.isatty() and "NO_COLOR" not in os.environ
+def styled(value, code):
+    """Terminal colour when stdout is a terminal and NO_COLOR is unset."""
+    return f"\033[{code}m{value}\033[0m" if sys.stdout.isatty() and "NO_COLOR" not in os.environ else value
 
-    def styled(value, code):
-        return f"\033[{code}m{value}\033[0m" if use_color else value
 
+def show_logo():
     print(styled(".       .\n|\\ /^\\ /|\n| V   V |\n'-------'", "33"))
     print(styled("M A X I M A", "1"))
     print("Chess engine & ops\n")
+
+
+def show_help(all_commands=False):
+    show_logo()
     print("Usage: maxima <command> [options]")
     print("       maxima                  Run the native UCI engine (from a GUI or pipe)")
     print("       maxima uci              Run it in this terminal\n")
