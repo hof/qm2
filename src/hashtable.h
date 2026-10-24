@@ -56,6 +56,7 @@ private:
     static_assert(sizeof(entry_t) == 10);
 
     static const int BUCKETS = 3;
+    static constexpr size_t TABLE_ALIGNMENT = 2 * 1024 * 1024;
     static const int AGES = 32;
 
     // Three entries fill one aligned 32-byte cluster.
@@ -100,7 +101,7 @@ public:
     }
 
     ~trans_table_t() {
-        ::operator delete[](table, std::align_val_t(alignof(cluster_t)));
+        ::operator delete[](table, std::align_val_t(TABLE_ALIGNMENT));
     }
 
     void clear() {

@@ -20,6 +20,7 @@
  */
 
 #include "hashtable.h"
+#include <sys/mman.h>
 
 trans_table_t::trans_table_t(int size_in_MB) {
     table = nullptr;
@@ -34,11 +35,13 @@ void trans_table_t::set_size(int size_in_MB) {
         return;
     }
     if (table) {
-        ::operator delete[](table, std::align_val_t(alignof(cluster_t)));
+        ::operator delete[](table, std::align_val_t(TABLE_ALIGNMENT));
     }
     cluster_count = std::max<size_t>(1, size_t(size_in_MB) * 1024 * 1024 / sizeof(cluster_t));
     table = static_cast<cluster_t *>(::operator new[](sizeof(cluster_t) * cluster_count,
-        std::align_val_t(alignof(cluster_t))));
+        std::align_val_t(TABLE_ALIGNMENT)));
+    // Huge pages spare the page walk that random cluster accesses otherwise need.
+    madvise(table, sizeof(cluster_t) * cluster_count, MADV_HUGEPAGE);
     size_in_mb = size_in_MB;
     clear();
 }
