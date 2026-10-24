@@ -118,7 +118,7 @@ class ics_connection:
         self.timeseal = timeseal
         self.transcript = transcript
         self.started = time.monotonic()
-        self.received = self.started
+        self.received = self.sent = self.started
         self.buffer = line_buffer()
         self.queue = asyncio.Queue()
         self.lock = asyncio.Lock()
@@ -152,6 +152,7 @@ class ics_connection:
         async with self.lock:
             self.writer.write(self.encode(line))
             await self.writer.drain()
+        self.sent = time.monotonic()
 
     async def _pump(self):
         try:
@@ -286,7 +287,7 @@ default_settings = {
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
     "contempt_window": 100, "layer_profiles": {}, "style_books": {}, "first_move_wait": 60,
     "whisper": False, "mood": "auto", "live_feed": None, "pgn_post": None,
-    "online_tablebase": True,
+    "online_tablebase": True, "reseek_minutes": 10,
 }
 
 
@@ -313,7 +314,7 @@ class play_policy:
 
     def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=0, games=None, guest=True,
                  owner=None, notes=(), contempt_window=100, first_move_wait=60,
-                 whisper=False, follow_key=None):
+                 whisper=False, follow_key=None, reseek_minutes=10):
         self.seeks = list(seeks)
         self.seeks_at_once = seeks_at_once
         self.accept = accept
@@ -326,6 +327,7 @@ class play_policy:
         self.first_move_wait = first_move_wait
         self.whisper = whisper
         self.follow_key = follow_key  # "tell <us> <key> <command>" steers us remotely (on_tell)
+        self.reseek_seconds = reseek_minutes * 60  # 0: seeks stay as posted while idle
 
     def opening_wait(self, initial_seconds):
         """Seconds the opponent gets for their first move: a fifth of the clock, at least 15, at most first_move_wait."""
@@ -479,6 +481,7 @@ class engine_player:
         self.opponent_ready.set()
         self.streak = self.played = 0
         self.stopping = self.finished = self.restart = False
+        self.seeked = time.monotonic()
 
     async def start(self):
         self.context = self.open_session()
@@ -608,11 +611,19 @@ class engine_player:
         return name, self.policy.owner, machine_description(setting("Threads", 1), setting("Hash", None))
 
     async def seek(self):
+        self.seeked = time.monotonic()
         if self.stopping or self.game is not None or not self.policy.seeks:
             return
         await self.send("unseek")
         for command in self.policy.seek_commands():
             await self.send(command)
+
+    async def reseek_when_idle(self):
+        """A fresh draw from the seek pool after reseek_minutes without a game: other time controls get
+        their turn and new players see the seeks announced."""
+        if self.policy.reseek_seconds and self.game is None and \
+                time.monotonic() - self.seeked >= self.policy.reseek_seconds:
+            await self.seek()
 
     async def stop(self):
         """Stop seeking; quit now when idle, or after the current game."""
@@ -932,7 +943,8 @@ class engine_player:
 
 
 async def serve(connection, commands, on_line, probe_interval=300, probe_timeout=60, player=None):
-    """Relay server lines and operator commands until quit; probe the server when it is quiet."""
+    """Relay server lines and operator commands until quit; probe when either side is quiet, which
+    checks the link and keeps FICS from logging us off after an hour without input."""
     probe_sent = None
     command = asyncio.ensure_future(commands.get())
     try:
@@ -968,10 +980,12 @@ async def serve(connection, commands, on_line, probe_interval=300, probe_timeout
             if player is not None and player.finished:
                 await connection.send("quit")
                 return "quit"
+            if player is not None:
+                await player.reseek_when_idle()
             now = time.monotonic()
             if probe_sent is not None and connection.received > probe_sent:
                 probe_sent = None
-            if probe_sent is None and now - connection.received > probe_interval:
+            if probe_sent is None and now - min(connection.received, connection.sent) > probe_interval:
                 await connection.send("date")
                 probe_sent = now
             elif probe_sent is not None and now - probe_sent > probe_timeout:
@@ -1019,7 +1033,7 @@ def load_settings(path):
              "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
              "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float), "whisper": bool,
              "mood": str, "live_feed": str, "pgn_post": str,
-             "online_tablebase": bool}
+             "online_tablebase": bool, "reseek_minutes": (int, float)}
     for key, value in loaded.items():
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
@@ -1036,6 +1050,8 @@ def load_settings(path):
             raise ValueError(f"{path}: notes must be at most 7 strings (notes 1-3 are generated)")
         if key == "mood" and not re.fullmatch(r"[a-z0-9_]{1,32}", value):
             raise ValueError(f"{path}: mood is auto, off, or a name from books/moods")
+        if key == "reseek_minutes" and (value is None or value < 0):
+            raise ValueError(f"{path}: reseek_minutes must be 0 (off) or more")
         if key == "layer_profiles":
             value = layer_profiles(value, path)
         if key == "style_books" and not all(name in learning.style_names and isinstance(book, str)
@@ -1127,7 +1143,8 @@ def run(options, parser):
                          owner=configured["owner"], notes=configured["notes"],
                          contempt_window=configured["contempt_window"],
                          first_move_wait=configured["first_move_wait"], whisper=configured["whisper"],
-                         follow_key=os.environ.get("MAXDRONE_KEY") or None)
+                         follow_key=os.environ.get("MAXDRONE_KEY") or None,
+                         reseek_minutes=configured["reseek_minutes"])
     redact = (lambda text: text.replace(policy.follow_key, "********")) if policy.follow_key else (lambda text: text)
     pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or data_root() / "experience" / "games" / "fics")
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None

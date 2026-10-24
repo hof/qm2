@@ -24,7 +24,8 @@ def parser():
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
-                             "layer_profiles, style_books, first_move_wait, whisper, mood, live_feed, pgn_post, online_tablebase); "
+                             "layer_profiles, style_books, first_move_wait, whisper, mood, live_feed, pgn_post, online_tablebase, "
+                             "reseek_minutes); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
@@ -32,7 +33,7 @@ def parser():
     parser.add_argument("--no-timeseal", dest="timeseal", action="store_false",
                         help="send plain lines; the server then charges network lag to our clock")
     parser.add_argument("--probe-interval", type=float, default=300,
-                        help="seconds of server silence before a liveness probe (default: 300)")
+                        help="seconds without traffic either way before a probe (default: 300)")
     parser.add_argument("--debug", metavar="FILE", help="append a wire transcript (password masked)")
     parser.add_argument("--engine", help="UCI engine to play with (default: the Release Maxima build)")
     parser.add_argument("--option", action="append", default=[], metavar="NAME=VALUE",

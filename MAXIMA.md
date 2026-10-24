@@ -1654,6 +1654,8 @@ Play policy, as JDrone's `ics.seeks`/`autoaccept`/`autorematch`, from a JSON fil
 
 After login and after each game the client posts `seeks_at_once` random seeks
 from the pool (`--seek`, `--seeks-at-once`, `--no-seek`); guests add ` u`.
+After `reseek_minutes` (default 10, 0 off) without a game it draws again, so
+the other time controls get their turn and new players see the seeks announced.
 Challenges are accepted only for standard lightning, blitz, or standard chess
 with a clock and only when idle (`--no-accept` declines all); a game created
 with a variant is aborted. Rematches are off by default; `rematches` (or
@@ -1767,9 +1769,10 @@ without it, the encoded login name is rejected. Each line carries milliseconds
 since connecting; the server's `[G]` pings (sent during games) are answered with
 the encoded `\x02` `9` reply. `--no-timeseal` sends plain lines.
 
-Every wait has a deadline. The server is silent outside games, so after five
-minutes without output (`--probe-interval`) the client sends `date`; no reply
-within a minute counts as a dead connection. Lost connections reconnect after
+Every wait has a deadline. After five minutes without output from the server,
+or without input from us (`--probe-interval`), the client sends `date`; no reply
+within a minute counts as a dead connection. Probing on our silence also keeps
+FICS from logging us off after an hour without input. Lost connections reconnect after
 5, 10, 30, then every 60 seconds. Wrong passwords, unregistered names, and
 rejected handles stop with an error instead of retrying. JDrone could hang on
 waits without deadlines (engine readiness, a half-open socket); the client

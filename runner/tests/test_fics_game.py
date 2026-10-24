@@ -197,6 +197,14 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.05)
         self.fail("search did not finish")
 
+    async def test_reseeks_only_after_idle_minutes(self):
+        player = await self.player("play", policy=fics.play_policy(seeks=["3 0"], reseek_minutes=10))
+        await player.reseek_when_idle()
+        self.assertEqual(player.connection.sent, [])
+        player.seeked -= 600
+        await player.reseek_when_idle()
+        self.assertEqual(player.connection.sent, ["unseek", "seek 3 0 u"])
+
     async def test_plays_own_moves_only_once(self):
         player = await self.player("play")
         await player.handle(after_e4)

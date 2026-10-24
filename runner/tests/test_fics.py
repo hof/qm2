@@ -228,6 +228,28 @@ class session_tests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await connection.close()
 
+    async def test_probes_when_we_are_silent_though_the_server_talks(self):
+        async def script(number, writer, read_line):
+            await guest_login(writer, read_line)
+            for _ in range(10):
+                writer.write(b"chatter\n\rfics% ")
+                await asyncio.sleep(0.2)
+            await asyncio.sleep(5)
+
+        async with fake_server(script) as server:
+            connection = await fics.ics_connection.open("127.0.0.1", server.port)
+            sent = []
+            original = connection.send
+            connection.send = lambda line, secret=False: sent.append(line) or original(line, secret)
+            try:
+                await fics.login(connection, "guest", timeout=5)
+                with self.assertRaises(asyncio.TimeoutError):
+                    await asyncio.wait_for(fics.serve(connection, asyncio.Queue(), lambda line: None,
+                                                      probe_interval=0.5, probe_timeout=10), 1.5)
+            finally:
+                await connection.close()
+        self.assertIn("date", sent)
+
     async def test_reconnects_after_drop_and_quits_cleanly(self):
         async def script(number, writer, read_line):
             await guest_login(writer, read_line, f"GuestRUN{'AB'[number - 1]}")
@@ -263,6 +285,9 @@ class session_tests(unittest.IsolatedAsyncioTestCase):
             game = None
 
             async def handle(self, line):
+                pass
+
+            async def reseek_when_idle(self):
                 pass
 
             async def stop(self):
