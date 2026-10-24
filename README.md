@@ -1,24 +1,27 @@
 ## Maxima 2, a chess playing program
 
 Maxima 2 is the successor of [QueenMaxima and BugChess NL](http://www.github.com/hof/queenmaxima),
-written by Erik van het Hof (hof) and Hermen Reitsma (hajewiet). We work on it about
-once per decade, and every time we catch up with what computer chess learned in
-between. See you in 2036.
+written by Erik van het Hof (hof) and Hermen Reitsma (hajewiet).
 
-**1996–2000: BugChess.** The original engine, at first focused on losing chess.
+We develop it in decade sprints: a burst of work roughly every ten years, catching
+up on everything computer chess learned in the meantime, followed by a well-earned
+decade of rest. Three sprints so far.
+
+**Sprint 1, 1996–2000: BugChess.** The original engine, at first focused on losing chess.
 It played the 18th Dutch Open Computer Chess Championship in 1998 on a Pentium II
 at 450 MHz, and on ICC as BugChess and later QueenMaxima(C). More history on
 the Chess Programming Wiki: [BugChess NL](https://www.chessprogramming.org/BugChess_NL)
 and [Maxima2](https://www.chessprogramming.org/Maxima2).
 
-**2013–2015: Maxima 2.** A complete rewrite, released as open source under the GPL:
+**Sprint 2, 2013–2015: Maxima 2.** A complete rewrite, released as open source under the GPL:
 - 64-bit architecture with bitboards and magic bitboard move generation.
 - Late Move Reductions (LMR) in the search; fewer extensions, more pruning.
 - Tapered evaluation, tuned with an integrated self-matching test.
 - More efficient code.
 - Maxima became a UCI engine.
 
-**2026: the NNUE decade.**
+**Sprint 3, 2026: neural networks.** Eleven years later, the NNUE revolution had
+long since happened without us, so:
 - NNUE evaluation, starting from the Stockfish 13 network.
 - The search brought up to current standards (transposition table, null-move
   and reverse futility pruning, LMR from logarithmic tables), worth about
@@ -30,7 +33,10 @@ and [Maxima2](https://www.chessprogramming.org/Maxima2).
 - C++26, and one command (`./maxima init`) to set up a fresh clone or a CI job.
 
 Standard chess is the main target. Experimental losers-chess support lives
-in `src/w17/`; more FICS wild variants will follow.
+in `src/w17/`, a nod to where it all started in 1996; more FICS wild variants
+will follow.
+
+Sprint 4 is pencilled in for around 2036. Bring your own neural network.
 
 ### Play online
 
