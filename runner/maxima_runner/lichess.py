@@ -31,7 +31,7 @@ owner_commands = ("softquit", "softrestart", "resign", "abort", "draw")
 public_commands = ("help", "name", "eval")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
-greeting = "Hi, I'm Maxima, running on MaxDrone."
+greeting = "Hi, I'm Maxima running on MaxDrone. Type !help for help."
 player_farewells = ("Good game, thanks for playing!", "Thanks for the game!")
 reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate", "timeout": "opponent left",
            "draw": "draw", "outoftime": "time forfeit", "cheat": "cheat detected", "noStart": "no first move",
@@ -361,8 +361,8 @@ class lichess_game:
             history = tuple(stats.get(outcome, 0) for outcome in ("wins", "draws", "losses"))
         else:
             history = None
-        self.chat("player", f"{greeting} Good luck!")
-        self.chat("spectator", spectator_greeting(them.get("name") or "my opponent", history))
+        self.chat("player", greeting)
+        self.chat("spectator", greeting, *filter(None, [record_line(history, them.get("name") or "you")]))
         clock = full.get("clock") or {}
         bot.on_line(f"-- game {self.id}: {full['white'].get('name')} vs {full['black'].get('name')}, "
                     f"{full['speed']} {'rated' if full.get('rated') else 'casual'} {bot.api.server}/{self.id}")
@@ -463,9 +463,12 @@ class lichess_game:
             self.last_eval = f"{board.san(move)} {info['source']}"
             bot.on_line(f"-- {board.san(move)} {info['source']} {seconds:.1f}s")
 
-    def chat(self, room, text):
-        """Post to a chat room without holding up the game; failures are only logged."""
-        asyncio.ensure_future(self.bot.api.post(self.path("chat"), {"room": room, "text": text}))
+    def chat(self, room, *texts):
+        """Post lines to a chat room in order without holding up the game; failures are only logged."""
+        async def post():
+            for text in texts:
+                await self.bot.api.post(self.path("chat"), {"room": room, "text": text})
+        asyncio.ensure_future(post())
 
     async def on_chat(self, event):
         """Commands typed in either chat room: !help, !name and !eval for anyone; owners may also
@@ -586,26 +589,15 @@ def refresh_experience(learner, on_line):
         on_line(f"-- could not refresh experience: {error}")
 
 
-def with_draws(draws):
-    """", with 2 draws", or nothing without draws."""
-    return f", with {draws} draw{'s' if draws != 1 else ''}" if draws else ""
-
-
-def spectator_greeting(name, history):
-    """The spectator room's opening line from our record against the opponent, (wins, draws, losses) or None
-    without learning: the opponent's lead when they are ahead, level scores, otherwise only the game number."""
-    if history is None:
-        return greeting
-    wins, draws, losses = history
-    if not wins + draws + losses:
-        return f"{greeting} First game against {name}."
-    if losses > wins:
-        line = f"{name} leads {losses}–{wins} so far{with_draws(draws)}."
-    elif losses == wins:
-        line = f"Level against {name}: {wins}–{losses}{with_draws(draws)}."
-    else:
-        line = f"Game {wins + draws + losses + 1} against {name}."
-    return f"{greeting} {line} I learned from our games."
+def record_line(history, name, choose=random.random):
+    """For spectators after earlier games against name: our record from (wins, draws, losses) or, half the
+    time, that we learned from those games; None for a first game or without learning."""
+    if not history or not sum(history):
+        return None
+    if choose() < 0.5:
+        return f"I learned from previous games against {name}."
+    games = sum(history)
+    return f"We played {games} game{'s' if games != 1 else ''}. W/D/L: {'/'.join(map(str, history))}"
 
 
 def load_settings(path):
