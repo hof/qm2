@@ -26,8 +26,8 @@ futility pruning, and late move reductions from logarithmic tables. With the sam
 network, the search work alone is worth about 380 Elo. Endgames use Syzygy
 tablebases, locally up to five pieces and online up to seven, and a multi-layer
 opening book learns from every game and every opponent. MaxDrone, the runner that
-plays Maxima on FICS and Lichess, can stream games live over WebSocket and post
-finished games to a database.
+plays Maxima on FICS and Lichess, works with any UCI engine; it can stream games
+live over WebSocket and post finished games to a database.
 
 The opening book mixes several layers on every move: a broad base book, style
 books (sharp gambits, solid drawing lines, experiments, and a mood that changes
@@ -84,6 +84,7 @@ online play:
 ./maxima tablebases:syzygy:download --pieces 5 --dry-run
 ./maxima fics          # play on FICS through MaxDrone
 ./maxima lichess       # play on Lichess as a bot account
+./maxima lichess --engine /path/to/engine --option Hash=256   # with another UCI engine
 ```
 
 MAXIMA.md explains each part in depth: [build and debugging](MAXIMA.md#5-build-and-debugging),
