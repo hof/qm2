@@ -28,7 +28,7 @@ speed_rank = {name: rank for rank, name in enumerate(("ultraBullet",) + speeds +
 stream_timeout = 30  # seconds of silence before a stream counts as dead; Lichess sends keepalives every 7 s
 rate_limit_pause = 60  # Lichess asks clients to wait a full minute after HTTP 429
 owner_commands = ("softquit", "softrestart", "resign", "abort", "draw", "challenge", "nochallenge")
-public_commands = ("help", "name", "eval")
+public_commands = ("help", "name", "eval", "stats", "book")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
 # Each room gets its own wording: Lichess silently drops a line equal to one of our previous two.
@@ -41,6 +41,9 @@ challenge_clocks = {"bullet": ((60, 0), (60, 1), (120, 1)), "blitz": ((180, 0), 
 challenge_shares = {"bullet": 30, "blitz": 50, "rapid": 20}
 challenge_wait = 60  # seconds for an answer before we cancel, and between attempts
 challenge_rest = 24 * 3600  # seconds a bot is left alone for a speed after it declined
+rematch_delay = 5  # seconds after a game before we offer a bot one rematch
+book_layers = {"book": "base", "global": "all games"}  # chat names; the others keep their layer name
+group_labels = {"engines": "bots"}
 reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate", "timeout": "opponent left",
            "draw": "draw", "outoftime": "time forfeit", "cheat": "cheat detected", "noStart": "no first move",
            "aborted": "aborted", "unknownFinish": "unknown finish", "variantEnd": "variant end"}
@@ -149,13 +152,36 @@ class matchmaker:
         self.pending = None  # (challenge id, opponent id, speed, sent)
         self.resting = {}  # (opponent id, speed) -> monotonic time until which we leave it alone
         self.last_opponent = None
+        self.streak = 0  # games in a row against last_opponent
 
     def busy(self, opponent=None):
         """A game started or ended: the idle time starts again."""
         self.idle_since = time.monotonic()
         self.pending = None
         if opponent:
-            self.last_opponent = opponent.lower()
+            opponent = opponent.lower()
+            self.streak = self.streak + 1 if opponent == self.last_opponent else 1
+            self.last_opponent = opponent
+
+    async def rematch(self, bot, name, opponent, speed, limit, increment, delay=rematch_delay):
+        """Offer a bot one rematch with the same clock after a few seconds, unless the game was a rematch
+        already, something else started, or the bot declined that speed recently."""
+        await asyncio.sleep(delay)
+        now = time.monotonic()
+        if (not self.enabled or self.streak >= 2 or self.pending is not None or bot.game is not None
+                or bot.stopping or bot.accepted[0] or self.resting.get((opponent, speed), 0) > now
+                or bot.games is not None and bot.played >= bot.games):
+            return
+        await self.challenge(bot, name, opponent, speed, limit, increment, "rematch")
+
+    async def challenge(self, bot, name, opponent, speed, limit, increment, why="challenging"):
+        answer = await bot.api.call("POST", f"/api/challenge/{name}", {
+            "rated": "true", "clock.limit": limit, "clock.increment": increment, "color": "random",
+            "variant": "standard"})
+        challenge_id = ((answer or {}).get("challenge") or answer or {}).get("id")
+        if challenge_id:
+            self.pending = (challenge_id, opponent, speed, time.monotonic())
+            self.on_line(f"-- {why} {name} ({speed} {limit // 60}+{increment}, rated)")
 
     def due(self, now):
         return (self.enabled and self.pending is None and now >= self.next_try
@@ -198,14 +224,7 @@ class matchmaker:
         choice = self.pick(bots, ratings, bot.id, now)
         if choice is None:
             return
-        name, opponent, speed, limit, increment = choice
-        answer = await bot.api.call("POST", f"/api/challenge/{name}", {
-            "rated": "true", "clock.limit": limit, "clock.increment": increment, "color": "random",
-            "variant": "standard"})
-        challenge_id = ((answer or {}).get("challenge") or answer or {}).get("id")
-        if challenge_id:
-            self.pending = (challenge_id, opponent, speed, now)
-            self.on_line(f"-- challenging {name} ({speed} {limit // 60}+{increment}, rated)")
+        await self.challenge(bot, *choice)
 
     def declined(self, challenge):
         """Our challenge was declined: leave that bot alone for that speed."""
@@ -387,7 +406,7 @@ class lichess_game:
         self.task = self.searching = None
         self.searched = None
         self.clocks = {}
-        self.last_eval = None
+        self.last_eval = self.last_book = self.left_book = None
         self.answered = 0.0
         self.over = self.draw_offered = False
 
@@ -561,6 +580,25 @@ class lichess_game:
         else:
             self.last_eval = f"{board.san(move)} {info['source']}"
             bot.on_line(f"-- {board.san(move)} {info['source']} {seconds:.1f}s")
+        why = self.opening.why if kind == "book" and self.opening is not None else None
+        if why and why[0] in ("book", "learned", "signature", "revenge"):
+            self.last_book, self.left_book = book_line(board.variation_san([move]), why, self.opening.names), None
+        elif self.last_book and self.left_book is None:
+            self.left_book = board.variation_san([move])
+
+    def stats_line(self):
+        """Our record against the opponent and on Lichess, from the experience."""
+        learner = self.bot.learner
+        if learner is None:
+            return "No stats: learning is off."
+        name = self.player(not self.color).get("name") or "?"
+        stats = learning.player_stats(learner.records).get(name.lower(), {})
+        scores = [record["score"] for record in learner.records if record["score"] is not None]
+        overall = f"Lichess: {len(scores)} games, W/D/L {scores.count(1.0)}/{scores.count(0.5)}/{scores.count(0.0)}."
+        if not stats.get("games"):
+            return f"First game against {name}. {overall}"
+        return (f"Vs {name}: {stats['games']} game{'s' if stats['games'] != 1 else ''}, "
+                f"W/D/L {stats['wins']}/{stats['draws']}/{stats['losses']}. {overall}")
 
     def chat(self, room, *texts):
         """Post lines to a chat room in order without holding up the game; failures are only logged."""
@@ -590,7 +628,12 @@ class lichess_game:
                 engine = bot.session.protocol.id.get("name") if bot.session is not None else "Maxima"
                 self.chat(room, f"{engine}. {credits}")
             elif room != "spectator":
-                self.chat(room, "I share my evaluation with spectators only.")
+                self.chat(room, "I share that with spectators only.")
+            elif command == "stats":
+                self.chat(room, self.stats_line())
+            elif command == "book":
+                self.chat(room, f"Out of book since {self.left_book}." if self.left_book
+                          else self.last_book or "No book move yet.")
             else:
                 self.chat(room, self.last_eval or "No search yet.")
             return
@@ -636,6 +679,11 @@ class lichess_game:
         self.emit("game_end", result=result, reason=reason, headers=dict(game.headers) if game else None,
                   pgn=str(game) if game else None)
         bot.ended()
+        them, clock = self.player(not self.color) if self.full else {}, (self.full or {}).get("clock") or {}
+        if status not in ("aborted", "noStart") and them.get("title") == "BOT" and clock and them.get("id"):
+            asyncio.ensure_future(bot.matchmaker.rematch(bot, them.get("name") or them["id"], them["id"],
+                                                         self.full["speed"], clock["initial"] // 1000,
+                                                         clock["increment"] // 1000))
         if self.task is not None and self.task is not asyncio.current_task():
             self.task.cancel()  # ended by the event stream; the game stream has nothing more to say
 
@@ -689,6 +737,21 @@ def refresh_experience(learner, on_line):
         learner.refresh()
     except (OSError, ValueError) as error:
         on_line(f"-- could not refresh experience: {error}")
+
+
+def book_line(move, why, names):
+    """ "5...Nc6 book: base 95%, fire 5%" from a book choice (kind, probability, parts, source)."""
+    kind, probability, parts = why[0], why[1], why[2]
+
+    def label(layer):
+        if layer == "group":
+            return f"vs {group_labels.get(names['group'], names['group'])}"
+        if layer == "opponent":
+            return f"vs {names['opponent']}"
+        return book_layers.get(layer, layer)
+    shares = [(label(layer), share / probability) for layer, share in parts.items() if share >= 0.005 * probability]
+    detail = ", ".join(f"{name} {share:.0%}" for name, share in sorted(shares, key=lambda item: -item[1]))
+    return f"{move} {'from book' if kind == 'book' else kind}: {detail}"
 
 
 def record_line(history, name, choose=random.random):

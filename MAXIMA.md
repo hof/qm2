@@ -1807,7 +1807,9 @@ speeds), a random clock of that speed (1+0, 1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
 300) at that speed, never the last opponent. Lichess is asked only then, at most
 once a minute; an unanswered challenge is cancelled after a minute, and a bot
 that declined or did not answer is left alone for that speed for a day. Owners
-switch it with `!challenge` and `!nochallenge` in a game's chat.
+switch it with `!challenge` and `!nochallenge` in a game's chat. Five seconds
+after a game against a bot it offers that bot one rematch with the same clock,
+never a second in a row, and not while challenges are switched off.
 
 It accepts standard
 chess with a clock at the configured speeds (`speeds`, `--speed`; default
@@ -1825,8 +1827,11 @@ games. W/D/L: 1/2/3", from Maxima's side) or, half the time, "I learned from
 previous games against ..."; nothing for a first game or without learning. At the end the player room gets a thank-you for the game and the
 spectator room "Thanks for watching!". Chat lines carry no links, which Lichess
 blanks. MaximaEngine posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
-authors; no links, which Lichess blanks in chat) or `!eval` (our last move with depth, score and expected
-line; answered in the spectator room only, never to the opponent). Answers to
+authors; no links, which Lichess blanks in chat), `!eval` (our last move with
+depth, score and expected line), `!stats` (our record against the opponent and
+on Lichess) or `!book` (the layers that chose our last book move, e.g. "5...Nc6
+from book: base 95%, fire 5%", or where we left the book); the last three are
+answered in the spectator room only, never to the opponent. Answers to
 non-owners come at most every 5 seconds per game, so chat spam cannot push the
 bot into Lichess's rate limit, which would also hold up its moves.
 

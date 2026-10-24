@@ -85,7 +85,7 @@ class command_tests(unittest.IsolatedAsyncioTestCase):
         await self.say(game, "Someone", "!eval")
         await self.say(game, "Someone", "!name")  # within the gap: ignored
         replies = [data["text"] for _, data in api.posts]
-        self.assertEqual(replies, ["I share my evaluation with spectators only.", "e4 d20 +0.30"])
+        self.assertEqual(replies, ["I share that with spectators only.", "e4 d20 +0.30"])
 
 
 class stub_session:
@@ -242,3 +242,31 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         calls = len(api.calls)
         await maker.tick(bot)
         self.assertFalse(any(path.startswith("/api/challenge/") for _, path, _ in api.calls[calls:]))
+
+
+class command_line_tests(unittest.TestCase):
+    def test_book_line_names_the_layers_by_share(self):
+        names = {"group": "engines", "opponent": "Ferrite"}
+        self.assertEqual(lichess.book_line("5...Nc6", ("book", 0.5, {"book": 0.475, "fire": 0.025}, "book"), names),
+                         "5...Nc6 from book: base 95%, fire 5%")
+        self.assertEqual(lichess.book_line("5...Nc6", ("learned", 1.0, {"global": 0.6, "opponent": 0.3,
+                                                                          "group": 0.1}, "global"), names),
+                         "5...Nc6 learned: all games 60%, vs Ferrite 30%, vs bots 10%")
+
+
+class rematch_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_offers_one_rematch_to_a_bot(self):
+        class api:
+            calls = []
+
+            async def call(self, method, path, data=None):
+                self.calls.append(path)
+                return {"id": "r1"}
+
+        bot = lichess.lichess_bot(api(), None, lambda line: None, challenge_idle=30)
+        bot.matchmaker.busy("Ferrite")
+        await bot.matchmaker.rematch(bot, "Ferrite", "ferrite", "blitz", 180, 2, delay=0)
+        self.assertEqual(api.calls, ["/api/challenge/Ferrite"])
+        bot.matchmaker.busy("Ferrite")  # the rematch was played
+        await bot.matchmaker.rematch(bot, "Ferrite", "ferrite", "blitz", 180, 2, delay=0)
+        self.assertEqual(len(api.calls), 1)

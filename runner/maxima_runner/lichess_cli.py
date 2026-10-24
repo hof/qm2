@@ -10,7 +10,7 @@ def parser():
                "  LICHESS_BOT_TOKEN    token of the bot account, scope bot:play (never logged)\n"
                "  LICHESS_OWNERS       Lichess users who may send commands, comma-separated\n"
                "  MAXDRONE_POST_TOKEN  bearer token for --pgn-post (never logged)\n\n"
-               "commands for anyone, in the game's chat: !help, !name, !eval (spectator room only)\n"
+               "commands for anyone, in the game's chat: !help, !name; !eval, !stats, !book (spectator room only)\n"
                "commands from an owner, typed in the game's chat (spectator room is best):\n"
                "  !softquit      stop after this game\n"
                "  !softrestart   restart after this game (exit 75, for a supervisor loop)\n"
