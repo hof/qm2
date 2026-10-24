@@ -385,6 +385,12 @@ def mood_title(mood):
 whisper_plies = 6
 
 
+def clock_text(seconds):
+    """Clock as m:ss."""
+    minutes, rest = divmod(int(seconds), 60)
+    return f"{minutes}:{rest:02d}"
+
+
 def book_whisper(san, why, opening):
     """A book move for observers: the layer that picked it, then the mix, e.g. "Nc6 book: fire (base 39%,
     fire 39%, surprise 10%, experience 12%)"."""
@@ -612,10 +618,12 @@ class engine_player:
         """Stop seeking; quit now when idle, or after the current game."""
         self.stopping = True
         await self.send("unseek")
+        action = "restarting" if self.restart else "stopping"
         if self.game is None:
             self.finished = True
+            self.on_line(f"-- {action}")
         else:
-            self.on_line("-- stopping after this game; quit again to leave now")
+            self.on_line(f"-- {action} after this game; quit again to leave now")
 
     async def handle(self, line):
         position = fics_game.style12.parse(line) if line.startswith("<12> ") else None
@@ -804,6 +812,11 @@ class engine_player:
                 mover_ms = position.black_ms if position.turn == chess.WHITE else position.white_ms
                 self.record.on_move(self.history.board, mover_ms / 1000, position.elapsed)
                 self.emit_move(position)
+                if position.turn == self.our_color:
+                    before = self.history.board.copy()
+                    move = before.pop()
+                    name = position.black if position.turn == chess.WHITE else position.white
+                    self.on_line(f"-- {before.variation_san([move])} by {name}, {clock_text(mover_ms / 1000)} left")
             elif change:
                 self.emit("position", game=self.game, ply=self.history.board.ply(), fen=self.history.board.fen(),
                           reason=change, clock_ms={"white": position.white_ms, "black": position.black_ms})
@@ -892,10 +905,13 @@ class engine_player:
         await self.send(fics_game.ics_move(move))
         if self.record is not None:
             self.record.on_search(board, move, info)
-        seconds = time.monotonic() - started
+        seconds, numbered = time.monotonic() - started, board.variation_san([move])
+        left = f", {clock_text(max(0.0, clock - seconds))} left"
         explaining = self.whispering or self.followers
         if kind != "engine":
-            self.on_line(f"-- {board.san(move)} {info['source']} {seconds:.1f}s")
+            book = kind == "book" and self.opening is not None and self.opening.why
+            source = book_whisper(numbered, self.opening.why, self.opening) if book else f"{numbered} {info['source']}"
+            self.on_line(f"-- {source} {seconds:.1f}s{left}")
             if explaining and kind == "book" and self.opening.why:
                 await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
             elif explaining and kind == "tablebase":
@@ -903,7 +919,7 @@ class engine_player:
             self.from_book = kind == "book"
             return
         pv = variation(board, info.get("pv", []))
-        self.on_line(f"-- {board.san(move)} {describe(info, board.turn)} {seconds:.1f}s" + (f" pv {pv}" if pv else ""))
+        self.on_line(f"-- {numbered} {describe(info, board.turn)} {seconds:.1f}s{left}" + (f" pv {pv}" if pv else ""))
         if explaining:
             note = None
             if self.opening is not None and self.opening.why == ("left book",):
@@ -927,18 +943,25 @@ async def serve(connection, commands, on_line, probe_interval=300, probe_timeout
             if line in done:
                 text = line.result()
                 if text is not None:
-                    on_line(text)
+                    if player is None or not text.startswith("<12> "):
+                        on_line(text)  # boards are noise once moves are logged
                     if player is not None:
                         await player.handle(text)
             else:
                 line.cancel()
             if command in done:
                 text = command.result()
-                if text.strip().lower() in ("quit", "exit"):
-                    if player is None or player.stopping or player.game is None:
-                        await connection.send("quit")
-                        return "quit"
+                word = text.strip().lower()
+                if word in ("quit", "exit") and (player is None or player.stopping):
+                    await connection.send("quit")
+                    return "quit"
+                if word in ("quit", "exit", "softquit", "softrestart") and player is not None:
+                    if word in ("softquit", "softrestart"):
+                        player.restart = word == "softrestart"
                     await player.stop()
+                elif word == "help":
+                    on_line("-- console: quit (after the game, again to leave now), softquit, softrestart, help; "
+                            "anything else goes to FICS (help <topic> for its help)")
                 else:
                     await connection.send(text)
                 command = asyncio.ensure_future(commands.get())

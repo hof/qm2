@@ -16,8 +16,8 @@ import chess
 import chess.engine
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase
-from .fics import chess_titles, draw_contempt, layer_profiles, learning_report, read_commands, restart_status, \
-    style_books
+from .fics import chess_titles, clock_text, draw_contempt, layer_profiles, learning_report, read_commands, \
+    restart_status, style_books
 from .move_choice import describe, search_summary, variation
 from .project import data_root, engine_path, env_value
 from .uci import open_engine
@@ -773,12 +773,6 @@ def refresh_experience(learner, on_line):
         learner.refresh()
     except (OSError, ValueError) as error:
         on_line(f"-- could not refresh experience: {error}")
-
-
-def clock_text(seconds):
-    """Clock as m:ss."""
-    minutes, rest = divmod(int(seconds), 60)
-    return f"{minutes}:{rest:02d}"
 
 
 def book_line(move, why, names):

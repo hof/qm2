@@ -1748,10 +1748,15 @@ coordinate form, promotions as `e7e8=Q`. Searches run as tasks, so server
 lines, pings, and commands keep flowing; a new board or a game end cancels a
 stale search. A search that misses our clock plus five seconds, or an engine
 that fails, is restarted and the board requested again with `refresh`; an
-`Illegal move` reply also triggers one `refresh`. The terminal shows each of
-our moves with depth, score, and time, or `book`.
+`Illegal move` reply also triggers one `refresh`. The terminal shows each move
+with its number and the mover's clock: the opponent's moves, and ours with
+depth, score, time and PV, or the book layers behind a book move. Style 12
+board lines are left out of the terminal; `--debug` transcripts keep them.
 
-Lines typed at the terminal go to the server verbatim; `quit` logs off.
+Lines typed at the terminal go to the server verbatim, except the console's own
+`help`, `quit`, `softquit` and `softrestart`; `help <topic>` still reaches the
+server. When the bot plays, `quit` stops after the game and a second `quit`
+leaves at once; without a player it logs off.
 Handles are validated before connecting (3–17 letters, or `guest`); the
 password is read only from `FICS_PASSWORD`. Login applies style 12, seek/shout
 silence, autoflag, noescape, width 240, and nowrap.

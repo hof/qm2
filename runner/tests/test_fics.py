@@ -250,6 +250,41 @@ class session_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(server.connections), 2)
         self.assertTrue(any(line.startswith("-- connection lost") for line in lines))
 
+    async def test_console_keeps_its_commands_and_hides_boards(self):
+        async def script(number, writer, read_line):
+            await guest_login(writer, read_line)
+            writer.write(b"<12> board\n\rfics% ")
+            self.assertEqual(await read_line(), "finger")
+            self.assertEqual(await read_line(), "unseek")
+            self.assertEqual(await read_line(), "quit")
+
+        class idle_player:
+            stopping = finished = restart = False
+            game = None
+
+            async def handle(self, line):
+                pass
+
+            async def stop(self):
+                self.stopping = self.finished = True
+                await self.connection.send("unseek")
+
+        lines, commands, player = [], asyncio.Queue(), idle_player()
+        for command in ("help", "finger", "softrestart"):
+            commands.put_nowait(command)
+        async with fake_server(script) as server:
+            connection = await fics.ics_connection.open("127.0.0.1", server.port)
+            try:
+                await fics.login(connection, "guest", timeout=5)
+                player.connection = connection
+                self.assertEqual(await asyncio.wait_for(fics.serve(connection, commands, lines.append, player=player),
+                                                        10), "quit")
+            finally:
+                await connection.close()
+        self.assertTrue(player.restart)
+        self.assertTrue(any(line.startswith("-- console:") for line in lines))
+        self.assertFalse(any("<12>" in line for line in lines))
+
 
 if __name__ == "__main__":
     unittest.main()
