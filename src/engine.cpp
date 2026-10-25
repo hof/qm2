@@ -600,7 +600,7 @@ void * engine_t::_learn(void * engineObjPtr) {
             } else {
                 std::cout << "Engine(" << strongest << ") is equal in strength to engine(" << opponent << ")" << std::endl;
             }
-            if (upperBound == score::INF) { //assume the bound is close
+            if (upperBound == double(score::INF)) { //assume the bound is close
                 upperBound = bestFactor + 4 * MAX_WINDOW;
             }
             if (lowerBound == -score::INF) { //assume the bound is close
@@ -693,9 +693,7 @@ void engine_t::_create_start_positions(search_t * sd_root, book_t * book, string
 
     move::list_t * bookmoves = &sd_root->stack->move_list;
     move_t actualmove;
-    int gen = 0;
     while (x < max) {
-        gen++;
         while (sd_root->brd.ply < MAX_PLY) {
             actualmove.clear();
             int count = book->find(&sd_root->brd, bookmoves);

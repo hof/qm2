@@ -152,6 +152,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 list->stage = captures;
                 return result;
             }
+            [[fallthrough]];
         case captures:
             move::gen_captures(brd, list);
             if (list->current != list->last) {
@@ -177,6 +178,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                     }
                 }
             }
+            [[fallthrough]];
         case promotions:
             move::gen_promotions(brd, list);
             if (list->current != list->last) {
@@ -195,6 +197,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                     return result;
                 }
             }
+            [[fallthrough]];
         case killer_1:
             if (do_quiets) {
                 result = &s->stack->killer[0];
@@ -207,6 +210,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                     return result;
                 }
             }
+            [[fallthrough]];
         case killer_2:
             if (do_quiets) {
                 result = &s->stack->killer[1];
@@ -220,6 +224,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                     return result;
                 }
             }
+            [[fallthrough]];
         case minor_promotions: //and captures with see < 0
             list->minimum_score = -move::INF;
             result = pop(s, list);
@@ -227,6 +232,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 list->stage = castling;
                 return result;
             }
+            [[fallthrough]];
         case castling:
             if (s->stack->in_check == false) {
                 move::gen_castles(brd, list);
@@ -239,6 +245,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                     return result;
                 }
             }
+            [[fallthrough]];
         case quiet_moves:
             if (do_quiets) {
                 list->minimum_score = -move::INF;
@@ -251,6 +258,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
                 result = pop(s, list);
                 return result;
             }
+            [[fallthrough]];
         case stop:
         default:
             return NULL;

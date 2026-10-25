@@ -54,7 +54,7 @@ inline int popcnt(U64 x) {
     return __builtin_popcountll(x);
 }
 
-inline unsigned popcnt0(U64 x) {
+inline int popcnt0(U64 x) {
     return __builtin_popcountll(x);
 }
 

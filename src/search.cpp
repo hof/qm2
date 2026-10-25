@@ -277,7 +277,8 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     result_depth = completed_depth = attempted_depth = 0;
     interrupted = false;
     result_source = result_source_t::none;
-    memset(_stack, 0, sizeof (_stack));
+    // Plain data apart from move list pointers, which every node resets before use.
+    memset(static_cast<void *>(_stack), 0, sizeof (_stack));
     memset(history, 0, sizeof (history));
     memset(countermoves, 0, sizeof(countermoves));
     quiet_history = wild == 0 ? std::make_unique<quiet_history_t>() : nullptr;
