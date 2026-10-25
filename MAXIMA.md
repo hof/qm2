@@ -1162,11 +1162,12 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 
 ## 8. Roadmap
 
-- Raise single-thread speed without changing the search: prefetch the child's
-  TT entry after make-move, pick moves per phase instead of rescanning the
-  whole list, keep the NNUE accumulator in registers across feature updates,
-  and compute `gives_check` only where it is used. Bench node counts must stay
-  identical; report NPS.
+- Single-thread speed: TT prefetch and huge pages, TT-only eval caching, a
+  shared dense-layer reduction and sort-once move picking gave about 20% more
+  nodes per cycle (2026-10-24). Remaining candidates, measured before any
+  work: sparse first-layer input, `gives_check`, history lookups. Judge speed
+  by nodes per CPU cycle; sample skid and cache-miss counts misled the first
+  profiles.
 - Bring the D8 and D10 depth-ladder totals within the 1.40× limit (1.64× and
   1.55× at the 2026-10-23 baseline; D12 passes at 1.32×).
 - Add incremental CLI documentation lookup (`docs:list`, `docs:search`,
