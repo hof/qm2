@@ -691,12 +691,8 @@ void search_t::forward() {
     stack->current_move.clear();
     stack++;
     stack->in_check = false;
+    // Node fields such as improving and reduction are set by the child's own setup.
     stack->eval_result = score::INVALID;
-    stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
-    stack->lmr_correction = stack->lmr_alpha_raises = 0;
-    stack->reduction = 1024;
-    stack->static_eval = score::INVALID;
     stack->excluded_move = 0;
     stack->move_count = 0;
     brd.forward();
@@ -731,12 +727,8 @@ void search_t::forward(move_t * move, bool gives_check) {
     (stack + 1)->repetition_start = stack->repetition_start;
     stack++;
     stack->in_check = gives_check;
+    // Node fields such as improving and reduction are set by the child's own setup.
     stack->eval_result = score::INVALID;
-    stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
-    stack->lmr_correction = stack->lmr_alpha_raises = 0;
-    stack->reduction = 1024;
-    stack->static_eval = score::INVALID;
     stack->excluded_move = 0;
     stack->move_count = 0;
     brd.forward(move);
@@ -1828,33 +1820,17 @@ int search_t::null_verification(int alpha, int beta, int depth, bool cut_node) {
  * @return score for the current node
  */
 int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
-    stack->improving = false;
-    // A singular search keeps the main-line flag of the node it re-searches.
-    if (!stack->excluded_move) {
-        stack->tt_pv = false;
+    // No depth left: dive into quiescence search before any node setup.
+    if (depth < 1) {
+        return qsearch(alpha, beta, 0);
     }
-    stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
-    stack->lmr_correction = stack->lmr_alpha_raises = 0;
-    stack->reduction = 1024;
-    stack->static_eval = score::INVALID;
     assert(!cut_node || alpha + 1 == beta);
-
     assert(alpha < beta);
     assert(alpha >= -score::INF);
     assert(beta <= score::INF);
 
+    // The parent copies this node's principal variation, even after an early exit.
     stack->pv_count = 0;
-    sel_depth = MAX(brd.ply, sel_depth);
-    stack->best_move.clear();
-
-    /*
-     * If no more depth remaining, return quiescence value
-     */
-
-    if (depth < 1) {
-        const int score = qsearch(alpha, beta, 0);
-        return score;
-    }
 
     /*
      * Stop conditions
@@ -1900,6 +1876,21 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     if (raise_repetition_alpha(alpha) && alpha >= beta) {
         return alpha;
     }
+
+    /*
+     * Node setup
+     */
+    stack->improving = false;
+    // A singular search keeps the main-line flag of the node it re-searches.
+    if (!stack->excluded_move) {
+        stack->tt_pv = false;
+    }
+    stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
+    stack->lmr_correction = stack->lmr_alpha_raises = 0;
+    stack->reduction = 1024;
+    stack->static_eval = score::INVALID;
+    stack->best_move.clear();
+    sel_depth = std::max(brd.ply, sel_depth);
 
     /*
      * Transposition table lookup
@@ -2238,14 +2229,8 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
  */
 
 int search_t::qsearch(int alpha, int beta, int depth) {
+    // The parent copies this node's principal variation, even after an early exit.
     stack->pv_count = 0;
-    stack->best_move.clear();
-    stack->tt_move.clear();
-    stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
-    stack->lmr_correction = stack->lmr_alpha_raises = 0;
-    stack->reduction = 1024;
-    stack->static_eval = score::INVALID;
 
     assert(depth <= 0);
     assert(!stack->excluded_move);
@@ -2293,6 +2278,14 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     if (raise_repetition_alpha(alpha) && alpha >= beta) {
         return alpha;
     }
+
+    /*
+     * Node setup: only what quiescence search uses. Its children are quiescence
+     * nodes too, so the main search's node fields are never read here.
+     */
+    stack->best_move.clear();
+    stack->tt_move.clear();
+    sel_depth = std::max(brd.ply, sel_depth);
 
     const bool in_check = stack->in_check;
     const U64 key = position_key();
