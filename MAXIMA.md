@@ -527,9 +527,15 @@ GUI interaction itself requires the user's Windows desktop.
 
 ### 5.1 Optional Release LTO and GCC PGO
 
-Ordinary builds keep their existing flags. Enable LTO explicitly with
-`-Dmaxima_lto=ON`; CMake checks compiler/linker IPO support. LTO applies to
-Release targets and allows optimization across source files. GCC PGO is
+The `cpp26_release` preset enables LTO (`-Dmaxima_lto=ON`); CMake checks
+compiler/linker IPO support. LTO applies to Release targets and allows
+optimization across source files. `./maxima build --pgo` adds GCC PGO to that
+Release build: it builds an instrumented engine, trains it with timed searches
+of fixed middlegames (`runner/maxima_runner/pgo.py`) and rebuilds with the
+profile. A plain `./maxima build` always switches PGO off again, because a
+profile of older sources would reject the build. Measured 2026-10-24: LTO gave
+about 4-10% and PGO+LTO about 6-19% more nodes per second than plain `-O3`,
+with identical searches; use `--pgo` for playing binaries. GCC PGO is
 selected with `-Dmaxima_pgo_mode=generate` or `use` (default `off`) and
 `-Dmaxima_pgo_dir=/absolute/path`. PGO requires Release and GCC for both C and
 C++. It instruments the engine and Fathom, uses atomic profile counters, and
@@ -1563,7 +1569,8 @@ resolve there. MaxDrone sets `SyzygyPath` to `tablebases/syzygy` there unless
 configured otherwise. The `.env` token file stays in the checkout.
 
 ```bash
-./maxima build                 # configure and compile Release
+./maxima build                 # configure and compile Release (with LTO)
+./maxima build --pgo           # Release trained with PGO: fastest, for playing (~4 minutes)
 ./maxima build --debug
 ./maxima test                  # Release engine checks, then runner integration checks
 ./maxima test --debug

@@ -32,6 +32,16 @@ def data_root():
     return Path(configured).expanduser().resolve() if configured else project_root()
 
 
+def network_path(root=None):
+    """The default NNUE network: eval.nnue in the data directory, else one in networks/."""
+    root = root or project_root()
+    networks = [data_root() / "eval.nnue", *sorted((root / "networks").glob("*.nnue"))]
+    network = next((path for path in networks if path.is_file()), None)
+    if network is None:
+        raise ValueError("no network found; run ./maxima init")
+    return network
+
+
 def engine_path(root=None):
     root = root or project_root()
     for mode in ("release", "debug"):

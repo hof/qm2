@@ -4,7 +4,8 @@ import os
 import subprocess
 import sys
 
-from .project import data_root, engine_path, project_root
+from . import pgo
+from .project import data_root, engine_path, network_path, project_root
 
 
 command_groups = (
@@ -123,12 +124,18 @@ def development_command(command, arguments):
     modes.add_argument("--release", action="store_true", help="use the Release build (default)")
     parser.description = ("Configure and build Maxima2." if command == "build"
                           else "Run checks against an existing Maxima2 build.")
-    parser.epilog = (f"Examples: maxima {command}; maxima {command} --debug")
+    parser.epilog = (f"Examples: maxima {command}; maxima {command} --debug"
+                     + ("; maxima build --pgo" if command == "build" else ""))
+    if command == "build":
+        parser.add_argument("--pgo", action="store_true",
+                            help="train a Release build and rebuild it with the profile (~2 minutes)")
     if command == "test":
         checks = parser.add_mutually_exclusive_group()
         checks.add_argument("--engine-only", action="store_true", help="run only native engine checks")
         checks.add_argument("--runner-only", action="store_true", help="run only Python runner checks")
     args = parser.parse_args(arguments)
+    if getattr(args, "pgo", False) and args.debug:
+        parser.error("--pgo builds Release")
     root = project_root()
     if not (root / "CMakePresets.json").is_file():
         raise ValueError("build/test requires a Maxima checkout; set MAXIMA_PROJECT_DIR")
@@ -136,10 +143,13 @@ def development_command(command, arguments):
     preset = f"cpp26_{mode}"
     prefix, environment = toolchain(root)
     if command == "build":
-        status = run_command(prefix + ["cmake", "--preset", preset], root, environment)
-        if status:
-            return status
-        return run_command(prefix + ["cmake", "--build", "--preset", preset, "--parallel"], root, environment)
+        configure = prefix + ["cmake", "--preset", preset]
+        build = prefix + ["cmake", "--build", "--preset", preset, "--parallel"]
+        run = lambda command: run_command(command, root, environment)
+        if args.pgo:
+            return pgo.build(root, configure, build, run)
+        # Switch profiling off explicitly: a profile of older sources must not break the build.
+        return run(configure + ["-Dmaxima_pgo_mode=off"]) or run(build)
 
     build_dir = root / "build/cpp26" / mode
     binary = build_dir / "src/maxima2"
@@ -157,11 +167,7 @@ def development_command(command, arguments):
     environment = dict(os.environ, MAXIMA_ENGINE=str(binary), MAXIMA_PROJECT_DIR=str(root))
     # Runner tests start the engine in temporary directories, where it cannot find eval.nnue itself.
     if not environment.get("MAXIMA_EVAL_FILE"):
-        networks = [data_root() / "eval.nnue", *sorted((root / "networks").glob("*.nnue"))]
-        network = next((path for path in networks if path.is_file()), None)
-        if network is None:
-            raise ValueError("no network found; run ./maxima init")
-        environment["MAXIMA_EVAL_FILE"] = str(network)
+        environment["MAXIMA_EVAL_FILE"] = str(network_path(root))
     source = str(root / "runner")
     environment["PYTHONPATH"] = source + os.pathsep + environment.get("PYTHONPATH", "")
     return run_command([sys.executable, "-m", "unittest", "discover", "-s",

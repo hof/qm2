@@ -79,6 +79,7 @@ online play:
 
 ```bash
 ./maxima build --release
+./maxima build --pgo   # fastest build, for playing
 ./maxima test --release
 ./maxima suite:run --suite bratko-kopec --movetime 1000
 ./maxima match:run --help

@@ -47,7 +47,8 @@ class cli_tests(unittest.TestCase):
             self.assertEqual(result.exception.code, 0)
             with patch.object(cli, 'run_command', return_value=0) as run:
                 self.assertEqual(cli.main(['build', '--debug']), 0)
-        self.assertEqual(run.call_args_list[0].args[0], ['cmake', '--preset', 'cpp26_debug'])
+        self.assertEqual(run.call_args_list[0].args[0],
+                         ['cmake', '--preset', 'cpp26_debug', '-Dmaxima_pgo_mode=off'])
         self.assertEqual(run.call_args_list[1].args[0],
                          ['cmake', '--build', '--preset', 'cpp26_debug', '--parallel'])
 
@@ -59,6 +60,22 @@ class cli_tests(unittest.TestCase):
     def test_build_failure_propagates(self):
         with patch.object(cli, 'run_command', side_effect=[0, 9]):
             self.assertEqual(cli.main(['build', '--release']), 9)
+
+    def test_pgo_build_trains_between_instrumented_and_final_builds(self):
+        steps = []
+        with patch.object(cli, 'run_command', side_effect=lambda command, *_: steps.append(command) or 0), \
+                patch.object(cli.pgo, 'train', side_effect=lambda *_: steps.append('train')), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cli.main(['build', '--pgo']), 0)
+        profiles = f"-Dmaxima_pgo_dir={self.root / 'build/cpp26/profiles'}"
+        self.assertEqual(steps, [
+            ['cmake', '--preset', 'cpp26_release', profiles, '-Dmaxima_pgo_mode=generate'],
+            ['cmake', '--build', '--preset', 'cpp26_release', '--parallel', '--target', 'maxima2'],
+            'train',
+            ['cmake', '--preset', 'cpp26_release', profiles, '-Dmaxima_pgo_mode=use'],
+            ['cmake', '--build', '--preset', 'cpp26_release', '--parallel']])
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            cli.main(['build', '--pgo', '--debug'])
 
     def test_missing_build_has_actionable_error(self):
         with contextlib.redirect_stderr(io.StringIO()) as output:
