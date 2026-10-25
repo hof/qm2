@@ -97,7 +97,7 @@ search, NNUE evaluation, Syzygy tablebases, and experimental royal-losers suppor
   evaluation, hash tables, time management, and Polyglot opening-book support.
 - `src/w17/`: royal-losers search and material-only evaluation.
 - `src/tablebase.*`: Maxima's Syzygy adapter and probing policies.
-- `third_party/fathom/`: pinned, unmodified MIT-licensed table decoder.
+- `third_party/fathom/`: pinned MIT-licensed table decoder.
 - `tests/`: native correctness tests and raw-UCI lifecycle tests.
 - `tests/data/`: independently generated certificates (SEE, search trees,
   boundaries) and small offline Syzygy fixtures.
@@ -1162,8 +1162,8 @@ pondering before publishing `bestmove`.
 ### 7.4 Decoder dependency
 
 The probing decoder is the MIT-licensed Fathom library, pinned in
-`third_party/fathom/`. Keep upstream sources unchanged so updates remain
-reviewable. Maxima's adapter, configuration, score handling, and search policy
+`third_party/fathom/`. Its README records a local population-count signedness
+cast; otherwise keep upstream sources unchanged so updates remain reviewable. Maxima's adapter, configuration, score handling, and search policy
 live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 
 ## 8. Roadmap
