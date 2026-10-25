@@ -19,7 +19,6 @@
  * Neural evaluation for standard chess
  */
 
-#include "eval.h"
 #include "search.h"
 #include "nnue.h"
 #include <algorithm>

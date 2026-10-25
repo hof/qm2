@@ -28,7 +28,6 @@
 #include "book.h"
 #include "search.h"
 #include "bbmoves.h"
-#include "eval.h"
 #include "hashtable.h"
 #include "search.h"
 #include "movegen.h"

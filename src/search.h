@@ -34,16 +34,141 @@
 #include "game.h"
 #include "experience.h"
 #include <random>
-#include "search_control.h"
+#include <atomic>
+
+// The owner keeps this alive until its search worker has been joined.
+struct search_control_t {
+    std::atomic<bool> stop_requested{false};
+    std::atomic<bool> ponder{false};
+};
 #include "nnue.h"
 #include <array>
-#include "quiet_history.h"
-#include "capture_history.h"
-#include "correction_history.h"
+#include <algorithm>
+
+struct quiet_history_policy_t {
+    bool main = true;
+    bool continuation = true;
+    bool pawn = true;
+};
+
+// Worker-owned tables. Piece keys include color; pawn buckets intentionally
+// share colliding structures, like other bounded history heuristics.
+struct quiet_history_t {
+    static constexpr int limit = 16384;
+    static constexpr int pawn_buckets = 512;
+    int16_t main[2][64][64] = {};
+    int16_t continuation[BKING + 1][64][BKING + 1][64] = {};
+    int16_t pawn[pawn_buckets][BKING + 1][64] = {};
+
+    static void update_entry(int16_t & entry, int bonus) {
+        bonus = std::clamp(bonus, -limit, limit);
+        entry += bonus - int(entry) * std::abs(bonus) / limit;
+    }
+
+    int continuation_score(const move_t & move, const move_t & previous) const {
+        return continuation[previous.piece][previous.tsq][move.piece][move.tsq];
+    }
+
+    void update_continuation(const move_t & move, const move_t & previous, int bonus) {
+        update_entry(continuation[previous.piece][previous.tsq][move.piece][move.tsq], bonus);
+    }
+
+    int score(bool us, const move_t & move, const move_t * previous, U64 pawn_key,
+            const quiet_history_policy_t & policy = {}) const {
+        int value = 0;
+        if (policy.main) {
+            value += main[us][move.ssq][move.tsq];
+        }
+        if (policy.pawn) {
+            value += pawn[pawn_key % pawn_buckets][move.piece][move.tsq];
+        }
+        if (policy.continuation && previous && previous->piece) {
+            value += continuation_score(move, *previous);
+        }
+        return value;
+    }
+
+    void update(bool us, const move_t & move, const move_t * previous, U64 pawn_key, int bonus,
+            const move_t * protected_move = nullptr, const quiet_history_policy_t & policy = {}) {
+        if (policy.main) {
+            update_entry(main[us][move.ssq][move.tsq], bonus);
+        }
+        if (protected_move && protected_move->piece == move.piece
+                && protected_move->tsq == move.tsq) {
+            return;
+        }
+        if (policy.pawn) {
+            update_entry(pawn[pawn_key % pawn_buckets][move.piece][move.tsq], bonus);
+        }
+        if (policy.continuation && previous && previous->piece) {
+            update_continuation(move, *previous, bonus);
+        }
+    }
+};
+#include <algorithm>
+
+// Worker-owned history. The move records the EP victim even on an empty target;
+// non-capturing promotions use EMPTY, and the mover remains the original pawn.
+struct capture_history_t {
+    static constexpr int limit = 16384;
+    int16_t entries[BKING + 1][64][WKING + 1] = {};
+
+    static int victim(const move_t & move) {
+        return move.capture > WKING ? move.capture - WKING : move.capture;
+    }
+
+    static bool same_entry(const move_t & a, const move_t & b) {
+        return a.piece == b.piece && a.tsq == b.tsq && victim(a) == victim(b);
+    }
+
+    int score(const move_t & move) const {
+        return entries[move.piece][move.tsq][victim(move)];
+    }
+
+    void update(const move_t & move, int bonus) {
+        auto & entry = entries[move.piece][move.tsq][victim(move)];
+        bonus = std::clamp(bonus, -limit, limit);
+        entry += bonus - int(entry) * std::abs(bonus) / limit;
+    }
+};
+#include <algorithm>
+
+// Side-to-move pawn patterns share a bounded estimate of static-eval error.
+// Collisions are intentional; this is a heuristic, never a score certificate.
+struct correction_history_t {
+    static constexpr int size = 16384;
+    static constexpr int limit = 16384;
+    static constexpr int grain = 128;
+    int16_t entries[2][size] = {};
+    // Separate domains keep unlike features and continuation distances independent.
+    int16_t pieces[4][2][size] = {}; //white/black nonpawn, minor, major
+    int16_t continuation[2][2][size] = {};
+
+    static int bonus_for(int depth, int error) {
+        return std::clamp(std::clamp(error, -32768, 32768) * std::clamp(depth, 1, 16) / 8,
+            -limit / 4, limit / 4);
+    }
+
+    static bool update_entry(int16_t & entry, int bonus) {
+        const int before = entry;
+        entry += bonus - int(entry) * std::abs(bonus) / limit;
+        return entry != before;
+    }
+
+    int correction(bool side, U64 pawn_key) const {
+        return entries[side][pawn_key & (size - 1)] / grain;
+    }
+
+    bool update(bool side, U64 pawn_key, int depth, int error) {
+        return update_entry(entries[side][pawn_key & (size - 1)], bonus_for(depth, error));
+    }
+};
 #include "movepicker.h"
 #include "hashtable.h"
-#include "eval.h"
+class search_t;
 
+int scale_network_score(int raw, const board_t & board, int halfmoves);
+int evaluate(search_t * search);
 
 // Halfmove clocks 0..13 share score bounds; later clocks use buckets of eight.
 // Scores within a bucket reuse each other; clock ranges still guard draws.
@@ -310,6 +435,11 @@ public:
         stack->pv_count = (stack + 1)->pv_count + 1;
     }
 };
+
+namespace repetition {
+// Decode a reversible non-pawn move delta; accept only a legal quiet move.
+bool find_move(board_t & board, U64 delta, move_t & move);
+}
 
 #endif	/* SEARCH_H */
 

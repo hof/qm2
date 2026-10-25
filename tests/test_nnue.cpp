@@ -1,6 +1,5 @@
 #include "engine.h"
 #include "nnue.h"
-#include "nnue_affine.h"
 #include "w17/w17_eval.h"
 #include "w17/w17_search.h"
 #include <bit>

@@ -1,7 +1,6 @@
 // GPL-3.0-or-later. Legacy HalfKP format and integer arithmetic described by
 // Stockfish/CFish and the pinned nnue-probe reference; see its README for credit.
 #include "nnue.h"
-#include "nnue_affine.h"
 #include "score.h"
 #include <algorithm>
 #include <bit>

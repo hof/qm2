@@ -27,11 +27,68 @@
 #include <memory>
 #include <mutex>
 
-#include "eval.h"
 #include "search.h"
 #include "movepicker.h"
 #include "book.h"
-#include "threadman.h"
+
+/*
+ * Search threads
+ */
+
+#include <pthread.h>
+
+#define MAX_THREADS 256
+
+class threads_t {
+public:
+
+    threads_t() {
+        _count = 0;
+    }
+
+    ~threads_t() {
+        stop_all();
+    }
+
+    int create(void* function_ptr(void *ptr), void* params) {
+        if (_count < MAX_THREADS) {
+            pthread_t thread;
+            if (pthread_create(&thread, NULL, function_ptr, params) == 0) {
+                _threads[_count++] = thread;
+            } else {
+                return 0;
+            }
+        }
+        return _count;
+    }
+
+    void wait_for(int ix) {
+        pthread_t thread = get(ix);
+        if (thread && ix < _count) {
+            pthread_join(thread, NULL);
+        }
+    }
+
+    void stop_all() {
+        for (int i = 0; i < _count; i++) {
+            this->stop(i);
+        }
+        _count = 0;
+    }
+
+    void stop(int ix) {
+        wait_for(ix);
+    }
+
+private:
+    int _count;
+    pthread_t _threads[MAX_THREADS];
+
+    inline pthread_t get(int index) {
+        return (index >= 0 && index < MAX_THREADS) ? _threads[index] : 0;
+    }
+
+};
 #include "uci_console.h"
 #include "timeman.h"
 #include "maxima/version.h"

@@ -33,7 +33,6 @@
 
 #include "search.h"
 #include <bit>
-#include "repetition.h"
 #include <limits>
 #include <cmath>
 #include <algorithm>
@@ -41,7 +40,6 @@
 #include <thread>
 #include "book.h"
 #include "uci_console.h"
-#include "eval.h"
 #include <stdexcept>
 #include "timeman.h"
 #include "tablebase.h"
