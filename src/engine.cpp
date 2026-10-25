@@ -150,7 +150,6 @@ void engine_t::copy_results(search_t * s) {
     result.move = s->stack->best_move;
     result.score = s->result_score;
     result.nodes = s->nodes;
-    result.pruned_moves = s->pruned_nodes;
     result.score_flag = s->result_flag;
     result.depth = s->result_depth;
     result.completed_depth = s->completed_depth;

@@ -277,7 +277,6 @@ public:
     search_stack_t * stack;
     search_stack_t * root_stack;
     U64 nodes;
-    U64 pruned_nodes;
     U64 tablebase_hits;
     int tablebase_limit;
     int tablebase_probe_depth;
@@ -353,23 +352,6 @@ public:
     void book_calc();
     void iterative_deepening();
     int aspiration(int depth, int last_score);
-    bool probcut(int alpha, int beta, int depth, int eval, bool cut_node, int & value);
-    bool razor_node(int alpha, int beta, int depth, int eval, int & value);
-    bool reverse_futility(int beta, int depth, int eval, int & value);
-    bool prune_futility(move_t & move, int reduced_depth, int searched_moves,
-        int best, int alpha, int beta, int gives_check, int eval);
-    bool prune_quiet(move_t & move, int depth, int searched_moves, int reduced_depth,
-        int best);
-    bool prune_main_see(move_t & move, int depth, int searched_moves, int best);
-    struct singular_result_t {
-        uint16_t move = 0;
-        int extension = 0;
-        bool cutoff = false;
-        int value = 0;
-    };
-    singular_result_t singular_extension(int alpha, int beta, int depth, bool cut_node);
-    int singular_search(int alpha, int beta, int depth, bool cut_node, uint16_t excluded_move);
-    int null_verification(int alpha, int beta, int depth, bool cut_node);
     bool book_lookup();
     bool tablebase_lookup();
     bool probe_tablebase(int depth, int & value);
@@ -393,7 +375,6 @@ public:
     void backward();
     void forward(move_t * move, bool givesCheck);
     void backward(move_t * move);
-    bool try_forward(move_t * move, bool gives_check);
     void update_history(move_t * move);
     std::array<const move_t *, 2> long_continuation_contexts() const;
     // Standard search: learned history only, queried before making the move.

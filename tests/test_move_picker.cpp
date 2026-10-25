@@ -27,7 +27,10 @@ bool legality_contract() {
             if (!seen.insert(candidate->to_int()).second) {
                 return false;
             }
-            const bool accepted = search->try_forward(candidate, search->brd.gives_check(candidate));
+            const bool accepted = search->brd.legal(candidate);
+            if (accepted) {
+                search->forward(candidate, search->brd.gives_check(candidate));
+            }
             if (accepted != legal || candidate->en_passant != expected.en_passant
                     || candidate->castle != expected.castle) {
                 std::cerr << "legality mismatch: " << fen << ' ' << candidate->to_string() << '\n';

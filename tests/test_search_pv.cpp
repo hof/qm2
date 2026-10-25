@@ -73,7 +73,6 @@ public:
     }
     int pvs(int, int, int depth, bool = false) override {
         nodes += 10;
-        pruned_nodes += 7;
         stack->pv_count = 0;
         if (depth + 1 == interrupt_depth && children++ == completed_children) {
             stop_all = true;

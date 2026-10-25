@@ -97,7 +97,6 @@ struct search_result_t {
     move_t move{};
     int score = 0;
     U64 nodes = 0;
-    U64 pruned_moves = 0;
     int score_flag = 0;
     int depth = 0;
     int completed_depth = 0;
