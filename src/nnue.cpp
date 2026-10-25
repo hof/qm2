@@ -69,8 +69,12 @@ std::shared_ptr<const network_t> network_t::load(const std::string & path, std::
     offset += 4; // Already checked the affine architecture hash.
     for (auto & bias : network->_hidden1_biases) bias = read_i32();
     read_weights(network->_hidden1_weights);
+    network->_hidden1_weights = detail::pack_affine_weights<512>(network->_hidden1_weights);
     for (auto & bias : network->_hidden2_biases) bias = read_i32();
     read_weights(network->_hidden2_weights);
+    network->_hidden2_weights = detail::pack_affine_weights<32>(network->_hidden2_weights);
+    network->_hidden1_pair_sums_safe = detail::affine_pair_sums_safe<512>(network->_hidden1_weights);
+    network->_hidden2_pair_sums_safe = detail::affine_pair_sums_safe<32>(network->_hidden2_weights);
     network->_output_bias = read_i32();
     read_weights(network->_output_weights);
     assert(offset == bytes.size());
@@ -202,8 +206,8 @@ int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
         accumulator.ready[color] = true;
     }
     const auto input = detail::clip_activations(accumulator.values, board.us());
-    const auto hidden1 = detail::affine(input, _hidden1_weights, _hidden1_biases);
-    const auto hidden2 = detail::affine(hidden1, _hidden2_weights, _hidden2_biases);
+    const auto hidden1 = detail::affine(input, _hidden1_weights, _hidden1_biases, _hidden1_pair_sums_safe);
+    const auto hidden2 = detail::affine(hidden1, _hidden2_weights, _hidden2_biases, _hidden2_pair_sums_safe);
     int64_t sum = _output_bias;
     for (size_t i = 0; i < 32; ++i) sum += int(hidden2[i]) * int(_output_weights[i]);
     return static_cast<int>(sum / 16);

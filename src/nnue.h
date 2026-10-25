@@ -50,6 +50,7 @@ private:
     std::array<int8_t, 32> _output_weights{};
     int32_t _output_bias = 0;
     U64 _fingerprint = 0;
+    bool _hidden1_pair_sums_safe = false, _hidden2_pair_sums_safe = false;
 
     void refresh(const board_t & board, accumulator_t & accumulator, bool color) const;
     void add_feature(std::array<int16_t, 256> & values, bool color,
@@ -76,6 +77,7 @@ std::string path();
 #include <array>
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
 #ifdef __AVX2__
 #include <immintrin.h>
 #endif
@@ -111,45 +113,120 @@ std::array<uint8_t, 512> clip_activations(
     return output;
 }
 
+// Store four adjacent inputs for each output, then advance to the next input
+// block. One broadcast supplies eight output lanes without horizontal reductions.
+template<size_t input_size>
+std::array<int8_t, input_size * 32> pack_affine_weights(
+        const std::array<int8_t, input_size * 32> & rows) {
+    std::array<int8_t, input_size * 32> packed;
+    for (size_t column = 0; column < input_size; column += 4) {
+        for (size_t row = 0; row < 32; ++row) {
+            for (size_t i = 0; i < 4; ++i) {
+                packed[column * 32 + row * 4 + i] = rows[row * input_size + column + i];
+            }
+        }
+    }
+    return packed;
+}
+
+// Four SIMD product pairs may share a widening instruction only if every
+// partial sum fits int16 for every possible activation in [0,127].
+template<size_t input_size>
+bool affine_pair_sums_safe(const std::array<int8_t, input_size * 32> & weights) {
+    for (size_t column = 0; column < input_size; column += 16) {
+        for (size_t row = 0; row < 32; ++row) {
+            for (size_t pair = 0; pair < 4; pair += 2) {
+                int positive = 0, negative = 0;
+                for (size_t block = 0; block < 4; ++block) {
+                    for (size_t i = 0; i < 2; ++i) {
+                        const int w = weights[(column + block * 4) * 32 + row * 4 + pair + i];
+                        positive += std::max(w, 0);
+                        negative += std::min(w, 0);
+                    }
+                }
+                if (positive * 127 > INT16_MAX || negative * 127 < INT16_MIN) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 template<size_t input_size, bool use_simd = true>
 std::array<uint8_t, 32> affine(const std::array<uint8_t, input_size> & input,
         const std::array<int8_t, input_size * 32> & weights,
-        const std::array<int32_t, 32> & biases) {
+        const std::array<int32_t, 32> & biases, [[maybe_unused]] bool pair_sums_safe = false) {
     static_assert(input_size % 32 == 0 && input_size <= 512);
     // Inputs are [0,127], weights [-128,127], at most 512 products:
     // the dot product fits int32 even for extreme external weights.
     std::array<int32_t, 32> dots{};
 #ifdef __AVX2__
     if constexpr (use_simd) {
-        // Eight partial int32 sums of one row's dot product.
-        auto row_sums = [&](size_t row) {
-            auto sums = _mm256_setzero_si256();
-            const auto ones = _mm256_set1_epi16(1);
-            for (size_t column = 0; column < input_size; column += 32) {
-                const auto values = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(input.data() + column));
-                const auto packed_weights = _mm256_loadu_si256(
-                    reinterpret_cast<const __m256i *>(weights.data() + row * input_size + column));
-                // Each pair is in [-32512,32258]: maddubs cannot saturate.
-                // Widen immediately; summing two pairs in int16 could overflow.
-                const auto pairs = _mm256_maddubs_epi16(values, packed_weights);
-                sums = _mm256_add_epi32(sums, _mm256_madd_epi16(pairs, ones));
+        auto sum0 = _mm256_setzero_si256();
+        auto sum1 = _mm256_setzero_si256();
+        auto sum2 = _mm256_setzero_si256();
+        auto sum3 = _mm256_setzero_si256();
+        const auto ones = _mm256_set1_epi16(1);
+        if (pair_sums_safe) {
+            for (size_t column = 0; column < input_size; column += 16) {
+                auto broadcast = [&](size_t offset) {
+                    int32_t block;
+                    std::memcpy(&block, input.data() + column + offset, sizeof(block));
+                    return _mm256_set1_epi32(block);
+                };
+                const auto in0 = broadcast(0), in1 = broadcast(4);
+                const auto in2 = broadcast(8), in3 = broadcast(12);
+                const auto * packed = weights.data() + column * 32;
+                auto products = [&](size_t offset) {
+                    auto pair = [&](const auto values, size_t block) {
+                        const auto w = _mm256_loadu_si256(
+                            reinterpret_cast<const __m256i *>(packed + offset + block * 128));
+                        return _mm256_maddubs_epi16(values, w);
+                    };
+                    // Loading proved the sum of all positive or all negative
+                    // terms fits int16, so every intermediate also fits.
+                    const auto low = _mm256_add_epi16(pair(in0, 0), pair(in1, 1));
+                    const auto high = _mm256_add_epi16(pair(in2, 2), pair(in3, 3));
+                    return _mm256_madd_epi16(_mm256_add_epi16(low, high), ones);
+                };
+                sum0 = _mm256_add_epi32(sum0, products(0));
+                sum1 = _mm256_add_epi32(sum1, products(32));
+                sum2 = _mm256_add_epi32(sum2, products(64));
+                sum3 = _mm256_add_epi32(sum3, products(96));
             }
-            return sums;
-        };
-        // Four rows share one horizontal reduction instead of one each.
-        for (size_t row = 0; row < 32; row += 4) {
-            const auto sums01 = _mm256_hadd_epi32(row_sums(row), row_sums(row + 1));
-            const auto sums23 = _mm256_hadd_epi32(row_sums(row + 2), row_sums(row + 3));
-            const auto sums0123 = _mm256_hadd_epi32(sums01, sums23);
-            const auto four = _mm_add_epi32(_mm256_castsi256_si128(sums0123), _mm256_extracti128_si256(sums0123, 1));
-            _mm_storeu_si128(reinterpret_cast<__m128i *>(dots.data() + row), four);
+        } else {
+            for (size_t column = 0; column < input_size; column += 4) {
+                int32_t block;
+                std::memcpy(&block, input.data() + column, sizeof(block));
+                if (block == 0) {
+                    continue;
+                }
+                const auto values = _mm256_set1_epi32(block);
+                const auto * packed = weights.data() + column * 32;
+                auto products = [&](size_t offset) {
+                    const auto w = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(packed + offset));
+                    // A pair is in [-32512,32258], so maddubs cannot saturate.
+                    // Widen each pair before adding more products: unrestricted
+                    // networks can overflow int16 when several pairs are summed.
+                    return _mm256_madd_epi16(_mm256_maddubs_epi16(values, w), ones);
+                };
+                sum0 = _mm256_add_epi32(sum0, products(0));
+                sum1 = _mm256_add_epi32(sum1, products(32));
+                sum2 = _mm256_add_epi32(sum2, products(64));
+                sum3 = _mm256_add_epi32(sum3, products(96));
+            }
         }
+        _mm256_storeu_si256(reinterpret_cast<__m256i *>(dots.data()), sum0);
+        _mm256_storeu_si256(reinterpret_cast<__m256i *>(dots.data() + 8), sum1);
+        _mm256_storeu_si256(reinterpret_cast<__m256i *>(dots.data() + 16), sum2);
+        _mm256_storeu_si256(reinterpret_cast<__m256i *>(dots.data() + 24), sum3);
     } else
 #endif
     {
         for (size_t row = 0; row < 32; ++row) {
             for (size_t column = 0; column < input_size; ++column) {
-                dots[row] += int(input[column]) * int(weights[row * input_size + column]);
+                dots[row] += int(input[column]) * int(weights[(column / 4 * 32 + row) * 4 + column % 4]);
             }
         }
     }

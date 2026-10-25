@@ -340,9 +340,15 @@ holds an immutable model snapshot. Royal losers needs no network.
 search and ply, updated lazily from the nearest ready ancestor; a king move
 refreshes its perspective, null moves swap perspectives. The loader checks
 size, version and architecture hashes. AVX2 feature accumulation, activation
-packing and byte dot products (`vpmaddubsw`/`vpmaddwd`) have scalar fallbacks;
-clipping keeps every intermediate exact. A per-search cache keyed by position
-holds raw network scores; clock-dependent scaling is applied on every read.
+packing and byte dot products (`vpmaddubsw`/`vpmaddwd`) have scalar fallbacks.
+Dense weights are packed at load time into four-input blocks across outputs,
+so AVX2 inference broadcasts each input block and accumulates eight outputs per
+vector without horizontal reductions. The loader bounds positive and negative
+weight sums before allowing four product pairs to share a widening instruction;
+other layers widen each pair immediately and skip zero input blocks. Arbitrary
+supported weights and int32 biases retain exact scalar arithmetic and clipping. A per-search
+cache keyed by position holds raw network scores; clock-dependent scaling is
+applied on every read.
 The GPL reference probe used for exact inference tests is recorded in
 `third_party/nnue_reference/README.md`. There is no network I/O or Python
 dependency in the engine.

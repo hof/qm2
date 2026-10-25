@@ -59,8 +59,28 @@ bool check_affine() {
     std::mt19937 random(20261016);
     for (int trial = 0; trial < 300; ++trial) {
         for (auto & value : input) value = trial < 4 ? (trial == 0 ? 0 : 127) : random() % 128;
-        for (auto & weight : weights) weight = trial < 4 ? (trial == 2 ? -128 : 127)
-            : std::bit_cast<int8_t>(static_cast<uint8_t>(random()));
+        for (auto & weight : weights) {
+            if (trial < 4) {
+                weight = trial == 2 ? -128 : 127;
+            } else if (trial < 12) {
+                weight = 0;
+            } else if (trial % 3 == 0) {
+                weight = static_cast<int8_t>(int(random() % 65) - 32);
+            } else {
+                weight = std::bit_cast<int8_t>(static_cast<uint8_t>(random()));
+            }
+        }
+        if (trial >= 4 && trial < 12) {
+            // 258 * 127 fits int16; 259 * 127 does not. Exercise both
+            // signs and both SIMD pair lanes, independently of input values.
+            const int sign = trial < 8 ? 1 : -1;
+            const size_t pair = trial % 4 < 2 ? 0 : 2;
+            for (size_t row = 0; row < 32; ++row) {
+                weights[row * input_size + pair] = 127 * sign;
+                weights[row * input_size + pair + 1] = 127 * sign;
+                weights[row * input_size + pair + 4] = (4 + trial % 2) * sign;
+            }
+        }
         for (size_t row = 0; row < 32; ++row) {
             int64_t dot = 0;
             for (size_t column = 0; column < input_size; ++column)
@@ -70,14 +90,20 @@ bool check_affine() {
             biases[row] = row == 0 ? INT32_MIN : row == 1 ? INT32_MAX
                 : static_cast<int32_t>(targets[(trial + row) % 12] - dot);
         }
-        const auto scalar = nnue::detail::affine<input_size, false>(input, weights, biases);
-        const auto simd = nnue::detail::affine(input, weights, biases);
+        const auto packed = nnue::detail::pack_affine_weights<input_size>(weights);
+        const auto scalar = nnue::detail::affine<input_size, false>(input, packed, biases);
+        const auto simd = nnue::detail::affine(input, packed, biases);
+        const bool safe = nnue::detail::affine_pair_sums_safe<input_size>(packed);
+        if (trial >= 4 && trial < 12 && safe != (trial % 2 == 0)) {
+            return check(false, "Dense pair-sum bounds must reject either sign beyond int16");
+        }
+        const auto blocked = nnue::detail::affine(input, packed, biases, safe);
         for (size_t row = 0; row < 32; ++row) {
             int64_t sum = biases[row];
             for (size_t column = 0; column < input_size; ++column)
                 sum += int64_t(input[column]) * weights[row * input_size + column];
             const int expected = sum <= 0 ? 0 : sum >= 127 * 64 ? 127 : sum / 64;
-            if (scalar[row] != expected || simd[row] != expected) {
+            if (scalar[row] != expected || simd[row] != expected || blocked[row] != expected) {
                 return check(false, "Dense scalar/SIMD mismatch at an arithmetic boundary");
             }
         }
