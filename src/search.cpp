@@ -1565,8 +1565,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         const int margin = 100 * depth
             - 100 * int(stack->improving && !lower_value_threat(brd)) + correction / 2;
         if (refined_eval - margin >= beta) {
-            // A null-like static premise is invalid in stalemate.
-            return has_legal_move(brd) ? beta + (refined_eval - beta) / 3 : draw_score();
+            return beta + (refined_eval - beta) / 3;
         }
     }
 
@@ -1580,11 +1579,6 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         && eval + 132 * int(stack->improving) >= beta + 8 * depth;
     const bool do_null = null_enabled && !previous_null && null_policy;
 
-    // A null cutoff requires legal play: passing in stalemate would turn an
-    // exact draw into a heuristic fail-high.
-    if (do_prune_node && do_null && !has_legal_move(brd)) {
-        return draw_score();
-    }
     if (do_prune_node && do_null) {
         // Stronger static evidence and deeper nodes permit a shallower null
         // search. A tactical hash move is ordering evidence, never a score bound.
@@ -2036,8 +2030,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     // Stand pat: return if the evaluation is already good enough
     const int eval = evaluate(this);
     if (eval >= beta && !in_check) {
-        return has_legal_move(brd) ? finish(eval, score::LOWERBOUND)
-            : finish(draw_score(), score::EXACT);
+        return finish(eval, score::LOWERBOUND);
     }
 
     // First move; without one it is mate, stalemate, or there are no tactical moves

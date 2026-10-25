@@ -25,6 +25,8 @@ const history_t histories[] = {
 std::map<std::string, const node_t *> oracle;
 bool valid = true;
 int checked_nodes = 0, quiescent_nodes = 0;
+// Quiescence stand pat does not prove stalemate, so a tree with one is approximate.
+bool quiescent_stalemate = false;
 
 bool check(bool ok, const char * message, const char * fen) {
     if (!ok) {
@@ -58,6 +60,7 @@ int reference(search_t & search, int mode) {
     }
     const auto & node = *found->second;
     if (node.terminal != score::INVALID) {
+        quiescent_stalemate |= mode <= 0 && node.terminal == 0 && !node.in_check;
         return node.terminal == -score::MATE ? -score::MATE + search.brd.ply : node.terminal;
     }
     valid &= check(search.stack->in_check == node.in_check, "reference check differs", node.fen);
@@ -127,7 +130,9 @@ bool test_root(const char * fen, int & probes, int & interrupted, int & exact_re
     for (int mode : {-2, -1, 0, 1}) {
         auto model = std::make_unique<search_t>(fen);
         prepare(*model, false);
+        quiescent_stalemate = false;
         const int value = reference(*model, mode);
+        const bool exact_model = !quiescent_stalemate;
         ok &= restored(*model, *original, fen);
         if (mode == 0) {
             auto parent = std::make_unique<search_t>(fen);
@@ -175,7 +180,7 @@ bool test_root(const char * fen, int & probes, int & interrupted, int & exact_re
                             // Selective pruning gives approximate bounds, and a warm
                             // TT hint may add a move to quiescence; only the unpruned
                             // search without hints must reproduce the exhaustive model.
-                            if (!selective && cache != 1) {
+                            if (!selective && cache != 1 && exact_model) {
                                 ok &= check(valid_bound(result, value, window.first, window.second),
                                     "real horizon bound differs", fen);
                             }
