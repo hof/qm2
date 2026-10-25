@@ -131,13 +131,7 @@ bool search_t::has_legal_move(board_t & brd) {
     return false;
 }
 
-/**
- * Initialize sort values for root move
- * @param m move
- * @param val initial value
- * @param checks if the move checks the opponent
- * @param see_value static exchange value
- */
+// Initial root order: SEE in pawns, plus one for a dangerous move.
 void root_move_t::init(move_t * m, bool checks, bool dangerous, int see_value) {
     move.set(m);
     gives_check = checks;
@@ -146,12 +140,7 @@ void root_move_t::init(move_t * m, bool checks, bool dangerous, int see_value) {
     nodes = see / 100 + dangerous; //initial sort order
 }
 
-/**
- * Compare two root moves for sorting
- * @param m move
- * @param best_move best move found so far
- * @return int < 0 -> m is better; >= 0 m is not better
- */
+// Root move sort order: negative when m is the better move.
 int root_move_t::compare(root_move_t * m, move_t * best_move) {
     if (this->move.equals(best_move)) {
         return 1;
@@ -177,10 +166,6 @@ void root_move_t::add_nodes(U64 count) {
     }
 }
 
-/**
- * Initializes the object, preparing to start a new search
- * @param fen string representing the board position
- */
 // Raw network scores depend on board/side and the immutable model snapshot,
 // not repetition history or the halfmove clock. Scaling is applied separately.
 int search_t::neural_static_score() {
@@ -296,9 +281,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     stack->repetition_start = -static_cast<int>(_position_history.size());
 }
 
-/**
- * Lookup current position in polyglot book database (file book.bin)
- */
+// Looks up the position in the polyglot book (book.bin).
 bool search_t::book_lookup() {
     if (!_own_book || brd.stack->fifty_count >= 90 || is_draw()) {
         return false;
@@ -407,9 +390,7 @@ bool search_t::book_lookup() {
     return true;
 }
 
-/**
- * Starts the searching
- */
+// Starts the search.
 void search_t::go() {
     assert(stack->best_move.piece == 0 && ponder_move.piece == 0);
     // Royal losers terminal rules apply before book selection or root moves.
@@ -521,9 +502,7 @@ bool search_t::probe_tablebase(int depth, int & value) {
     return true;
 }
 
-/**
- * Get a score for every legal move
- */
+// Scores every legal move from the book.
 void search_t::book_calc() {
     const int count = init_root_moves();
     std::string fen = brd.to_string();
@@ -546,11 +525,8 @@ void search_t::book_calc() {
 }
 
 
-/**
- * Iterative deepening - call aspiration search iterating over the depth. 
- * For timed searched, the function decides if a new iteration should be started 
- * or not.
- */
+// Iterative deepening with aspiration windows. Timed searches decide here
+// whether another iteration starts.
 void search_t::iterative_deepening() {
     int last_score = -score::INF;
     const int max_time = game.tm.reserved_max();
@@ -576,22 +552,22 @@ void search_t::iterative_deepening() {
             int elapsed = game.tm.elapsed();
             bool do_stop = false;
             if (root.move_count <= 1 && elapsed > min_time / 8) {
-                //one legal move, still search a bit to get a ponder move
+                // One legal move, still search a bit to get a ponder move
                 do_stop = true;
             } else if (elapsed > max_time / 2) {
-                //complex position, maximum (emergency) time control
+                // Complex position, maximum (emergency) time control
                 do_stop = true;
             } else if (elapsed > min_time / 2 && !score_jump && root.is_easy()) {
-                //easy position, half time control
+                // Easy position, half time control
                 do_stop = true;
             } else if (elapsed > min_time && !score_jump && !root.is_complex()) {
-                //neutral position, normal time control
+                // Neutral position, normal time control
                 do_stop = true;
             } else if (score::mate_in_ply(score) && depth > score::mate_in_ply(score)) {
-                //mate in N and search depth > N
+                // Mate in N and search depth > N
                 do_stop = true;
             }
-            //abort search or prepare pondering to abort early
+            // Abort search or prepare pondering to abort early
             if (do_stop && pondering()) {
                 game.tm.set_max(0);
             } else if (do_stop) {
@@ -610,13 +586,8 @@ void search_t::iterative_deepening() {
     }
 }
 
-/**
- * Aspiration window search: call search with a small alpha, beta window and 
- * gradually increase the window in case of a fail high or fail low
- * @param depth depth search depth
- * @param last_score score of last iteration
- * @return search result score
- */
+// Aspiration windows: search a narrow window around the last score and widen
+// it after a fail high or fail low.
 int search_t::aspiration(int depth, int last_score) {
     if (!aspiration_enabled || depth < 2) {
         return pvs_root(-score::INF, score::INF, depth);
@@ -648,9 +619,7 @@ int search_t::aspiration(int depth, int last_score) {
     }
 }
 
-/**
- * Poll to test is the search should be aborted
- */
+// Polls whether the search must stop.
 bool search_t::abort(bool force_poll = false) {
     static const int NODES_BETWEEN_POLLS = 5000;
     bool result = false;
@@ -668,9 +637,7 @@ bool search_t::abort(bool force_poll = false) {
     return result;
 }
 
-/**
- * Do a null move
- */
+// Makes a null move.
 void search_t::forward() {
     (stack + 1)->multiple_extensions = stack->multiple_extensions;
     stack->current_move.clear();
@@ -689,20 +656,14 @@ void search_t::forward() {
     assert(stack == &_stack[brd.ply]);
 }
 
-/**
- * Undo a null move
- */
+// Undoes a null move.
 void search_t::backward() {
     stack--;
     brd.backward();
     assert(stack == &_stack[brd.ply]);
 }
 
-/**
- * Make a move, going one ply deeper in the search
- * @param move 
- * @param gives_check
- */
+// Makes a move, one ply deeper.
 void search_t::forward(move_t * move, bool gives_check) {
     // Count one node per move made; null moves and re-searches of an
     // already made move are not new nodes.
@@ -724,40 +685,31 @@ void search_t::forward(move_t * move, bool gives_check) {
     assert(stack == &_stack[brd.ply]);
 }
 
-/**
- * Undo a move
- * @param move
- */
+// Undoes a move.
 void search_t::backward(move_t * move) {
     stack--;
     brd.backward(move);
     assert(stack == &_stack[brd.ply]);
 }
 
-/**
- * Test if the search is pondering
- * @return bool true if pondering 
- */
+// True while pondering.
 bool search_t::pondering() {
     return game.ponder && (!_control || _control->ponder.load());
 }
 
-/**
- * Converts principle variation to a string
- * @return pv string
- */
+// The principal variation as text.
 std::string search_t::pv_to_string() {
     std::string result = "";
     board_t b;
     b.init(brd.to_string().c_str());
 
-    //retrieve pv from stack
+    // Retrieve pv from stack
     for (int i = 0; i < stack->pv_count; i++) {
         result += stack->pv_moves[i].to_string() + " ";
         b.forward(&stack->pv_moves[i]);
     }
 
-    //retrieve extra moves from hash if the pv is short
+    // Retrieve extra moves from hash if the pv is short
     if (stack->pv_count < 8) {
         move_t m;
         for (int i = 0; i < 8; i++) {
@@ -776,10 +728,8 @@ std::string search_t::pv_to_string() {
     return result;
 }
 
-/**
- * Writes principle variation in the hash table. Called after every iteration
- * to make sure pv moves are searched again first
- */
+// Stores the principal variation in the TT after every iteration, so its
+// moves are searched first again.
 void search_t::store_pv() {
     board_t b;
     b.init(brd.to_string().c_str());
@@ -798,11 +748,7 @@ void search_t::store_pv() {
     }
 }
 
-/**
- * Update history sort scores for quiet moves
- * @param move a quiet move that caused a beta cutoff
- * @param depth current search depth
- */
+// Updates history scores after a quiet move caused a beta cutoff.
 void search_t::update_history(move_t * move) {
     assert(move->capture == EMPTY);
     assert(move->promotion == EMPTY);
@@ -1056,10 +1002,7 @@ void search_t::update_quiet_cutoff(move_t * move, int depth, int searched_moves)
     }
 }
 
-/**
- * Updates killer moves, making sure they're not equal
- * @param move a quiet move that caused a beta cutoff
- */
+// Updates the killer moves after a quiet beta cutoff; the two stay different.
 void search_t::update_killers(move_t * move) {
     assert(move->capture == EMPTY);
     assert(move->promotion == EMPTY);
@@ -1067,7 +1010,7 @@ void search_t::update_killers(move_t * move) {
     if (stack->killer[0].equals(move)) {
         return;
     }
-    //note: address(&stack->killer[1]) can be equal to address(move)
+    // Note: address(&stack->killer[1]) can be equal to address(move)
     move_t t;
     t.set(move);
     stack->killer[1].set(&stack->killer[0]);
@@ -1075,10 +1018,7 @@ void search_t::update_killers(move_t * move) {
     assert(stack->killer[0].equals(&stack->killer[1]) == false);
 }
 
-/**
- * Initialize moves for the root position
- * @return int amount of legal moves
- */
+// Collects the root moves; returns the number of legal moves.
 int search_t::init_root_moves() {
     root.move_count = 0;
     root.moves[0].move.clear();
@@ -1122,10 +1062,7 @@ void search_t::order_root_moves(int depth) {
     }
 }
 
-/**
- * Algorithm to guess the complexity of the position based on amount
- * of nodes searched
- */
+// Guesses from the node distribution whether the position is complex.
 bool root_t::is_complex() {
     const int64_t n0 = moves[0].nodes;
     for (int i = 1; i < move_count; i++) {
@@ -1136,10 +1073,7 @@ bool root_t::is_complex() {
     return false;
 }
 
-/**
- * Algorithm to guess the complexity of the position based on amount
- * of nodes searched
- */
+// Guesses from the node distribution whether the position is easy.
 bool root_t::is_easy() {
     const int64_t n0 = moves[0].nodes / 8;
     for (int i = 1; i < move_count; i++) {
@@ -1150,9 +1084,7 @@ bool root_t::is_easy() {
     return true;
 }
 
-/**
- * Sort algorithm for root moves (simple insertion sort)
- */
+// Sorts the root moves (insertion sort).
 void root_t::sort_moves(move_t * best_move) {
     for (int j = 1; j < move_count; j++) {
         root_move_t rmove = moves[j];
@@ -1251,14 +1183,9 @@ int search_t::ceiling_score() {
     return is_draw() ? draw_score() : evaluate(this);
 }
 
-/**
- * Principle Variation Search (root node)
- * Difference with normal (non-root) search:
- * - Sending new PVs asap to the interface
- * - Sort order based on pv and amount of nodes of the subtrees
- * - No pruning and hash table lookup/store
- * - Compatible with all supported wild variants
- */
+// Principal variation search at the root. Unlike pvs it sends new PVs to the
+// interface at once, orders moves by PV and subtree size, never prunes or cuts
+// off on the TT, and supports all wild variants.
 int search_t::pvs_root(int alpha, int beta, int depth) {
     // A reduced aspiration re-search still belongs to the attempted iteration.
     const int report_depth = std::max(depth, attempted_depth);
@@ -1295,7 +1222,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         const int estimate = wild == 0
             ? reduction_estimate(depth, i, *move, true, false, rmove->gives_check) : 0;
         const int reduce = wild == 0 ? reduction(depth, i, estimate, true) : 0;
-        //go forward and search one level deeper
+        // Go forward and search one level deeper
         stack->move_count = i + 1;
         forward(move, rmove->gives_check);
         if (i == 0) {
@@ -1322,7 +1249,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
         }
         backward(move);
 
-        //handle results
+        // Handle results
         rmove->add_nodes(nodes - nodes_before);
         if (stop_all) {
             return alpha;
@@ -1356,15 +1283,9 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     return best;
 }
 
-/**
- * Verifies is a position is drawn by 
- * a) lack of material
- * b) fifty quiet moves
- * c) repetition
- * The actual root requires three occurrences; descendants score the first
- * match against either game or search history as a draw heuristic.
- * @return true if search should score this node as drawn
- */
+// Draw by lack of material, fifty quiet moves or repetition. The actual root
+// needs three occurrences; descendants score the first match against game or
+// search history as a draw.
 bool search_t::is_draw() {
     if (brd.is_draw()) {
         return true;
@@ -1454,14 +1375,8 @@ bool search_t::is_improving() const {
     return true;
 }
 
-/**
- * Principle Variation Search (fail-soft)
- * @param alpha lowerbound value
- * @param beta upperbound value
- * @param depth remaining search depth
- * @param cut_node expected non-PV cutoff, not a proven score bound
- * @return score for the current node
- */
+// Principal variation search, fail-soft. cut_node marks an expected non-PV
+// cutoff, not a proven score bound.
 int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     // No depth left: dive into quiescence search before any node setup.
     if (depth < 1) {
@@ -1523,6 +1438,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     /*
      * Node setup
      */
+
     stack->improving = false;
     // A singular search keeps the main-line flag of the node it re-searches.
     if (!stack->excluded_move) {
@@ -1538,6 +1454,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     /*
      * Transposition table lookup
      */
+
     const auto excluded_move = stack->excluded_move;
     const bool normal_search = !excluded_move;
     stack->tt_key = position_key(brd);
@@ -2023,11 +1940,8 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     return best;
 }
 
-/**
- * Quiescence search with tactical moves only.
- * Captures and promotions at every depth; all legal evasions in check.
- */
-
+// Quiescence search: captures and promotions at every depth, all legal evasions
+// in check.
 int search_t::qsearch(int alpha, int beta, int depth) {
     // The parent copies this node's principal variation, even after an early exit.
     stack->pv_count = 0;
@@ -2082,6 +1996,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     /*
      * Node setup
      */
+
     // Only what quiescence search uses: its children are quiescence nodes
     // too, so the main search's node fields are never read here.
     stack->best_move.clear();
@@ -2202,19 +2117,12 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     return finish(best_score, score::UPPERBOUND);
 }
 
-/**
- * Tests if a move equals one of the killer moves
- */
+// True if the move is one of the two killer moves.
 bool search_t::is_killer(move_t * const move) {
     return !move->capture && (stack->killer[0].equals(move) || stack->killer[1].equals(move));
 }
 
-/**
- * Tests if a move is stored in the searched moves list
- * @param move
- * @param searched_moves
- * @return true is listed, false otherwise
- */
+// True if the move is among the moves already searched.
 bool search_t::in_searched(move_t* move, int searched_moves) {
     for (int i = 0; i < searched_moves; i++) {
         if (stack->searched[i].equals(move)) {
@@ -2231,6 +2139,7 @@ bool search_t::in_searched(move_t* move, int searched_moves) {
  * Note: in UCI mode this is not an issue, because each position
  * starts with a new stack.
  */
+
 void search_t::reset_stack() {
     for (int ply = 0; ply < brd.ply; ++ply) {
         _position_history.push_back(brd._stack[ply].repetition_key());
@@ -2257,30 +2166,3 @@ void search_t::reset_stack() {
     stack->pv_count = 0;
 }
 
-/**
- * Prints the positon debug info and search path upto the point in the tree where
- * the function was called and exits the program
- * @param alpha lowerbound value
- * @param beta upperbound value
- */
-void search_t::debug_print_search(int alpha, int beta, int depth) {
-    std::cout << "print search (" << alpha << ", " << beta << ", "
-            << depth << "): " << std::endl;
-    board_t brd2;
-    memcpy(&brd2, &brd, sizeof (board_t));
-    while (brd2.ply > 0) {
-        move_t * move = &get_stack(brd2.ply - 1)->current_move;
-        move->piece ? brd2.backward(move) : brd2.backward();
-    }
-    std::cout << "ROOT FEN: " << brd2.to_string() << std::endl;
-    std::cout << "Path ";
-    for (int i = 0; i < brd.ply; i++) {
-
-        std::cout << " " << get_stack(i)->current_move.to_string();
-    }
-    std::cout << "\nFEN: " << brd.to_string() << std::endl;
-    std::cout << "Hash: " << brd.stack->tt_key << std::endl;
-    std::cout << "nodes: " << nodes << std::endl;
-    std::cout << std::endl;
-    exit(0);
-}
