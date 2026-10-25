@@ -1615,11 +1615,10 @@ bool search_t::reverse_futility(int beta, int depth, int eval, int & value) {
             || std::abs(eval) >= decisive || eval < beta) {
         return false;
     }
-    // A quiet refutation deserves a search. Never trust an unvalidated hash
-    // hint as tactical evidence or use its bound as a static evaluation.
-    auto & hint = stack->tt_move;
-    const bool legal_hint = hint.piece && brd.valid(&hint) && brd.legal(&hint);
-    if (legal_hint && !hint.capture && !hint.promotion) {
+    // A quiet refutation deserves a search. Never use the hash move's bound
+    // as a static evaluation.
+    const auto & hint = stack->tt_move;
+    if (hint.piece && !hint.capture && !hint.promotion) {
         return false;
     }
     // Correction magnitude expresses uncertainty in the raw evaluator. A
@@ -1718,7 +1717,7 @@ int search_t::internal_search_depth(int depth, bool pv, bool cut_node) {
             || stack->excluded_move) {
         return depth;
     }
-    if (stack->tt_move.piece && brd.valid(&stack->tt_move) && brd.legal(&stack->tt_move)) {
+    if (stack->tt_move.piece) {
         return depth;
     }
     return depth - 1;
@@ -1736,8 +1735,7 @@ search_t::singular_result_t search_t::singular_extension(int alpha, int beta, in
             || stack->in_check || stack->excluded_move
            
             || std::abs(alpha) >= decisive || std::abs(beta) >= decisive
-            || !stack->tt_move.piece || !brd.valid(&stack->tt_move)
-            || !brd.legal(&stack->tt_move)) {
+            || !stack->tt_move.piece) {
         return {};
     }
     tt_hit_t hit;
@@ -1786,11 +1784,10 @@ search_t::singular_result_t search_t::singular_extension(int alpha, int beta, in
 }
 
 // Stronger static evidence and deeper nodes permit a shallower artificial
-// branch. The legal tactical hint is ordering evidence, never a score bound.
+// branch. A tactical hash move is ordering evidence, never a score bound.
 int search_t::null_search_depth(int depth, int eval, int beta) {
-    auto hint = stack->tt_move;
-    const bool tactical = hint.piece && (hint.capture || hint.promotion)
-        && brd.valid(&hint) && brd.legal(&hint);
+    const auto & hint = stack->tt_move;
+    const bool tactical = hint.piece && (hint.capture || hint.promotion);
     const int surplus = std::clamp((eval - beta) / 174, 0, 4);
     return std::max(0, depth - 4 - depth / 3 - surplus - int(tactical));
 }
@@ -1927,13 +1924,15 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         // A main-line node whose cached score already failed low is reduced more.
         stack->lmr_tt_fail_low = stack->tt_pv && tt_hit && tt_flag && tt_score <= alpha;
     }
-    bool tt_move_legal = true;
-    if (tt_move) {
-        move_t hint;
-        hint.set_compact(&brd, tt_move);
-        tt_move_legal = hint.piece && brd.valid(&hint) && brd.legal(&hint);
+    // Decode and check the hash move once. Only a key collision stores a move
+    // that is invalid here; such an entry supplies neither a move nor a score.
+    // Legality is tested when the move is made.
+    stack->tt_move.set_compact(&brd, tt_move);
+    if (stack->tt_move.piece && !brd.valid(&stack->tt_move)) {
+        stack->tt_move.clear();
     }
-    if (!pv && usable_tt_score && tt_move_legal && brd.stack->fifty_count < 90) {
+    const bool tt_move_valid = !tt_move || stack->tt_move.piece;
+    if (!pv && usable_tt_score && tt_move_valid && brd.stack->fifty_count < 90) {
         // A compatible exact score resolves either side of the window.
         if (tt_flag == score::EXACT) {
             if (tt_score >= beta
@@ -1950,7 +1949,6 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             return tt_score;
         }
     }
-    stack->tt_move.set_compact(&brd, tt_move);
 
     /*
      * Node pruning
@@ -1978,8 +1976,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     }
     if (lmr_enabled && normal_search) {
         auto & hint = stack->tt_move;
-        stack->lmr_tt_tactical = hint.piece && (hint.capture || hint.promotion)
-            && brd.valid(&hint) && brd.legal(&hint);
+        stack->lmr_tt_tactical = hint.piece && (hint.capture || hint.promotion);
         if (!in_check && stack->eval_result != score::INVALID) {
             stack->lmr_correction = std::min(2048, std::abs(eval - stack->eval_result) * 1024 / 100);
         }

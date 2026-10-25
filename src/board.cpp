@@ -24,6 +24,7 @@
 
 #include "board.h"
 #include "hashcodes.h"
+#include <array>
 #include <type_traits>
 
 /**
@@ -75,6 +76,7 @@ void board_t::clear() {
     _stack[0].clear();
     stack = &_stack[0];
     ply = 0;
+    reset_check_info();
     root_ply = 0;
     memset(bb, 0, sizeof (bb));
     memset(matrix, 0, sizeof (matrix));
@@ -157,6 +159,7 @@ void board_t::forward(const move_t * move) {
     (stack + 1)->copy(stack);
     stack++;
     ply++;
+    reset_check_info();
 
     HASH_EP(stack->tt_key, stack->enpassant_sq); //remove (a possible) ep square from hashcode
 
@@ -314,6 +317,7 @@ void board_t::forward() {
     (stack + 1)->copy(stack);
     stack++;
     ply++;
+    reset_check_info();
     HASH_EP(stack->tt_key, stack->enpassant_sq); //remove enpassant_square if it is set
     stack->enpassant_sq = EMPTY;
     stack->legal_enpassant = false;
@@ -448,7 +452,7 @@ bool board_t::valid(const move_t * move) {
  * NOTE: this version does not consider if we are in check or not which leaves some
  * room for further optimization.
  */
-bool board_t::legal(move_t * move) {
+bool board_t::legal_full(move_t * move) {
     int piece = move->piece;
     int tsq = move->tsq;
     assert(piece >= WPAWN && piece <= BKING && tsq >= a1 && tsq <= h8);
@@ -551,12 +555,117 @@ bool board_t::legal(move_t * move) {
     return true;
 }
 
+namespace {
+
+// Squares strictly between two squares on a common line, else empty.
+constexpr auto BETWEEN = [] {
+    std::array<std::array<U64, 64>, 64> table{};
+    constexpr int directions[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+    for (int from = 0; from < 64; ++from) {
+        for (const auto & direction : directions) {
+            U64 path = 0;
+            int file = from % 8 + direction[0];
+            int rank = from / 8 + direction[1];
+            while (file >= 0 && file < 8 && rank >= 0 && rank < 8) {
+                table[from][rank * 8 + file] = path;
+                path |= U64(1) << (rank * 8 + file);
+                file += direction[0];
+                rank += direction[1];
+            }
+        }
+    }
+    return table;
+}();
+
+// Questions per ply answered by the per-move tests before the facts pay off.
+constexpr int LAZY_QUESTIONS = 2;
+
+// Pieces that are the only one between the king and a slider of the given set.
+U64 lone_blockers(int king, U64 diagonal_sliders, U64 straight_sliders, U64 occupied) {
+    U64 snipers = (BISHOP_MOVES[king] & diagonal_sliders) | (ROOK_MOVES[king] & straight_sliders);
+    U64 result = 0;
+    while (snipers) {
+        const U64 between = BETWEEN[king][pop(snipers)] & occupied;
+        if (between && !(between & (between - 1))) {
+            result |= between;
+        }
+    }
+    return result;
+}
+
+}
+
+// Facts for gives_check: separate from pins, as quiescence nodes never test legality before moving.
+const check_info_t & board_t::check_facts() {
+    auto & info = _check_info[ply];
+    if (info.checks_ready) {
+        return info;
+    }
+    const bool us = stack->wtm;
+    const U64 occupied = bb[ALLPIECES];
+    const int enemy_king = get_sq(KING[!us]);
+    info.discoverers = bb[us ? WPIECES : BPIECES] & lone_blockers(enemy_king,
+        bb[BISHOP[us]] | bb[QUEEN[us]], bb[ROOK[us]] | bb[QUEEN[us]], occupied);
+    const U64 diagonal = magic::bishop_moves(enemy_king, occupied);
+    const U64 straight = magic::rook_moves(enemy_king, occupied);
+    info.check_squares[PAWN[us]] = PAWN_CAPTURES[!us][enemy_king];
+    info.check_squares[KNIGHT[us]] = KNIGHT_MOVES[enemy_king];
+    info.check_squares[BISHOP[us]] = diagonal;
+    info.check_squares[ROOK[us]] = straight;
+    info.check_squares[QUEEN[us]] = diagonal | straight;
+    info.check_squares[KING[us]] = 0;
+    info.checks_ready = true;
+    return info;
+}
+
+const check_info_t & board_t::pin_facts() {
+    auto & info = _check_info[ply];
+    if (info.pins_ready) {
+        return info;
+    }
+    const bool us = stack->wtm;
+    const int own_king = get_sq(KING[us]);
+    info.in_check = is_attacked(own_king, !us);
+    info.pinned = bb[us ? WPIECES : BPIECES] & lone_blockers(own_king,
+        bb[BISHOP[!us]] | bb[QUEEN[!us]], bb[ROOK[!us]] | bb[QUEEN[!us]], bb[ALLPIECES]);
+    info.pins_ready = true;
+    return info;
+}
+
+bool board_t::legal(move_t * move) {
+    if (!_check_info[ply].pins_ready && ++_check_info[ply].pin_questions <= LAZY_QUESTIONS) {
+        return legal_full(move);
+    }
+    const bool us = stack->wtm;
+    const auto & info = pin_facts();
+    const bool en_passant = stack->enpassant_sq && move->tsq == stack->enpassant_sq && move->piece == PAWN[us];
+    // Out of check, only the king, a pinned piece or en passant can expose the own king.
+    if (!info.in_check && move->piece != KING[us] && !en_passant && !(info.pinned & BIT(move->ssq))) {
+        move->en_passant = false;
+        move->castle = 0;
+        return true;
+    }
+    return legal_full(move);
+}
+
+int board_t::gives_check(const move_t * move) {
+    if (!_check_info[ply].checks_ready && ++_check_info[ply].check_questions <= LAZY_QUESTIONS) {
+        return gives_check_full(move);
+    }
+    const auto & info = check_facts();
+    // Direct checks only; discovered checks and special moves take the full test.
+    if (!move->castle && !move->en_passant && !move->promotion && !(info.discoverers & BIT(move->ssq))) {
+        return (info.check_squares[move->piece] & BIT(move->tsq)) != 0;
+    }
+    return gives_check_full(move);
+}
+
 /**
  * Verify if a move checks the opponent's king
  * @param move the move to verify
  * @return 0: no check, 1: simple, direct check, 2: exposed check 
  */
-int board_t::gives_check(const move_t * move) {
+int board_t::gives_check_full(const move_t * move) {
     int piece = move->piece;
     const int ssq = move->ssq;
     const int tsq = move->tsq;
@@ -1211,6 +1320,7 @@ void board_t::do_flip() {
         }
     }
     stack->do_flip();
+    reset_check_info();
     stack->pawn_key = stack->minor_key = stack->major_key = 0;
     stack->nonpawn_key[0] = stack->nonpawn_key[1] = 0;
     for (int piece = WPAWN; piece <= BKING; ++piece) {

@@ -107,6 +107,20 @@ public:
 };
 
 
+// Check facts of one position for the side to move. Most nodes cut off after
+// one or two moves, so the first questions use the per-move tests and only a
+// node that keeps asking computes the facts.
+struct check_info_t {
+    bool checks_ready; // discoverers and check_squares
+    bool pins_ready; // in_check and pinned
+    uint8_t check_questions; // gives_check calls answered without the facts
+    uint8_t pin_questions; // legal calls answered without the facts
+    bool in_check;
+    U64 pinned; // own pieces that alone shield the own king from a slider
+    U64 discoverers; // own pieces that alone block an own slider's line to the enemy king
+    U64 check_squares[BKING + 1]; // per own piece: target squares that attack the enemy king
+};
+
 //Board representation structure
 
 class board_t {
@@ -119,6 +133,8 @@ public:
 
     board_stack_t _stack[MAX_PLY + 1];
     board_stack_t * stack;
+    // Per ply, filled on first use: nodes that cut off before trying moves never pay for it.
+    check_info_t _check_info[MAX_PLY + 1];
 
     void clear();
     void do_flip();
@@ -133,6 +149,18 @@ public:
     bool legal(move_t * move);
     bool valid(const move_t * move);
     int gives_check(const move_t * move);
+private:
+    bool legal_full(move_t * move);
+    int gives_check_full(const move_t * move);
+    const check_info_t & check_facts();
+    const check_info_t & pin_facts();
+
+    void reset_check_info() {
+        auto & info = _check_info[ply];
+        info.checks_ready = info.pins_ready = false;
+        info.check_questions = info.pin_questions = 0;
+    }
+public:
     void add_piece(const int piece, const int sq, const bool hash);
     void remove_piece(const int piece, const int sq, const bool hash);
     void move_piece(const int piece, const int ssq, const int tsq, const bool hash);
