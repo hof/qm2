@@ -41,11 +41,11 @@ bool test_rule50_buckets() {
         first->brd.stack->tt_key == next->brd.stack->tt_key
         && first->brd.stack->repetition_key() == next->brd.stack->repetition_key());
     success &= check("TT keys must share within a bucket and differ across buckets",
-        first->position_key() == same->position_key() && first->position_key() != next->position_key()
-        && early->position_key() == late->position_key()
-        && early->position_key() == early->brd.stack->tt_key);
+        position_key(first->brd) == position_key(same->brd) && position_key(first->brd) != position_key(next->brd)
+        && position_key(early->brd) == position_key(late->brd)
+        && position_key(early->brd) == early->brd.stack->tt_key);
     trans_table::clear();
-    trans_table::store(first->position_key(), 0, 0, 2, 123, 0, score::EXACT);
+    trans_table::store(position_key(first->brd), 0, 0, 2, 123, 0, score::EXACT);
     success &= check("different counts within a bucket must reuse TT scores",
         same->pvs(122, 123, 1, true) == 123 && same->nodes == 0);
     const int warm = next->pvs(-score::INF, score::INF, 1);
@@ -76,7 +76,7 @@ bool test_fifty_move_horizon() {
         trans_table::clear();
         search_t search(fen.c_str());
         prepare(search);
-        trans_table::store(search.position_key(), 0, 0, 4, 5000, 0, score::EXACT);
+        trans_table::store(position_key(search.brd), 0, 0, 4, 5000, 0, score::EXACT);
         const int value = search.pvs(4999, 5000, 1, true);
         success &= check("TT cutoffs must stop at a halfmove clock of 90",
             clock < 90 ? value == 5000 && search.nodes == 0 : search.nodes > 0);
@@ -96,7 +96,7 @@ bool test_non_pv_tt_bounds() {
                 prepare(search);
                 const U64 key = search.brd.stack->tt_key;
                 search.stack->pv_count = 1;
-                trans_table::store(search.position_key(), 0, 0, 2, value, 0, bound);
+                trans_table::store(position_key(search.brd), 0, 0, 2, value, 0, bound);
                 const int result = search.pvs(alpha, alpha + 1, 1);
                 const bool cutoff = bound == score::EXACT
                     || (bound == score::LOWERBOUND && value >= alpha + 1)
@@ -114,13 +114,13 @@ bool test_non_pv_tt_bounds() {
     trans_table::clear();
     search_t shallow(fen);
     prepare(shallow);
-    trans_table::store(shallow.position_key(), 0, 0, 1, 123, 0, score::LOWERBOUND);
+    trans_table::store(position_key(shallow.brd), 0, 0, 1, 123, 0, score::LOWERBOUND);
     success &= check("a lower bound at equal depth must not cut off",
         shallow.pvs(122, 123, 1) >= -score::INF && shallow.nodes > 0);
     trans_table::clear();
     search_t mate(fen);
     prepare(mate);
-    trans_table::store(mate.position_key(), 0, 0, 1, score::MATE - 9, 0, score::LOWERBOUND);
+    trans_table::store(position_key(mate.brd), 0, 0, 1, score::MATE - 9, 0, score::LOWERBOUND);
     success &= check("a proven mate bound must cut off at any depth",
         mate.pvs(0, 1, 5) == score::MATE - 9 && mate.nodes == 0);
     return success;

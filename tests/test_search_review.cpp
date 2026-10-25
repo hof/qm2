@@ -129,7 +129,7 @@ bool test_exact_pv() {
         parent.forward(&root_move, false);
         trans_table::clear();
         // A fail-high cutoff needs one ply more than the searched depth.
-        trans_table::store(parent.position_key(), 0, parent.brd.ply, 4, 42, 0, score::EXACT);
+        trans_table::store(position_key(parent.brd), 0, parent.brd.ply, 4, 42, 0, score::EXACT);
         parent.stack->pv_count = 2; // stale data must be discarded on entry
         ok &= check(parent.pvs(41, 42, 3, true) == 42
             && parent.stack->pv_count == 0, "exact score with no move retained stale PV");

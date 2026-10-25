@@ -164,17 +164,6 @@ int move_t::to_int() {
     return result;
 }
 
-// Six bits per square, two promotion bits, and two move-kind bits.
-uint16_t move_t::to_compact() const {
-    if (!piece) {
-        return 0;
-    }
-    const int kind = promotion ? 1 : en_passant ? 2 : castle ? 3 : 0;
-    const int promoted = promotion ? promotion - (piece == WPAWN ? WKNIGHT : BKNIGHT) : 0;
-    assert(promoted >= 0 && promoted <= 3);
-    return ssq | (tsq << 6) | (promoted << 12) | (kind << 14);
-}
-
 void move_t::set_compact(board_t * pos, uint16_t move) {
     if (!move) {
         set(0);

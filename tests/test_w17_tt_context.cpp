@@ -22,13 +22,13 @@ result_t run(const std::string & fen, int mode, int depth,
     search->stack->in_check = search->brd.in_check();
     const auto original_fen = search->brd.to_string();
     const U64 key = search->brd.stack->tt_key;
-    const U64 context = search->position_key();
+    const U64 context = position_key(search->brd);
     const bool repeated = search->is_repetition();
     const int value = search->w17_pvs(-score::INF, score::INF, mode, depth);
     if (!check("losers search must finish and restore board, hashes, history and stacks",
             !search->stop_all && search->brd.to_string() == original_fen
             && search->brd.stack->tt_key == key
-            && search->position_key() == context && search->is_repetition() == repeated
+            && position_key(search->brd) == context && search->is_repetition() == repeated
             && search->brd.ply == 0 && search->stack == search->root_stack
             && search->brd.stack == search->brd._stack)) {
         std::exit(EXIT_FAILURE);

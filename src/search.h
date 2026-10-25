@@ -45,6 +45,30 @@
 #include "eval.h"
 
 
+// Halfmove clocks 0..13 share score bounds; later clocks use buckets of eight.
+// Scores within a bucket reuse each other; clock ranges still guard draws.
+inline int rule50_bucket(int halfmoves) {
+    return halfmoves < 14 ? 0 : (halfmoves - 14) / 8 + 1;
+}
+
+// Halfmove-clock buckets keep TT scores apart: one fixed salt per bucket,
+// mixed at compile time, is XORed into the position key.
+inline constexpr auto RULE50_SALTS = [] {
+    std::array<U64, 32> salts{};
+    for (U64 bucket = 1; bucket < salts.size(); ++bucket) {
+        U64 key = bucket ^ 0x72756c6535303031ULL;
+        key = (key ^ (key >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        key = (key ^ (key >> 27)) * 0x94d049bb133111ebULL;
+        salts[bucket] = key ^ (key >> 31);
+    }
+    return salts;
+}();
+
+inline U64 position_key(const board_t & board) {
+    const int bucket = std::min(rule50_bucket(board.stack->fifty_count), int(RULE50_SALTS.size()) - 1);
+    return board.stack->tt_key ^ RULE50_SALTS[bucket];
+}
+
 class root_move_t {
 public:
     move_t move;
@@ -173,7 +197,6 @@ public:
     int wild;
     int draw_contempt;
     // Total reduction includes the artificial pass itself.
-    int null_search_depth(int depth, int eval, int beta);
     bool null_verify;
     bool null_enabled;
     bool beta_pruning;
@@ -220,7 +243,6 @@ public:
         int value = 0;
     };
     singular_result_t singular_extension(int alpha, int beta, int depth, bool cut_node);
-    int internal_search_depth(int depth, bool pv, bool cut_node);
     int singular_search(int alpha, int beta, int depth, bool cut_node, uint16_t excluded_move);
     int null_verification(int alpha, int beta, int depth, bool cut_node);
     bool book_lookup();
@@ -259,7 +281,6 @@ public:
     bool is_killer(move_t * const move);
     bool in_searched(move_t * move, int searched_moves);
     void reset_stack();
-    U64 position_key() const;
     int reduction(int depth, int searched_moves, int estimate, bool root_node = false);
     int reduction_estimate(int depth, int searched_moves, const move_t & move,
         bool pv, bool cut_node, int gives_check);

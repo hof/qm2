@@ -38,7 +38,7 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
     place_at_ply(search, ply);
     const auto original_fen = search.brd.to_string();
     const auto key = search.brd.stack->tt_key;
-    const auto context = search.position_key();
+    const auto context = position_key(search.brd);
     const auto history_start = search.stack->repetition_start;
     const bool repeated = search.is_repetition();
     const int sign = losers ? test.losers_sign : test.standard_sign;
@@ -62,7 +62,7 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
         && search.brd.ply == ply && search.stack == &search._stack[ply]
         && search.brd.stack == &search.brd._stack[ply]
         && search.brd.stack->tt_key == key
-        && search.position_key() == context
+        && position_key(search.brd) == context
         && search.stack->repetition_start == history_start && search.is_repetition() == repeated;
     if (!success) {
         std::cerr << "ceiling: " << fen << " losers=" << losers << " mode=" << mode
@@ -86,7 +86,7 @@ bool test_transition(bool losers) {
     place_at_ply(search, ply);
     const auto original_fen = search.brd.to_string();
     const auto key = search.brd.stack->tt_key;
-    const auto context = search.position_key();
+    const auto context = position_key(search.brd);
     move_t move;
     move.set(&search.brd, "g6g7");
     if (!search.brd.valid(&move) || !search.brd.legal(&move)) {
@@ -98,7 +98,7 @@ bool test_transition(bool losers) {
     search.backward(&move);
     const bool success = actual == expected && !search.stop_all
         && search.brd.to_string() == original_fen && search.brd.stack->tt_key == key
-        && search.position_key() == context && search.brd.ply == ply
+        && position_key(search.brd) == context && search.brd.ply == ply
         && search.stack == &search._stack[ply] && search.brd.stack == &search.brd._stack[ply];
     if (!success) {
         std::cerr << "ceiling transition losers=" << losers
@@ -149,7 +149,7 @@ bool test_repetition(bool losers) {
     place_at_ply(search, ply);
     const auto original_fen = search.brd.to_string();
     const auto key = search.brd.stack->tt_key;
-    const auto context = search.position_key();
+    const auto context = position_key(search.brd);
     const char * cycle[] = {"b1c3", "g8f6", "c3b1", "f6g8"};
     move_t moves[4];
     for (int i = 0; i < 4; ++i) {
@@ -166,7 +166,7 @@ bool test_repetition(bool losers) {
     }
     for (int i = 3; i >= 0; --i) search.backward(&moves[i]);
     success &= search.brd.to_string() == original_fen && search.brd.stack->tt_key == key
-        && search.position_key() == context && !search.is_repetition()
+        && position_key(search.brd) == context && !search.is_repetition()
         && search.brd.ply == ply && search.stack == &search._stack[ply];
     if (!success) {
         std::cerr << "ceiling repetition losers=" << losers << "\n";

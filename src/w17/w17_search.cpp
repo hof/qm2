@@ -64,7 +64,7 @@ U64 w17_search_t::w17_tt_key(int in_mate_search) const {
     constexpr U64 mode_salts[] = {
         0x243f6a8885a308d3ULL, 0x13198a2e03707344ULL, 0xa4093822299f31d0ULL,
     };
-    return position_key() ^ mode_salts[in_mate_search + 1];
+    return position_key(brd) ^ mode_salts[in_mate_search + 1];
 }
 
 int w17_search_t::pvs(int alpha, int beta, int depth, bool) {

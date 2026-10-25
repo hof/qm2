@@ -16,14 +16,19 @@
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
  *  
  * File: search.cpp
- * Search methods for traditional chess. 
- * Maxima uses a fail-soft principle variation search (PVS) with
- * - aspiration windows
- * - null move pruning 
- * - futility pruning
- * - late move reductions (LMR)
- * - check and pv extensions
- * 
+ * Search for standard chess: fail-soft principal variation search (PVS) with
+ * iterative deepening and aspiration windows.
+ * - Transposition table, also in quiescence search, with cached evaluations
+ * - Node pruning: reverse futility, razoring, null move with verification,
+ *   ProbCut and internal iterative reduction
+ * - Singular extensions, including multiple and negative extensions
+ * - Move pruning: late move pruning, history pruning, futility and SEE
+ * - Late move reductions guided by history
+ * - Move ordering: killers, countermoves, main, continuation, pawn and
+ *   capture histories, threat and check bonuses
+ * - Correction history for the static evaluation
+ * - Quiescence search: captures and promotions, all evasions in check
+ * - Upcoming-repetition detection
  */
 
 #include "search.h"
@@ -37,7 +42,6 @@
 #include "book.h"
 #include "uci_console.h"
 #include "eval.h"
-#include "progress.h"
 #include <stdexcept>
 #include "timeman.h"
 #include "tablebase.h"
@@ -78,12 +82,6 @@ bool lower_value_threat(board_t & board) {
         attacks |= magic::rook_moves(pop(pieces), board.all());
     }
     return attacks & queens;
-}
-
-U64 mix_context(U64 key) {
-    key = (key ^ (key >> 30)) * 0xbf58476d1ce4e5b9ULL;
-    key = (key ^ (key >> 27)) * 0x94d049bb133111ebULL;
-    return key ^ (key >> 31);
 }
 
 // Same-position helpers may replace the picker, PV, evaluation and repetition
@@ -133,16 +131,6 @@ bool search_t::has_legal_move(board_t & brd) {
         }
     }
     return false;
-}
-
-// Clock buckets share entries within 0-13 halfmoves, then per eight halfmoves.
-U64 position_key(const board_t & board) {
-    const int bucket = rule50_bucket(board.stack->fifty_count);
-    return board.stack->tt_key ^ (bucket ? mix_context(U64(bucket) ^ 0x72756c6535303031ULL) : 0);
-}
-
-U64 search_t::position_key() const {
-    return ::position_key(brd);
 }
 
 /**
@@ -200,7 +188,7 @@ void root_move_t::add_nodes(U64 count) {
 int search_t::neural_static_score() {
     assert(evaluation_network);
     tt_hit_t hit;
-    if (tt_eval_enabled && trans_table::probe(position_key(), brd.ply, brd.stack->fifty_count, hit)
+    if (tt_eval_enabled && trans_table::probe(position_key(brd), brd.ply, brd.stack->fifty_count, hit)
             && hit.eval != score::INVALID) {
         return hit.eval;
     }
@@ -209,7 +197,7 @@ int search_t::neural_static_score() {
         std::span<const nnue::accumulator_t>(evaluation_accumulators.data(), brd.ply)),
         -score::TABLEBASE + 1, score::TABLEBASE - 1);
     if (tt_eval_enabled) {
-        trans_table::store(position_key(), brd.root_ply, brd.ply, 0, 0, 0, 0, value);
+        trans_table::store(position_key(brd), brd.root_ply, brd.ply, 0, 0, 0, 0, value);
     }
     return value;
 }
@@ -732,7 +720,7 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->excluded_move = 0;
     stack->move_count = 0;
     brd.forward(move);
-    trans_table::prefetch(position_key());
+    trans_table::prefetch(position_key(brd));
     if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, move, evaluation_accumulators[brd.ply]);
     }
@@ -796,7 +784,7 @@ std::string search_t::pv_to_string() {
         move_t m;
         for (int i = 0; i < 8; i++) {
             tt_hit_t hit;
-            trans_table::probe(::position_key(b), 0, b.stack->fifty_count, hit);
+            trans_table::probe(position_key(b), 0, b.stack->fifty_count, hit);
             const int tt_move = hit.move;
             if (tt_move == 0) {
                 break;
@@ -820,7 +808,7 @@ void search_t::store_pv() {
     move_t m;
     for (int i = 0; i < stack->pv_count; i++) {
         if (i > 0) {
-            const U64 key = ::position_key(b);
+            const U64 key = position_key(b);
             tt_hit_t hit;
             trans_table::probe(key, 0, b.stack->fifty_count, hit);
             m.set_compact(&b, hit.move);
@@ -1116,7 +1104,7 @@ void search_t::update_killers(move_t * move) {
 int search_t::init_root_moves() {
     root.move_count = 0;
     root.moves[0].move.clear();
-    stack->tt_key = position_key();
+    stack->tt_key = position_key(brd);
     tt_hit_t hit;
     trans_table::probe(stack->tt_key, 0, brd.stack->fifty_count, hit);
     stack->tt_move.set_compact(&brd, hit.move);
@@ -1701,20 +1689,6 @@ bool search_t::prune_main_see(move_t & move, int depth, int searched_moves, int 
     return true;
 }
 
-// Missing move hints make deep ordering less reliable. Reduce the whole node
-// once; all downstream consumers, including TT storage, use the searched depth.
-int search_t::internal_search_depth(int depth, bool pv, bool cut_node) {
-    if (!iir_enabled || !brd.ply || depth < 6 || (!pv && !cut_node)
-            || stack->in_check
-            || stack->excluded_move) {
-        return depth;
-    }
-    if (stack->tt_move.piece) {
-        return depth;
-    }
-    return depth - 1;
-}
-
 // Only a compatible lower/exact main-search score can nominate an only move.
 // Verification owns an isolated same-position frame; retain a compact move,
 // never a pointer into its picker. A failed-low alternative is a heuristic
@@ -1775,15 +1749,6 @@ search_t::singular_result_t search_t::singular_extension(int alpha, int beta, in
     return result;
 }
 
-// Stronger static evidence and deeper nodes permit a shallower artificial
-// branch. A tactical hash move is ordering evidence, never a score bound.
-int search_t::null_search_depth(int depth, int eval, int beta) {
-    const auto & hint = stack->tt_move;
-    const bool tactical = hint.piece && (hint.capture || hint.promotion);
-    const int surplus = std::clamp((eval - beta) / 174, 0, 4);
-    return std::max(0, depth - 4 - depth / 3 - surplus - int(tactical));
-}
-
 // Search this position again without one move. Only this frame skips the
 // TT and node pruning; its children are ordinary searches.
 int search_t::singular_search(int alpha, int beta, int depth, bool cut_node,
@@ -1836,12 +1801,12 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
      * Stop conditions
      */
 
-    //time
+    // Time
     if (abort()) {
         return alpha;
     }
 
-    //ceiling
+    // Ceiling
     if (brd.ply >= (MAX_PLY - 1)) {
         return ceiling_score();
     }
@@ -1849,7 +1814,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     assert(depth > 0 && depth <= MAX_PLY);
     int alpha1 = alpha;
 
-    //mate distance pruning: if mate(d) in n don't search deeper
+    // Mate distance pruning: a mate in n needs no deeper search
     if ((score::MATE - brd.ply) < beta) {
         beta = score::MATE - brd.ply;
         if (alpha >= beta) {
@@ -1863,7 +1828,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         }
     }
 
-    //draw by lack of material or fifty quiet moves
+    // Draw by lack of material or fifty quiet moves
     if (is_draw()) {
         return draw_score();
     }
@@ -1897,7 +1862,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
      */
     const auto excluded_move = stack->excluded_move;
     const bool normal_search = !excluded_move;
-    stack->tt_key = position_key();
+    stack->tt_key = position_key(brd);
     tt_hit_t tt;
     const bool tt_hit = normal_search && trans_table::probe(stack->tt_key, brd.ply,
         brd.stack->fifty_count, tt);
@@ -2001,9 +1966,13 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         return draw_score();
     }
 
-    //null move pruning
+    // Null move pruning
     if (do_prune_node && do_null) {
-        const int null_depth = null_search_depth(depth, eval, beta);
+        // Stronger static evidence and deeper nodes permit a shallower null
+        // search. A tactical hash move is ordering evidence, never a score bound.
+        const bool tactical_hint = hint.piece && (hint.capture || hint.promotion);
+        const int surplus = std::clamp((eval - beta) / 174, 0, 4);
+        const int null_depth = std::max(0, depth - 4 - depth / 3 - surplus - int(tactical_hint));
         forward();
         int null_score = -pvs(-beta, -beta + 1, null_depth, !cut_node);
         backward();
@@ -2022,13 +1991,19 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
                     return verified_score;
                 }
             } else {
-                //no verification
+                // No verification
                 return null_score;
             }
         }
     }
 
-    depth = internal_search_depth(depth, pv, cut_node);
+    // Internal iterative reduction: without a hash move, deep move ordering is
+    // less reliable. Reduce the whole node once; everything downstream,
+    // including TT storage, uses the searched depth.
+    if (iir_enabled && brd.ply && depth >= 6 && (pv || cut_node) && !in_check
+            && !excluded_move && !hint.piece) {
+        --depth;
+    }
 
     int probcut_score = alpha;
     if (!pv && probcut(alpha, beta, depth, eval, cut_node, probcut_score)) {
@@ -2053,7 +2028,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         return singular_result.value;
     }
 
-    //if there is no first move, it's checkmate or stalemate
+    // Without a first move it is checkmate or stalemate
     move_t * move = move::first(this, depth);
     if (!move) {
         if (excluded_move) {
@@ -2062,7 +2037,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         return in_check ? -score::MATE + brd.ply : draw_score();
     }
 
-    //prepare and do the loop
+    // Prepare and run the loop
     int best = -score::INF;
     int searched_moves = 0;
     // Late-move pruning and reductions count every legal move considered, pruned ones included.
@@ -2082,9 +2057,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         const int gives_check = brd.gives_check(move);
         assert(gives_check == 0 || gives_check == 1 || gives_check == 2);
 
-        /*
-         * Move pruning: skip all futile moves
-         */
+        // Move pruning: skip futile moves
 
 
         const bool nominated = singular_result.move && move->to_compact() == singular_result.move;
@@ -2107,16 +2080,12 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             continue;
         }
 
-        /*
-         * Move extensions and reductions
-         */
+        // Move extensions and reductions
 
         const int extend = nominated ? singular_result.extension : 0;
 
 
-        /*
-         * Go forward and search next node
-         */
+        // Go forward and search the next node
 
         if (!try_forward(move, gives_check)) {
             --considered_moves;
@@ -2155,9 +2124,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             update_lmr_history(*move, depth, score, alpha, beta);
         }
 
-        /*
-         * Handle results: update the best value / do a beta cutoff
-         */
+        // Handle results: update the best value or cut off
 
         if (stop_all) {
             return alpha;
@@ -2199,7 +2166,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     } while ((move = move::next(this, depth)));
 
     /*
-     * Store the result in the hash table and return
+     * Store the result
      */
 
     assert(!stop_all);
@@ -2242,17 +2209,17 @@ int search_t::qsearch(int alpha, int beta, int depth) {
      * Stop conditions
      */
 
-    //time
+    // Time
     if (abort()) {
         return alpha;
     }
 
-    //ceiling
+    // Ceiling
     if (brd.ply >= (MAX_PLY - 1)) {
         return ceiling_score();
     }
 
-    //mate distance pruning (if mate(d) in n: don't search deeper)
+    // Mate distance pruning: a mate in n needs no deeper search
     if ((score::MATE - brd.ply) < beta) {
         beta = score::MATE - brd.ply;
         if (alpha >= beta) {
@@ -2266,7 +2233,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         }
     }
 
-    //draw by lack of material or fifty quiet moves
+    // Draw by lack of material or fifty quiet moves
     if (is_draw()) {
         return draw_score();
     }
@@ -2280,15 +2247,16 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     }
 
     /*
-     * Node setup: only what quiescence search uses. Its children are quiescence
-     * nodes too, so the main search's node fields are never read here.
+     * Node setup
      */
+    // Only what quiescence search uses: its children are quiescence nodes
+    // too, so the main search's node fields are never read here.
     stack->best_move.clear();
     stack->tt_move.clear();
     sel_depth = std::max(brd.ply, sel_depth);
 
     const bool in_check = stack->in_check;
-    const U64 key = position_key();
+    const U64 key = position_key(brd);
     const bool use_q_tt = q_tt_enabled;
     stack->tt_key = key;
     if (use_q_tt) {
@@ -2316,14 +2284,14 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return value;
     };
 
-    //stand-pat: return if eval is already good enough
+    // Stand pat: return if the evaluation is already good enough
     const int eval = evaluate(this);
     if (eval >= beta && !in_check) {
         return has_legal_move(brd) ? finish(eval, score::LOWERBOUND)
             : finish(draw_score(), score::EXACT);
     }
 
-    //get first move; if there's none it's mate, stalemate, or there are no captures/promotions
+    // First move; without one it is mate, stalemate, or there are no tactical moves
     move_t * move = move::first(this, depth);
     if (!move) {
         if (in_check) {
@@ -2350,9 +2318,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     const int futility = eval + quiescence_futility_margin;
     do {
 
-        /*
-         * Move pruning
-         */
+        // Move pruning
 
         int gives_check = brd.gives_check(move);
 
@@ -2373,9 +2339,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             continue;
         }
 
-        /*
-         * Go forward and search next node
-         */
+        // Go forward and search the next node
 
         if (!try_forward(move, gives_check)) {
             continue;
@@ -2384,9 +2348,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         int score = -qsearch(-beta, -alpha, depth - 1);
         backward(move);
 
-        /*
-         * Handle results: beta cutoff or improved alpha
-         */
+        // Handle results: cut off or raise alpha
 
         if (stop_all) {
             return alpha;

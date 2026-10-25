@@ -184,7 +184,7 @@ bool search_bounds() {
             const int draw = search->draw_score();
             const auto fen = search->brd.to_string();
             const U64 key = search->brd.stack->tt_key;
-            const U64 tt_key = search->position_key();
+            const U64 tt_key = position_key(search->brd);
             const int value = qsearch ? search->qsearch(draw - 1, draw, -1)
                 : search->pvs(draw - 1, draw, 3);
             success &= check("legal escape must raise alpha and cut off before children",
@@ -231,7 +231,7 @@ bool cache_clock_and_stop() {
         auto search = std::make_unique<probe_search_t>(cycle_fen);
         prepare(*search);
         reach_escape(*search);
-        trans_table::store(search->position_key(), 0, 3, 4, cached, 0, score::EXACT);
+        trans_table::store(position_key(search->brd), 0, 3, 4, cached, 0, score::EXACT);
         // Cached score cutoffs apply only to non-PV windows.
         const int result = cached > 0 ? search->pvs(cached - 1, cached, 2, true)
             : search->pvs(-1000, 1000, 2);
@@ -255,7 +255,7 @@ bool cache_clock_and_stop() {
     success &= check("stand pat above draw must clear the witness PV",
         winning->qsearch(-1000, 1000, -1) > 100 && winning->stack->pv_count == 0);
     trans_table::clear();
-    trans_table::store(winning->position_key(), 0, 3, 4, -500, 0, score::EXACT);
+    trans_table::store(position_key(winning->brd), 0, 3, 4, -500, 0, score::EXACT);
     success &= check("a contradictory TT score must not hide a better-than-draw continuation",
         winning->pvs(-1000, 1000, 2) > 100 && winning->nodes > 0);
 

@@ -46,7 +46,7 @@ bool test_shared_entries() {
     trans_table::clear();
     auto search = std::make_unique<search_t>(fen);
     prepare(*search);
-    trans_table::store(search->position_key(), 0, 0, 0, 12345, 0, score::EXACT);
+    trans_table::store(position_key(search->brd), 0, 0, 0, 12345, 0, score::EXACT);
     bool success = check("a depth-0 entry must serve a qsearch cutoff",
         search->qsearch(12344, 12345, 0) == 12345 && search->nodes == 0);
     success &= check("a depth-0 entry must not serve a main-search cutoff",
@@ -54,7 +54,7 @@ bool test_shared_entries() {
     trans_table::clear();
     auto main = std::make_unique<search_t>(fen);
     prepare(*main);
-    trans_table::store(main->position_key(), 0, 0, 3, -12345, 0, score::EXACT);
+    trans_table::store(position_key(main->brd), 0, 0, 3, -12345, 0, score::EXACT);
     success &= check("a main-search entry must serve a qsearch cutoff",
         main->qsearch(-12346, -12345, 0) == -12345 && main->nodes == 0);
     return success;
@@ -70,7 +70,7 @@ bool test_mates_and_terminals() {
         move_t quiet;
         quiet.set(&search->brd, "a1a2");
         search->forward(&quiet, false);
-        trans_table::store(search->position_key(), 0, 3, 0, value, 0, score::EXACT);
+        trans_table::store(position_key(search->brd), 0, 3, 0, value, 0, score::EXACT);
         success &= check("cached q mate/tablebase scores must decode at the probing ply",
             search->qsearch(0, 1, -1) == value + (value > 0 ? 2 : -2)
             && search->nodes == 1);
@@ -95,7 +95,7 @@ bool test_mates_and_terminals() {
     trans_table::clear();
     auto drawn = std::make_unique<search_t>("7k/8/8/8/8/8/8/KR6 w - - 100 1");
     prepare(*drawn);
-    trans_table::store(drawn->position_key(), 0, 0, 0, 12345, 0, score::EXACT);
+    trans_table::store(position_key(drawn->brd), 0, 0, 0, 12345, 0, score::EXACT);
     success &= check("draw adjudication must precede q cache cutoffs",
         drawn->qsearch(0, 1, -1) == 0);
     return success;
@@ -114,7 +114,7 @@ bool test_cancellation() {
         success &= check("cancelled qsearch must restore its board without caching an unfinished result",
             search->stop_all && search->brd.to_string() == fen && search->brd.ply == 0
             && search->stack == search->root_stack
-            && !(trans_table::probe(search->position_key(), 0, 0, hit) && hit.bound));
+            && !(trans_table::probe(position_key(search->brd), 0, 0, hit) && hit.bound));
     }
     return success;
 }
@@ -132,17 +132,17 @@ bool test_option_snapshot_and_off() {
     bool success = check("changing QsearchTT must snapshot worker flags and clear incompatible cached results",
         before->q_tt_enabled && !after->q_tt_enabled
         && !trans_table::probe(123, 0, 0, hit));
-    trans_table::store(after->position_key(), 0, 0, 0, 12345, 0, score::EXACT);
+    trans_table::store(position_key(after->brd), 0, 0, 0, 12345, 0, score::EXACT);
     success &= check("QsearchTT off must skip score probes",
         after->qsearch(12344, 12345, -1) != 12345 && after->nodes > 0);
     trans_table::clear();
     after->nodes = 0;
     after->qsearch(-score::INF, score::INF, -1);
     success &= check("QsearchTT off must skip bound stores",
-        !trans_table::probe(after->position_key(), 0, 0, hit));
+        !trans_table::probe(position_key(after->brd), 0, 0, hit));
     move_t hint;
     hint.set(&after->brd, "d1d5");
-    trans_table::store(after->position_key(), 0, 0, 0, 0, hint.to_compact(), 0);
+    trans_table::store(position_key(after->brd), 0, 0, 0, 0, hint.to_compact(), 0);
     after->qsearch(-score::INF, score::INF, -1);
     success &= check("QsearchTT off must also skip move-hint probes",
         after->stack->move_list.returned_hints[0] == 0);

@@ -130,7 +130,7 @@ bool test_filter_and_cache() {
         prepare(*search);
         const char * excluded_text = fen == queen ? "d1d5" : fen == start ? "g1f3" : "a7a8q";
         const auto excluded = compact(*search, excluded_text);
-        const auto key = search->position_key();
+        const auto key = position_key(search->brd);
         trans_table::store(key, 0, 0, 8, 12345, excluded, score::EXACT);
         const int alpha = fen == start ? -10001 : -1000, beta = fen == start ? -10000 : 1000;
         const int value = search->singular_search(alpha, beta, 1, fen == start, excluded);

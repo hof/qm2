@@ -192,7 +192,7 @@ bool test_root(const char * fen, int & probes, int & interrupted, int & exact_re
                 trans_table::clear();
                 auto search = std::make_unique<search_t>(fen);
                 prepare(*search, false);
-                trans_table::store(search->position_key(), 0, 0, 8, value + 500, 0, flag);
+                trans_table::store(position_key(search->brd), 0, 0, 8, value + 500, 0, flag);
                 ok &= check(run(*search, -score::INF, score::INF, mode, mode < 0) == value,
                     "deep TT entry contaminated quiescence", fen);
                 ok &= restored(*search, *original, fen);

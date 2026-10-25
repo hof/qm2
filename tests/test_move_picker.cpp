@@ -18,7 +18,7 @@ bool legality_contract() {
         const std::string original = search->brd.to_string();
         const U64 key = search->brd.stack->tt_key;
         const U64 pawn_key = search->brd.stack->pawn_key;
-        const U64 position_key = search->position_key();
+        const U64 search_key = position_key(search->brd);
         std::set<int> seen;
         for (auto * candidate = move::first(search.get(), 1); candidate;
                 candidate = move::next(search.get(), 1)) {
@@ -55,7 +55,7 @@ bool legality_contract() {
             }
             if (search->brd.to_string() != original || search->brd.stack->tt_key != key
                     || search->brd.stack->pawn_key != pawn_key
-                    || search->position_key() != position_key || search->stack != search->root_stack) {
+                    || position_key(search->brd) != search_key || search->stack != search->root_stack) {
                 return false;
             }
         }
