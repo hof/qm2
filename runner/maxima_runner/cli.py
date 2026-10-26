@@ -21,12 +21,6 @@ command_groups = (
         ("suite:run", "Evaluate a position suite"),
         ("match:run", "Run offline paired-opening matches"),
     )),
-    ("Engine experience book (experience.bin)", (
-        ("experience:book:import", "Import PGN results; export experience.bin"),
-        ("experience:book:analyze", "Analyze PGN moves; export experience.bin"),
-        ("experience:book:export", "Export saved experience to experience.bin"),
-        ("experience:book:show", "Show saved move statistics and analysis"),
-    )),
     ("Online learning (FICS / Lichess)", (
         ("experience:sync", "Upload PGNs into shared online learning"),
         ("experience:build", "Rebuild shared index and opponent statistics"),
@@ -72,7 +66,6 @@ def show_help():
         for command, description in commands:
             print(f"  {command:<28} {description}")
         print()
-    print("Engine book: PGNs -> experience.json -> experience.bin")
     print("Online learning: saved PGNs -> shared index -> multilayer book\n")
     print("Run maxima <command> --help for usage and options.")
     print("You can also use maxima help <command>.\n")
@@ -184,7 +177,7 @@ def main(argv=None):
     arguments = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
-        "init, uci, build, test, suite:run, match:run, experience:book:import|export|show|analyze, "
+        "init, uci, build, test, suite:run, match:run, "
         "experience:sync|archive|build, books:repertoire|draw|fire, "
         "tablebases:syzygy:download, fics, lichess (no command: run engine)"))
     if not arguments and sys.stdin.isatty() and sys.stdout.isatty():
@@ -239,10 +232,6 @@ def main(argv=None):
         elif command == "books:fire":
             from . import master_books
             entrypoint = master_books.fire_main
-        elif command in ("experience:book:import", "experience:book:export", "experience:book:show", "experience:book:analyze"):
-            from . import experience
-            remaining.insert(0, command.rsplit(":", 1)[1])
-            entrypoint = experience.main
         elif command == "tablebases:syzygy:download":
             from . import download_tablebases
             entrypoint = download_tablebases.main

@@ -1,4 +1,4 @@
-"""Opening learning from MaxDrone's PGN games (MAXIMA.md 9.7): digests, player stats, and the multi-layer book."""
+"""Opening learning from MaxDrone's PGN games (MAXIMA.md 9.2): digests, player stats, and the multi-layer book."""
 import argparse
 from datetime import date, datetime
 import json
@@ -228,7 +228,7 @@ def write_book(weights, book_path):
     return len(weights)
 
 
-# Multi-layer book profiles (MAXIMA.md 9.7): percentages per layer; "search" is the share of games
+# Multi-layer book profiles (MAXIMA.md 9.2): percentages per layer; "search" is the share of games
 # that leave the book once, at a random ply, so the engine can bring in new moves; "revenge" is the chance
 # to play an opponent's winning line back at them.
 style_names = ("fire", "draw", "experiment")
@@ -286,7 +286,7 @@ def learned_factor(rate):
 
 
 class opening_book:
-    """One game's multi-layer book (MAXIMA.md 9.7): book.bin, the style books fire, draw, and experiment,
+    """One game's multi-layer book (MAXIMA.md 9.2): book.bin, the style books fire, draw, and experiment,
     the week's mood, and the learned layers global, group, and opponent, each with a percentage from the
     game's profile. style_books may carry the mood's book under "mood"."""
 
@@ -624,7 +624,7 @@ def repertoire_main():
     from .project import data_root, project_root
     parser = argparse.ArgumentParser(
         prog="maxima books:repertoire",
-        description="Build the style books of the multi-layer book (MAXIMA.md 9.7) from repertoire PGNs.")
+        description="Build the style books of the multi-layer book (MAXIMA.md 9.2) from repertoire PGNs.")
     parser.add_argument("--books-dir", default=str(project_root() / "books"),
                         help="reads <style>.pgn (default: books/)")
     parser.add_argument("--output-dir", default=str(data_root()),

@@ -8,7 +8,6 @@ add_library(MAX2SRC
 	movegen.cpp
 	movepicker.cpp
 	book.cpp
-        experience.cpp
         tablebase.cpp
         nnue.cpp
 	eval.cpp

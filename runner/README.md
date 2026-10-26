@@ -26,24 +26,18 @@ configuration and streamed searches using `chess.Board` and
 FICS royal losers with compulsory legal captures and orthodox king safety.
 Sessions map that board to an advertised `Wild=losers` option and ordinary boards
 to `Wild=standard`; unsupported variants/engines are rejected before search.
-Offline matches preserve both variants in PGNs. Losers suites, general PGN
-imports, and experience remain future work.
+Offline matches preserve both variants in PGNs. Losers suites remain future work.
 Shared online learning lives in `maxima_runner.learning` and `learning_store`.
 Both bots use `MAXIMA_DATA_DIR/experience` on the PVC. `experience:sync SOURCE
 [DESTINATION]` uploads a PGN or folder; `--player NAME` identifies our side when
 needed, and `--group bots` classifies offline opponents. `experience:build
 --experience-dir PATH` rebuilds everything from the archived PGNs. Global and
 group evidence is shared; individual opponent identities remain server-specific.
-The native binary-export workflow stays in `maxima_runner.experience` and uses
-locked, atomically published `experience/experience.json` (`--store` overrides it).
-`experience.bin` is its engine-readable export. SQLite is used only for optional,
-read-only conversion of an existing legacy store; normal commands do not need it.
-Use `experience:book:import|analyze|export|show`. `--source` defaults to the
-saved PGN archive for import/analysis and the JSON data file for export/inspection.
-PGN input may be a file or a recursively scanned directory. Purpose-built opening
-books use `books:fire`, `books:draw` and `books:repertoire`. Online learning and
-PGN archiving have their own sections in `maxima help`. Old command names and
-experience `--pgn`/`--database` aliases are removed.
+Saved analysis metadata remains passive: it cannot select moves or shorten a search.
+Search statistics and pondering remain available. Native binary experience and its
+import, analysis, export and migration commands have been removed; historical
+PGNs, JSON, binary and database files are preserved. Purpose-built opening books
+use `books:fire`, `books:draw` and `books:repertoire`.
 Both online clients invoke `experience:archive <LearningId>.pgn` after saving
 and learning a completed game. It locks the shared archive, deduplicates into
 `games/<LearningSource>/YYYY-MM.pgn`, and deletes the pending file only after

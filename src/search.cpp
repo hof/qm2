@@ -208,8 +208,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     wild = variant;
     book_name = book::path();
     _own_book = options::get_value("OwnBook") && !options::get_value("UCI_AnalyseMode");
-    _experience_depth = options::get_value("ExperienceDepth");
-    _experience = experience::snapshot();
     _book_seeded = false;
     beta_pruning = options::get_value("BetaPruning");
     null_verify = options::get_value("NullVerify");
@@ -307,28 +305,11 @@ bool search_t::book_lookup() {
     move::list_t book_moves;
     reader.open(book_name);
     reader.find(&brd, &book_moves);
-    if (book_moves.first == book_moves.last && (wild != 0 || !_experience)) {
+    if (book_moves.first == book_moves.last) {
         return false;
-    }
-    const U64 key = book_t::polyglot_key(&brd);
-    double mean_weight = 100;
-    if (book_moves.first != book_moves.last) {
-        U64 total = 0;
-        for (auto entry = book_moves.first; entry != book_moves.last; ++entry) total += entry->score;
-        mean_weight = double(total) / (book_moves.last - book_moves.first);
     }
     std::vector<move_t> candidates;
     std::vector<double> weights;
-    bool has_reference = false, has_analysis = false;
-    struct candidate_t {
-        move_t move;
-        double weight;
-        const experience::entry_t * learned;
-        int analysis_score;
-    };
-    std::vector<candidate_t> legal;
-    const int no_analysis = std::numeric_limits<int>::min();
-    int best_analysis = no_analysis;
     stack->in_check = brd.in_check();
     for (move_t * move = move::first(this, 1); move; move = move::next(this, 1)) {
         if (!game.search_moves.empty() && std::find(game.search_moves.begin(),
@@ -339,39 +320,13 @@ bool search_t::book_lookup() {
             continue;
         }
         double weight = 0;
-        for (auto entry = book_moves.first; entry != book_moves.last; ++entry)
+        for (auto entry = book_moves.first; entry != book_moves.last; ++entry) {
             if (move->equals(entry)) {
                 weight += entry->score;
             }
-        has_reference |= weight > 0;
-        const unsigned promotion = move->promotion ? (move->promotion - 1) % 6 : 0;
-        const unsigned code = move->ssq | (move->tsq << 6) | (promotion << 12);
-        const auto * learned = wild == 0 && _experience ? _experience->find(key, code) : nullptr;
-        int analysis_score = no_analysis;
-        if (learned && learned->depth >= _experience_depth
-                && learned->clock == unsigned(brd.stack->fifty_count)) {
-            analysis_score = learned->score_type ? (learned->score > 0 ? 30000 : -30000)
-                : std::clamp(int(learned->score), -29000, 29000);
-            best_analysis = std::max(best_analysis, analysis_score);
-        }
-        legal.push_back({*move, weight, learned, analysis_score});
-    }
-    for (const auto & candidate : legal) {
-        double weight = candidate.weight;
-        if (candidate.learned) {
-            const auto & learned = *candidate.learned;
-            const double games = double(learned.wins) + learned.draws + learned.losses;
-            // Analysed mistakes remain observations, but do not qualify as recommendations.
-            const bool analysed = candidate.analysis_score != no_analysis
-                && candidate.analysis_score >= best_analysis - 50;
-            has_analysis |= analysed;
-            if (!weight && (games > 0 || analysed)) {
-                weight = mean_weight * (analysed ? 1 : 0.125 + 0.875 * games / (games + 8));
-            }
-            weight *= learned.factor();
         }
         if (weight > 0) {
-            candidates.push_back(candidate.move);
+            candidates.push_back(*move);
             weights.push_back(weight);
         }
     }
@@ -382,19 +337,12 @@ bool search_t::book_lookup() {
         _book_random.seed(std::random_device{}());
         _book_seeded = true;
     }
-    // Sparse unanalysed experience competes with doing a fresh search.
-    if (!has_reference && !has_analysis) {
-        weights.push_back(mean_weight);
-    }
     std::discrete_distribution<size_t> choose(weights.begin(), weights.end());
     const size_t selected = choose(_book_random);
-    if (selected == candidates.size()) {
-        return false;
-    }
     stack->best_move = candidates[selected];
     stack->pv_moves[0] = stack->best_move;
     stack->pv_count = 1;
-    result_score = 0; // Experience scores are evidence, never transposition bounds.
+    result_score = 0;
     result_source = result_source_t::book;
     return true;
 }

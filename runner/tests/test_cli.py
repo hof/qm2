@@ -44,7 +44,8 @@ class cli_tests(unittest.TestCase):
         with patch.dict(sys.modules, {'chess': None}), contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(cli.main(['--help']), 0)
             self.assertEqual(cli.main(['help']), 0)
-            self.assertIn('experience:book:import', output.getvalue())
+            self.assertIn('experience:sync', output.getvalue())
+            self.assertNotIn('experience:book:', output.getvalue())
             self.assertNotIn('\033[', output.getvalue())
             with self.assertRaises(SystemExit) as result:
                 cli.main(['help', 'build'])
@@ -55,6 +56,13 @@ class cli_tests(unittest.TestCase):
                          ['cmake', '--preset', 'cpp26_debug', '-Dmaxima_pgo_mode=off'])
         self.assertEqual(run.call_args_list[1].args[0],
                          ['cmake', '--build', '--preset', 'cpp26_debug', '--parallel'])
+
+    def test_retired_experience_commands_are_unknown(self):
+        for action in ("import", "analyze", "export", "show"):
+            with self.subTest(action=action), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as result:
+                    cli.main(["experience:book:" + action])
+                self.assertNotEqual(result.exception.code, 0)
 
     def test_configure_failure_prevents_build(self):
         with patch.object(cli, 'run_command', return_value=7) as run:
@@ -94,7 +102,7 @@ class cli_tests(unittest.TestCase):
         self.assertEqual(run.call_args.args[0], ['ctest', '--preset', 'cpp26_release', '--no-tests=error'])
 
     def test_subcommand_help_needs_no_chess(self):
-        for command in ('uci', 'suite:run', 'match:run', 'experience:book:show', 'tablebases:syzygy:download',
+        for command in ('uci', 'suite:run', 'match:run', 'tablebases:syzygy:download',
                         'fics', 'init'):
             with patch.dict(sys.modules, {'chess': None}), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as result:

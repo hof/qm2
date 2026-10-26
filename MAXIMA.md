@@ -443,7 +443,7 @@ without restarting the search. Pondering does not consume the timed allocation.
 Explicit zero clocks and `movetime 0` retain a time limit and return a legal
 move without requiring `stop`; absent time limits retain untimed search behavior.
 `go searchmoves` accepts a nonempty list of legal root moves, including losers'
-compulsory-capture rule. It restricts both search and book/experience selection;
+compulsory-capture rule. It restricts both search and book selection;
 illegal or empty lists reject the command. Other supported `go` options can
 appear before or after the move list. A search interrupted before evaluating its
 first root move returns a legal fallback from that permitted set, rather than
@@ -526,19 +526,18 @@ through WSL distribution `Ubuntu`. WSL remains required; this is not a native
 standalone Windows engine. The bundle is tied to this directory and the CPU
 where the engine was built, but does not require the source checkout to run.
 
-The bundle includes the NNUE weights, opening book, immutable experience file,
+The bundle includes the NNUE weights, opening book,
 290 installed three/four/five-piece Syzygy WDL/DTZ tables (about 984 MB), and GCC runtime libraries.
-The bridge translates single Windows drive paths for `EvalFile`, `BookFile`,
-`ExperienceFile` and `SyzygyPath` to Linux `/mnt/<drive>/...` paths.
+The bridge translates single Windows drive paths for `EvalFile`, `BookFile`
+and `SyzygyPath` to Linux `/mnt/<drive>/...` paths.
 `eval.nnue` beside `book.bin` loads automatically; `EvalFile` selects alternative
 networks. Use `C:\\dev\\maxima\\syzygy` for `SyzygyPath`, with
 `SyzygyProbeLimit=5` and `SyzygyProbeDepth=1`. The complete five-piece set is bundled.
-`BookFile` is `C:\dev\maxima\book.bin` and `ExperienceFile` is
-`C:\dev\maxima\experience\experience.bin`. The frozen HCE baseline remains available through its separate launcher. The bundle's README lists the configuration.
+`BookFile` is `C:\dev\maxima\book.bin`. The frozen HCE baseline remains available through its separate launcher. The bundle's README lists the configuration.
 
 Launcher source/build artifacts remain local under ignored `.tools/windows/`.
 Copied assets are SHA-256 verified in the bundle's `SHA256.json`. Checks through
-the copied Windows executable loaded NNUE/book/experience/Syzygy using Windows
+the copied Windows executable loaded NNUE/book/Syzygy using Windows
 paths, completed a legal depth-three search, and reported a Syzygy root hit.
 GUI interaction itself requires the user's Windows desktop.
 
@@ -602,8 +601,8 @@ falling back to untrained optimization.
 
 Include openings, early and late middlegames (quiet and tactical), queen, rook,
 minor-piece, pawn, and promotion endgames, with both sides to move. Include
-royal-losers searches if that variant will use the optimized binary. Keep books,
-experience, and tablebases disabled when training search/evaluation code, and use
+royal-losers searches if that variant will use the optimized binary. Keep books
+and tablebases disabled when training search/evaluation code, and use
 fixed hash/search options. This search-only workload does not exercise tablebase
 decoder probing paths; assess tablebase performance separately before adopting a
 production profile. Keep a separate held-out corpus with the same stage coverage
@@ -1212,7 +1211,7 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
   single-worker NNUE baseline and use held-out strength tests for changes.
 
 Late-move reductions now follow the reference form described in 4.4, and the
-online play integration has landed (9.7, 10.2). The 2026-10-23 baseline
+online play integration has landed (9.2, 10.2). The 2026-10-23 baseline
 (`9370042`) passed SPRT against the previous master (147 wins, 9 draws, no
 losses at 5+0.05 s). Its effective branching factor, `sqrt(N(d+2) / N(d))` on
 the depth-ladder totals, is 1.85 from D8 to D10 and 1.68 from D10 to D12,
@@ -1222,190 +1221,39 @@ No speed or Elo gain should be claimed without the corresponding measurements.
 
 ## 9. Opening books and persistent experience
 
-### 9.1 Playing configuration
+### 9.1 Native Polyglot book
 
-The reference Polyglot book is read-only. `BookFile` defaults to `book.bin` in
-its working directory; online clients should supply an absolute path. `OwnBook`
-is now honoured: false disables both reference-book selection and experience.
-`UCI_AnalyseMode=true` also disables them. These options affect future searches.
+The engine reads a Polyglot book without modifying it. `BookFile` defaults to
+`book.bin` in its working directory; online clients should supply an absolute
+path. `OwnBook=false` and `UCI_AnalyseMode=true` disable book selection for future
+searches. `<empty>` clears the book path.
 
 ```text
 setoption name BookFile value /home/hermen/dev/qm2/book.bin
-setoption name ExperienceFile value /home/hermen/dev/qm2/experience/experience.bin
-setoption name ExperienceDepth value 16
 setoption name OwnBook value true
 ```
 
-Experience is optional, disabled until a file is configured. The engine loads a
-validated immutable snapshot; changing `ExperienceFile` stops the current worker
-before publishing a new snapshot. Reapply that option after importing new games.
-`<empty>` disables experience. Invalid reloads retain the previous snapshot.
-The engine never writes either the reference book or the experience file.
+Only generated legal book moves are candidates, with their original Polyglot
+weights (duplicate entries add their weights). `searchmoves` restrictions apply.
+Repeated roots, imminent fifty-move draws, terminal draws and covered Syzygy
+material bypass the book for normal search/tablebase handling. Infinite and
+ponder searches wait for the appropriate stop/ponderhit before publishing a
+book move. Book results report zero nodes and no evaluation.
 
-Only generated legal moves can be selected from either source. Experienced
-positions with a previous occurrence of the root, imminent fifty-move draws, and covered
-Syzygy material fall back to normal search/tablebases. Saved scores are never
-used as transposition-table bounds or reported as proven evaluations. Book
-moves report zero cp, as before. Infinite/ponder searches still wait for the
-appropriate stop/ponderhit before publishing a book move.
+Native binary experience loading, `ExperienceFile`, `ExperienceDepth`, and all
+`experience:book:*` import/analysis/export/inspection commands have been removed,
+along with their exclusive storage and migration code. Existing PGNs, JSON,
+binary snapshots and legacy databases remain untouched as historical data.
+Statistical online learning uses the separate PGN workflow below.
 
-### 9.2 Importing online games
-
-Tooling uses the same pinned Python environment as the EPD runner (chapter 6.1).
-
-```bash
-./maxima experience:book:import --source games/BugChessFICS.pgn
-./maxima experience:book:import --source completed.pgn --player Maxima --player BugChess
-./maxima experience:book:show
-./maxima experience:book:export
-```
-
-Engine book commands use `experience:book:*`. Online learning commands
-(`experience:sync`, `experience:build`) and PGN storage (`experience:archive`)
-are listed separately in `./maxima help`. Purpose-built opening books use
-`books:fire`, `books:draw` and `books:repertoire`. Previous command names and
-the experience `--pgn`/`--database` flags have been removed.
-
-`--source` selects input. For import/analysis it accepts a PGN file or a folder
-searched recursively, defaulting to `MAXIMA_DATA_DIR/experience/games` (the
-checkout's `experience/games` when unset). For export/inspection it selects
-the saved experience JSON file, defaulting to `experience/experience.json`.
-`--output` selects the binary destination. Import/analysis also publish that
-binary automatically. With no `--player`, imports recognise Maxima, BugChess,
-MaximaEngine, and the saved `LearningColor` so guest FICS games are included;
-explicit `--player` aliases override this inference.
-
-```bash
-./maxima experience:book:import --source match.pgn --player Maxima
-./maxima experience:book:analyze --source experience/games/fics/2026-10.pgn --movetime 60000
-./maxima experience:book:export
-```
-
-Defaults are `experience/experience.json` and `experience/experience.bin`,
-ignored by Git. `--store` and `--output` select other files.
-SQLite is not required for import, analysis, inspection or export.
-On first use, an existing sibling `experience.sqlite` is converted read-only to
-the JSON store; the original is retained as a backup. Legacy `--store path.sqlite`
-also converts to `path.json`. Only this optional migration uses Python's SQLite
-module. Snapshot export
-refuses to overwrite an existing file without an experience snapshot header.
-The reference `book.bin` is untouched. Imported games must be standard chess;
-invalid games roll back the current import rather than partly changing statistics.
-
-Default player aliases are Maxima, BugChess and MaximaEngine, matched without
-case sensitivity; saved `LearningColor` also identifies our side in archived games.
-Only games matching those identities contribute results, but **both sides' moves** are
-retained. An opponent's winning line is recorded as successful for that move's
-side, rather than penalised because Maxima lost. Own and opponent provenance and
-own win/draw/loss totals are stored separately. Scores count draws as half points.
-These are observed results, not causal proof that an opening caused the outcome.
-
-The default horizon is the first 32 plies (`--max-ply`). A position/move receives
-at most one result observation per game, even if it repeats. Stable game identity
-uses starting position, moves, result, and identifying PGN headers; importing the
-same game again does not increase its counts. A later import may add stronger
-annotations or extend the import horizon. Incomplete games (`*`) may contribute
-analysis but do not count as wins/draws/losses. Completed results are treated as
-authoritative; corrected game identities are not automatically reconciled.
-
-### 9.3 Confidence and repertoire exploration
-
-The importer keeps the counts as well as the percentages. Selection prefers
-Maxima's own results when available. Own results start with 32 neutral prior
-games: one win gives an estimated 51.5%, not 100%. Opponent-only observations
-use 64 neutral prior games because player strength can differ. With more games,
-actual results increasingly outweigh the prior.
-
-Book weights are multiplied by `0.1 + 0.9 * (2 * estimated_score)^4`. This is a
-first, unvalidated policy, not an Elo claim. The positive floor preserves trials
-of less successful moves. Randomness uses an independently seeded generator per
-search and is not reset every time the file opens. New observed moves get a small
-trial weight growing with sample count. When sparse experience has no reference
-book entry or qualifying analysis, it competes with a fresh search rather than
-forcing a previously seen move. This lets both Maxima's and its opponents' new
-lines enter the repertoire without treating one game as conclusive.
-
-### 9.4 Remembering serious analysis
-
-Annotated PGN supports standard `[%eval 0.40,18]` (White's score and depth) and
-`[%emt 0:01:00]` (elapsed move time). Optional `[%nodes 1200000]` and
-`[%pv e4 e5 Nf3]` comments retain effort and a legal SAN or coordinate PV.
-A PV candidate is kept separately from the move actually played; unplayed PV
-moves do not receive game-result counts. PV scores are attached only to their
-first move, not copied into descendant positions. Engine identity comes from
-WhiteEngine/BlackEngine headers, falling back to the player name. Unknown clock
-annotations are not interpreted as elapsed thinking time.
-
-Analysis retains score perspective, mate/cp type, depth, nodes, time, PV, engine
-identity and halfmove clock. Stronger depth/node/time evidence replaces weaker
-analysis for the same position/move/engine/clock. Engine versions remain visible
-in the database. The compact snapshot exports the strongest record per move.
-At a matching halfmove clock, analysis meeting `ExperienceDepth` (default 16)
-can qualify an extra book candidate even without result observations. Candidates
-must score within 50 cp of the best eligible saved analysis among legal moves;
-analysed inferior continuations do not become recommendations merely because
-they were examined deeply. Mate scores rank ahead of centipawn wins and behind
-centipawn losses as appropriate. It remains
-book evidence, not an exact score cache. A deeper recorded move can therefore
-be available immediately in a later short game; this reuse policy needs match
-validation and does not guarantee that past analysis was correct.
-
-### 9.5 Optional post-game analysis
-
-```bash
-./maxima experience:book:analyze --source completed.pgn --movetime 1000 --max-ply 32
-./maxima experience:book:analyze --source completed.pgn --movetime 60000 --max-ply 4
-```
-
-`--engine` selects an executable; default is the Release Maxima binary. The tool
-starts an external UCI engine in an empty directory with book/experience disabled.
-It analyses each position in the selected opening horizon and saves the best PV.
-If its preferred move differs from the played move, it also searches the played
-continuation and reports both scores and an estimated centipawn loss. This may
-use two time budgets per position; differing search horizons can produce noisy
-comparisons. Reports are candidate improvements, not proven mistakes. Analysis
-candidates do not acquire invented wins or losses. Snapshot publication happens
-when analysis completes. Result accounting remains a separate import command.
-
-An online client can save annotated PGN at game end, invoke these commands, and
-reload ExperienceFile before the next game. Automatic server connection,
-background-job scheduling, and live UCI analysis recording are not implemented
-here. The existing legacy `learn` self-match tuner is separate and is not used
-by this persistent experience layer.
-
-### 9.6 Storage and search ownership
-
-The JSON store retains imported game identities, per-game observations, move
-statistics and saved analysis, and is used only by external tooling. Writers hold
-an advisory lock for the entire command, including binary publication. Updates
-use fsync and atomic replacement; failed imports roll back the current batch.
-This file is loaded into memory and rewritten on updates, so it is a portable
-replacement for the old binary-export workflow, not an unlimited-history index.
-An atomic snapshot replace leaves readers with complete data. Snapshot format
-v1 is little-endian: `MXEXP001`, an unsigned 64-bit record count, then sorted
-80-byte records. Each has a full 64-bit Polyglot key, coordinate move (source six
-bits, target six bits, promotion N/B/R/Q encoded 1/2/3/4), total W/D/L, analysis
-depth/score/nodes/time/clock/type/engine fingerprint, own W/D/L, and a reserved
-zero field. Duplicate or unordered records, bad headers, invalid field ranges,
-incorrect lengths, and counts above two million are rejected.
-
-Searches hold shared immutable ownership of the loaded snapshot. Lookups and
-weighting occur only at the root, outside the search node hot path. Configuring
-a file parses it once; ordinary searches do not reopen or modify it. Statistics
-and analysis never change fifty-move/repetition identity or TT score semantics.
-Tests cover confidence smoothing, both-side result attribution, duplicate and
-repeated-position handling, stronger annotations, unfinished games, atomic
-publication, legal selection, rejected reloads, OwnBook, and unchanged book bytes.
-
-
-### 9.7 Online opening learning (MaxDrone)
+### 9.2 Online opening learning (MaxDrone)
 
 Status: implemented in `learning.py` and both online clients; thresholds are
 first guesses awaiting measurement. Both clients use the same store beneath
 `MAXIMA_DATA_DIR/experience` (on the shared PVC), publish after every saved game,
 and reload before preparing the next game's opening book. A game already in
-progress retains its existing view. The native JSON/`experience.bin` workflow
-above remains separate for GUI use; online sharing does not merge binary counters.
+progress retains its existing view. Saved analysis metadata is passive; only
+statistical evaluation/result evidence affects learned book choices.
 
 FICS royal losers uses a separate store at `experience/losers`, with its own
 `games`, `index/shared.json`, locks and `players`. PGNs carry
@@ -1461,7 +1309,6 @@ this implementation does not provide a network service or configure Kubernetes.
 
 `experience:archive` accepts multiple individual game paths for migration or retry.
 It uses the same command in both online clients, including custom PGN destinations.
-It does not import results into the separate native JSON/`experience.bin` store.
 Archive failures retain pending files and are reported by the clients. Existing
 legacy monthly files are preserved. All pods writing these files must run this
 version; shared PVC advisory locks and atomic rename must work across nodes.
@@ -1499,8 +1346,6 @@ PGN comments retain `[%nodes]`, `[%nps]` and `[%searchtime]` (seconds of actual
 search, separate from server `[%emt]`). Missing legacy effort is unknown. The
 versioned derived index rebuilds from archived PGNs without adding duplicate
 result observations.
-
-Analysis saved only in the native JSON store is not part of the PGN reconstruction guarantee.
 
 **Learning signal (Maxima's eval).** Maxima's own `[%eval]` is the source of
 truth; an eval can miss something, but not for long. Every opening move (both
@@ -1625,9 +1470,8 @@ downloaded books.
 Moves are labelled in the terminal and PGN comment with the label, the move's
 probability, and each layer's share of it, e.g. `learned 65%: fire 45%, global
 13%, humans 13%, John 29%`; `book` when the books gave most, `learned` when the
-learned layers did, `(recalled d20)` alongside fresh search statistics for reused analysis. These shares are
-logged for tuning the profiles. Superseding analysis needs depth 16 and two
-plies more; the horizon is 40 plies. `--no-learning` (or `--no-pgn`) leaves the
+learned layers did. These shares are logged for tuning the profiles. The horizon
+is 40 plies. `--no-learning` (or `--no-pgn`) leaves the
 book to the engine.
 
 The decision is built per game at `Creating:` (opponent, group, game type, and
@@ -1640,9 +1484,9 @@ not easy wins, as JDrone's `book_calc`.
 
 One repository contains two independently usable components: the C++ engine and
 an installable Python runner. The engine owns search, evaluation, time allocation,
-UCI handling, book/tablebase probing, and reading immutable experience snapshots.
+UCI handling and native Polyglot book/tablebase probing.
 It never imports, embeds, or invokes Python. The runtime boundary is UCI plus
-existing book, tablebase, and experience files.
+existing book and tablebase files.
 
 The runner uses python-chess for boards, legal moves, SAN/UCI notation, EPD, PGN,
 Polyglot keys, and UCI process handling. Its `uci` module uses asyncio for engine
@@ -1655,14 +1499,13 @@ an advertised combo option containing `losers`. Unsupported board variants and
 Chess960 are rejected before analysis. The losers board retains ordinary UCI
 position transport and independent rule/terminal semantics. Offline matches
 preserve variants in PGN export/replay.
-Losers CLI suites, general PGN imports, and experience remain pending; those
-workflows must preserve variant identity when introduced.
+Losers CLI suites remain pending and must preserve variant identity when introduced.
 Generic UCI orchestration has no dependency on the Maxima source tree.
-Maxima's file-based experience accounting and binary snapshot serialization remain
-in the runner's experience module; their formats are unchanged.
+Statistical online learning and its PGN archives belong to the Python runner.
 
 The CLI owns repository paths and build helpers. Existing `suite:run`,
-`experience:*`, and `tablebases:syzygy:download` commands remain available.
+`experience:sync`, `experience:build`, `experience:archive`, and
+`tablebases:syzygy:download` commands remain available.
 Default engine selection prefers Release, falling back to Debug. Installed
 commands discover the checkout from the current directory or
 `MAXIMA_PROJECT_DIR`; outside a checkout, generic suite commands accept
@@ -1683,7 +1526,7 @@ ready, so it is safe to rerun and suits CI. In order:
   SHA-256; a different existing file is kept unless `--force`
 - `fire.bin` (Noomen's Daring carried on by `books:fire`) and `draw.bin` from
   Maxima's `books-v1` release; `--draw` rebuilds it from the
-  Lichess masters explorer instead (needs a Lichess token, see 9.7)
+  Lichess masters explorer instead (needs a Lichess token, see 9.2)
 - Syzygy tables up to `--syzygy N` pieces (default 5, about 940 MiB; 0 skips),
   skipped offline when the manifest lists the complete set
 
@@ -1757,7 +1600,7 @@ JDrone's Java implementation remains operational in its own existing checkout.
 FICS play is being migrated onto this async runner (see 10.2); game/clock
 orchestration, automation, and PGN capture follow the transport. ICC, legacy
 database migration, remote control, and notifications are deferred. Learning
-writes stay in Python; snapshot reading and move selection stay in Maxima.
+and online book selection stay in Python; native Polyglot probing stays in Maxima.
 
 ### 10.1 Documentation and CLI interface
 
@@ -1973,7 +1816,7 @@ or a list), note 3 (CPU model with the engine's `Threads` and `Hash`, and the
 OS), then up to seven `notes`. Guest accounts may test engines freely and get no
 notes.
 
-The multi-layer book (9.7) chooses opening moves; `layer_profiles` in the
+The multi-layer book (9.2) chooses opening moves; `layer_profiles` in the
 config overrides its percentages per profile, e.g. `{"layer_profiles": {"weaker":
 {"fire": 35, "book": 10}}}` (layers `book`, `fire`, `draw`, `experiment`,
 `global`, `group`, `opponent`, `search`; profiles `equal`, `weaker`, `stronger`,
@@ -1990,7 +1833,7 @@ keep the previous game's value.
 Every game with at least one move is atomically saved to a pending
 `experience/games/<LearningId>.pgn`, then completed games are moved by
 `experience:archive` into `<LearningSource>/YYYY-MM.pgn` (`pgn_dir` or `--pgn-dir` overrides the extra
-PGN destination; `--no-pgn` disables saving and learning). See 9.7 for shared
+PGN destination; `--no-pgn` disables saving and learning). See 9.2 for shared
 publication, imports and rebuilding. Tags: `Event` (`FICS unrated blitz game`),
 `Site`, `Date` (local) and `UTCDate`/`UTCTime` at game start, `White`/`Black`, `WhiteElo`/
 `BlackElo` when rated, `TimeControl` (`180+0`), `Termination` (`normal`,
@@ -2002,8 +1845,8 @@ publication, imports and rebuilding. Tags: `Event` (`FICS unrated blitz game`),
 moves add `[%eval score,depth]`, `[%pv ...]` (SAN, up to 12 plies), and
 `[%nodes]`, `[%nps]` and `[%searchtime]` (actual engine search seconds);
 moves from the multi-layer book carry its label and layer shares
-(9.7); the server's reason ends the game.
-`experience:book:import` reads these annotations. A takeback rewinds the move list;
+(9.2); the server's reason ends the game.
+Shared statistical learning reads the evaluation annotations. A takeback rewinds the move list;
 a board that does not follow (missed update) restarts it with a `FEN` tag. A
 game cut off by a lost connection has no result line and is not saved. Unregistered
 names (guests, and `(U)` logins such as `zahrani`) are not stable identities, so
@@ -2102,7 +1945,7 @@ Unknown settings, wrong types and invalid ranges fail before connection.
 `enabled` controls resignation; the casual thinking ceiling remains independent.
 Loss thresholds are negative integer cp; confirmation count and depth are positive
 integers, the rating margin is nonnegative, and the ceiling is positive finite
-seconds. Shared online learning and PGN ingestion are described in 9.7.
+seconds. Shared online learning and PGN ingestion are described in 9.2.
 
 Both clients handle `SIGTERM` and `SIGINT` for Kubernetes/container shutdown.
 The first signal stops seeking, accepting and creating challenges immediately;
@@ -2149,7 +1992,7 @@ Prediction misses, game changes and ordinary searches keep their usual wording.
 accepts challenges, plays them with the Release Maxima build, saves them as
 PGN and learns from them. The move choice is the same as on FICS
 (`runner/maxima_runner/move_choice.py`): the multi-layer book and experience
-(9.7), then the engine while the online tablebase is asked (11.4), with draw
+(9.2), then the engine while the online tablebase is asked (11.4), with draw
 contempt from the rating gap.
 
 ```bash
@@ -2224,7 +2067,7 @@ Opening stalls use the same move 1–4 and book/score rule as FICS, waiting at l
 turn; the Lichess server decides whether the game can still be aborted. A refused
 request leaves play running normally.
 
-Lichess shares the PGN archive and global/group learning with FICS (9.7);
+Lichess shares the PGN archive and global/group learning with FICS (9.2);
 individual opponents and rating statistics remain server-specific. The learner maps Lichess speeds to its game types (bullet to lightning,
 rapid and classical to standard); the PGN keeps the real speed in `Event`
 (`Lichess rated blitz game`) and links the game in `Site`. Settings files take

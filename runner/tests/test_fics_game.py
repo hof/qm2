@@ -1,6 +1,5 @@
 """Style12 parsing against a recorded FICS game, move history, and the engine player."""
 import asyncio
-from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
@@ -14,7 +13,7 @@ import chess.engine
 import chess.pgn
 import chess.polyglot
 
-from maxima_runner import connectors, experience, fics, fics_game, learning, move_choice, online_tablebase
+from maxima_runner import connectors, fics, fics_game, learning, move_choice, online_tablebase
 from maxima_runner.uci import open_engine
 
 observed = (Path(__file__).parent / "data" / "fics_observed_game.txt").read_text().splitlines()
@@ -120,7 +119,7 @@ class record_tests(unittest.TestCase):
         self.assertTrue(text.rstrip().endswith("GuestVHRM resigns } 1-0"))
         self.assertEqual(len(list(game.mainline_moves())), 15)
 
-    def test_saved_games_are_atomic_deduplicated_and_import_losslessly(self):
+    def test_saved_games_are_atomic_and_deduplicated(self):
         game = self.recorded_game()
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory) / "fics"
@@ -131,12 +130,6 @@ class record_tests(unittest.TestCase):
                 games = [chess.pgn.read_game(stream)]
                 self.assertIsNone(chess.pgn.read_game(stream))
             self.assertEqual([str(item) for item in games], [str(game)])
-            with closing(experience.open_store(Path(directory) / "experience.json")) as db:
-                counts = experience.import_games(db, path, {"guestmczl"}, 200)
-                self.assertEqual(counts, {"imported": 1, "duplicates": 0, "analyses": 1})
-                analysis = next(iter(db.data['analysis'].values()))
-                row = [analysis[i] for i in (1, 2, 4, 5, 7, 9)]
-        self.assertEqual(row, ["d5a5", "Maxima 2.0.0", 16, 42, 123456, ["d5a5", "c6a5"]])
 
 
 fake_engine = '''

@@ -23,7 +23,6 @@
 #include "uci_console.h"
 #include <mutex>
 #include "tablebase.h"
-#include "experience.h"
 #include "book.h"
 #include "movegen.h"
 #include "nnue.h"
@@ -512,12 +511,7 @@ namespace uci {
                         opt->value = candidate;
 
                         //handle option
-                        if (name == "ExperienceFile") {
-                            out(experience::set_path(value) ? "info string Experience loaded"
-                                : "info string Experience load failed; previous snapshot retained");
-                        } else if (name == "ExperienceDepth") {
-                            opt->value = MAX(1, MIN(128, opt->value));
-                        } else if (name == "BookFile") {
+                        if (name == "BookFile") {
                             book::set_path(value == "<empty>" ? "" : value);
                         } else if (name == "SyzygyPath") {
                             const bool initialized = tablebase::set_path(value);
