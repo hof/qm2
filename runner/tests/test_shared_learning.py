@@ -233,7 +233,7 @@ class shared_learning_tests(unittest.TestCase):
             deadline = time.monotonic() + 20
             while any(worker.is_alive() for worker in workers) and time.monotonic() < deadline:
                 snapshot = json.loads(self.store.snapshot.read_text())
-                self.assertEqual(snapshot['version'], 1)
+                self.assertEqual(snapshot['version'], 2)
                 self.assertLessEqual(len(snapshot['games']), 4)
                 for identity in snapshot['games']:
                     self.assertEqual(len(learning_store.read_games(self.store.games / f'{identity}.pgn')), 1)

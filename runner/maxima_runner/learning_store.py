@@ -195,10 +195,16 @@ def merge_game(old, new, replace=False):
             old.headers['Termination'] = new.headers['Termination']
     for key, value in new.headers.items():
         old.headers.setdefault(key, value)
+    from .search_effort import effort, analysis_rank
     for before, after in zip(old.mainline(), new.mainline()):
         clocks = {name: getattr(before, name)() for name in ("clock", "emt")}
         # An older export must not erase our stronger analysis or clock annotations.
-        if (after.eval_depth() or 0) > (before.eval_depth() or 0):
+        def rank(node):
+            nodes, _, seconds = effort(node)
+            score = node.eval()
+            cp = score.relative.score(mate_score=2000) if score else 0
+            return analysis_rank(node.eval_depth(), cp, score.is_mate() if score else False, seconds, nodes)
+        if rank(after) > rank(before):
             before.comment = after.comment
         elif after.comment and not before.comment:
             before.comment = after.comment
@@ -246,7 +252,7 @@ class shared_store:
     def _read(self):
         try:
             value = json.loads(self.snapshot.read_text(encoding='utf-8'))
-            if (value.get('version') == 1 and value.get('variant', 'standard') == self.variant
+            if (value.get('version') == 2 and value.get('variant', 'standard') == self.variant
                     and isinstance(value.get('games'), dict)):
                 return value['games']
         except (OSError, ValueError, AttributeError):
@@ -268,7 +274,7 @@ class shared_store:
     def _publish(self, cached):
         from .learning import player_stats, write_player_stats
         write_player_stats(player_stats(self.records(cached)), self.root / 'players')
-        atomic_text(self.snapshot, json.dumps({'version': 1, 'variant': self.variant, 'games': cached}, sort_keys=True) + '\n')
+        atomic_text(self.snapshot, json.dumps({'version': 2, 'variant': self.variant, 'games': cached}, sort_keys=True) + '\n')
 
     def _ingest(self, games, cached, replace=False):
         from .learning import digest

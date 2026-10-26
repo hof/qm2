@@ -104,6 +104,7 @@ class engine_session:
             settings["UCI_AnalyseMode"] = False
 
         async def play_search():
+            started = time.monotonic()
             self.pondering = False
             evidence = {}
             self.protocol.evidence = evidence
@@ -118,6 +119,7 @@ class engine_session:
                 self.pondering = result.ponder is not None
                 result.info = dict(self.protocol.hit_info, **result.info)
                 result.info["_resignation"] = dict(evidence)
+                result.info["_search_seconds"] = time.monotonic() - started
                 return result
             finally:
                 self.protocol.evidence = None

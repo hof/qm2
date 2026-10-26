@@ -1495,6 +1495,11 @@ over their obsolete legacy copies. Stop old client versions during migration;
 thereafter both pods must use this version and the same `MAXIMA_DATA_DIR`.
 A custom `--pgn-dir` receives the game too; learning still archives a canonical
 copy beneath the shared experience root. Idle analysis remains future work;
+PGN comments retain [%nodes], [%nps] and [%searchtime] (seconds of actual
+search, separate from server [%emt]). Missing legacy effort is unknown. The
+versioned derived index rebuilds from archived PGNs without adding duplicate
+result observations.
+
 Analysis saved only in the native JSON store is not part of the PGN reconstruction guarantee.
 
 **Learning signal (Maxima's eval).** Maxima's own `[%eval]` is the source of
@@ -1523,7 +1528,7 @@ other types ½; unregistered opponents (`Account "unregistered"`) count in the
 global layer only, at ½.
 
 **Soundness from analysis.** Each position keeps the strongest analysis per
-move (think time, then depth). Depth differences do not veto other moves: existing evaluation and result feedback
+move (winning mate first, otherwise nodes, depth, then search duration). Depth differences do not veto other moves: existing evaluation and result feedback
 continues to weight every legal alternative. Selection probability is shown
 separately from the contributing layer percentages.
 

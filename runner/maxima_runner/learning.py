@@ -12,6 +12,7 @@ import chess.pgn
 import chess.polyglot
 
 from . import learning_store
+from .search_effort import effort, analysis_rank
 from .variants import board_variant, experience_variants, learning_variant
 
 horizon_plies = 40
@@ -83,8 +84,10 @@ def digest(game):
             centipawns = relative.score(mate_score=2000)
             evals.append((ply, expected_score(centipawns)))
             if ply < horizon_plies:
+                nodes, nps, seconds = effort(node)
                 analyses.append([key, node.move.uci(), depth, centipawns, int(relative.is_mate()),
-                                 round((node.emt() or 0) * 1000), board.halfmove_clock])
+                                 round(seconds * 1000) if seconds is not None else None,
+                                 board.halfmove_clock, nodes, nps])
         board.push(node.move)
     if len(moves) < minimum_plies or len(evals) < eval_window and headers.get("LearningResults") != "true":
         return None
@@ -348,11 +351,16 @@ class opening_book:
                     entry[0] += layer_weight * value
                     entry[1] += layer_weight
                     self.totals[layer][key] = self.totals[layer].get(key, 0.0) + layer_weight
-            for key, move, depth, centipawns, mate, think_ms, clock in record["analyses"]:
+            for saved in record["analyses"]:
+                key, move, depth, centipawns, mate, think_ms, clock = saved[:7]
+                nodes, nps = saved[7:9] if len(saved) >= 9 else (None, None)
+                if len(saved) < 9:
+                    think_ms = None  # legacy field was server elapsed time
                 moves = self.analyses.setdefault(key, {})
                 known = moves.get(move)
-                if known is None or (think_ms, depth) > (known[3], known[0]):
-                    moves[move] = [depth, centipawns, mate, think_ms, clock]
+                rank = analysis_rank(depth, centipawns, mate, think_ms, nodes)
+                if known is None or rank > analysis_rank(known[0], known[1], known[2], known[3], known[5]):
+                    moves[move] = [depth, centipawns, mate, think_ms, clock, nodes, nps]
 
     def track_revenge(self, record):
         """A loss gives us the opponent's line for their colour; a win with that colour serves the revenge."""
@@ -532,7 +540,7 @@ class opening_book:
             # Out of book a learned move must have real evidence: several games scoring well, or an
             # analysis that took at least this game's budget.
             revenge = self.revenge_move(board, key, moves)
-            if in_book or move == revenge or (games >= 2 and rate >= 0.5) or (analysis and analysis[3] >= budget_ms):
+            if in_book or move == revenge or (games >= 2 and rate >= 0.5) or (analysis and (analysis[3] or 0) >= budget_ms):
                 reason = self.describe(*moves[move])
                 kind = reason.split()[0]
                 if move == self.signature(key, moves):
@@ -546,10 +554,10 @@ class opening_book:
                 self.why = (kind,) + moves[move] + (source,)
                 return move, reason
         if analyses:
-            text, (depth, centipawns, mate, think_ms, clock) = max(analyses.items(),
-                                                                   key=lambda item: (item[1][3], item[1][0]))
+            text, saved = max(analyses.items(), key=lambda item: (item[1][3] or 0, item[1][0]))
+            depth, centipawns, mate, think_ms, clock = saved[:5]
             move = chess.Move.from_uci(text)
-            if think_ms >= budget_ms and clock == board.halfmove_clock and board.is_legal(move):
+            if (think_ms or 0) >= budget_ms and clock == board.halfmove_clock and board.is_legal(move):
                 self.why = ("recalled", depth, think_ms / 1000)
                 return move, f"recalled d{depth} {think_ms / 1000:.1f}s"
         return None

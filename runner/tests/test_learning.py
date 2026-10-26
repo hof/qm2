@@ -52,7 +52,7 @@ class digest_tests(unittest.TestCase):
         self.assertAlmostEqual(values["g1f3"][0], learning.expected_score(100), places=3)
         self.assertEqual((values["e2e4"][1], values["e7e5"][1]), (0.0, 1.0))
         self.assertEqual(record["score"], 0.0)
-        self.assertEqual(record["analyses"][0][1:], ["e2e4", 12, 0, 0, 2500, 0])
+        self.assertEqual(record["analyses"][0][1:], ["e2e4", 12, 0, 0, None, 0, None, None])
 
     def test_unfinished_games_keep_evals_only_and_book_tails_keep_results_only(self):
         record = learning.digest(make_game([0] * 4, result="*"))
