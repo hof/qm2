@@ -1247,17 +1247,17 @@ appropriate stop/ponderhit before publishing a book move.
 Tooling uses the same pinned Python environment as the EPD runner (chapter 6.1).
 
 ```bash
-./maxima experience:book:import --pgn games/BugChessFICS.pgn
-./maxima experience:book:import --pgn completed.pgn --player Maxima --player BugChess
+./maxima experience:book:import --source games/BugChessFICS.pgn
+./maxima experience:book:import --source completed.pgn --player Maxima --player BugChess
 ./maxima experience:book:show
 ./maxima experience:book:export
 ```
 
 Engine book commands use `experience:book:*`. Online learning commands
 (`experience:sync`, `experience:build`) and PGN storage (`experience:archive`)
-are listed separately in `./maxima help`. The older `experience:import`,
-`experience:analyze`, `experience:export`, and `experience:show` remain aliases;
-`--pgn` remains an alias for selecting PGN input.
+are listed separately in `./maxima help`. Purpose-built opening books use
+`books:fire`, `books:draw` and `books:repertoire`. Previous command names and
+the experience `--pgn`/`--database` flags have been removed.
 
 `--source` selects input. For import/analysis it accepts a PGN file or a folder
 searched recursively, defaulting to `MAXIMA_DATA_DIR/experience/games` (the
@@ -1275,10 +1275,10 @@ explicit `--player` aliases override this inference.
 ```
 
 Defaults are `experience/experience.json` and `experience/experience.bin`,
-ignored by Git. `--store` and `--output` select other files (`--database` remains
-a legacy alias). SQLite is not required for import, analysis, inspection or export.
+ignored by Git. `--store` and `--output` select other files.
+SQLite is not required for import, analysis, inspection or export.
 On first use, an existing sibling `experience.sqlite` is converted read-only to
-the JSON store; the original is retained as a backup. Legacy `--database path.sqlite`
+the JSON store; the original is retained as a backup. Legacy `--store path.sqlite`
 also converts to `path.json`. Only this optional migration uses Python's SQLite
 module. Snapshot export
 refuses to overwrite an existing file without an experience snapshot header.
@@ -1346,8 +1346,8 @@ validation and does not guarantee that past analysis was correct.
 ### 9.5 Optional post-game analysis
 
 ```bash
-./maxima experience:book:analyze --pgn completed.pgn --movetime 1000 --max-ply 32
-./maxima experience:book:analyze --pgn completed.pgn --movetime 60000 --max-ply 4
+./maxima experience:book:analyze --source completed.pgn --movetime 1000 --max-ply 32
+./maxima experience:book:analyze --source completed.pgn --movetime 60000 --max-ply 4
 ```
 
 `--engine` selects an executable; default is the Release Maxima binary. The tool
@@ -1577,7 +1577,7 @@ the MaxDrone config points a style at another file, e.g. `{"style_books":
 leaves that style's percentage to the other layers.
 
 No published book aims at safe, drawish positions, so `./maxima
-experience:draw` builds `draw.bin` from the Lichess masters explorer. Our
+books:draw` builds `draw.bin` from the Lichess masters explorer. Our
 moves are scored `draw% - 2 × loss%` for the side to move (at least 50 master
 games); moves within 0.05 of the safest stay, weighted 100 down to 10.
 Opponent replies played in at least 5% of games are followed, most likely
@@ -1589,7 +1589,7 @@ rate limits wait a minute as Lichess asks. A first build takes a few hours.
 `experiment.bin` is for fun in unrated games: gambits and surprise first moves
 (1.b4, 1.b3, 1.a3, 1.Nc3; 1...b6, 1...a6, 1...Nc6) that unsettle humans, while the
 learned layers measure whether they work. `./maxima init` and `./maxima
-experience:repertoire` build it from `books/experiment.pgn`, one line per game
+books:repertoire` build it from `books/experiment.pgn`, one line per game
 tagged `[Repertoire "white"|"black"]` so only our side's moves enter the book.
 `--styles fire draw` builds those from their PGNs too, replacing the
 downloaded books.
@@ -1653,7 +1653,7 @@ ready, so it is safe to rerun and suits CI. In order:
 - Release and Debug builds (Ninja's no-op check decides "up to date")
 - `book.bin` from the pinned polyglot-books v1.0 archive, verified by size and
   SHA-256; a different existing file is kept unless `--force`
-- `fire.bin` (Noomen's Daring carried on by `experience:fire`) and `draw.bin` from
+- `fire.bin` (Noomen's Daring carried on by `books:fire`) and `draw.bin` from
   Maxima's `books-v1` release; `--draw` rebuilds it from the
   Lichess masters explorer instead (needs a Lichess token, see 9.7)
 - Syzygy tables up to `--syzygy N` pieces (default 5, about 940 MiB; 0 skips),

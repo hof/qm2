@@ -79,8 +79,9 @@ class experience_store_tests(unittest.TestCase):
         output = self.root / 'experience.bin'
         code = "import sys; sys.modules['sqlite3'] = None; from maxima_runner.cli import main; raise SystemExit(main(sys.argv[1:]))"
         for command in ('import', 'export', 'show'):
-            result = subprocess.run([sys.executable, '-c', code, 'experience:' + command,
-                                     '--store', str(store), '--output', str(output), '--pgn', str(games)],
+            arguments = ['--source', str(games if command == 'import' else store)]
+            result = subprocess.run([sys.executable, '-c', code, 'experience:book:' + command,
+                                     '--store', str(store), '--output', str(output), *arguments],
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(output.exists())
@@ -104,8 +105,8 @@ class experience_store_tests(unittest.TestCase):
         for index in range(3):
             path = self.root / f'{index}.pgn'
             path.write_text(pgn.replace('fixture', f'fixture-{index}'))
-            commands.append([sys.executable, '-m', 'maxima_runner', 'experience:import',
-                             '--pgn', str(path), '--store', str(store), '--output', str(output)])
+            commands.append([sys.executable, '-m', 'maxima_runner', 'experience:book:import',
+                             '--source', str(path), '--store', str(store), '--output', str(output)])
         for _ in range(2):
             processes = [subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                          for command in commands]
@@ -122,7 +123,7 @@ class experience_store_tests(unittest.TestCase):
         self.assertEqual(len(data['games']), 9)
         self.assertEqual(sum(sum(row[2:5]) for row in data['moves'].values()), 18)
 
-    def test_book_commands_default_to_archive_and_keep_old_aliases(self):
+    def test_book_commands_default_to_archive_and_accept_explicit_sources(self):
         folder = self.root / 'experience' / 'games' / 'fics'
         folder.mkdir(parents=True)
         source = folder / '2026-10.pgn'
@@ -138,7 +139,7 @@ class experience_store_tests(unittest.TestCase):
         key = experience.key_of(chess.Board())
         self.assertEqual(data['moves'][key + '/e2e4'][5], 1)
         for arguments in (
-                ['experience:import', '--pgn', str(source)],
+                ['experience:book:import', '--source', str(source)],
                 ['experience:book:export', '--source', str(store)],
                 ['experience:book:show', '--source', str(store)]):
             result = subprocess.run([sys.executable, '-m', 'maxima_runner', *arguments],

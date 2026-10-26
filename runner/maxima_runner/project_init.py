@@ -20,7 +20,7 @@ from .project import data_root, project_root
 # Chris Whittington's polyglot-books collection: Noomen's Rebel book and his gambit-minded Daring.
 polyglot_books = "https://github.com/ChrisWhittington/polyglot-books/releases/download/v1.0/"
 polyglot_credit = "Chris Whittington's polyglot-books collection"
-# Our own books, built by maxima experience:draw and experience:fire (MAXIMA.md 9.7).
+# Our own books, built by maxima books:draw and books:fire (MAXIMA.md 9.7).
 maxima_books = "https://github.com/hof/qm2/releases/download/books-v1/"
 # Pinned downloads: file, archive URL, archive member, size, SHA-256, source.
 books = (
@@ -222,8 +222,8 @@ def draw_step(root, options):
         return "missing", "set LICHESS_TOKEN (environment or .env)"
     if options.check:
         return "missing", "./maxima init --draw builds it"
-    status = subprocess.run([sys.executable, "-m", "maxima_runner", "experience:draw"], cwd=root).returncode
-    return ("done", "draw.bin") if status == 0 else ("failed", "./maxima experience:draw")
+    status = subprocess.run([sys.executable, "-m", "maxima_runner", "books:draw"], cwd=root).returncode
+    return ("done", "draw.bin") if status == 0 else ("failed", "./maxima books:draw")
 
 
 def repertoire_step(root, options):

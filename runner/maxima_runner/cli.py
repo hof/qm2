@@ -35,9 +35,9 @@ command_groups = (
         ("experience:archive", "Move completed games into monthly PGNs"),
     )),
     ("Opening books", (
-        ("experience:repertoire", "Build the fire, draw and experiment books"),
-        ("experience:draw", "Build draw.bin from master games"),
-        ("experience:fire", "Build fire.bin from master games"),
+        ("books:repertoire", "Build experiment and mood books from PGNs"),
+        ("books:draw", "Build draw.bin for safe, drawish openings"),
+        ("books:fire", "Build fire.bin for sharp, decisive openings"),
     )),
     ("Tablebases", (
         ("tablebases:syzygy:download", "Download selected Syzygy tablebases"),
@@ -60,25 +60,20 @@ def show_logo():
     print("Chess engine & ops\n")
 
 
-def show_help(all_commands=False):
+def show_help():
     show_logo()
     print("Usage: maxima <command> [options]")
     print("       maxima                  Run the native UCI engine (from a GUI or pipe)")
     print("       maxima uci              Run it in this terminal\n")
     for title, commands in command_groups:
-        visible = commands if all_commands else tuple(
-            item for item in commands if item[0].startswith('experience:') or item[0] in (
-                "init", "uci", "build", "test", "suite:run", "match:run", "experience:show", "tablebases:syzygy:download",
-                "fics", "lichess"))
         print(styled("-" * 72, "36"))
         print(styled(title, "1"))
         print(styled("-" * 72, "36"))
-        for command, description in visible:
+        for command, description in commands:
             print(f"  {command:<28} {description}")
         print()
     print("Engine book: PGNs -> experience.json -> experience.bin")
     print("Online learning: saved PGNs -> shared index -> multilayer book\n")
-    print("Older experience:import/analyze/export/show names remain aliases.")
     print("Run maxima <command> --help for usage and options.")
     print("You can also use maxima help <command>.\n")
 
@@ -190,7 +185,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
         "init, uci, build, test, suite:run, match:run, experience:book:import|export|show|analyze, "
-        "experience:sync|archive|build|repertoire|draw|fire, "
+        "experience:sync|archive|build, books:repertoire|draw|fire, "
         "tablebases:syzygy:download, fics, lichess (no command: run engine)"))
     if not arguments and sys.stdin.isatty() and sys.stdout.isatty():
         arguments = ["--help"]
@@ -199,7 +194,7 @@ def main(argv=None):
         return 0
     if arguments and arguments[0] == "help":
         if len(arguments) == 1:
-            show_help(all_commands=True)
+            show_help()
             return 0
         if len(arguments) != 2:
             parser.error("usage: maxima help [command]")
@@ -211,8 +206,6 @@ def main(argv=None):
                 raise ValueError("build Maxima first: ./maxima build")
             os.execv(str(binary), [str(binary)])
         command, remaining = arguments[0], arguments[1:]
-        if command in ('experience:import', 'experience:analyze', 'experience:export', 'experience:show'):
-            command = 'experience:book:' + command.rsplit(':', 1)[1]
         if sys.stdout.isatty():
             show_logo()
         if command == "uci":
@@ -237,13 +230,13 @@ def main(argv=None):
         elif command == "experience:build":
             from . import learning
             entrypoint = learning.main
-        elif command == "experience:repertoire":
+        elif command == "books:repertoire":
             from . import learning
             entrypoint = learning.repertoire_main
-        elif command == "experience:draw":
+        elif command == "books:draw":
             from . import master_books
             entrypoint = master_books.main
-        elif command == "experience:fire":
+        elif command == "books:fire":
             from . import master_books
             entrypoint = master_books.fire_main
         elif command in ("experience:book:import", "experience:book:export", "experience:book:show", "experience:book:analyze"):

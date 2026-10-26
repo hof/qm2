@@ -40,9 +40,10 @@ locked, atomically published `experience/experience.json` (`--store` overrides i
 read-only conversion of an existing legacy store; normal commands do not need it.
 Use `experience:book:import|analyze|export|show`. `--source` defaults to the
 saved PGN archive for import/analysis and the JSON data file for export/inspection.
-PGN input may be a file or a recursively scanned directory. Older command names
-and `--pgn` continue to work. Online learning and PGN archiving have their own
-sections in `maxima help`.
+PGN input may be a file or a recursively scanned directory. Purpose-built opening
+books use `books:fire`, `books:draw` and `books:repertoire`. Online learning and
+PGN archiving have their own sections in `maxima help`. Old command names and
+experience `--pgn`/`--database` aliases are removed.
 Both online clients invoke `experience:archive <LearningId>.pgn` after saving
 and learning a completed game. It locks the shared archive, deduplicates into
 `games/<LearningSource>/YYYY-MM.pgn`, and deletes the pending file only after

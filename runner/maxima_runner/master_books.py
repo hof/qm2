@@ -170,7 +170,7 @@ def main(style="draw"):
     from .project import data_root, project_root
     root = data_root()
     output, rank, best = styles[style]
-    parser = argparse.ArgumentParser(prog=f"maxima experience:{style}", description=__doc__)
+    parser = argparse.ArgumentParser(prog=f"maxima books:{style}", description=__doc__)
     parser.add_argument("--output", default=str(root / output), help=f"book to write (default: {output})")
     parser.add_argument("--plies", type=int, default=16, help="depth of the book in plies (default: 16)")
     parser.add_argument("--min-games", type=int, default=50, help="master games a move needs (default: 50)")

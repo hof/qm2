@@ -263,11 +263,10 @@ def main():
     default_source = data_root() / 'experience/games' if pgn_input else default_store
     parser.add_argument('--source', type=Path, default=default_source,
                         help=f'{"PGN file or folder" if pgn_input else "saved experience data"}; default: {default_source}')
-    parser.add_argument('--store', '--database', dest='store', type=Path,
+    parser.add_argument('--store', type=Path,
                         help=f'working data file; default: {default_store}' if pgn_input else argparse.SUPPRESS)
     parser.add_argument('--output', type=Path, default=data_root() / 'experience/experience.bin',
                         help='binary export path; default: experience/experience.bin' if command != 'show' else argparse.SUPPRESS)
-    parser.add_argument('--pgn', type=Path, help=argparse.SUPPRESS)
     parser.add_argument('--player', action='append',
                         help='our player aliases; default: Maxima/BugChess/MaximaEngine and saved LearningColor' if command == 'import' else argparse.SUPPRESS)
     parser.add_argument('--max-ply', type=positive_int, default=32,
@@ -291,7 +290,7 @@ def main():
             print(f'Converted legacy experience to {args.store}; original retained at {legacy}')
         with closing(open_store(args.store)) as store:
             if pgn_input:
-                source = args.pgn or args.source
+                source = args.source
                 if command == 'import':
                     result = import_games(store, source,
                                           {p.casefold() for p in args.player} if args.player else None, args.max_ply)

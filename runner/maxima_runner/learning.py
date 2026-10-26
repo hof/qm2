@@ -634,7 +634,7 @@ def sync_main():
 def repertoire_main():
     from .project import data_root, project_root
     parser = argparse.ArgumentParser(
-        prog="maxima experience:repertoire",
+        prog="maxima books:repertoire",
         description="Build the style books of the multi-layer book (MAXIMA.md 9.7) from repertoire PGNs.")
     parser.add_argument("--books-dir", default=str(project_root() / "books"),
                         help="reads <style>.pgn (default: books/)")
@@ -643,7 +643,7 @@ def repertoire_main():
     parser.add_argument("--plies", type=int, default=30, help="moves per line to include (default: 30)")
     parser.add_argument("--styles", nargs="+", choices=style_names + ("moods",), default=["experiment", "moods"],
                         help="books to build (default: experiment and moods; fire.bin and draw.bin normally "
-                             "come from maxima init or experience:fire|draw, which this would replace)")
+                             "come from maxima init or books:fire|draw, which this would replace)")
     options = parser.parse_args()
     built = 0
     if "moods" in options.styles:
