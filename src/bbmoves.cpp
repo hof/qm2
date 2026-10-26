@@ -44,16 +44,6 @@ namespace magic {
     U64 _MAGIC_MOVES_ROOK_DB[64][1 << 12];
 #endif
 
-    U64 _init_occ(const int* squares, const int num_squares, const U64 linocc) {
-        int i;
-        U64 ret = 0;
-        for (i = 0; i < num_squares; i++)
-            if (linocc & (((U64) (1)) << i)) {
-                ret |= (((U64) (1)) << squares[i]);
-            }
-        return ret;
-    }
-
     U64 _init_rook_moves(const int square, const U64 occ) {
         U64 ret = 0;
         U64 bit;
@@ -156,59 +146,33 @@ namespace magic {
      * Note it's required to run this function before using the engine
      */
     void init(void) {
-        int i;
 #ifdef __BMI2__
         U64 * bishop_next = bishop_attack_data;
         U64 * rook_next = rook_attack_data;
 #endif
-
-        const int _BITPOS64_DB[64] = {
-            63, 0, 58, 1, 59, 47, 53, 2,
-            60, 39, 48, 27, 54, 33, 42, 3,
-            61, 51, 37, 40, 49, 18, 28, 20,
-            55, 30, 34, 11, 43, 14, 22, 4,
-            62, 57, 46, 52, 38, 26, 32, 41,
-            50, 36, 17, 19, 29, 10, 13, 21,
-            56, 45, 25, 31, 35, 16, 9, 12,
-            44, 24, 15, 8, 23, 7, 6, 5
-        };
-        
-        for (i = 0; i < 64; i++) {
-            int squares[64];
-            int numsquares = 0;
-            U64 temp = _MAGIC_MOVES_BISHOP_MASK[i];
-            while (temp) {
-                U64 bit = temp&-temp;
-                squares[numsquares++] = _BITPOS64_DB[(bit * C64(0x07EDD5E59A4E28C2)) >> 58];
-                temp ^= bit;
-            }
+        for (int square = 0; square < 64; ++square) {
+            const U64 mask = _MAGIC_MOVES_BISHOP_MASK[square];
 #ifdef __BMI2__
-            bishop_attack_table[i] = bishop_next;
-            bishop_next += 1U << numsquares;
+            bishop_attack_table[square] = bishop_next;
+            bishop_next += U64(1) << popcnt0(mask);
 #endif
-            for (temp = 0; temp < (((U64) (1)) << numsquares); temp++) {
-                U64 tempocc = _init_occ(squares, numsquares, temp);
-                _BISHOP_MAGIC_NOMASK2(i, tempocc) = _init_bishop_moves(i, tempocc);
-
-            }
+            U64 occupied = 0;
+            do {
+                _BISHOP_MAGIC_NOMASK2(square, occupied) = _init_bishop_moves(square, occupied);
+                occupied = (occupied - mask) & mask;
+            } while (occupied);
         }
-        for (i = 0; i < 64; i++) {
-            int squares[64];
-            int numsquares = 0;
-            U64 temp = _MAGIC_MOVES_ROOK_MASK[i];
-            while (temp) {
-                U64 bit = temp&-temp;
-                squares[numsquares++] = _BITPOS64_DB[(bit * C64(0x07EDD5E59A4E28C2)) >> 58];
-                temp ^= bit;
-            }
+        for (int square = 0; square < 64; ++square) {
+            const U64 mask = _MAGIC_MOVES_ROOK_MASK[square];
 #ifdef __BMI2__
-            rook_attack_table[i] = rook_next;
-            rook_next += 1U << numsquares;
+            rook_attack_table[square] = rook_next;
+            rook_next += U64(1) << popcnt0(mask);
 #endif
-            for (temp = 0; temp < (((U64) (1)) << numsquares); temp++) {
-                U64 tempocc = _init_occ(squares, numsquares, temp);
-                _ROOK_MAGIC_NOMASK2(i, tempocc) = _init_rook_moves(i, tempocc);
-            }
+            U64 occupied = 0;
+            do {
+                _ROOK_MAGIC_NOMASK2(square, occupied) = _init_rook_moves(square, occupied);
+                occupied = (occupied - mask) & mask;
+            } while (occupied);
         }
 #ifdef __BMI2__
         assert(bishop_next == bishop_attack_data + 5248);
