@@ -406,8 +406,10 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await self.settle(player)
         await player.handle(after_e4.replace("180000 180000 1 P/e2-e4 (0:00.000)", "179900 180000 1 P/e2-e4 (0:00.100)"))
         await player.handle("{Game 17 (GuestHJGC vs. guestNinja) guestNinja resigns} 1-0")
-        files = list(folder.glob("*.pgn"))
+        files = list(folder.rglob("*.pgn"))
         self.assertEqual(len(files), 1)
+        self.assertEqual(files[0].parent, folder / 'fics')
+        self.assertFalse(list(folder.glob('*.pgn')))
         with files[0].open() as stream:
             game = chess.pgn.read_game(stream)
         headers = game.headers
@@ -445,7 +447,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
             " B 4 ", " B 3 ").replace("P/e2-e4 (0:00.000) e4", "P/d2-d4 (0:00.000) d4")
         await player.handle(after_d4)
         await player.handle("{Game 17 (GuestHJGC vs. guestNinja) guestNinja resigns} 1-0")
-        with next(folder.glob("*.pgn")).open() as stream:
+        with next(folder.rglob("*.pgn")).open() as stream:
             self.assertEqual(chess.pgn.read_game(stream).next().comment.split()[0], "learned")
         self.assertEqual(len(learner.records), 6)  # one move teaches nothing
 

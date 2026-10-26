@@ -206,10 +206,15 @@ def merge_game(old, new, replace=False):
 
 
 def archive_game(game, directory, replace=False):
-    """Publish one complete game; distinct clients never append to a shared monthly file."""
+    """Save pending work, or update an already compacted monthly record."""
+    from .monthly_pgn import archived_game, write_month
     directory = Path(directory)
     path = directory / (game.headers['LearningId'] + '.pgn')
     with writer_lock(directory / '.pgn.lock'):
+        monthly = archived_game(game, directory)
+        if monthly is not None:
+            game = merge_game(monthly, game, replace)
+            return write_month(game, directory, replace), game
         if path.exists():
             with path.open(encoding='utf-8') as stream:
                 game = merge_game(chess.pgn.read_game(stream), game, replace)
@@ -217,6 +222,12 @@ def archive_game(game, directory, replace=False):
         if not path.exists() or path.read_text(encoding='utf-8') != text:
             atomic_text(path, text)
     return path, game
+
+
+def find_archived(game, directory):
+    from .monthly_pgn import archived_game
+    with writer_lock(Path(directory) / '.pgn.lock'):
+        return archived_game(game, directory)
 
 
 class shared_store:
@@ -263,6 +274,8 @@ class shared_store:
             old = prepared.get(identity)
             if old is None and path.exists():
                 old = read_games(path)[0]
+            if old is None:
+                old = find_archived(game, self.games)
             prepared[identity] = merge_game(old, game, replace) if old is not None else game
         for identity, game in prepared.items():
             path, game = archive_game(game, self.games, replace)
@@ -281,6 +294,8 @@ class shared_store:
             return self._ingest([game], cached)[0]
 
     def _rebuild(self):
+        from .monthly_pgn import recover_all
+        recover_all(self.games)
         # Include both old server layouts on first use; never delete the original PGNs.
         paths = set(self.games.rglob('*.pgn')) if self.games.exists() else set()
         for legacy in (self.root / 'lichess' / 'games', self.root / 'fics' / 'games'):
@@ -295,6 +310,10 @@ class shared_store:
                     current = read_games(canonical)[0]
                     # An explicitly corrected archived result wins over old exports.
                     game.headers['Result'] = current.headers.get('Result', '*')
+                elif canonical != path:
+                    current = find_archived(game, self.games)
+                    if current is not None:
+                        game.headers['Result'] = current.headers.get('Result', '*')
                 games.append(game)
         cached = {}
         self._ingest(games, cached)

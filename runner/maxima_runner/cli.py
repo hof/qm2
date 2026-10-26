@@ -27,6 +27,7 @@ command_groups = (
         ("experience:show", "Inspect experience"),
         ("experience:analyze", "Analyze experience positions"),
         ("experience:sync", "Upload PGNs into shared online learning"),
+        ("experience:archive", "Move completed games into locked monthly PGNs"),
         ("experience:build", "Build the learning index and player stats"),
         ("experience:repertoire", "Build the fire, draw and experiment books"),
         ("experience:draw", "Build draw.bin from master games"),
@@ -58,7 +59,7 @@ def show_help(all_commands=False):
     print("       maxima uci              Run it in this terminal\n")
     for title, commands in command_groups:
         visible = commands if all_commands else tuple(
-            item for item in commands if item[0] in (
+            item for item in commands if item[0].startswith('experience:') or item[0] in (
                 "init", "uci", "build", "test", "suite:run", "match:run", "experience:show", "tablebases:syzygy:download",
                 "fics", "lichess"))
         print(styled("-" * 72, "36"))
@@ -179,7 +180,7 @@ def main(argv=None):
     arguments = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
-        "init, uci, build, test, suite:run, match:run, experience:import|export|show|analyze|build|repertoire|draw|fire, "
+        "init, uci, build, test, suite:run, match:run, experience:import|export|show|analyze|sync|archive|build|repertoire|draw|fire, "
         "tablebases:syzygy:download, fics, lichess (no command: run engine)"))
     if not arguments and sys.stdin.isatty() and sys.stdout.isatty():
         arguments = ["--help"]
@@ -218,6 +219,9 @@ def main(argv=None):
         elif command == "experience:sync":
             from . import learning
             entrypoint = learning.sync_main
+        elif command == "experience:archive":
+            from . import monthly_pgn
+            entrypoint = monthly_pgn.main
         elif command == "experience:build":
             from . import learning
             entrypoint = learning.main

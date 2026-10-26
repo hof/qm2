@@ -872,6 +872,12 @@ class lichess_game:
                 return
             for text in learning_report(game, record, bot.learner.records):
                 bot.on_line(f"-- {text}")
+        if game.headers.get('Result') != '*':
+            from .monthly_pgn import archive_saved
+            paths = [path]
+            if bot.learner is not None and getattr(bot.learner, 'experience_dir', None) is not None:
+                paths.append(bot.learner.experience_dir / 'games' / (game.headers['LearningId'] + '.pgn'))
+            archive_saved(paths, bot.on_line)
 
 
 def book_line(move, why, names):

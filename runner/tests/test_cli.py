@@ -33,8 +33,12 @@ class cli_tests(unittest.TestCase):
     def test_help_fits_an_80_column_terminal(self):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            cli.show_help(all_commands=True)
+            cli.show_help()
         self.assertLessEqual(max(map(len, output.getvalue().splitlines())), 80)
+        for _, commands in cli.command_groups:
+            for command, _ in commands:
+                if command.startswith('experience:'):
+                    self.assertIn(command, output.getvalue())
 
     def test_help_and_build_do_not_import_chess(self):
         with patch.dict(sys.modules, {'chess': None}), contextlib.redirect_stdout(io.StringIO()) as output:

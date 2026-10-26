@@ -35,6 +35,12 @@ needed, and `--group bots` classifies offline opponents. `experience:build
 --experience-dir PATH` rebuilds everything from the archived PGNs. Global and
 group evidence is shared; individual opponent identities remain server-specific.
 The native SQLite/binary GUI workflow stays in `maxima_runner.experience`.
+Both online clients invoke `experience:archive <LearningId>.pgn` after saving
+and learning a completed game. It locks the shared archive, deduplicates into
+`games/<LearningSource>/YYYY-MM.pgn`, and deletes the pending file only after
+durable publication. A monthly offset index and append journal support retries
+and recovery; PVC locks must work across pods. The command also accepts multiple
+pending files for migration. `maxima --help` lists every experience command.
 The CLI owns repository paths and compiler helpers.
 
 Offline tests:

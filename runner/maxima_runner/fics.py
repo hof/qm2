@@ -806,6 +806,12 @@ class engine_player:
             for text in learning_report(game, record, self.learner.records):
                 self.on_line(f"-- {text}")
                 self.tell_followers(text)
+        if game.headers.get('Result') != '*':
+            from .monthly_pgn import archive_saved
+            paths = [path]
+            if self.learner is not None and getattr(self.learner, 'experience_dir', None) is not None:
+                paths.append(self.learner.experience_dir / 'games' / (game.headers['LearningId'] + '.pgn'))
+            archive_saved(paths, self.on_line)
 
     def opponent_group(self):
         """Learning group from finger; None (global layer only) when unregistered or unknown."""

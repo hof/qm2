@@ -1368,14 +1368,23 @@ and reload before preparing the next game's opening book. A game already in
 progress retains its existing view. The native SQLite/`experience.bin` workflow
 above remains separate for GUI use; online sharing does not merge binary counters.
 
-**Storage and concurrency.** Complete PGNs in `experience/games/<LearningId>.pgn`
-are the source of truth. Each includes `LearningSource` (`fics`, `lichess`, or
+**Storage and concurrency.** Games are first durably saved to
+`experience/games/<LearningId>.pgn`. After successful learning, both online
+clients invoke `experience:archive` to merge completed games into
+`experience/games/<LearningSource>/YYYY-MM.pgn` (UTC game-start month), then
+delete the individual pending file. These monthly PGNs are the source of truth;
+unfinished games remain individual files. Each includes `LearningSource` (`fics`, `lichess`, or
 `local`), `LearningServer`, `LearningColor`, a stable `LearningId`, and the original
 metadata, moves, clocks, evaluations and PV annotations. Optional `LearningGroup`
 and `LearningResults` tags retain import classification and result-only eligibility.
-A game is written to a
-unique temporary file, flushed and fsynced, then atomically renamed; concurrent
-clients never append to one monthly PGN. Repeated publication counts once. A
+A pending game is written to a unique temporary file, flushed and fsynced,
+then atomically renamed. Monthly appenders share `games/.pgn.lock` across pods.
+A per-month byte-offset ID index avoids reparsing old PGNs on routine appends;
+an fsynced append journal recovers partial writes before retry or reconstruction.
+The pending file is removed only after the monthly PGN and index are durable.
+Existing monthly PGNs are indexed on first use. Replays merge stronger annotations
+without adding another game; exceptional annotation/result corrections atomically
+rewrite the affected monthly file. Repeated publication counts once. A
 writer lock covers reading, merging, and publishing `index/shared.json`, which
 holds the complete derived game records. Global and human/master/bot evidence is
 shared across servers. Personal learning, signature/revenge lines, and player
@@ -1390,7 +1399,18 @@ this implementation does not provide a network service or configure Kubernetes.
 ./maxima experience:sync /uploads/games.pgn /data/experience
 ./maxima experience:sync /laptop/games /data/experience --player Maxima --group bots
 ./maxima experience:build --experience-dir /data/experience
+./maxima experience:archive /data/experience/games/<LearningId>.pgn
 ```
+
+`experience:archive` accepts multiple individual game paths for migration or retry.
+It uses the same command in both online clients, including custom PGN destinations.
+It does not import results into the separate native SQLite/`experience.bin` store.
+Archive failures retain pending files and are reported by the clients. Existing
+legacy monthly files are preserved. All pods writing these files must run this
+version; shared PVC advisory locks and atomic rename must work across nodes.
+This change bounds PGN file growth by month; the existing shared learning JSON
+snapshot/player-stat publication and startup reconstruction still scale with total
+history and are not a constant-cost, multi-year learning index.
 
 The sync source can be one PGN or a recursively scanned directory; the destination
 is the experience root, defaulting to `MAXIMA_DATA_DIR/experience`. Maxima's side
@@ -1795,8 +1815,9 @@ welcome); 400 or more weaker gives -100 (avoid draws). Without both ratings
 (guests, unrated) the engine default is sent, as python-chess would otherwise
 keep the previous game's value.
 
-Every game with at least one move is atomically saved to
-`experience/games/<LearningId>.pgn` (`pgn_dir` or `--pgn-dir` overrides the extra
+Every game with at least one move is atomically saved to a pending
+`experience/games/<LearningId>.pgn`, then completed games are moved by
+`experience:archive` into `<LearningSource>/YYYY-MM.pgn` (`pgn_dir` or `--pgn-dir` overrides the extra
 PGN destination; `--no-pgn` disables saving and learning). See 9.7 for shared
 publication, imports and rebuilding. Tags: `Event` (`FICS unrated blitz game`),
 `Site`, `Date` (local) and `UTCDate`/`UTCTime` at game start, `White`/`Black`, `WhiteElo`/

@@ -205,7 +205,9 @@ class game_tests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('[Event "Lichess casual blitz game"]', pgn)
         self.assertIn("1. e4", pgn)
         self.assertIn("1-0", pgn)
-        self.assertEqual(len(list((Path(directory.name) / "games").glob("*.pgn"))), 1)
+        self.assertEqual(len(list((Path(directory.name) / "games").rglob("*.pgn"))), 1)
+        self.assertFalse(list((Path(directory.name) / 'games').glob('*.pgn')))
+        self.assertEqual(len(list((Path(directory.name) / 'games' / 'lichess').glob('*.pgn'))), 1)
 
 
 if __name__ == "__main__":

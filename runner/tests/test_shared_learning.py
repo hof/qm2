@@ -141,7 +141,7 @@ class shared_learning_tests(unittest.TestCase):
             (folder / '2026-10.pgn').write_text(str(game) + '\n\n')
         self.assertEqual(self.store.rebuild()['learned'], 2)
         self.assertEqual(self.store.rebuild()['learned'], 2)
-        self.assertEqual(len(list(self.store.games.glob('*.pgn'))), 2)
+        self.assertEqual(len(list(self.store.games.rglob('*.pgn'))), 2)
         self.assertEqual({record['source'] for record in self.store.load()}, {'fics', 'lichess'})
 
     def test_final_result_correction_is_explicit_and_survives_rebuild(self):
