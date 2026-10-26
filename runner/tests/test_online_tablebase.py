@@ -62,6 +62,18 @@ class draw_offer_tests(unittest.TestCase):
 
 
 class describe_tests(unittest.TestCase):
+    def test_only_actual_hits_prefix_shared_search_description(self):
+        from maxima_runner.move_choice import describe
+        from maxima_runner.fics import search_whisper
+        import chess.engine
+        info = {"score": chess.engine.PovScore(chess.engine.Cp(20), chess.WHITE), "depth": 12, "nps": 1000}
+        ordinary = describe(info, chess.WHITE)
+        self.assertEqual(describe(dict(info, _ponder_hit=False), chess.WHITE), ordinary)
+        hit = dict(info, _ponder_hit=True)
+        self.assertEqual(describe(hit, chess.WHITE), "pondered " + ordinary)
+        self.assertTrue(search_whisper(hit, chess.WHITE, "1. e4").startswith("pondered d12"))
+
+
     def test_engine_tablebase_moves_are_not_called_book(self):
         from maxima_runner.move_choice import describe
         import chess.engine

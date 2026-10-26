@@ -522,7 +522,7 @@ def search_whisper(info, turn, line, note=None, seconds=None):
     """A searched move for observers: "d15 +4.52 TB 9. Bg2 d5 10. d4 Nbd7 (out of book)"; the line starts
     with our move, already cut at whisper_plies."""
     score, depth = info.get("score"), info.get("depth", 0)
-    parts = []
+    parts = ["pondered"] if info.get("_ponder_hit") else []
     if score is not None and depth:
         relative = score.pov(turn)
         parts += [f"d{depth}", f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}"]

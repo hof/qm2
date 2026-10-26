@@ -1495,8 +1495,8 @@ over their obsolete legacy copies. Stop old client versions during migration;
 thereafter both pods must use this version and the same `MAXIMA_DATA_DIR`.
 A custom `--pgn-dir` receives the game too; learning still archives a canonical
 copy beneath the shared experience root. Idle analysis remains future work;
-PGN comments retain [%nodes], [%nps] and [%searchtime] (seconds of actual
-search, separate from server [%emt]). Missing legacy effort is unknown. The
+PGN comments retain `[%nodes]`, `[%nps]` and `[%searchtime]` (seconds of actual
+search, separate from server `[%emt]`). Missing legacy effort is unknown. The
 versioned derived index rebuilds from archived PGNs without adding duplicate
 result observations.
 
@@ -1644,7 +1644,7 @@ downloaded books.
 Moves are labelled in the terminal and PGN comment with the label, the move's
 probability, and each layer's share of it, e.g. `learned 65%: fire 45%, global
 13%, humans 13%, John 29%`; `book` when the books gave most, `learned` when the
-learned layers did, `recalled d20 60.0s` for earlier analysis. These shares are
+learned layers did, `(recalled d20)` alongside fresh search statistics for reused analysis. These shares are
 logged for tuning the profiles. Superseding analysis needs depth 16 and two
 plies more; the horizon is 40 plies. `--no-learning` (or `--no-pgn`) leaves the
 book to the engine.
@@ -1927,8 +1927,8 @@ The log shows each searched move with depth, score, time, and the expected line
 (`pv`). `whisper` (or `--whisper`) explains every move to observers (never to the
 opponent, unlike kibitz) in plain words:
 
-    1...e5 book: fire (base 44%, fire 20%, surprise 10%, experience 26%)
-    2. f4 book: revenge vs John (base 30%, vs John 70%)
+    1...e5 book: fire (35% selection; base 44%, fire 20%, surprise 10%, experience 26%)
+    2. f4 book: revenge vs John (40% selection; base 30%, vs John 70%)
     d19 +2.07 36.6s 7...Bd6 8. c4 O-O 9. cxd5 Bxd5 10. Bxd5 (out of book)
     learned: 24 moves | vs John +2 =0 -1
 
@@ -1937,7 +1937,8 @@ time, the speed (`850Knps`, `1.2Mnps`), and the first six plies of the line in n
 with the largest share (ties to the more specific layer), then the mix; `base` is book.bin.
 The console uses a shorter book summary on both FICS and Lichess, for example
 `-- 1. .. c5 experience (45% selection; 100% layer) 0.1s, 4:59 left`: only the selected source's
-share is shown. Observer whispers and book chat retain the full mix.
+contribution and the move's selection probability are shown separately. Observer
+whispers and book chat retain the full mix.
 
 FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and stops
 whispering. Owners configured in `owner` can steer it by tell without a key.
@@ -2018,7 +2019,8 @@ publication, imports and rebuilding. Tags: `Event` (`FICS unrated blitz game`),
 `BlackAccount "unregistered"` for guests and other `(U)` logins. Every move has `[%clk]`
 (mover's clock after the move) and `[%emt]` (time FICS charged); our searched
 moves add `[%eval score,depth]`, `[%pv ...]` (SAN, up to 12 plies), and
-`[%nodes]`; moves from the multi-layer book carry its label and layer shares
+`[%nodes]`, `[%nps]` and `[%searchtime]` (actual engine search seconds);
+moves from the multi-layer book carry its label and layer shares
 (9.7); the server's reason ends the game.
 `experience:book:import` reads these annotations. A takeback rewinds the move list;
 a board that does not follow (missed update) restarts it with a `FEN` tag. A
@@ -2153,6 +2155,12 @@ A filesystem failure is logged and does not prevent engine/connection cleanup.
 
 Deploy one active client per server account, including during upgrades. Health
 checks and account-lock automation are outside this shutdown increment.
+
+Searched-move descriptions on both servers start with `pondered` only when
+the protocol actually sent `ponderhit` for that play request. Per-search
+`_ponder_hit` metadata survives immediate completion without fresh info and the
+next background ponder, and resets for every request and engine restart.
+Prediction misses, game changes and ordinary searches keep their usual wording.
 
 ### 10.3 Lichess client (MaximaEngine)
 

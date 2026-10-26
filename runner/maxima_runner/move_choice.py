@@ -171,6 +171,11 @@ def speed(nps):
 
 
 def describe(info, turn):
+    """Shared searched-move description, marking only actual protocol ponder hits."""
+    return ("pondered " if info.get("_ponder_hit") else "") + describe_search(info, turn)
+
+
+def describe_search(info, turn):
     """A searched move for the log: "d20 +0.35 480Knps"; the engine's own tablebase moves come without a
     search ("TB win")."""
     score = info.get("score")

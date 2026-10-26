@@ -18,6 +18,7 @@ class online_protocol(chess.engine.UciProtocol):
         self.ponder_info = {}
         self.ponder_evidence = {}
         self.hit_info = {}
+        self.ponder_hit = False
         self.on_info = None
         self.search_started = None
         self.search_seconds = None
@@ -35,6 +36,8 @@ class online_protocol(chess.engine.UciProtocol):
                 self.evidence.clear()
                 if line == "ponderhit":
                     self.evidence.update(self.ponder_evidence)
+        if line == "ponderhit":
+            self.ponder_hit = True
         super().send_line(line)
 
     def line_received(self, line):
@@ -104,6 +107,7 @@ class engine_session:
         options are per-search UCI settings, applied only when the engine has them; None restores the
         option's default, since python-chess keeps the last value sent. An optional ceiling
         sends stop while retaining the ordinary clock allocation and collects bestmove."""
+        self.protocol.ponder_hit = False
         settings = {name: self.protocol.options[name].default if value is None else value
                     for name, value in (options or {}).items() if name in self.protocol.options}
         settings.update(self.variant_settings(board))
@@ -139,6 +143,7 @@ class engine_session:
                                                   ponder=True, options=settings, opponent=opponent)
                 self.pondering = result.ponder is not None
                 result.info = dict(self.protocol.hit_info, **result.info)
+                result.info["_ponder_hit"] = self.protocol.ponder_hit
                 result.info["_resignation"] = dict(evidence)
                 result.info["_search_seconds"] = self.protocol.search_seconds
                 return result

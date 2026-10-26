@@ -210,17 +210,20 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 game, board = object(), chess.Board()
                 limit = chess.engine.Limit(white_clock=60, black_clock=60)
                 first = await session.play(board, limit, game=game)
+                self.assertFalse(first.info["_ponder_hit"])
                 self.assertEqual(first.info['score'].relative.score(), 12)
                 board.push(first.move)
                 board.push(first.ponder)
                 await asyncio.sleep(0.03)
                 hit = await session.play(board, limit, game=game)
+                self.assertTrue(hit.info["_ponder_hit"])
                 self.assertEqual(hit.info['score'].relative.score(), 77)
                 self.assertEqual(hit.info['_resignation']['depth'], 23)
                 self.assertEqual(hit.info['_resignation']['score'].relative.score(), 77)
                 board.push(hit.move)
                 board.push(next(move for move in board.legal_moves if move != hit.ponder))
                 miss = await session.play(board, limit, game=game)
+                self.assertFalse(miss.info["_ponder_hit"])
                 self.assertEqual(miss.info['score'].relative.score(), 12)
                 self.assertEqual(miss.info['_resignation']['depth'], 18)
                 await session.stop_pondering()
@@ -233,24 +236,58 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 game, board = object(), chess.Board()
                 limit = chess.engine.Limit(white_clock=60, black_clock=60)
                 result = await session.play(board, limit, game=game)
+                self.assertFalse(result.info["_ponder_hit"])
                 self.assertEqual(result.info['_resignation']['depth'], 18)
                 board.push(result.move)
                 board.push(result.ponder)
                 hit = await session.play(board, limit, game=game)
+                self.assertTrue(hit.info["_ponder_hit"])
                 self.assertEqual(log.read_text().splitlines().count('ponderhit'), 1)
                 board.push(hit.move)
                 board.push(next(move for move in board.legal_moves if move != hit.ponder))
                 miss = await session.play(board, limit, game=game)
+                self.assertFalse(miss.info["_ponder_hit"])
                 self.assertIn('stop', log.read_text().splitlines())
                 board.push(miss.move)
                 board.push(miss.ponder)
-                await session.play(board, limit, game=object())
+                changed = await session.play(board, limit, game=object())
+                self.assertFalse(changed.info["_ponder_hit"])
                 await session.stop_pondering()
                 lines = log.read_text().splitlines()
                 self.assertEqual(lines.count('ponderhit'), 1)
                 self.assertEqual(lines.count('ucinewgame'), 2)
                 self.assertEqual(sum(line.startswith('go ponder ') for line in lines), 4)
                 self.assertEqual(lines[-1], 'isready')
+
+    async def test_restart_discards_ponder_hit_and_background_info_does_not_measure_nps(self):
+        from maxima_runner.search_effort import reuse_monitor
+        with tempfile.TemporaryDirectory() as directory:
+            script, log = Path(directory) / "engine.py", Path(directory) / "commands"
+            fixture = ponder_engine.replace(
+                "elif command.startswith('go ponder'):\n        pass",
+                "elif command.startswith('go ponder'):\n        print('info depth 23 score cp 77 nodes 9000 time 1000 pv', next(iter(board.legal_moves)).uci(), flush=True)")
+            fixture = fixture.replace(
+                "print('info depth 18 score cp 12 nodes 100 pv', move.uci())",
+                "if command != 'ponderhit':\n            print('info depth 18 score cp 12 nodes 100 pv', move.uci())")
+            script.write_text(fixture)
+            limit = chess.engine.Limit(white_clock=60, black_clock=60)
+            async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
+                board, game = chess.Board(), object()
+                first = await session.play(board, limit, game=game)
+                board.push(first.move)
+                board.push(first.ponder)
+                await asyncio.sleep(.03)
+                monitor = reuse_monitor(next(iter(board.legal_moves)), [25, 30, False, 10000, 0, 100000, 1000], 1000)
+                hit = await session.play(board, limit, game=game, on_info=monitor)
+                self.assertTrue(hit.info["_ponder_hit"])
+                self.assertIsNone(monitor.first)
+                self.assertFalse(monitor.stopped)
+                await asyncio.sleep(.03)
+                self.assertTrue(hit.info["_ponder_hit"])
+                self.assertTrue(session.protocol.ponder_hit)
+            async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
+                fresh = await session.play(chess.Board(), limit)
+                self.assertFalse(fresh.info["_ponder_hit"])
 
 
 reuse_engine = """
