@@ -21,11 +21,13 @@ def parser():
                "examples:\n"
                "  maxima fics --whisper\n"
                "  maxima fics --handle MaxDrone --seek \"3 0\" --seek \"5 0\" --games 20")
+    parser.add_argument("--shutdown-grace", type=float, metavar="SECONDS",
+                        help="wait for the current game after SIGTERM/SIGINT, then save and close (default: 15)")
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
                              "layer_profiles, style_books, first_move_wait, whisper, mood, live_feed, pgn_post, online_tablebase, "
-                             "reseek_minutes, resignation); "
+                             "reseek_minutes, resignation, shutdown_grace); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)

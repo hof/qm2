@@ -99,3 +99,8 @@ license and upstream attribution.
 `--min-elo 10` is a separate, non-SPRT mode: success requires the simultaneous
 95% lower score bound to exceed the +10 Elo target. Declare the pair cap before
 play. See MAXIMA.md for assumptions and capped-inconclusive semantics.
+
+Online clients drain on SIGTERM/SIGINT (`--shutdown-grace 15`, also a JSON setting).
+Use an exec-form container entrypoint and a Kubernetes termination grace of at
+least the drain plus 15 seconds. Interrupted games are archived separately with
+unknown results and excluded from learning. See MAXIMA.md 10.2 for lifecycle details.

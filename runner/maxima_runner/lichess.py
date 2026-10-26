@@ -15,7 +15,7 @@ import urllib.request
 import chess
 import chess.engine
 
-from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation
+from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
 from .fics import chess_titles, clock_text, draw_contempt, layer_profiles, learning_report, read_commands, \
     restart_status, style_books
 from .move_choice import describe, search_summary, variation
@@ -51,6 +51,7 @@ reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate
 terminations = {"outoftime": "time forfeit", "timeout": "abandoned", "noStart": "abandoned", "aborted": "abandoned"}
 default_settings = {
     "resignation": resignation.validate_settings({}),
+    "shutdown_grace": 15,
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
@@ -151,6 +152,7 @@ class matchmaker:
         self.speeds = [speed for speed in challenge_clocks if speed in speeds]
         self.enabled = bool(idle_minutes) and bool(self.speeds)
         self.idle_since = self.next_try = time.monotonic()
+        self.challenging = False
         self.pending = None  # (challenge id, opponent id, speed, sent)
         self.resting = {}  # (opponent id, speed) -> monotonic time until which we leave it alone
         self.last_opponent = None
@@ -177,13 +179,19 @@ class matchmaker:
         await self.challenge(bot, name, opponent, speed, limit, increment, rated, "rematch")
 
     async def challenge(self, bot, name, opponent, speed, limit, increment, rated=True, why="challenging"):
-        answer = await bot.api.call("POST", f"/api/challenge/{name}", {
-            "rated": "true" if rated else "false", "clock.limit": limit, "clock.increment": increment,
-            "color": "random", "variant": "standard"})
-        challenge_id = ((answer or {}).get("challenge") or answer or {}).get("id")
-        if challenge_id:
-            self.pending = (challenge_id, opponent, speed, time.monotonic())
-            self.on_line(f"-- {why} {name} ({speed} {limit / 60:g}+{increment}, {'rated' if rated else 'casual'})")
+        if bot.stopping:
+            return
+        self.challenging = True
+        try:
+            answer = await bot.api.call("POST", f"/api/challenge/{name}", {
+                "rated": "true" if rated else "false", "clock.limit": limit, "clock.increment": increment,
+                "color": "random", "variant": "standard"})
+            challenge_id = ((answer or {}).get("challenge") or answer or {}).get("id")
+            if challenge_id:
+                self.pending = (challenge_id, opponent, speed, time.monotonic())
+                self.on_line(f"-- {why} {name} ({speed} {limit / 60:g}+{increment}, {'rated' if rated else 'casual'})")
+        finally:
+            self.challenging = False
 
     def due(self, now):
         return (self.enabled and self.pending is None and now >= self.next_try
@@ -263,7 +271,9 @@ class lichess_bot:
 
     @property
     def finished(self):
-        return self.stopping and self.game is None
+        return (self.stopping and self.game is None and not self.matchmaker.challenging
+                and self.matchmaker.pending is None
+                and (self.accepted[0] is None or time.monotonic() - self.accepted[1] >= 20))
 
     async def start(self):
         account = await self.api.call("GET", "/api/account")
@@ -272,6 +282,8 @@ class lichess_bot:
         if account.get("title") != "BOT":
             raise RuntimeError(f"{account.get('username')} is not a bot account (MAXIMA.md 10.3)")
         self.id, self.name = account["id"], account["username"]
+        if self.stopping:
+            return
         await self.start_engine()
         self.on_line(f"-- logged in as {self.name}; accepting {', '.join(self.speeds)}"
                      + (f"; owners {', '.join(sorted(self.owners))}" if self.owners else "; no owners for commands"))
@@ -332,6 +344,8 @@ class lichess_bot:
         command = asyncio.ensure_future(commands.get())
         try:
             while not self.finished:
+                if self.stopping and self.matchmaker.pending is not None:
+                    await self.cancel_challenge()
                 done, _ = await asyncio.wait({events, command}, timeout=1, return_when=asyncio.FIRST_COMPLETED)
                 if events in done:
                     events.result()
@@ -348,6 +362,18 @@ class lichess_bot:
         finally:
             events.cancel()
             command.cancel()
+            await asyncio.gather(events, command, return_exceptions=True)
+            if self.stopping and self.matchmaker.pending is not None:
+                try:
+                    await asyncio.wait_for(self.cancel_challenge(), 2)
+                except asyncio.TimeoutError:
+                    self.on_line("-- outgoing challenge cancellation timed out")
+
+    async def cancel_challenge(self):
+        pending = self.matchmaker.pending
+        if pending is not None and await self.api.post(f"/api/challenge/{pending[0]}/cancel"):
+            if self.matchmaker.pending == pending:
+                self.matchmaker.pending = None
 
     async def follow_events(self):
         attempt = 0
@@ -758,6 +784,13 @@ class lichess_game:
             if not await bot.api.post(self.path(path)):
                 self.chat(room, f"Could not {command}.")
 
+    def save_interrupted(self):
+        if self.over or self.full is None or self.record is None or self.board is None:
+            return
+        self.record.headers.update(self.headers())
+        game = self.record.game(self.board, "*", "client shutdown before server result")
+        online_shutdown.save_interrupted(game, self.bot.pgn_dir, self.bot.on_line)
+
     async def finish(self, status, winner):
         """Save, learn and report once, whichever of the game stream and the event stream ends it first."""
         if self.over:
@@ -878,7 +911,10 @@ def load_settings(path):
              "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
              "challenge_idle": int, "challenge_window": int}
     types["resignation"] = dict
+    types["shutdown_grace"] = (int, float)
     for key, value in loaded.items():
+        if key == "shutdown_grace":
+            value = online_shutdown.grace_seconds(value)
         if key == "resignation":
             value = resignation.validate_settings(value)
         if key not in types:
@@ -899,6 +935,8 @@ def run(options, parser):
     """Play with parsed options; parser reports configuration errors."""
     try:
         configured = load_settings(options.config)
+        if options.shutdown_grace is not None:
+            configured["shutdown_grace"] = online_shutdown.grace_seconds(options.shutdown_grace)
     except (OSError, ValueError) as error:
         parser.error(str(error))
     flags = {"engine": options.engine, "speeds": options.speed, "games": options.games, "pgn_dir": options.pgn_dir,
@@ -949,9 +987,8 @@ def run(options, parser):
             await session.configure(settings)
             yield session
 
-    async def session():
+    async def play_session(controller, commands, state):
         loop = asyncio.get_running_loop()
-        commands = asyncio.Queue()
         read_commands(loop, commands)
         learner = None
         if configured["learning"]:
@@ -969,6 +1006,9 @@ def run(options, parser):
                           challenge_window=configured["challenge_window"],
                           resignation_settings=configured["resignation"],
                           local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))
+        state["bot"] = bot
+        if controller.requested:
+            bot.soft_quit()
         feed = None
         if feed_address:
             def about():
@@ -982,13 +1022,31 @@ def run(options, parser):
         except (NotImplementedError, AttributeError):
             pass  # no SIGUSR1 on this platform; console quit and chat commands still work
         try:
+            if controller.requested:
+                return 0
             if feed is not None:
                 await feed.start()
             await bot.start()
             return await bot.run(commands)
         finally:
+            if controller.requested and bot.game is not None:
+                bot.game.save_interrupted()
             await bot.close()
             if feed is not None:
                 await feed.close()
+
+    async def session():
+        commands, state = asyncio.Queue(), {}
+        controller = online_shutdown.shutdown_controller(show, configured["shutdown_grace"])
+
+        def stop():
+            bot = state.get("bot")
+            if bot is not None:
+                bot.soft_quit()
+                bot.matchmaker.enabled = False
+            return bot is not None and (bot.game is not None or bot.accepted[0] is not None
+                                       or bot.matchmaker.pending is not None or bot.matchmaker.challenging)
+
+        return await controller.run(play_session(controller, commands, state), stop)
 
     return asyncio.run(session())

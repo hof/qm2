@@ -59,6 +59,8 @@ def digest(game):
     Every opening move gets two values from the mover's point of view: Maxima's eval just after it
     (the mean expected score of our next eval_window searched moves) and the game result."""
     headers = game.headers
+    if headers.get("LearningIncomplete") == "true":
+        return None
     ours = [color for color, prefix in ((chess.WHITE, "White"), (chess.BLACK, "Black"))
             if headers.get(f"{prefix}Type") == "program" and headers.get(f"{prefix}Engine")]
     if headers.get("LearningColor") in ("white", "black"):

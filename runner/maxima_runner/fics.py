@@ -16,7 +16,7 @@ import time
 import chess
 import chess.engine
 
-from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation
+from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
 from .move_choice import describe, search_summary, speed, variation
 from .project import data_root, engine_path
 from .uci import open_engine
@@ -283,6 +283,7 @@ seek_pattern = re.compile(r"\d{1,3} \d{1,3}(?: [a-z0-9+-]+)*")
 rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
 default_settings = {
     "resignation": resignation.validate_settings({}),
+    "shutdown_grace": 15,
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
@@ -736,6 +737,14 @@ class engine_player:
             await self.send("rematch")
         await self.seek()
 
+    def save_interrupted(self):
+        if self.game is None or self.history is None or self.record is None or self.latest_position is None:
+            return
+        end = {"white": self.latest_position.white, "black": self.latest_position.black}
+        self.record.headers.update(self.headers(end))
+        game = self.record.game(self.history.board, "*", "client shutdown before server result")
+        online_shutdown.save_interrupted(game, self.pgn_dir, self.on_line)
+
     def headers(self, end):
         """PGN tags from Creating:, finger, and the engine; our side is a program, the other side as fingered."""
         created = self.created if self.created and {self.created["white"], self.created["black"]} == {
@@ -985,6 +994,7 @@ async def serve(connection, commands, on_line, probe_interval=300, probe_timeout
     checks the link and keeps FICS from logging us off after an hour without input."""
     probe_sent = None
     command = asyncio.ensure_future(commands.get())
+    line = None
     try:
         while True:
             line = asyncio.ensure_future(connection.next(None))
@@ -1030,16 +1040,25 @@ async def serve(connection, commands, on_line, probe_interval=300, probe_timeout
                 raise ConnectionError("server stopped responding")
     finally:
         command.cancel()
+        if line is not None:
+            line.cancel()
+        await asyncio.gather(*(task for task in (command, line) if task is not None), return_exceptions=True)
 
 
 async def run_client(options, commands, on_line, backoff=backoff_seconds, transcript=None, player=None):
     """Keep a FICS session alive with reconnect backoff until the operator quits."""
     attempt = 0
     while True:
+        if player is not None and player.stopping:
+            return 0
         connection = None
         try:
             connection = await ics_connection.open(options.host, options.port, options.timeseal, transcript)
+            if player is not None and player.stopping:
+                return 0
             name = await login(connection, options.handle, options.password, on_line=on_line)
+            if player is not None and player.stopping:
+                return 0
             on_line(f"-- logged in as {name}")
             attempt = 0
             if player is not None:
@@ -1048,6 +1067,8 @@ async def run_client(options, commands, on_line, backoff=backoff_seconds, transc
             if await serve(connection, commands, on_line, options.probe_interval, player=player) == "quit":
                 return 0
         except (ConnectionError, OSError, asyncio.TimeoutError) as error:
+            if player is not None and player.stopping:
+                return 0
             delay = backoff[min(attempt, len(backoff) - 1)]
             attempt += 1
             on_line(f"-- connection lost ({error or type(error).__name__}); reconnecting in {delay}s")
@@ -1073,7 +1094,10 @@ def load_settings(path):
              "mood": str, "live_feed": str, "pgn_post": str,
              "online_tablebase": bool, "reseek_minutes": (int, float)}
     types["resignation"] = dict
+    types["shutdown_grace"] = (int, float)
     for key, value in loaded.items():
+        if key == "shutdown_grace":
+            value = online_shutdown.grace_seconds(value)
         if key == "resignation":
             value = resignation.validate_settings(value)
         if key not in types:
@@ -1137,6 +1161,8 @@ def run(options, parser):
     """Play with parsed options; parser reports configuration errors."""
     try:
         configured = load_settings(options.config)
+        if options.shutdown_grace is not None:
+            configured["shutdown_grace"] = online_shutdown.grace_seconds(options.shutdown_grace)
     except (OSError, ValueError) as error:
         parser.error(str(error))
     flags = {"host": options.host, "port": options.port, "handle": options.handle, "engine": options.engine,
@@ -1209,8 +1235,7 @@ def run(options, parser):
             await session.configure(settings)
             yield session
 
-    async def session():
-        commands = asyncio.Queue()
+    async def play_session(controller, commands, state):
         read_commands(asyncio.get_event_loop(), commands)
         learner = None
         if configured["learning"] and not options.no_engine:
@@ -1227,6 +1252,9 @@ def run(options, parser):
                                                                   online_tablebase=configured["online_tablebase"],
                                                                   local_pieces=local_pieces,
                                                                   resignation_settings=configured["resignation"])
+        state["player"] = player
+        if controller.requested and player is not None:
+            player.stopping = True
         feed = None
         if feed_address:
             def about():
@@ -1240,15 +1268,32 @@ def run(options, parser):
         try:
             if feed is not None:
                 await feed.start()
+            if controller.requested:
+                return 0
             if player is not None:
                 await player.start()
             status = await run_client(options, commands, show, transcript=transcript, player=player)
             return restart_status if status == 0 and player is not None and player.restart else status
         finally:
             if player is not None:
+                if controller.requested:
+                    player.save_interrupted()
                 await player.close()
             if feed is not None:
                 await feed.close()
+
+    async def session():
+        commands, state = asyncio.Queue(), {}
+        controller = online_shutdown.shutdown_controller(show, configured["shutdown_grace"])
+
+        def stop():
+            player = state.get("player")
+            if player is not None:
+                player.stopping, player.restart = True, False
+            commands.put_nowait("softquit" if player is not None else "quit")
+            return player is not None and player.game is not None
+
+        return await controller.run(play_session(controller, commands, state), stop)
 
     return asyncio.run(session())
 

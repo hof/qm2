@@ -1900,6 +1900,39 @@ Loss thresholds are negative integer cp; confirmation count and depth are positi
 integers, the rating margin is nonnegative, and the ceiling is positive finite
 seconds. Shared online learning and PGN ingestion are described in 9.7.
 
+Both clients handle `SIGTERM` and `SIGINT` for Kubernetes/container shutdown.
+The first signal stops seeking, accepting and creating challenges immediately;
+idle or startup/reconnect sessions close without waiting for a game. An active
+game can finish during `shutdown_grace` seconds (default 15). A confirmed finish
+uses the ordinary PGN and shared-learning path. At the deadline, or on a second
+signal, the client cancels its searches, saves the confirmed moves as an unfinished
+PGN, and closes the engine/connection. Engine cleanup reaps the subprocess,
+killing it if its bounded UCI quit fails. Shutdown exits with status 0; genuine
+startup/runtime failures retain their error status. Existing console softquit and
+Lichess SIGUSR1 behavior remain available.
+
+`--shutdown-grace SECONDS` overrides JSON `"shutdown_grace": 15`; zero means no
+game-drain wait. Nonfinite, negative, boolean and null settings fail validation
+before connecting. A longer drain needs a correspondingly longer Kubernetes
+`terminationGracePeriodSeconds`: allow at least `shutdown_grace + 15` seconds
+for cleanup and pending HTTP calls (default 30). Use an exec-form container
+entrypoint, e.g. `exec maxima fics ...` or `exec maxima lichess ...`, so signals
+reach the Python client. Kubernetes can still forcibly terminate after its own
+deadline; finishing a long game is not guaranteed by the default drain period.
+A `preStop` hook is not required for this signal handling.
+
+Interrupted PGNs go to `games/interrupted/` (or beneath a custom `--pgn-dir`),
+with `Result "*"`, `Termination "unterminated"`, and `LearningIncomplete "true"`.
+Their IDs are separate from a later completed/resumed game's identity;
+`LearningParentId` retains the complete game's base identity. These diagnostic
+snapshots never count as wins/losses or teach the online book, including during
+PGN-only rebuilds. They preserve only server-confirmed moves and existing search
+annotations; no move or result is invented. `--no-pgn` still disables saving.
+A filesystem failure is logged and does not prevent engine/connection cleanup.
+
+Deploy one active client per server account, including during upgrades. Health
+checks and account-lock automation are outside this shutdown increment.
+
 ### 10.3 Lichess client (MaximaEngine)
 
 `maxima lichess` plays on Lichess through the Bot API as MaximaEngine: it
@@ -1983,7 +2016,7 @@ rapid and classical to standard); the PGN keeps the real speed in `Event`
 (`Lichess rated blitz game`) and links the game in `Site`. Settings files take
 `engine`, `options`, `speeds`, `accept`, `games`, `pgn_dir`, `learning`,
 `variety`, `contempt_window`, `layer_profiles`, `style_books`, `mood`,
-`live_feed`, `pgn_post` and `online_tablebase`, as on FICS.
+`live_feed`, `pgn_post`, `online_tablebase`, `resignation` and `shutdown_grace`, as on FICS.
 
 Streams are read line by line; Lichess sends a keepalive every 7 seconds, so 30
 seconds of silence counts as a dead connection and the stream reconnects (the
