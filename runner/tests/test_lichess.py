@@ -214,13 +214,11 @@ if __name__ == "__main__":
 
 class chat_line_tests(unittest.TestCase):
     def test_spectators_see_the_record_after_a_first_game(self):
-        record = lambda history: lichess.record_line(history, "Ferrite", choose=lambda: 0.9)
+        record = lambda history: lichess.record_line(history, "Ferrite")
         self.assertIsNone(record(None))
         self.assertIsNone(record((0, 0, 0)))
-        self.assertEqual(record((1, 2, 3)), "We played 6 games. W/D/L: 1/2/3")
-        self.assertEqual(record((0, 1, 0)), "We played 1 game. W/D/L: 0/1/0")
-        self.assertEqual(lichess.record_line((0, 1, 0), "Ferrite", choose=lambda: 0.1),
-                         "I learned from previous games against Ferrite.")
+        self.assertEqual(record((1, 2, 3)), "vs Ferrite: +1 =2 -3.")
+        self.assertEqual(record((0, 1, 0)), "vs Ferrite: +0 =1 -0.")
 
 
 class matchmaker_tests(unittest.IsolatedAsyncioTestCase):

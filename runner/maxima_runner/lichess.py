@@ -34,7 +34,7 @@ public_gap = 5  # seconds between answers to anyone's commands, so chat spam can
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
 # Each room gets its own wording: Lichess silently drops a line equal to one of our previous two.
 player_greeting = "Hi, I'm Maxima running on MaxDrone. Good luck!"
-greeting = "Hi, I'm Maxima running on MaxDrone. Type !help for help."
+greeting = "Hi! I'm Maxima, running on MaxDrone. Type !help for available commands."
 player_farewells = ("Good game, thanks for playing!", "Thanks for the game!")
 # Our own challenges after idle time: (limit, increment) seconds per speed and each speed's share.
 challenge_clocks = {"bullet": ((60, 0), (60, 1), (120, 1)), "blitz": ((180, 0), (180, 2), (300, 0), (300, 3)),
@@ -511,7 +511,7 @@ class lichess_game:
         else:
             history = None
         self.chat("player", player_greeting)
-        self.chat("spectator", greeting, *filter(None, [record_line(history, them.get("name") or "you")]))
+        self.chat("spectator", " ".join(filter(None, (greeting, record_line(history, them.get("name") or "you")))))
         clock = full.get("clock") or {}
         bot.on_line(f"-- game {self.id}: {full['white'].get('name')} vs {full['black'].get('name')}, "
                     f"{full['speed']} {'rated' if full.get('rated') else 'casual'} {bot.api.server}/{self.id}")
@@ -790,15 +790,12 @@ def book_line(move, why, names):
     return f"{move} {'from book' if kind == 'book' else kind}: {detail}"
 
 
-def record_line(history, name, choose=random.random):
-    """For spectators after earlier games against name: our record from (wins, draws, losses) or, half the
-    time, that we learned from those games; None for a first game or without learning."""
+def record_line(history, name):
+    """Compact spectator record from (wins, draws, losses), omitted before a first game."""
     if not history or not sum(history):
         return None
-    if choose() < 0.5:
-        return f"I learned from previous games against {name}."
-    games = sum(history)
-    return f"We played {games} game{'s' if games != 1 else ''}. W/D/L: {'/'.join(map(str, history))}"
+    wins, draws, losses = history
+    return f"vs {name}: +{wins} ={draws} -{losses}."
 
 
 def load_settings(path):
