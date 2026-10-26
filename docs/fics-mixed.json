@@ -1,4 +1,7 @@
 {
+  "handle": "guest",
+  "owner": ["hof", "hajewiet"],
+  "notes": ["Maxima: standard chess and royal losers."],
   "seeks": ["3 0", "3 1", "5 0", "5 1"],
   "seeks_at_once": 2,
   "losers_seeks": ["3 0 u", "3 1 u", "5 0 u", "5 1 u"],

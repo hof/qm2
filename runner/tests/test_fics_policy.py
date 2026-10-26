@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 import chess.engine
 
@@ -45,7 +46,7 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
         subject = player(seeks=["3 0", "5 2 r", "1 0 unrated"], seeks_at_once=3)
         await subject.on_login("GuestTEST")
         self.assertEqual(subject.connection.sent[0], "unseek")
-        self.assertCountEqual(subject.connection.sent[1:], ["seek 3 0 u", "seek 5 2 r", "seek 1 0 unrated"])
+        self.assertCountEqual(subject.connection.sent[1:], ["seek 3 0 u", "seek 5 2 u", "seek 1 0 u"])
         registered = player(seeks=["3 0"], guest=False)
         await registered.on_login("Maxima")
         self.assertEqual(registered.connection.sent[-2:], ["unseek", "seek 3 0"])
@@ -163,6 +164,27 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
 
 
 class settings_tests(unittest.TestCase):
+    def test_config_discovery_precedence_and_explicit_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            roots = [Path(directory) / name for name in ('cwd', 'data', 'project')]
+            for root in roots:
+                root.mkdir()
+            with patch.object(fics.Path, 'cwd', return_value=roots[0]), \
+                    patch.object(fics, 'data_root', return_value=roots[1]), \
+                    patch.object(fics, 'project_root', return_value=roots[2]):
+                self.assertIsNone(fics.config_path())
+                for root in reversed(roots):
+                    path = root / '.fics.json'
+                    path.write_text(json.dumps({'seeks': ['5 1'], 'owner': ['hof'], 'notes': ['Hello']}))
+                    self.assertEqual(fics.config_path(), path)
+                explicit = roots[2] / 'other.json'
+                self.assertEqual(fics.config_path(explicit), explicit)
+                with self.assertRaises(FileNotFoundError):
+                    fics.load_settings(fics.config_path(explicit))
+                (roots[0] / '.fics.json').write_text('invalid json')
+                with self.assertRaises(ValueError):
+                    fics.load_settings(fics.config_path())
+
     def write(self, value):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)

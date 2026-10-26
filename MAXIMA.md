@@ -1794,6 +1794,16 @@ FICS_PASSWORD=... ./maxima fics --handle Maxima # registered account
 Play policy, as JDrone's `ics.seeks`/`autoaccept`/`autorematch`, from a JSON file
 (`--config`) or flags:
 
+With no `--config`, the client loads the first `.fics.json` found in the current
+directory, `MAXIMA_DATA_DIR` (the data directory), then the project directory.
+Only one file is loaded; an explicit `--config FILE` overrides discovery, and
+command-line flags override file settings. Without a file, built-in defaults
+apply. A malformed or unreadable selected file is an error, not a fallback.
+The selected path is printed at startup. To use the mixed guest setup with
+plain `./maxima fics`, copy `docs/fics-mixed.json` to `.fics.json`; the local file
+is Git-ignored. It sets `handle` to `guest`; all guest seeks are forced unrated,
+including any pool entries marked rated. Guest accounts have no finger notes.
+
 ```json
 {"seeks": ["3 0", "3 1", "5 2"], "seeks_at_once": 2, "accept": true, "rematches": 0,
  "games": 20, "handle": "guest", "engine": null, "options": {"Hash": "256"},
@@ -1801,7 +1811,7 @@ Play policy, as JDrone's `ics.seeks`/`autoaccept`/`autorematch`, from a JSON fil
 ```
 
 After login and after each game the client posts `seeks_at_once` random seeks
-from the pool (`--seek`, `--seeks-at-once`, `--no-seek`); guests add ` u`.
+from the pool (`--seek`, `--seeks-at-once`, `--no-seek`); guests always use `u`.
 After `reseek_minutes` (default 10, 0 off) without a game it draws again, so
 the other time controls get their turn and new players see the seeks announced.
 

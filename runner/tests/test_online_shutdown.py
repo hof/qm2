@@ -185,6 +185,10 @@ class process_tests(unittest.IsolatedAsyncioTestCase):
                            SHUTDOWN_FIXTURE_PID=str(self.pid), SHUTDOWN_FIXTURE_STARTUP=startup)
         command = [sys.executable, '-m', 'maxima_runner', service, '--engine', str(self.engine),
                    '--no-learning', '--no-online-tablebase', '--shutdown-grace', grace]
+        # Keep user auto-discovered configuration out of the fake-server fixtures.
+        config = self.root / 'fixture-config.json'
+        config.write_text('{}')
+        command += ['--config', str(config)]
         command += list(extra)
         process = await asyncio.create_subprocess_exec(*command, env=environment, stdin=asyncio.subprocess.DEVNULL,
                                                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)

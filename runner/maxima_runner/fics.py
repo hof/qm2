@@ -19,7 +19,7 @@ from .variants import royal_losers_board
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
 from .move_choice import describe, search_summary, speed, variation
-from .project import data_root, engine_path
+from .project import data_root, engine_path, project_root
 from .uci import open_engine
 
 timeseal_key = b"Timestamp (FICS) v1.0 - programmed by Henrik Gram."
@@ -347,7 +347,12 @@ class play_policy:
         chosen = random.sample(self.seeks, min(self.seeks_at_once, len(self.seeks)))
         chosen += [f"{spec} losers" for spec in random.sample(
             self.losers_seeks, min(self.losers_seeks_at_once, len(self.losers_seeks)))]
-        return [f"seek {spec}" + (" u" if self.guest and not rated_word.search(spec) else "") for spec in chosen]
+        commands = []
+        for spec in chosen:
+            if self.guest:
+                spec = rated_word.sub("u", spec) if rated_word.search(spec) else spec + " u"
+            commands.append(f"seek {spec}")
+        return commands
 
 
 def cpu_model():
@@ -1132,6 +1137,14 @@ async def run_client(options, commands, on_line, backoff=backoff_seconds, transc
                 await connection.close()
 
 
+def config_path(path=None):
+    """An explicit file wins; otherwise use the first local/data/project .fics.json."""
+    if path is not None:
+        return Path(path).expanduser()
+    return next((root / ".fics.json" for root in (Path.cwd(), data_root(), project_root())
+                 if (root / ".fics.json").exists()), None)
+
+
 def load_settings(path):
     """Defaults merged with an optional JSON file; unknown keys and wrong types are errors."""
     settings = dict(default_settings)
@@ -1219,6 +1232,7 @@ def read_commands(loop, commands):
 def run(options, parser):
     """Play with parsed options; parser reports configuration errors."""
     try:
+        options.config = config_path(options.config)
         configured = load_settings(options.config)
         if options.shutdown_grace is not None:
             configured["shutdown_grace"] = online_shutdown.grace_seconds(options.shutdown_grace)
@@ -1297,6 +1311,9 @@ def run(options, parser):
 
     def show(line):
         print(redact(line), flush=True)
+
+    if options.config is not None:
+        show(f"-- configuration: {options.config}")
 
     @asynccontextmanager
     async def engine_session():
