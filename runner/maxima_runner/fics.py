@@ -16,7 +16,7 @@ import time
 import chess
 import chess.engine
 
-from . import connectors, fics_game, learning, move_choice, online_tablebase
+from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation
 from .move_choice import describe, search_summary, speed, variation
 from .project import data_root, engine_path
 from .uci import open_engine
@@ -282,6 +282,7 @@ chess_titles = ("GM", "IM", "FM", "WGM", "WIM", "WFM", "CM", "WCM", "NM")
 seek_pattern = re.compile(r"\d{1,3} \d{1,3}(?: [a-z0-9+-]+)*")
 rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
 default_settings = {
+    "resignation": resignation.validate_settings({}),
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
@@ -450,7 +451,11 @@ class engine_player:
     """Play our games with a UCI engine; searches run as tasks so server lines keep flowing."""
 
     def __init__(self, open_session, on_line, margin=5, policy=None, finger_wait=2, pgn_dir=None,
-                 site="freechess.org", learner=None, events=None, online_tablebase=False, local_pieces=0):
+                 site="freechess.org", learner=None, events=None, online_tablebase=False, local_pieces=0,
+                 resignation_settings=None):
+        self.loss = resignation.loss_policy(resignation_settings)
+        self.latest_position = None
+        self.position_received_at = None
         self.open_session = open_session
         self.events = events
         self.our_color = None
@@ -526,6 +531,7 @@ class engine_player:
     async def on_login(self, name):
         """A new session: any earlier game was forfeited (noescape), so start seeking again."""
         self.cancel()
+        self.loss.reset()
         self.name = name
         self.game = self.history = None
         self.announced_mood = None
@@ -810,6 +816,7 @@ class engine_player:
             history = fics_game.game_history(position)
             self.cancel()
             self.game, self.token, self.history = position.game, object(), history
+            self.loss.reset()
             self.record = fics_game.game_record({})
             self.opening = None
             self.from_book = self.draw_offered = False
@@ -826,11 +833,17 @@ class engine_player:
                 if position.turn == self.our_color:
                     before = self.history.board.copy()
                     move = before.pop()
+                    self.loss.on_reply(before, move, position.elapsed)
                     name = position.black if position.turn == chess.WHITE else position.white
                     self.on_line(f"-- {before.variation_san([move])} by {name}, {clock_text(mover_ms / 1000)} left")
             elif change:
+                self.loss.reset()
+                self.cancel()
+                self.token = object()
                 self.emit("position", game=self.game, ply=self.history.board.ply(), fen=self.history.board.fen(),
                           reason=change, clock_ms={"white": position.white_ms, "black": position.black_ms})
+        self.latest_position = position
+        self.position_received_at = time.monotonic()
         self.watch_first_move(position)
         if position.relation != fics_game.playing_my_move:
             return
@@ -880,7 +893,10 @@ class engine_player:
         clock = (position.white_ms if board.turn == chess.WHITE else position.black_ms) / 1000
         limit = chess.engine.Limit(white_clock=position.white_ms / 1000, black_clock=position.black_ms / 1000,
                                    white_inc=position.increment_seconds, black_inc=position.increment_seconds)
+        token = self.token
         started = time.monotonic()
+        if self.loss.sent:
+            return
         if not self.opponent_ready.is_set():
             # The first search waits briefly for finger, so UCI_Opponent carries title and engine flag.
             try:
@@ -896,6 +912,7 @@ class engine_player:
         try:
             move, info, kind = await move_choice.choose_move(
                 self.session, board, limit, opening=self.opening,
+                ceiling=self.loss.ceiling((False if self.created.get("rated") == "unrated" else None) if self.created else None),
                 budget_ms=learning.per_move_budget_ms(clock, position.increment_seconds), tablebase=self.tablebase,
                 game=self.token, opponent=self.opponent, timeout=max(clock, 1) + self.margin,
                 options={"DrawContempt": self.contempt})
@@ -905,8 +922,28 @@ class engine_player:
             await self.start()
             await self.send("refresh")
             return
+        if self.token is not token or self.history is None or self.history.board.fen() != board.fen():
+            return
         if move is None or not board.is_legal(move):
             self.on_line(f"-- engine returned no legal move in {board.fen()}")
+            return
+        fresh = self.loss.on_search(board, move, info, kind)
+        latest = self.latest_position
+        received_at = self.position_received_at if self.position_received_at is not None else started
+        created = self.created or {}
+        our_tag = "white" if self.our_color == chess.WHITE else "black"
+        evidence = self.loss.decision(
+            our_rating=rating_of(created.get(f"{our_tag}_rating", "")),
+            their_rating=self.opponent.rating if self.opponent else None,
+            bot=True if self.opponent and self.opponent.is_engine else None,
+            speed=created.get("type"),
+            ours=max(0, (latest.white_ms if self.our_color else latest.black_ms) / 1000 - (time.monotonic() - received_at)),
+            theirs=(latest.black_ms if self.our_color else latest.white_ms) / 1000,
+            increment=latest.increment_seconds, info=info, board=board) if fresh else None
+        if evidence is not None:
+            self.loss.sent = True
+            self.on_line(f"-- resigning game {self.game}: {json.dumps(evidence)}")
+            await self.send("resign")
             return
         if self.draw_offered and move_choice.accept_draw(board, info, self.contempt):
             # Accept, and move too: a withdrawn offer must not leave our clock running.
@@ -1034,7 +1071,10 @@ def load_settings(path):
              "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float), "whisper": bool,
              "mood": str, "live_feed": str, "pgn_post": str,
              "online_tablebase": bool, "reseek_minutes": (int, float)}
+    types["resignation"] = dict
     for key, value in loaded.items():
+        if key == "resignation":
+            value = resignation.validate_settings(value)
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
         kinds = types[key] if isinstance(types[key], tuple) else (types[key],)
@@ -1185,7 +1225,8 @@ def run(options, parser):
                                                                   pgn_dir=pgn_dir, site=options.host, learner=learner,
                                                                   events=events,
                                                                   online_tablebase=configured["online_tablebase"],
-                                                                  local_pieces=local_pieces)
+                                                                  local_pieces=local_pieces,
+                                                                  resignation_settings=configured["resignation"])
         feed = None
         if feed_address:
             def about():

@@ -48,7 +48,7 @@ async def tablebase_first(lookup, search):
     return lookup.result()
 
 
-async def choose_move(session, board, limit, *, opening=None, budget_ms=None, tablebase=None, **search):
+async def choose_move(session, board, limit, *, opening=None, budget_ms=None, tablebase=None, ceiling=None, **search):
     """(move, info, kind) with kind "book", "tablebase" or "engine"; book and tablebase info carry "source".
     Engine failures propagate; search are engine_session.play keywords."""
     if opening is not None:
@@ -57,6 +57,8 @@ async def choose_move(session, board, limit, *, opening=None, budget_ms=None, ta
             move, reason = found
             return move, {"source": reason}, "book"
     lookup = tablebase.ask(board) if tablebase is not None else None
+    if ceiling is not None:
+        search["ceiling"] = ceiling
     searching = asyncio.ensure_future(session.play(board, limit, **search))
     try:
         answer = await tablebase_first(lookup, searching)

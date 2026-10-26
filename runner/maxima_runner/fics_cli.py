@@ -25,7 +25,7 @@ def parser():
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
                              "layer_profiles, style_books, first_move_wait, whisper, mood, live_feed, pgn_post, online_tablebase, "
-                             "reseek_minutes); "
+                             "reseek_minutes, resignation); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)

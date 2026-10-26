@@ -15,7 +15,7 @@ import urllib.request
 import chess
 import chess.engine
 
-from . import connectors, fics_game, learning, move_choice, online_tablebase
+from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation
 from .fics import chess_titles, clock_text, draw_contempt, layer_profiles, learning_report, read_commands, \
     restart_status, style_books
 from .move_choice import describe, search_summary, variation
@@ -50,6 +50,7 @@ reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate
            "aborted": "aborted", "unknownFinish": "unknown finish", "variantEnd": "variant end"}
 terminations = {"outoftime": "time forfeit", "timeout": "abandoned", "noStart": "abandoned", "aborted": "abandoned"}
 default_settings = {
+    "resignation": resignation.validate_settings({}),
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
@@ -243,7 +244,9 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, resignation_settings=None):
+        self.resignation_settings = resignation.validate_settings(
+            {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
         self.speeds, self.accept, self.games = tuple(speeds), accept, games
         self.owners = {name.lower() for name in owners}
@@ -431,6 +434,11 @@ class lichess_game:
     """One game: follow its stream, keep the board, record and events, and play our moves."""
 
     def __init__(self, bot, game_id):
+        self.loss = resignation.loss_policy(bot.resignation_settings)
+        self.generation = object()
+        self.state = None
+        self.state_received_at = None
+        self.reply_clock = None
         self.bot, self.id = bot, game_id
         self.initial = self.board = self.record = self.color = self.opponent = None
         self.full = self.opening = self.contempt = None
@@ -466,6 +474,13 @@ class lichess_game:
                         return
             except OSError as error:
                 self.bot.on_line(f"-- game {self.id} stream failed ({error}); reconnecting")
+            self.loss.reset()
+            self.generation = object()
+            if self.searching is not None:
+                self.searching.cancel()
+            self.searched = None
+            self.state = None
+            self.reply_clock = None
             failures += 1
             if failures > 8:
                 await self.finish("unknownFinish", None)
@@ -534,14 +549,44 @@ class lichess_game:
         for uci in state.get("moves", "").split():
             replay.push_uci(uci)
         old, new = self.board.move_stack, replay.move_stack
+        previous_state = self.state
+        self.state = dict(state)
+        self.state_received_at = time.monotonic()
+        if previous_state is not None and previous_state.get("moves", "") == state.get("moves", ""):
+            side = "b" if self.color == chess.WHITE else "w"
+            if any(previous_state.get(f"{side}{field}") != state.get(f"{side}{field}") for field in ("time", "inc")):
+                # A donation/clock adjustment without a move invalidates timing.
+                self.reply_clock = None
         common = next((index for index, (a, b) in enumerate(zip(old, new)) if a != b), min(len(old), len(new)))
         if common < len(old):
+            self.loss.reset()
+            self.generation = object()
+            if self.searching is not None:
+                self.searching.cancel()
+            self.searched = None
+            self.reply_clock = None
             self.board = replay
             self.emit("position", ply=replay.ply(), fen=replay.fen(), reason="takeback", clock_ms=clock_ms)
         else:
+            added = len(new) - len(old)
             for move in new[len(old):]:
                 before = self.board.copy()
                 self.board.push(move)
+                if before.turn != self.color:
+                    elapsed = None
+                    side = "w" if before.turn == chess.WHITE else "b"
+                    if added == 1 and self.reply_clock is not None:
+                        prior, previous_inc = self.reply_clock
+                        now, inc = state.get(f"{side}time"), state.get(f"{side}inc")
+                        if prior is not None and now is not None and inc is not None and inc == previous_inc:
+                            elapsed = (prior - now + inc) / 1000
+                    self.loss.on_reply(before, move, elapsed)
+                    self.reply_clock = None
+                elif added == 1:
+                    side = "b" if self.color == chess.WHITE else "w"
+                    self.reply_clock = (state.get(f"{side}time"), state.get(f"{side}inc"))
+                else:
+                    self.reply_clock = None
                 self.on_move(before, move, state, clock_ms)
         if state.get("status") not in ("created", "started"):
             await self.finish(state.get("status", "unknownFinish"), state.get("winner"))
@@ -579,6 +624,9 @@ class lichess_game:
 
     async def play(self, board, state, retry=True):
         bot = self.bot
+        generation = self.generation
+        if self.over or self.loss.sent:
+            return
         ours = "w" if board.turn == chess.WHITE else "b"
         clock, increment = state[f"{ours}time"] / 1000, state[f"{ours}inc"] / 1000
         limit = chess.engine.Limit(white_clock=state["wtime"] / 1000, black_clock=state["btime"] / 1000,
@@ -587,6 +635,7 @@ class lichess_game:
         try:
             move, info, kind = await move_choice.choose_move(
                 bot.session, board, limit, opening=self.opening,
+                ceiling=self.loss.ceiling(self.full.get("rated")),
                 budget_ms=learning.per_move_budget_ms(clock, increment), tablebase=bot.tablebase, game=self.id,
                 opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options={"DrawContempt": self.contempt})
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
@@ -596,8 +645,26 @@ class lichess_game:
             if retry:
                 await self.play(board, state, retry=False)
             return
+        if self.over or self.generation is not generation or self.board.fen() != board.fen():
+            return
         if move is None or not board.is_legal(move):
             bot.on_line(f"-- engine returned no legal move in {board.fen()}")
+            return
+        fresh = self.loss.on_search(board, move, info, kind)
+        latest = self.state or state
+        received_at = self.state_received_at if self.state_received_at is not None else started
+        their_side = "b" if self.color == chess.WHITE else "w"
+        evidence = self.loss.decision(
+            our_rating=self.player(self.color).get("rating"), their_rating=self.player(not self.color).get("rating"),
+            bot=True if self.player(not self.color).get("title") == "BOT" else None, speed=self.full.get("speed"),
+            ours=max(0, latest[f"{ours}time"] / 1000 - (time.monotonic() - received_at)),
+            theirs=latest.get(f"{their_side}time", 0) / 1000,
+            increment=latest[f"{their_side}inc"] / 1000 if f"{their_side}inc" in latest else None,
+            info=info, board=board) if fresh else None
+        if evidence is not None:
+            self.loss.sent = True
+            bot.on_line(f"-- resigning game {self.id}: {json.dumps(evidence)}")
+            await bot.api.post(self.path("resign"))
             return
         if self.draw_offered and move_choice.accept_draw(board, info, self.contempt):
             # Accept, and move too: a withdrawn offer must not leave our clock running.
@@ -811,7 +878,10 @@ def load_settings(path):
              "learning": bool, "variety": (int, float), "contempt_window": int, "layer_profiles": dict,
              "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
              "challenge_idle": int, "challenge_window": int}
+    types["resignation"] = dict
     for key, value in loaded.items():
+        if key == "resignation":
+            value = resignation.validate_settings(value)
         if key not in types:
             raise ValueError(f"{path}: unknown setting {key!r}")
         kinds = types[key] if isinstance(types[key], tuple) else (types[key],)
@@ -899,6 +969,7 @@ def run(options, parser):
                           contempt_window=configured["contempt_window"],
                           challenge_idle=configured["challenge_idle"] or 0,
                           challenge_window=configured["challenge_window"],
+                          resignation_settings=configured["resignation"],
                           local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))
         feed = None
         if feed_address:

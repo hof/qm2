@@ -1809,6 +1809,49 @@ rejected handles stop with an error instead of retrying. JDrone could hang on
 waits without deadlines (engine readiness, a half-open socket); the client
 avoids both.
 
+Both online clients share conservative automatic resignation (`resignation.py`),
+in rated and unrated games. After move 20, the last three completed own-turn
+searches must score at most −800 cp at depth 16 or greater. Four qualifying
+searches must decline by at least 100 cp overall, with no consecutive improvement
+greater than 50 cp. The last three actual opponent replies must match the replies
+in our preceding PVs. Book choices, missing or stale scores and provisional UCI
+bounds break evaluation evidence. Score and depth must come from the same UCI
+report. Known tablebase draws or wins prevent resignation.
+
+Eligible opponents are confirmed bots, opponents with unavailable ratings, and
+humans rated at least our rating minus 200. Unknown bot status receives human
+clock protection. The opponent must retain the speed reserve (15 seconds for
+bullet/lightning, 30 for blitz, 60 for other/unknown speeds), plus
+`20 × max(0, median_reply_seconds − increment_seconds)`, using the last three
+measured opponent reply times. Missing clocks or timings prevent resignation.
+Against humans, we also continue when our clock is at least twice theirs and
+theirs is below twice the required reserve. Lichess derives reply times from
+the clock at the start of their turn; batched moves or changed increments cannot
+supply a timing sample. FICS uses the server's elapsed move time.
+
+Only explicitly unrated/casual games gain a thinking ceiling: two qualifying
+evaluations at most −300 cp enable a 30-second ceiling on subsequent searches.
+Ordinary engine clock allocation still applies; the runner sends UCI `stop` at
+the ceiling and collects `bestmove`. Rated games retain ordinary allocation,
+and missing/provisional ratings do not classify a game as unrated. Takebacks,
+resets, reconnects and new games clear policy evidence. The clients check the
+current game and position before one resignation request and await the normal
+server game-end event for PGN saving. Resignation logs include scores, prediction
+matches, ratings and the complete reserve calculation.
+
+Both JSON configuration files accept the same optional object (shown with defaults):
+
+```json
+{"resignation": {"enabled": true, "loss_cp": -800, "confirmations": 3,
+                 "min_depth": 16, "rating_margin": 200, "unrated_ceiling": 30}}
+```
+
+Unknown settings, wrong types and invalid ranges fail before connection.
+`enabled` controls resignation; the casual thinking ceiling remains independent.
+Loss thresholds are negative integer cp; confirmation count and depth are positive
+integers, the rating margin is nonnegative, and the ceiling is positive finite
+seconds. Learning synchronization and PGN ingestion remain deferred.
+
 ### 10.3 Lichess client (MaximaEngine)
 
 `maxima lichess` plays on Lichess through the Bot API as MaximaEngine: it

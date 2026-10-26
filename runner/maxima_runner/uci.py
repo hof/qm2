@@ -48,18 +48,47 @@ class engine_session:
             raise ValueError("unsupported board variant")
         return settings
 
-    async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None):
+    async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None, ceiling=None):
         """Choose a move under game clocks; a new game token makes python-chess send ucinewgame.
 
         options are per-search UCI settings, applied only when the engine has them; None restores the
-        option's default, since python-chess keeps the last value sent."""
+        option's default, since python-chess keeps the last value sent. An optional ceiling
+        sends stop while retaining the ordinary clock allocation and collects bestmove."""
         settings = {name: self.protocol.options[name].default if value is None else value
                     for name, value in (options or {}).items() if name in self.protocol.options}
         settings.update(self.variant_settings(board))
-        return await asyncio.wait_for(
-            self.protocol.play(board, limit, game=game, info=chess.engine.INFO_ALL,
-                               options=settings, opponent=opponent),
-            self.timeout if timeout is None else timeout)
+        # Use the analysis stream to retain a score and its depth from the same UCI
+        # report. Aggregated PlayResult.info can mix a stale score with a newer depth.
+        if "UCI_AnalyseMode" in self.protocol.options:
+            settings["UCI_AnalyseMode"] = False
+
+        async def play_search():
+            if opponent is not None:
+                await self.protocol.send_opponent_information(opponent=opponent)
+            analysis = await self.protocol.analysis(board, limit, game=game, info=chess.engine.INFO_ALL,
+                                                    options=settings)
+            timer = asyncio.get_running_loop().call_later(ceiling, analysis.stop) if ceiling is not None else None
+            evidence = {}
+            try:
+                async for report in analysis:
+                    if report.get("multipv", 1) == 1 and ("depth" in report or "score" in report):
+                        evidence = dict(report)
+                best = await analysis.wait()
+                info = dict(analysis.info, _resignation=evidence)
+                return chess.engine.PlayResult(best.move, best.ponder, info)
+            finally:
+                if timer is not None:
+                    timer.cancel()
+                analysis.stop()
+                # Cancellation must return promptly to the server event loop. The
+                # protocol sequences later commands behind this stopped search.
+                completion = asyncio.ensure_future(analysis.wait())
+                completion.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
+
+        deadline = self.timeout if timeout is None else timeout
+        if ceiling is not None:
+            deadline = min(deadline, ceiling + min(self.timeout, 2))
+        return await asyncio.wait_for(play_search(), deadline)
 
     async def search(self, board, limit, *, game=None, on_info=None):
         settings = self.variant_settings(board)
