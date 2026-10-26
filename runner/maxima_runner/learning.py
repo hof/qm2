@@ -406,13 +406,6 @@ class opening_book:
         total = sum(weights.values())
         return {move: weight / total for move, weight in weights.items()} if total else {}
 
-    def superseded(self, analyses, move):
-        """A clearly deeper search in this position preferred another move."""
-        own = analyses.get(move.uci())
-        depth = own[0] if own else 0
-        return any(other != move.uci() and analysis[0] >= max(self.supersede_depth, depth + 2)
-                   for other, analysis in analyses.items())
-
     def sample(self, rate, games):
         strength = (games + self.prior) / self.variety
         return self.random.betavariate(max(rate * strength, 1e-3), max((1 - rate) * strength, 1e-3))
@@ -426,7 +419,7 @@ class opening_book:
         known = set().union(*books.values()) if books else set()
         learned = {chess.Move.from_uci(move) for (position, move) in self.layers[0] if position == key}
         candidates = {move for move in known | learned
-                      if board.is_legal(move) and not self.superseded(analyses, move)}
+                      if board.is_legal(move)}
         if not candidates:
             return {}, False, 0.0
         in_book = bool(candidates & known)
@@ -509,7 +502,7 @@ class opening_book:
         label = "learned" if learned > sum(parts.get(name, 0) for name in ("book",) + style_names) else "book"
         detail = ", ".join(f"{self.names[name]} {parts[name] / probability:.0%}" for name in layer_names
                            if parts.get(name, 0) >= 0.005 * probability)
-        return f"{label} {probability:.0%}: {detail}"
+        return f"{label} {probability:.0%} selection: {detail}"
 
     def choose(self, board, budget_ms):
         """(move, reason) to play without searching, or None to let the engine search.

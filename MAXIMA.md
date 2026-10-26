@@ -1523,9 +1523,9 @@ other types ½; unregistered opponents (`Account "unregistered"`) count in the
 global layer only, at ½.
 
 **Soundness from analysis.** Each position keeps the strongest analysis per
-move (think time, then depth). A move is unsound while a clearly deeper search
-in the same position preferred a different move; a later deeper search choosing
-it restores it.
+move (think time, then depth). Depth differences do not veto other moves: existing evaluation and result feedback
+continues to weight every legal alternative. Selection probability is shown
+separately from the contributing layer percentages.
 
 **Multi-layer book.** Each game gets its own multi-layer book: book.bin (the
 base: its moves are good in principle), the style books `fire` (sharp, e.g.
@@ -1551,7 +1551,7 @@ rewritten; other layers only add to it.
 **Revenge.** When an opponent (guest or registered) beats Maxima, their moves from the
 first 24 plies become our line for their colour: next time Maxima has that colour against
 them, each of those moves gets at least the profile's `revenge` probability where it is
-legal and no deeper search preferred another move, labelled `revenge` in the log. A win
+legal, labelled `revenge` in the log. A win
 with that colour serves the revenge; a newer loss replaces the line.
 
 **Moods.** Like a human who is "in a Dutch mood lately", Maxima plays one theme

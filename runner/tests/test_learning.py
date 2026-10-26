@@ -166,7 +166,7 @@ class selection_tests(unittest.TestCase):
         self.assertEqual(reasons, {"book"})
         self.assertEqual(set(counts), {"e2e4", "d2d4"})
         move, reason = self.opening().choose(chess.Board(), 5000)
-        self.assertEqual(reason, "book 50%: book 100%")
+        self.assertEqual(reason, "book 50% selection: book 100%")
 
     def test_good_line_against_opponent_grows_but_book_keeps_its_floor(self):
         few, _ = self.picks([record([[start_key, "e2e4", 1.0]]) for _ in range(2)])
@@ -175,7 +175,7 @@ class selection_tests(unittest.TestCase):
         self.assertGreater(many.get("d2d4", 0), 40)  # book.bin's 45% still gives d4 its half
         self.assertIn("learned", reasons)
         _, reason = self.opening([record([[start_key, "e2e4", 1.0]]) for _ in range(30)]).choose(chess.Board(), 5000)
-        self.assertRegex(reason, r"^(book|learned) \d+%: book \d+%, global \d+%, humans \d+%, John \d+%$")
+        self.assertRegex(reason, r"^(book|learned) \d+% selection: book \d+%, global \d+%, humans \d+%, John \d+%$")
 
     def test_signature_line_comes_back_against_the_same_opponent(self):
         def game(score, evaluated=0.55, opponent="John"):
@@ -257,22 +257,15 @@ class selection_tests(unittest.TestCase):
         self.assertGreater(stronger.get("d2d4", 0), stronger.get("e2e4", 0))
         self.assertGreater(weaker.get("e2e4", 0), weaker.get("d2d4", 0))
 
-    def test_deeper_analysis_supersedes_and_is_recalled_within_budget(self):
-        board = board_after("e2e4 e7e5 g1f3 b8c6 f1c4 g8f6")
+    def test_depth_differences_preserve_alternatives(self):
+        board = chess.Board()
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
-        records = [record([[key, "f3g5", 1.0]], analyses=[[key, "f3g5", 13, 90, 0, 5000, board.halfmove_clock]])
-                   for _ in range(3)]
-        records.append(record([[key, "h2h4", 0.5]], analyses=[[key, "h2h4", 20, 40, 0, 60000,
-                                                                  board.halfmove_clock]]))
-        book = self.opening(records, book_path=None)
-        self.assertTrue(book.superseded(book.analyses[key], chess.Move.from_uci("f3g5")))
-        picks = [book.choose(board, 5000) for _ in range(50)]
-        self.assertEqual({pick[0].uci() for pick in picks if pick}, {"h2h4"})
-        self.assertIn(None, picks)  # without book.bin, book.bin's share searches
-        fresh = self.opening(records[:3] + [record([], analyses=[[key, "h2h4", 20, 40, 0, 60000,
-                                                                 board.halfmove_clock]])], book_path=None)
-        self.assertEqual(fresh.choose(board, 5000), (chess.Move.from_uci("h2h4"), "recalled d20 60.0s"))
-        self.assertIsNone(fresh.choose(board, 90000))
+        records = [record([[key, "e2e4", 1.0], [key, "d2d4", 0.5]],
+                          analyses=[[key, "d2d4", 24, 40, 0, 60000, 0]])]
+        book = self.opening(records)
+        moves, _, _ = book.distribution(board, key, book.analyses[key])
+        self.assertGreater(moves[chess.Move.from_uci("e2e4")][0], 0)
+        self.assertGreater(moves[chess.Move.from_uci("d2d4")][0], 0)
 
     def test_out_of_book_a_learned_move_needs_evidence(self):
         board = board_after("e2e4 e7e5 g1f3 b8c6")
@@ -359,7 +352,7 @@ class multi_layer_book_tests(unittest.TestCase):
         guest, book = self.shares(rated=False)
         self.assertEqual(guest["f2f4"], 0.25)
         moves, _, _ = book.distribution(self.after_e5, "", {})
-        self.assertEqual(book.describe(*moves[chess.Move.from_uci("g1f3")]), "book 70%: book 64%, fire 36%")
+        self.assertEqual(book.describe(*moves[chess.Move.from_uci("g1f3")]), "book 70% selection: book 64%, fire 36%")
 
     def test_mood_rotates_weekly_and_joins_the_book(self):
         moods = ["dutch", "parham", "traxler"]
