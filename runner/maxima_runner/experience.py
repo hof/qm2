@@ -6,7 +6,6 @@ import hashlib
 import json
 from pathlib import Path
 import re
-import sqlite3
 import struct
 import tempfile
 import os
@@ -19,33 +18,9 @@ record = struct.Struct('<QIIIIiiQQIIQIIII')
 magic = b'MXEXP001'
 
 
-def connect(path):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(str(path), timeout=30)
-    if db.execute('PRAGMA user_version').fetchone()[0] not in (0, 1):
-        db.close()
-        raise ValueError('unsupported experience database version')
-    db.executescript('''
-        CREATE TABLE IF NOT EXISTS games (
-            id TEXT PRIMARY KEY, headers TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS observations (
-            game TEXT NOT NULL, key TEXT NOT NULL, move TEXT NOT NULL,
-            PRIMARY KEY (game, key, move));
-        CREATE TABLE IF NOT EXISTS moves (
-            key TEXT NOT NULL, move TEXT NOT NULL, wins INTEGER NOT NULL DEFAULT 0,
-            draws INTEGER NOT NULL DEFAULT 0, losses INTEGER NOT NULL DEFAULT 0,
-            own_games INTEGER NOT NULL DEFAULT 0, opponent_games INTEGER NOT NULL DEFAULT 0,
-            own_wins INTEGER NOT NULL DEFAULT 0, own_draws INTEGER NOT NULL DEFAULT 0,
-            own_losses INTEGER NOT NULL DEFAULT 0,
-            PRIMARY KEY (key, move));
-        CREATE TABLE IF NOT EXISTS analysis (
-            key TEXT NOT NULL, move TEXT NOT NULL, engine TEXT NOT NULL,
-            clock INTEGER NOT NULL, depth INTEGER NOT NULL, score INTEGER NOT NULL,
-            score_type INTEGER NOT NULL, nodes INTEGER NOT NULL, think_ms INTEGER NOT NULL,
-            pv TEXT NOT NULL, PRIMARY KEY (key, move, engine, clock));
-    ''')
-    db.execute('PRAGMA user_version=1')
-    return db
+def open_store(path):
+    from .experience_store import open_store as load_store
+    return load_store(path)
 
 
 def key_of(board):
@@ -73,7 +48,7 @@ def game_id(game):
     return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
 
 
-def store_analysis(db, board, pv, depth, score, score_type, nodes, think_ms, engine):
+def store_analysis(store, board, pv, depth, score, score_type, nodes, think_ms, engine):
     if not pv or depth <= 0:
         return
     replay = board.copy()
@@ -81,26 +56,25 @@ def store_analysis(db, board, pv, depth, score, score_type, nodes, think_ms, eng
         if move not in replay.legal_moves:
             raise ValueError('analysis PV contains an illegal move')
         replay.push(move)
-    db.execute('''INSERT INTO analysis VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(key, move, engine, clock) DO UPDATE SET
-        depth=excluded.depth, score=excluded.score, score_type=excluded.score_type,
-        nodes=excluded.nodes, think_ms=excluded.think_ms, pv=excluded.pv
-        WHERE (excluded.depth, excluded.nodes, excluded.think_ms) >
-              (analysis.depth, analysis.nodes, analysis.think_ms)''',
-        (key_of(board), pv[0].uci(), engine, board.halfmove_clock, depth,
-         score, score_type, nodes, think_ms, json.dumps([m.uci() for m in pv])))
+    row = [key_of(board), pv[0].uci(), engine, board.halfmove_clock, depth,
+           score, score_type, nodes, think_ms, [move.uci() for move in pv]]
+    identity = json.dumps(row[:4])
+    old = store.data['analysis'].get(identity)
+    if old is None or (depth, nodes, think_ms) > (old[4], old[7], old[8]):
+        store.data['analysis'][identity] = row
 
 
-def import_games(db, path, players, max_ply):
+def import_games(store, path, players, max_ply):
     imported = duplicates = analyses = 0
-    with db:
+    with store:
         for game in games_from(path):
             names = [game.headers.get('Black', ''), game.headers.get('White', '')]
             if not any(name.casefold() in players for name in names):
                 continue
             identifier = game_id(game)
-            inserted = db.execute('INSERT OR IGNORE INTO games VALUES (?, ?)',
-                                  (identifier, json.dumps(dict(game.headers)))).rowcount
+            inserted = identifier not in store.data['games']
+            store.data['games'].setdefault(identifier, dict(game.headers))
+            observations = set(store.data['observations'].get(identifier, []))
             imported += inserted
             duplicates += not inserted
             board = game.board()
@@ -112,23 +86,17 @@ def import_games(db, path, players, max_ply):
                 outcome = game.headers.get('Result', '*')
                 if outcome not in ('1-0', '0-1', '1/2-1/2', '*'):
                     raise ValueError('invalid game result')
-                observed = outcome != '*' and db.execute(
-                    'INSERT OR IGNORE INTO observations VALUES (?, ?, ?)',
-                    (identifier, key_of(board), node.move.uci())).rowcount
+                move_key = key_of(board) + '/' + node.move.uci()
+                observed = outcome != '*' and move_key not in observations
                 if observed:
+                    observations.add(move_key)
                     draw = outcome == '1/2-1/2'
                     win = not draw and ((outcome == '1-0') == board.turn)
                     own = names[board.turn].casefold() in players
-                    db.execute('''INSERT INTO moves VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(key, move) DO UPDATE SET
-                        wins=wins+excluded.wins, draws=draws+excluded.draws,
-                        losses=losses+excluded.losses, own_games=own_games+excluded.own_games,
-                        opponent_games=opponent_games+excluded.opponent_games,
-                        own_wins=own_wins+excluded.own_wins, own_draws=own_draws+excluded.own_draws,
-                        own_losses=own_losses+excluded.own_losses''',
-                        (key_of(board), node.move.uci(), int(win), int(draw),
-                         int(not win and not draw), int(own), int(not own),
-                         int(own and win), int(own and draw), int(own and not win and not draw)))
+                    counts = [int(win), int(draw), int(not win and not draw), int(own), int(not own),
+                              int(own and win), int(own and draw), int(own and not win and not draw)]
+                    row = store.data['moves'].setdefault(move_key, [key_of(board), node.move.uci()] + [0] * 8)
+                    row[2:] = [before + after for before, after in zip(row[2:], counts)]
                 evaluation, depth = node.eval(), node.eval_depth()
                 if evaluation is not None and depth:
                     pv_match = re.search(r'\[%pv\s+([^\]]+)\]', node.comment)
@@ -144,27 +112,26 @@ def import_games(db, path, players, max_ply):
                     nodes_match = re.search(r'\[%nodes\s+(\d+)\]', node.comment)
                     engine = game.headers.get('WhiteEngine' if board.turn else 'BlackEngine',
                                               names[board.turn])
-                    store_analysis(db, board, pv, depth,
+                    store_analysis(store, board, pv, depth,
                                    score.mate() if score.is_mate() else score.score(),
                                    int(score.is_mate()), int(nodes_match.group(1)) if nodes_match else 0,
                                    round((node.emt() or 0) * 1000), engine)
                     analyses += 1
                 board.push(node.move)
+            store.data['observations'][identifier] = sorted(observations)
     return {'imported': imported, 'duplicates': duplicates, 'analyses': analyses}
 
 
-def export_snapshot(db, path):
+def export_snapshot(store, path):
     import chess
     if path.exists():
         with path.open('rb') as existing:
             if existing.read(8) != magic:
                 raise ValueError('refusing to replace a non-experience file')
     data = {}
-    for key, move, wins, draws, losses, own_wins, own_draws, own_losses in db.execute(
-            'SELECT key,move,wins,draws,losses,own_wins,own_draws,own_losses FROM moves'):
+    for key, move, wins, draws, losses, own, opponent, own_wins, own_draws, own_losses in store.data['moves'].values():
         data[key, move] = [wins, draws, losses, 0, 0, 0, 0, 0, 0, 0, own_wins, own_draws, own_losses]
-    for key, move, engine, clock, depth, score, score_type, nodes, think_ms in db.execute(
-            'SELECT key, move, engine, clock, depth, score, score_type, nodes, think_ms FROM analysis'):
+    for key, move, engine, clock, depth, score, score_type, nodes, think_ms, pv in store.data['analysis'].values():
         row = data.setdefault((key, move), [0] * 13)
         if (depth, nodes, think_ms) > (row[3], row[5], row[6]):
             row[3:10] = [depth, score, nodes, think_ms, clock, score_type,
@@ -216,7 +183,7 @@ async def analyze_position(engine, board, movetime, game_token):
     return None
 
 
-async def analyze_games(db, path, engine_path, max_ply, movetime):
+async def analyze_games(store, path, engine_path, max_ply, movetime):
     from .uci import open_engine
     changes = []
     with tempfile.TemporaryDirectory(prefix='maxima-experience-') as directory:
@@ -225,7 +192,7 @@ async def analyze_games(db, path, engine_path, max_ply, movetime):
             identity = '\n'.join('id ' + line for line in engine.identity)
             await engine.configure({'Hash': 64, 'OwnBook': False,
                                     'UCI_AnalyseMode': True, 'SyzygyProbeLimit': 0})
-            with db:
+            with store:
                 for game in games_from(path):
                     board = game.board()
                     game_token = object()
@@ -236,7 +203,7 @@ async def analyze_games(db, path, engine_path, max_ply, movetime):
                         best = await analyze_position(engine, board, movetime, game_token)
                         if best:
                             score = best['score'].pov(actor)
-                            store_analysis(db, board, best['pv'], best['depth'],
+                            store_analysis(store, board, best['pv'], best['depth'],
                                            score.mate() if score.is_mate() else score.score(),
                                            int(score.is_mate()), best['nodes'], best['think_ms'], identity)
                             if best['pv'][0] != node.move:
@@ -245,7 +212,7 @@ async def analyze_games(db, path, engine_path, max_ply, movetime):
                                 played = await analyze_position(engine, child, movetime, game_token)
                                 if played:
                                     played_score = played['score'].pov(actor)
-                                    store_analysis(db, board, [node.move] + played['pv'],
+                                    store_analysis(store, board, [node.move] + played['pv'],
                                                    played['depth'] + 1,
                                                    played_score.mate() if played_score.is_mate() else played_score.score(),
                                                    int(played_score.is_mate()), played['nodes'], played['think_ms'], identity)
@@ -269,7 +236,9 @@ def main():
     root = project_root()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=('import', 'export', 'show', 'analyze'))
-    parser.add_argument('--database', type=Path, default=data_root() / 'experience/experience.sqlite')
+    parser.add_argument('--store', '--database', dest='store', type=Path,
+                        default=data_root() / 'experience/experience.json',
+                        help='file-based experience data (--database is a legacy alias)')
     parser.add_argument('--output', type=Path, default=data_root() / 'experience/experience.bin')
     parser.add_argument('--pgn', type=Path)
     parser.add_argument('--player', action='append', help='player aliases; default Maxima and BugChess')
@@ -280,20 +249,28 @@ def main():
     args = parser.parse_args()
     import chess
     try:
-        with closing(connect(args.database)) as db:
+        legacy = args.store if args.store.suffix in ('.sqlite', '.db') else args.store.with_suffix('.sqlite')
+        if args.store == legacy:
+            args.store = legacy.with_suffix('.json')
+        if not args.store.exists() and legacy.exists():
+            from .experience_migration import migrate_legacy
+            migrate_legacy(legacy, args.store)
+            print(f'Converted legacy experience to {args.store}; original retained at {legacy}')
+        with closing(open_store(args.store)) as store:
             if args.command in ('import', 'analyze'):
                 if args.pgn is None:
                     parser.error('--pgn is required')
                 if args.command == 'import':
-                    result = import_games(db, args.pgn,
+                    result = import_games(store, args.pgn,
                                           {p.casefold() for p in (args.player or ['Maxima', 'BugChess'])}, args.max_ply)
                     print(json.dumps(result))
                 else:
-                    print(json.dumps(asyncio.run(analyze_games(db, args.pgn, args.engine, args.max_ply, args.movetime))))
+                    print(json.dumps(asyncio.run(analyze_games(store, args.pgn, args.engine, args.max_ply, args.movetime))))
             if args.command == 'show':
                 board = chess.Board(args.fen)
-                for move, wins, draws, losses, own, opponent, own_wins, own_draws, own_losses in db.execute(
-                        'SELECT move,wins,draws,losses,own_games,opponent_games,own_wins,own_draws,own_losses FROM moves WHERE key=?', (key_of(board),)):
+                for key, move, wins, draws, losses, own, opponent, own_wins, own_draws, own_losses in store.data['moves'].values():
+                    if key != key_of(board):
+                        continue
                     games = wins + draws + losses
                     print(f'{move}: {wins}W {draws}D {losses}L, score {(wins + draws / 2) / games:.1%}, '
                           f'{own} own / {opponent} opponent games')
@@ -303,14 +280,15 @@ def main():
                               f'smoothed {(own_wins + own_draws / 2 + 16) / (own + 32):.1%}')
                     else:
                         print(f'  Opponent-only estimate {(wins + draws / 2 + 32) / (games + 64):.1%}')
-                for move, engine, depth, nodes, think_ms, pv in db.execute(
-                        'SELECT move,engine,depth,nodes,think_ms,pv FROM analysis WHERE key=? ORDER BY depth DESC',
-                        (key_of(board),)):
+                for key, move, engine, clock, depth, score, score_type, nodes, think_ms, pv in sorted(
+                        store.data['analysis'].values(), key=lambda row: row[4], reverse=True):
+                    if key != key_of(board):
+                        continue
                     print(f'{move}: analysis depth {depth}, {nodes} nodes, {think_ms}ms, engine {engine}, PV {pv}')
             else:
-                print(f'Published {export_snapshot(db, args.output)} entries to {args.output}')
+                print(f'Published {export_snapshot(store, args.output)} entries to {args.output}')
         return 0
-    except (OSError, ValueError, sqlite3.Error, struct.error, RuntimeError) as error:
+    except (OSError, ValueError, struct.error, RuntimeError) as error:
         print(f'Experience failed: {error}', file=sys.stderr)
         return 1
 

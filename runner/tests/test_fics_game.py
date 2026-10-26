@@ -131,11 +131,12 @@ class record_tests(unittest.TestCase):
                 games = [chess.pgn.read_game(stream)]
                 self.assertIsNone(chess.pgn.read_game(stream))
             self.assertEqual([str(item) for item in games], [str(game)])
-            with closing(experience.connect(Path(directory) / "experience.db")) as db:
+            with closing(experience.open_store(Path(directory) / "experience.json")) as db:
                 counts = experience.import_games(db, path, {"guestmczl"}, 200)
                 self.assertEqual(counts, {"imported": 1, "duplicates": 0, "analyses": 1})
-                row = db.execute("SELECT move, engine, depth, score, nodes, pv FROM analysis").fetchone()
-        self.assertEqual(row, ("d5a5", "Maxima 2.0.0", 16, 42, 123456, '["d5a5", "c6a5"]'))
+                analysis = next(iter(db.data['analysis'].values()))
+                row = [analysis[i] for i in (1, 2, 4, 5, 7, 9)]
+        self.assertEqual(row, ["d5a5", "Maxima 2.0.0", 16, 42, 123456, ["d5a5", "c6a5"]])
 
 
 fake_engine = '''

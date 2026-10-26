@@ -69,28 +69,27 @@ class experience_tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'games.pgn'
             path.write_text(pgn)
-            db_path = Path(directory) / 'experience.sqlite'
-            db = experience.connect(db_path)
+            db_path = Path(directory) / 'experience.json'
+            db = experience.open_store(db_path)
             result = experience.import_games(db, path, {'maxima'}, 32)
             self.assertEqual(result['imported'], 3)
             key = experience.key_of(chess.Board())
-            self.assertEqual(db.execute('SELECT wins,draws,losses,own_games,opponent_games FROM moves WHERE key=? AND move=?',
-                                        (key, 'e2e4')).fetchone(), (1, 1, 0, 1, 1))
-            self.assertEqual(db.execute('SELECT wins,losses,opponent_games FROM moves WHERE key=? AND move=?',
-                                        (key, 'd2d4')).fetchone(), (1, 0, 1))
-            analysis = db.execute('SELECT depth,score,nodes,think_ms,pv FROM analysis').fetchone()
-            self.assertEqual(analysis[:4], (18, 40, 1200000, 60000))
-            self.assertEqual(json.loads(analysis[4]), ['e2e4', 'e7e5', 'g1f3'])
+            self.assertEqual(db.data['moves'][key + '/e2e4'][2:7], [1, 1, 0, 1, 1])
+            row = db.data['moves'][key + '/d2d4']
+            self.assertEqual([row[2], row[4], row[6]], [1, 0, 1])
+            analysis = next(iter(db.data['analysis'].values()))
+            self.assertEqual([analysis[i] for i in (4, 5, 7, 8)], [18, 40, 1200000, 60000])
+            self.assertEqual(analysis[9], ['e2e4', 'e7e5', 'g1f3'])
             db.close()
-            db = experience.connect(db_path)
+            db = experience.open_store(db_path)
             duplicate = experience.import_games(db, path, {'maxima'}, 32)
             self.assertEqual(duplicate['duplicates'], 3)
-            self.assertEqual(db.execute('SELECT SUM(wins+draws+losses) FROM moves').fetchone()[0], 6)
+            self.assertEqual(sum(sum(row[2:5]) for row in db.data['moves'].values()), 6)
             # A stronger annotation can be imported without recounting the game.
             path.write_text(pgn.replace('0.40,18', '0.60,24'))
             experience.import_games(db, path, {'maxima'}, 32)
-            self.assertEqual(db.execute('SELECT depth,score FROM analysis').fetchone(), (24, 60))
-            self.assertEqual(db.execute('SELECT SUM(wins+draws+losses) FROM moves').fetchone()[0], 6)
+            self.assertEqual(next(iter(db.data['analysis'].values()))[4:6], [24, 60])
+            self.assertEqual(sum(sum(row[2:5]) for row in db.data['moves'].values()), 6)
             db.close()
 
     def test_repetitions_are_one_game_and_import_horizon_can_grow(self):
@@ -98,30 +97,30 @@ class experience_tests(unittest.TestCase):
             path = Path(directory) / 'games.pgn'
             path.write_text('[White "Maxima"]\n[Black "Opponent"]\n[Result "1-0"]\n\n'
                             '1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 1-0\n')
-            db = experience.connect(Path(directory) / 'experience.sqlite')
+            db = experience.open_store(Path(directory) / 'experience.json')
             experience.import_games(db, path, {'maxima'}, 1)
             experience.import_games(db, path, {'maxima'}, 32)
-            self.assertEqual(db.execute('SELECT SUM(wins+draws+losses) FROM moves').fetchone()[0], 4)
+            self.assertEqual(sum(sum(row[2:5]) for row in db.data['moves'].values()), 4)
             db.close()
 
     def test_unfinished_game_and_rollback(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'games.pgn'
             path.write_text(pgn.split('[Event "fixture"]\n[Round "2"]')[0].replace('1-0', '*'))
-            db = experience.connect(Path(directory) / 'experience.sqlite')
+            db = experience.open_store(Path(directory) / 'experience.json')
             experience.import_games(db, path, {'maxima'}, 32)
-            self.assertEqual(db.execute('SELECT COUNT(*) FROM moves').fetchone()[0], 0)
-            self.assertEqual(db.execute('SELECT COUNT(*) FROM analysis').fetchone()[0], 1)
-            before = db.execute('SELECT COUNT(*) FROM games').fetchone()[0]
+            self.assertEqual(len(db.data['moves']), 0)
+            self.assertEqual(len(db.data['analysis']), 1)
+            before = len(db.data['games'])
             path.write_text(pgn + '\n[White "Maxima"]\n[Black "Opponent"]\n\n1. e5 *\n')
             with self.assertRaises(ValueError):
                 experience.import_games(db, path, {'maxima'}, 32)
-            self.assertEqual(db.execute('SELECT COUNT(*) FROM games').fetchone()[0], before)
+            self.assertEqual(len(db.data['games']), before)
             db.close()
 
     def test_atomic_snapshot_and_book_protection(self):
         with tempfile.TemporaryDirectory() as directory:
-            db = experience.connect(Path(directory) / 'experience.sqlite')
+            db = experience.open_store(Path(directory) / 'experience.json')
             board = chess.Board()
             with self.assertRaises(ValueError):
                 experience.store_analysis(db, board, [chess.Move.from_uci('e2e5')], 20, 0, 0, 1000, 60000, 'fixture')
@@ -143,7 +142,7 @@ class experience_tests(unittest.TestCase):
     def test_engine_uses_analysis_and_keeps_old_snapshot_on_bad_reload(self):
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)
-            db = experience.connect(directory / 'experience.sqlite')
+            db = experience.open_store(directory / 'experience.json')
             experience.store_analysis(db, chess.Board(), [chess.Move.from_uci('g1f3')], 24, 25, 0, 1000000, 60000, 'fixture')
             snapshot = directory / 'experience with spaces.bin'
             experience.export_snapshot(db, snapshot)
@@ -207,7 +206,7 @@ class experience_tests(unittest.TestCase):
             directory = Path(directory)
             path = directory / 'game.pgn'
             path.write_text('[White "Maxima"]\n[Black "Opponent"]\n[Result "0-1"]\n\n1. f3 0-1\n')
-            db = experience.connect(directory / 'experience.sqlite')
+            db = experience.open_store(directory / 'experience.json')
             from maxima_runner.uci import engine_session as async_session
             import chess.engine
             original_search = async_session.search
@@ -219,16 +218,16 @@ class experience_tests(unittest.TestCase):
 
             with patch.object(async_session, 'search', completed_search):
                 changes = asyncio.run(experience.analyze_games(db, path, Path(engine_path), 1, 50))
-            self.assertEqual(db.execute('SELECT COUNT(*) FROM moves').fetchone()[0], 0)
-            records = db.execute('SELECT move,depth,nodes,think_ms,pv FROM analysis').fetchall()
+            self.assertEqual(len(db.data['moves']), 0)
+            records = [[row[i] for i in (1, 4, 7, 8, 9)] for row in db.data['analysis'].values()]
             self.assertGreaterEqual(len(records), 1)
             for move, depth, nodes, think_ms, pv in records:
                 self.assertGreater(depth, 0)
                 self.assertGreaterEqual(nodes, 0)
                 self.assertGreater(think_ms, 0)
                 board = chess.Board()
-                self.assertEqual(json.loads(pv)[0], move)
-                for text in json.loads(pv):
+                self.assertEqual(pv[0], move)
+                for text in pv:
                     move = chess.Move.from_uci(text)
                     self.assertIn(move, board.legal_moves)
                     board.push(move)
@@ -241,7 +240,7 @@ class experience_tests(unittest.TestCase):
     def test_inferior_analysis_is_not_a_book_recommendation(self):
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)
-            db = experience.connect(directory / 'experience.sqlite')
+            db = experience.open_store(directory / 'experience.json')
             for move, score in [('g1f3', 30), ('f2f3', -200)]:
                 experience.store_analysis(db, chess.Board(), [chess.Move.from_uci(move)],
                                           24, score, 0, 1000000, 60000, 'fixture')
@@ -260,7 +259,7 @@ class experience_tests(unittest.TestCase):
     def test_special_move_snapshot_encoding(self):
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)
-            db = experience.connect(directory / 'experience.sqlite')
+            db = experience.open_store(directory / 'experience.json')
             cases = [
                 ('r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1', 'e1g1'),
                 ('7k/P7/8/8/8/8/8/7K w - - 0 1', 'a7a8n'),

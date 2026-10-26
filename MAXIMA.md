@@ -1253,8 +1253,13 @@ Tooling uses the same pinned Python environment as the EPD runner (chapter 6.1).
 ./maxima experience:export
 ```
 
-Defaults are `experience/experience.sqlite` and `experience/experience.bin`,
-ignored by Git. `--database` and `--output` select other files. Snapshot export
+Defaults are `experience/experience.json` and `experience/experience.bin`,
+ignored by Git. `--store` and `--output` select other files (`--database` remains
+a legacy alias). SQLite is not required for import, analysis, inspection or export.
+On first use, an existing sibling `experience.sqlite` is converted read-only to
+the JSON store; the original is retained as a backup. Legacy `--database path.sqlite`
+also converts to `path.json`. Only this optional migration uses Python's SQLite
+module. Snapshot export
 refuses to overwrite an existing file without an experience snapshot header.
 The reference `book.bin` is untouched. Imported games must be standard chess;
 invalid games roll back the current import rather than partly changing statistics.
@@ -1341,7 +1346,12 @@ by this persistent experience layer.
 
 ### 9.6 Storage and search ownership
 
-SQLite is the authoritative writable store, used only by external tooling.
+The JSON store retains imported game identities, per-game observations, move
+statistics and saved analysis, and is used only by external tooling. Writers hold
+an advisory lock for the entire command, including binary publication. Updates
+use fsync and atomic replacement; failed imports roll back the current batch.
+This file is loaded into memory and rewritten on updates, so it is a portable
+replacement for the old binary-export workflow, not an unlimited-history index.
 An atomic snapshot replace leaves readers with complete data. Snapshot format
 v1 is little-endian: `MXEXP001`, an unsigned 64-bit record count, then sorted
 80-byte records. Each has a full 64-bit Polyglot key, coordinate move (source six
@@ -1365,7 +1375,7 @@ Status: implemented in `learning.py` and both online clients; thresholds are
 first guesses awaiting measurement. Both clients use the same store beneath
 `MAXIMA_DATA_DIR/experience` (on the shared PVC), publish after every saved game,
 and reload before preparing the next game's opening book. A game already in
-progress retains its existing view. The native SQLite/`experience.bin` workflow
+progress retains its existing view. The native JSON/`experience.bin` workflow
 above remains separate for GUI use; online sharing does not merge binary counters.
 
 **Storage and concurrency.** Games are first durably saved to
@@ -1404,7 +1414,7 @@ this implementation does not provide a network service or configure Kubernetes.
 
 `experience:archive` accepts multiple individual game paths for migration or retry.
 It uses the same command in both online clients, including custom PGN destinations.
-It does not import results into the separate native SQLite/`experience.bin` store.
+It does not import results into the separate native JSON/`experience.bin` store.
 Archive failures retain pending files and are reported by the clients. Existing
 legacy monthly files are preserved. All pods writing these files must run this
 version; shared PVC advisory locks and atomic rename must work across nodes.
@@ -1438,7 +1448,7 @@ over their obsolete legacy copies. Stop old client versions during migration;
 thereafter both pods must use this version and the same `MAXIMA_DATA_DIR`.
 A custom `--pgn-dir` receives the game too; learning still archives a canonical
 copy beneath the shared experience root. Idle analysis remains future work;
-SQLite-only analysis is not part of the PGN reconstruction guarantee.
+Analysis saved only in the native JSON store is not part of the PGN reconstruction guarantee.
 
 **Learning signal (Maxima's eval).** Maxima's own `[%eval]` is the source of
 truth; an eval can miss something, but not for long. Every opening move (both
@@ -1598,7 +1608,7 @@ preserve variants in PGN export/replay.
 Losers CLI suites, general PGN imports, and experience remain pending; those
 workflows must preserve variant identity when introduced.
 Generic UCI orchestration has no dependency on the Maxima source tree.
-Maxima's SQLite experience accounting and binary snapshot serialization remain
+Maxima's file-based experience accounting and binary snapshot serialization remain
 in the runner's experience module; their formats are unchanged.
 
 The CLI owns repository paths and build helpers. Existing `suite:run`,

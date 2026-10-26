@@ -34,7 +34,10 @@ Both bots use `MAXIMA_DATA_DIR/experience` on the PVC. `experience:sync SOURCE
 needed, and `--group bots` classifies offline opponents. `experience:build
 --experience-dir PATH` rebuilds everything from the archived PGNs. Global and
 group evidence is shared; individual opponent identities remain server-specific.
-The native SQLite/binary GUI workflow stays in `maxima_runner.experience`.
+The native binary-export workflow stays in `maxima_runner.experience` and uses
+locked, atomically published `experience/experience.json` (`--store` overrides it).
+`experience.bin` is its engine-readable export. SQLite is used only for optional,
+read-only conversion of an existing legacy store; normal commands do not need it.
 Both online clients invoke `experience:archive <LearningId>.pgn` after saving
 and learning a completed game. It locks the shared archive, deduplicates into
 `games/<LearningSource>/YYYY-MM.pgn`, and deletes the pending file only after
