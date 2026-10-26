@@ -196,6 +196,35 @@ for line in sys.stdin:
 
 
 class ponder_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_completed_ponder_keeps_score_and_miss_discards_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script, log = Path(directory) / 'engine.py', Path(directory) / 'commands'
+            fixture = ponder_engine.replace(
+                "elif command.startswith('go ponder'):\n        pass",
+                "elif command.startswith('go ponder'):\n        print('info depth 23 score cp 77 nodes 300 pv', next(iter(board.legal_moves)).uci(), flush=True)")
+            fixture = fixture.replace(
+                "print('info depth 18 score cp 12 nodes 100 pv', move.uci())",
+                "if command != 'ponderhit':\n            print('info depth 18 score cp 12 nodes 100 pv', move.uci())")
+            script.write_text(fixture)
+            async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
+                game, board = object(), chess.Board()
+                limit = chess.engine.Limit(white_clock=60, black_clock=60)
+                first = await session.play(board, limit, game=game)
+                self.assertEqual(first.info['score'].relative.score(), 12)
+                board.push(first.move)
+                board.push(first.ponder)
+                await asyncio.sleep(0.03)
+                hit = await session.play(board, limit, game=game)
+                self.assertEqual(hit.info['score'].relative.score(), 77)
+                self.assertEqual(hit.info['_resignation']['depth'], 23)
+                self.assertEqual(hit.info['_resignation']['score'].relative.score(), 77)
+                board.push(hit.move)
+                board.push(next(move for move in board.legal_moves if move != hit.ponder))
+                miss = await session.play(board, limit, game=game)
+                self.assertEqual(miss.info['score'].relative.score(), 12)
+                self.assertEqual(miss.info['_resignation']['depth'], 18)
+                await session.stop_pondering()
+
     async def test_prediction_hit_miss_game_change_and_stop(self):
         with tempfile.TemporaryDirectory() as directory:
             script, log = Path(directory) / 'engine.py', Path(directory) / 'commands'

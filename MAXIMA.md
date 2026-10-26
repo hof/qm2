@@ -2015,6 +2015,9 @@ reply starts `go ponder` during the opponent turn; matching replies use
 Book/tablebase choices and game ends stop background pondering. Game tokens,
 position history and option changes prevent reuse across incompatible searches.
 The ordinary allocation and casual thinking ceiling apply after the actual reply.
+A completed ponder search retains its evaluation and PV for an instant hit;
+missed predictions discard those reports. Resignation still requires a score
+and depth from the same report.
 
 Both online clients share conservative automatic resignation (`resignation.py`),
 in rated and unrated games. After move 20, the last three completed own-turn

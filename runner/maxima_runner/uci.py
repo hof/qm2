@@ -11,24 +11,41 @@ from .variants import royal_losers_board, orthodox_wild_board
 class online_protocol(chess.engine.UciProtocol):
     """Keep complete evaluation reports alongside python-chess's managed pondering."""
 
-    evidence = None
-    collecting = False
+    def __init__(self):
+        super().__init__()
+        self.evidence = None
+        self.collecting = False
+        self.ponder_info = {}
+        self.ponder_evidence = {}
+        self.hit_info = {}
 
     def send_line(self, line):
-        if line.startswith("go ") or line == "ponderhit":
-            self.collecting = not line.startswith("go ponder")
-            if self.collecting and self.evidence is not None:
+        if line.startswith("go ponder"):
+            self.collecting = False
+            self.ponder_info = {}
+            self.ponder_evidence = {}
+        elif line.startswith("go ") or line == "ponderhit":
+            self.collecting = True
+            self.hit_info = dict(self.ponder_info) if line == "ponderhit" else {}
+            if self.evidence is not None:
                 self.evidence.clear()
+                if line == "ponderhit":
+                    self.evidence.update(self.ponder_evidence)
         super().send_line(line)
 
     def line_received(self, line):
-        if self.collecting and self.evidence is not None and line.startswith("info "):
-            # Parse each report independently: aggregated PlayResult.info can mix
-            # a stale score with a newer depth. python-chess owns UCI parsing.
+        if line.startswith("info ") and (not self.collecting or self.evidence is not None):
+            # Keep ponder reports: a solved search can return bestmove immediately
+            # on ponderhit without repeating its evaluation. Fresh searches discard
+            # this buffer, so a missed prediction cannot inherit another position.
             report = chess.engine._parse_uci_info(line[5:], self.board, chess.engine.INFO_ALL)
-            if report.get("multipv", 1) == 1 and ("depth" in report or "score" in report):
-                self.evidence.clear()
-                self.evidence.update(report)
+            if report.get("multipv", 1) == 1:
+                if not self.collecting:
+                    self.ponder_info.update(report)
+                evidence = self.evidence if self.collecting else self.ponder_evidence
+                if evidence is not None and ("depth" in report or "score" in report):
+                    evidence.clear()
+                    evidence.update(report)
         super().line_received(line)
 
 
@@ -99,6 +116,7 @@ class engine_session:
                 result = await self.protocol.play(board, limit, game=game, info=chess.engine.INFO_ALL,
                                                   ponder=True, options=settings, opponent=opponent)
                 self.pondering = result.ponder is not None
+                result.info = dict(self.protocol.hit_info, **result.info)
                 result.info["_resignation"] = dict(evidence)
                 return result
             finally:
