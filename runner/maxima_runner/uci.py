@@ -18,6 +18,9 @@ class online_protocol(chess.engine.UciProtocol):
         self.ponder_info = {}
         self.ponder_evidence = {}
         self.hit_info = {}
+        self.on_info = None
+        self.search_started = None
+        self.search_seconds = None
 
     def send_line(self, line):
         if line.startswith("go ponder"):
@@ -26,6 +29,7 @@ class online_protocol(chess.engine.UciProtocol):
             self.ponder_evidence = {}
         elif line.startswith("go ") or line == "ponderhit":
             self.collecting = True
+            self.search_started = time.monotonic()
             self.hit_info = dict(self.ponder_info) if line == "ponderhit" else {}
             if self.evidence is not None:
                 self.evidence.clear()
@@ -34,11 +38,15 @@ class online_protocol(chess.engine.UciProtocol):
         super().send_line(line)
 
     def line_received(self, line):
+        if line.startswith("bestmove ") and self.collecting and self.search_started is not None:
+            self.search_seconds = time.monotonic() - self.search_started
         if line.startswith("info ") and (not self.collecting or self.evidence is not None):
             # Keep ponder reports: a solved search can return bestmove immediately
             # on ponderhit without repeating its evaluation. Fresh searches discard
             # this buffer, so a missed prediction cannot inherit another position.
             report = chess.engine._parse_uci_info(line[5:], self.board, chess.engine.INFO_ALL)
+            if self.collecting and self.on_info is not None:
+                self.on_info(report)
             if report.get("multipv", 1) == 1:
                 if not self.collecting:
                     self.ponder_info.update(report)
@@ -90,7 +98,7 @@ class engine_session:
             raise ValueError("unsupported board variant")
         return settings
 
-    async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None, ceiling=None):
+    async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None, ceiling=None, on_info=None):
         """Choose a move under game clocks; a new game token makes python-chess send ucinewgame.
 
         options are per-search UCI settings, applied only when the engine has them; None restores the
@@ -104,25 +112,39 @@ class engine_session:
             settings["UCI_AnalyseMode"] = False
 
         async def play_search():
-            started = time.monotonic()
+            self.protocol.search_seconds = None
             self.pondering = False
             evidence = {}
             self.protocol.evidence = evidence
             # play(ponder=True) starts go ponder after bestmove, and reuses the
             # search via ponderhit only for the same game, board and options.
             timer = None
+            stopped = False
+
+            def stop_once():
+                nonlocal stopped
+                if not stopped:
+                    stopped = True
+                    self.protocol.send_line("stop")
+
+            def observe(info):
+                if on_info is not None and on_info(info):
+                    stop_once()
+
+            self.protocol.on_info = observe
             if ceiling is not None:
-                timer = asyncio.get_running_loop().call_later(ceiling, self.protocol.send_line, "stop")
+                timer = asyncio.get_running_loop().call_later(ceiling, stop_once)
             try:
                 result = await self.protocol.play(board, limit, game=game, info=chess.engine.INFO_ALL,
                                                   ponder=True, options=settings, opponent=opponent)
                 self.pondering = result.ponder is not None
                 result.info = dict(self.protocol.hit_info, **result.info)
                 result.info["_resignation"] = dict(evidence)
-                result.info["_search_seconds"] = time.monotonic() - started
+                result.info["_search_seconds"] = self.protocol.search_seconds
                 return result
             finally:
                 self.protocol.evidence = None
+                self.protocol.on_info = None
                 if timer is not None:
                     timer.cancel()
 

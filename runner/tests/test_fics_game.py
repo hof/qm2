@@ -284,9 +284,9 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         opening = learning.opening_book([], opponent="John", group="humans", mood="parham")
         parts = {"book": 0.2, "fire": 0.1, "mood": 0.15, "opponent": 0.05, "global": 0.001}
         self.assertEqual(fics.book_whisper("Qh5", ("book", 0.5, parts, "mood"), opening),
-                         "Qh5 book: parham mood (base 40%, fire 20%, parham mood 30%, vs John 10%)")
+                         "Qh5 book: parham mood (50% selection; base 40%, fire 20%, parham mood 30%, vs John 10%)")
         self.assertEqual(fics.book_whisper("d3", ("book", 1.0, {"book": 1.0}, "book"), opening),
-                         "d3 book: base (base 100%)")
+                         "d3 book: base (100% selection; base 100%)")
         self.assertTrue(fics.book_whisper("f4", ("revenge", 0.5, parts, "opponent"), opening).startswith(
             "f4 book: revenge vs John ("))
         self.assertEqual(fics.book_whisper("Bd6", ("recalled", 19, 36.6), opening), "Bd6 recalled d19 37s")

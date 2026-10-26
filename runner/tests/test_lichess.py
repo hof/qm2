@@ -289,10 +289,10 @@ class command_line_tests(unittest.TestCase):
     def test_book_line_names_the_layers_by_share(self):
         names = {"group": "engines", "opponent": "Ferrite"}
         self.assertEqual(lichess.book_line("5...Nc6", ("book", 0.5, {"book": 0.475, "fire": 0.025}, "book"), names),
-                         "5...Nc6 from book: base 95%, fire 5%")
+                         "5...Nc6 from book (50% selection): base 95%, fire 5%")
         self.assertEqual(lichess.book_line("5...Nc6", ("learned", 1.0, {"global": 0.6, "opponent": 0.3,
                                                                           "group": 0.1}, "global"), names),
-                         "5...Nc6 learned: all games 60%, vs Ferrite 30%, vs bots 10%")
+                         "5...Nc6 learned (100% selection): all games 60%, vs Ferrite 30%, vs bots 10%")
 
 
 class rematch_tests(unittest.IsolatedAsyncioTestCase):

@@ -53,6 +53,21 @@ class shared_learning_tests(unittest.TestCase):
         path.write_text(str(game) + '\n\n')
         return self.store.sync(path, **options)
 
+    def test_legacy_index_rebuild_recovers_effort_without_duplicate_results(self):
+        game = game_for()
+        node = next(iter(game.mainline()))
+        node.comment += " [%nodes 12345] [%nps 1000] [%searchtime 12.345]"
+        self.store.add(game)
+        before = self.store.load()
+        snapshot = json.loads(self.store.snapshot.read_text())
+        snapshot["version"] = 1
+        self.store.snapshot.write_text(json.dumps(snapshot))
+        after = self.store.load()
+        self.assertEqual(len(after), 1)
+        self.assertEqual(after[0]["values"], before[0]["values"])
+        self.assertEqual(after[0]["analyses"][0][-2:], [12345, 1000])
+        self.assertEqual(after[0]["analyses"][0][5], 12345)
+
     def test_next_game_sees_shared_groups_and_existing_game_keeps_its_view(self):
         fics = learning.learner(self.root, server='freechess.org')
         lichess = learning.learner(self.root, server='lichess.org')

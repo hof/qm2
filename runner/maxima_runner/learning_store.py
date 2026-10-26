@@ -202,7 +202,7 @@ def merge_game(old, new, replace=False):
         def rank(node):
             nodes, _, seconds = effort(node)
             score = node.eval()
-            cp = score.relative.score(mate_score=2000) if score else 0
+            cp = score.pov(node.parent.board().turn).score(mate_score=2000) if score else 0
             return analysis_rank(node.eval_depth(), cp, score.is_mate() if score else False, seconds, nodes)
         if rank(after) > rank(before):
             before.comment = after.comment

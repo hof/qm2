@@ -1528,7 +1528,8 @@ other types ½; unregistered opponents (`Account "unregistered"`) count in the
 global layer only, at ½.
 
 **Soundness from analysis.** Each position keeps the strongest analysis per
-move (winning mate first, otherwise nodes, depth, then search duration). Depth differences do not veto other moves: existing evaluation and result feedback
+move (winning mate first, otherwise nodes, depth, then search duration).
+Depth differences do not veto other moves: existing evaluation and result feedback
 continues to weight every legal alternative. Selection probability is shown
 separately from the contributing layer percentages.
 
@@ -1592,9 +1593,25 @@ MaxDrone config). In each position:
    the line returns when the opponent comes back months later; a loss or a poor
    eval with it resets the streak.
 6. The move is drawn from the result. Out of book a learned move is played only
-   with real evidence (two games at 50% or more, or an analysis that took this
-   game's budget); otherwise an analysis longer than the per-move budget
-   (about remaining/30 + increment) is `recalled`, else the engine searches.
+   with real evidence (two games at 50% or more). Analysis alone starts a normal
+   search, retaining the one weighted saved candidate; a deliberate search choice
+   never redraws or switches to the record with most nodes.
+
+During that search, complete, unbounded principal-variation reports from the
+current turn supply increasing node/time samples spanning at least 100 ms.
+Background pondering is excluded. The highest measured NPS this turn is used,
+with optional JSON `learning_nps` as a conservative floor (default unknown).
+The clock-plus-increment estimate (remaining/30 + increment) is fixed at search
+start. Saved nodes must cover NPS × estimated move seconds ×
+(1 + `learning_margin`), with `learning_margin` defaulting to 0.40.
+Only agreement between the live PV's first move and the selected saved move can
+send one early `stop`; missing measurements, disagreement or fresh work beyond
+saved nodes keeps searching. Winning mate records bypass the effort threshold.
+Legality, repetition and draw-clock guards still apply. The final engine result
+is collected normally and always stands, including a different move. A shortened
+search carries recalled provenance but stores its actual fresh depth, nodes,
+reported NPS and measured duration. This is shared online learning only; native
+binary experience remains separate.
 
 The *search* column is the share of games that leave the book once, at a
 random ply, so the engine can bring in new moves (a per-move share would
@@ -1919,7 +1936,7 @@ Searched moves show depth, score (`#5` for mate), `TB` when tablebases were hit,
 time, the speed (`850Knps`, `1.2Mnps`), and the first six plies of the line in numbered SAN, starting with the move played. Book moves name the layer
 with the largest share (ties to the more specific layer), then the mix; `base` is book.bin.
 The console uses a shorter book summary on both FICS and Lichess, for example
-`-- 1. .. c5 experience (45%) 0.1s, 4:59 left`: only the selected source's
+`-- 1. .. c5 experience (45% selection; 100% layer) 0.1s, 4:59 left`: only the selected source's
 share is shown. Observer whispers and book chat retain the full mix.
 
 FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and stops

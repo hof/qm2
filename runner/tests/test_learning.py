@@ -267,6 +267,30 @@ class selection_tests(unittest.TestCase):
         self.assertGreater(moves[chess.Move.from_uci("e2e4")][0], 0)
         self.assertGreater(moves[chess.Move.from_uci("d2d4")][0], 0)
 
+    def test_analysis_only_selects_once_and_starts_search(self):
+        from unittest.mock import Mock
+        rows = [[start_key, move, depth, 40, 0, 60000, 0, nodes, 1000]
+                for move, depth, nodes in (("e2e4", 12, 2000), ("d2d4", 30, 90000))]
+        book = self.opening([record([], analyses=rows)], book_path=None)
+        book.search_ply = None
+        book.random.choices = Mock(return_value=[chess.Move.from_uci("e2e4")])
+        self.assertIsNone(book.choose(chess.Board(), 1000))
+        self.assertEqual(book.reuse[0].uci(), "e2e4")
+        self.assertEqual(book.random.choices.call_count, 1)
+        book.random.choices = Mock(return_value=[None])
+        self.assertIsNone(book.choose(chess.Board(), 1000))
+        self.assertIsNone(book.reuse)
+        self.assertEqual(book.random.choices.call_count, 1)
+
+    def test_retention_prefers_nodes_and_legacy_effort_is_unknown(self):
+        rows = [[start_key, "e2e4", 10, 40, 0, 100, 0, 2000, 1000],
+                [start_key, "e2e4", 30, 40, 0, 90000, 0, 1000, 1000]]
+        book = self.opening([record([], analyses=rows)], book_path=None)
+        self.assertEqual(book.analyses[start_key]["e2e4"][0], 10)
+        book = self.opening([record([], analyses=[rows[0][:7]])], book_path=None)
+        self.assertIsNone(book.analyses[start_key]["e2e4"][3])
+        self.assertIsNone(book.analyses[start_key]["e2e4"][5])
+
     def test_out_of_book_a_learned_move_needs_evidence(self):
         board = board_after("e2e4 e7e5 g1f3 b8c6")
         key = f"{chess.polyglot.zobrist_hash(board):016x}"

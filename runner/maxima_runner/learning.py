@@ -296,7 +296,7 @@ class opening_book:
     game's profile. style_books may carry the mood's book under "mood"."""
 
     def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
-                 variety=1.0, supersede_depth=16, random_source=None, contempt=None, style_books=None,
+                 variety=1.0, random_source=None, contempt=None, style_books=None,
                  rated=True, profiles=None, mood=None, server=None, variant="standard"):
         self.book_path = book_path
         self.mood = mood
@@ -318,10 +318,9 @@ class opening_book:
         self.draw_value = 0.5 if contempt is None else 0.5 + 0.45 * max(-1.0, min(1.0, contempt / 100))
         self.prior = prior
         self.variety = max(variety, 0.05)
-        self.supersede_depth = supersede_depth
         self.layers = ({}, {}, {})  # global, group, opponent: (key, move) -> [value sum, games]
         self.totals = ({}, {}, {})  # the same per position: key -> games
-        self.analyses = {}  # key -> {move: [depth, centipawns, mate, think_ms, halfmove clock]}
+        self.analyses = {}  # key -> {move: [depth, centipawns, mate, search_ms, halfmove clock, nodes, nps]}
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
         opponent = (opponent or "").lower()
@@ -516,9 +515,11 @@ class opening_book:
         """(move, reason) to play without searching, or None to let the engine search.
 
         why keeps the last decision for observers: ("left book",), ("book" | "learned" | "signature" |
-        "revenge", probability, parts, source), or ("recalled", depth, seconds). The source is the layer with
+        "revenge", probability, parts, source). Analysis-only choices populate reuse for live search.
+        The source is the layer with
         the largest share of the move; ties go to the more specific layer."""
         self.why = None
+        self.reuse = None
         if (learning_variant(board_variant(board)) != self.variant or board.ply() >= horizon_plies or board.halfmove_clock >= 90
                 or board.is_repetition(2)):
             return None
@@ -529,6 +530,15 @@ class opening_book:
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         analyses = self.analyses.get(key, {})
         moves, in_book, search = self.distribution(board, key, analyses)
+        if not moves and analyses:
+            # Analysis-only positions still select once using the learned-rate weighting.
+            candidates = [chess.Move.from_uci(text) for text in sorted(analyses)
+                          if board.is_legal(chess.Move.from_uci(text))]
+            if candidates:
+                weights = [learned_factor(self.sample(*self.rates(key, move.uci())[-1])) for move in candidates]
+                total = sum(weights)
+                moves = {move: (weight / total, {"global": weight / total})
+                         for move, weight in zip(candidates, weights)}
         if moves:
             ordered = sorted(moves, key=chess.Move.uci)
             move = self.random.choices(ordered + [None], [moves[move][0] for move in ordered] + [search])[0]
@@ -537,10 +547,9 @@ class opening_book:
                 return None
             rate, games = self.estimate(key, move.uci())
             analysis = analyses.get(move.uci())
-            # Out of book a learned move must have real evidence: several games scoring well, or an
-            # analysis that took at least this game's budget.
+            # Standalone learned-book eligibility remains separate from analysis reuse.
             revenge = self.revenge_move(board, key, moves)
-            if in_book or move == revenge or (games >= 2 and rate >= 0.5) or (analysis and (analysis[3] or 0) >= budget_ms):
+            if in_book or move == revenge or (games >= 2 and rate >= 0.5):
                 reason = self.describe(*moves[move])
                 kind = reason.split()[0]
                 if move == self.signature(key, moves):
@@ -553,13 +562,9 @@ class opening_book:
                 source = max(parts, key=lambda name: (round(parts[name], 6), layer_names.index(name)))
                 self.why = (kind,) + moves[move] + (source,)
                 return move, reason
-        if analyses:
-            text, saved = max(analyses.items(), key=lambda item: (item[1][3] or 0, item[1][0]))
-            depth, centipawns, mate, think_ms, clock = saved[:5]
-            move = chess.Move.from_uci(text)
-            if (think_ms or 0) >= budget_ms and clock == board.halfmove_clock and board.is_legal(move):
-                self.why = ("recalled", depth, think_ms / 1000)
-                return move, f"recalled d{depth} {think_ms / 1000:.1f}s"
+            if analysis and analysis[4] == board.halfmove_clock:
+                self.reuse = (move, analysis)
+
         return None
 
 
@@ -567,7 +572,9 @@ class learner:
     """MaxDrone's experience: digests kept in memory, a fresh opening_book per game."""
 
     def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0, style_books=None,
-                 profiles=None, mood="auto", moods_dir=None, server=None, variant="standard"):
+                 profiles=None, mood="auto", moods_dir=None, server=None, variant="standard",
+                 learning_nps=None, learning_margin=0.40):
+        self.learning_nps, self.learning_margin = learning_nps, learning_margin
         self.experience_dir = Path(experience_dir)
         self.variant = learning_variant(variant)
         self.mood, self.moods_dir = mood, moods_dir
@@ -592,9 +599,11 @@ class learner:
         mood, books = self.today_mood(), dict(self.style_books or {})
         if mood:
             books["mood"] = Path(self.moods_dir) / f"{mood}.bin"
-        return opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety,
+        book = opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety,
                             contempt=contempt, style_books=books, rated=rated, profiles=self.profiles, mood=mood,
                             server=self.server, variant=self.variant)
+        book.learning_nps, book.learning_margin = self.learning_nps, self.learning_margin
+        return book
 
     def add(self, game):
         record = self.store.add(game)
