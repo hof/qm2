@@ -1185,6 +1185,12 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 
 ## 8. Roadmap
 
+- Extend online variant support on FICS and Lichess: Chess960, antichess/suicide,
+  Three-check, and an assessment of atomic chess. Establish each server's exact
+  rules, engine/evaluator support, protocol encoding, state/hash invariants and
+  lifecycle checks before accepting its games. Keep incompatible rules or extra
+  state out of orthodox learning; preserve royal losers as its own ruleset.
+
 - Single-thread speed: TT prefetch and huge pages, TT-only eval caching, a
   shared dense-layer reduction and sort-once move picking gave about 20% more
   nodes per cycle (2026-10-24). Remaining candidates, measured before any
@@ -1914,10 +1920,17 @@ Supported orthodox-rule wild challenges are `wild/2`, `wild/3`, `wild/4`,
 repeated `--seek` flags; `seeks_at_once` samples that combined standard/wild pool.
 For example, `"seeks": ["3 0 w2", "3 0 w3", "3 0 w4", "3 0 w5", "3 0 w8", "3 0 w8a"]`
 with `"seeks_at_once": 2` posts two random supported wild advertisements. The initial style12 position must pass legal-board validation.
-Each wild variant has its own learned book, experience and PGNs under
-`experience/wild/<style>` (and the corresponding PGN directory). Optional
-Polyglot books live at `experience/wild/<style>/book.bin`; standard books are
-not mixed in. Rebuild/sync accept `--variant wild/2` and the other supported styles. Wild 0/1 and Fischer Random require different castling support
+Standard chess and supported numbered wild variants use one orthodox learning
+store (`experience`) and the same books, on both FICS and Lichess. Position keys
+retain side to move, castling rights and effective en-passant rights; moves are
+checked for legality before use. PGNs retain their variant and starting FEN;
+FICS also keeps the per-variant live PGN directories. A shared rebuild imports
+older `experience/wild/<style>/games` archives without deleting them, preserving
+identities and avoiding duplicate learning. Rebuild/sync accept numbered-wild
+`--variant` names as aliases for the shared orthodox store. Royal losers keeps
+its separate `experience/losers` store. Chess960 remains unsupported and declined
+by both online clients because its castling rules and encoding need explicit
+support. Wild 0/1 and Fischer Random require different castling support
 and remain declined, as do suicide, atomic, crazyhouse, and bughouse.
 
 FICS computer accounts must keep the owner, machine, and engine in their finger

@@ -504,7 +504,6 @@ class engine_player:
         self.our_color = None
         self.learner = learner
         self.losers_learner = losers_learner
-        self.wild_learners = {}
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.opening = None
         self.from_book = self.draw_offered = False
@@ -553,15 +552,6 @@ class engine_player:
 
     @property
     def game_learner(self):
-        if self.is_wild:
-            kind = self.created["type"].lower()
-            if self.learner is not None and kind not in self.wild_learners:
-                # Each ruleset owns its PGNs, experience and optional Polyglot book.
-                root = self.learner.experience_dir / kind
-                self.wild_learners[kind] = learning.learner(
-                    root, self.game_pgn_dir, root / "book.bin", self.learner.variety,
-                    mood="off", server=self.site, variant=kind)
-            return self.wild_learners.get(kind)
         return self.losers_learner if self.is_losers else self.learner
 
     @property
@@ -1049,7 +1039,7 @@ class engine_player:
                                                  self.opponent_group(), game_type, self.contempt, rated)
         try:
             search_options = {"DrawContempt": self.contempt}
-            if self.is_losers or self.is_wild:
+            if self.is_losers:
                 search_options["OwnBook"] = False
             ceiling = None if self.is_losers else self.loss.ceiling(
                 (False if self.created.get("rated") == "unrated" else None) if self.created else None)

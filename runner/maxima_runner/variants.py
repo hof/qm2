@@ -68,6 +68,13 @@ def board_variant(board):
     raise ValueError("unsupported board variant")
 
 
+def learning_variant(variant):
+    """Rules-compatible positions share experience; PGN variant labels stay intact."""
+    if variant not in experience_variants:
+        raise ValueError("unsupported experience variant")
+    return "standard" if variant in wild_boards else variant
+
+
 class variant_headers(chess.pgn.Headers):
     def variant(self):
         if self.get("Variant") == "Royal losers":

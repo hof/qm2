@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 import chess
 import chess.pgn
 
-from .variants import board_variant, read_pgn, experience_variants
+from .variants import board_variant, read_pgn, learning_variant, wild_boards
 
 
 @contextmanager
@@ -75,7 +75,7 @@ def prepare_game(game, source=None, server=None, players=(), results_only=False,
     actual_variant = board_variant(game.board())
     if game.errors or not game.board().is_valid():
         raise ValueError('shared learning accepts valid supported-variant PGNs only')
-    if variant is not None and actual_variant != variant:
+    if variant is not None and learning_variant(actual_variant) != learning_variant(variant):
         raise ValueError(f'{actual_variant} PGN cannot enter {variant} experience')
     if game.next() is None:
         raise ValueError('PGN has no moves')
@@ -237,9 +237,7 @@ def find_archived(game, directory):
 
 class shared_store:
     def __init__(self, root, variant='standard'):
-        if variant not in experience_variants:
-            raise ValueError('unsupported experience variant')
-        self.variant = variant
+        self.variant = learning_variant(variant)
         self.root = Path(root)
         self.snapshot = self.root / 'index' / 'shared.json'
         self.lock = self.root / '.learning.lock'
@@ -307,8 +305,12 @@ class shared_store:
         recover_all(self.games)
         # Include both old server layouts on first use; never delete the original PGNs.
         paths = set(self.games.rglob('*.pgn')) if self.games.exists() else set()
-        for legacy in (self.root / 'lichess' / 'games', self.root / 'fics' / 'games'):
+        legacy_roots = [self.root / 'lichess' / 'games', self.root / 'fics' / 'games']
+        if self.variant == 'standard':
+            legacy_roots.extend(self.root / kind / 'games' for kind in wild_boards)
+        for legacy in legacy_roots:
             if legacy.exists():
+                recover_all(legacy)
                 paths.update(legacy.rglob('*.pgn'))
         games = []
         for path in sorted(paths):

@@ -12,7 +12,7 @@ import chess.pgn
 import chess.polyglot
 
 from . import learning_store
-from .variants import board_variant, experience_variants
+from .variants import board_variant, experience_variants, learning_variant
 
 horizon_plies = 40
 # A game teaches only when it lasted 10 moves and Maxima searched enough moves to judge them: early
@@ -297,7 +297,7 @@ class opening_book:
                  rated=True, profiles=None, mood=None, server=None, variant="standard"):
         self.book_path = book_path
         self.mood = mood
-        self.variant = variant
+        self.variant = learning_variant(variant)
         self.random = random_source or random.Random()
         self.weights = game_profile(contempt, rated, profiles)
         self.paths = {"book": book_path}
@@ -323,7 +323,7 @@ class opening_book:
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
         opponent = (opponent or "").lower()
         for record in records:
-            if record.get("variant", "standard") != variant:
+            if learning_variant(record.get("variant", "standard")) != self.variant:
                 continue
             weight = 1.0 if record["type"] == game_type else 0.5
             registered = record["group"] is not None
@@ -518,7 +518,7 @@ class opening_book:
         "revenge", probability, parts, source), or ("recalled", depth, seconds). The source is the layer with
         the largest share of the move; ties go to the more specific layer."""
         self.why = None
-        if (board_variant(board) != self.variant or board.ply() >= horizon_plies or board.halfmove_clock >= 90
+        if (learning_variant(board_variant(board)) != self.variant or board.ply() >= horizon_plies or board.halfmove_clock >= 90
                 or board.is_repetition(2)):
             return None
         if self.search_ply is not None and board.ply() >= self.search_ply:
@@ -568,7 +568,7 @@ class learner:
     def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0, style_books=None,
                  profiles=None, mood="auto", moods_dir=None, server=None, variant="standard"):
         self.experience_dir = Path(experience_dir)
-        self.variant = variant
+        self.variant = learning_variant(variant)
         self.mood, self.moods_dir = mood, moods_dir
         self.style_books = style_books
         self.profiles = profiles
@@ -612,10 +612,10 @@ def main():
     parser.add_argument("--experience-dir", default=str(data_root() / "experience"),
                         help="rebuild shared index and player stats from all archived PGNs (default: experience)")
     parser.add_argument("--variant", choices=experience_variants, default="standard",
-                        help="nonstandard variants use their own subdirectory of the experience root")
+                        help="standard and numbered wild variants share the root; losers uses its subdirectory")
     options = parser.parse_args()
     root = Path(options.experience_dir)
-    summary = build(root / options.variant if options.variant != "standard" else root, variant=options.variant)
+    summary = build(root / "losers" if learning_variant(options.variant) == "losers" else root, variant=options.variant)
     print(f"{summary['games']} archived games, {summary['learned']} learned, {summary['evaluated']} with Maxima's evals, "
           f"{summary['players']} opponents")
     return 0
@@ -635,9 +635,9 @@ def sync_main():
                         help="opponent group when uploading PGNs without account/type metadata")
     parser.add_argument("--replace", action="store_true", help="explicitly correct an archived final result")
     parser.add_argument("--variant", choices=experience_variants, default="standard",
-                        help="nonstandard variants use their own subdirectory of the destination")
+                        help="standard and numbered wild variants share the destination; losers uses its subdirectory")
     options = parser.parse_args()
-    root = options.destination / options.variant if options.variant != "standard" else options.destination
+    root = options.destination / "losers" if learning_variant(options.variant) == "losers" else options.destination
     summary = learning_store.shared_store(root, options.variant).sync(options.source, options.player,
                                                                     options.source_name, options.replace, options.group)
     print(f"{summary['read']} read, {summary['added']} new, {summary['games']} archived, {summary['learned']} learnable")
