@@ -32,9 +32,17 @@ namespace magic {
      * @Credits Pradyumna Kannan
      */
     
+#ifdef __BMI2__
+    // PEXT indices are dense: allocate only the occupancy subsets of each square.
+    alignas(64) U64 bishop_attack_data[5248];
+    alignas(64) U64 rook_attack_data[102400];
+    U64 * bishop_attack_table[64];
+    U64 * rook_attack_table[64];
+#else
     U64 _MAGIC_MOVES_BISHOP_DB[64][1 << 9];
 
     U64 _MAGIC_MOVES_ROOK_DB[64][1 << 12];
+#endif
 
     U64 _init_occ(const int* squares, const int num_squares, const U64 linocc) {
         int i;
@@ -135,8 +143,13 @@ namespace magic {
 
     //used so that the original indices can be left as const so that the compiler can optimize better
 
+#ifdef __BMI2__
+#define _BISHOP_MAGIC_NOMASK2(square, occupancy) bishop_attack_table[square][_pext_u64(occupancy, _MAGIC_MOVES_BISHOP_MASK[square])]
+#define _ROOK_MAGIC_NOMASK2(square, occupancy) rook_attack_table[square][_pext_u64(occupancy, _MAGIC_MOVES_ROOK_MASK[square])]
+#else
 #define _BISHOP_MAGIC_NOMASK2(square, occupancy) _MAGIC_MOVES_BISHOP_DB[square][((occupancy)*_MAGIC_MOVES_BISHOP_MAGICS[square])>>_MINIMAL_B_BITS_SHIFT(square)]
 #define _ROOK_MAGIC_NOMASK2(square, occupancy) _MAGIC_MOVES_ROOK_DB[square][((occupancy)*_MAGIC_MOVES_ROOK_MAGICS[square])>>_MINIMAL_R_BITS_SHIFT(square)]
+#endif
 
     /**
      * Initialize Magic Moves
@@ -144,6 +157,10 @@ namespace magic {
      */
     void init(void) {
         int i;
+#ifdef __BMI2__
+        U64 * bishop_next = bishop_attack_data;
+        U64 * rook_next = rook_attack_data;
+#endif
 
         const int _BITPOS64_DB[64] = {
             63, 0, 58, 1, 59, 47, 53, 2,
@@ -165,6 +182,10 @@ namespace magic {
                 squares[numsquares++] = _BITPOS64_DB[(bit * C64(0x07EDD5E59A4E28C2)) >> 58];
                 temp ^= bit;
             }
+#ifdef __BMI2__
+            bishop_attack_table[i] = bishop_next;
+            bishop_next += 1U << numsquares;
+#endif
             for (temp = 0; temp < (((U64) (1)) << numsquares); temp++) {
                 U64 tempocc = _init_occ(squares, numsquares, temp);
                 _BISHOP_MAGIC_NOMASK2(i, tempocc) = _init_bishop_moves(i, tempocc);
@@ -180,10 +201,18 @@ namespace magic {
                 squares[numsquares++] = _BITPOS64_DB[(bit * C64(0x07EDD5E59A4E28C2)) >> 58];
                 temp ^= bit;
             }
+#ifdef __BMI2__
+            rook_attack_table[i] = rook_next;
+            rook_next += 1U << numsquares;
+#endif
             for (temp = 0; temp < (((U64) (1)) << numsquares); temp++) {
                 U64 tempocc = _init_occ(squares, numsquares, temp);
                 _ROOK_MAGIC_NOMASK2(i, tempocc) = _init_rook_moves(i, tempocc);
             }
         }
+#ifdef __BMI2__
+        assert(bishop_next == bishop_attack_data + 5248);
+        assert(rook_next == rook_attack_data + 102400);
+#endif
     }
 }

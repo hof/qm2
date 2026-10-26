@@ -471,6 +471,10 @@ Release builds retain `-O3 -DNDEBUG -march=native`; Debug builds retain assertio
 and debug symbols. Fathom is compiled separately as C11; a C compiler is also required.
 Native CPU tuning means the binary targets the build machine.
 
+BMI2 builds use PEXT to index compact rook and bishop attack tables (about
+0.82 MiB instead of 2.25 MiB). Other builds retain multiplication-based magic
+lookups. Both backends return the same attacks and preserve move order.
+
 With those tools on your PATH:
 
 ```bash

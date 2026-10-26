@@ -87,6 +87,10 @@ if(maxima_nnue_test_network)
     add_test(NAME test_nnue_reference COMMAND test_nnue_reference "${maxima_nnue_test_network}")
 endif()
 
+add_executable(test_sliding_attacks test_sliding_attacks.cpp)
+target_link_libraries(test_sliding_attacks MAX2SRC)
+add_test(NAME test_sliding_attacks COMMAND test_sliding_attacks)
+
 add_executable(test_move_picker test_move_picker.cpp)
 target_link_libraries(test_move_picker MAX2SRC)
 add_test(NAME test_move_picker COMMAND test_move_picker)

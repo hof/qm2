@@ -28,6 +28,9 @@
 #define _bbmovesh
 
 #include "bits.h"
+#ifdef __BMI2__
+#include <immintrin.h>
+#endif
 
 const U64 KING_MOVES[64] = {
     C64(0x0000000000000302), C64(0x0000000000000705), C64(0x0000000000000E0A), C64(0x0000000000001C14),
@@ -309,8 +312,13 @@ namespace magic {
 #define _MINIMAL_B_BITS_SHIFT(square) 55
 #define _MINIMAL_R_BITS_SHIFT(square) 52
 
+#ifdef __BMI2__
+    extern U64 * bishop_attack_table[64];
+    extern U64 * rook_attack_table[64];
+#else
     extern U64 _MAGIC_MOVES_BISHOP_DB[64][1 << 9];
     extern U64 _MAGIC_MOVES_ROOK_DB[64][1 << 12];
+#endif
 
     /**
      * Return Bishop Moves given a square and board occupancy
@@ -319,7 +327,11 @@ namespace magic {
      * @return bitboard populated with bishop moves
      */
     inline U64 bishop_moves(const unsigned int sq, const U64 occ) {
+#ifdef __BMI2__
+        return bishop_attack_table[sq][_pext_u64(occ, _MAGIC_MOVES_BISHOP_MASK[sq])];
+#else
         return _MAGIC_MOVES_BISHOP_DB[sq][(((occ) & _MAGIC_MOVES_BISHOP_MASK[sq]) * _MAGIC_MOVES_BISHOP_MAGICS[sq]) >> _MINIMAL_B_BITS_SHIFT(sq)];
+#endif
     }
 
     /**
@@ -329,7 +341,11 @@ namespace magic {
      * @return bitboard populated with rook moves
      */
     inline U64 rook_moves(const unsigned int sq, const U64 occ) {
+#ifdef __BMI2__
+        return rook_attack_table[sq][_pext_u64(occ, _MAGIC_MOVES_ROOK_MASK[sq])];
+#else
         return _MAGIC_MOVES_ROOK_DB[sq][(((occ) & _MAGIC_MOVES_ROOK_MASK[sq]) * _MAGIC_MOVES_ROOK_MAGICS[sq]) >> _MINIMAL_R_BITS_SHIFT(sq)];
+#endif
     }
 
     /**
