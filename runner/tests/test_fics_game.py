@@ -289,7 +289,6 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
                          "d3 book: base (100% selection; base 100%)")
         self.assertTrue(fics.book_whisper("f4", ("revenge", 0.5, parts, "opponent"), opening).startswith(
             "f4 book: revenge vs John ("))
-        self.assertEqual(fics.book_whisper("Bd6", ("recalled", 19, 36.6), opening), "Bd6 recalled d19 37s")
         self.assertEqual([fics.speed(nps) for nps in (850, 512_345, 1_234_567)], ["850nps", "512Knps", "1.2Mnps"])
         info = {"depth": 18, "score": chess.engine.PovScore(chess.engine.Mate(5), chess.BLACK), "tbhits": 3}
         self.assertEqual(fics.search_whisper(info, chess.BLACK, "21...Qd5+ 22. Qd6", "out of book"),

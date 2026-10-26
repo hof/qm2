@@ -174,8 +174,6 @@ def annotate_search(node, board, info):
         if info.get(key) is not None:
             value = f"{info[key]:.9f}" if name == "searchtime" else str(info[key])
             extras.append(f"[%{name} {value}]")
-    if info.get("_experience"):
-        extras.append(info["_experience"])
     node.comment = " ".join([node.comment] + extras)
 
 

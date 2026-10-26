@@ -20,7 +20,6 @@ from .fics import book_whisper, chess_titles, clock_text, draw_contempt, layer_p
     restart_status, style_books
 from .move_choice import describe, search_summary, variation
 from .project import data_root, engine_path, env_value
-from .search_effort import validate_setting
 from .uci import open_engine
 
 server_url = "https://lichess.org"
@@ -54,7 +53,7 @@ default_settings = {
     "resignation": resignation.validate_settings({}),
     "shutdown_grace": 15,
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
-    "pgn_dir": None, "learning": True, "learning_nps": None, "learning_margin": 0.40, "variety": 1.0, "contempt_window": 100, "layer_profiles": {},
+    "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
     "challenge_idle": 30, "challenge_window": 300,
 }
@@ -699,7 +698,7 @@ class lichess_game:
             move, info, kind = await move_choice.choose_move(
                 bot.session, board, limit, opening=self.opening,
                 ceiling=self.loss.ceiling(self.full.get("rated")),
-                budget_ms=learning.per_move_budget_ms(clock, increment), tablebase=bot.tablebase, game=(self.id, self.generation),
+                tablebase=bot.tablebase, game=(self.id, self.generation),
                 opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options={"DrawContempt": self.contempt})
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
             bot.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
@@ -958,13 +957,9 @@ def load_settings(path):
              "learning": bool, "variety": (int, float), "contempt_window": int, "layer_profiles": dict,
              "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
              "challenge_idle": int, "challenge_window": int}
-    types["learning_nps"] = (int, float)
-    types["learning_margin"] = (int, float)
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     for key, value in loaded.items():
-        if key in ("learning_nps", "learning_margin"):
-            value = validate_setting(key, value)
         if key == "shutdown_grace":
             value = online_shutdown.grace_seconds(value)
         if key == "resignation":
@@ -1046,8 +1041,7 @@ def run(options, parser):
         if configured["learning"]:
             learner = learning.learner(data_root() / "experience", pgn_dir, data_root() / "book.bin", configured["variety"],
                                        style_books(configured["style_books"]), configured["layer_profiles"] or None,
-                                       configured["mood"], data_root() / "moods", server=options.server,
-                                       learning_nps=configured["learning_nps"], learning_margin=configured["learning_margin"])
+                                       configured["mood"], data_root() / "moods", server=options.server)
             show(f"-- experience: {len(learner.records)} games")
         events = connectors.game_events() if feed_address or configured["pgn_post"] else None
         api = lichess_api(token, options.server, show)

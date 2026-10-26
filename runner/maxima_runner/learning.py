@@ -12,7 +12,7 @@ import chess.pgn
 import chess.polyglot
 
 from . import learning_store
-from .search_effort import effort, analysis_rank
+from .search_effort import effort
 from .variants import board_variant, experience_variants, learning_variant
 
 horizon_plies = 40
@@ -285,11 +285,6 @@ def learned_factor(rate):
     return 0.1 + 0.9 * (2 * rate) ** 4
 
 
-def per_move_budget_ms(clock_seconds, increment_seconds):
-    """Roughly what the engine spends on a move: a thirtieth of the clock plus the increment."""
-    return max(0.0, clock_seconds / 30 + increment_seconds) * 1000
-
-
 class opening_book:
     """One game's multi-layer book (MAXIMA.md 9.7): book.bin, the style books fire, draw, and experiment,
     the week's mood, and the learned layers global, group, and opponent, each with a percentage from the
@@ -320,7 +315,6 @@ class opening_book:
         self.variety = max(variety, 0.05)
         self.layers = ({}, {}, {})  # global, group, opponent: (key, move) -> [value sum, games]
         self.totals = ({}, {}, {})  # the same per position: key -> games
-        self.analyses = {}  # key -> {move: [depth, centipawns, mate, search_ms, halfmove clock, nodes, nps]}
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
         opponent = (opponent or "").lower()
@@ -350,16 +344,6 @@ class opening_book:
                     entry[0] += layer_weight * value
                     entry[1] += layer_weight
                     self.totals[layer][key] = self.totals[layer].get(key, 0.0) + layer_weight
-            for saved in record["analyses"]:
-                key, move, depth, centipawns, mate, think_ms, clock = saved[:7]
-                nodes, nps = saved[7:9] if len(saved) >= 9 else (None, None)
-                if len(saved) < 9:
-                    think_ms = None  # legacy field was server elapsed time
-                moves = self.analyses.setdefault(key, {})
-                known = moves.get(move)
-                rank = analysis_rank(depth, centipawns, mate, think_ms, nodes)
-                if known is None or rank > analysis_rank(known[0], known[1], known[2], known[3], known[5]):
-                    moves[move] = [depth, centipawns, mate, think_ms, clock, nodes, nps]
 
     def track_revenge(self, record):
         """A loss gives us the opponent's line for their colour; a win with that colour serves the revenge."""
@@ -417,7 +401,7 @@ class opening_book:
         strength = (games + self.prior) / self.variety
         return self.random.betavariate(max(rate * strength, 1e-3), max((1 - rate) * strength, 1e-3))
 
-    def distribution(self, board, key, analyses):
+    def distribution(self, board, key):
         """Each move's probability and the share each layer gave it, whether any book knew the position,
         and the chance to search instead: book.bin is the know-all base, so where it has no move, its
         percentage goes to the engine rather than to the other layers."""
@@ -511,15 +495,14 @@ class opening_book:
                            if parts.get(name, 0) >= 0.005 * probability)
         return f"{label} {probability:.0%} selection: {detail}"
 
-    def choose(self, board, budget_ms):
+    def choose(self, board):
         """(move, reason) to play without searching, or None to let the engine search.
 
         why keeps the last decision for observers: ("left book",), ("book" | "learned" | "signature" |
-        "revenge", probability, parts, source). Analysis-only choices populate reuse for live search.
+        "revenge", probability, parts, source).
         The source is the layer with
         the largest share of the move; ties go to the more specific layer."""
         self.why = None
-        self.reuse = None
         if (learning_variant(board_variant(board)) != self.variant or board.ply() >= horizon_plies or board.halfmove_clock >= 90
                 or board.is_repetition(2)):
             return None
@@ -528,17 +511,7 @@ class opening_book:
             self.why = ("left book",)
             return None
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
-        analyses = self.analyses.get(key, {})
-        moves, in_book, search = self.distribution(board, key, analyses)
-        if not moves and analyses:
-            # Analysis-only positions still select once using the learned-rate weighting.
-            candidates = [chess.Move.from_uci(text) for text in sorted(analyses)
-                          if board.is_legal(chess.Move.from_uci(text))]
-            if candidates:
-                weights = [learned_factor(self.sample(*self.rates(key, move.uci())[-1])) for move in candidates]
-                total = sum(weights)
-                moves = {move: (weight / total, {"global": weight / total})
-                         for move, weight in zip(candidates, weights)}
+        moves, in_book, search = self.distribution(board, key)
         if moves:
             ordered = sorted(moves, key=chess.Move.uci)
             move = self.random.choices(ordered + [None], [moves[move][0] for move in ordered] + [search])[0]
@@ -546,8 +519,6 @@ class opening_book:
                 self.why = ("left book",)
                 return None
             rate, games = self.estimate(key, move.uci())
-            analysis = analyses.get(move.uci())
-            # Standalone learned-book eligibility remains separate from analysis reuse.
             revenge = self.revenge_move(board, key, moves)
             if in_book or move == revenge or (games >= 2 and rate >= 0.5):
                 reason = self.describe(*moves[move])
@@ -562,8 +533,6 @@ class opening_book:
                 source = max(parts, key=lambda name: (round(parts[name], 6), layer_names.index(name)))
                 self.why = (kind,) + moves[move] + (source,)
                 return move, reason
-            if analysis and analysis[4] == board.halfmove_clock:
-                self.reuse = (move, analysis)
 
         return None
 
@@ -572,9 +541,7 @@ class learner:
     """MaxDrone's experience: digests kept in memory, a fresh opening_book per game."""
 
     def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0, style_books=None,
-                 profiles=None, mood="auto", moods_dir=None, server=None, variant="standard",
-                 learning_nps=None, learning_margin=0.40):
-        self.learning_nps, self.learning_margin = learning_nps, learning_margin
+                 profiles=None, mood="auto", moods_dir=None, server=None, variant="standard"):
         self.experience_dir = Path(experience_dir)
         self.variant = learning_variant(variant)
         self.mood, self.moods_dir = mood, moods_dir
@@ -602,7 +569,6 @@ class learner:
         book = opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety,
                             contempt=contempt, style_books=books, rated=rated, profiles=self.profiles, mood=mood,
                             server=self.server, variant=self.variant)
-        book.learning_nps, book.learning_margin = self.learning_nps, self.learning_margin
         return book
 
     def add(self, game):

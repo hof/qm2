@@ -33,15 +33,15 @@ class wild_tests(unittest.TestCase):
         for kind in ('standard', *wild_boards):
             board_type = wild_boards.get(kind, chess.Board)
             choices = [learning.opening_book([record], variant=kind, random_source=random.Random(seed))
-                       .choose(board_type(start), 5000) for seed in range(20)]
+                       .choose(board_type(start)) for seed in range(20)]
             self.assertTrue(any(choice is not None for choice in choices), kind)
         # Castling rights distinguish positions, even when pieces occupy identical squares.
-        self.assertIsNone(learning.opening_book([record]).choose(chess.Board(), 5000))
+        self.assertIsNone(learning.opening_book([record]).choose(chess.Board()))
         losers = learning.opening_book([record], variant='losers')
         self.assertFalse(losers.layers[0])
-        self.assertIsNone(losers.choose(royal_losers_board(start), 5000))
+        self.assertIsNone(losers.choose(royal_losers_board(start)))
         with self.assertRaises(ValueError):
-            learning.opening_book([record]).choose(chess.Board(start, chess960=True), 5000)
+            learning.opening_book([record]).choose(chess.Board(start, chess960=True))
 
     def test_rebuild_imports_legacy_wild_games_once_and_preserves_labels(self):
         with tempfile.TemporaryDirectory() as directory:

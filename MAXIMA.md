@@ -1527,12 +1527,6 @@ each layer is shrunk toward the layer below (global toward 50%) with a prior of
 other types ½; unregistered opponents (`Account "unregistered"`) count in the
 global layer only, at ½.
 
-**Soundness from analysis.** Each position keeps the strongest analysis per
-move (winning mate first, otherwise nodes, depth, then search duration).
-Depth differences do not veto other moves: existing evaluation and result feedback
-continues to weight every legal alternative. Selection probability is shown
-separately from the contributing layer percentages.
-
 **Multi-layer book.** Each game gets its own multi-layer book: book.bin (the
 base: its moves are good in principle), the style books `fire` (sharp, e.g.
 gambits), `draw` (playing for the draw), and `experiment`, the week's `mood`, and the
@@ -1593,25 +1587,12 @@ MaxDrone config). In each position:
    the line returns when the opponent comes back months later; a loss or a poor
    eval with it resets the streak.
 6. The move is drawn from the result. Out of book a learned move is played only
-   with real evidence (two games at 50% or more). Analysis alone starts a normal
-   search, retaining the one weighted saved candidate; a deliberate search choice
-   never redraws or switches to the record with most nodes.
-
-During that search, complete, unbounded principal-variation reports from the
-current turn supply increasing node/time samples spanning at least 100 ms.
-Background pondering is excluded. The highest measured NPS this turn is used,
-with optional JSON `learning_nps` as a conservative floor (default unknown).
-The clock-plus-increment estimate (remaining/30 + increment) is fixed at search
-start. Saved nodes must cover NPS × estimated move seconds ×
-(1 + `learning_margin`), with `learning_margin` defaulting to 0.40.
-Only agreement between the live PV's first move and the selected saved move can
-send one early `stop`; missing measurements, disagreement or fresh work beyond
-saved nodes keeps searching. Winning mate records bypass the effort threshold.
-Legality, repetition and draw-clock guards still apply. The final engine result
-is collected normally and always stands, including a different move. A shortened
-search carries recalled provenance but stores its actual fresh depth, nodes,
-reported NPS and measured duration. This is shared online learning only; native
-binary experience remains separate.
+   with real evidence (two games at 50% or more). Saved analysis alone starts a normal
+   search. A deliberate search choice always runs an ordinary engine search.
+   Saved analysis metadata remains in historical records but neither selects
+   candidates nor shortens searches; opening books keep no analysis cache.
+   Search depth, nodes, NPS, duration and PV are still recorded in PGNs.
+   Retired `learning_nps` and `learning_margin` settings are rejected as unknown.
 
 The *search* column is the share of games that leave the book once, at a
 random ply, so the engine can bring in new moves (a per-move share would

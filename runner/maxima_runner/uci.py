@@ -19,7 +19,6 @@ class online_protocol(chess.engine.UciProtocol):
         self.ponder_evidence = {}
         self.hit_info = {}
         self.ponder_hit = False
-        self.on_info = None
         self.search_started = None
         self.search_seconds = None
 
@@ -48,8 +47,6 @@ class online_protocol(chess.engine.UciProtocol):
             # on ponderhit without repeating its evaluation. Fresh searches discard
             # this buffer, so a missed prediction cannot inherit another position.
             report = chess.engine._parse_uci_info(line[5:], self.board, chess.engine.INFO_ALL)
-            if self.collecting and self.on_info is not None:
-                self.on_info(report)
             if report.get("multipv", 1) == 1:
                 if not self.collecting:
                     self.ponder_info.update(report)
@@ -101,7 +98,7 @@ class engine_session:
             raise ValueError("unsupported board variant")
         return settings
 
-    async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None, ceiling=None, on_info=None):
+    async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None, ceiling=None):
         """Choose a move under game clocks; a new game token makes python-chess send ucinewgame.
 
         options are per-search UCI settings, applied only when the engine has them; None restores the
@@ -131,11 +128,6 @@ class engine_session:
                     stopped = True
                     self.protocol.send_line("stop")
 
-            def observe(info):
-                if on_info is not None and on_info(info):
-                    stop_once()
-
-            self.protocol.on_info = observe
             if ceiling is not None:
                 timer = asyncio.get_running_loop().call_later(ceiling, stop_once)
             try:
@@ -149,7 +141,6 @@ class engine_session:
                 return result
             finally:
                 self.protocol.evidence = None
-                self.protocol.on_info = None
                 if timer is not None:
                     timer.cancel()
 

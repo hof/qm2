@@ -259,8 +259,7 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(sum(line.startswith('go ponder ') for line in lines), 4)
                 self.assertEqual(lines[-1], 'isready')
 
-    async def test_restart_discards_ponder_hit_and_background_info_does_not_measure_nps(self):
-        from maxima_runner.search_effort import reuse_monitor
+    async def test_restart_discards_ponder_hit_and_preserves_background_info(self):
         with tempfile.TemporaryDirectory() as directory:
             script, log = Path(directory) / "engine.py", Path(directory) / "commands"
             fixture = ponder_engine.replace(
@@ -277,11 +276,9 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 board.push(first.move)
                 board.push(first.ponder)
                 await asyncio.sleep(.03)
-                monitor = reuse_monitor(next(iter(board.legal_moves)), [25, 30, False, 10000, 0, 100000, 1000], 1000)
-                hit = await session.play(board, limit, game=game, on_info=monitor)
+                hit = await session.play(board, limit, game=game)
                 self.assertTrue(hit.info["_ponder_hit"])
-                self.assertIsNone(monitor.first)
-                self.assertFalse(monitor.stopped)
+                self.assertEqual(hit.info["depth"], 23)
                 await asyncio.sleep(.03)
                 self.assertTrue(hit.info["_ponder_hit"])
                 self.assertTrue(session.protocol.ponder_hit)
@@ -290,7 +287,7 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(fresh.info["_ponder_hit"])
 
 
-reuse_engine = """
+timed_engine = """
 import sys, time
 for line in sys.stdin:
     command = line.strip()
@@ -312,55 +309,52 @@ for line in sys.stdin:
 """
 
 
-class reuse_protocol_tests(unittest.IsolatedAsyncioTestCase):
-    async def test_reuse_stops_once_and_keeps_final_move_and_fresh_effort(self):
+class search_lifecycle_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_saved_analysis_cannot_stop_search_before_ceiling(self):
         from maxima_runner.move_choice import choose_move
         from types import SimpleNamespace
         for final in ("e2e4", "d2d4"):
             with self.subTest(final=final), tempfile.TemporaryDirectory() as directory:
                 script, log = Path(directory) / "engine.py", Path(directory) / "commands"
-                script.write_text(reuse_engine.replace("FINAL", final))
+                script.write_text(timed_engine.replace("FINAL", final))
                 opening = SimpleNamespace(reuse=None)
-                def choose(board, budget):
+                def choose(board):
                     opening.reuse = (chess.Move.from_uci("e2e4"), [25, 30, False, 60000, 0, 1400, 1000])
                 opening.choose = choose
                 async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
                     move, info, kind = await choose_move(session, chess.Board(),
                         chess.engine.Limit(white_clock=30, black_clock=30),
-                        opening=opening, budget_ms=1000, ceiling=1)
+                        opening=opening, ceiling=.35)
                     self.assertEqual(move.uci(), final)
                     self.assertEqual(kind, "engine")
                     self.assertEqual(info["depth"], 12)
                     self.assertEqual(info["nodes"], 210)
                     self.assertEqual(info["time"], .210)
-                    self.assertGreaterEqual(info["_search_seconds"], .1)
-                    self.assertEqual("_experience" in info, final == "e2e4")
+                    self.assertGreaterEqual(info["_search_seconds"], .3)
+                    self.assertNotIn("_experience", info)
                     self.assertEqual(log.read_text().splitlines().count("stop"), 1)
 
-    async def test_reuse_cancellation_stops_protocol(self):
-        from maxima_runner.search_effort import reuse_monitor
+    async def test_cancellation_stops_protocol(self):
         with tempfile.TemporaryDirectory() as directory:
             script, log = Path(directory) / "engine.py", Path(directory) / "commands"
-            script.write_text(reuse_engine.replace("FINAL", "e2e4"))
+            script.write_text(timed_engine.replace("FINAL", "e2e4"))
             async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
-                monitor = reuse_monitor(chess.Move.from_uci("d2d4"), [25, 30, False, 60000, 0, 1400, 1000], 1000)
-                task = asyncio.create_task(session.play(chess.Board(), chess.engine.Limit(time=10), on_info=monitor))
+                task = asyncio.create_task(session.play(chess.Board(), chess.engine.Limit(time=10)))
                 await asyncio.sleep(.03)
                 task.cancel()
                 with self.assertRaises(asyncio.CancelledError):
                     await task
                 await session.protocol.ping()
-                self.assertFalse(monitor.stopped)
                 self.assertIn("stop", log.read_text().splitlines())
 
-    async def test_tablebase_cancels_reuse_search_and_keeps_tablebase_result(self):
+    async def test_tablebase_cancels_search_and_keeps_tablebase_result(self):
         from maxima_runner.move_choice import choose_move
         from types import SimpleNamespace
         with tempfile.TemporaryDirectory() as directory:
             script, log = Path(directory) / "engine.py", Path(directory) / "commands"
-            script.write_text(reuse_engine.replace("FINAL", "e2e4"))
+            script.write_text(timed_engine.replace("FINAL", "e2e4"))
             opening = SimpleNamespace(reuse=None)
-            def choose(board, budget):
+            def choose(board):
                 opening.reuse = (chess.Move.from_uci("e2e4"), [25, 30, False, 60000, 0, 1400, 1000])
             opening.choose = choose
             async def lookup():
@@ -369,7 +363,7 @@ class reuse_protocol_tests(unittest.IsolatedAsyncioTestCase):
             tablebase = SimpleNamespace(ask=lambda board: asyncio.create_task(lookup()))
             async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
                 move, info, kind = await choose_move(session, chess.Board(),
-                    chess.engine.Limit(time=10), opening=opening, budget_ms=1000, tablebase=tablebase)
+                    chess.engine.Limit(time=10), opening=opening, tablebase=tablebase)
                 self.assertEqual(move.uci(), "d2d4")
                 self.assertEqual(kind, "tablebase")
                 self.assertNotIn("_experience", info)

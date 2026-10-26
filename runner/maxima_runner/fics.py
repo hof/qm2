@@ -21,7 +21,6 @@ from .variants import royal_losers_board, wild_boards
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
 from .move_choice import describe, search_summary, speed, variation
 from .project import data_root, engine_path, project_root
-from .search_effort import validate_setting
 from .uci import open_engine
 
 timeseal_key = b"Timestamp (FICS) v1.0 - programmed by Henrik Gram."
@@ -290,7 +289,7 @@ default_settings = {
     "shutdown_grace": 15,
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
-    "owner": None, "notes": [], "pgn_dir": None, "learning": True, "learning_nps": None, "learning_margin": 0.40, "variety": 1.0,
+    "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
     "contempt_window": 100, "layer_profiles": {}, "style_books": {}, "first_move_wait": 60,
     "whisper": False, "mood": "auto", "live_feed": None, "pgn_post": None,
     "online_tablebase": True, "reseek_minutes": 10,
@@ -487,8 +486,6 @@ def book_whisper(san, why, opening, *, compact=False):
     fire 39%, surprise 10%, experience 12%)"."""
     kind = why[0]
     opponent = opening.names["opponent"]
-    if kind == "recalled":
-        return f"{san} recalled d{why[1]} {why[2]:.0f}s"
     probability, parts, source = why[1], why[2], why[3]
     words = {"book": "base", "fire": "fire", "draw": "draw", "experiment": "surprise", "global": "experience",
              "group": opening.names["group"], "opponent": f"vs {opponent}",
@@ -1113,7 +1110,7 @@ class engine_player:
             move, info, kind = await move_choice.choose_move(
                 self.session, board, limit, opening=self.opening,
                 ceiling=ceiling,
-                budget_ms=learning.per_move_budget_ms(clock, position.increment_seconds), tablebase=self.tablebase,
+                tablebase=self.tablebase,
                 game=self.token, opponent=self.opponent, timeout=max(clock, 1) + self.margin,
                 options=search_options)
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
@@ -1295,13 +1292,9 @@ def load_settings(path):
              "mood": str, "live_feed": str, "pgn_post": str,
              "online_tablebase": bool, "reseek_minutes": (int, float),
              "losers": bool, "losers_seeks": list, "losers_seeks_at_once": int}
-    types["learning_nps"] = (int, float)
-    types["learning_margin"] = (int, float)
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     for key, value in loaded.items():
-        if key in ("learning_nps", "learning_margin"):
-            value = validate_setting(key, value)
         if key == "shutdown_grace":
             value = online_shutdown.grace_seconds(value)
         if key == "resignation":
@@ -1477,14 +1470,12 @@ def run(options, parser):
                                        configured["variety"],
                                        style_books(configured["style_books"]),
                                        configured["layer_profiles"] or None, configured["mood"],
-                                       data_root() / "moods", server=options.host,
-                                       learning_nps=configured["learning_nps"], learning_margin=configured["learning_margin"])
+                                       data_root() / "moods", server=options.host)
             show(f"-- experience: {len(learner.records)} games")
             if policy.losers:
                 losers_games = pgn_dir.parent / "losers" / pgn_dir.name
                 losers_learner = learning.learner(data_root() / "experience" / "losers", losers_games,
-                                                 variety=configured["variety"], learning_nps=configured["learning_nps"],
-                                                 learning_margin=configured["learning_margin"], mood="off", server=options.host,
+                                                 variety=configured["variety"], mood="off", server=options.host,
                                                  variant="losers")
                 show(f"-- losers experience: {len(losers_learner.records)} games")
         events = connectors.game_events() if feed_address or configured["pgn_post"] else None

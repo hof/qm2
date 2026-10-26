@@ -3,8 +3,6 @@ tablebase is asked. Servers only send the move and explain it."""
 import asyncio
 import time
 
-from .search_effort import reuse_monitor
-
 import chess
 
 from . import online_tablebase
@@ -66,22 +64,16 @@ async def tablebase_first(lookup, search):
     return lookup.result()
 
 
-async def choose_move(session, board, limit, *, opening=None, budget_ms=None, tablebase=None, ceiling=None, learning_nps=None, learning_margin=0.40, **search):
+async def choose_move(session, board, limit, *, opening=None, tablebase=None, ceiling=None, **search):
     """(move, info, kind) with kind "book", "tablebase" or "engine"; book and tablebase info carry "source".
     Engine failures propagate; search are engine_session.play keywords."""
     if opening is not None:
-        found = opening.choose(board, budget_ms)
+        found = opening.choose(board)
         if found is not None:
             move, reason = found
             if hasattr(session, "stop_pondering"):
                 await session.stop_pondering()
             return move, {"source": reason}, "book"
-    monitor = None
-    if opening is not None and getattr(opening, "reuse", None) is not None:
-        monitor = reuse_monitor(*opening.reuse, budget_ms,
-                                getattr(opening, "learning_nps", learning_nps),
-                                getattr(opening, "learning_margin", learning_margin))
-        search["on_info"] = monitor
     lookup = tablebase.ask(board) if tablebase is not None else None
     if ceiling is not None:
         search["ceiling"] = ceiling
@@ -98,8 +90,6 @@ async def choose_move(session, board, limit, *, opening=None, budget_ms=None, ta
     except asyncio.CancelledError:
         searching.cancel()
         raise
-    if monitor is not None and monitor.stopped and result.move == monitor.move:
-        result.info["_experience"] = f"recalled d{monitor.saved[0]}"
     return result.move, result.info, "engine"
 
 
@@ -189,5 +179,4 @@ def describe_search(info, turn):
         value = relative.score(mate_score=100000)
         return "TB " + ("win" if value > 0 else "loss" if value < 0 else "draw")
     value = f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}"
-    return (f"d{depth} {value}" + (f" {speed(info['nps'])}" if info.get("nps") else "")
-            + (f" ({info['_experience']})" if info.get("_experience") else ""))
+    return f"d{depth} {value}" + (f" {speed(info['nps'])}" if info.get("nps") else "")
