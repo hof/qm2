@@ -1816,34 +1816,27 @@ from the pool (`--seek`, `--seeks-at-once`, `--no-seek`); guests always use `u`.
 After `reseek_minutes` (default 10, 0 off) without a game it draws again, so
 the other time controls get their turn and new players see the seeks announced.
 
-To advertise **two standard games and one royal-losers game** at each posting,
-use separate pools in the FICS JSON configuration:
+Standard chess, royal losers and supported wild variants share one `seeks` pool:
 
 ```json
 {
-  "seeks": ["3 0", "3 1", "5 0", "5 1"],
-  "seeks_at_once": 2,
-  "losers_seeks": ["3 0 u", "3 1 u", "5 0 u", "5 1 u"],
-  "losers_seeks_at_once": 1,
+  "seeks": ["3 0", "3 0 losers", "5 1 losers", "3 0 w2", "3 0 w3", "3 0 w4", "3 0 w5", "3 0 w8", "3 0 w8a"],
+  "seeks_at_once": 3,
   "accept": true,
-  "reseek_minutes": 10
+  "reseek_minutes": 2
 }
 ```
 
-The example is checked in as `docs/fics-mixed.json`; run
-`./maxima fics --config docs/fics-mixed.json --handle MaxDrone`.
-The losers pool enables
-royal-losers challenges and engine capability validation automatically; use
-`"losers": true` or `--losers` to accept them without posting a losers seek.
-Repeat `--losers-seek "3 0 u"` for CLI pool entries; use
-`--losers-seeks-at-once 1` for its independent count. Seek specifications contain
-time controls and ordinary seek options; the runner adds `losers` to that pool.
-For example, it posts `seek 3 0 u losers` alongside two standard seeks.
-The `u` makes the initial losers games unrated; omit it to use the account's
-rated setting. `--no-seek` suppresses both pools while retaining challenge support.
-The counts specify concurrent advertisements, not a guaranteed ratio of played
-games: opponents choose which advertisement to answer. A new random sample is
-posted after each game and after the idle reseek interval.
+`seeks_at_once` controls the total random sample: use 1, 2 or 3 advertisements,
+or 0 for none. A new sample is posted after each game and idle reseek interval;
+opponents choose which advertisement to answer. `losers` entries automatically
+enable royal-losers challenges and engine capability validation. Use `"losers": true`
+or `--losers` to accept them without advertising them. Repeat `--seek "3 0 losers"`
+or `--seek "3 0 w3"` on the CLI. Guests always advertise unrated games.
+The standard/losers example is checked in as `docs/fics-mixed.json`.
+Older `losers_seeks`, `losers_seeks_at_once`, and their CLI flags remain accepted
+for compatibility; a single mixed `seeks` pool is sufficient. `--no-seek`
+suppresses all advertisements while retaining challenge support.
 
 On login, enabled losers support sends `set f3 losers`, required for computer
 accounts by [FICS losers help](https://www.freechess.org/Help/HelpFiles/losers_chess.html).
@@ -1917,7 +1910,10 @@ configuration file. `owner` handles can also use the existing remote commands.
 
 Supported orthodox-rule wild challenges are `wild/2`, `wild/3`, `wild/4`,
 `wild/5`, `wild/8`, and `wild/8a`; operator pool entries use `w2`, `w3`, `w4`,
-`w5`, `w8`, `w8a`. The initial style12 position must pass legal-board validation.
+`w5`, `w8`, `w8a`. These entries also work directly in JSON `seeks` and
+repeated `--seek` flags; `seeks_at_once` samples that combined standard/wild pool.
+For example, `"seeks": ["3 0 w2", "3 0 w3", "3 0 w4", "3 0 w5", "3 0 w8", "3 0 w8a"]`
+with `"seeks_at_once": 2` posts two random supported wild advertisements. The initial style12 position must pass legal-board validation.
 Each wild variant has its own learned book, experience and PGNs under
 `experience/wild/<style>` (and the corresponding PGN directory). Optional
 Polyglot books live at `experience/wild/<style>/book.bin`; standard books are

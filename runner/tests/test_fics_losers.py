@@ -38,7 +38,9 @@ class losers_policy_tests(unittest.IsolatedAsyncioTestCase):
     def test_example_configuration_and_invalid_pool_settings(self):
         example = Path(__file__).resolve().parents[2] / 'docs' / 'fics-mixed.json'
         settings = fics.load_settings(example)
-        self.assertEqual((settings['seeks_at_once'], settings['losers_seeks_at_once']), (2, 1))
+        self.assertEqual(settings['seeks_at_once'], 3)
+        self.assertEqual(sum('losers' in spec.split() for spec in settings['seeks']), 4)
+        self.assertFalse(settings['losers_seeks'])
         for key, value in (('losers_seeks_at_once', -1), ('losers', None), ('losers_seeks', [17])):
             import json
             with tempfile.TemporaryDirectory() as directory:

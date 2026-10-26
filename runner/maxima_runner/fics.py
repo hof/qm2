@@ -347,7 +347,7 @@ class play_policy:
         self.seek_pool = None
         self.seeks = list(seeks)
         self.losers_seeks = list(losers_seeks)
-        self.losers = losers or bool(self.losers_seeks)
+        self.losers = losers or bool(self.losers_seeks) or any("losers" in spec.split()[2:] for spec in self.seeks)
         self.losers_seeks_at_once = losers_seeks_at_once
         self.seeks_at_once = seeks_at_once
         self.accept = accept
@@ -1319,7 +1319,8 @@ def run(options, parser):
              "losers": options.losers, "losers_seeks": options.losers_seek,
              "losers_seeks_at_once": options.losers_seeks_at_once}
     configured.update({key: value for key, value in flags.items() if value is not None})
-    configured["losers"] = configured["losers"] or bool(configured["losers_seeks"])
+    configured["losers"] = (configured["losers"] or bool(configured["losers_seeks"])
+                            or any("losers" in spec.split()[2:] for spec in configured["seeks"]))
     if options.no_seek:
         configured["seeks"] = []
         configured["losers_seeks"] = []
@@ -1356,12 +1357,16 @@ def run(options, parser):
     for name in ("seeks_at_once", "losers_seeks_at_once"):
         if type(configured[name]) is not int or configured[name] < 0:
             parser.error(f"{name} must be a nonnegative integer")
-    for spec in configured["seeks"] + configured["losers_seeks"]:
-        if not seek_pattern.fullmatch(spec):
-            parser.error(f"seek spec must look like '3 0' or '5 2 u', got {spec!r}")
-        if any(word in ("losers", "suicide", "wild", "atomic", "crazyhouse", "zh") or re.fullmatch(r"w\d+", word)
-               for word in spec.split()[2:]):
-            parser.error("seek pools contain time controls and seek options; use losers_seeks or --losers-seek for losers")
+    supported_wild = {kind.replace("wild/", "w") for kind in wild_types}
+    for pool in ("seeks", "losers_seeks"):
+        for spec in configured[pool]:
+            if not seek_pattern.fullmatch(spec):
+                parser.error(f"seek spec must look like '3 0', '5 2 u' or '3 0 w2', got {spec!r}")
+            variants = [word for word in spec.split()[2:]
+                        if word in ("losers", "suicide", "wild", "atomic", "crazyhouse", "zh", "bughouse", "fr", "chess960")
+                        or re.fullmatch(r"w\d+[a-z]*", word)]
+            if variants and (pool != "seeks" or len(variants) != 1 or variants[0] not in supported_wild | {"losers"}):
+                parser.error("seeks supports losers, w2, w3, w4, w5, w8 and w8a; use one variant per entry")
     policy = play_policy(configured["seeks"], configured["seeks_at_once"], configured["accept"],
                          configured["rematches"], configured["games"], guest=options.handle == "guest",
                          owner=configured["owner"], notes=configured["notes"],

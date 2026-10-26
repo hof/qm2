@@ -192,6 +192,43 @@ class settings_tests(unittest.TestCase):
         path.write_text(json.dumps(value))
         return str(path)
 
+    def test_wild_config_reaches_startup_and_posts_each_variant(self):
+        from maxima_runner.fics_cli import parser
+        specs = ['3 0 ' + kind for kind in ('w2', 'w3', 'w4', 'w5', 'w8', 'w8a', 'losers')]
+        arguments = parser()
+        options = arguments.parse_args(['--config', self.write({
+            'seeks': specs, 'seeks_at_once': 7})])
+        policies = []
+        factory = fics.play_policy
+
+        def capture(*args, **kwargs):
+            subject = factory(*args, **kwargs)
+            policies.append(subject)
+            return subject
+
+        def without_connecting(coroutine):
+            coroutine.close()
+            return 0
+
+        with patch.object(fics, 'play_policy', side_effect=capture), \
+                patch.object(fics.asyncio, 'run', side_effect=without_connecting), patch('builtins.print'):
+            self.assertEqual(fics.run(options, arguments), 0)
+        self.assertCountEqual(policies[0].seek_commands(),
+                              ['seek ' + spec + ' u' for spec in specs])
+        self.assertTrue(policies[0].losers)
+
+    def test_config_rejects_unsupported_or_combined_variants(self):
+        from maxima_runner.fics_cli import parser
+        for pool, spec in [('seeks', '3 0 ' + kind) for kind in
+                           ('w0', 'w1', 'w17', 'w8b', 'suicide', 'atomic', 'losers w2', 'w2 w3')] + [
+                               ('losers_seeks', '3 0 w2')]:
+            with self.subTest(pool=pool, spec=spec):
+                arguments = parser()
+                options = arguments.parse_args(['--config', self.write({pool: [spec]})])
+                with patch('sys.stderr'), self.assertRaises(SystemExit) as error:
+                    fics.run(options, arguments)
+                self.assertEqual(error.exception.code, 2)
+
     def test_merges_file_over_defaults(self):
         settings = fics.load_settings(self.write({"seeks": ["1 0"], "games": 5, "options": {"Hash": 256}}))
         self.assertEqual((settings["seeks"], settings["games"], settings["options"]), (["1 0"], 5, {"Hash": "256"}))

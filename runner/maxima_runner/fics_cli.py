@@ -43,7 +43,7 @@ def parser():
                         help="UCI option for the engine, repeatable (e.g. Hash=256)")
     parser.add_argument("--no-engine", action="store_true", help="connect without playing games")
     parser.add_argument("--seek", action="append", metavar="SPEC",
-                        help='seek pool entry, repeatable (e.g. "3 0"; default pool 3 0, 3 1, 5 0)')
+                        help='seek pool entry, repeatable (e.g. "3 0", "3 0 losers", "3 0 w3"; default pool 3 0, 3 1, 5 0)')
     parser.add_argument("--seeks-at-once", type=int, help="seeks posted at a time, drawn from the pool (default: 2)")
     parser.add_argument("--losers", action="store_true", default=None, help="also accept FICS royal-losers challenges")
     parser.add_argument("--losers-seek", action="append", metavar="SPEC",
