@@ -1819,6 +1819,8 @@ including any pool entries marked rated. Guest accounts have no finger notes.
 
 After login and after each game the client posts `seeks_at_once` random seeks
 from the pool (`--seek`, `--seeks-at-once`, `--no-seek`); guests always use `u`.
+The console prints each selected command, such as `-- posting seek 5 0 u`,
+before sending it, so server index confirmations can be read alongside the choices.
 After `reseek_minutes` (default 10, 0 off) without a game it draws again, so
 the other time controls get their turn and new players see the seeks announced.
 
@@ -1906,6 +1908,9 @@ opponent, unlike kibitz) in plain words:
 Searched moves show depth, score (`#5` for mate), `TB` when tablebases were hit, the
 time, the speed (`850Knps`, `1.2Mnps`), and the first six plies of the line in numbered SAN, starting with the move played. Book moves name the layer
 with the largest share (ties to the more specific layer), then the mix; `base` is book.bin.
+The console uses a shorter book summary on both FICS and Lichess, for example
+`-- 1. .. c5 experience (45%) 0.1s, 4:59 left`: only the selected source's
+share is shown. Observer whispers and book chat retain the full mix.
 
 FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and stops
 whispering. Owners configured in `owner` can steer it by tell without a key.
@@ -2197,7 +2202,7 @@ lists them. `quit` (or `kill -USR1 <pid>`) stops after the game; a second `quit`
 leaves at once. Every `maxima` command shows the Maxima header in a terminal.
 The console logs each move with its number and the mover's clock: the
 opponent's moves, and the bot's with eval, depth, time and PV, or the book
-layers behind a book move.
+source and its percentage for a book move.
 
 Lichess shares the PGN archive and global/group learning with FICS (9.7);
 individual opponents and rating statistics remain server-specific. The learner maps Lichess speeds to its game types (bullet to lightning,

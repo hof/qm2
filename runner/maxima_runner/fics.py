@@ -481,7 +481,7 @@ def clock_text(seconds):
     return f"{minutes}:{rest:02d}"
 
 
-def book_whisper(san, why, opening):
+def book_whisper(san, why, opening, *, compact=False):
     """A book move for observers: the layer that picked it, then the mix, e.g. "Nc6 book: fire (base 39%,
     fire 39%, surprise 10%, experience 12%)"."""
     kind = why[0]
@@ -495,6 +495,8 @@ def book_whisper(san, why, opening):
     mix = ", ".join(f"{words[name]} {parts[name] / probability:.0%}" for name in learning.layer_names
                     if parts.get(name, 0) >= 0.05 * probability)
     lead = {"signature": f"signature vs {opponent}", "revenge": f"revenge vs {opponent}"}.get(kind, words[source])
+    if compact:
+        return f"{san.replace('...', '. .. ', 1)} {lead} ({parts[source] / probability:.0%})"
     return f"{san} book: {lead} ({mix})"
 
 
@@ -769,6 +771,7 @@ class engine_player:
             return
         await self.send("unseek")
         for command in self.policy.seek_commands():
+            self.on_line(f"-- posting {command}")
             await self.send(command)
 
     async def reseek_when_idle(self):
@@ -1142,7 +1145,7 @@ class engine_player:
         explaining = self.whispering or self.followers
         if kind != "engine":
             book = kind == "book" and self.opening is not None and self.opening.why
-            source = book_whisper(numbered, self.opening.why, self.opening) if book else f"{numbered} {info['source']}"
+            source = book_whisper(numbered, self.opening.why, self.opening, compact=True) if book else f"{numbered} {info['source']}"
             self.on_line(f"-- {source} {seconds:.1f}s{left}")
             if explaining and kind == "book" and self.opening.why:
                 await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))

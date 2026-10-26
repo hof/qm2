@@ -16,7 +16,7 @@ import chess
 import chess.engine
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
-from .fics import chess_titles, clock_text, draw_contempt, layer_profiles, learning_report, read_commands, \
+from .fics import book_whisper, chess_titles, clock_text, draw_contempt, layer_profiles, learning_report, read_commands, \
     restart_status, style_books
 from .move_choice import describe, search_summary, variation
 from .project import data_root, engine_path, env_value
@@ -717,7 +717,7 @@ class lichess_game:
             bot.on_line(f"-- {numbered} {describe(info, board.turn)} {seconds:.1f}s{left}" + (f" pv {pv}" if pv else ""))
         else:
             self.last_eval = f"{board.san(move)} {info['source']}"
-            source = self.last_book if why and self.left_book is None else f"{numbered} {info['source']}"
+            source = book_whisper(numbered, why, self.opening, compact=True) if why else f"{numbered} {info['source']}"
             bot.on_line(f"-- {source} {seconds:.1f}s{left}")
 
     def stats_line(self):
