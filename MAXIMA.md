@@ -1892,10 +1892,15 @@ fingers the opponent; the first search waits up to two seconds for the reply so
 `UCI_Opponent` carries the rating, title, and computer flag. `--games N` quits
 after N games; `quit` during a game stops seeking and leaves after the game,
 and a second `quit` leaves at once. Unknown settings or wrong types are errors.
-An opponent who lets a fifth of the starting clock pass (at least 15 s, at most
-`first_move_wait`, default 60 s) before their first move is aborted: FICS aborts
-without agreement until both sides have moved. Games aborted that early are
-not saved.
+An opponent who makes no move for 20% of the starting clock, with a minimum of
+`first_move_wait` (default 60 s), triggers one abort request on that turn.
+This applies before their first move, and through opponent move 4 when our last
+move came from book or scored at or below `DrawContempt` from our side. Unknown
+scores outside book do not qualify. The timer measures the current turn, survives
+clock-only updates, and is canceled on a reply, takeback, or game end. FICS aborts
+without agreement before both players have moved; later requests require the
+opponent's agreement (or server permission once they run out of time). Games
+aborted before both sides move are not saved.
 The log shows each searched move with depth, score, time, and the expected line
 (`pv`). `whisper` (or `--whisper`) explains every move to observers (never to the
 opponent, unlike kibitz) in plain words:
@@ -2203,6 +2208,10 @@ leaves at once. Every `maxima` command shows the Maxima header in a terminal.
 The console logs each move with its number and the mover's clock: the
 opponent's moves, and the bot's with eval, depth, time and PV, or the book
 source and its percentage for a book move.
+Opening stalls use the same move 1–4 and book/score rule as FICS, waiting at least
+60 seconds or 20% of the initial clock. One abort request is sent per eligible
+turn; the Lichess server decides whether the game can still be aborted. A refused
+request leaves play running normally.
 
 Lichess shares the PGN archive and global/group learning with FICS (9.7);
 individual opponents and rating statistics remain server-specific. The learner maps Lichess speeds to its game types (bullet to lightning,

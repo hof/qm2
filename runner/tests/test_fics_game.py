@@ -14,7 +14,7 @@ import chess.engine
 import chess.pgn
 import chess.polyglot
 
-from maxima_runner import connectors, experience, fics, fics_game, learning, online_tablebase
+from maxima_runner import connectors, experience, fics, fics_game, learning, move_choice, online_tablebase
 from maxima_runner.uci import open_engine
 
 observed = (Path(__file__).parent / "data" / "fics_observed_game.txt").read_text().splitlines()
@@ -385,6 +385,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
                     "GuestHJGC guestNinja 1 3 0 39 39 180000 180000 2 P/e7-e5 (0:00.000) e5 0 0 0")
         folder = Path(self.directory.name) / "games"
         player = await self.player("hang", policy=fics.play_policy(first_move_wait=0.1), pgn_dir=folder)
+        player.policy.opening_wait = lambda initial: 0.1
         await player.handle(after_e4)
         await player.handle(after_e5)
         await asyncio.sleep(0.3)
@@ -396,6 +397,43 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("no first move" in line for line in self.lines))
         await player.handle("{Game 18 (GuestHJGC vs. guestNinja) Game aborted on move 1} *")
         self.assertEqual(list(folder.glob("*.pgn")), [])
+
+    def test_opening_stall_eligibility_and_time(self):
+        board = chess.Board()
+        for move in ("d2d4", "f7f6"):
+            board.push_uci(move)
+        move = chess.Move.from_uci("c2c4")
+        for cp, expected in ((-11, True), (-10, True), (-9, False)):
+            info = {"score": chess.engine.PovScore(chess.engine.Cp(cp), chess.WHITE)}
+            self.assertEqual(bool(move_choice.opening_abort_position(board, move, info, "engine", -10)), expected)
+        self.assertIsNone(move_choice.opening_abort_position(board, move, {}, "engine", -10))
+        self.assertIsNotNone(move_choice.opening_abort_position(board, move, {}, "book", -10))
+        for fullmove, turn, expected in ((4, chess.WHITE, True), (4, chess.BLACK, False), (5, chess.WHITE, False)):
+            board.fullmove_number, board.turn = fullmove, turn
+            move = next(iter(board.legal_moves))
+            self.assertEqual(bool(move_choice.opening_abort_position(board, move, {}, "book", -10)), expected)
+        self.assertEqual([move_choice.opening_stall_wait(clock) for clock in (60, 180, 300, 600)],
+                         [60, 60, 60, 120])
+
+    async def test_opening_stall_timer_survives_clock_updates_and_stops_on_reply(self):
+        player = await self.player("hang")
+        await player.handle(after_e4)
+        player.stop_waiting()
+        player.history.board.push_uci("f7f6")
+        player.history.board.push_uci("c2c4")
+        player.abort_position = player.history.board.fen()
+        player.policy.opening_wait = lambda initial: 0.01
+        player.watch_first_move(fics_game.style12.parse(after_e4))
+        timer = player.waiting
+        player.watch_first_move(fics_game.style12.parse(after_e4))
+        self.assertIs(player.waiting, timer)
+        await timer
+        self.assertEqual(player.connection.sent, ["abort"])
+        player.watch_first_move(fics_game.style12.parse(after_e4))
+        self.assertIs(player.waiting, timer)
+        player.history.board.push_uci("e7e5")
+        player.watch_first_move(fics_game.style12.parse(start))
+        self.assertIsNone(player.waiting)
 
     async def test_played_game_is_saved_as_pgn(self):
         folder = Path(self.directory.name) / "games"

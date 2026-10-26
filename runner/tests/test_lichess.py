@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 import chess
 import chess.engine
@@ -110,6 +111,32 @@ class stub_session:
 
 
 class draw_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_stalled_opening_requests_abort_once_and_cancels_on_reply(self):
+        api = stub_api()
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot.id = "maximaengine"
+        game = lichess.lichess_game(bot, "g1")
+        game.setup(game_full())
+        for move in ("d2d4", "f7f6", "c2c4"):
+            game.board.push_uci(move)
+        game.abort_position = game.board.fen()
+        with patch.object(lichess.move_choice, "opening_stall_wait", return_value=0.01):
+            game.watch_opening()
+            timer = game.waiting
+            game.watch_opening()
+            self.assertIs(game.waiting, timer)
+            await timer
+            game.watch_opening()
+            self.assertEqual(sum(path.endswith("/abort") for path, _ in api.posts), 1)
+            game.stop_waiting()
+            game.watch_opening()
+            timer = game.waiting
+            game.board.push_uci("e7e5")
+            game.watch_opening()
+            await asyncio.sleep(0.02)
+            self.assertTrue(timer.cancelled())
+            self.assertEqual(sum(path.endswith("/abort") for path, _ in api.posts), 1)
+
     async def test_draw_offer_is_accepted_in_a_tablebase_draw(self):
         api = stub_api()
         bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)

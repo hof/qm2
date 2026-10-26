@@ -474,14 +474,40 @@ class lichess_game:
         self.last_eval = self.last_book = self.left_book = None
         self.answered = 0.0
         self.over = self.draw_offered = False
+        self.abort_position = self.waiting_position = self.waiting = None
 
     def start(self):
         self.task = asyncio.ensure_future(self.follow())
 
     def cancel(self):
-        for task in (self.searching, self.task):
+        for task in (self.searching, self.task, self.waiting):
             if task is not None and not task.done():
                 task.cancel()
+
+    def stop_waiting(self):
+        if self.waiting is not None:
+            self.waiting.cancel()
+        self.waiting = self.waiting_position = None
+
+    def watch_opening(self):
+        fen = self.board.fen()
+        eligible = self.board.ply() < 2 or (self.board.fullmove_number <= 4 and fen == self.abort_position)
+        if self.over or self.board.turn == self.color or not eligible or self.board.is_game_over():
+            self.stop_waiting()
+            return
+        if self.waiting_position != fen:
+            self.stop_waiting()
+        if self.waiting is None:
+            wait = move_choice.opening_stall_wait((self.full.get("clock") or {}).get("initial", 0) / 1000)
+            self.waiting_position = fen
+            self.waiting = asyncio.ensure_future(self.abort_unless_moved(fen, wait))
+            self.waiting.add_done_callback(self.report)
+
+    async def abort_unless_moved(self, fen, wait):
+        await asyncio.sleep(wait)
+        if not self.over and self.board.fen() == fen and self.board.turn != self.color:
+            self.bot.on_line(f"-- game {self.id}: requesting abort; no opening reply in {wait:.0f}s")
+            await self.bot.api.post(self.path("abort"))
 
     def path(self, action):
         return f"/api/bot/game/{self.id}/{action}"
@@ -501,6 +527,8 @@ class lichess_game:
             except OSError as error:
                 self.bot.on_line(f"-- game {self.id} stream failed ({error}); reconnecting")
             self.loss.reset()
+            self.stop_waiting()
+            self.abort_position = None
             self.generation = object()
             if self.searching is not None:
                 self.searching.cancel()
@@ -588,6 +616,8 @@ class lichess_game:
         common = next((index for index, (a, b) in enumerate(zip(old, new)) if a != b), min(len(old), len(new)))
         if common < len(old):
             self.loss.reset()
+            self.stop_waiting()
+            self.abort_position = None
             self.generation = object()
             if self.searching is not None:
                 self.searching.cancel()
@@ -619,9 +649,11 @@ class lichess_game:
                     self.reply_clock = None
                 self.on_move(before, move, state, clock_ms)
         if state.get("status") not in ("created", "started"):
+            self.stop_waiting()
             await self.finish(state.get("status", "unknownFinish"), state.get("winner"))
             return
         self.draw_offered = bool(state.get("wdraw" if self.color == chess.BLACK else "bdraw"))
+        self.watch_opening()
         if state.get("wtakeback" if self.color == chess.BLACK else "btakeback"):
             await self.bot.api.post(self.path("takeback/no"))
         key = len(self.board.move_stack)
@@ -702,7 +734,9 @@ class lichess_game:
             await bot.api.post(self.path("draw/yes"))
         # Recorded before sending: the stream may report the move before the POST returns.
         self.record.on_search(board, move, info)
+        self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.contempt)
         if not await bot.api.post(self.path(f"move/{move.uci()}")):
+            self.abort_position = None
             return
         seconds, numbered = time.monotonic() - started, board.variation_san([move])
         left = f", {clock_text(max(0.0, clock - seconds))} left"
@@ -797,6 +831,7 @@ class lichess_game:
 
     async def finish(self, status, winner):
         """Save, learn and report once, whichever of the game stream and the event stream ends it first."""
+        self.stop_waiting()
         if self.over:
             return
         self.over = True

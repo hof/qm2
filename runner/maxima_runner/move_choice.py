@@ -12,6 +12,22 @@ draw_categories = ("draw", "cursed-win", "blessed-loss")  # the last two are dra
 engine_draw_value = -10  # the engine's DrawContempt default, in cp from our side
 
 
+def opening_abort_position(board, move, info, kind, contempt):
+    """The reply position eligible for an opening-stall abort, using our last move's score."""
+    score = info.get("score")
+    ours = score.pov(board.turn).score(mate_score=100000) if score is not None else None
+    if kind != "book" and (ours is None or ours > (engine_draw_value if contempt is None else contempt)):
+        return None
+    reply = board.copy()
+    reply.push(move)
+    return reply.fen() if reply.fullmove_number <= 4 and not reply.is_game_over() else None
+
+
+def opening_stall_wait(initial_seconds, minimum=60):
+    """Allow at least a minute, or a fifth of the starting clock in longer games."""
+    return max(minimum, initial_seconds / 5)
+
+
 class tablebase_lookups:
     """Online tablebase lookups for one player, for positions beyond the engine's local tables (local_pieces);
     errors pause them for a minute."""

@@ -409,8 +409,8 @@ class play_policy:
         self.reseek_seconds = reseek_minutes * 60  # 0: seeks stay as posted while idle
 
     def opening_wait(self, initial_seconds):
-        """Seconds the opponent gets for their first move: a fifth of the clock, at least 15, at most first_move_wait."""
-        return min(self.first_move_wait, max(15, initial_seconds / 5))
+        """Opening reply wait: a fifth of the initial clock, at least first_move_wait (default 60s)."""
+        return move_choice.opening_stall_wait(initial_seconds, self.first_move_wait)
 
     def seek_commands(self):
         """A random draw from the pool; guests can only play unrated."""
@@ -554,6 +554,7 @@ class engine_player:
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.opening = None
         self.from_book = self.draw_offered = False
+        self.abort_position = self.waiting_position = None
         self.announced_mood = None
         self.contempt = None
         self.fingered = False
@@ -629,20 +630,29 @@ class engine_player:
         if self.waiting is not None:
             self.waiting.cancel()
             self.waiting = None
+        self.waiting_position = None
 
     def watch_first_move(self, position):
-        """FICS aborts without agreement until both sides have moved, so an opponent who lets the opening
-        wait pass before their first move does not hold us up."""
-        if position.relation != fics_game.playing_their_move or self.history.board.ply() >= 2:
+        """Watch each eligible opening turn once; clock-only updates must not restart its timer."""
+        board = self.history.board
+        fen = board.fen()
+        eligible = board.ply() < 2 or (board.fullmove_number <= 4 and fen == self.abort_position)
+        if position.relation != fics_game.playing_their_move or not eligible:
             self.stop_waiting()
-        elif self.waiting is None:
+        else:
+            if self.waiting_position != fen:
+                self.stop_waiting()
+            if self.waiting is not None:
+                return
             wait = self.policy.opening_wait(position.initial_seconds)
-            self.waiting = asyncio.ensure_future(self.abort_unless_moved(self.game, self.history.board.ply(), wait))
+            self.waiting_position = fen
+            self.waiting = asyncio.ensure_future(self.abort_unless_moved(self.game, board.ply(), wait))
 
     async def abort_unless_moved(self, game, ply, wait):
         await asyncio.sleep(wait)
         if self.game == game and self.history is not None and self.history.board.ply() == ply:
-            self.on_line(f"-- aborting game {game}: no first move from the opponent in {wait:.0f}s")
+            reason = "no first move" if ply < 2 else "no opening reply"
+            self.on_line(f"-- requesting abort of game {game}: {reason} from the opponent in {wait:.0f}s")
             await self.send("abort")
 
     async def on_login(self, name):
@@ -1001,6 +1011,7 @@ class engine_player:
             self.record = fics_game.game_record({})
             self.opening = None
             self.from_book = self.draw_offered = False
+            self.abort_position = None
             self.our_color = position.turn if position.relation == fics_game.playing_my_move else not position.turn
             self.on_line(f"-- game {self.game}: {position.white} vs {position.black}, "
                          f"{position.initial_seconds // 60} {position.increment_seconds}")
@@ -1019,6 +1030,7 @@ class engine_player:
                     self.on_line(f"-- {before.variation_san([move])} by {name}, {clock_text(mover_ms / 1000)} left")
             elif change:
                 self.loss.reset()
+                self.abort_position = None
                 self.cancel()
                 self.token = object()
                 self.emit("position", game=self.game, ply=self.history.board.ply(), fen=self.history.board.fen(),
@@ -1137,6 +1149,7 @@ class engine_player:
             self.on_line("-- accepting the draw offer")
             await self.send("draw")
         self.draw_offered = False
+        self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.contempt)
         await self.send(fics_game.ics_move(move))
         if self.record is not None:
             self.record.on_search(board, move, info)
