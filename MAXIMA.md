@@ -1361,17 +1361,64 @@ publication, legal selection, rejected reloads, OwnBook, and unchanged book byte
 
 ### 9.7 Online opening learning (MaxDrone)
 
-Status: implemented in `learning.py` and MaxDrone (`maxima fics`); thresholds
-are first guesses awaiting measurement. `./maxima experience:build` refreshes
-the index and player stats by hand; MaxDrone does it after every saved game.
-It replaces the SQLite store for online play; the engine
-snapshot path above stays for GUI use.
+Status: implemented in `learning.py` and both online clients; thresholds are
+first guesses awaiting measurement. Both clients use the same store beneath
+`MAXIMA_DATA_DIR/experience` (on the shared PVC), publish after every saved game,
+and reload before preparing the next game's opening book. A game already in
+progress retains its existing view. The native SQLite/`experience.bin` workflow
+above remains separate for GUI use; online sharing does not merge binary counters.
 
-**Storage.** PGN under `experience/games/fics/` is the only source of truth
-(10.2). Everything else is derived and rebuildable: a game index cache under
-`experience/index/` (per game: players, colour, account, title, computer flag,
-group, game type, ratings, result, opening moves with their eval and result
-values, and our analyses), and readable `experience/players/<handle>.json` stats. No database.
+**Storage and concurrency.** Complete PGNs in `experience/games/<LearningId>.pgn`
+are the source of truth. Each includes `LearningSource` (`fics`, `lichess`, or
+`local`), `LearningServer`, `LearningColor`, a stable `LearningId`, and the original
+metadata, moves, clocks, evaluations and PV annotations. Optional `LearningGroup`
+and `LearningResults` tags retain import classification and result-only eligibility.
+A game is written to a
+unique temporary file, flushed and fsynced, then atomically renamed; concurrent
+clients never append to one monthly PGN. Repeated publication counts once. A
+writer lock covers reading, merging, and publishing `index/shared.json`, which
+holds the complete derived game records. Global and human/master/bot evidence is
+shared across servers. Personal learning, signature/revenge lines, and player
+statistics use `(server, handle)`; readable stats live in
+`players/<server>/<handle>.json`. Readers see complete snapshots. The PVC filesystem
+must support cross-process advisory locks and atomic rename across the client pods;
+this implementation does not provide a network service or configure Kubernetes.
+
+**Imports and rebuilding.** These commands use the shared online store:
+
+```bash
+./maxima experience:sync /uploads/games.pgn /data/experience
+./maxima experience:sync /laptop/games /data/experience --player Maxima --group bots
+./maxima experience:build --experience-dir /data/experience
+```
+
+The sync source can be one PGN or a recursively scanned directory; the destination
+is the experience root, defaulting to `MAXIMA_DATA_DIR/experience`. Maxima's side
+is inferred from its player/engine tags (including local `match:run` EngineA/B
+records); `--player` supplies aliases when inference is ambiguous. `--source`
+sets missing source metadata and `--group` supplies missing opponent classification.
+Existing provenance and identities survive copies and repeated uploads. New local
+matches carry unique game IDs. Legacy PGNs without IDs receive deterministic IDs
+from source, server, players, timestamps, starting position and moves; distinct
+legacy games identical in all those fields cannot be distinguished automatically.
+Malformed games, unsupported variants, and conflicting identities fail ingestion.
+Conflicting final results require explicit `--replace`; replaying an unfinished or
+less-annotated copy cannot erase a final result or stronger recorded analysis.
+Unannotated uploaded games of at least ten moves can contribute result-only
+evidence; this never invents evaluation or search-quality evidence. Unfinished
+uploads without sufficient evaluations teach nothing.
+
+`experience:build` reconstructs learning exclusively from PGNs: `index/` and
+`players/` can be deleted and rebuilt completely. Keep **all PGNs**, including
+source/evaluation annotations. Startup also rebuilds to recover a durable game
+whose snapshot publication was interrupted. The old `games/fics/`,
+`lichess/games/`, and `fics/games/` layouts are read and copied into the common
+archive without deleting originals. Corrected canonical games take precedence
+over their obsolete legacy copies. Stop old client versions during migration;
+thereafter both pods must use this version and the same `MAXIMA_DATA_DIR`.
+A custom `--pgn-dir` receives the game too; learning still archives a canonical
+copy beneath the shared experience root. Idle analysis remains future work;
+SQLite-only analysis is not part of the PGN reconstruction guarantee.
 
 **Learning signal (Maxima's eval).** Maxima's own `[%eval]` is the source of
 truth; an eval can miss something, but not for long. Every opening move (both
@@ -1748,9 +1795,10 @@ welcome); 400 or more weaker gives -100 (avoid draws). Without both ratings
 (guests, unrated) the engine default is sent, as python-chess would otherwise
 keep the previous game's value.
 
-Every game with at least one move is appended to
-`experience/games/fics/<YYYY-MM>.pgn` (UTC month; `pgn_dir` or `--pgn-dir`,
-`--no-pgn` to disable) and fsynced. Tags: `Event` (`FICS unrated blitz game`),
+Every game with at least one move is atomically saved to
+`experience/games/<LearningId>.pgn` (`pgn_dir` or `--pgn-dir` overrides the extra
+PGN destination; `--no-pgn` disables saving and learning). See 9.7 for shared
+publication, imports and rebuilding. Tags: `Event` (`FICS unrated blitz game`),
 `Site`, `Date` (local) and `UTCDate`/`UTCTime` at game start, `White`/`Black`, `WhiteElo`/
 `BlackElo` when rated, `TimeControl` (`180+0`), `Termination` (`normal`,
 `time forfeit`, `abandoned`, `adjudication`), our side's `Type "program"` and
@@ -1850,7 +1898,7 @@ Unknown settings, wrong types and invalid ranges fail before connection.
 `enabled` controls resignation; the casual thinking ceiling remains independent.
 Loss thresholds are negative integer cp; confirmation count and depth are positive
 integers, the rating margin is nonnegative, and the ceiling is positive finite
-seconds. Learning synchronization and PGN ingestion remain deferred.
+seconds. Shared online learning and PGN ingestion are described in 9.7.
 
 ### 10.3 Lichess client (MaximaEngine)
 
@@ -1929,9 +1977,8 @@ The console logs each move with its number and the mover's clock: the
 opponent's moves, and the bot's with eval, depth, time and PV, or the book
 layers behind a book move.
 
-Lichess keeps its own experience: `experience/lichess/games/*.pgn` with
-`index/` and `players/` beside it, since its players and rating pool are not
-FICS's. The learner maps Lichess speeds to its game types (bullet to lightning,
+Lichess shares the PGN archive and global/group learning with FICS (9.7);
+individual opponents and rating statistics remain server-specific. The learner maps Lichess speeds to its game types (bullet to lightning,
 rapid and classical to standard); the PGN keeps the real speed in `Event`
 (`Lichess rated blitz game`) and links the game in `Site`. Settings files take
 `engine`, `options`, `speeds`, `accept`, `games`, `pgn_dir`, `learning`,

@@ -28,8 +28,14 @@ Sessions map that board to an advertised `Wild=losers` option and ordinary board
 to `Wild=standard`; unsupported variants/engines are rejected before search.
 Offline matches preserve both variants in PGNs. Losers suites, general PGN
 imports, and experience remain future work.
-Maxima-specific experience storage lives separately in
-`maxima_runner.experience`. The CLI owns repository paths and compiler helpers.
+Shared online learning lives in `maxima_runner.learning` and `learning_store`.
+Both bots use `MAXIMA_DATA_DIR/experience` on the PVC. `experience:sync SOURCE
+[DESTINATION]` uploads a PGN or folder; `--player NAME` identifies our side when
+needed, and `--group bots` classifies offline opponents. `experience:build
+--experience-dir PATH` rebuilds everything from the archived PGNs. Global and
+group evidence is shared; individual opponent identities remain server-specific.
+The native SQLite/binary GUI workflow stays in `maxima_runner.experience`.
+The CLI owns repository paths and compiler helpers.
 
 Offline tests:
 

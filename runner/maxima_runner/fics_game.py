@@ -1,6 +1,5 @@
 """FICS game state: style12 boards, move history, coordinate moves, game endings, and PGN records."""
 from datetime import datetime, timezone
-import os
 import re
 
 import chess
@@ -172,15 +171,10 @@ def annotate_search(node, board, info):
 
 
 def save_game(game, directory, when):
-    """Append to the month's PGN file and fsync, so a crash loses at most the game being written."""
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{when:%Y-%m}.pgn"
-    text = str(game)
-    with open(path, "a", encoding="utf-8") as stream:
-        stream.write(text + "\n\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    return path
+    """Atomically archive a complete, identified game; replaying its save is idempotent."""
+    from .learning_store import archive_game, prepare_game
+    prepare_game(game)
+    return archive_game(game, directory)[0]
 
 
 def ics_move(move):

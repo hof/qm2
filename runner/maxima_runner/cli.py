@@ -26,6 +26,7 @@ command_groups = (
         ("experience:export", "Export an engine experience snapshot"),
         ("experience:show", "Inspect experience"),
         ("experience:analyze", "Analyze experience positions"),
+        ("experience:sync", "Upload PGNs into shared online learning"),
         ("experience:build", "Build the learning index and player stats"),
         ("experience:repertoire", "Build the fire, draw and experiment books"),
         ("experience:draw", "Build draw.bin from master games"),
@@ -214,6 +215,9 @@ def main(argv=None):
         elif command == "match:run":
             from . import matches
             entrypoint = matches.main
+        elif command == "experience:sync":
+            from . import learning
+            entrypoint = learning.sync_main
         elif command == "experience:build":
             from . import learning
             entrypoint = learning.main

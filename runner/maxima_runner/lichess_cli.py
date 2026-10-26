@@ -32,7 +32,7 @@ def parser():
                         help="accepted speed, repeatable (default: bullet, blitz, rapid)")
     parser.add_argument("--no-accept", action="store_true", help="decline all challenges")
     parser.add_argument("--games", type=int, help="stop after this many games")
-    parser.add_argument("--pgn-dir", help="directory for monthly PGN files (default: experience/lichess/games)")
+    parser.add_argument("--pgn-dir", help="directory for atomic per-game PGNs (default: experience/games)")
     parser.add_argument("--no-pgn", action="store_true", help="do not save games")
     parser.add_argument("--no-learning", action="store_true",
                         help="let the engine use its own book instead of MaxDrone's experience")

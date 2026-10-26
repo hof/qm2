@@ -521,7 +521,7 @@ class lichess_game:
             group = "engines" if title == "BOT" else "masters" if title in chess_titles else "humans"
             self.opening = bot.learner.for_game(them.get("name"), group, learning.lichess_speeds.get(full["speed"]),
                                                 self.contempt, full.get("rated", False))
-            stats = learning.player_stats(bot.learner.records).get((them.get("name") or "").lower(), {})
+            stats = learning.player_stats(bot.learner.records, bot.learner.server).get((them.get("name") or "").lower(), {})
             history = tuple(stats.get(outcome, 0) for outcome in ("wins", "draws", "losses"))
         else:
             history = None
@@ -696,8 +696,9 @@ class lichess_game:
         if learner is None:
             return "No stats: learning is off."
         name = self.player(not self.color).get("name") or "?"
-        stats = learning.player_stats(learner.records).get(name.lower(), {})
-        scores = [record["score"] for record in learner.records if record["score"] is not None]
+        stats = learning.player_stats(learner.records, learner.server).get(name.lower(), {})
+        scores = [record["score"] for record in learner.records if record["score"] is not None
+                  and record.get("server") == learner.server]
         overall = f"Lichess: {len(scores)} games, W/D/L {scores.count(1.0)}/{scores.count(0.5)}/{scores.count(0.0)}."
         if not stats.get("games"):
             return f"First game against {name}. {overall}"
@@ -803,7 +804,9 @@ class lichess_game:
         clock = full.get("clock") or {}
         headers = {"Event": f"Lichess {'rated' if full.get('rated') else 'casual'} {full['speed']} game",
                    "Site": f"{bot.api.server}/{self.id}", "White": full["white"].get("name", "?"),
-                   "Black": full["black"].get("name", "?")}
+                   "Black": full["black"].get("name", "?"), "LearningSource": "lichess",
+                   "LearningServer": learning.learning_store.server_name(bot.api.server),
+                   "LearningColor": "white" if self.color == chess.WHITE else "black", "GameId": self.id}
         if clock:
             headers["TimeControl"] = f"{clock['initial'] // 1000}+{clock['increment'] // 1000}"
         engine_name = bot.session.protocol.id.get("name") if bot.session is not None else None
@@ -824,22 +827,18 @@ class lichess_game:
         bot = self.bot
         try:
             path = fics_game.save_game(game, bot.pgn_dir, self.record.started)
-        except OSError as error:
+        except (OSError, ValueError) as error:
             bot.on_line(f"-- could not save game {self.id}: {error}")
             return
         bot.on_line(f"-- saved game {self.id} to {path}")
         if bot.learner is not None:
-            record = bot.learner.add(game)
-            asyncio.get_running_loop().run_in_executor(None, refresh_experience, bot.learner, bot.on_line)
+            try:
+                record = bot.learner.add(game)
+            except (OSError, ValueError) as error:
+                bot.on_line(f"-- PGN saved; shared learning update failed: {error}")
+                return
             for text in learning_report(game, record, bot.learner.records):
                 bot.on_line(f"-- {text}")
-
-
-def refresh_experience(learner, on_line):
-    try:
-        learner.refresh()
-    except (OSError, ValueError) as error:
-        on_line(f"-- could not refresh experience: {error}")
 
 
 def book_line(move, why, names):
@@ -938,7 +937,7 @@ def run(options, parser):
         feed_address = (host or "127.0.0.1", int(port))
     if configured["pgn_post"] and not configured["pgn_post"].startswith(("http://", "https://")):
         parser.error(f"PGN post needs an http(s) URL, got {configured['pgn_post']!r}")
-    pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or data_root() / "experience" / "lichess" / "games")
+    pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or data_root() / "experience" / "games")
 
     def show(line):
         print(line, flush=True)
@@ -956,10 +955,9 @@ def run(options, parser):
         read_commands(loop, commands)
         learner = None
         if configured["learning"]:
-            # Lichess keeps its own experience (games/, index/, players/): other players, other rating pool.
-            learner = learning.learner(pgn_dir.parent, pgn_dir, data_root() / "book.bin", configured["variety"],
+            learner = learning.learner(data_root() / "experience", pgn_dir, data_root() / "book.bin", configured["variety"],
                                        style_books(configured["style_books"]), configured["layer_profiles"] or None,
-                                       configured["mood"], data_root() / "moods")
+                                       configured["mood"], data_root() / "moods", server=options.server)
             show(f"-- experience: {len(learner.records)} games")
         events = connectors.game_events() if feed_address or configured["pgn_post"] else None
         api = lichess_api(token, options.server, show)

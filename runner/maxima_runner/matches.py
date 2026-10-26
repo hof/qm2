@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 from contextlib import AsyncExitStack
+from datetime import datetime, timezone
 import hashlib
 import json
 import math
@@ -9,6 +10,7 @@ from pathlib import Path
 import random
 import sys
 import tempfile
+import uuid
 
 from .match_options import (engine_profile, file_identity, option_assignment,
                             validated_settings, verify_models)
@@ -194,8 +196,11 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
     adjudication = None
     game = match_game_type()()
     initial = board.root()
+    started = datetime.now(timezone.utc)
     game.headers.update(Event='Maxima offline paired match', Site='offline',
-                        Date='????.??.??', Round=str(pair + 1),
+                        Date=started.strftime('%Y.%m.%d'), UTCDate=started.strftime('%Y.%m.%d'),
+                        UTCTime=started.strftime('%H:%M:%S'), Round=str(pair + 1),
+                        GameId=uuid.uuid4().hex, LearningSource='local',
                         White='A' if a_white else 'B', Black='B' if a_white else 'A',
                         Variant='Royal losers' if variant == 'losers' else 'Standard',
                         Opening=opening, TimeControl=f'{seconds:g}+{increment:g}')

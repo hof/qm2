@@ -11,8 +11,9 @@ import chess
 import chess.pgn
 import chess.polyglot
 
+from . import learning_store
+
 horizon_plies = 40
-index_version = 3
 # A game teaches only when it lasted 10 moves and Maxima searched enough moves to judge them: early
 # resignations, aborts, disconnects, and book-only games carry no eval, only a result.
 minimum_plies = 20
@@ -60,6 +61,8 @@ def digest(game):
     headers = game.headers
     ours = [color for color, prefix in ((chess.WHITE, "White"), (chess.BLACK, "Black"))
             if headers.get(f"{prefix}Type") == "program" and headers.get(f"{prefix}Engine")]
+    if headers.get("LearningColor") in ("white", "black"):
+        ours = [headers["LearningColor"] == "white"]
     if len(ours) != 1 or game.errors or type(game.board()) is not chess.Board:
         return None
     our_color = ours[0]
@@ -79,8 +82,12 @@ def digest(game):
                 analyses.append([key, node.move.uci(), depth, centipawns, int(relative.is_mate()),
                                  round((node.emt() or 0) * 1000), board.halfmove_clock])
         board.push(node.move)
-    if len(moves) < minimum_plies or len(evals) < eval_window:
+    if len(moves) < minimum_plies or len(evals) < eval_window and headers.get("LearningResults") != "true":
         return None
+    if len(evals) < eval_window:
+        if headers.get("Result", "*") == "*":
+            return None
+        evals, analyses = [], []
     outcome = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(headers.get("Result"))
     score = None if outcome is None else (outcome if our_color == chess.WHITE else 1 - outcome)
     values = []
@@ -95,12 +102,14 @@ def digest(game):
             values.append([key, move, evaluated, result])
     rating = headers.get(f"{their_prefix}Elo", "")
     return {
+        "id": headers.get("LearningId"), "source": headers.get("LearningSource"),
+        "server": headers.get("LearningServer"),
         "date": headers.get("UTCDate", headers.get("Date", "")),
         "time": headers.get("UTCTime", ""),
         "white": headers.get("White", ""), "black": headers.get("Black", ""),
         "color": "white" if our_color == chess.WHITE else "black",
         "opponent": headers.get(their_prefix, ""),
-        "group": opponent_group(headers, not our_color),
+        "group": headers.get("LearningGroup") or opponent_group(headers, not our_color),
         "title": headers.get(f"{their_prefix}Title") or None,
         "rating": int(rating) if rating.isdigit() else None,
         "type": game_type(headers.get("Event", "")),
@@ -111,48 +120,17 @@ def digest(game):
     }
 
 
-def digest_file(path):
-    with open(path, encoding="utf-8-sig") as stream:
-        while True:
-            game = chess.pgn.read_game(stream)
-            if game is None:
-                return
-            record = digest(game)
-            if record is not None:
-                yield record
-
-
-def load_index(games_dir, index_dir):
-    """Digests of every game; a PGN file is re-read only when its size or mtime changed."""
-    index_dir.mkdir(parents=True, exist_ok=True)
-    records = []
-    for path in sorted(Path(games_dir).glob("*.pgn")):
-        stat = path.stat()
-        cache = index_dir / f"{path.stem}.json"
-        stamp = {"version": index_version, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
-        cached = None
-        if cache.is_file():
-            try:
-                cached = json.loads(cache.read_text(encoding="utf-8"))
-            except ValueError:
-                cached = None
-        if cached is None or cached.get("stamp") != stamp:
-            cached = {"stamp": stamp, "games": list(digest_file(path))}
-            temporary = cache.with_suffix(".tmp")
-            temporary.write_text(json.dumps(cached), encoding="utf-8")
-            temporary.replace(cache)
-        records.extend(cached["games"])
-    return records
-
-
-def player_stats(records):
+def player_stats(records, server=None):
     """Readable per-opponent stats from the actual results."""
     players = {}
     for record in records:
+        if server is not None and record.get("server") != server:
+            continue
         name = record["opponent"]
         if not name:
             continue
-        stats = players.setdefault(name.lower(), {
+        key = f"{record['server']}/{name.lower()}" if server is None and record.get("server") else name.lower()
+        stats = players.setdefault(key, {
             "handle": name, "games": 0, "wins": 0, "draws": 0, "losses": 0, "by_type": {},
             "group": None, "title": None, "rating": None, "last_game": ""})
         if record["score"] is None:
@@ -173,24 +151,25 @@ def player_stats(records):
 
 def write_player_stats(players, directory):
     directory.mkdir(parents=True, exist_ok=True)
+    from urllib.parse import quote
     for key, stats in players.items():
-        if not re.fullmatch(r"[a-z]{1,20}", key):
-            continue
-        path = directory / f"{key}.json"
-        temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(stats, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        temporary.replace(path)
+        parts = key.split("/", 1)
+        path = directory.joinpath(*(quote(part, safe="") for part in parts))
+        path = path.parent / (path.name + ".json")
+        learning_store.atomic_text(path, json.dumps(stats, indent=2, sort_keys=True) + "\n")
     return len(players)
 
 
 def build(experience_dir, games_dir=None):
-    """Refresh the index cache and player stats from experience/games/fics."""
-    experience_dir = Path(experience_dir)
-    records = load_index(games_dir or experience_dir / "games" / "fics", experience_dir / "index")
-    count = write_player_stats(player_stats(records), experience_dir / "players")
-    return {"games": len(records), "players": count,
-            "evaluated": sum(any(value[2] is not None for value in record["values"]) for record in records),
-            "built": datetime.now().isoformat(timespec="seconds")}
+    """Reconstruct all shared online learning from the complete PGN archive."""
+    store = learning_store.shared_store(experience_dir)
+    if games_dir is not None and Path(games_dir).resolve() != store.games.resolve():
+        store.sync(games_dir)
+    summary = store.rebuild()
+    records = store.load()
+    return dict(summary, players=len(player_stats(records)),
+                evaluated=sum(any(value[2] is not None for value in record["values"]) for record in records),
+                built=datetime.now().isoformat(timespec="seconds"))
 
 
 def polyglot_code(board, move):
@@ -311,7 +290,7 @@ class opening_book:
 
     def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
                  variety=1.0, supersede_depth=16, random_source=None, contempt=None, style_books=None,
-                 rated=True, profiles=None, mood=None):
+                 rated=True, profiles=None, mood=None, server=None):
         self.book_path = book_path
         self.mood = mood
         self.random = random_source or random.Random()
@@ -345,11 +324,12 @@ class opening_book:
             if registered and group is not None and record["group"] == group:
                 layers.append((1, weight))
             ours = set()
-            if registered and opponent and record["opponent"].lower() == opponent:
+            personal = server is None or record.get("server") == server
+            if registered and personal and opponent and record["opponent"].lower() == opponent:
                 layers.append((2, weight))
                 first = 0 if record.get("color") == "white" else 1
                 ours = {tuple(played) for played in record.get("moves", [])[first::2]}
-            if opponent and record["opponent"].lower() == opponent and record.get("color") in ("white", "black"):
+            if personal and opponent and record["opponent"].lower() == opponent and record.get("color") in ("white", "black"):
                 self.track_revenge(record)
             for key, move, evaluated, result in record["values"]:
                 if (key, move) in ours:
@@ -579,46 +559,73 @@ class learner:
     """MaxDrone's experience: digests kept in memory, a fresh opening_book per game."""
 
     def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0, style_books=None,
-                 profiles=None, mood="auto", moods_dir=None):
+                 profiles=None, mood="auto", moods_dir=None, server=None):
         self.experience_dir = Path(experience_dir)
         self.mood, self.moods_dir = mood, moods_dir
         self.style_books = style_books
         self.profiles = profiles
-        self.games_dir = Path(games_dir or self.experience_dir / "games" / "fics")
+        self.games_dir = Path(games_dir or self.experience_dir / "games")
+        self.server = learning_store.server_name(server) if server else None
+        self.store = learning_store.shared_store(self.experience_dir)
         self.book_path = book_path
         self.variety = variety
-        self.records = load_index(self.games_dir, self.experience_dir / "index")
+        self.store.rebuild()
+        if self.games_dir.exists() and self.experience_dir.resolve() not in self.games_dir.resolve().parents and self.games_dir.resolve() != self.experience_dir.resolve():
+            self.store.sync(self.games_dir)
+        self.records = self.store.load()
 
     def today_mood(self):
         return current_mood(self.mood, mood_names(self.moods_dir))
 
     def for_game(self, opponent, group, game_type, contempt=None, rated=True):
+        # Existing opening_book instances own their view; only the next game reloads.
+        self.records = self.store.load()
         mood, books = self.today_mood(), dict(self.style_books or {})
         if mood:
             books["mood"] = Path(self.moods_dir) / f"{mood}.bin"
         return opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety,
-                            contempt=contempt, style_books=books, rated=rated, profiles=self.profiles, mood=mood)
+                            contempt=contempt, style_books=books, rated=rated, profiles=self.profiles, mood=mood, server=self.server)
 
     def add(self, game):
-        record = digest(game)
-        if record is not None:
-            self.records.append(record)
+        record = self.store.add(game)
+        self.records = self.store.load()
         return record
 
     def refresh(self):
-        """Index cache and player stats on disk; run off the event loop."""
-        return build(self.experience_dir, self.games_dir)
+        """Reload a published snapshot; existing opening books keep their own view."""
+        self.records = self.store.load()
+        return {"games": len(self.records)}
 
 
 def main():
     from .project import data_root
     parser = argparse.ArgumentParser(prog="maxima experience:build", description=__doc__)
     parser.add_argument("--experience-dir", default=str(data_root() / "experience"),
-                        help="reads games/fics/*.pgn, writes index/ and players/ (default: experience)")
+                        help="rebuild shared index and player stats from all archived PGNs (default: experience)")
     options = parser.parse_args()
     summary = build(options.experience_dir)
-    print(f"{summary['games']} games, {summary['evaluated']} with Maxima's evals, "
+    print(f"{summary['games']} archived games, {summary['learned']} learned, {summary['evaluated']} with Maxima's evals, "
           f"{summary['players']} opponents")
+    return 0
+
+
+def sync_main():
+    from .project import data_root
+    parser = argparse.ArgumentParser(prog="maxima experience:sync",
+                                     description="Upload PGNs into shared online learning; repeated imports count once.")
+    parser.add_argument("source", type=Path, help="a PGN file or a folder searched recursively")
+    parser.add_argument("destination", type=Path, nargs="?", default=data_root() / "experience",
+                        help="shared experience root on the PVC (default: MAXIMA_DATA_DIR/experience)")
+    parser.add_argument("--player", action="append", default=[], help="our PGN player name, repeatable")
+    parser.add_argument("--source", choices=("fics", "lichess", "local"), dest="source_name",
+                        help="source for games without provenance tags (otherwise inferred)")
+    parser.add_argument("--group", choices=("humans", "bots", "masters"),
+                        help="opponent group when uploading PGNs without account/type metadata")
+    parser.add_argument("--replace", action="store_true", help="explicitly correct an archived final result")
+    options = parser.parse_args()
+    summary = learning_store.shared_store(options.destination).sync(options.source, options.player,
+                                                                    options.source_name, options.replace, options.group)
+    print(f"{summary['read']} read, {summary['added']} new, {summary['games']} archived, {summary['learned']} learnable")
     return 0
 
 

@@ -86,10 +86,12 @@ class index_tests(unittest.TestCase):
             path.write_text(str(make_game([0] * 9, result="1/2-1/2")) + "\n\n")
             self.assertEqual(learning.build(root)["games"], 1)
             with path.open("a") as stream:
-                stream.write(str(make_game([20, 80, 320, 400])) + "\n\n")
+                other = make_game([20, 80, 320, 400])
+                other.headers["UTCTime"] = "20:00:01"
+                stream.write(str(other) + "\n\n")
             summary = learning.build(root)
             self.assertEqual((summary["games"], summary["players"]), (2, 1))
-            stats = json.loads((root / "players" / "beta.json").read_text())
+            stats = json.loads((root / "players" / "freechess.org" / "beta.json").read_text())
             self.assertEqual((stats["games"], stats["wins"], stats["draws"], stats["rating"]), (2, 1, 1, 1500))
             self.assertEqual(stats["by_type"]["blitz"]["games"], 2)
 

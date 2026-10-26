@@ -120,20 +120,20 @@ class record_tests(unittest.TestCase):
         self.assertTrue(text.rstrip().endswith("GuestVHRM resigns } 1-0"))
         self.assertEqual(len(list(game.mainline_moves())), 15)
 
-    def test_saved_games_append_and_import_losslessly(self):
+    def test_saved_games_are_atomic_deduplicated_and_import_losslessly(self):
         game = self.recorded_game()
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory) / "fics"
             path = fics_game.save_game(game, folder, datetime(2026, 10, 21, tzinfo=timezone.utc))
             fics_game.save_game(game, folder, datetime(2026, 10, 22, tzinfo=timezone.utc))
-            self.assertEqual(path.name, "2026-10.pgn")
+            self.assertEqual(path.stem, game.headers["LearningId"])
             with path.open() as stream:
-                games = [chess.pgn.read_game(stream) for _ in range(2)]
+                games = [chess.pgn.read_game(stream)]
                 self.assertIsNone(chess.pgn.read_game(stream))
-            self.assertEqual([str(item) for item in games], [str(game)] * 2)
+            self.assertEqual([str(item) for item in games], [str(game)])
             with closing(experience.connect(Path(directory) / "experience.db")) as db:
                 counts = experience.import_games(db, path, {"guestmczl"}, 200)
-                self.assertEqual(counts, {"imported": 1, "duplicates": 1, "analyses": 2})
+                self.assertEqual(counts, {"imported": 1, "duplicates": 0, "analyses": 1})
                 row = db.execute("SELECT move, engine, depth, score, nodes, pv FROM analysis").fetchone()
         self.assertEqual(row, ("d5a5", "Maxima 2.0.0", 16, 42, 123456, '["d5a5", "c6a5"]'))
 
@@ -429,6 +429,9 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         key = f"{chess.polyglot.zobrist_hash(chess.Board()):016x}"
         learner.records = [{"opponent": "guestNinja", "group": "humans", "type": "blitz",
                             "values": [[key, "d2d4", 0.9, 1.0]], "analyses": []}] * 6
+        fixture_view = patch.object(learner.store, "load", return_value=learner.records)
+        fixture_view.start()
+        self.addCleanup(fixture_view.stop)
         player = await self.player("hang", pgn_dir=folder, learner=learner)
         player.name = "GuestHJGC"
         await player.handle("Creating: GuestHJGC (++++) guestNinja (1500) unrated blitz 3 0")

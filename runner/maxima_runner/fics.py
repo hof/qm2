@@ -418,7 +418,8 @@ def learning_report(game, record, records):
         return ["not learned: under ten moves or too few searches"]
     opponent = record["opponent"]
     moves = sum(1 for _ in record["values"])
-    played = [other["score"] for other in records if other["opponent"].lower() == opponent.lower()]
+    played = [other["score"] for other in records if other["opponent"].lower() == opponent.lower()
+              and other.get("server") == record.get("server")]
     wins, draws, losses = played.count(1.0), played.count(0.5), played.count(0.0)
     lines = [f"learned: {moves} moves | vs {opponent} +{wins} ={draws} -{losses}"]
     if record["score"] == 0.0:
@@ -740,7 +741,10 @@ class engine_player:
         created = self.created if self.created and {self.created["white"], self.created["black"]} == {
             end["white"], end["black"]} else {}
         headers = {"Event": f"FICS {created['rated']} {created['type']} game" if created else "FICS game",
-                   "Site": self.site, "White": end["white"], "Black": end["black"]}
+                   "Site": self.site, "White": end["white"], "Black": end["black"],
+                   "LearningSource": "fics", "LearningServer": self.site,
+                   "LearningColor": "white" if self.our_color == chess.WHITE else "black",
+                   "GameId": str(self.game)}
         if created:
             headers["TimeControl"] = f"{int(created['time']) * 60}+{created['increment']}"
         engine_name = self.session.protocol.id.get("name") if self.session is not None else None
@@ -780,22 +784,19 @@ class engine_player:
             return
         try:
             path = fics_game.save_game(game, self.pgn_dir, self.record.started)
-        except OSError as error:
+        except (OSError, ValueError) as error:
             self.on_line(f"-- could not save game {self.game}: {error}")
             return
         self.on_line(f"-- saved game {self.game} to {path}")
         if self.learner is not None:
-            record = self.learner.add(game)
-            asyncio.get_event_loop().run_in_executor(None, self.refresh_experience)
+            try:
+                record = self.learner.add(game)
+            except (OSError, ValueError) as error:
+                self.on_line(f"-- PGN saved; shared learning update failed: {error}")
+                return
             for text in learning_report(game, record, self.learner.records):
                 self.on_line(f"-- {text}")
                 self.tell_followers(text)
-
-    def refresh_experience(self):
-        try:
-            self.learner.refresh()
-        except (OSError, ValueError) as error:
-            self.on_line(f"-- could not refresh experience: {error}")
 
     def opponent_group(self):
         """Learning group from finger; None (global layer only) when unregistered or unknown."""
@@ -1186,7 +1187,7 @@ def run(options, parser):
                          follow_key=os.environ.get("MAXDRONE_KEY") or None,
                          reseek_minutes=configured["reseek_minutes"])
     redact = (lambda text: text.replace(policy.follow_key, "********")) if policy.follow_key else (lambda text: text)
-    pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or data_root() / "experience" / "games" / "fics")
+    pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or data_root() / "experience" / "games")
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
     if not valid_handle(options.handle):
         parser.error("FICS handles have 3 to 17 letters, or use guest")
@@ -1213,12 +1214,11 @@ def run(options, parser):
         read_commands(asyncio.get_event_loop(), commands)
         learner = None
         if configured["learning"] and not options.no_engine:
-            # index/ and players/ sit beside games/<server>/, so a custom --pgn-dir keeps them together
-            learner = learning.learner(pgn_dir.parent.parent, pgn_dir, data_root() / "book.bin",
+            learner = learning.learner(data_root() / "experience", pgn_dir, data_root() / "book.bin",
                                        configured["variety"],
                                        style_books(configured["style_books"]),
                                        configured["layer_profiles"] or None, configured["mood"],
-                                       data_root() / "moods")
+                                       data_root() / "moods", server=options.host)
             show(f"-- experience: {len(learner.records)} games")
         events = connectors.game_events() if feed_address or configured["pgn_post"] else None
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
