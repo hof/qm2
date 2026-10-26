@@ -506,6 +506,8 @@ class lichess_game:
                 self.searching.cancel()
             self.searched = None
             self.state = None
+            if self.bot.session is not None and hasattr(self.bot.session, "stop_pondering"):
+                await self.bot.session.stop_pondering()
             self.reply_clock = None
             failures += 1
             if failures > 8:
@@ -592,6 +594,8 @@ class lichess_game:
             self.searched = None
             self.reply_clock = None
             self.board = replay
+            if self.bot.session is not None and hasattr(self.bot.session, "stop_pondering"):
+                await self.bot.session.stop_pondering()
             self.emit("position", ply=replay.ply(), fen=replay.fen(), reason="takeback", clock_ms=clock_ms)
         else:
             added = len(new) - len(old)
@@ -662,7 +666,7 @@ class lichess_game:
             move, info, kind = await move_choice.choose_move(
                 bot.session, board, limit, opening=self.opening,
                 ceiling=self.loss.ceiling(self.full.get("rated")),
-                budget_ms=learning.per_move_budget_ms(clock, increment), tablebase=bot.tablebase, game=self.id,
+                budget_ms=learning.per_move_budget_ms(clock, increment), tablebase=bot.tablebase, game=(self.id, self.generation),
                 opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options={"DrawContempt": self.contempt})
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
             bot.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
@@ -796,6 +800,8 @@ class lichess_game:
         if self.over:
             return
         self.over = True
+        if self.bot.session is not None and hasattr(self.bot.session, "stop_pondering"):
+            await self.bot.session.stop_pondering()
         if self.searching is not None and not self.searching.done():
             self.searching.cancel()
         bot = self.bot

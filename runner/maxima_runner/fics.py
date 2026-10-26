@@ -15,7 +15,7 @@ import time
 
 import chess
 import chess.engine
-from .variants import royal_losers_board
+from .variants import royal_losers_board, wild_boards
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
 from .move_choice import describe, search_summary, speed, variation
@@ -279,7 +279,7 @@ restart_status = 75
 draw_offer_pattern = re.compile(r"^(?:Your opponent|[A-Za-z]+) offers you a draw\.")
 finger_pattern = re.compile(r"^Finger of (?P<name>[A-Za-z]+)(?P<titles>(?:\([A-Z*]+\))*):")
 playable_types = ("lightning", "blitz", "standard")
-wild_types = ("wild/2", "wild/3", "wild/4", "wild/5", "wild/8", "wild/8a")
+wild_types = tuple(wild_boards)
 chess_titles = ("GM", "IM", "FM", "WGM", "WIM", "WFM", "CM", "WCM", "NM")
 seek_pattern = re.compile(r"\d{1,3} \d{1,3}(?: [a-z0-9+-]+)*")
 rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
@@ -504,6 +504,7 @@ class engine_player:
         self.our_color = None
         self.learner = learner
         self.losers_learner = losers_learner
+        self.wild_learners = {}
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.opening = None
         self.from_book = self.draw_offered = False
@@ -553,7 +554,14 @@ class engine_player:
     @property
     def game_learner(self):
         if self.is_wild:
-            return None
+            kind = self.created["type"].lower()
+            if self.learner is not None and kind not in self.wild_learners:
+                # Each ruleset owns its PGNs, experience and optional Polyglot book.
+                root = self.learner.experience_dir / kind
+                self.wild_learners[kind] = learning.learner(
+                    root, self.game_pgn_dir, root / "book.bin", self.learner.variety,
+                    mood="off", server=self.site, variant=kind)
+            return self.wild_learners.get(kind)
         return self.losers_learner if self.is_losers else self.learner
 
     @property
@@ -744,7 +752,11 @@ class engine_player:
         position = fics_game.style12.parse(line) if line.startswith("<12> ") else None
         if position is not None:
             try:
+                previous_token = self.token
                 self.on_board(position)
+                if self.token is not previous_token and position.relation == fics_game.playing_their_move \
+                        and self.session is not None and hasattr(self.session, "stop_pondering"):
+                    await self.session.stop_pondering()
             except ValueError as error:
                 self.on_line(f"-- ignored board: {error}")
             return
@@ -811,6 +823,8 @@ class engine_player:
 
     async def on_game_end(self, end):
         self.cancel()
+        if self.session is not None and hasattr(self.session, "stop_pondering"):
+            await self.session.stop_pondering()
         self.on_line(f"-- game {self.game} over: {end['reason']} {end['result']}")
         opponent = end["black"] if self.name and end["white"].lower() == self.name.lower() else end["white"]
         game = self.finished_game(end)
@@ -934,7 +948,8 @@ class engine_player:
             # rather than silently treating a resumed losers board as standard.
             if self.policy.losers and created is None:
                 raise ValueError("mixed-variant game needs Creating: metadata")
-            board_type = royal_losers_board if created and created["type"].lower() == "losers" else chess.Board
+            kind = created["type"].lower() if created else "standard"
+            board_type = royal_losers_board if kind == "losers" else wild_boards.get(kind, chess.Board)
             history = fics_game.game_history(position, board_type)
             self.cancel()
             self.game, self.token, self.history = position.game, object(), history

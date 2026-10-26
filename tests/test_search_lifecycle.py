@@ -377,7 +377,7 @@ class search_lifecycle_tests(unittest.TestCase):
                 fields = info.split()
                 self.assertGreaterEqual(int(fields[fields.index("time") + 1]), 1200)
 
-    def test_ponderhit_after_elapsed_deadline(self):
+    def test_ponderhit_starts_fresh_clock_budget(self):
         with running_engine() as engine:
             engine.send("setoption name OwnBook value false")
             engine.start_search("go ponder movetime 200")
@@ -388,9 +388,11 @@ class search_lifecycle_tests(unittest.TestCase):
             started = time.monotonic()
             engine.send("ponderhit")
             engine.wait_for_bestmove()
-            self.assertLess(time.monotonic() - started, 0.5)
+            elapsed = time.monotonic() - started
+            self.assertGreater(elapsed, 0.1)
+            self.assertLess(elapsed, 0.7)
             fields = [line for line in engine.transcript if line.startswith("info depth ")][-1].split()
-            self.assertGreaterEqual(int(fields[fields.index("time") + 1]), 300)
+            self.assertGreaterEqual(int(fields[fields.index("time") + 1]), 150)
             engine.send("quit")
             engine.wait_for_exit()
 

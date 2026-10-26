@@ -262,6 +262,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     nodes = 0;
     stop_all = false;
     next_poll = 0;
+    ponder_clock_started = !game.ponder;
     sel_depth = 0;
     root_stack = stack = &_stack[0];
     root_wtm = brd.stack->wtm;
@@ -555,7 +556,7 @@ void search_t::iterative_deepening() {
         uci::send_pv(result_score, depth, sel_depth, nodes, game.tm.elapsed(),
             pv_to_string().c_str(), result_flag, tablebase_hits);
         store_pv();
-        if (timed_search) {
+        if (timed_search && !pondering()) {
             bool score_jump = depth >= 6 && ((ABS(score - last_score) > 20) || score > score::WIN);
             int elapsed = game.tm.elapsed();
             bool do_stop = false;
@@ -575,10 +576,7 @@ void search_t::iterative_deepening() {
                 // Mate in N and search depth > N
                 do_stop = true;
             }
-            // Abort search or prepare pondering to abort early
-            if (do_stop && pondering()) {
-                game.tm.set_max(0);
-            } else if (do_stop) {
+            if (do_stop) {
                 break;
             }
         } else if (depth >= 15 && game.target_score && score >= game.target_score &&
@@ -636,6 +634,11 @@ bool search_t::abort(bool force_poll = false) {
     } else if (stop_all || (_control && _control->stop_requested.load())) {
         result = true;
     } else if (force_poll || --next_poll <= 0) {
+        if (!ponder_clock_started && !pondering()) {
+            game.tm.set_start();
+            game.tm.set_max(game.tm.reserved_max());
+            ponder_clock_started = true;
+        }
         const int remaining = game.tm.remaining();
         // Tighten polling near the deadline without taxing the ordinary hot path.
         next_poll = remaining <= 50 ? 64 : remaining <= 250 ? 512 : NODES_BETWEEN_POLLS;

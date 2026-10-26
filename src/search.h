@@ -317,6 +317,7 @@ public:
     uint16_t countermoves[BKING + 1][64];
     move_t ponder_move;
     std::string book_name;
+    bool ponder_clock_started;
     bool root_wtm;
     int wild;
     int draw_contempt;

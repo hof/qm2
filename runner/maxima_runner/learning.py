@@ -12,7 +12,7 @@ import chess.pgn
 import chess.polyglot
 
 from . import learning_store
-from .variants import board_variant
+from .variants import board_variant, experience_variants
 
 horizon_plies = 40
 # A game teaches only when it lasted 10 moves and Maxima searched enough moves to judge them: early
@@ -297,6 +297,7 @@ class opening_book:
                  rated=True, profiles=None, mood=None, server=None, variant="standard"):
         self.book_path = book_path
         self.mood = mood
+        self.variant = variant
         self.random = random_source or random.Random()
         self.weights = game_profile(contempt, rated, profiles)
         self.paths = {"book": book_path}
@@ -517,7 +518,7 @@ class opening_book:
         "revenge", probability, parts, source), or ("recalled", depth, seconds). The source is the layer with
         the largest share of the move; ties go to the more specific layer."""
         self.why = None
-        if (type(board) is not chess.Board or board.ply() >= horizon_plies or board.halfmove_clock >= 90
+        if (board_variant(board) != self.variant or board.ply() >= horizon_plies or board.halfmove_clock >= 90
                 or board.is_repetition(2)):
             return None
         if self.search_ply is not None and board.ply() >= self.search_ply:
@@ -610,11 +611,11 @@ def main():
     parser = argparse.ArgumentParser(prog="maxima experience:build", description=__doc__)
     parser.add_argument("--experience-dir", default=str(data_root() / "experience"),
                         help="rebuild shared index and player stats from all archived PGNs (default: experience)")
-    parser.add_argument("--variant", choices=("standard", "losers"), default="standard",
-                        help="losers uses the losers subdirectory of the experience root")
+    parser.add_argument("--variant", choices=experience_variants, default="standard",
+                        help="nonstandard variants use their own subdirectory of the experience root")
     options = parser.parse_args()
     root = Path(options.experience_dir)
-    summary = build(root / "losers" if options.variant == "losers" else root, variant=options.variant)
+    summary = build(root / options.variant if options.variant != "standard" else root, variant=options.variant)
     print(f"{summary['games']} archived games, {summary['learned']} learned, {summary['evaluated']} with Maxima's evals, "
           f"{summary['players']} opponents")
     return 0
@@ -633,10 +634,10 @@ def sync_main():
     parser.add_argument("--group", choices=("humans", "bots", "masters"),
                         help="opponent group when uploading PGNs without account/type metadata")
     parser.add_argument("--replace", action="store_true", help="explicitly correct an archived final result")
-    parser.add_argument("--variant", choices=("standard", "losers"), default="standard",
-                        help="losers uses the losers subdirectory of the destination")
+    parser.add_argument("--variant", choices=experience_variants, default="standard",
+                        help="nonstandard variants use their own subdirectory of the destination")
     options = parser.parse_args()
-    root = options.destination / "losers" if options.variant == "losers" else options.destination
+    root = options.destination / options.variant if options.variant != "standard" else options.destination
     summary = learning_store.shared_store(root, options.variant).sync(options.source, options.player,
                                                                     options.source_name, options.replace, options.group)
     print(f"{summary['read']} read, {summary['added']} new, {summary['games']} archived, {summary['learned']} learnable")

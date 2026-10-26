@@ -55,6 +55,8 @@ async def choose_move(session, board, limit, *, opening=None, budget_ms=None, ta
         found = opening.choose(board, budget_ms)
         if found is not None:
             move, reason = found
+            if hasattr(session, "stop_pondering"):
+                await session.stop_pondering()
             return move, {"source": reason}, "book"
     lookup = tablebase.ask(board) if tablebase is not None else None
     if ceiling is not None:
@@ -65,6 +67,8 @@ async def choose_move(session, board, limit, *, opening=None, budget_ms=None, ta
         if answer is not None:
             searching.cancel()
             await asyncio.wait({searching})
+            if hasattr(session, "stop_pondering"):
+                await session.stop_pondering()
             return answer["move"], {"source": tablebase_reason(answer), "tablebase": answer}, "tablebase"
         result = await searching
     except asyncio.CancelledError:

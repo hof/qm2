@@ -154,3 +154,71 @@ class variant_session_tests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual((board.fen(), board.move_stack), before)
                 expected = "losers" if type(board) is royal_losers_board else "standard"
                 self.assertEqual(session.protocol.config["Wild"], expected)
+
+
+ponder_engine = '''
+import sys
+import chess
+board = chess.Board()
+first = True
+for line in sys.stdin:
+    command = line.strip()
+    with open(sys.argv[1], 'a') as log:
+        log.write(command + '\\n')
+    if command == 'uci':
+        print('option name Ponder type check default false')
+        print('uciok', flush=True)
+    elif command == 'isready':
+        print('readyok', flush=True)
+    elif command.startswith('position '):
+        fields = command.split()
+        if fields[1] == 'startpos':
+            board = chess.Board()
+        else:
+            end = fields.index('moves') if 'moves' in fields else len(fields)
+            board = chess.Board(' '.join(fields[2:end]))
+        if 'moves' in fields:
+            for move in fields[fields.index('moves') + 1:]:
+                board.push_uci(move)
+    elif command.startswith('go ponder'):
+        pass
+    elif command.startswith('go ') or command in ('ponderhit', 'stop'):
+        move = chess.Move.from_uci('e2e4') if first else next(iter(board.legal_moves))
+        first = False
+        replay = board.copy()
+        replay.push(move)
+        reply = next(iter(replay.legal_moves))
+        print('info depth 18 score cp 12 nodes 100 pv', move.uci())
+        print('bestmove', move.uci(), 'ponder', reply.uci(), flush=True)
+    elif command == 'quit':
+        break
+'''
+
+
+class ponder_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_prediction_hit_miss_game_change_and_stop(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script, log = Path(directory) / 'engine.py', Path(directory) / 'commands'
+            script.write_text(ponder_engine)
+            async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
+                game, board = object(), chess.Board()
+                limit = chess.engine.Limit(white_clock=60, black_clock=60)
+                result = await session.play(board, limit, game=game)
+                self.assertEqual(result.info['_resignation']['depth'], 18)
+                board.push(result.move)
+                board.push(result.ponder)
+                hit = await session.play(board, limit, game=game)
+                self.assertEqual(log.read_text().splitlines().count('ponderhit'), 1)
+                board.push(hit.move)
+                board.push(next(move for move in board.legal_moves if move != hit.ponder))
+                miss = await session.play(board, limit, game=game)
+                self.assertIn('stop', log.read_text().splitlines())
+                board.push(miss.move)
+                board.push(miss.ponder)
+                await session.play(board, limit, game=object())
+                await session.stop_pondering()
+                lines = log.read_text().splitlines()
+                self.assertEqual(lines.count('ponderhit'), 1)
+                self.assertEqual(lines.count('ucinewgame'), 2)
+                self.assertEqual(sum(line.startswith('go ponder ') for line in lines), 4)
+                self.assertEqual(lines[-1], 'isready')

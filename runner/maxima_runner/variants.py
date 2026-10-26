@@ -45,9 +45,24 @@ class royal_losers_board(chess.Board):
         return move in self.generate_legal_moves()
 
 
+class orthodox_wild_board(chess.Board):
+    """Orthodox moves from a FICS wild starting position, with variant provenance."""
+    uci_variant = "chess"
+
+
+wild_boards = {
+    name: type("wild_" + name.split("/")[1] + "_board", (orthodox_wild_board,),
+               {"wild_type": name, "aliases": ["FICS " + name], "xboard_variant": name})
+    for name in ("wild/2", "wild/3", "wild/4", "wild/5", "wild/8", "wild/8a")
+}
+experience_variants = ("standard", "losers", *wild_boards)
+
+
 def board_variant(board):
     if type(board) is royal_losers_board:
         return "losers"
+    if isinstance(board, orthodox_wild_board) and not board.chess960:
+        return board.wild_type
     if type(board) is chess.Board and not board.chess960:
         return "standard"
     raise ValueError("unsupported board variant")
@@ -57,6 +72,9 @@ class variant_headers(chess.pgn.Headers):
     def variant(self):
         if self.get("Variant") == "Royal losers":
             return royal_losers_board
+        for name, board_type in wild_boards.items():
+            if self.get("Variant") == "FICS " + name:
+                return board_type
         return super().variant()
 
 

@@ -5,13 +5,38 @@ import time
 
 import chess.engine
 
-from .variants import royal_losers_board
+from .variants import royal_losers_board, orthodox_wild_board
+
+
+class online_protocol(chess.engine.UciProtocol):
+    """Keep complete evaluation reports alongside python-chess's managed pondering."""
+
+    evidence = None
+    collecting = False
+
+    def send_line(self, line):
+        if line.startswith("go ") or line == "ponderhit":
+            self.collecting = not line.startswith("go ponder")
+            if self.collecting and self.evidence is not None:
+                self.evidence.clear()
+        super().send_line(line)
+
+    def line_received(self, line):
+        if self.collecting and self.evidence is not None and line.startswith("info "):
+            # Parse each report independently: aggregated PlayResult.info can mix
+            # a stale score with a newer depth. python-chess owns UCI parsing.
+            report = chess.engine._parse_uci_info(line[5:], self.board, chess.engine.INFO_ALL)
+            if report.get("multipv", 1) == 1 and ("depth" in report or "score" in report):
+                self.evidence.clear()
+                self.evidence.update(report)
+        super().line_received(line)
 
 
 class engine_session:
     def __init__(self, protocol, timeout):
         self.protocol = protocol
         self.timeout = timeout
+        self.pondering = False
 
     @property
     def identity(self):
@@ -38,7 +63,7 @@ class engine_session:
             if wild is None or wild.type != "combo" or "losers" not in wild.var:
                 raise ValueError("engine does not support royal losers through Wild=losers")
             settings["Wild"] = "losers"
-        elif type(board) is chess.Board:
+        elif type(board) is chess.Board or isinstance(board, orthodox_wild_board):
             wild = self.protocol.options.get("Wild")
             if wild is not None:
                 if wild.type != "combo" or "standard" not in wild.var:
@@ -57,38 +82,40 @@ class engine_session:
         settings = {name: self.protocol.options[name].default if value is None else value
                     for name, value in (options or {}).items() if name in self.protocol.options}
         settings.update(self.variant_settings(board))
-        # Use the analysis stream to retain a score and its depth from the same UCI
-        # report. Aggregated PlayResult.info can mix a stale score with a newer depth.
+        # Keep game evaluation behavior while python-chess manages pondering.
         if "UCI_AnalyseMode" in self.protocol.options:
             settings["UCI_AnalyseMode"] = False
 
         async def play_search():
-            if opponent is not None:
-                await self.protocol.send_opponent_information(opponent=opponent)
-            analysis = await self.protocol.analysis(board, limit, game=game, info=chess.engine.INFO_ALL,
-                                                    options=settings)
-            timer = asyncio.get_running_loop().call_later(ceiling, analysis.stop) if ceiling is not None else None
+            self.pondering = False
             evidence = {}
+            self.protocol.evidence = evidence
+            # play(ponder=True) starts go ponder after bestmove, and reuses the
+            # search via ponderhit only for the same game, board and options.
+            timer = None
+            if ceiling is not None:
+                timer = asyncio.get_running_loop().call_later(ceiling, self.protocol.send_line, "stop")
             try:
-                async for report in analysis:
-                    if report.get("multipv", 1) == 1 and ("depth" in report or "score" in report):
-                        evidence = dict(report)
-                best = await analysis.wait()
-                info = dict(analysis.info, _resignation=evidence)
-                return chess.engine.PlayResult(best.move, best.ponder, info)
+                result = await self.protocol.play(board, limit, game=game, info=chess.engine.INFO_ALL,
+                                                  ponder=True, options=settings, opponent=opponent)
+                self.pondering = result.ponder is not None
+                result.info["_resignation"] = dict(evidence)
+                return result
             finally:
+                self.protocol.evidence = None
                 if timer is not None:
                     timer.cancel()
-                analysis.stop()
-                # Cancellation must return promptly to the server event loop. The
-                # protocol sequences later commands behind this stopped search.
-                completion = asyncio.ensure_future(analysis.wait())
-                completion.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
 
         deadline = self.timeout if timeout is None else timeout
         if ceiling is not None:
             deadline = min(deadline, ceiling + min(self.timeout, 2))
         return await asyncio.wait_for(play_search(), deadline)
+
+    async def stop_pondering(self):
+        """Stop background work without changing the game or clearing its hash."""
+        if self.pondering:
+            self.pondering = False
+            await asyncio.wait_for(self.protocol.ping(), self.timeout)
 
     async def search(self, board, limit, *, game=None, on_info=None):
         settings = self.variant_settings(board)
@@ -124,7 +151,7 @@ async def open_engine(command, directory, timeout=30):
     transport = protocol = None
     try:
         # Keep the transport before the handshake so every failure can reap it.
-        transport, protocol = await chess.engine.UciProtocol.popen(command, cwd=directory)
+        transport, protocol = await online_protocol.popen(command, cwd=directory)
         await asyncio.wait_for(protocol.initialize(), timeout)
         yield engine_session(protocol, timeout)
     except asyncio.TimeoutError as error:

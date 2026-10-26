@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 import chess
 import chess.pgn
 
-from .variants import board_variant, read_pgn
+from .variants import board_variant, read_pgn, experience_variants
 
 
 @contextmanager
@@ -74,7 +74,7 @@ def prepare_game(game, source=None, server=None, players=(), results_only=False,
     """Validate and attach provenance, own colour and a reproducible identity to a PGN."""
     actual_variant = board_variant(game.board())
     if game.errors or not game.board().is_valid():
-        raise ValueError('shared learning accepts valid standard or royal-losers PGNs only')
+        raise ValueError('shared learning accepts valid supported-variant PGNs only')
     if variant is not None and actual_variant != variant:
         raise ValueError(f'{actual_variant} PGN cannot enter {variant} experience')
     if game.next() is None:
@@ -237,7 +237,7 @@ def find_archived(game, directory):
 
 class shared_store:
     def __init__(self, root, variant='standard'):
-        if variant not in ('standard', 'losers'):
+        if variant not in experience_variants:
             raise ValueError('unsupported experience variant')
         self.variant = variant
         self.root = Path(root)

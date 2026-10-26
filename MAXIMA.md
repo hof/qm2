@@ -438,7 +438,8 @@ completed iteration selected.
 Search deadlines and UCI elapsed times use a monotonic wall clock. Time spent
 preparing the search or waiting to run its worker counts toward the budget; a
 process pause does not extend the deadline. Pondering suppresses deadline
-cancellation until `ponderhit`, preserving elapsed time from the search start.
+cancellation until `ponderhit`, then starts the move clock budget on the worker
+without restarting the search. Pondering does not consume the timed allocation.
 Explicit zero clocks and `movetime 0` retain a time limit and return a legal
 move without requiring `stop`; absent time limits retain untimed search behavior.
 `go searchmoves` accepts a nonempty list of legal root moves, including losers'
@@ -1890,8 +1891,9 @@ time, the speed (`850Knps`, `1.2Mnps`), and the first six plies of the line in n
 with the largest share (ties to the more specific layer), then the mix; `base` is book.bin.
 
 FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and stops
-whispering. With `MAXDRONE_KEY` set in the environment (never in a file it writes or a
-log: the key is masked in the terminal and wire logs), the owner can steer it by tell:
+whispering. Owners configured in `owner` can steer it by tell without a key.
+Alternatively, `MAXDRONE_KEY` authorizes anyone who supplies that key (never in a
+file it writes or a log: the key is masked in the terminal and wire logs):
 `tell <name> <key> follow` sends the same explanations as tells (`unfollow` stops),
 `softquit` stops after the game, `softrestart` stops after the game with exit status 75
 so a supervisor loop (`while ...; [ $? -eq 75 ]`) starts it again with the latest code,
@@ -1902,6 +1904,25 @@ loss the revenge line it filed. FICS queues guest tells sent too fast, so MaxDro
 them itself (one tell every two seconds, joining what waits with ` | `) and drops a
 follower who is no longer logged in. Only this fixed list is accepted; a wrong key gets no
 answer.
+
+FICS operators listed in `owner` (case-insensitive server-authenticated handles),
+or anyone supplying `MAXDRONE_KEY`, can replace the current seek pool:
+`tell Maxima seek-pool 3 0, 5 1, 3 0 losers, 5 1 losers, 4 0 losers, 1 0 losers`.
+With a key use `tell Maxima <key> seek-pool ...`. The complete pool is validated
+before replacement. Idle clients withdraw their advertisements and sample the
+new pool immediately; during a game it applies after the game. Random sampling
+uses the larger configured concurrent seek count (at least one). The replacement
+survives games and connection retries in this process, but is not written to the
+configuration file. `owner` handles can also use the existing remote commands.
+
+Supported orthodox-rule wild challenges are `wild/2`, `wild/3`, `wild/4`,
+`wild/5`, `wild/8`, and `wild/8a`; operator pool entries use `w2`, `w3`, `w4`,
+`w5`, `w8`, `w8a`. The initial style12 position must pass legal-board validation.
+Each wild variant has its own learned book, experience and PGNs under
+`experience/wild/<style>` (and the corresponding PGN directory). Optional
+Polyglot books live at `experience/wild/<style>/book.bin`; standard books are
+not mixed in. Rebuild/sync accept `--variant wild/2` and the other supported styles. Wild 0/1 and Fischer Random require different castling support
+and remain declined, as do suicide, atomic, crazyhouse, and bughouse.
 
 FICS computer accounts must keep the owner, machine, and engine in their finger
 notes (`help computers`), and may only play the engine, time controls, and
@@ -1987,6 +2008,13 @@ FICS from logging us off after an hour without input. Lost connections reconnect
 rejected handles stop with an error instead of retrying. JDrone could hang on
 waits without deadlines (engine readiness, a half-open socket); the client
 avoids both.
+
+FICS and Lichess engine moves enable UCI pondering automatically. A legal predicted
+reply starts `go ponder` during the opponent turn; matching replies use
+`ponderhit`, otherwise the old search is stopped and a new timed search begins.
+Book/tablebase choices and game ends stop background pondering. Game tokens,
+position history and option changes prevent reuse across incompatible searches.
+The ordinary allocation and casual thinking ceiling apply after the actual reply.
 
 Both online clients share conservative automatic resignation (`resignation.py`),
 in rated and unrated games. After move 20, the last three completed own-turn
@@ -2296,20 +2324,3 @@ limited, timeout) also pauses lookups for a minute. The move is logged, whispere
 `"online_tablebase": false`) leaves endgames to the engine and its local tables
 (7). The module is `runner/maxima_runner/online_tablebase.py`; it needs no
 account or token.
-
-FICS operators listed in `owner` (case-insensitive server-authenticated handles),
-or anyone supplying `MAXDRONE_KEY`, can replace the current seek pool:
-` tell Maxima seek-pool 3 0, 5 1, 3 0 losers, 5 1 losers, 4 0 losers, 1 0 losers`.
-With a key use `tell Maxima <key> seek-pool ...`. The complete pool is validated
-before replacement. Idle clients withdraw their advertisements and sample the
-new pool immediately; during a game it applies after the game. Random sampling
-uses the larger configured concurrent seek count (at least one). The replacement
-survives games and connection retries in this process, but is not written to the
-configuration file. `owner` handles can also use the existing remote commands.
-
-Supported orthodox-rule wild challenges are `wild/2`, `wild/3`, `wild/4`,
-`wild/5`, `wild/8`, and `wild/8a`; operator pool entries use `w2`, `w3`, `w4`,
-`w5`, `w8`, `w8a`. The initial style12 position must pass legal-board validation.
-These games disable opening books and learning and use separate `wild/<style>`
-PGN directories. Wild 0/1 and Fischer Random require different castling support
-and remain declined, as do suicide, atomic, crazyhouse, and bughouse.
