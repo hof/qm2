@@ -218,6 +218,11 @@ stalemate stays a draw.
 
 ### 4.4 Move loop: pruning and reductions
 
+When a conservative bound proves that the existing late-move-pruning predicate
+rejects a quiet even with its maximum history, refutation and check bonuses,
+search skips its unused check and history queries. Legality and the considered
+move ordinal are still evaluated; pruning decisions and move ordering are unchanged.
+
 All move pruning needs one searched legal alternative and a nondecisive best
 score, applies in PV nodes too, and checks legality before recording a skip.
 Move counts include every legal move considered at the node, pruned ones too.

@@ -52,6 +52,14 @@ constexpr int razoring_margin_per_ply = 300;
 constexpr int main_see_quiet_margin = 50;
 constexpr int main_see_capture_margin = 100;
 constexpr int quiescence_futility_margin = 350;
+constexpr int lmr_normal_offset = 503 + 1024;
+constexpr int lmr_history_limit = 2048;
+constexpr int lmr_tt_pv_bonus = 1289;
+constexpr int lmr_tt_deep_bonus = 1024;
+constexpr int lmr_refutation_bonus = 775;
+constexpr int lmr_check_bonus = 1361;
+constexpr int lmr_tt_pv_depth_offset = 2057;
+constexpr int lmr_depth_offset = 400;
 
 // Pseudo-attacks by cheaper pieces make a static surplus less trustworthy.
 // This is the same parent-position threat model used for quiet ordering.
@@ -1140,13 +1148,14 @@ int search_t::reduction_estimate(int depth, int searched_moves, const move_t & m
     }
     // Base reduction plus the normal ply; non-improving nodes reduce one ply more.
     const int base = reductions[std::min(depth, 255)] * reductions[std::min(searched_moves + 1, 255)];
-    int reduce = base + 503 + 1024 + 1024 * (!stack->improving && base > 915);
+    int reduce = base + lmr_normal_offset + 1024 * (!stack->improving && base > 915);
     reduce += 987 * !pv + 1601 * cut_node
         + 999 * stack->lmr_tt_tactical + 1136 * stack->lmr_tt_fail_low
         + 384 * stack->lmr_alpha_raises;
-    reduce -= std::clamp(history * 1024 / history_divisor, -2048, 2048);
-    reduce -= 1289 * stack->tt_pv + 1024 * stack->lmr_tt_deep + 775 * refutation + 1024 * noisy
-        + 1361 * (gives_check != 0) + stack->lmr_correction;
+    reduce -= std::clamp(history * 1024 / history_divisor, -lmr_history_limit, lmr_history_limit);
+    reduce -= lmr_tt_pv_bonus * stack->tt_pv + lmr_tt_deep_bonus * stack->lmr_tt_deep
+        + lmr_refutation_bonus * refutation + 1024 * noisy
+        + lmr_check_bonus * (gives_check != 0) + stack->lmr_correction;
     return reduce;
 }
 
@@ -1761,6 +1770,16 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
     // Late-move pruning and reductions count every legal move considered, pruned ones included.
     int considered_moves = 0;
     const int score_max = score::MATE - brd.ply - 1;
+    // A quiet's remaining reduction terms are nonnegative. Even its maximum
+    // history, refutation and check bonuses cannot search deeper than this.
+    const int minimum_estimate = lmr_enabled
+        ? lmr_normal_offset - lmr_history_limit - lmr_refutation_bonus - lmr_check_bonus
+            - lmr_tt_pv_bonus * stack->tt_pv - lmr_tt_deep_bonus * stack->lmr_tt_deep
+            - stack->lmr_correction
+        : 0;
+    const bool quiet_lmp_certain = std::max(0, depth
+        - (minimum_estimate + lmr_tt_pv_depth_offset * stack->tt_pv - lmr_depth_offset) / 1024) < 9;
+    const int move_limit = (3 + depth * depth) / (2 - int(stack->improving));
     stack->best_move.clear();
     do {
         if (excluded_move && move->to_compact() == excluded_move) {
@@ -1776,26 +1795,27 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         assert(!stack->best_move.equals(move));
         assert(in_searched(move, searched_moves) == false);
 
-        const int gives_check = brd.gives_check(move);
-        assert(gives_check == 0 || gives_check == 1 || gives_check == 2);
-
-        // Move pruning: skip futile moves
-
-
         const bool nominated = singular_move && move->to_compact() == singular_move;
         const bool singular = nominated && singular_extension > 0;
+        const bool quiet_pruning_allowed = !singular && (lmp_enabled || history_pruning_enabled)
+            && brd.ply && searched_moves && !in_check && !stop_all
+            && !move->capture && !move->promotion && best > -decisive_score;
+        // The existing LMP predicate is certain: do not compute unused check
+        // and history facts. Legality and the considered ordinal remain exact.
+        if (quiet_pruning_allowed && lmp_enabled && quiet_lmp_certain && considered_moves >= move_limit) {
+            continue;
+        }
+        const int gives_check = brd.gives_check(move);
+        assert(gives_check == 0 || gives_check == 1 || gives_check == 2);
         const int estimate = singular ? 0
             : reduction_estimate(depth, considered_moves - 1, *move, pv, cut_node, gives_check);
         const int reduce = singular ? 0 : reduction(depth, searched_moves, estimate);
-        const int lmr_depth = std::max(0, depth - (estimate + 2057 * stack->tt_pv - 400) / 1024);
+        const int lmr_depth = std::max(0, depth - (estimate + lmr_tt_pv_depth_offset * stack->tt_pv - lmr_depth_offset) / 1024);
 
         // Late move and history pruning: a searched legal alternative protects
         // terminals and losing or mating lines. The move limit grows quadratically
         // with depth, larger when improving, and counts every legal move considered.
-        if (!singular && (lmp_enabled || history_pruning_enabled) && brd.ply && searched_moves
-                && !in_check && !stop_all && !move->capture && !move->promotion
-                && best > -decisive_score) {
-            const int move_limit = (3 + depth * depth) / (2 - int(stack->improving));
+        if (quiet_pruning_allowed) {
             const bool lmp_prune = lmp_enabled && lmr_depth < 9 && considered_moves >= move_limit;
             const bool history_prune = !lmp_prune && history_pruning_enabled && lmr_depth < 7
                 && !move->equals(&stack->killer[0]) && !move->equals(&stack->killer[1])
