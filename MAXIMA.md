@@ -2296,3 +2296,20 @@ limited, timeout) also pauses lookups for a minute. The move is logged, whispere
 `"online_tablebase": false`) leaves endgames to the engine and its local tables
 (7). The module is `runner/maxima_runner/online_tablebase.py`; it needs no
 account or token.
+
+FICS operators listed in `owner` (case-insensitive server-authenticated handles),
+or anyone supplying `MAXDRONE_KEY`, can replace the current seek pool:
+` tell Maxima seek-pool 3 0, 5 1, 3 0 losers, 5 1 losers, 4 0 losers, 1 0 losers`.
+With a key use `tell Maxima <key> seek-pool ...`. The complete pool is validated
+before replacement. Idle clients withdraw their advertisements and sample the
+new pool immediately; during a game it applies after the game. Random sampling
+uses the larger configured concurrent seek count (at least one). The replacement
+survives games and connection retries in this process, but is not written to the
+configuration file. `owner` handles can also use the existing remote commands.
+
+Supported orthodox-rule wild challenges are `wild/2`, `wild/3`, `wild/4`,
+`wild/5`, `wild/8`, and `wild/8a`; operator pool entries use `w2`, `w3`, `w4`,
+`w5`, `w8`, `w8a`. The initial style12 position must pass legal-board validation.
+These games disable opening books and learning and use separate `wild/<style>`
+PGN directories. Wild 0/1 and Fischer Random require different castling support
+and remain declined, as do suicide, atomic, crazyhouse, and bughouse.

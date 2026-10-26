@@ -273,12 +273,13 @@ max_followers = 5
 # merge what piles up per follower, so followers never fall behind the game.
 tell_gap = 2.0
 gone_pattern = re.compile(r"^(?P<name>[A-Za-z]{3,17}) is not logged in\.$")
-remote_commands = ("follow", "softquit", "softrestart", "help", "!abort", "!resign", "!draw")
+remote_commands = ("follow", "softquit", "softrestart", "help", "!abort", "!resign", "!draw", "seek-pool")
 # Exit status after softrestart (EX_TEMPFAIL): a supervisor loop starts MaxDrone again with the latest code.
 restart_status = 75
 draw_offer_pattern = re.compile(r"^(?:Your opponent|[A-Za-z]+) offers you a draw\.")
 finger_pattern = re.compile(r"^Finger of (?P<name>[A-Za-z]+)(?P<titles>(?:\([A-Z*]+\))*):")
 playable_types = ("lightning", "blitz", "standard")
+wild_types = ("wild/2", "wild/3", "wild/4", "wild/5", "wild/8", "wild/8a")
 chess_titles = ("GM", "IM", "FM", "WGM", "WIM", "WFM", "CM", "WCM", "NM")
 seek_pattern = re.compile(r"\d{1,3} \d{1,3}(?: [a-z0-9+-]+)*")
 rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
@@ -297,8 +298,30 @@ default_settings = {
 
 def playable(game_type, minutes, increment, losers=False):
     """Supported rules and a running clock."""
-    supported = game_type.lower() in playable_types or losers and game_type.lower() == "losers"
+    supported = game_type.lower() in playable_types + wild_types or losers and game_type.lower() == "losers"
     return supported and int(minutes) + int(increment) > 0
+
+
+def parse_seek_pool(text):
+    """Validate the complete replacement before changing the running policy."""
+    pool = []
+    for entry in text.split(","):
+        spec = " ".join(entry.lower().split())
+        words = spec.split()
+        allowed = {"r", "u", "rated", "unrated", "white", "black", "random", "losers",
+                   *(kind.replace("wild/", "w") for kind in wild_types)}
+        if not seek_pattern.fullmatch(spec) or int(words[0]) + int(words[1]) == 0:
+            raise ValueError("use comma-separated time controls, e.g. 3 0, 5 1 losers")
+        if any(word not in allowed for word in words[2:]):
+            raise ValueError("unsupported seek option or variant")
+        variants = [word for word in words[2:] if word == "losers" or word.startswith("w") and word != "white"]
+        if len(variants) > 1:
+            raise ValueError("one variant per seek")
+        if spec not in pool:
+            pool.append(spec)
+    if len(pool) > 32:
+        raise ValueError("at most 32 seeks")
+    return pool
 
 
 def rating_of(text):
@@ -321,6 +344,7 @@ class play_policy:
                  owner=None, notes=(), contempt_window=100, first_move_wait=60,
                  whisper=False, follow_key=None, reseek_minutes=10, losers=False,
                  losers_seeks=(), losers_seeks_at_once=1):
+        self.seek_pool = None
         self.seeks = list(seeks)
         self.losers_seeks = list(losers_seeks)
         self.losers = losers or bool(self.losers_seeks)
@@ -347,6 +371,9 @@ class play_policy:
         chosen = random.sample(self.seeks, min(self.seeks_at_once, len(self.seeks)))
         chosen += [f"{spec} losers" for spec in random.sample(
             self.losers_seeks, min(self.losers_seeks_at_once, len(self.losers_seeks)))]
+        if self.seek_pool is not None:
+            count = max(self.seeks_at_once, self.losers_seeks_at_once, 1)
+            chosen = random.sample(self.seek_pool, min(count, len(self.seek_pool)))
         commands = []
         for spec in chosen:
             if self.guest:
@@ -520,11 +547,19 @@ class engine_player:
         return self.history is not None and type(self.history.board) is royal_losers_board
 
     @property
+    def is_wild(self):
+        return bool(self.created and self.created["type"].lower() in wild_types)
+
+    @property
     def game_learner(self):
+        if self.is_wild:
+            return None
         return self.losers_learner if self.is_losers else self.learner
 
     @property
     def game_pgn_dir(self):
+        if self.pgn_dir is not None and self.is_wild:
+            return self.pgn_dir.parent / "wild" / self.created["type"].split("/")[1] / self.pgn_dir.name
         if self.pgn_dir is None or not self.is_losers:
             return self.pgn_dir
         return self.pgn_dir.parent / "losers" / self.pgn_dir.name
@@ -587,12 +622,36 @@ class engine_player:
                 await self.send(f"tell {name} Stopped. Thanks for following!")
             return
         key = self.policy.follow_key
-        if len(words) != 2 or words[1] not in remote_commands:
+        owners = self.policy.owner or []
+        owners = [owners] if isinstance(owners, str) else owners
+        authorized = name.lower() in {owner.lower() for owner in owners}
+        if key and words and hmac.compare_digest(words[0].encode(), key.encode()):
+            authorized = True
+            words = words[1:]
+        if not words or words[0] not in remote_commands:
             return
-        if not key or not hmac.compare_digest(words[0].encode(), key.encode()):
+        if not authorized:
             self.on_line(f"-- remote command refused for {name}")
             return
-        command = words[1]
+        command = words[0]
+        if command == "seek-pool":
+            try:
+                pool = parse_seek_pool(" ".join(words[1:]))
+                if any("losers" in spec.split() for spec in pool) and self.session is not None:
+                    self.session.variant_settings(royal_losers_board())
+            except ValueError as error:
+                await self.send(f"tell {name} Invalid seek pool: {error}")
+                return
+            if any("losers" in spec.split() for spec in pool):
+                self.policy.losers = True
+                await self.send("set f3 losers")
+            self.policy.seek_pool = pool
+            if self.game is None:
+                await self.seek()
+            await self.send(f"tell {name} Seek pool set: {', '.join(pool)}. Used after every game.")
+            return
+        if len(words) != 1:
+            return
         self.on_line(f"-- {name}: {command}")
         if command == "follow":
             if name not in self.followers:
@@ -657,7 +716,7 @@ class engine_player:
 
     async def seek(self):
         self.seeked = time.monotonic()
-        if self.stopping or self.game is not None or not (self.policy.seeks or self.policy.losers_seeks):
+        if self.stopping or self.game is not None or not (self.policy.seek_pool or self.policy.seeks or self.policy.losers_seeks):
             return
         await self.send("unseek")
         for command in self.policy.seek_commands():
@@ -975,7 +1034,7 @@ class engine_player:
                                                  self.opponent_group(), game_type, self.contempt, rated)
         try:
             search_options = {"DrawContempt": self.contempt}
-            if self.is_losers:
+            if self.is_losers or self.is_wild:
                 search_options["OwnBook"] = False
             ceiling = None if self.is_losers else self.loss.ceiling(
                 (False if self.created.get("rated") == "unrated" else None) if self.created else None)

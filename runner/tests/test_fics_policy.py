@@ -221,3 +221,43 @@ class settings_tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class remote_pool_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_owner_replaces_mixed_pool_and_it_survives_game_end(self):
+        subject = player(owner=['HoF'], seeks=['9 0'])
+        await subject.on_login('GuestTEST')
+        subject.connection.sent.clear()
+        await subject.handle('hof tells you: seek-pool 3 0, 5 1 losers, 4 0 losers, 1 0 w2')
+        self.assertEqual(subject.policy.seek_pool, ['3 0', '5 1 losers', '4 0 losers', '1 0 w2'])
+        self.assertTrue(subject.policy.losers)
+        self.assertIn('set f3 losers', subject.connection.sent)
+        self.assertEqual(sum(line.startswith('seek ') for line in subject.connection.sent), 2)
+        await play_one_game(subject)
+        self.assertEqual(sum(line.startswith('seek ') for line in subject.connection.sent), 2)
+        self.assertNotIn('seek 9 0 u', subject.connection.sent)
+
+    async def test_key_and_rejected_pool_leave_policy_intact(self):
+        subject = player(follow_key='secret', seeks=['3 0'])
+        await subject.handle('stranger tells you: seek-pool 1 0 losers')
+        self.assertIsNone(subject.policy.seek_pool)
+        await subject.handle('stranger tells you: secret seek-pool 5 1 losers')
+        self.assertEqual(subject.policy.seek_pool, ['5 1 losers'])
+        for spec in ('3 0,', '0 0', '3 0 suicide', '3 0 w0', '3 0 losers w2', '3 0; quit'):
+            await subject.handle(f'stranger tells you: secret seek-pool {spec}')
+            self.assertEqual(subject.policy.seek_pool, ['5 1 losers'])
+
+    async def test_active_game_updates_only_future_seeks(self):
+        subject = player(owner='hof')
+        subject.game = 7
+        await subject.handle('hof tells you: seek-pool 3 0, 5 1')
+        self.assertEqual(subject.policy.seek_pool, ['3 0', '5 1'])
+        self.assertFalse(any(line == 'unseek' or line.startswith('seek ') for line in subject.connection.sent))
+
+    async def test_supported_wild_challenges(self):
+        subject = player()
+        for kind in fics.wild_types:
+            await subject.handle(f'Challenge: Beta (1500) Alpha (1500) unrated {kind} 3 0.')
+            self.assertEqual(subject.connection.sent[-1], 'accept Beta')
+        await subject.handle('Challenge: Beta (1500) Alpha (1500) unrated wild/0 3 0.')
+        self.assertEqual(subject.connection.sent[-1], 'decline Beta')
