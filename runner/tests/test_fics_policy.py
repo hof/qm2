@@ -298,3 +298,54 @@ class remote_pool_tests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(subject.connection.sent[-1], 'accept Beta')
         await subject.handle('Challenge: Beta (1500) Alpha (1500) unrated wild/0 3 0.')
         self.assertEqual(subject.connection.sent[-1], 'decline Beta')
+
+
+class weighted_seek_tests(unittest.IsolatedAsyncioTestCase):
+    def test_remaining_shares_and_hundred_percent_override(self):
+        self.assertEqual(fics.seek_weights(['5 0 50%', '3 0 w2', '3 0 losers']),
+                         [('5 0', 50), ('3 0 w2', 25), ('3 0 losers', 25)])
+        subject = fics.play_policy(seeks=['5 0 100%', '3 0 w2', '3 0 losers'], seeks_at_once=3)
+        self.assertEqual(subject.seek_commands(), ['seek 5 0 u'])
+        self.assertEqual(fics.seek_weights(['5 0 99.9%', '3 0 w3']), [('5 0', 99.9), ('3 0 w3', 0.1)])
+
+    def test_weighted_draws_and_distinct_ads(self):
+        import random
+        from collections import Counter
+        subject = fics.play_policy(seeks=['5 0 50%', '3 0 w2', '3 0 w3'], seeks_at_once=1)
+        with patch.object(fics, 'random', random.Random(20261026)):
+            counts = Counter(subject.seek_commands()[0] for _ in range(4000))
+            self.assertTrue(1900 < counts['seek 5 0 u'] < 2100, counts)
+            for kind in ('w2', 'w3'):
+                self.assertTrue(900 < counts[f'seek 3 0 {kind} u'] < 1100, counts)
+            subject.seeks_at_once = 3
+            self.assertEqual(len(set(subject.seek_commands())), 3)
+
+    def test_invalid_percentage_pools(self):
+        for pool in (['3 0 101%'], ['3 0 -1%'], ['3 0 nan%'], ['3 0 60%', '5 0 50%'],
+                     ['3 0 50%'], ['3 0 0%'], ['3 0 50%', '3 0 50%'], ['3 0 50% w3']):
+            with self.subTest(pool=pool), self.assertRaises(ValueError):
+                fics.seek_weights(pool)
+
+    async def test_operator_weights_are_validated_before_replacement(self):
+        subject = player(owner='hof', seeks=['3 0'], seeks_at_once=3)
+        await subject.handle('hof tells you: seek-pool 5 0 100%, 3 0 w3')
+        self.assertIn('seek 5 0 u', subject.connection.sent)
+        self.assertFalse(any('w3' in line for line in subject.connection.sent if line.startswith('seek ')))
+        original = subject.policy.seek_pool[:]
+        await subject.handle('hof tells you: seek-pool 5 0 80%, 3 0 w3 30%')
+        self.assertEqual(subject.policy.seek_pool, original)
+
+    async def test_reseek_requires_operator_and_waits_during_game(self):
+        subject = player(owner='hof', follow_key='secret', seeks=['5 0 100%', '3 0 w3'], seeks_at_once=3)
+        await subject.handle('stranger tells you: reseek')
+        self.assertEqual(subject.connection.sent, [])
+        await subject.handle('hof tells you: reseek')
+        self.assertEqual(subject.connection.sent[:2], ['unseek', 'seek 5 0 u'])
+        subject.connection.sent.clear()
+        await subject.handle('stranger tells you: secret reseek')
+        self.assertEqual(subject.connection.sent[:2], ['unseek', 'seek 5 0 u'])
+        subject.connection.sent.clear()
+        subject.game = 29
+        await subject.handle('hof tells you: reseek')
+        self.assertEqual(len(subject.connection.sent), 1)
+        self.assertIn('Game in progress', subject.connection.sent[0])

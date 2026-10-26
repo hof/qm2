@@ -1,6 +1,7 @@
 """Play on FICS: timeseal transport, login, keepalive probes, and reconnects."""
 import asyncio
 import json
+from decimal import Decimal
 from contextlib import asynccontextmanager
 import os
 from pathlib import Path
@@ -273,7 +274,7 @@ max_followers = 5
 # merge what piles up per follower, so followers never fall behind the game.
 tell_gap = 2.0
 gone_pattern = re.compile(r"^(?P<name>[A-Za-z]{3,17}) is not logged in\.$")
-remote_commands = ("follow", "softquit", "softrestart", "help", "!abort", "!resign", "!draw", "seek-pool")
+remote_commands = ("follow", "softquit", "softrestart", "help", "!abort", "!resign", "!draw", "seek-pool", "reseek")
 # Exit status after softrestart (EX_TEMPFAIL): a supervisor loop starts MaxDrone again with the latest code.
 restart_status = 75
 draw_offer_pattern = re.compile(r"^(?:Your opponent|[A-Za-z]+) offers you a draw\.")
@@ -302,15 +303,59 @@ def playable(game_type, minutes, increment, losers=False):
     return supported and int(minutes) + int(increment) > 0
 
 
+def seek_entry(entry):
+    """Strip a local optional percentage; never send it to FICS."""
+    spec = " ".join(entry.lower().split())
+    weight = None
+    if "%" in spec:
+        spec, _, percentage = spec.rpartition(" ")
+        if not re.fullmatch(r"\d+(?:\.\d+)?%", percentage):
+            raise ValueError("seek percentage must be a trailing number, e.g. 5 0 50%")
+        weight = Decimal(percentage[:-1])
+        if weight > 100:
+            raise ValueError("seek percentages must be between 0% and 100%")
+    if not seek_pattern.fullmatch(spec):
+        raise ValueError("seek spec must look like '3 0', '3 0 w3' or '5 0 50%'")
+    return spec, weight
+
+
+def seek_weights(entries):
+    """Explicit percentages reserve shares; unspecified entries divide the remainder."""
+    parsed = [seek_entry(entry) for entry in entries]
+    if not parsed:
+        return []
+    if len({spec for spec, _ in parsed}) != len(parsed):
+        raise ValueError("duplicate seek specifications")
+    total = sum((weight for _, weight in parsed if weight is not None), Decimal(0))
+    unspecified = sum(weight is None for _, weight in parsed)
+    if total > 100 or not unspecified and total != 100:
+        raise ValueError("seek percentages must total at most 100%, or exactly 100% when all are specified")
+    share = (Decimal(100) - total) / unspecified if unspecified else Decimal(0)
+    return [(spec, float(share if weight is None else weight)) for spec, weight in parsed]
+
+
+def sample_seeks(entries, count):
+    weighted = seek_weights(entries)
+    if all(weight is None for _, weight in map(seek_entry, entries)):
+        return random.sample([spec for spec, _ in weighted], min(count, len(weighted)))
+    remaining = [(spec, weight) for spec, weight in weighted if weight > 0]
+    chosen = []
+    for _ in range(min(count, len(remaining))):
+        index = random.choices(range(len(remaining)), weights=[weight for _, weight in remaining])[0]
+        chosen.append(remaining.pop(index)[0])
+    return chosen
+
+
 def parse_seek_pool(text):
     """Validate the complete replacement before changing the running policy."""
     pool = []
     for entry in text.split(","):
         spec = " ".join(entry.lower().split())
-        words = spec.split()
+        body, _ = seek_entry(spec)
+        words = body.split()
         allowed = {"r", "u", "rated", "unrated", "white", "black", "random", "losers",
                    *(kind.replace("wild/", "w") for kind in wild_types)}
-        if not seek_pattern.fullmatch(spec) or int(words[0]) + int(words[1]) == 0:
+        if int(words[0]) + int(words[1]) == 0:
             raise ValueError("use comma-separated time controls, e.g. 3 0, 5 1 losers")
         if any(word not in allowed for word in words[2:]):
             raise ValueError("unsupported seek option or variant")
@@ -321,6 +366,7 @@ def parse_seek_pool(text):
             pool.append(spec)
     if len(pool) > 32:
         raise ValueError("at most 32 seeks")
+    seek_weights(pool)
     return pool
 
 
@@ -368,12 +414,11 @@ class play_policy:
 
     def seek_commands(self):
         """A random draw from the pool; guests can only play unrated."""
-        chosen = random.sample(self.seeks, min(self.seeks_at_once, len(self.seeks)))
-        chosen += [f"{spec} losers" for spec in random.sample(
-            self.losers_seeks, min(self.losers_seeks_at_once, len(self.losers_seeks)))]
+        chosen = sample_seeks(self.seeks, self.seeks_at_once)
+        chosen += [f"{spec} losers" for spec in sample_seeks(self.losers_seeks, self.losers_seeks_at_once)]
         if self.seek_pool is not None:
             count = max(self.seeks_at_once, self.losers_seeks_at_once, 1)
-            chosen = random.sample(self.seek_pool, min(count, len(self.seek_pool)))
+            chosen = sample_seeks(self.seek_pool, count)
         commands = []
         for spec in chosen:
             if self.guest:
@@ -611,7 +656,7 @@ class engine_player:
         await self.seek()
 
     async def on_tell(self, found):
-        """Remote control by tell: "<key> follow|softquit|softrestart|help|!abort|!resign|!draw", and "unfollow". Wrong
+        """Remote control by tell: "<key> follow|softquit|softrestart|help|seek-pool|reseek|!abort|!resign|!draw", and "unfollow". Wrong
         keys get no answer; the ! commands are a fixed list, never raw server commands."""
         name, words = found["name"], found["text"].split()
         if words == ["unfollow"]:
@@ -655,6 +700,12 @@ class engine_player:
             if name not in self.followers:
                 self.followers = (self.followers + [name])[-max_followers:]
             await self.send(f"tell {name} Hi! I will tell you why I play each move. 'tell {self.name} unfollow' stops.")
+        elif command == "reseek":
+            if self.game is None:
+                await self.seek()
+                await self.send(f"tell {name} Seeks refreshed.")
+            else:
+                await self.send(f"tell {name} Game in progress; seeks refresh after this game.")
         elif command in ("softquit", "softrestart"):
             self.restart = command == "softrestart"
             await self.stop()
@@ -1142,8 +1193,10 @@ async def serve(connection, commands, on_line, probe_interval=300, probe_timeout
                     if word in ("softquit", "softrestart"):
                         player.restart = word == "softrestart"
                     await player.stop()
+                elif word == "reseek" and player is not None:
+                    await player.seek()
                 elif word == "help":
-                    on_line("-- console: quit (after the game, again to leave now), softquit, softrestart, help; "
+                    on_line("-- console: quit (after the game, again to leave now), softquit, softrestart, reseek, help; "
                             "anything else goes to FICS (help <topic> for its help)")
                 else:
                     await connection.send(text)
@@ -1348,15 +1401,18 @@ def run(options, parser):
         if type(configured[name]) is not int or configured[name] < 0:
             parser.error(f"{name} must be a nonnegative integer")
     supported_wild = {kind.replace("wild/", "w") for kind in wild_types}
-    for pool in ("seeks", "losers_seeks"):
-        for spec in configured[pool]:
-            if not seek_pattern.fullmatch(spec):
-                parser.error(f"seek spec must look like '3 0', '5 2 u' or '3 0 w2', got {spec!r}")
-            variants = [word for word in spec.split()[2:]
-                        if word in ("losers", "suicide", "wild", "atomic", "crazyhouse", "zh", "bughouse", "fr", "chess960")
-                        or re.fullmatch(r"w\d+[a-z]*", word)]
-            if variants and (pool != "seeks" or len(variants) != 1 or variants[0] not in supported_wild | {"losers"}):
-                parser.error("seeks supports losers, w2, w3, w4, w5, w8 and w8a; use one variant per entry")
+    try:
+        for pool in ("seeks", "losers_seeks"):
+            seek_weights(configured[pool])
+            for entry in configured[pool]:
+                spec, _ = seek_entry(entry)
+                variants = [word for word in spec.split()[2:]
+                            if word in ("losers", "suicide", "wild", "atomic", "crazyhouse", "zh", "bughouse", "fr", "chess960")
+                            or re.fullmatch(r"w\d+[a-z]*", word)]
+                if variants and (pool != "seeks" or len(variants) != 1 or variants[0] not in supported_wild | {"losers"}):
+                    raise ValueError("seeks supports losers, w2, w3, w4, w5, w8 and w8a; use one variant per entry")
+    except ValueError as error:
+        parser.error(str(error))
     policy = play_policy(configured["seeks"], configured["seeks_at_once"], configured["accept"],
                          configured["rematches"], configured["games"], guest=options.handle == "guest",
                          owner=configured["owner"], notes=configured["notes"],

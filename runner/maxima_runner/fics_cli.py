@@ -16,8 +16,10 @@ def parser():
                "  tell <name> <key> softquit     stop after this game\n"
                "  tell <name> <key> softrestart  restart after this game (exit 75, for a supervisor loop)\n"
                "  tell <name> <key> !abort|!resign|!draw   act on the current game now\n"
-               "  tell <name> <key> help         list the commands\n"
-               "typed here: lines go to FICS, except help, quit, softquit and softrestart\n\n"
+               "  tell <name> <key> reseek       withdraw ads and draw the pool again\n"
+               "  tell <name> <key> seek-pool 5 0 50%, 3 0 w3  replace the mixed weighted pool\n"
+               "  tell <name> <key> help         list the commands (configured owners may omit the key)\n"
+               "typed here: lines go to FICS, except help, quit, softquit, softrestart and reseek\n\n"
                "examples:\n"
                "  maxima fics --whisper\n"
                "  maxima fics --handle MaxDrone --seek \"3 0\" --seek \"5 0\" --games 20")

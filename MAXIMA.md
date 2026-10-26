@@ -1840,6 +1840,24 @@ enable royal-losers challenges and engine capability validation. Use `"losers": 
 or `--losers` to accept them without advertising them. Repeat `--seek "3 0 losers"`
 or `--seek "3 0 w3"` on the CLI. Guests always advertise unrated games.
 The standard/losers example is checked in as `docs/fics-mixed.json`.
+
+Seek entries may end in a local percentage: `"5 0 50%"`. Entries without a
+percentage divide the remaining weight equally. For example,
+`"seeks": ["5 0 50%", "3 0 w2", "3 0 w3"]` gives weights 50%, 25%, 25%.
+`"5 0 100%"` gives every unspecified entry zero weight. Negative percentages,
+totals over 100%, duplicate specifications, and fully specified totals other
+than 100% are rejected before connecting or replacing an operator pool. Decimals
+are supported. Sampling draws distinct positive-weight entries up to
+`seeks_at_once`; percentages never reach FICS. Without percentages, selection
+remains uniform. The same syntax works in `--seek` and operator `seek-pool`.
+The local `.fics.json` uses 50% for standard 5+0, divides the remaining 50%
+equally among its six wild and four losers entries, posts up to three seeks,
+and reseeks after five minutes without a game (`reseek_minutes: 5`).
+
+Operators can refresh immediately with `tell <bot> reseek` (a configured owner)
+or `tell <bot> <key> reseek`. This withdraws the current ads and draws the pool
+again. During a game it reports that seeking resumes after the game, without
+interrupting play. Typing `reseek` in the local console also refreshes idle ads.
 Older `losers_seeks`, `losers_seeks_at_once`, and their CLI flags remain accepted
 for compatibility; a single mixed `seeks` pool is sufficient. `--no-seek`
 suppresses all advertisements while retaining challenge support.
@@ -1996,7 +2014,7 @@ depth, score, time and PV, or the book layers behind a book move. Style 12
 board lines are left out of the terminal; `--debug` transcripts keep them.
 
 Lines typed at the terminal go to the server verbatim, except the console's own
-`help`, `quit`, `softquit` and `softrestart`; `help <topic>` still reaches the
+`help`, `quit`, `softquit`, `softrestart` and `reseek`; `help <topic>` still reaches the
 server. When the bot plays, `quit` stops after the game and a second `quit`
 leaves at once; without a player it logs off.
 Handles are validated before connecting (3–17 letters, or `guest`); the
