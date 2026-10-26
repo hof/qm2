@@ -54,9 +54,9 @@ class monthly_pgn_tests(unittest.TestCase):
         _, second = self.pending('two')
         original = monthly_pgn.chess.pgn.read_game
         calls = []
-        def observe(stream):
+        def observe(stream, **kwargs):
             calls.append(1)
-            return original(stream)
+            return original(stream, **kwargs)
         with patch.object(monthly_pgn.chess.pgn, 'read_game', side_effect=observe):
             monthly_pgn.archive_pending(second)
         self.assertEqual(len(calls), 2)  # Input game and EOF; no archive parsing.

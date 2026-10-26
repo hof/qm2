@@ -12,6 +12,7 @@ import chess.pgn
 import chess.polyglot
 
 from . import learning_store
+from .variants import board_variant
 
 horizon_plies = 40
 # A game teaches only when it lasted 10 moves and Maxima searched enough moves to judge them: early
@@ -65,8 +66,9 @@ def digest(game):
             if headers.get(f"{prefix}Type") == "program" and headers.get(f"{prefix}Engine")]
     if headers.get("LearningColor") in ("white", "black"):
         ours = [headers["LearningColor"] == "white"]
-    if len(ours) != 1 or game.errors or type(game.board()) is not chess.Board:
+    if len(ours) != 1 or game.errors:
         return None
+    variant = board_variant(game.board())
     our_color = ours[0]
     their_prefix = "Black" if our_color == chess.WHITE else "White"
     board = game.board()
@@ -104,7 +106,7 @@ def digest(game):
             values.append([key, move, evaluated, result])
     rating = headers.get(f"{their_prefix}Elo", "")
     return {
-        "id": headers.get("LearningId"), "source": headers.get("LearningSource"),
+        "id": headers.get("LearningId"), "source": headers.get("LearningSource"), "variant": variant,
         "server": headers.get("LearningServer"),
         "date": headers.get("UTCDate", headers.get("Date", "")),
         "time": headers.get("UTCTime", ""),
@@ -162,9 +164,9 @@ def write_player_stats(players, directory):
     return len(players)
 
 
-def build(experience_dir, games_dir=None):
+def build(experience_dir, games_dir=None, variant="standard"):
     """Reconstruct all shared online learning from the complete PGN archive."""
-    store = learning_store.shared_store(experience_dir)
+    store = learning_store.shared_store(experience_dir, variant)
     if games_dir is not None and Path(games_dir).resolve() != store.games.resolve():
         store.sync(games_dir)
     summary = store.rebuild()
@@ -292,7 +294,7 @@ class opening_book:
 
     def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
                  variety=1.0, supersede_depth=16, random_source=None, contempt=None, style_books=None,
-                 rated=True, profiles=None, mood=None, server=None):
+                 rated=True, profiles=None, mood=None, server=None, variant="standard"):
         self.book_path = book_path
         self.mood = mood
         self.random = random_source or random.Random()
@@ -320,6 +322,8 @@ class opening_book:
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
         opponent = (opponent or "").lower()
         for record in records:
+            if record.get("variant", "standard") != variant:
+                continue
             weight = 1.0 if record["type"] == game_type else 0.5
             registered = record["group"] is not None
             layers = [(0, weight if registered else weight / 2)]
@@ -561,14 +565,15 @@ class learner:
     """MaxDrone's experience: digests kept in memory, a fresh opening_book per game."""
 
     def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0, style_books=None,
-                 profiles=None, mood="auto", moods_dir=None, server=None):
+                 profiles=None, mood="auto", moods_dir=None, server=None, variant="standard"):
         self.experience_dir = Path(experience_dir)
+        self.variant = variant
         self.mood, self.moods_dir = mood, moods_dir
         self.style_books = style_books
         self.profiles = profiles
         self.games_dir = Path(games_dir or self.experience_dir / "games")
         self.server = learning_store.server_name(server) if server else None
-        self.store = learning_store.shared_store(self.experience_dir)
+        self.store = learning_store.shared_store(self.experience_dir, variant)
         self.book_path = book_path
         self.variety = variety
         self.store.rebuild()
@@ -586,7 +591,8 @@ class learner:
         if mood:
             books["mood"] = Path(self.moods_dir) / f"{mood}.bin"
         return opening_book(self.records, opponent, group, game_type, self.book_path, variety=self.variety,
-                            contempt=contempt, style_books=books, rated=rated, profiles=self.profiles, mood=mood, server=self.server)
+                            contempt=contempt, style_books=books, rated=rated, profiles=self.profiles, mood=mood,
+                            server=self.server, variant=self.variant)
 
     def add(self, game):
         record = self.store.add(game)
@@ -604,8 +610,11 @@ def main():
     parser = argparse.ArgumentParser(prog="maxima experience:build", description=__doc__)
     parser.add_argument("--experience-dir", default=str(data_root() / "experience"),
                         help="rebuild shared index and player stats from all archived PGNs (default: experience)")
+    parser.add_argument("--variant", choices=("standard", "losers"), default="standard",
+                        help="losers uses the losers subdirectory of the experience root")
     options = parser.parse_args()
-    summary = build(options.experience_dir)
+    root = Path(options.experience_dir)
+    summary = build(root / "losers" if options.variant == "losers" else root, variant=options.variant)
     print(f"{summary['games']} archived games, {summary['learned']} learned, {summary['evaluated']} with Maxima's evals, "
           f"{summary['players']} opponents")
     return 0
@@ -624,8 +633,11 @@ def sync_main():
     parser.add_argument("--group", choices=("humans", "bots", "masters"),
                         help="opponent group when uploading PGNs without account/type metadata")
     parser.add_argument("--replace", action="store_true", help="explicitly correct an archived final result")
+    parser.add_argument("--variant", choices=("standard", "losers"), default="standard",
+                        help="losers uses the losers subdirectory of the destination")
     options = parser.parse_args()
-    summary = learning_store.shared_store(options.destination).sync(options.source, options.player,
+    root = options.destination / "losers" if options.variant == "losers" else options.destination
+    summary = learning_store.shared_store(root, options.variant).sync(options.source, options.player,
                                                                     options.source_name, options.replace, options.group)
     print(f"{summary['read']} read, {summary['added']} new, {summary['games']} archived, {summary['learned']} learnable")
     return 0

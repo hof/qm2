@@ -257,7 +257,7 @@ class process_tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_fics_confirmed_end_during_grace_uses_normal_pgn_only(self):
         await self.fics_session(finish=True)
-        paths = list((self.root / 'experience' / 'games').glob('*.pgn'))
+        paths = list((self.root / 'experience' / 'games').rglob('*.pgn'))
         self.assertEqual(len(paths), 1)
         self.assertEqual(learning_store.read_games(paths[0])[0].headers['Result'], '0-1')
         self.assertFalse(list((self.root / 'experience' / 'games' / 'interrupted').glob('*.pgn')))
@@ -325,7 +325,7 @@ class process_tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_lichess_confirmed_finish_has_no_extra_interrupted_game(self):
         await self.lichess_session(finish=True)
-        paths = list((self.root / 'experience' / 'games').glob('*.pgn'))
+        paths = list((self.root / 'experience' / 'games').rglob('*.pgn'))
         self.assertEqual(len(paths), 1)
         self.assertEqual(learning_store.read_games(paths[0])[0].headers['Result'], '0-1')
         self.assertFalse(list((self.root / 'experience' / 'games' / 'interrupted').glob('*.pgn')))

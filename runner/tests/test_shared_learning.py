@@ -201,7 +201,7 @@ class shared_learning_tests(unittest.TestCase):
         self.assertEqual(self.store.snapshot.read_bytes(), expected)
         variant = game_for()
         variant.headers['Variant'] = 'Chess960'
-        with self.assertRaisesRegex(ValueError, 'standard-chess'):
+        with self.assertRaisesRegex(ValueError, 'unsupported board variant'):
             self.upload(variant)
         self.assertEqual(self.store.snapshot.read_bytes(), expected)
 

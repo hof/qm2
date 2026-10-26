@@ -12,6 +12,7 @@ import sys
 import chess.pgn
 
 from .learning_store import atomic_text, merge_game, prepare_game, read_games, writer_lock
+from .variants import read_pgn
 
 
 def month_path(game, directory):
@@ -53,7 +54,7 @@ def load_index(path):
         raise ValueError('unsupported PGN byte order mark')
     stream = io.StringIO(text)
     entries, position, offset = {}, 0, 0
-    while (game := chess.pgn.read_game(stream)) is not None:
+    while (game := read_pgn(stream)) is not None:
         prepare_game(game)
         end = stream.tell()
         length = len(text[position:end].encode('utf-8'))
@@ -109,7 +110,7 @@ def archived_game(game, directory):
     with path.open('rb') as stream:
         stream.seek(entry[0])
         text = stream.read(entry[1]).decode('utf-8')
-    return prepare_game(chess.pgn.read_game(io.StringIO(text)))
+    return prepare_game(read_pgn(io.StringIO(text)))
 
 
 def write_month(game, directory, replace=False):

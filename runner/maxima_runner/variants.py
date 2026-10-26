@@ -4,6 +4,7 @@ Rules: https://www.freechess.org/Help/HelpFiles/losers.html
 This is not python-chess's suicide/antichess variant.
 """
 import chess
+import chess.pgn
 
 
 class royal_losers_board(chess.Board):
@@ -42,3 +43,30 @@ class royal_losers_board(chess.Board):
 
     def is_legal(self, move):
         return move in self.generate_legal_moves()
+
+
+def board_variant(board):
+    if type(board) is royal_losers_board:
+        return "losers"
+    if type(board) is chess.Board and not board.chess960:
+        return "standard"
+    raise ValueError("unsupported board variant")
+
+
+class variant_headers(chess.pgn.Headers):
+    def variant(self):
+        if self.get("Variant") == "Royal losers":
+            return royal_losers_board
+        return super().variant()
+
+
+class variant_game(chess.pgn.Game):
+    """Royal-losers PGNs without modifying python-chess's global registry."""
+
+    def __init__(self, headers=None):
+        super().__init__(headers)
+        self.headers = variant_headers(self.headers)
+
+
+def read_pgn(stream):
+    return chess.pgn.read_game(stream, Visitor=lambda: chess.pgn.GameBuilder(Game=variant_game))

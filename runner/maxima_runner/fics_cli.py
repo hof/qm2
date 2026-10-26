@@ -27,7 +27,7 @@ def parser():
                         help="JSON settings (keys: host, port, handle, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
                              "layer_profiles, style_books, first_move_wait, whisper, mood, live_feed, pgn_post, online_tablebase, "
-                             "reseek_minutes, resignation, shutdown_grace); "
+                             "reseek_minutes, resignation, shutdown_grace, losers, losers_seeks, losers_seeks_at_once); "
                              "flags override it")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
@@ -44,6 +44,10 @@ def parser():
     parser.add_argument("--seek", action="append", metavar="SPEC",
                         help='seek pool entry, repeatable (e.g. "3 0"; default pool 3 0, 3 1, 5 0)')
     parser.add_argument("--seeks-at-once", type=int, help="seeks posted at a time, drawn from the pool (default: 2)")
+    parser.add_argument("--losers", action="store_true", default=None, help="also accept FICS royal-losers challenges")
+    parser.add_argument("--losers-seek", action="append", metavar="SPEC",
+                        help='enable losers and add a time control to its separate pool, e.g. "3 0 u"')
+    parser.add_argument("--losers-seeks-at-once", type=int, help="losers seeks posted alongside standard seeks (default: 1)")
     parser.add_argument("--no-seek", action="store_true", help="do not seek; only accept challenges")
     parser.add_argument("--whisper", action="store_true",
                         help="whisper each move's reason to observers: book layer and mix, or depth, score, "

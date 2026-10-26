@@ -5,6 +5,8 @@ import re
 import chess
 import chess.pgn
 
+from .variants import variant_game
+
 style12_pattern = re.compile(
     r"<12> (?P<rows>(?:[pnbrqkPNBRQK-]{8} ){8})(?P<turn>[WB]) (?P<ep>-1|[0-7]) "
     r"(?P<castling>(?:[01] ){4})(?P<halfmove>\d+) (?P<game>\d+) (?P<white>[A-Za-z]+) (?P<black>[A-Za-z]+) "
@@ -56,8 +58,8 @@ class style12:
         side = "w" if self.turn == chess.WHITE else "b"
         return f"{placement} {side} {castling} {ep} {self.halfmove} {self.move_number}"
 
-    def board(self):
-        board = chess.Board(self.fen())
+    def board(self, board_type=chess.Board):
+        board = board_type(self.fen())
         if not board.is_valid():
             raise ValueError(f"invalid style12 position: {self.fen()}")
         return board
@@ -79,8 +81,9 @@ def same_position(board, position):
 class game_history:
     """Board with the game's moves, so the engine sees repetitions; resyncs on any mismatch."""
 
-    def __init__(self, position):
-        self.board = position.board()
+    def __init__(self, position, board_type=chess.Board):
+        self.board_type = board_type
+        self.board = position.board(board_type)
 
     def update(self, position):
         """Apply the server's latest board: 'move', 'takeback', 'reset', or False when nothing changed."""
@@ -103,7 +106,7 @@ class game_history:
                 if same_position(self.board, position):
                     return "move"
         # Takebacks, missed updates, and resumed games restart from the server board.
-        self.board = position.board()
+        self.board = position.board(self.board_type)
         return "reset"
 
 
@@ -129,7 +132,7 @@ class game_record:
         self.searches[board.ply()] = (move, info)
 
     def game(self, board, result, reason):
-        game = chess.pgn.Game.from_board(board)
+        game = variant_game.from_board(board)
         when = self.started
         game.headers.update({"Date": when.astimezone().strftime("%Y.%m.%d"), "Round": "-", "UTCDate": when.strftime("%Y.%m.%d"),
                              "UTCTime": when.strftime("%H:%M:%S")})

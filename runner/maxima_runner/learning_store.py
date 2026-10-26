@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 import chess
 import chess.pgn
 
+from .variants import board_variant, read_pgn
+
 
 @contextmanager
 def writer_lock(path):
@@ -68,11 +70,13 @@ def server_name(value):
     return name
 
 
-def prepare_game(game, source=None, server=None, players=(), results_only=False, group=None):
+def prepare_game(game, source=None, server=None, players=(), results_only=False, group=None, variant=None):
     """Validate and attach provenance, own colour and a reproducible identity to a PGN."""
-    if (game.errors or type(game.board()) is not chess.Board or game.board().chess960
-            or not game.board().is_valid()):
-        raise ValueError('shared learning accepts valid standard-chess PGNs only')
+    actual_variant = board_variant(game.board())
+    if game.errors or not game.board().is_valid():
+        raise ValueError('shared learning accepts valid standard or royal-losers PGNs only')
+    if variant is not None and actual_variant != variant:
+        raise ValueError(f'{actual_variant} PGN cannot enter {variant} experience')
     if game.next() is None:
         raise ValueError('PGN has no moves')
     replay = game.board()
@@ -167,7 +171,7 @@ def read_games(path):
     stream = io.StringIO(text)
     games = []
     while True:
-        game = chess.pgn.read_game(stream)
+        game = read_pgn(stream)
         if game is None:
             return games
         if game.errors:
@@ -177,7 +181,8 @@ def read_games(path):
 
 def merge_game(old, new, replace=False):
     """Keep richer annotations on replay; require explicit correction of a final result."""
-    if (old.board().fen() != new.board().fen() or list(old.mainline_moves()) != list(new.mainline_moves())
+    if (board_variant(old.board()) != board_variant(new.board())
+            or old.board().fen() != new.board().fen() or list(old.mainline_moves()) != list(new.mainline_moves())
             or any(old.headers.get(key) != new.headers.get(key)
                    for key in ('LearningSource', 'LearningServer', 'LearningColor', 'White', 'Black'))):
         raise ValueError('conflicting game content for one LearningId')
@@ -217,7 +222,7 @@ def archive_game(game, directory, replace=False):
             return write_month(game, directory, replace), game
         if path.exists():
             with path.open(encoding='utf-8') as stream:
-                game = merge_game(chess.pgn.read_game(stream), game, replace)
+                game = merge_game(read_pgn(stream), game, replace)
         text = str(game) + '\n\n'
         if not path.exists() or path.read_text(encoding='utf-8') != text:
             atomic_text(path, text)
@@ -231,7 +236,10 @@ def find_archived(game, directory):
 
 
 class shared_store:
-    def __init__(self, root):
+    def __init__(self, root, variant='standard'):
+        if variant not in ('standard', 'losers'):
+            raise ValueError('unsupported experience variant')
+        self.variant = variant
         self.root = Path(root)
         self.snapshot = self.root / 'index' / 'shared.json'
         self.lock = self.root / '.learning.lock'
@@ -240,7 +248,8 @@ class shared_store:
     def _read(self):
         try:
             value = json.loads(self.snapshot.read_text(encoding='utf-8'))
-            if value.get('version') == 1 and isinstance(value.get('games'), dict):
+            if (value.get('version') == 1 and value.get('variant', 'standard') == self.variant
+                    and isinstance(value.get('games'), dict)):
                 return value['games']
         except (OSError, ValueError, AttributeError):
             pass
@@ -261,7 +270,7 @@ class shared_store:
     def _publish(self, cached):
         from .learning import player_stats, write_player_stats
         write_player_stats(player_stats(self.records(cached)), self.root / 'players')
-        atomic_text(self.snapshot, json.dumps({'version': 1, 'games': cached}, sort_keys=True) + '\n')
+        atomic_text(self.snapshot, json.dumps({'version': 1, 'variant': self.variant, 'games': cached}, sort_keys=True) + '\n')
 
     def _ingest(self, games, cached, replace=False):
         from .learning import digest
@@ -286,7 +295,7 @@ class shared_store:
         return learned
 
     def add(self, game):
-        prepare_game(game)
+        prepare_game(game, variant=self.variant)
         with writer_lock(self.lock):
             cached = self._read()
             if cached is None:
@@ -304,7 +313,7 @@ class shared_store:
         games = []
         for path in sorted(paths):
             for game in read_games(path):
-                prepare_game(game)
+                prepare_game(game, variant=self.variant)
                 canonical = self.games / (game.headers['LearningId'] + '.pgn')
                 if canonical.exists() and canonical != path:
                     current = read_games(canonical)[0]
@@ -329,7 +338,7 @@ class shared_store:
         if not source.exists():
             raise ValueError(f'PGN source does not exist: {source}')
         paths = [source] if source.is_file() else sorted(source.rglob('*.pgn'))
-        games = [prepare_game(game, source_name, players=players, results_only=True, group=group)
+        games = [prepare_game(game, source_name, players=players, results_only=True, group=group, variant=self.variant)
                  for path in paths for game in read_games(path)]
         with writer_lock(self.lock):
             cached = self._read()

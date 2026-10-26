@@ -15,6 +15,7 @@ import time
 
 import chess
 import chess.engine
+from .variants import royal_losers_board
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
 from .move_choice import describe, search_summary, speed, variation
@@ -290,12 +291,14 @@ default_settings = {
     "contempt_window": 100, "layer_profiles": {}, "style_books": {}, "first_move_wait": 60,
     "whisper": False, "mood": "auto", "live_feed": None, "pgn_post": None,
     "online_tablebase": True, "reseek_minutes": 10,
+    "losers": False, "losers_seeks": [], "losers_seeks_at_once": 1,
 }
 
 
-def playable(game_type, minutes, increment):
-    """Standard chess with a running clock; variants and untimed games are refused."""
-    return game_type.lower() in playable_types and int(minutes) + int(increment) > 0
+def playable(game_type, minutes, increment, losers=False):
+    """Supported rules and a running clock."""
+    supported = game_type.lower() in playable_types or losers and game_type.lower() == "losers"
+    return supported and int(minutes) + int(increment) > 0
 
 
 def rating_of(text):
@@ -316,8 +319,12 @@ class play_policy:
 
     def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=0, games=None, guest=True,
                  owner=None, notes=(), contempt_window=100, first_move_wait=60,
-                 whisper=False, follow_key=None, reseek_minutes=10):
+                 whisper=False, follow_key=None, reseek_minutes=10, losers=False,
+                 losers_seeks=(), losers_seeks_at_once=1):
         self.seeks = list(seeks)
+        self.losers_seeks = list(losers_seeks)
+        self.losers = losers or bool(self.losers_seeks)
+        self.losers_seeks_at_once = losers_seeks_at_once
         self.seeks_at_once = seeks_at_once
         self.accept = accept
         self.rematches = rematches
@@ -338,6 +345,8 @@ class play_policy:
     def seek_commands(self):
         """A random draw from the pool; guests can only play unrated."""
         chosen = random.sample(self.seeks, min(self.seeks_at_once, len(self.seeks)))
+        chosen += [f"{spec} losers" for spec in random.sample(
+            self.losers_seeks, min(self.losers_seeks_at_once, len(self.losers_seeks)))]
         return [f"seek {spec}" + (" u" if self.guest and not rated_word.search(spec) else "") for spec in chosen]
 
 
@@ -454,7 +463,7 @@ class engine_player:
 
     def __init__(self, open_session, on_line, margin=5, policy=None, finger_wait=2, pgn_dir=None,
                  site="freechess.org", learner=None, events=None, online_tablebase=False, local_pieces=0,
-                 resignation_settings=None):
+                 resignation_settings=None, losers_learner=None):
         self.loss = resignation.loss_policy(resignation_settings)
         self.latest_position = None
         self.position_received_at = None
@@ -462,6 +471,7 @@ class engine_player:
         self.events = events
         self.our_color = None
         self.learner = learner
+        self.losers_learner = losers_learner
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.opening = None
         self.from_book = self.draw_offered = False
@@ -493,6 +503,26 @@ class engine_player:
     async def start(self):
         self.context = self.open_session()
         self.session = await self.context.__aenter__()
+        if self.policy.losers:
+            try:
+                self.session.variant_settings(royal_losers_board())
+            except ValueError:
+                await self.stop_engine()
+                raise
+
+    @property
+    def is_losers(self):
+        return self.history is not None and type(self.history.board) is royal_losers_board
+
+    @property
+    def game_learner(self):
+        return self.losers_learner if self.is_losers else self.learner
+
+    @property
+    def game_pgn_dir(self):
+        if self.pgn_dir is None or not self.is_losers:
+            return self.pgn_dir
+        return self.pgn_dir.parent / "losers" / self.pgn_dir.name
 
     async def stop_engine(self):
         if self.context is not None:
@@ -537,6 +567,8 @@ class engine_player:
         self.name = name
         self.game = self.history = None
         self.announced_mood = None
+        if self.policy.losers:
+            await self.send("set f3 losers")
         await self.announce()
         await self.seek()
 
@@ -620,7 +652,7 @@ class engine_player:
 
     async def seek(self):
         self.seeked = time.monotonic()
-        if self.stopping or self.game is not None or not self.policy.seeks:
+        if self.stopping or self.game is not None or not (self.policy.seeks or self.policy.losers_seeks):
             return
         await self.send("unseek")
         for command in self.policy.seek_commands():
@@ -697,7 +729,7 @@ class engine_player:
         self.contempt = draw_contempt(rating_of(our_rating), rating_of(rating), self.policy.contempt_window)
         if self.contempt is not None:
             self.on_line(f"-- draw contempt {self.contempt / 100:+.2f} ({rating_of(our_rating)} vs {rating_of(rating)})")
-        if not playable(match["type"], match["time"], match["increment"]):
+        if not playable(match["type"], match["time"], match["increment"], self.policy.losers):
             self.on_line(f"-- aborting unsupported game: {match['type']} {match['time']} {match['increment']}")
             await self.send("abort")
             return
@@ -707,7 +739,7 @@ class engine_player:
         name = match["name"]
         if self.game is not None or self.stopping or not self.policy.accept:
             await self.send(f"decline {name}")
-        elif not playable(match["type"], match["time"], match["increment"]):
+        elif not playable(match["type"], match["time"], match["increment"], self.policy.losers):
             self.on_line(f"-- declining {match['type']} {match['time']} {match['increment']} from {name}")
             await self.send(f"decline {name}")
         else:
@@ -743,7 +775,7 @@ class engine_player:
         end = {"white": self.latest_position.white, "black": self.latest_position.black}
         self.record.headers.update(self.headers(end))
         game = self.record.game(self.history.board, "*", "client shutdown before server result")
-        online_shutdown.save_interrupted(game, self.pgn_dir, self.on_line)
+        online_shutdown.save_interrupted(game, self.game_pgn_dir, self.on_line)
 
     def headers(self, end):
         """PGN tags from Creating:, finger, and the engine; our side is a program, the other side as fingered."""
@@ -792,25 +824,26 @@ class engine_player:
         if self.pgn_dir is None or game is None:
             return
         try:
-            path = fics_game.save_game(game, self.pgn_dir, self.record.started)
+            path = fics_game.save_game(game, self.game_pgn_dir, self.record.started)
         except (OSError, ValueError) as error:
             self.on_line(f"-- could not save game {self.game}: {error}")
             return
         self.on_line(f"-- saved game {self.game} to {path}")
-        if self.learner is not None:
+        learner = self.game_learner
+        if learner is not None:
             try:
-                record = self.learner.add(game)
+                record = learner.add(game)
             except (OSError, ValueError) as error:
                 self.on_line(f"-- PGN saved; shared learning update failed: {error}")
                 return
-            for text in learning_report(game, record, self.learner.records):
+            for text in learning_report(game, record, learner.records):
                 self.on_line(f"-- {text}")
                 self.tell_followers(text)
         if game.headers.get('Result') != '*':
             from .monthly_pgn import archive_saved
             paths = [path]
-            if self.learner is not None and getattr(self.learner, 'experience_dir', None) is not None:
-                paths.append(self.learner.experience_dir / 'games' / (game.headers['LearningId'] + '.pgn'))
+            if learner is not None and getattr(learner, 'experience_dir', None) is not None:
+                paths.append(learner.experience_dir / 'games' / (game.headers['LearningId'] + '.pgn'))
             archive_saved(paths, self.on_line)
 
     def opponent_group(self):
@@ -829,7 +862,16 @@ class engine_player:
         if position.relation not in (fics_game.playing_my_move, fics_game.playing_their_move):
             return
         if position.game != self.game:
-            history = fics_game.game_history(position)
+            created = self.created if self.created and {self.created["white"], self.created["black"]} == {
+                position.white, position.black} else None
+            if created and not playable(created["type"], created["time"], created["increment"], self.policy.losers):
+                return
+            # Style12 has no variant field. With mixed rules, wait for Creating:
+            # rather than silently treating a resumed losers board as standard.
+            if self.policy.losers and created is None:
+                raise ValueError("mixed-variant game needs Creating: metadata")
+            board_type = royal_losers_board if created and created["type"].lower() == "losers" else chess.Board
+            history = fics_game.game_history(position, board_type)
             self.cancel()
             self.game, self.token, self.history = position.game, object(), history
             self.loss.reset()
@@ -919,19 +961,25 @@ class engine_player:
                 await asyncio.wait_for(self.opponent_ready.wait(), self.finger_wait)
             except asyncio.TimeoutError:
                 self.opponent_ready.set()
-        if self.learner is not None and self.opening is None:
+        learner = self.game_learner
+        if learner is not None and self.opening is None:
             await self.announce()  # a new week may bring a new mood
             game_type = self.created["type"].lower() if self.created else None
             rated = bool(self.created) and self.created["rated"] == "rated"
-            self.opening = self.learner.for_game(self.opponent.name if self.opponent else None,
+            self.opening = learner.for_game(self.opponent.name if self.opponent else None,
                                                  self.opponent_group(), game_type, self.contempt, rated)
         try:
+            search_options = {"DrawContempt": self.contempt}
+            if self.is_losers:
+                search_options["OwnBook"] = False
+            ceiling = None if self.is_losers else self.loss.ceiling(
+                (False if self.created.get("rated") == "unrated" else None) if self.created else None)
             move, info, kind = await move_choice.choose_move(
                 self.session, board, limit, opening=self.opening,
-                ceiling=self.loss.ceiling((False if self.created.get("rated") == "unrated" else None) if self.created else None),
+                ceiling=ceiling,
                 budget_ms=learning.per_move_budget_ms(clock, position.increment_seconds), tablebase=self.tablebase,
                 game=self.token, opponent=self.opponent, timeout=max(clock, 1) + self.margin,
-                options={"DrawContempt": self.contempt})
+                options=search_options)
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
             self.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
             await self.stop_engine()
@@ -943,7 +991,7 @@ class engine_player:
         if move is None or not board.is_legal(move):
             self.on_line(f"-- engine returned no legal move in {board.fen()}")
             return
-        fresh = self.loss.on_search(board, move, info, kind)
+        fresh = self.loss.on_search(board, move, info, kind) if not self.is_losers else False
         latest = self.latest_position
         received_at = self.position_received_at if self.position_received_at is not None else started
         created = self.created or {}
@@ -955,7 +1003,7 @@ class engine_player:
             speed=created.get("type"),
             ours=max(0, (latest.white_ms if self.our_color else latest.black_ms) / 1000 - (time.monotonic() - received_at)),
             theirs=(latest.black_ms if self.our_color else latest.white_ms) / 1000,
-            increment=latest.increment_seconds, info=info, board=board) if fresh else None
+            increment=latest.increment_seconds, info=info, board=board) if fresh and not self.is_losers else None
         if evidence is not None:
             self.loss.sent = True
             self.on_line(f"-- resigning game {self.game}: {json.dumps(evidence)}")
@@ -1098,7 +1146,8 @@ def load_settings(path):
              "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
              "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float), "whisper": bool,
              "mood": str, "live_feed": str, "pgn_post": str,
-             "online_tablebase": bool, "reseek_minutes": (int, float)}
+             "online_tablebase": bool, "reseek_minutes": (int, float),
+             "losers": bool, "losers_seeks": list, "losers_seeks_at_once": int}
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     for key, value in loaded.items():
@@ -1113,8 +1162,12 @@ def load_settings(path):
             expected = " or ".join(kind.__name__ for kind in (types[key] if isinstance(types[key], tuple)
                                                                  else (types[key],)))
             raise ValueError(f"{path}: {key} must be {expected}")
-        if key == "seeks" and not all(isinstance(spec, str) for spec in value):
+        if key in ("seeks", "losers_seeks") and (value is None or not all(isinstance(spec, str) for spec in value)):
             raise ValueError(f"{path}: seeks must be strings like '3 0'")
+        if key in ("seeks_at_once", "losers_seeks_at_once") and (value is None or value < 0):
+            raise ValueError(f"{path}: {key} must be a nonnegative integer")
+        if key == "losers" and value is None:
+            raise ValueError(f"{path}: losers must be bool")
         if key == "owner" and isinstance(value, list) and not all(isinstance(name, str) for name in value):
             raise ValueError(f"{path}: owner must be a handle or a list of handles")
         if key == "notes" and (len(value) > 7 or not all(isinstance(note, str) for note in value)):
@@ -1174,10 +1227,14 @@ def run(options, parser):
     flags = {"host": options.host, "port": options.port, "handle": options.handle, "engine": options.engine,
              "seeks": options.seek, "seeks_at_once": options.seeks_at_once, "rematches": options.rematches,
              "games": options.games, "pgn_dir": options.pgn_dir, "variety": options.variety,
-             "live_feed": options.live_feed, "pgn_post": options.pgn_post}
+             "live_feed": options.live_feed, "pgn_post": options.pgn_post,
+             "losers": options.losers, "losers_seeks": options.losers_seek,
+             "losers_seeks_at_once": options.losers_seeks_at_once}
     configured.update({key: value for key, value in flags.items() if value is not None})
+    configured["losers"] = configured["losers"] or bool(configured["losers_seeks"])
     if options.no_seek:
         configured["seeks"] = []
+        configured["losers_seeks"] = []
     if options.no_accept:
         configured["accept"] = False
     if options.whisper:
@@ -1208,16 +1265,23 @@ def run(options, parser):
         feed_address = (host or "127.0.0.1", int(port))
     if configured["pgn_post"] and not re.match(r"https?://", configured["pgn_post"]):
         parser.error(f"PGN post needs an http(s) URL, got {configured['pgn_post']!r}")
-    for spec in configured["seeks"]:
+    for name in ("seeks_at_once", "losers_seeks_at_once"):
+        if type(configured[name]) is not int or configured[name] < 0:
+            parser.error(f"{name} must be a nonnegative integer")
+    for spec in configured["seeks"] + configured["losers_seeks"]:
         if not seek_pattern.fullmatch(spec):
             parser.error(f"seek spec must look like '3 0' or '5 2 u', got {spec!r}")
+        if any(word in ("losers", "suicide", "wild", "atomic", "crazyhouse", "zh") or re.fullmatch(r"w\d+", word)
+               for word in spec.split()[2:]):
+            parser.error("seek pools contain time controls and seek options; use losers_seeks or --losers-seek for losers")
     policy = play_policy(configured["seeks"], configured["seeks_at_once"], configured["accept"],
                          configured["rematches"], configured["games"], guest=options.handle == "guest",
                          owner=configured["owner"], notes=configured["notes"],
                          contempt_window=configured["contempt_window"],
                          first_move_wait=configured["first_move_wait"], whisper=configured["whisper"],
                          follow_key=os.environ.get("MAXDRONE_KEY") or None,
-                         reseek_minutes=configured["reseek_minutes"])
+                         reseek_minutes=configured["reseek_minutes"], losers=configured["losers"],
+                         losers_seeks=configured["losers_seeks"], losers_seeks_at_once=configured["losers_seeks_at_once"])
     redact = (lambda text: text.replace(policy.follow_key, "********")) if policy.follow_key else (lambda text: text)
     pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or data_root() / "experience" / "games")
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
@@ -1244,6 +1308,7 @@ def run(options, parser):
     async def play_session(controller, commands, state):
         read_commands(asyncio.get_event_loop(), commands)
         learner = None
+        losers_learner = None
         if configured["learning"] and not options.no_engine:
             learner = learning.learner(data_root() / "experience", pgn_dir, data_root() / "book.bin",
                                        configured["variety"],
@@ -1251,9 +1316,16 @@ def run(options, parser):
                                        configured["layer_profiles"] or None, configured["mood"],
                                        data_root() / "moods", server=options.host)
             show(f"-- experience: {len(learner.records)} games")
+            if policy.losers:
+                losers_games = pgn_dir.parent / "losers" / pgn_dir.name
+                losers_learner = learning.learner(data_root() / "experience" / "losers", losers_games,
+                                                 variety=configured["variety"], mood="off", server=options.host,
+                                                 variant="losers")
+                show(f"-- losers experience: {len(losers_learner.records)} games")
         events = connectors.game_events() if feed_address or configured["pgn_post"] else None
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
                                                                   pgn_dir=pgn_dir, site=options.host, learner=learner,
+                                                                  losers_learner=losers_learner,
                                                                   events=events,
                                                                   online_tablebase=configured["online_tablebase"],
                                                                   local_pieces=local_pieces,

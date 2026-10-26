@@ -1400,6 +1400,24 @@ and reload before preparing the next game's opening book. A game already in
 progress retains its existing view. The native JSON/`experience.bin` workflow
 above remains separate for GUI use; online sharing does not merge binary counters.
 
+FICS royal losers uses a separate store at `experience/losers`, with its own
+`games`, `index/shared.json`, locks and `players`. PGNs carry
+`Variant "Royal losers"`; readers preserve compulsory captures and royal kings
+without modifying python-chess's global variant registry. Stores reject games
+of the other variant, snapshots identify their variant, and opening selection
+filters variant-tagged records. Standard records from older snapshots default
+to standard. Losers uses learned openings only: no standard Polyglot/style/mood
+books, standard online tablebases, or standard resignation thresholds. The W17
+material evaluator is unchanged; its scores and learning probabilities have not
+been calibrated by a new strength test.
+
+Use `./maxima experience:build --variant losers` to rebuild that store, or
+`./maxima experience:sync games.pgn --variant losers --player MaxDrone` to import
+royal-losers games. Both commands append `losers` to their experience root.
+Custom FICS `pgn_dir` places losers PGNs at `<parent>/losers/<directory-name>`
+so they never enter the standard PGN directory. Disabling PGN or learning has
+the same effect for both variants.
+
 **Storage and concurrency.** Games are first durably saved to
 `experience/games/<LearningId>.pgn`. After successful learning, both online
 clients invoke `experience:archive` to merge completed games into
@@ -1786,9 +1804,59 @@ After login and after each game the client posts `seeks_at_once` random seeks
 from the pool (`--seek`, `--seeks-at-once`, `--no-seek`); guests add ` u`.
 After `reseek_minutes` (default 10, 0 off) without a game it draws again, so
 the other time controls get their turn and new players see the seeks announced.
-Challenges are accepted only for standard lightning, blitz, or standard chess
-with a clock and only when idle (`--no-accept` declines all); a game created
-with a variant is aborted. Rematches are off by default; `rematches` (or
+
+To advertise **two standard games and one royal-losers game** at each posting,
+use separate pools in the FICS JSON configuration:
+
+```json
+{
+  "seeks": ["3 0", "3 1", "5 0", "5 1"],
+  "seeks_at_once": 2,
+  "losers_seeks": ["3 0 u", "3 1 u", "5 0 u", "5 1 u"],
+  "losers_seeks_at_once": 1,
+  "accept": true,
+  "reseek_minutes": 10
+}
+```
+
+The example is checked in as `docs/fics-mixed.json`; run
+`./maxima fics --config docs/fics-mixed.json --handle MaxDrone`.
+The losers pool enables
+royal-losers challenges and engine capability validation automatically; use
+`"losers": true` or `--losers` to accept them without posting a losers seek.
+Repeat `--losers-seek "3 0 u"` for CLI pool entries; use
+`--losers-seeks-at-once 1` for its independent count. Seek specifications contain
+time controls and ordinary seek options; the runner adds `losers` to that pool.
+For example, it posts `seek 3 0 u losers` alongside two standard seeks.
+The `u` makes the initial losers games unrated; omit it to use the account's
+rated setting. `--no-seek` suppresses both pools while retaining challenge support.
+The counts specify concurrent advertisements, not a guaranteed ratio of played
+games: opponents choose which advertisement to answer. A new random sample is
+posted after each game and after the idle reseek interval.
+
+On login, enabled losers support sends `set f3 losers`, required for computer
+accounts by [FICS losers help](https://www.freechess.org/Help/HelpFiles/losers_chess.html).
+Existing account formulas remain in effect: inspect `variables` and remove any
+`!losers` restriction if needed. Check `limits` to confirm the account/server
+allows the desired number of concurrent ads; `sought all` shows posted seeks.
+These commands and the server-dependent ad limit are described in
+[FICS seek help](https://www.freechess.org/Help/HelpFiles/seek.html).
+The runner uses `Creating:` metadata to select the rules because style12 has no
+variant field. In mixed mode, an unidentified resumed board is ignored and
+logged rather than searched with guessed rules.
+
+W17 supports FICS **royal losers**: kings remain royal, captures are compulsory,
+and king-only, checkmate and stalemate win. It retains material-only evaluation;
+protocol/correctness checks do not establish current competitive strength.
+Lichess offers [antichess](https://lichess.org/variant/antichess), where kings can
+be captured, castling is absent, and promotion to a king is allowed. W17 cannot
+play that ruleset. The Lichess client continues to accept standard games only;
+enabling antichess requires its own engine rules/search support and a third,
+separate experience store.
+Challenges are accepted for standard lightning, blitz, or standard chess, plus
+royal losers when enabled, with a clock and only when idle (`--no-accept`
+declines all); games created with unsupported rules are aborted.
+Rematches are off by default; `rematches` (or
 `--rematches`) offers `rematch` up to that many games in a row per opponent. At `Creating:` it
 fingers the opponent; the first search waits up to two seconds for the reply so
 `UCI_Opponent` carries the rating, title, and computer flag. `--games N` quits
