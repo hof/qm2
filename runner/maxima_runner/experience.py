@@ -30,6 +30,13 @@ def key_of(board):
 
 def games_from(path):
     import chess.pgn
+    if path.is_dir():
+        paths = sorted(path.rglob('*.pgn'))
+        if not paths:
+            raise ValueError(f'no PGN files found in {path}')
+        for source in paths:
+            yield from games_from(source)
+        return
     with path.open(encoding='utf-8-sig') as stream:
         while True:
             game = chess.pgn.read_game(stream)
@@ -69,7 +76,13 @@ def import_games(store, path, players, max_ply):
     with store:
         for game in games_from(path):
             names = [game.headers.get('Black', ''), game.headers.get('White', '')]
-            if not any(name.casefold() in players for name in names):
+            aliases = players
+            if aliases is None:
+                aliases = {'maxima', 'bugchess', 'maximaengine'}
+                color = game.headers.get('LearningColor')
+                if color in ('white', 'black'):
+                    aliases.add(game.headers.get(color.title(), '').casefold())
+            if not any(name.casefold() in aliases for name in names):
                 continue
             identifier = game_id(game)
             inserted = identifier not in store.data['games']
@@ -92,7 +105,7 @@ def import_games(store, path, players, max_ply):
                     observations.add(move_key)
                     draw = outcome == '1/2-1/2'
                     win = not draw and ((outcome == '1-0') == board.turn)
-                    own = names[board.turn].casefold() in players
+                    own = names[board.turn].casefold() in aliases
                     counts = [int(win), int(draw), int(not win and not draw), int(own), int(not own),
                               int(own and win), int(own and draw), int(own and not win and not draw)]
                     row = store.data['moves'].setdefault(move_key, [key_of(board), node.move.uci()] + [0] * 8)
@@ -234,19 +247,39 @@ def positive_int(text):
 
 def main():
     root = project_root()
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('import', 'export', 'show', 'analyze'))
+    descriptions = {
+        'import': 'Import PGN results and annotations, then export experience.bin.',
+        'analyze': 'Find better PGN continuations with engine analysis, then export experience.bin.',
+        'export': 'Export saved game statistics and analysis to experience.bin.',
+        'show': 'Inspect saved move statistics and analysis for a position.',
+    }
+    command = sys.argv[1] if len(sys.argv) > 1 else ''
+    parser = argparse.ArgumentParser(prog=f'maxima experience:book:{command}',
+                                     description=descriptions.get(command, __doc__))
+    if command not in descriptions:
+        parser.error('expected import, analyze, export or show')
+    pgn_input = command in ('import', 'analyze')
+    default_store = data_root() / 'experience/experience.json'
+    default_source = data_root() / 'experience/games' if pgn_input else default_store
+    parser.add_argument('--source', type=Path, default=default_source,
+                        help=f'{"PGN file or folder" if pgn_input else "saved experience data"}; default: {default_source}')
     parser.add_argument('--store', '--database', dest='store', type=Path,
-                        default=data_root() / 'experience/experience.json',
-                        help='file-based experience data (--database is a legacy alias)')
-    parser.add_argument('--output', type=Path, default=data_root() / 'experience/experience.bin')
-    parser.add_argument('--pgn', type=Path)
-    parser.add_argument('--player', action='append', help='player aliases; default Maxima and BugChess')
-    parser.add_argument('--max-ply', type=positive_int, default=32)
-    parser.add_argument('--fen', default='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
-    parser.add_argument('--engine', type=Path, default=engine_path(root))
-    parser.add_argument('--movetime', type=positive_int, default=1000)
-    args = parser.parse_args()
+                        help=f'working data file; default: {default_store}' if pgn_input else argparse.SUPPRESS)
+    parser.add_argument('--output', type=Path, default=data_root() / 'experience/experience.bin',
+                        help='binary export path; default: experience/experience.bin' if command != 'show' else argparse.SUPPRESS)
+    parser.add_argument('--pgn', type=Path, help=argparse.SUPPRESS)
+    parser.add_argument('--player', action='append',
+                        help='our player aliases; default: Maxima/BugChess/MaximaEngine and saved LearningColor' if command == 'import' else argparse.SUPPRESS)
+    parser.add_argument('--max-ply', type=positive_int, default=32,
+                        help='opening horizon in plies; default: 32 (16 full moves)' if pgn_input else argparse.SUPPRESS)
+    parser.add_argument('--fen', default='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+                        help='position to inspect; default: starting position' if command == 'show' else argparse.SUPPRESS)
+    parser.add_argument('--engine', type=Path, default=engine_path(root),
+                        help='UCI engine; default: Release Maxima' if command == 'analyze' else argparse.SUPPRESS)
+    parser.add_argument('--movetime', type=positive_int, default=1000,
+                        help='milliseconds per search; up to two searches per position; default: 1000' if command == 'analyze' else argparse.SUPPRESS)
+    args = parser.parse_args(sys.argv[2:])
+    args.store = args.store or (default_store if pgn_input else args.source)
     import chess
     try:
         legacy = args.store if args.store.suffix in ('.sqlite', '.db') else args.store.with_suffix('.sqlite')
@@ -257,16 +290,15 @@ def main():
             migrate_legacy(legacy, args.store)
             print(f'Converted legacy experience to {args.store}; original retained at {legacy}')
         with closing(open_store(args.store)) as store:
-            if args.command in ('import', 'analyze'):
-                if args.pgn is None:
-                    parser.error('--pgn is required')
-                if args.command == 'import':
-                    result = import_games(store, args.pgn,
-                                          {p.casefold() for p in (args.player or ['Maxima', 'BugChess'])}, args.max_ply)
+            if pgn_input:
+                source = args.pgn or args.source
+                if command == 'import':
+                    result = import_games(store, source,
+                                          {p.casefold() for p in args.player} if args.player else None, args.max_ply)
                     print(json.dumps(result))
                 else:
-                    print(json.dumps(asyncio.run(analyze_games(store, args.pgn, args.engine, args.max_ply, args.movetime))))
-            if args.command == 'show':
+                    print(json.dumps(asyncio.run(analyze_games(store, source, args.engine, args.max_ply, args.movetime))))
+            if command == 'show':
                 board = chess.Board(args.fen)
                 for key, move, wins, draws, losses, own, opponent, own_wins, own_draws, own_losses in store.data['moves'].values():
                     if key != key_of(board):

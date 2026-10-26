@@ -38,6 +38,11 @@ The native binary-export workflow stays in `maxima_runner.experience` and uses
 locked, atomically published `experience/experience.json` (`--store` overrides it).
 `experience.bin` is its engine-readable export. SQLite is used only for optional,
 read-only conversion of an existing legacy store; normal commands do not need it.
+Use `experience:book:import|analyze|export|show`. `--source` defaults to the
+saved PGN archive for import/analysis and the JSON data file for export/inspection.
+PGN input may be a file or a recursively scanned directory. Older command names
+and `--pgn` continue to work. Online learning and PGN archiving have their own
+sections in `maxima help`.
 Both online clients invoke `experience:archive <LearningId>.pgn` after saving
 and learning a completed game. It locks the shared archive, deduplicates into
 `games/<LearningSource>/YYYY-MM.pgn`, and deletes the pending file only after

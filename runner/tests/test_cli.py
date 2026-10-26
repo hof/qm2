@@ -44,7 +44,7 @@ class cli_tests(unittest.TestCase):
         with patch.dict(sys.modules, {'chess': None}), contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(cli.main(['--help']), 0)
             self.assertEqual(cli.main(['help']), 0)
-            self.assertIn('experience:import', output.getvalue())
+            self.assertIn('experience:book:import', output.getvalue())
             self.assertNotIn('\033[', output.getvalue())
             with self.assertRaises(SystemExit) as result:
                 cli.main(['help', 'build'])

@@ -21,17 +21,25 @@ command_groups = (
         ("suite:run", "Evaluate a position suite"),
         ("match:run", "Run offline paired-opening matches"),
     )),
-    ("Chess data", (
-        ("experience:import", "Import games into experience"),
-        ("experience:export", "Export an engine experience snapshot"),
-        ("experience:show", "Inspect experience"),
-        ("experience:analyze", "Analyze experience positions"),
+    ("Engine experience book (experience.bin)", (
+        ("experience:book:import", "Import PGN results; export experience.bin"),
+        ("experience:book:analyze", "Analyze PGN moves; export experience.bin"),
+        ("experience:book:export", "Export saved experience to experience.bin"),
+        ("experience:book:show", "Show saved move statistics and analysis"),
+    )),
+    ("Online learning (FICS / Lichess)", (
         ("experience:sync", "Upload PGNs into shared online learning"),
-        ("experience:archive", "Move completed games into locked monthly PGNs"),
-        ("experience:build", "Build the learning index and player stats"),
+        ("experience:build", "Rebuild shared index and opponent statistics"),
+    )),
+    ("PGN archive", (
+        ("experience:archive", "Move completed games into monthly PGNs"),
+    )),
+    ("Opening books", (
         ("experience:repertoire", "Build the fire, draw and experiment books"),
         ("experience:draw", "Build draw.bin from master games"),
         ("experience:fire", "Build fire.bin from master games"),
+    )),
+    ("Tablebases", (
         ("tablebases:syzygy:download", "Download selected Syzygy tablebases"),
     )),
     ("Online play", (
@@ -68,8 +76,9 @@ def show_help(all_commands=False):
         for command, description in visible:
             print(f"  {command:<28} {description}")
         print()
-    if not all_commands:
-        print("Run maxima help to list every command.")
+    print("Engine book: PGNs -> experience.json -> experience.bin")
+    print("Online learning: saved PGNs -> shared index -> multilayer book\n")
+    print("Older experience:import/analyze/export/show names remain aliases.")
     print("Run maxima <command> --help for usage and options.")
     print("You can also use maxima help <command>.\n")
 
@@ -180,7 +189,8 @@ def main(argv=None):
     arguments = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
-        "init, uci, build, test, suite:run, match:run, experience:import|export|show|analyze|sync|archive|build|repertoire|draw|fire, "
+        "init, uci, build, test, suite:run, match:run, experience:book:import|export|show|analyze, "
+        "experience:sync|archive|build|repertoire|draw|fire, "
         "tablebases:syzygy:download, fics, lichess (no command: run engine)"))
     if not arguments and sys.stdin.isatty() and sys.stdout.isatty():
         arguments = ["--help"]
@@ -201,6 +211,8 @@ def main(argv=None):
                 raise ValueError("build Maxima first: ./maxima build")
             os.execv(str(binary), [str(binary)])
         command, remaining = arguments[0], arguments[1:]
+        if command in ('experience:import', 'experience:analyze', 'experience:export', 'experience:show'):
+            command = 'experience:book:' + command.rsplit(':', 1)[1]
         if sys.stdout.isatty():
             show_logo()
         if command == "uci":
@@ -234,9 +246,9 @@ def main(argv=None):
         elif command == "experience:fire":
             from . import master_books
             entrypoint = master_books.fire_main
-        elif command in ("experience:import", "experience:export", "experience:show", "experience:analyze"):
+        elif command in ("experience:book:import", "experience:book:export", "experience:book:show", "experience:book:analyze"):
             from . import experience
-            remaining.insert(0, command.split(":", 1)[1])
+            remaining.insert(0, command.rsplit(":", 1)[1])
             entrypoint = experience.main
         elif command == "tablebases:syzygy:download":
             from . import download_tablebases

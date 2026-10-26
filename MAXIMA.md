@@ -1247,10 +1247,31 @@ appropriate stop/ponderhit before publishing a book move.
 Tooling uses the same pinned Python environment as the EPD runner (chapter 6.1).
 
 ```bash
-./maxima experience:import --pgn games/BugChessFICS.pgn
-./maxima experience:import --pgn completed.pgn --player Maxima --player BugChess
-./maxima experience:show
-./maxima experience:export
+./maxima experience:book:import --pgn games/BugChessFICS.pgn
+./maxima experience:book:import --pgn completed.pgn --player Maxima --player BugChess
+./maxima experience:book:show
+./maxima experience:book:export
+```
+
+Engine book commands use `experience:book:*`. Online learning commands
+(`experience:sync`, `experience:build`) and PGN storage (`experience:archive`)
+are listed separately in `./maxima help`. The older `experience:import`,
+`experience:analyze`, `experience:export`, and `experience:show` remain aliases;
+`--pgn` remains an alias for selecting PGN input.
+
+`--source` selects input. For import/analysis it accepts a PGN file or a folder
+searched recursively, defaulting to `MAXIMA_DATA_DIR/experience/games` (the
+checkout's `experience/games` when unset). For export/inspection it selects
+the saved experience JSON file, defaulting to `experience/experience.json`.
+`--output` selects the binary destination. Import/analysis also publish that
+binary automatically. With no `--player`, imports recognise Maxima, BugChess,
+MaximaEngine, and the saved `LearningColor` so guest FICS games are included;
+explicit `--player` aliases override this inference.
+
+```bash
+./maxima experience:book:import --source match.pgn --player Maxima
+./maxima experience:book:analyze --source experience/games/fics/2026-10.pgn --movetime 60000
+./maxima experience:book:export
 ```
 
 Defaults are `experience/experience.json` and `experience/experience.bin`,
@@ -1264,8 +1285,9 @@ refuses to overwrite an existing file without an experience snapshot header.
 The reference `book.bin` is untouched. Imported games must be standard chess;
 invalid games roll back the current import rather than partly changing statistics.
 
-Default player aliases are Maxima and BugChess, matched without case sensitivity.
-Only games involving an alias contribute results, but **both sides' moves** are
+Default player aliases are Maxima, BugChess and MaximaEngine, matched without
+case sensitivity; saved `LearningColor` also identifies our side in archived games.
+Only games matching those identities contribute results, but **both sides' moves** are
 retained. An opponent's winning line is recorded as successful for that move's
 side, rather than penalised because Maxima lost. Own and opponent provenance and
 own win/draw/loss totals are stored separately. Scores count draws as half points.
@@ -1324,8 +1346,8 @@ validation and does not guarantee that past analysis was correct.
 ### 9.5 Optional post-game analysis
 
 ```bash
-./maxima experience:analyze --pgn completed.pgn --movetime 1000 --max-ply 32
-./maxima experience:analyze --pgn completed.pgn --movetime 60000 --max-ply 4
+./maxima experience:book:analyze --pgn completed.pgn --movetime 1000 --max-ply 32
+./maxima experience:book:analyze --pgn completed.pgn --movetime 60000 --max-ply 4
 ```
 
 `--engine` selects an executable; default is the Release Maxima binary. The tool
@@ -1840,7 +1862,7 @@ publication, imports and rebuilding. Tags: `Event` (`FICS unrated blitz game`),
 moves add `[%eval score,depth]`, `[%pv ...]` (SAN, up to 12 plies), and
 `[%nodes]`; moves from the multi-layer book carry its label and layer shares
 (9.7); the server's reason ends the game.
-`experience:import` reads these annotations. A takeback rewinds the move list;
+`experience:book:import` reads these annotations. A takeback rewinds the move list;
 a board that does not follow (missed update) restarts it with a `FEN` tag. A
 game cut off by a lost connection has no result line and is not saved. Unregistered
 names (guests, and `(U)` logins such as `zahrani`) are not stable identities, so

@@ -2,6 +2,7 @@
 from contextlib import closing
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -11,7 +12,7 @@ from unittest.mock import patch
 
 import chess
 
-from maxima_runner import experience
+from maxima_runner import cli, experience
 from test_experience import pgn
 
 try:
@@ -120,3 +121,37 @@ class experience_store_tests(unittest.TestCase):
         data = json.loads(store.read_text())
         self.assertEqual(len(data['games']), 9)
         self.assertEqual(sum(sum(row[2:5]) for row in data['moves'].values()), 18)
+
+    def test_book_commands_default_to_archive_and_keep_old_aliases(self):
+        folder = self.root / 'experience' / 'games' / 'fics'
+        folder.mkdir(parents=True)
+        source = folder / '2026-10.pgn'
+        source.write_text(pgn.replace('Maxima', 'GuestWhite').replace('[Round "1"]',
+                          '[Round "1"]\n[LearningColor "white"]'))
+        environment = dict(os.environ, MAXIMA_DATA_DIR=str(self.root))
+        result = subprocess.run([sys.executable, '-m', 'maxima_runner', 'experience:book:import'],
+                                env=environment, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        store = self.root / 'experience' / 'experience.json'
+        data = json.loads(store.read_text())
+        self.assertEqual(len(data['games']), 1)  # Tagged guest game; other games have no matching alias.
+        key = experience.key_of(chess.Board())
+        self.assertEqual(data['moves'][key + '/e2e4'][5], 1)
+        for arguments in (
+                ['experience:import', '--pgn', str(source)],
+                ['experience:book:export', '--source', str(store)],
+                ['experience:book:show', '--source', str(store)]):
+            result = subprocess.run([sys.executable, '-m', 'maxima_runner', *arguments],
+                                    env=environment, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(json.loads(store.read_text())['games']), 1)
+
+    def test_analyze_source_defaults_and_search_budget_are_explicit(self):
+        calls = []
+        async def analyze(store, source, engine, max_ply, movetime):
+            calls.append((source, max_ply, movetime))
+            return []
+        with patch.dict(os.environ, {'MAXIMA_DATA_DIR': str(self.root)}), \
+                patch.object(experience, 'analyze_games', analyze):
+            self.assertEqual(cli.main(['experience:book:analyze', '--movetime', '60000']), 0)
+        self.assertEqual(calls, [(self.root / 'experience' / 'games', 32, 60000)])
