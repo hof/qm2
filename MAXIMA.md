@@ -263,12 +263,17 @@ plies it shrinks by one when they sum above 128. There are no check extensions.
 ### 4.5 Quiescence
 
 Qsearch searches captures and promotions, plus all legal evasions in check.
-Outside check, stand pat cuts at beta (after verifying a legal move exists),
+Outside check, stand pat cuts at beta,
 captures need `see >= -60` and the picker stops at the first noisy move below
-that. Futility skips a nonchecking, non-recapture move that does not win
+that. Rejected noisy moves outside check are excluded without full-score SEE
+or a second history lookup: their deferred stage is unreachable. Main search
+and check evasions retain full SEE/history scoring for deferred captures.
+Futility skips a nonchecking, non-recapture move that does not win
 material when `eval + 350 <= alpha`, raising the best score to that bound. In
 check, after one evasion, evasions that lose material are skipped; quiet
-evasions stay searchable. Stalemate is detected at every depth. Results are
+evasions stay searchable. After exhausting tactical candidates without searching
+a legal move, a separate legal-move probe detects stalemate. Stand-pat and TT
+cutoffs do not prove that a legal move exists. Results are
 fail-soft. `QsearchTT` probes and stores qsearch results at depth 0 in the
 main table; null-window qsearch nodes below clock 90 take cutoffs from any
 bound, and any valid TT move is searched first.

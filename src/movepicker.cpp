@@ -297,8 +297,8 @@ void sort_by_score(move_t * begin, move_t * end) {
 
 // Standard chess returns candidates; only search decides king safety.
 // Picks the best remaining noisy move that passes SEE. A failing move gets a
-// negative score and waits for the bad noisy stage.
-move_t * move_picker_t::pop_good_noisy(search_t * s, int see_threshold) {
+// negative score; only searchable deferred moves need their exact score.
+move_t * move_picker_t::pop_good_noisy(search_t * s, int see_threshold, bool defer_bad_noisy) {
     auto * list = &s->stack->move_list;
     for (;;) {
         move_t * best = nullptr;
@@ -311,9 +311,15 @@ move_t * move_picker_t::pop_good_noisy(search_t * s, int see_threshold) {
             return nullptr;
         }
         if (!s->brd.see(best, see_threshold)) {
-            const int see = s->brd.see(best);
-            best->score = s->capture_history_enabled
-                ? -2 * capture_history_t::limit + 16 * see + s->move_history_score(*best) : see;
+            if (defer_bad_noisy) {
+                const int see = s->brd.see(best);
+                best->score = s->capture_history_enabled
+                    ? -2 * capture_history_t::limit + 16 * see + s->move_history_score(*best) : see;
+            } else {
+                // Non-check qsearch never visits bad_noisy. Keep the slot to
+                // preserve swap-removal tie order among the remaining moves.
+                best->score = -1;
+            }
             continue;
         }
         *list->best = *best;
@@ -420,7 +426,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 list->stage = promotions;
                 break;
             case promotions:
-                result = pop_good_noisy(s, depth > 0 ? 0 : quiescence_see_threshold);
+                result = pop_good_noisy(s, depth > 0 ? 0 : quiescence_see_threshold, do_quiets);
                 if (result) {
                     return result;
                 }

@@ -173,11 +173,57 @@ bool staging_contract() {
     return true;
 }
 
+bool quiescence_noisy_contract() {
+    for (bool history : {false, true}) {
+        for (int depth : {0, -1, -2}) {
+            for (bool hint : {false, true}) {
+                auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
+                search->capture_history_enabled = history;
+                if (hint) {
+                    search->stack->tt_move.set(&search->brd, "d2d5");
+                }
+                std::vector<std::string> actual;
+                for (auto * move = move::first(search.get(), depth); move;
+                        move = move::next(search.get(), depth)) {
+                    actual.push_back(move->to_string());
+                }
+                const std::vector<std::string> expected = hint
+                    ? std::vector<std::string>{"d2d5", "d2b2"}
+                    : std::vector<std::string>{"d2b2"};
+                if (actual != expected) {
+                    return false;
+                }
+            }
+            auto search = std::make_unique<search_t>("7k/8/8/1b6/8/8/4r3/3QK3 w - - 0 1");
+            search->capture_history_enabled = history;
+            search->stack->in_check = search->brd.in_check();
+            move_t losing_evasion;
+            losing_evasion.set(&search->brd, "d1e2");
+            if (!search->stack->in_check || !search->brd.legal(&losing_evasion)
+                    || search->brd.see(&losing_evasion, quiescence_see_threshold)) {
+                return false;
+            }
+            int found = 0;
+            for (auto * move = move::first(search.get(), depth); move;
+                    move = move::next(search.get(), depth)) {
+                if (move->equals(&losing_evasion)) {
+                    ++found;
+                }
+            }
+            if (found != 1) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 }
 
 int main() {
     magic::init();
-    if (!legality_contract() || !pawn_hint_geometry() || !staging_contract() || !disabled_hints()) {
+    if (!legality_contract() || !pawn_hint_geometry() || !staging_contract() || !disabled_hints()
+            || !quiescence_noisy_contract()) {
         std::cerr << "pseudo-legal picker / lazy legality contract failed\n";
         return EXIT_FAILURE;
     }
