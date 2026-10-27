@@ -351,6 +351,9 @@ search and ply, updated lazily from the nearest ready ancestor; a king move
 refreshes its perspective, null moves swap perspectives. The loader checks
 size, version and architecture hashes. AVX2 feature accumulation, activation
 packing and byte dot products (`vpmaddubsw`/`vpmaddwd`) have scalar fallbacks.
+Full AVX2 refresh builds feature addresses once per perspective and sums two
+128-value tiles in eight vector registers, storing each tile after all features.
+Feature order and int16 wrapping arithmetic are preserved.
 Dense weights are packed at load time into four-input blocks across outputs,
 so AVX2 inference broadcasts each input block and accumulates eight outputs per
 vector without horizontal reductions. The loader bounds positive and negative
@@ -666,7 +669,9 @@ tests never assert node counts or restate tuning formulas. The full preset
 additionally covers lifecycle, evaluation, board rules and search contracts.
 
 Use identical Release compiler flags, positions, search limits, and hash size
-for performance comparisons. Track nodes, NPS, and time to depth; only match
+for performance comparisons. Keep competing builds, tests and editor indexing
+out of timed runs; record CPU affinity, cycles and elapsed time. Track nodes, NPS,
+and time to depth; only match
 testing establishes a playing-strength gain. Test score bounds and cache reuse
 as well as best moves. Keep regular tests offline and deterministic.
 

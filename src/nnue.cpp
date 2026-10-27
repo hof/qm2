@@ -22,6 +22,16 @@ std::mutex configuration_mutex;
 std::shared_ptr<const network_t> configured_network;
 std::string configured_path;
 
+size_t feature_index(bool color, int king, int piece, int square) {
+    const int orientation = color == WHITE ? 0 : 63;
+    const int type = (piece - 1) % 6;
+    assert(type < 5 && square >= 0 && square < 64 && king >= 0 && king < 64);
+    const int relative_color = (piece <= WKING) == color ? 0 : 1;
+    const size_t index = (square ^ orientation) + 1 + 64 * (2 * type + relative_color)
+        + 641 * (king ^ orientation);
+    return index;
+}
+
 uint32_t read_u32(const std::vector<uint8_t> & bytes, size_t offset) {
     return uint32_t(bytes[offset]) | (uint32_t(bytes[offset + 1]) << 8)
         | (uint32_t(bytes[offset + 2]) << 16) | (uint32_t(bytes[offset + 3]) << 24);
@@ -83,12 +93,7 @@ std::shared_ptr<const network_t> network_t::load(const std::string & path, std::
 
 void network_t::add_feature(std::array<int16_t, 256> & values, bool color,
         int king, int piece, int square, bool subtract) const {
-    const int orientation = color == WHITE ? 0 : 63;
-    const int type = (piece - 1) % 6;
-    assert(type < 5 && square >= 0 && square < 64 && king >= 0 && king < 64);
-    const int relative_color = (piece <= WKING) == color ? 0 : 1;
-    const size_t index = (square ^ orientation) + 1 + 64 * (2 * type + relative_color)
-        + 641 * (king ^ orientation);
+    const size_t index = feature_index(color, king, piece, square);
     const int16_t * weights = _features.data() + index * 256;
 #ifdef __AVX2__
     for (size_t i = 0; i < 256; i += 16) {
@@ -107,14 +112,47 @@ void network_t::add_feature(std::array<int16_t, 256> & values, bool color,
 }
 
 void network_t::refresh(const board_t & board, accumulator_t & accumulator, bool color) const {
-    accumulator.values[color] = _biases;
     accumulator.kings[color] = board.get_sq(KING[color]);
+#ifdef __AVX2__
+    // Build addresses once; each tile visits the same pieces in square order.
+    const int16_t * features[64];
+    size_t count = 0;
+    for (int square = 0; square < 64; ++square) {
+        const int piece = board.matrix[square];
+        if (piece && piece != WKING && piece != BKING) {
+            features[count++] = _features.data()
+                + feature_index(color, accumulator.kings[color], piece, square) * 256;
+        }
+    }
+    // Eight vectors leave room for addresses and avoid accumulator load/store
+    // traffic for every piece. Incremental updates retain their existing path.
+    for (size_t offset = 0; offset < 256; offset += 128) {
+        __m256i sums[8];
+        for (size_t i = 0; i < 8; ++i) {
+            sums[i] = _mm256_loadu_si256(
+                reinterpret_cast<const __m256i *>(_biases.data() + offset + i * 16));
+        }
+        for (size_t feature = 0; feature < count; ++feature) {
+            for (size_t i = 0; i < 8; ++i) {
+                const auto weight = _mm256_loadu_si256(
+                    reinterpret_cast<const __m256i *>(features[feature] + offset + i * 16));
+                sums[i] = _mm256_add_epi16(sums[i], weight);
+            }
+        }
+        for (size_t i = 0; i < 8; ++i) {
+            _mm256_storeu_si256(
+                reinterpret_cast<__m256i *>(accumulator.values[color].data() + offset + i * 16), sums[i]);
+        }
+    }
+#else
+    accumulator.values[color] = _biases;
     for (int square = 0; square < 64; ++square) {
         const int piece = board.matrix[square];
         if (piece && piece != WKING && piece != BKING) {
             add_feature(accumulator.values[color], color, accumulator.kings[color], piece, square, false);
         }
     }
+#endif
     accumulator.ready[color] = true;
 }
 
