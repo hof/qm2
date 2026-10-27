@@ -747,8 +747,9 @@ class lichess_game:
             self.left_book = numbered
         if kind == "engine":
             pv = variation(board, info.get("pv", []))
-            self.last_eval = f"{board.san(move)} {describe(info, board.turn)}" + (f", expecting {pv}" if pv else "")
-            bot.on_line(f"-- {numbered} {describe(info, board.turn)} {seconds:.1f}s{left}" + (f" pv {pv}" if pv else ""))
+            pondering = f", pondering {info['_ponder_san']}" if info.get("_ponder_san") else ""
+            self.last_eval = f"{board.san(move)} {describe(info, board.turn)}" + (f", expecting {pv}" if pv else "") + pondering
+            bot.on_line(f"-- {numbered} {describe(info, board.turn)} {seconds:.1f}s{left}" + (f" pv {pv}" if pv else "") + pondering)
         else:
             self.last_eval = f"{board.san(move)} {info['source']}"
             source = book_whisper(numbered, why, self.opening, compact=True) if why else f"{numbered} {info['source']}"

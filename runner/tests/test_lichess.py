@@ -17,6 +17,7 @@ import chess.engine
 from maxima_runner import connectors, lichess
 from maxima_runner.uci import open_engine
 from test_fics_game import fake_engine
+from test_uci import ponder_engine
 
 
 def challenge(speed="blitz", variant="standard", clock=True):
@@ -108,6 +109,39 @@ class stub_session:
         move = next(iter(board.legal_moves))
         return chess.engine.PlayResult(move, None, {"score": chess.engine.PovScore(chess.engine.Cp(0), board.turn),
                                                     "depth": 20, "tbhits": 3})
+
+
+class ponder_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_stream_reports_prediction_hit_and_miss(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script, log = Path(directory) / "engine.py", Path(directory) / "commands"
+            script.write_text(ponder_engine)
+            async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
+                api, lines = stub_api(), []
+                bot = lichess.lichess_bot(api, None, lines.append, online_tablebase=False)
+                bot.id, bot.session = "maximaengine", session
+                game = lichess.lichess_game(bot, "g1")
+                game.setup(game_full())
+                state = game_full()["state"]
+                await game.on_state(state)
+                await game.searching
+                self.assertIn("pondering 1...Nh6", game.last_eval)
+                self.assertNotIn("pondered", game.last_eval)
+                await game.on_state(dict(state, moves="e2e4 g8h6"))
+                await game.searching
+                self.assertIn("pondered", game.last_eval)
+                self.assertTrue(any("pondered" in line for line in lines))
+                replay = game.board.copy()
+                our_move = chess.Move.from_uci(api.posts[-1][0].rsplit("/", 1)[-1])
+                replay.push(our_move)
+                replay.push(list(replay.legal_moves)[-1])
+                await game.on_state(dict(state, moves=" ".join(move.uci() for move in replay.move_stack)))
+                await game.searching
+                self.assertNotIn("pondered", game.last_eval)
+                self.assertIn("pondering", game.last_eval)
+                self.assertEqual(log.read_text().splitlines().count("ponderhit"), 1)
+                await session.stop_pondering()
+                game.stop_waiting()
 
 
 class draw_tests(unittest.IsolatedAsyncioTestCase):

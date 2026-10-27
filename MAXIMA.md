@@ -1985,6 +1985,9 @@ the protocol actually sent `ponderhit` for that play request. Per-search
 `_ponder_hit` metadata survives immediate completion without fresh info and the
 next background ponder, and resets for every request and engine restart.
 Prediction misses, game changes and ordinary searches keep their usual wording.
+Lichess console lines and `!eval` also show `pondering 1...e5` for the legal
+reply being searched during the opponent's turn, even before any prediction
+has hit. Live search events carry `ponder_hit` and, when available, `ponder_san`.
 
 ### 10.3 Lichess client (MaximaEngine)
 

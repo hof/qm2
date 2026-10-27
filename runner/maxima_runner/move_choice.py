@@ -136,6 +136,9 @@ def search_summary(board, info):
                "nps": info.get("nps"), "time_ms": round(info["time"] * 1000) if "time" in info else None,
                "pv_san": pv}
     summary["score"] = {"mate": white.mate()} if white.is_mate() else {"cp": white.score()}
+    summary["ponder_hit"] = bool(info.get("_ponder_hit"))
+    if info.get("_ponder_san"):
+        summary["ponder_san"] = info["_ponder_san"]
     return summary
 
 
