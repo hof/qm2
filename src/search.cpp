@@ -176,12 +176,18 @@ void root_move_t::add_nodes(U64 count) {
 
 // Raw network scores depend on board/side and the immutable model snapshot,
 // not repetition history or the halfmove clock. Scaling is applied separately.
-int search_t::neural_static_score() {
+int search_t::neural_static_score(const tt_hit_t * tt) {
     assert(evaluation_network);
     tt_hit_t hit;
-    if (tt_eval_enabled && trans_table::probe(position_key(brd), brd.ply, brd.stack->fifty_count, hit)
-            && hit.eval != score::INVALID) {
-        return hit.eval;
+    if (tt_eval_enabled) {
+        // A supplied result includes misses: do not probe the same node twice.
+        if (!tt) {
+            trans_table::probe(position_key(brd), brd.ply, brd.stack->fifty_count, hit);
+            tt = &hit;
+        }
+        if (tt->eval != score::INVALID) {
+            return tt->eval;
+        }
     }
     auto & accumulator = evaluation_accumulators[brd.ply];
     const int value = std::clamp(evaluation_network->evaluate(brd, accumulator,
@@ -1972,8 +1978,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     const U64 key = position_key(brd);
     const bool use_q_tt = q_tt_enabled;
     stack->tt_key = key;
+    tt_hit_t tt;
     if (use_q_tt) {
-        tt_hit_t tt;
         const bool usable = trans_table::probe(key, brd.ply, brd.stack->fifty_count, tt) && tt.bound;
         const int tt_score = tt.score, tt_flag = tt.bound;
         if (usable && alpha + 1 == beta && brd.stack->fifty_count < 90 && (tt_flag == score::EXACT
@@ -1999,7 +2005,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     };
 
     // Stand pat: return if the evaluation is already good enough
-    const int eval = evaluate(this);
+    const int eval = evaluate(this, use_q_tt ? &tt : nullptr);
     if (eval >= beta && !in_check) {
         return finish(eval, score::LOWERBOUND);
     }

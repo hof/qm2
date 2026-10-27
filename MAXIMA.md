@@ -319,6 +319,9 @@ bound; otherwise it keeps its score and takes the newer move and evaluation.
 `TTEval` stores the raw network score so other workers and later searches skip
 inference; it never authorizes a cutoff. Changes to options, the model or draw
 contempt clear the table.
+Qsearch passes its existing TT probe result, including a miss, to static
+evaluation. With `QsearchTT` disabled, evaluation still probes independently
+when `TTEval` is enabled. Raw-evaluation and result stores remain separate.
 
 ### 4.9 NNUE evaluation
 

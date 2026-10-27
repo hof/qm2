@@ -37,7 +37,7 @@ int scale_network_score(int raw, const board_t & board, int halfmoves) {
     return nnue::to_centipawns(value * (100 - clock) / 100);
 }
 
-int evaluate(search_t * search) {
+int evaluate(search_t * search, const tt_hit_t * tt) {
     if (search->stack->in_check && search->brd.ply < (MAX_PLY - 1)) {
         search->stack->eval_result = score::INVALID;
         return search->stack->eval_result;
@@ -46,7 +46,7 @@ int evaluate(search_t * search) {
         return search->corrected_static_eval(search->stack->eval_result);
     }
     assert(search->evaluation_network);
-    const int result = scale_network_score(search->neural_static_score(), search->brd,
+    const int result = scale_network_score(search->neural_static_score(tt), search->brd,
         search->brd.stack->fifty_count);
     search->stack->eval_result = result;
     return search->corrected_static_eval(result);
