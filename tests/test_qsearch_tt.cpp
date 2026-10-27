@@ -193,6 +193,50 @@ bool test_raw_eval_reuse() {
     return success;
 }
 
+bool test_unusable_hints() {
+    struct fixture_t { const char * fen; const char * hint; bool valid; };
+    bool success = true;
+    for (const auto & fixture : {
+            fixture_t{"7k/8/8/8/8/8/8/KQ6 w - - 0 1", "b1b1", false},
+            fixture_t{"7k/8/8/8/8/8/8/KR6 w - - 0 1", "b1c2", false},
+            fixture_t{"4r2k/8/8/8/8/8/4R3/4K3 w - - 0 1", "e2f2", true},
+            fixture_t{"7k/8/8/r4pPK/8/8/8/8 w - f6 0 1", "g5f6", true}}) {
+        trans_table::clear();
+        auto reference = std::make_unique<search_t>(fixture.fen);
+        prepare(*reference);
+        reference->q_tt_enabled = reference->tt_eval_enabled = false;
+        reference->ffp_enabled = false;
+        const int expected = reference->qsearch(-score::INF, score::INF, 0);
+        trans_table::clear();
+        auto search = std::make_unique<search_t>(fixture.fen);
+        prepare(*search);
+        search->tt_eval_enabled = search->ffp_enabled = false;
+        move_t hint;
+        hint.set(&search->brd, fixture.hint);
+        success &= check("TT hint fixtures must distinguish invalid geometry from king exposure",
+            search->brd.valid(&hint) == fixture.valid
+            && (!fixture.valid || !search->brd.legal(&hint)));
+        const U64 key = position_key(search->brd);
+        const U64 pawn_key = search->brd.stack->pawn_key;
+        trans_table::store(key, 0, 0, 0, 0, hint.to_compact(), 0);
+        success &= check("unusable TT hints must not change searched moves or the result",
+            search->qsearch(-score::INF, score::INF, 0) == expected
+            && search->nodes == reference->nodes);
+        success &= check("rejecting an unusable TT hint must restore board, hashes and stacks",
+            search->brd.to_string() == fixture.fen && position_key(search->brd) == key
+            && search->brd.stack->pawn_key == pawn_key && search->brd.ply == 0
+            && search->stack == search->root_stack);
+        // A cached score is trusted independently of its move hint. Neither
+        // invalid geometry nor exposed king safety authenticates the score.
+        trans_table::clear();
+        trans_table::store(key, 0, 0, 0, 12345, hint.to_compact(), score::EXACT);
+        success &= check("a cached-score cutoff must not require its TT move to be playable",
+            search->qsearch(12344, 12345, 0) == 12345
+            && search->brd.to_string() == fixture.fen);
+    }
+    return success;
+}
+
 }
 
 
@@ -205,5 +249,6 @@ int main() {
     success &= test_mates_and_terminals();
     success &= test_option_snapshot_and_off();
     success &= test_raw_eval_reuse();
+    success &= test_unusable_hints();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

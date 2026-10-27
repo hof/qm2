@@ -1987,12 +1987,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
                 || (tt_flag == score::UPPERBOUND && tt_score <= alpha))) {
             return tt_score;
         }
+        // Decode only; the picker validates the hint if move selection is needed.
         stack->tt_move.set_compact(&brd, tt.move);
-        const auto & hint = stack->tt_move;
-        // Any valid hint is searched first, even a quiet move.
-        if (hint.piece && !brd.valid(&hint)) {
-            stack->tt_move.clear();
-        }
     }
     // Only completed results reach this helper; qsearch stores at depth 0.
     // Forced inline: GCC otherwise splits the store into a call at every exit.

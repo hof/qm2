@@ -396,6 +396,8 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
             case hash_move:
                 list->stage = captures;
                 result = &s->stack->tt_move;
+                // Qsearch reaches this check only after TT and stand-pat cutoffs.
+                // King safety remains the caller's responsibility before making it.
                 if (result->piece
                         && board->valid(result)
                         && move::allows_evasion(*result, list->evasion_targets)) {
