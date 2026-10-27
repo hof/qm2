@@ -128,6 +128,26 @@ def board_after(text):
 
 
 class selection_tests(unittest.TestCase):
+    def test_move_results_count_games_without_weights_or_repetitions(self):
+        repeated = record([[start_key, "e2e4", 1.0]] * 2, group="masters", game_type="rapid")
+        records = [repeated, record([[start_key, "e2e4", 0.5]], group="masters"),
+                   record([[start_key, "e2e4", 0.0]], group="engines"),
+                   record([[start_key, "e2e4", None]], group="masters")]
+        records[-1]["values"][0][2] = 0.6
+        book = self.opening(records, group="masters")
+        pair = (start_key, "e2e4")
+        self.assertEqual(book.results[0][pair], [1, 1, 1])
+        self.assertEqual(book.results[1][pair], [1, 1, 0])
+        self.assertEqual(book.results[2][pair], [1, 1, 1])
+        board = chess.Board()
+        for _ in range(20):
+            found = book.choose(board)
+            if found and found[0].uci() == "e2e4":
+                break
+        self.assertEqual(book.choice_results, {"global": (1, 1, 1), "group": (1, 1, 0), "opponent": (1, 1, 1)})
+        book.choose(chess.Board("8/8/8/4k3/8/8/8/4K3 w - - 0 1"))
+        self.assertEqual(book.choice_results, {})
+
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)

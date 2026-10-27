@@ -136,11 +136,6 @@ class engine_session:
                 self.pondering = result.ponder is not None
                 result.info = dict(self.protocol.hit_info, **result.info)
                 result.info["_ponder_hit"] = self.protocol.ponder_hit
-                reply_board = board.copy()
-                if result.move is not None and reply_board.is_legal(result.move):
-                    reply_board.push(result.move)
-                    if result.ponder is not None and reply_board.is_legal(result.ponder):
-                        result.info["_ponder_san"] = reply_board.variation_san([result.ponder])
                 result.info["_resignation"] = dict(evidence)
                 result.info["_search_seconds"] = self.protocol.search_seconds
                 return result

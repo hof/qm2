@@ -277,11 +277,15 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         opening = learning.opening_book([], opponent="John", group="humans", mood="parham")
         parts = {"book": 0.2, "fire": 0.1, "mood": 0.15, "opponent": 0.05, "global": 0.001}
         self.assertEqual(fics.book_whisper("Qh5", ("book", 0.5, parts, "mood"), opening),
-                         "Qh5 book: parham mood (50% selection; base 40%, fire 20%, parham mood 30%, vs John 10%)")
+                         "Qh5 parham mood | 50% pick chance | support: base book, fire book, parham mood, vs John | learned: no results yet")
         self.assertEqual(fics.book_whisper("d3", ("book", 1.0, {"book": 1.0}, "book"), opening),
-                         "d3 book: base (100% selection; base 100%)")
+                         "d3 base book | 100% pick chance | learned: no results yet")
         self.assertTrue(fics.book_whisper("f4", ("revenge", 0.5, parts, "opponent"), opening).startswith(
-            "f4 book: revenge vs John ("))
+            "f4 revenge vs John | 50% pick chance"))
+        opening.choice_results = {"group": (23, 1, 1), "opponent": (2, 0, 1)}
+        opening.names["group"] = "masters"
+        self.assertEqual(fics.book_whisper("1...c6", ("book", 0.55, parts, "book"), opening, compact=True),
+                         "1...c6 base book | 55% pick chance | learned: masters +23 =1 -1; vs John +2 =0 -1")
         self.assertEqual([fics.speed(nps) for nps in (850, 512_345, 1_234_567)], ["850nps", "512Knps", "1.2Mnps"])
         info = {"depth": 18, "score": chess.engine.PovScore(chess.engine.Mate(5), chess.BLACK), "tbhits": 3}
         self.assertEqual(fics.search_whisper(info, chess.BLACK, "21...Qd5+ 22. Qd6", "out of book"),
@@ -472,7 +476,8 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle(start)
         await self.settle(player)
         self.assertEqual(player.connection.sent[-1], "d2d4")
-        self.assertTrue(any(line.startswith("-- 1. d4 experience (") for line in self.lines))
+        self.assertTrue(any(line.startswith("-- 1. d4 all games | 100% pick chance | learned: all games +6 =0 -0")
+                            for line in self.lines))
         self.assertEqual(player.opponent_group(), "humans")
         after_d4 = after_e4.replace("----P--- -------- PPPP-PPP", "---P---- -------- PPP-PPPP").replace(
             " B 4 ", " B 3 ").replace("P/e2-e4 (0:00.000) e4", "P/d2-d4 (0:00.000) d4")

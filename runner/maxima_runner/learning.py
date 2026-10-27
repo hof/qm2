@@ -315,6 +315,8 @@ class opening_book:
         self.variety = max(variety, 0.05)
         self.layers = ({}, {}, {})  # global, group, opponent: (key, move) -> [value sum, games]
         self.totals = ({}, {}, {})  # the same per position: key -> games
+        self.results = ({}, {}, {})  # unweighted W/D/L per position and move, from the mover's side
+        self.choice_results = {}
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
         opponent = (opponent or "").lower()
@@ -334,6 +336,7 @@ class opening_book:
                 ours = {tuple(played) for played in record.get("moves", [])[first::2]}
             if personal and opponent and record["opponent"].lower() == opponent and record.get("color") in ("white", "black"):
                 self.track_revenge(record)
+            counted = set()
             for key, move, evaluated, result in record["values"]:
                 if (key, move) in ours:
                     convincing = result == 1.0 and (evaluated is None or evaluated >= signature_eval)
@@ -344,6 +347,11 @@ class opening_book:
                     entry[0] += layer_weight * value
                     entry[1] += layer_weight
                     self.totals[layer][key] = self.totals[layer].get(key, 0.0) + layer_weight
+                    if result in (1.0, 0.5, 0.0) and (key, move) not in counted:
+                        outcomes = self.results[layer].setdefault((key, move), [0, 0, 0])
+                        outcomes[(1.0, 0.5, 0.0).index(result)] += 1
+                if result is not None:
+                    counted.add((key, move))
 
     def track_revenge(self, record):
         """A loss gives us the opponent's line for their colour; a win with that colour serves the revenge."""
@@ -503,6 +511,7 @@ class opening_book:
         The source is the layer with
         the largest share of the move; ties go to the more specific layer."""
         self.why = None
+        self.choice_results = {}
         if (learning_variant(board_variant(board)) != self.variant or board.ply() >= horizon_plies or board.halfmove_clock >= 90
                 or board.is_repetition(2)):
             return None
@@ -532,6 +541,9 @@ class opening_book:
                 parts = moves[move][1]
                 source = max(parts, key=lambda name: (round(parts[name], 6), layer_names.index(name)))
                 self.why = (kind,) + moves[move] + (source,)
+                self.choice_results = {name: tuple(results[(key, move.uci())])
+                                       for name, results in zip(("global", "group", "opponent"), self.results)
+                                       if (key, move.uci()) in results}
                 return move, reason
 
         return None

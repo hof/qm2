@@ -89,6 +89,15 @@ class command_tests(unittest.IsolatedAsyncioTestCase):
         replies = [data["text"] for _, data in api.posts]
         self.assertEqual(replies, ["I share that with spectators only.", "e4 d20 +0.30"])
 
+    async def test_book_details_are_separate_readable_chat_lines(self):
+        api, lines, bot, game = self.game()
+        game.last_book = ("5...Nc6 base book | 55% pick chance | support: base book, fire book"
+                          " | learned: masters +23 =1 -1")
+        await self.say(game, "Someone", "!book")
+        self.assertEqual([data["text"] for _, data in api.posts],
+                         ["5...Nc6 base book | 55% pick chance", "support: base book, fire book",
+                          "learned: masters +23 =1 -1"])
+
     async def test_console_answers_every_command(self):
         api, lines, bot, game = self.game()
         self.assertFalse(await bot.console("help"))
@@ -125,7 +134,6 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 state = game_full()["state"]
                 await game.on_state(state)
                 await game.searching
-                self.assertIn("pondering 1...Nh6", game.last_eval)
                 self.assertNotIn("pondered", game.last_eval)
                 await game.on_state(dict(state, moves="e2e4 g8h6"))
                 await game.searching
@@ -138,7 +146,6 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 await game.on_state(dict(state, moves=" ".join(move.uci() for move in replay.move_stack)))
                 await game.searching
                 self.assertNotIn("pondered", game.last_eval)
-                self.assertIn("pondering", game.last_eval)
                 self.assertEqual(log.read_text().splitlines().count("ponderhit"), 1)
                 await session.stop_pondering()
                 game.stop_waiting()
@@ -320,13 +327,11 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
 
 
 class command_line_tests(unittest.TestCase):
-    def test_book_line_names_the_layers_by_share(self):
-        names = {"group": "engines", "opponent": "Ferrite"}
-        self.assertEqual(lichess.book_line("5...Nc6", ("book", 0.5, {"book": 0.475, "fire": 0.025}, "book"), names),
-                         "5...Nc6 from book (50% selection): base 95%, fire 5%")
-        self.assertEqual(lichess.book_line("5...Nc6", ("learned", 1.0, {"global": 0.6, "opponent": 0.3,
-                                                                          "group": 0.1}, "global"), names),
-                         "5...Nc6 learned (100% selection): all games 60%, vs Ferrite 30%, vs bots 10%")
+    def test_book_display_labels_the_moves_chance_and_learned_results(self):
+        opening = lichess.learning.opening_book([], group="engines", opponent="Ferrite")
+        opening.choice_results = {"global": (23, 1, 1), "group": (10, 0, 1)}
+        self.assertEqual(lichess.book_whisper("5...Nc6", ("book", 0.5, {"book": 0.475, "fire": 0.025}, "book"), opening),
+                         "5...Nc6 base book | 50% pick chance | support: base book, fire book | learned: all games +23 =1 -1; engines +10 =0 -1")
 
 
 class rematch_tests(unittest.IsolatedAsyncioTestCase):

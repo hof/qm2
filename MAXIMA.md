@@ -1751,18 +1751,26 @@ The log shows each searched move with depth, score, time, and the expected line
 (`pv`). `whisper` (or `--whisper`) explains every move to observers (never to the
 opponent, unlike kibitz) in plain words:
 
-    1...e5 book: fire (35% selection; base 44%, fire 20%, surprise 10%, experience 26%)
-    2. f4 book: revenge vs John (40% selection; base 30%, vs John 70%)
+    1...e5 fire book | 35% pick chance | learned: masters +23 =1 -1
+    2. f4 revenge vs John | 40% pick chance | learned: vs John +0 =0 -1
     d19 +2.07 36.6s 7...Bd6 8. c4 O-O 9. cxd5 Bxd5 10. Bxd5 (out of book)
     learned: 24 moves | vs John +2 =0 -1
 
 Searched moves show depth, score (`#5` for mate), `TB` when tablebases were hit, the
 time, the speed (`850Knps`, `1.2Mnps`), and the first six plies of the line in numbered SAN, starting with the move played. Book moves name the layer
-with the largest share (ties to the more specific layer), then the mix; `base` is book.bin.
-The console uses a shorter book summary on both FICS and Lichess, for example
-`-- 1. .. c5 experience (45% selection; 100% layer) 0.1s, 4:59 left`: only the selected source's
-contribution and the move's selection probability are shown separately. Observer
-whispers and book chat retain the full mix.
+with the largest share (ties to the more specific layer); `base book` is book.bin.
+Both servers show the move's overall `pick chance`, including all active book
+and learned layers. This is a selection probability, not a win rate. Observer
+whispers and `!book` also name supporting layers contributing at least 5% of the
+move's weight, without a second set of percentages.
+`learned: all games +23 =1 -1; masters +10 =0 -1; vs John +2 =0 -1` gives actual
+unweighted wins, draws and losses for this position and move, from the mover's
+side. Each game counts once even if the position repeats; unfinished games add
+no result. The group and opponent are overlapping subsets of all games, not
+additional games. Opponent history is specific to the current server, and
+variants stay separate. Absent results say `learned: no results yet`. These
+counts describe evidence; move selection still uses its existing evaluation,
+result, game-type weights and sampling rules.
 
 FICS mutes guests, so their whispers fail; MaxDrone notices "You are muted." and stops
 whispering. Owners configured in `owner` can steer it by tell without a key.
@@ -1985,9 +1993,6 @@ the protocol actually sent `ponderhit` for that play request. Per-search
 `_ponder_hit` metadata survives immediate completion without fresh info and the
 next background ponder, and resets for every request and engine restart.
 Prediction misses, game changes and ordinary searches keep their usual wording.
-Lichess console lines and `!eval` also show `pondering 1...e5` for the legal
-reply being searched during the opponent's turn, even before any prediction
-has hit. Live search events carry `ponder_hit` and, when available, `ponder_san`.
 
 ### 10.3 Lichess client (MaximaEngine)
 
@@ -2048,9 +2053,10 @@ spectator room "Thanks for watching!". Chat lines carry no links, which Lichess
 blanks. MaximaEngine posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
 authors; no links, which Lichess blanks in chat), `!eval` (our last move with
 depth, score and expected line), `!stats` (our record against the opponent and
-on Lichess) or `!book` (the layers that chose our last book move, e.g. "5...Nc6
-from book: base 95%, fire 5%", or where we left the book); the last three are
-answered in the spectator room only, never to the opponent. Answers to
+on Lichess) or `!book` (our last book move, e.g. "5...Nc6 base book | 55% pick
+chance | learned: masters +23 =1 -1", or where we left the book). Book answers
+put the move and chance first, with supporting layers and learned results on
+separate chat lines. The last three commands are answered in the spectator room only, never to the opponent. Answers to
 non-owners come at most every 5 seconds per game, so chat spam cannot push the
 bot into Lichess's rate limit, which would also hold up its moves.
 

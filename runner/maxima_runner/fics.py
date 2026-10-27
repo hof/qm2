@@ -482,20 +482,19 @@ def clock_text(seconds):
 
 
 def book_whisper(san, why, opening, *, compact=False):
-    """A book move for observers: the layer that picked it, then the mix, e.g. "Nc6 book: fire (base 39%,
-    fire 39%, surprise 10%, experience 12%)"."""
+    """Name the main source, the move's pick chance, and actual results for this move."""
     kind = why[0]
     opponent = opening.names["opponent"]
     probability, parts, source = why[1], why[2], why[3]
-    words = {"book": "base", "fire": "fire", "draw": "draw", "experiment": "surprise", "global": "experience",
-             "group": opening.names["group"], "opponent": f"vs {opponent}",
+    words = {"book": "base book", "fire": "fire book", "draw": "draw book", "experiment": "surprise book",
+             "global": "all games", "group": opening.names["group"], "opponent": f"vs {opponent}",
              "mood": f"{(opening.mood or '').replace('_', ' ')} mood"}
-    mix = ", ".join(f"{words[name]} {parts[name] / probability:.0%}" for name in learning.layer_names
-                    if parts.get(name, 0) >= 0.05 * probability)
+    support = [words[name] for name in learning.layer_names if parts.get(name, 0) >= 0.05 * probability]
     lead = {"signature": f"signature vs {opponent}", "revenge": f"revenge vs {opponent}"}.get(kind, words[source])
-    if compact:
-        return f"{san.replace('...', '. .. ', 1)} {lead} ({probability:.0%} selection; {parts[source] / probability:.0%} layer)"
-    return f"{san} book: {lead} ({probability:.0%} selection; {mix})"
+    results = "; ".join(f"{words[name]} +{wins} ={draws} -{losses}"
+                        for name, (wins, draws, losses) in opening.choice_results.items())
+    detail = f" | support: {', '.join(support)}" if not compact and len(support) > 1 else ""
+    return f"{san} {lead} | {probability:.0%} pick chance{detail} | learned: {results or 'no results yet'}"
 
 
 def learning_report(game, record, records):

@@ -43,8 +43,6 @@ challenge_shares = {"bullet": 30, "blitz": 50, "rapid": 20}
 challenge_wait = 60  # seconds for an answer before we cancel, and between attempts
 challenge_rest = 24 * 3600  # seconds a bot is left alone for a speed after it declined
 rematch_delay = 5  # seconds after a game before we offer a bot one rematch
-book_layers = {"book": "base", "global": "all games"}  # chat names; the others keep their layer name
-group_labels = {"engines": "bots"}
 reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate", "timeout": "opponent left",
            "draw": "draw", "outoftime": "time forfeit", "cheat": "cheat detected", "noStart": "no first move",
            "aborted": "aborted", "unknownFinish": "unknown finish", "variantEnd": "variant end"}
@@ -742,17 +740,16 @@ class lichess_game:
         left = f", {clock_text(max(0.0, clock - seconds))} left"
         why = self.opening.why if kind == "book" and self.opening is not None else None
         if why and why[0] in ("book", "learned", "signature", "revenge"):
-            self.last_book, self.left_book = book_line(numbered, why, self.opening.names), None
+            self.last_book, self.left_book = book_whisper(numbered, why, self.opening), None
         elif self.last_book and self.left_book is None:
             self.left_book = numbered
         if kind == "engine":
             pv = variation(board, info.get("pv", []))
-            pondering = f", pondering {info['_ponder_san']}" if info.get("_ponder_san") else ""
-            self.last_eval = f"{board.san(move)} {describe(info, board.turn)}" + (f", expecting {pv}" if pv else "") + pondering
-            bot.on_line(f"-- {numbered} {describe(info, board.turn)} {seconds:.1f}s{left}" + (f" pv {pv}" if pv else "") + pondering)
+            self.last_eval = f"{board.san(move)} {describe(info, board.turn)}" + (f", expecting {pv}" if pv else "")
+            bot.on_line(f"-- {numbered} {describe(info, board.turn)} {seconds:.1f}s{left}" + (f" pv {pv}" if pv else ""))
         else:
-            self.last_eval = f"{board.san(move)} {info['source']}"
             source = book_whisper(numbered, why, self.opening, compact=True) if why else f"{numbered} {info['source']}"
+            self.last_eval = source
             bot.on_line(f"-- {source} {seconds:.1f}s{left}")
 
     def stats_line(self):
@@ -802,8 +799,13 @@ class lichess_game:
             elif command == "stats":
                 self.chat(room, self.stats_line())
             elif command == "book":
-                self.chat(room, f"Out of book since {self.left_book}." if self.left_book
-                          else self.last_book or "No book move yet.")
+                if self.left_book:
+                    self.chat(room, f"Out of book since {self.left_book}.")
+                elif self.last_book:
+                    heading, chance, *details = self.last_book.split(" | ")
+                    self.chat(room, f"{heading} | {chance}", *details)
+                else:
+                    self.chat(room, "No book move yet.")
             else:
                 self.chat(room, self.last_eval or "No search yet.")
             return
@@ -920,21 +922,6 @@ class lichess_game:
             if bot.learner is not None and getattr(bot.learner, 'experience_dir', None) is not None:
                 paths.append(bot.learner.experience_dir / 'games' / (game.headers['LearningId'] + '.pgn'))
             archive_saved(paths, bot.on_line)
-
-
-def book_line(move, why, names):
-    """ "5...Nc6 book: base 95%, fire 5%" from a book choice (kind, probability, parts, source)."""
-    kind, probability, parts = why[0], why[1], why[2]
-
-    def label(layer):
-        if layer == "group":
-            return f"vs {group_labels.get(names['group'], names['group'])}"
-        if layer == "opponent":
-            return f"vs {names['opponent']}"
-        return book_layers.get(layer, layer)
-    shares = [(label(layer), share / probability) for layer, share in parts.items() if share >= 0.005 * probability]
-    detail = ", ".join(f"{name} {share:.0%}" for name, share in sorted(shares, key=lambda item: -item[1]))
-    return f"{move} {'from book' if kind == 'book' else kind} ({probability:.0%} selection): {detail}"
 
 
 def record_line(history, name):
