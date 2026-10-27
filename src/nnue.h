@@ -231,10 +231,13 @@ std::array<uint8_t, 32> affine(const std::array<uint8_t, input_size> & input,
         }
     }
     std::array<uint8_t, 32> output;
+    constexpr int dot_bound = int(input_size) * 128 * 127;
     for (size_t row = 0; row < 32; ++row) {
-        // Biases are unrestricted int32 in the file. Add them in wide arithmetic.
-        const int64_t sum = int64_t(biases[row]) + dots[row];
-        output[row] = static_cast<uint8_t>(std::clamp(sum >> 6, int64_t(0), int64_t(127)));
+        // Beyond these bias bounds every possible dot already clips to 0 or 127.
+        // Clamping first preserves that result and bounds the int32 addition.
+        const int bias = std::clamp(biases[row], -dot_bound, dot_bound + 127 * 64);
+        const int sum = bias + dots[row];
+        output[row] = static_cast<uint8_t>(std::clamp(sum >> 6, 0, 127));
     }
     return output;
 }

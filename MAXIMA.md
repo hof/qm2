@@ -365,8 +365,11 @@ so AVX2 inference broadcasts each input block and accumulates eight outputs per
 vector without horizontal reductions. The loader bounds positive and negative
 weight sums before allowing four product pairs to share a widening instruction;
 other layers widen each pair immediately and skip zero input blocks. Arbitrary
-supported weights and int32 biases retain exact scalar arithmetic and clipping. A per-search
-cache keyed by position holds raw network scores; clock-dependent scaling is
+supported weights and int32 biases retain exact scalar arithmetic and clipping.
+Affine dot products are bounded by `input_size * 128 * 127`. Clamping each bias to
+the bounds where every possible result already saturates permits 32-bit
+addition and clipping without changing the output, even for extreme file biases.
+A per-search cache keyed by position holds raw network scores; clock-dependent scaling is
 applied on every read.
 The GPL reference probe used for exact inference tests is recorded in
 `third_party/nnue_reference/README.md`. There is no network I/O or Python

@@ -89,6 +89,9 @@ bool check_affine() {
             constexpr int targets[] = {-65, -64, -1, 0, 1, 63, 64, 65, 8127, 8128, 8191, 8192};
             biases[row] = row == 0 ? INT32_MIN : row == 1 ? INT32_MAX
                 : static_cast<int32_t>(targets[(trial + row) % 12] - dot);
+            if (row >= 14) {
+                biases[row] = std::bit_cast<int32_t>(static_cast<uint32_t>(random()));
+            }
         }
         const auto packed = nnue::detail::pack_affine_weights<input_size>(weights);
         const auto scalar = nnue::detail::affine<input_size, false>(input, packed, biases);
