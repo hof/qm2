@@ -118,10 +118,9 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
         await subject.on_login("GuestTEST")
         await subject.handle("Creating: GuestOPPO (++++) GuestTEST (++++) unrated losers 3 0")
         self.assertEqual(subject.connection.sent[-1], "abort")
-        for kind in ("wild/8", "wild/8a"):
-            subject.connection.sent.clear()
-            await subject.handle(f"Creating: GuestOPPO (++++) GuestTEST (++++) unrated {kind} 3 0")
-            self.assertEqual(subject.connection.sent[-1], "abort")
+        subject.connection.sent.clear()
+        await subject.handle("Creating: GuestOPPO (++++) GuestTEST (++++) unrated wild/8a 3 0")
+        self.assertEqual(subject.connection.sent[-1], "abort")
 
     async def test_rematches_are_limited_per_opponent(self):
         subject = player(seeks=["3 0"], rematches=2)
@@ -198,10 +197,10 @@ class settings_tests(unittest.TestCase):
 
     def test_wild_config_reaches_startup_and_posts_each_variant(self):
         from maxima_runner.fics_cli import parser
-        specs = ['3 0 ' + kind for kind in ('w2', 'w3', 'w4', 'w5', 'losers')]
+        specs = ['3 0 ' + kind for kind in ('w2', 'w3', 'w4', 'w5', 'w8', 'losers')]
         arguments = parser()
         options = arguments.parse_args(['--config', self.write({
-            'seeks': specs, 'seeks_at_once': 5})])
+            'seeks': specs, 'seeks_at_once': 6})])
         policies = []
         factory = fics.play_policy
 
@@ -224,7 +223,7 @@ class settings_tests(unittest.TestCase):
     def test_config_rejects_unsupported_or_combined_variants(self):
         from maxima_runner.fics_cli import parser
         for pool, spec in [('seeks', '3 0 ' + kind) for kind in
-                           ('w0', 'w1', 'w17', 'w8', 'w8a', 'w8b', 'suicide', 'atomic', 'losers w2', 'w2 w3')] + [
+                           ('w0', 'w1', 'w17', 'w8a', 'w8b', 'suicide', 'atomic', 'losers w2', 'w2 w3')] + [
                                ('losers_seeks', '3 0 w2')]:
             with self.subTest(pool=pool, spec=spec):
                 arguments = parser()
@@ -284,7 +283,7 @@ class remote_pool_tests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(subject.policy.seek_pool)
         await subject.handle('stranger tells you: secret seek-pool 5 1 losers')
         self.assertEqual(subject.policy.seek_pool, ['5 1 losers'])
-        for spec in ('3 0,', '0 0', '3 0 suicide', '3 0 w0', '3 0 w8', '3 0 w8a', '3 0 losers w2', '3 0; quit'):
+        for spec in ('3 0,', '0 0', '3 0 suicide', '3 0 w0', '3 0 w8a', '3 0 losers w2', '3 0; quit'):
             await subject.handle(f'stranger tells you: secret seek-pool {spec}')
             self.assertEqual(subject.policy.seek_pool, ['5 1 losers'])
 
@@ -300,7 +299,7 @@ class remote_pool_tests(unittest.IsolatedAsyncioTestCase):
         for kind in fics.wild_types:
             await subject.handle(f'Challenge: Beta (1500) Alpha (1500) unrated {kind} 3 0.')
             self.assertEqual(subject.connection.sent[-1], 'accept Beta')
-        for kind in ('wild/0', 'wild/8', 'wild/8a'):
+        for kind in ('wild/0', 'wild/8a'):
             await subject.handle(f'Challenge: Beta (1500) Alpha (1500) unrated {kind} 3 0.')
             self.assertEqual(subject.connection.sent[-1], 'decline Beta')
 

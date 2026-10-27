@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 import chess
-from maxima_runner import learning, learning_store
+from maxima_runner import fics_game, learning, learning_store
 from maxima_runner.variants import wild_boards, variant_game, read_pgn, board_variant, royal_losers_board
 from test_fics_policy import player
 from test_fics_losers import position
@@ -27,6 +27,29 @@ def training_game(kind='wild/2', source='fics'):
 
 
 class wild_tests(unittest.TestCase):
+    def test_observed_wild8_start_and_both_castling_wings(self):
+        # FICS guest examinations, 2026-10-26: actual boards, not help-text assumptions.
+        start = fics_game.style12.parse(
+            '<12> rnbqkbnr -------- -------- pppppppp PPPPPPPP -------- -------- RNBQKBNR '
+            'W -1 1 1 1 1 0 20 Alpha Beta -1 0 0 39 39 0 0 1 none (0:00.000) none')
+        fixtures = [
+            (('g1f3', 'g8f6', 'f1d3', 'f8d6', 'e1g1', 'e8g8'),
+             'rnbq1rk1/8/3b1n2/pppppppp/PPPPPPPP/3B1N2/8/RNBQ1RK1 w - - 6 4'),
+            (('b1c3', 'b8c6', 'c1e3', 'c8e6', 'd1d2', 'd8d7', 'e1c1', 'e8c8'),
+             '2kr1bnr/3q4/2n1b3/pppppppp/PPPPPPPP/2N1B3/3Q4/2KR1BNR w - - 8 5'),
+        ]
+        for moves, expected in fixtures:
+            with self.subTest(moves=moves):
+                board = start.board(wild_boards['wild/8'])
+                for move in moves:
+                    board.push_uci(move)
+                self.assertEqual(board.fen(), expected)
+        unsupported = fics_game.style12.parse(
+            '<12> rnbkqbnr -------- -------- PPPPPPPP pppppppp -------- -------- RNBKQBNR '
+            'W -1 1 1 1 1 0 20 Alpha Beta -1 0 0 39 39 0 0 1 none (0:00.000) none')
+        with self.assertRaisesRegex(ValueError, 'invalid style12 position'):
+            unsupported.board(wild_boards['wild/8a'])
+
     def test_shared_positions_transfer_between_standard_and_wild_but_not_losers(self):
         record = learning.digest(training_game())
         start = training_game().board().fen()
