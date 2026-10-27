@@ -1674,7 +1674,7 @@ Standard chess, royal losers and supported wild variants share one `seeks` pool:
 
 ```json
 {
-  "seeks": ["3 0", "3 0 losers", "5 1 losers", "3 0 w2", "3 0 w3", "3 0 w4", "3 0 w5", "3 0 w8", "3 0 w8a"],
+  "seeks": ["3 0", "3 0 losers", "5 1 losers", "3 0 w2", "3 0 w3", "3 0 w4", "3 0 w5"],
   "seeks_at_once": 3,
   "accept": true,
   "reseek_minutes": 2
@@ -1699,7 +1699,7 @@ are supported. Sampling draws distinct positive-weight entries up to
 `seeks_at_once`; percentages never reach FICS. Without percentages, selection
 remains uniform. The same syntax works in `--seek` and operator `seek-pool`.
 The local `.fics.json` uses 50% for standard 5+0, divides the remaining 50%
-equally among its six wild and four losers entries, posts up to three seeks,
+equally among its four wild and four losers entries, posts up to three seeks,
 and reseeks after five minutes without a game (`reseek_minutes: 5`).
 
 Operators can refresh immediately with `tell <bot> reseek` (a configured owner)
@@ -1798,11 +1798,18 @@ survives games and connection retries in this process, but is not written to the
 configuration file. `owner` handles can also use the existing remote commands.
 
 Supported orthodox-rule wild challenges are `wild/2`, `wild/3`, `wild/4`,
-`wild/5`, `wild/8`, and `wild/8a`; operator pool entries use `w2`, `w3`, `w4`,
-`w5`, `w8`, `w8a`. These entries also work directly in JSON `seeks` and
+and `wild/5`; operator pool entries use `w2`, `w3`, `w4`, and `w5`. These entries also work directly in JSON `seeks` and
 repeated `--seek` flags; `seeks_at_once` samples that combined standard/wild pool.
-For example, `"seeks": ["3 0 w2", "3 0 w3", "3 0 w4", "3 0 w5", "3 0 w8", "3 0 w8a"]`
+For example, `"seeks": ["3 0 w2", "3 0 w3", "3 0 w4", "3 0 w5"]`
 with `"seeks_at_once": 2` posts two random supported wild advertisements. The initial style12 position must pass legal-board validation.
+`wild/8a` is unsupported: observed FICS starts place kings on d1/d8 with
+castling rights, requiring castling the engine does not implement. Challenges
+are declined, seek entries are rejected, and created games are aborted.
+`wild/8` is also disabled pending verification of its starting positions and
+castling rules against engine capabilities. Both variants are excluded from
+challenges and seek pools, and created games are aborted.
+Historical wild/8 and wild/8a PGN labels remain readable; this does not imply
+playing support.
 Standard chess and supported numbered wild variants use one orthodox learning
 store (`experience`) and the same books, on both FICS and Lichess. Position keys
 retain side to move, castling rights and effective en-passant rights; moves are

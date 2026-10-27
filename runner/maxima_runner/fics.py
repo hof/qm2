@@ -280,7 +280,9 @@ restart_status = 75
 draw_offer_pattern = re.compile(r"^(?:Your opponent|[A-Za-z]+) offers you a draw\.")
 finger_pattern = re.compile(r"^Finger of (?P<name>[A-Za-z]+)(?P<titles>(?:\([A-Z*]+\))*):")
 playable_types = ("lightning", "blitz", "standard")
-wild_types = tuple(wild_boards)
+# Keep historical PGN readers separate from playable server variants.
+# wild/8a has unsupported d-file castling; wild/8 is unverified.
+wild_types = tuple(kind for kind in wild_boards if kind not in ("wild/8", "wild/8a"))
 chess_titles = ("GM", "IM", "FM", "WGM", "WIM", "WFM", "CM", "WCM", "NM")
 seek_pattern = re.compile(r"\d{1,3} \d{1,3}(?: [a-z0-9+-]+)*")
 rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
@@ -1423,7 +1425,7 @@ def run(options, parser):
                             if word in ("losers", "suicide", "wild", "atomic", "crazyhouse", "zh", "bughouse", "fr", "chess960")
                             or re.fullmatch(r"w\d+[a-z]*", word)]
                 if variants and (pool != "seeks" or len(variants) != 1 or variants[0] not in supported_wild | {"losers"}):
-                    raise ValueError("seeks supports losers, w2, w3, w4, w5, w8 and w8a; use one variant per entry")
+                    raise ValueError("seeks supports losers, w2, w3, w4 and w5; use one variant per entry")
     except ValueError as error:
         parser.error(str(error))
     policy = play_policy(configured["seeks"], configured["seeks_at_once"], configured["accept"],
