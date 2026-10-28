@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "search_position.h"
 #include "search.h"
 #include <array>
 #include <cstring>
@@ -225,6 +226,7 @@ bool search_bounds() {
 }
 
 bool cache_clock_and_stop() {
+    std::vector<U64> game_history;
     bool success = true;
     for (int cached : {-500, 500}) {
         trans_table::clear();
@@ -268,7 +270,7 @@ bool cache_clock_and_stop() {
         cancelled->pvs(-1, 0, 2) == -1 && cancelled->stop_all
         && cancelled->stack->pv_count == 0 && !cancelled->stack->best_move.piece);
     // The root still uses normal move search rather than taking a descendant shortcut.
-    search->reset_stack();
+    start_new_search(*search, game_history);
     int alpha = -1000;
     success &= check("actual root must not use the early descendant mechanism",
         !search->raise_repetition_alpha(alpha));
@@ -281,13 +283,14 @@ bool cache_clock_and_stop() {
 }
 
 bool history_boundaries() {
+    std::vector<U64> game_history;
     auto search = std::make_unique<probe_search_t>(cycle_fen);
     prepare(*search);
     move_t witness{};
     bool success = check("fresh FEN must not invent missing history", !search->upcoming_repetition(witness));
     play(*search, "g1f3");
     play(*search, "g8f6");
-    search->reset_stack();
+    start_new_search(*search, game_history);
     play(*search, "f3g1");
     success &= check("a pre-root match must supply a descendant's escape", search->upcoming_repetition(witness) == 3);
     search->forward();
@@ -303,6 +306,7 @@ bool history_boundaries() {
 }
 
 bool oracle_comparison() {
+    std::vector<U64> game_history;
     std::mt19937 random(20261019);
     int positions = 0, hits = 0;
     auto search = std::make_unique<probe_search_t>(cycle_fen);
@@ -338,13 +342,14 @@ bool oracle_comparison() {
         hits += distance != 0;
         if (sample >= 2) {
             if (legal.empty() || sample % 60 == 59) {
+                game_history.clear();
                 search->init(cycle_fen, nullptr, nullptr, {}, 0);
                 prepare(*search);
             } else {
                 auto move = legal[random() % legal.size()];
                 search->forward(&move, search->brd.gives_check(&move));
                 if (search->brd.ply >= 24) {
-                    search->reset_stack();
+                    start_new_search(*search, game_history);
                 }
             }
         }

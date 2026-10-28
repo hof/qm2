@@ -108,7 +108,6 @@ void game_t::clear() {
     clock_limit = false;
     movetime_limit = false;
     search_moves.clear();
-    learn_factor = 1.0;
 }
 
 void game_t::copy(game_t* game) {
@@ -127,7 +126,6 @@ void game_t::copy(game_t* game) {
     clock_limit = game->clock_limit;
     movetime_limit = game->movetime_limit;
     search_moves = game->search_moves;
-    learn_factor = game->learn_factor;
     tm = game->tm;
     go_started = game->go_started;
 }

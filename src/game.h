@@ -69,7 +69,6 @@ public:
     bool clock_limit;
     bool movetime_limit;
     std::vector<std::string> search_moves;
-    double learn_factor;
 
     void clear();
     void copy(game_t * game);

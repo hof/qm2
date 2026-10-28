@@ -2101,38 +2101,3 @@ bool search_t::in_searched(move_t* move, int searched_moves) {
     }
     return false;
 }
-
-/*
- * Helper function to reset the search stack.
- * This is used for self-playing games, where
- * MAX_PLY is not sufficient to hold all moves of a chess game.
- * Note: in UCI mode this is not an issue, because each position
- * starts with a new stack.
- */
-
-void search_t::reset_stack() {
-    for (int ply = 0; ply < brd.ply; ++ply) {
-        _position_history.push_back(brd._stack[ply].repetition_key());
-    }
-    if (_position_history.size() > static_cast<size_t>(brd.stack->fifty_count)) {
-        _position_history.erase(_position_history.begin(),
-            _position_history.end() - brd.stack->fifty_count);
-    }
-    brd.ply = 0;
-    stack = root_stack;
-    stack->eval_result = score::INVALID;
-    stack->improving = false;
-    stack->tt_pv = stack->lmr_tt_tactical = stack->lmr_tt_fail_low = stack->lmr_tt_deep = false;
-    stack->lmr_correction = stack->lmr_alpha_raises = 0;
-    stack->reduction = 1024;
-    stack->static_eval = score::INVALID;
-    stack->excluded_move = 0;
-    stack->move_count = 0;
-    stack->multiple_extensions = 0;
-    stack->repetition_start = -static_cast<int>(_position_history.size());
-    brd._stack[0].copy(brd.stack);
-    brd.stack = &brd._stack[0];
-    nodes = 0;
-    stack->pv_count = 0;
-}
-

@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "search_position.h"
 #include <vector>
 
 namespace {
@@ -55,9 +56,10 @@ bool test_trend() {
     success &= check(!search->is_improving(), "a null child must start without stale evaluation history");
     search->backward();
     success &= check(search->stack->improving, "undo must retain the parent's trend");
-    search->reset_stack();
+    std::vector<U64> position_history;
+    start_new_search(*search, position_history);
     success &= check(!search->stack->improving && !search->is_improving(),
-        "resetting the search root must discard the previous path's trend");
+        "starting a new search must discard the previous path's trend");
     return success;
 }
 

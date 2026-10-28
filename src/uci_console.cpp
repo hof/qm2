@@ -243,8 +243,6 @@ namespace uci {
                 result = handle_ponderhit();
             } else if (token == "eval") {
                 result = handle_eval(parser);
-            } else if (token == "learn") {
-                result = handle_learn();
             } else if (token == "book") {
                 result = handle_book(parser);
             }
@@ -540,21 +538,6 @@ namespace uci {
         engine::set_ponder(false);
         return true;
     }
-
-    /*
-     * Learn can be used to determine if a new evaluation or search
-     * feature gives better performance, and what is the ideal score
-     *
-     */
-    bool handle_learn() {
-        engine::stop();
-        engine::settings()->clear();
-        engine::set_ponder(false);
-        engine::set_position(fen, position_history);
-        engine::learn();
-        return true;
-    }
-
 
     /*
      * Eval prints the evaluation result on the current position

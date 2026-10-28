@@ -779,6 +779,8 @@ as a build check.
 
 ### Offline paired-opening matches
 
+Self-play uses the runner and independent UCI engine processes.
+
 ```bash
 ./maxima match:run --engine-a /path/to/baseline --engine-b /path/to/candidate \
     --openings openings.json --pairs 2 --seed 2026 \

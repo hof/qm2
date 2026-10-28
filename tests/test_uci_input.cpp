@@ -163,6 +163,15 @@ int main() {
     success &= check("invalid boolean must preserve setting", options::get_value("Ponder") == 1);
     uci::in("setoption name Unknown value 123");
     success &= check("unknown option must not mutate sentinel", options::PARAM[0].value == 0);
+
+    const int saved_depth = engine::settings()->max_depth;
+    engine::settings()->max_depth = 7;
+    uci::in("learn");
+    success &= check("removed legacy tuner command must preserve UCI state",
+        engine::settings()->max_depth == 7 && uci::fen == fen
+        && uci::position_history == history);
+    engine::settings()->max_depth = saved_depth;
+
     success &= check("Chess960 must not be an available option",
         std::string(options::get_option("UCI_Chess960")->key).empty());
     std::vector<int> option_values;

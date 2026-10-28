@@ -119,10 +119,8 @@ private:
     bool start_search(void * (*function)(void *), bool calculate_book);
 
     static void * _think(void * engineObjPtr);
-    static void * _learn(void * engineObjPtr);
     static void * _book_calc(void * engineObjPrt);
     
-    void _create_start_positions(search_t * root, book_t * book, std::string * pos, int &x, const int max);
 
 public:
     
@@ -142,12 +140,6 @@ public:
 
     bool think() {
         return start_search(_think, false);
-    }
-
-    void learn() {
-        stop();
-        _control.stop_requested.store(false);
-        this->create(_learn, this);
     }
 
     void book_calc() {
@@ -204,7 +196,6 @@ namespace engine {
     void stop();
     void go();
     void analyse();
-    void learn();
     void book_calc();
     void new_game(std::string fen);
     void set_position(std::string fen, const std::vector<U64> & position_history = {});

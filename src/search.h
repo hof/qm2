@@ -383,7 +383,6 @@ public:
     void update_killers(move_t * move);
     bool is_killer(move_t * const move);
     bool in_searched(move_t * move, int searched_moves);
-    void reset_stack();
     int reduction(int depth, int searched_moves, int estimate, bool root_node = false);
     int reduction_estimate(int depth, int searched_moves, const move_t & move,
         bool pv, bool cut_node, int gives_check);

@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "search_position.h"
 #include "w17/w17_search.h"
 
 namespace {
@@ -63,6 +64,7 @@ bool test_owned_history() {
 }
 
 bool test_search_path() {
+    std::vector<U64> game_history;
     search_t search(start_fen);
     search.init_root_moves();
     move_t moves[4];
@@ -81,16 +83,16 @@ bool test_search_path() {
     for (const char * text : cycle) {
         play(search, text);
     }
-    search.reset_stack();
-    success &= check("rebasing must preserve twofold history without declaring a draw",
+    start_new_search(search, game_history);
+    success &= check("starting a new search must preserve twofold history without declaring a draw",
         search.brd.ply == 0 && !search.is_repetition());
     for (const char * text : cycle) {
         play(search, text);
     }
     success &= check("root and pre-root matches together must count as threefold",
         search.is_repetition());
-    search.reset_stack();
-    success &= check("rebasing the search stack must retain threefold history",
+    start_new_search(search, game_history);
+    success &= check("starting a new search must retain threefold history",
         search.brd.ply == 0 && search.is_repetition());
     play(search, "e2e4");
     success &= check("a pawn move must stop repetition scanning", !search.is_repetition());
@@ -128,6 +130,7 @@ bool test_null_moves_and_bounds() {
 }
 
 bool test_cycle_after_pawn_push() {
+    std::vector<U64> game_history;
     search_t search(start_fen);
     play(search, "e2e4");
     const char * moves[] = {"g8f6", "g1f3", "f6g8", "f3g1"};
@@ -142,8 +145,8 @@ bool test_cycle_after_pawn_push() {
     }
     search_t supplied(search.brd.to_string().c_str(), nullptr, nullptr, history);
     success &= check("a supplied twofold EP history must not declare a draw", !supplied.is_repetition());
-    search.reset_stack();
-    success &= check("rebasing turns a search cycle into twofold game history", !search.is_repetition());
+    start_new_search(search, game_history);
+    success &= check("starting a new search turns a search cycle into twofold game history", !search.is_repetition());
     for (const char * text : moves) {
         play(search, text);
     }
@@ -153,20 +156,21 @@ bool test_cycle_after_pawn_push() {
     search_t supplied_threefold(search.brd.to_string().c_str(), nullptr, nullptr, history);
     success &= check("supplied threefold history must normalize unavailable EP",
         supplied_threefold.is_repetition());
-    search.reset_stack();
-    success &= check("rebasing must preserve normalized EP for genuine threefold", search.is_repetition());
+    start_new_search(search, game_history);
+    success &= check("starting a new search must preserve normalized EP for genuine threefold", search.is_repetition());
     search_t available("7k/8/8/3pP3/8/8/8/K7 w - d6 0 1");
+    std::vector<U64> available_history;
     for (int occurrence = 0; occurrence < 2; ++occurrence) {
         for (const char * text : {"a1a2", "h8h7", "a2a1", "h7h8"}) {
             play(available, text);
         }
-        available.reset_stack();
+        start_new_search(available, available_history);
     }
     success &= check("an expired legal EP capture must distinguish positions", !available.is_repetition());
     for (const char * text : {"a1a2", "h8h7", "a2a1", "h7h8"}) {
         play(available, text);
     }
-    available.reset_stack();
+    start_new_search(available, available_history);
     success &= check("three occurrences without legal EP must still count", available.is_repetition());
     return success;
 }
@@ -202,14 +206,15 @@ bool test_pre_root_matches() {
 }
 
 bool test_repetition_scores() {
+    std::vector<U64> game_history;
     search_t search("7k/8/8/8/8/8/8/KR6 w - - 0 1");
-    search.draw_contempt = 0;
     bool success = true;
     for (int occurrence = 0; occurrence < 2; ++occurrence) {
         for (const char * text : {"a1a2", "h8h7", "a2a1", "h7h8"}) {
             play(search, text);
         }
-        search.reset_stack();
+        start_new_search(search, game_history);
+        search.draw_contempt = 0;
         search.init_root_moves();
         success &= check("only genuine threefold game history must score as a draw",
             search.is_draw() == (occurrence == 1));
