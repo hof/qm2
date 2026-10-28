@@ -1342,7 +1342,7 @@ Archive failures retain pending files and are reported by the clients. Existing
 legacy monthly files are preserved. All pods writing these files must run this
 version; shared PVC advisory locks and atomic rename must work across nodes.
 This change bounds PGN file growth by month; the existing shared learning JSON
-snapshot/player-stat publication and startup reconstruction still scale with total
+snapshot/player-stat publication and explicit reconstruction still scale with total
 history and are not a constant-cost, multi-year learning index.
 
 The sync source can be one PGN or a recursively scanned directory; the destination
@@ -1363,8 +1363,12 @@ uploads without sufficient evaluations teach nothing.
 
 `experience:build` reconstructs learning exclusively from PGNs: `index/` and
 `players/` can be deleted and rebuilt completely. Keep **all PGNs**, including
-source/evaluation annotations. Startup also rebuilds to recover a durable game
-whose snapshot publication was interrupted. The old `games/fics/`,
+source/evaluation annotations. Online startup loads the published index directly;
+it rebuilds only if that index is missing or invalid. Run `experience:build`
+to recover a durable game whose snapshot publication was interrupted, or after
+changing archived PGNs outside the shared store. Experience loading runs before
+the online signal controller starts, so Ctrl-C can interrupt a cold rebuild.
+The old `games/fics/`,
 `lichess/games/`, and `fics/games/` layouts are read and copied into the common
 archive without deleting originals. Corrected canonical games take precedence
 over their obsolete legacy copies. Stop old client versions during migration;

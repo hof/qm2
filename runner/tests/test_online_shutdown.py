@@ -270,6 +270,40 @@ class process_tests(unittest.IsolatedAsyncioTestCase):
         await self.fics_session(second_signal=True)
         self.assertEqual(len(list((self.root / 'experience' / 'games' / 'interrupted').glob('*.pgn'))), 1)
 
+    async def test_ctrl_c_during_experience_loading_exits_for_both_clients(self):
+        config = self.root / 'fixture-config.json'
+        config.write_text('{}')
+        for service in ('fics', 'lichess'):
+            with self.subTest(service=service):
+                script = """
+import sys, time
+from maxima_runner import cli, learning
+
+def slow_learner(*args, **kwargs):
+    print('fixture loading experience', flush=True)
+    time.sleep(30)
+    raise AssertionError('loading should have been interrupted')
+
+learning.learner = slow_learner
+sys.exit(cli.main(sys.argv[1:]))
+"""
+                environment = dict(os.environ, MAXIMA_DATA_DIR=str(self.root), LICHESS_BOT_TOKEN='fixture-token')
+                process = await asyncio.create_subprocess_exec(
+                    sys.executable, '-c', script, service, '--config', str(config),
+                    env=environment, stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+                self.processes.append(process)
+                while True:
+                    line = await asyncio.wait_for(process.stdout.readline(), 5)
+                    self.assertTrue(line, 'client exited before loading experience')
+                    if b'fixture loading experience' in line:
+                        break
+                process.send_signal(signal.SIGINT)
+                output, _ = await asyncio.wait_for(process.communicate(), 2)
+                self.assertEqual(process.returncode, 130, output.decode())
+                self.assertNotIn(b'Traceback', output)
+                self.assertFalse(self.pid.exists())
+
     async def test_signal_during_engine_startup_does_not_connect_and_reaps_child(self):
         process = await self.launch('fics', '--host', '127.0.0.1', '--port', '1', startup='hang', grace='5')
         await self.wait_for(self.pid.exists)

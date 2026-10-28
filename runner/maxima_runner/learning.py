@@ -564,7 +564,6 @@ class learner:
         self.store = learning_store.shared_store(self.experience_dir, variant)
         self.book_path = book_path
         self.variety = variety
-        self.store.rebuild()
         if self.games_dir.exists() and self.experience_dir.resolve() not in self.games_dir.resolve().parents and self.games_dir.resolve() != self.experience_dir.resolve():
             self.store.sync(self.games_dir)
         self.records = self.store.load()

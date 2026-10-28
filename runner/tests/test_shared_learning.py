@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 import chess
 import chess.engine
@@ -67,6 +68,27 @@ class shared_learning_tests(unittest.TestCase):
         self.assertEqual(after[0]["values"], before[0]["values"])
         self.assertEqual(after[0]["analyses"][0][-2:], [12345, 1000])
         self.assertEqual(after[0]["analyses"][0][5], 12345)
+
+    def test_startup_reuses_published_index_without_reading_or_rewriting_pgns(self):
+        self.store.add(game_for())
+        expected = self.store.load()
+        before = {path: (path.read_bytes(), path.stat().st_mtime_ns)
+                  for path in self.root.rglob('*') if path.is_file()}
+        with patch.object(learning_store.shared_store, 'rebuild', side_effect=AssertionError('unexpected rebuild')), \
+                patch.object(learning_store, 'read_games', side_effect=AssertionError('unexpected PGN parse')):
+            for server in ('freechess.org', 'lichess.org'):
+                subject = learning.learner(self.root, server=server)
+                self.assertEqual(subject.records, expected)
+        self.assertEqual(before, {path: (path.read_bytes(), path.stat().st_mtime_ns)
+                                  for path in self.root.rglob('*') if path.is_file()})
+
+    def test_startup_rebuilds_missing_or_invalid_index(self):
+        self.store.add(game_for())
+        expected = self.store.load()
+        self.store.snapshot.unlink()
+        self.assertEqual(learning.learner(self.root).records, expected)
+        self.store.snapshot.write_text('invalid JSON')
+        self.assertEqual(learning.learner(self.root).records, expected)
 
     def test_next_game_sees_shared_groups_and_existing_game_keeps_its_view(self):
         fics = learning.learner(self.root, server='freechess.org')

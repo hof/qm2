@@ -1455,6 +1455,24 @@ def run(options, parser):
     if options.config is not None:
         show(f"-- configuration: {options.config}")
 
+    # Load before installing event-loop signal handlers so cold rebuilds remain interruptible.
+    learner = None
+    losers_learner = None
+    if configured["learning"] and not options.no_engine:
+        show("-- loading experience (rebuild only if the index is missing or invalid)")
+        learner = learning.learner(data_root() / "experience", pgn_dir, data_root() / "book.bin",
+                                   configured["variety"],
+                                   style_books(configured["style_books"]),
+                                   configured["layer_profiles"] or None, configured["mood"],
+                                   data_root() / "moods", server=options.host)
+        show(f"-- experience: {len(learner.records)} games")
+        if policy.losers:
+            losers_games = pgn_dir.parent / "losers" / pgn_dir.name
+            losers_learner = learning.learner(data_root() / "experience" / "losers", losers_games,
+                                             variety=configured["variety"], mood="off", server=options.host,
+                                             variant="losers")
+            show(f"-- losers experience: {len(losers_learner.records)} games")
+
     @asynccontextmanager
     async def engine_session():
         # The data directory resolves the engine's relative eval.nnue and book.bin defaults.
@@ -1464,21 +1482,6 @@ def run(options, parser):
 
     async def play_session(controller, commands, state):
         read_commands(asyncio.get_event_loop(), commands)
-        learner = None
-        losers_learner = None
-        if configured["learning"] and not options.no_engine:
-            learner = learning.learner(data_root() / "experience", pgn_dir, data_root() / "book.bin",
-                                       configured["variety"],
-                                       style_books(configured["style_books"]),
-                                       configured["layer_profiles"] or None, configured["mood"],
-                                       data_root() / "moods", server=options.host)
-            show(f"-- experience: {len(learner.records)} games")
-            if policy.losers:
-                losers_games = pgn_dir.parent / "losers" / pgn_dir.name
-                losers_learner = learning.learner(data_root() / "experience" / "losers", losers_games,
-                                                 variety=configured["variety"], mood="off", server=options.host,
-                                                 variant="losers")
-                show(f"-- losers experience: {len(losers_learner.records)} games")
         events = connectors.game_events() if feed_address or configured["pgn_post"] else None
         player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
                                                                   pgn_dir=pgn_dir, site=options.host, learner=learner,

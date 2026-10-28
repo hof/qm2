@@ -1015,6 +1015,15 @@ def run(options, parser):
     def show(line):
         print(line, flush=True)
 
+    # Load before installing event-loop signal handlers so cold rebuilds remain interruptible.
+    learner = None
+    if configured["learning"]:
+        show("-- loading experience (rebuild only if the index is missing or invalid)")
+        learner = learning.learner(data_root() / "experience", pgn_dir, data_root() / "book.bin", configured["variety"],
+                                   style_books(configured["style_books"]), configured["layer_profiles"] or None,
+                                   configured["mood"], data_root() / "moods", server=options.server)
+        show(f"-- experience: {len(learner.records)} games")
+
     @asynccontextmanager
     async def engine_session():
         # The data directory resolves the engine's relative eval.nnue and book.bin defaults.
@@ -1025,12 +1034,6 @@ def run(options, parser):
     async def play_session(controller, commands, state):
         loop = asyncio.get_running_loop()
         read_commands(loop, commands)
-        learner = None
-        if configured["learning"]:
-            learner = learning.learner(data_root() / "experience", pgn_dir, data_root() / "book.bin", configured["variety"],
-                                       style_books(configured["style_books"]), configured["layer_profiles"] or None,
-                                       configured["mood"], data_root() / "moods", server=options.server)
-            show(f"-- experience: {len(learner.records)} games")
         events = connectors.game_events() if feed_address or configured["pgn_post"] else None
         api = lichess_api(token, options.server, show)
         bot = lichess_bot(api, engine_session, show, speeds=configured["speeds"], accept=configured["accept"],
