@@ -1785,6 +1785,8 @@ The PV excludes the played move and defaults to four plies; `--pv-plies N` or
 `"pv_plies": N` in either server config changes this (0 hides PV). Opponent
 lines use `10. Qa3 | John | 2.1s | 4:54 left`; unavailable timing is omitted. Both servers use compact console book lines, for example
 `1...e5 | FireBook (pick 43%) | 0.1s | 4:59 left`, omitting support.
+Maxima's book and search lines use muted gray in a terminal; opponent lines keep
+the default color. Redirected output stays plain, and `NO_COLOR` disables color.
 Available learning results appear after the pick chance as separate fields, for
 example `Masters +23 =1 -1 | vs John +2 =0 -1`; absent results add no field.
 Base, fire, draw and surprise books appear as `BaseBook`, `FireBook`,

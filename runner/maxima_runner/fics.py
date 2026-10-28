@@ -19,6 +19,7 @@ import chess.engine
 from .variants import royal_losers_board, wild_boards
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
+from .cli import styled
 from .move_choice import describe, search_summary, speed, variation
 from .project import data_root, engine_path, project_root
 from .uci import open_engine
@@ -1193,14 +1194,14 @@ class engine_player:
         if kind != "engine":
             book = kind == "book" and self.opening is not None and self.opening.why
             source = book_whisper(numbered, self.opening.why, self.opening, compact=True) if book else f"{numbered} {info['source']}"
-            self.on_line(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left")
+            self.on_line(styled(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left", "90"))
             if explaining and kind == "book" and self.opening.why:
                 await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
             elif explaining and kind == "tablebase":
                 await self.explain(f"{board.variation_san([move])} {info['source']}")
             self.from_book = kind == "book"
             return
-        self.on_line(console_search(board, move, info, seconds, clock, self.policy.pv_plies))
+        self.on_line(styled(console_search(board, move, info, seconds, clock, self.policy.pv_plies), "90"))
         if explaining:
             note = None
             if self.opening is not None and self.opening.why == ("left book",):

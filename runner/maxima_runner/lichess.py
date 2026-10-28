@@ -16,6 +16,7 @@ import chess
 import chess.engine
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
+from .cli import styled
 from .fics import book_whisper, chess_titles, clock_text, console_search, draw_contempt, layer_profiles, \
     learning_report, numbered_move, read_commands, restart_status, style_books
 from .move_choice import describe, search_summary, variation
@@ -747,11 +748,11 @@ class lichess_game:
         if kind == "engine":
             pv = variation(board, info.get("pv", []))
             self.last_eval = f"{board.san(move)} {describe(info, board.turn)}" + (f", expecting {pv}" if pv else "")
-            bot.on_line(console_search(board, move, info, seconds, clock, bot.pv_plies))
+            bot.on_line(styled(console_search(board, move, info, seconds, clock, bot.pv_plies), "90"))
         else:
             source = book_whisper(numbered, why, self.opening, compact=True) if why else f"{numbered} {info['source']}"
             self.last_eval = source
-            bot.on_line(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left")
+            bot.on_line(styled(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left", "90"))
 
     def stats_line(self):
         """Our record against the opponent and on Lichess, from the experience."""
