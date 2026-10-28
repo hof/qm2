@@ -527,24 +527,31 @@ You can use [Visual Studio Code](https://code.visualstudio.com/) to develop and 
 
 ### Windows GUI with the WSL build
 
-The local Windows GUI bundle lives at `C:\dev\maxima`. Add
-`C:\dev\maxima\maxima.exe` in En Croissant's Engines page. This executable
-is a Windows UCI bridge: it launches the bundled ordinary Linux Release engine
-through WSL distribution `Ubuntu`. WSL remains required; this is not a native
-standalone Windows engine. The bundle is tied to this directory and the CPU
-where the engine was built, but does not require the source checkout to run.
+The Windows GUI entry point is `C:\dev\maxima\maxima2.exe` (also available
+in `C:\dev\uci-engines`). Add that executable in the GUI's Engines page.
+It bridges UCI through WSL distribution `Ubuntu` to this checkout's canonical
+`build/cpp26/release/src/maxima2`. Every rebuild of `cpp26_release` updates the
+engine used by the GUI automatically. Keep this checkout and its
+`.tools/cpp26/lib` runtime installed. WSL remains required.
 
-The bundle includes the NNUE weights, opening book,
-290 installed three/four/five-piece Syzygy WDL/DTZ tables (about 984 MB), and GCC runtime libraries.
-The bridge translates single Windows drive paths for `EvalFile`, `BookFile`
-and `SyzygyPath` to Linux `/mnt/<drive>/...` paths.
-`eval.nnue` beside `book.bin` loads automatically; `EvalFile` selects alternative
-networks. Use `C:\\dev\\maxima\\syzygy` for `SyzygyPath`, with
-`SyzygyProbeLimit=5` and `SyzygyProbeDepth=1`. The complete five-piece set is bundled.
-`BookFile` is `C:\dev\maxima\book.bin`. The bundle's README lists the configuration.
+Build or reinstall the launcher with MinGW's `x86_64-w64-mingw32-gcc`:
 
-Launcher source/build artifacts remain local under ignored `.tools/windows/`.
-Copied assets are SHA-256 verified in the bundle's `SHA256.json`.
+```bash
+python3 tools/install_windows_engine.py             # build the bridge locally
+python3 tools/install_windows_engine.py --install   # install; archive older launchers
+```
+
+The engine runs with `C:\dev\maxima` as its working directory, where the
+NNUE weights, opening book and 290 three/four/five-piece Syzygy WDL/DTZ tables
+remain installed. `eval.nnue` and `book.bin` load automatically. Windows drive
+paths for `EvalFile`, `BookFile` and `SyzygyPath` are translated to Linux
+`/mnt/<drive>/...` paths. Set `SyzygyPath` to `C:\dev\maxima\syzygy`,
+`SyzygyProbeLimit=5` and `SyzygyProbeDepth=1` for the complete five-piece set.
+
+The installer keeps one `maxima2.exe` entry point in each engine directory,
+archives previous Maxima launchers under ignored `.context/releases/`, and
+updates the bundle's README and SHA-256 manifest. Launcher build artifacts stay
+under ignored `.tools/windows/`. The engine is CPU-tuned for this machine.
 GUI interaction itself requires the user's Windows desktop.
 
 ### 5.1 Optional Release LTO and GCC PGO
