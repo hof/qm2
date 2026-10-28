@@ -3,8 +3,8 @@
 This is the main technical documentation for Maxima. Keep it current as the
 engine evolves and keep it short: describe current behavior, not its history.
 `AGENTS.md` is the quick entry for contributors and coding agents; optional
-private context lives in `.context/agents.md`, outside Git. Measurement records
-and experiment logs belong under `.context/baselines/`; Git history keeps the rest.
+private context lives in `.context/agents.md`, outside Git. Planning and results
+are indexed in `.context/plan-index.md`; this document describes the engine.
 
 ## Contents
 
@@ -15,7 +15,7 @@ and experiment logs belong under `.context/baselines/`; Git history keeps the re
 5. [Build and debugging](#5-build-and-debugging)
 6. [Testing and performance](#6-testing-and-performance)
 7. [CLI and local tablebases](#7-cli-and-local-tablebases)
-8. [Roadmap](#8-roadmap)
+8. [Private project records](#8-private-project-records)
 9. [Opening books and persistent experience](#9-opening-books-and-persistent-experience)
 10. [Python runner and project CLI](#10-python-runner-and-project-cli)
 11. [Connectors](#11-connectors)
@@ -36,16 +36,8 @@ search, NNUE evaluation, Syzygy tablebases, and experimental royal-losers suppor
   explicit state ownership and coherent interfaces.
 - Preserve the engine's focus on speed: efficient chess algorithms, high search
   throughput, and compilation tuned for the target CPU.
-- Keep search similar to established strong engines. Every mechanism needs a
-  counterpart in that reference set; anything without one is removed rather than
-  guarded. Evaluation-related behavior follows the engine that trained the
-  current network.
-- Standard chess uses NNUE exclusively. Lopsided endgames are a known weakness
-  of the borrowed network; tablebases cover only their installed piece counts.
-- Add multithreaded search with explicit ownership of worker state, safe shared
-  caches, and reliable cancellation.
-- Later: train our own networks (standard and royal losers), and investigate play
-  that exploits other engines' selective-search weaknesses.
+- Standard chess uses NNUE exclusively. Tablebases cover only their installed
+  piece counts.
 
 ## 2. Engineering conventions
 
@@ -59,10 +51,6 @@ search, NNUE evaluation, Syzygy tablebases, and experimental royal-losers suppor
   over complex changes aimed at marginal Elo improvements.
 - Keep heuristics understandable and independently testable. Justify added
   complexity with measured benefits.
-- During the NNUE search baseline work, use simple documented search rules and
-  conservative round margins. Apply this to every pruning/reduction/extension
-  under review. Establish a sound empirical baseline before adding adaptive
-  tweaks or tuning; cite original references and state heuristic limits.
 - Before implementing or substantially changing a chess algorithm, read the
   relevant [Chess Programming Wiki](https://chessprogramming.org/) articles.
   Follow their references to original papers and engine implementations when
@@ -119,9 +107,8 @@ CMake generates `generated/maxima/version.h` inside each build directory from
 
 Search is fail-soft PVS with quiescence, a shared transposition table, and
 worker-owned histories. Every selective rule below is a heuristic: none is a
-proven bound, and the round constants are provisional until tuned. Royal losers
-(`Wild=losers`) has its own search in `src/w17/` and shares only the root driver;
-the rules in this chapter apply to standard chess.
+proven bound. Royal losers (`Wild=losers`) has its own search in `src/w17/` and
+shares only the root driver; the rules in this chapter apply to standard chess.
 
 Every search-policy option is a UCI checkbox, default true, snapshotted by the
 worker. Changing one stops and joins the worker and clears the TT;
@@ -336,9 +323,9 @@ when `TTEval` is enabled. Raw-evaluation and result stores remain separate.
 
 ### 4.9 NNUE evaluation
 
-Standard chess uses the Stockfish 13 network (legacy HalfKP: 41024 inputs,
-two 256-wide accumulators, 512->32->32->1 integer inference) until Maxima trains
-its own. Weights are CC0: `nn-62ef826d1a6d.nnue`, SHA-256
+Maxima temporarily uses the borrowed Stockfish 13 NNUE network (legacy HalfKP:
+41024 inputs, two 256-wide accumulators, 512->32->32->1 integer inference).
+Weights are CC0: `nn-62ef826d1a6d.nnue`, SHA-256
 `62ef826d1a6d11b9e814188025aa02a60815c037292e0ef9bbb9bf4f724e5e63`, from
 https://github.com/official-stockfish/networks. `python3 tools/download_nnue.py`
 fetches and verifies it into `networks/`.
@@ -560,12 +547,10 @@ and `SyzygyPath` to Linux `/mnt/<drive>/...` paths.
 `eval.nnue` beside `book.bin` loads automatically; `EvalFile` selects alternative
 networks. Use `C:\\dev\\maxima\\syzygy` for `SyzygyPath`, with
 `SyzygyProbeLimit=5` and `SyzygyProbeDepth=1`. The complete five-piece set is bundled.
-`BookFile` is `C:\dev\maxima\book.bin`. The frozen HCE baseline remains available through its separate launcher. The bundle's README lists the configuration.
+`BookFile` is `C:\dev\maxima\book.bin`. The bundle's README lists the configuration.
 
 Launcher source/build artifacts remain local under ignored `.tools/windows/`.
-Copied assets are SHA-256 verified in the bundle's `SHA256.json`. Checks through
-the copied Windows executable loaded NNUE/book/Syzygy using Windows
-paths, completed a legal depth-three search, and reported a Syzygy root hit.
+Copied assets are SHA-256 verified in the bundle's `SHA256.json`.
 GUI interaction itself requires the user's Windows desktop.
 
 ### 5.1 Optional Release LTO and GCC PGO
@@ -576,10 +561,7 @@ optimization across source files. `./maxima build --pgo` adds GCC PGO to that
 Release build: it builds an instrumented engine, trains it with timed searches
 of fixed middlegames (`runner/maxima_runner/pgo.py`) and rebuilds with the
 profile. A plain `./maxima build` always switches PGO off again, because a
-profile of older sources would reject the build. Measured 2026-10-24: LTO gave
-about 4-10% and PGO+LTO about 6-19% more nodes per second than plain `-O3`,
-with identical searches; use `--pgo` for playing binaries. GCC PGO is
-selected with `-Dmaxima_pgo_mode=generate` or `use` (default `off`) and
+profile of older sources would reject the build. GCC PGO is selected with `-Dmaxima_pgo_mode=generate` or `use` (default `off`) and
 `-Dmaxima_pgo_dir=/absolute/path`. PGO requires Release and GCC for both C and
 C++. It instruments the engine and Fathom, uses atomic profile counters, and
 supplies the profiling runtime to executables linking the engine library.
@@ -650,13 +632,11 @@ Use repeated fixed-work searches and alternate execution order, preserving wall
 times, search results, and variation by game stage and variant. Instrumented
 engines are training tools, not performance candidates. Node/NPS reporting has
 the limitations described in chapter 6.1; compiler optimization alone establishes
-neither a speedup nor an Elo gain. Keep these build modes opt-in until measured.
+neither a speedup nor an Elo gain.
 
 See [GCC profiling](https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html)
 and [GCC optimization](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)
 for the underlying flags.
-
-An LTO/PGO comparison (2026-10-17) found no stable gain beyond noise; both stay opt-in.
 
 ## 6. Testing and performance
 
@@ -714,8 +694,7 @@ Repeatable `--option NAME=VALUE` and `--model OPTION=PATH` select the evaluator
 or search settings. Models are loaded before enabling evaluator options, hashed
 in the report, and checked for changes before and after each search. Requested
 options must be advertised by the engine. Use identical budgets and settings
-for comparisons; use the frozen HCE executable with its legacy `UseNNUE=false`
-option when comparing against HCE. Pass `--model EvalFile=...` explicitly so
+for comparisons. Pass `--model EvalFile=...` explicitly so
 the runner records the model hash, including when using the default network.
 
 Use `--suite bratko-kopec` explicitly for the historical suite, now 22 positions:
@@ -1211,42 +1190,10 @@ The probing decoder is the MIT-licensed Fathom library, pinned in
 cast; otherwise keep upstream sources unchanged so updates remain reviewable. Maxima's adapter, configuration, score handling, and search policy
 live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 
-## 8. Roadmap
+## 8. Private project records
 
-- Extend online variant support on FICS and Lichess: Chess960, antichess/suicide,
-  Three-check, and an assessment of atomic chess. Establish each server's exact
-  rules, engine/evaluator support, protocol encoding, state/hash invariants and
-  lifecycle checks before accepting its games. Keep incompatible rules or extra
-  state out of orthodox learning; preserve royal losers as its own ruleset.
-
-- Single-thread speed: TT prefetch and huge pages, TT-only eval caching, a
-  shared dense-layer reduction and sort-once move picking gave about 20% more
-  nodes per cycle (2026-10-24). Remaining candidates, measured before any
-  work: sparse first-layer input, `gives_check`, history lookups. Judge speed
-  by nodes per CPU cycle; sample skid and cache-miss counts misled the first
-  profiles.
-- Bring the D8 and D10 depth-ladder totals within the 1.40× limit (1.64× and
-  1.55× at the 2026-10-23 baseline; D12 passes at 1.32×).
-- Add incremental CLI documentation lookup (`docs:list`, `docs:search`,
-  `docs:section`) using the stable chapters in this file. These commands are
-  planned and are not implemented yet.
-- Measure tablebase probing cost and strength before adding more probe heuristics.
-- Extend direct root tablebase handling across histories that already contain repetitions.
-- Explore selective asynchronous online probes separately from local probing.
-- Prepare shared caches and worker state for safe multithreaded search.
-- Further directions, one at a time with measured goals: profiling and tuning
-  under real time controls; a dedicated bullet setup; a more advanced supported
-  NNUE family; and training our own royal-losers evaluator. Preserve the
-  single-worker NNUE baseline and use held-out strength tests for changes.
-
-Late-move reductions now follow the reference form described in 4.4, and the
-online play integration has landed (9.2, 10.2). The 2026-10-23 baseline
-(`9370042`) passed SPRT against the previous master (147 wins, 9 draws, no
-losses at 5+0.05 s). Its effective branching factor, `sqrt(N(d+2) / N(d))` on
-the depth-ladder totals, is 1.85 from D8 to D10 and 1.68 from D10 to D12,
-below the required 2.
-
-No speed or Elo gain should be claimed without the corresponding measurements.
+Plans, progress, experiments, and optimization results are indexed in
+`.context/plan-index.md`, outside Git.
 
 ## 9. Opening books and persistent experience
 
@@ -1277,9 +1224,8 @@ Statistical online learning uses the separate PGN workflow below.
 
 ### 9.2 Online opening learning (MaxDrone)
 
-Status: implemented in `learning.py` and both online clients; thresholds are
-first guesses awaiting measurement. Both clients use the same store beneath
-`MAXIMA_DATA_DIR/experience` (on the shared PVC), publish after every saved game,
+Opening learning is implemented in `learning.py` and both online clients.
+Both clients use the same store beneath `MAXIMA_DATA_DIR/experience` (on the shared PVC), publish after every saved game,
 and reload before preparing the next game's opening book. A game already in
 progress retains its existing view. Saved analysis metadata is passive; only
 statistical evaluation/result evidence affects learned book choices.
@@ -1374,7 +1320,7 @@ archive without deleting originals. Corrected canonical games take precedence
 over their obsolete legacy copies. Stop old client versions during migration;
 thereafter both pods must use this version and the same `MAXIMA_DATA_DIR`.
 A custom `--pgn-dir` receives the game too; learning still archives a canonical
-copy beneath the shared experience root. Idle analysis remains future work;
+copy beneath the shared experience root.
 PGN comments retain `[%nodes]`, `[%nps]` and `[%searchtime]` (seconds of actual
 search, separate from server `[%emt]`). Missing legacy effort is unknown. The
 versioned derived index rebuilds from archived PGNs without adding duplicate
@@ -1509,9 +1455,7 @@ book to the engine.
 
 The decision is built per game at `Creating:` (opponent, group, game type, and
 budget are known then) and must be ready before our first move; if it is late,
-the global layer alone is used. Engine-side variants (rating-based draw value,
-UCI_Opponent books) are planned. Later: background analysis of positions from games that were
-not easy wins, as JDrone's `book_calc`.
+the global layer alone is used.
 
 ## 10. Python runner and project CLI
 
@@ -1524,15 +1468,14 @@ existing book and tablebase files.
 The runner uses python-chess for boards, legal moves, SAN/UCI notation, EPD, PGN,
 Polyglot keys, and UCI process handling. Its `uci` module uses asyncio for engine
 sessions, streaming analysis, response deadlines, cancellation, and bounded
-shutdown followed by process reaping. Async operations can be awaited by future
-server clients; ordinary CLI entry points run their event loop with `asyncio.run`.
+shutdown followed by process reaping. Ordinary CLI entry points run their
+event loop with `asyncio.run`.
 Sessions accept ordinary `chess.Board` and `royal_losers_board`. Before search,
 they select `Wild=standard` or `Wild=losers` when supported; royal losers requires
 an advertised combo option containing `losers`. Unsupported board variants and
 Chess960 are rejected before analysis. The losers board retains ordinary UCI
 position transport and independent rule/terminal semantics. Offline matches
 preserve variants in PGN export/replay.
-Losers CLI suites remain pending and must preserve variant identity when introduced.
 Generic UCI orchestration has no dependency on the Maxima source tree.
 Statistical online learning and its PGN archives belong to the Python runner.
 
@@ -1639,9 +1582,10 @@ and online book selection stay in Python; native Polyglot probing stays in Maxim
 
 Update this document in the same change whenever implemented behavior, public
 commands, configuration, architecture, or workflows change. Keep examples runnable
-and distinguish available functionality from planned features. Private milestone
-status, decisions, known bugs, and reproducible measurement records belong in
-`.context/plan-maxima.md`; that file is ignored by Git.
+and describe implemented functionality. Planning, milestone status, decisions,
+and optimization or benchmark results belong under `.context/`, starting at
+`.context/plan-index.md`. Link detailed sub-plans and evidence reports from that
+index; keep this document focused on Maxima. `.context/` is ignored by Git.
 
 The CLI follows the local Nimbly CLI's concise command summaries and section
 separators, with a left-aligned ASCII crown above the Maxima name. It provides
@@ -1658,8 +1602,7 @@ Help must work without an engine build, credentials, network access, or optional
 runtime dependencies. Invalid commands or arguments return nonzero with useful
 guidance. Output must remain readable when redirected; any styling is limited to
 terminals and respects `NO_COLOR`: the crown is gold, separators cyan, and titles
-bold. Native UCI streams remain free of banners and styling. Detailed examples
-for every data command remain a planned documentation improvement.
+bold. Native UCI streams remain free of banners and styling.
 
 ### 10.2 FICS client (MaxDrone)
 
@@ -1859,10 +1802,8 @@ with `"seeks_at_once": 2` posts two random supported wild advertisements. The in
 `wild/8a` is unsupported: observed FICS starts place kings on d1/d8 with
 castling rights, requiring castling the engine does not implement. Challenges
 are declined, seek entries are rejected, and created games are aborted.
-On 2026-10-26, direct FICS guest examinations confirmed that `wild/8` starts
-with kings on e1/e8 and pawns on ranks 4/5. Both colours castled on both wings
-with ordinary king/rook destinations. The same server placed `wild/8a` kings
-on d1/d8, contradicting the help text describing normal piece placement.
+`wild/8` starts with kings on e1/e8 and pawns on ranks 4/5; castling uses
+ordinary king/rook destinations. `wild/8a` uses kings on d1/d8.
 Historical wild/8a PGN labels remain readable; this does not imply playing support.
 Standard chess and supported numbered wild variants use one orthodox learning
 store (`experience`) and the same books, on both FICS and Lichess. Position keys
