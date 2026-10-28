@@ -76,6 +76,12 @@ search, NNUE evaluation, Syzygy tablebases, and experimental royal-losers suppor
   to guide hot-path changes and compiler choices. Compare Release builds with
   identical positions, limits, and compiler flags, checking NPS, time to depth,
   and playing strength rather than assuming any one metric proves improvement.
+- Order independent hot-path guards by cost and rejection frequency so cheap,
+  selective conditions avoid expensive work. Preserve required terminal and
+  score-bound precedence. Defer calculations until their first consumer and
+  reuse valid results; measure caches and incremental maintenance against
+  recomputation. Choose storage widths from proven ranges and actual layout,
+  while keeping arithmetic efficient and safe from overflow.
 - Always use curly braces for `if` and `else` bodies, including single returns.
 - Prefer incremental changes with clear ownership and explicit dependencies.
 - Commit each completed, tested increment with its regressions and relevant
@@ -427,7 +433,9 @@ with the remaining clock rather than assuming a particular period length:
 with a 50 ms interface reserve. Other period moves and sudden death retain
 their current allocation. The boundary follows UCI's remaining-move count,
 not the board's move number; no next-period time is available until the GUI
-credits it. Clock polling tightens
+credits it. Periodic clock startup and deadline handling live in the time manager;
+search owns the stop latch, node limit and polling counter. Each clock poll uses
+one ponder-state snapshot. Clock polling tightens
 from 5000 visits to 512 within
 250 ms of the deadline and to 64 within 50 ms; scheduling or blocking I/O can
 still exceed those intervals, so these counts are not a hard real-time guarantee.

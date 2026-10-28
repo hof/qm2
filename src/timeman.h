@@ -74,6 +74,9 @@ public:
         return std::chrono::steady_clock::now() >= max;
     }
 
+    // Poll timing only when due; the caller owns these per-worker counters.
+    bool handle_abort(bool pondering, bool & clock_started, int & next_poll);
+
     int remaining() const {
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             max - std::chrono::steady_clock::now()).count();

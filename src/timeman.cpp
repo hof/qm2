@@ -90,3 +90,17 @@ void time_manager_t::clear() {
     tot_min = 0;
     tot_max = 0;
 }
+
+// Keep one ponder snapshot throughout a poll so a concurrent ponderhit cannot
+// expire the old budget between deciding to start it and testing its deadline.
+bool time_manager_t::handle_abort(bool pondering, bool & clock_started, int & next_poll) {
+    if (!clock_started && !pondering) {
+        set_start();
+        set_max(reserved_max());
+        clock_started = true;
+    }
+    const int left = remaining();
+    // Tighten polling near the deadline without taxing the ordinary hot path.
+    next_poll = left <= 50 ? 64 : left <= 250 ? 512 : 5000;
+    return !pondering && time_is_up();
+}

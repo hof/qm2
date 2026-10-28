@@ -581,22 +581,14 @@ int search_t::aspiration(int depth, int last_score) {
 
 // Polls whether the search must stop.
 bool search_t::abort(bool force_poll = false) {
-    static const int NODES_BETWEEN_POLLS = 5000;
     bool result = false;
     if (game.max_nodes > 0 && nodes >= game.max_nodes) {
         result = true;
     } else if (stop_all || (_control && _control->stop_requested.load())) {
         result = true;
     } else if (force_poll || --next_poll <= 0) {
-        if (!ponder_clock_started && !pondering()) {
-            game.tm.set_start();
-            game.tm.set_max(game.tm.reserved_max());
-            ponder_clock_started = true;
-        }
-        const int remaining = game.tm.remaining();
-        // Tighten polling near the deadline without taxing the ordinary hot path.
-        next_poll = remaining <= 50 ? 64 : remaining <= 250 ? 512 : NODES_BETWEEN_POLLS;
-        result = !pondering() && game.tm.time_is_up() && root_stack->best_move.piece > 0;
+        result = game.tm.handle_abort(pondering(), ponder_clock_started, next_poll)
+            && root_stack->best_move.piece > 0;
     }
     stop_all = result;
     return result;
