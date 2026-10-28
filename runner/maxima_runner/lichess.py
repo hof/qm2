@@ -16,8 +16,8 @@ import chess
 import chess.engine
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
-from .fics import book_whisper, chess_titles, clock_text, draw_contempt, layer_profiles, learning_report, read_commands, \
-    restart_status, style_books
+from .fics import book_whisper, chess_titles, clock_text, console_search, draw_contempt, layer_profiles, \
+    learning_report, numbered_move, read_commands, restart_status, style_books
 from .move_choice import describe, search_summary, variation
 from .project import data_root, engine_path, env_value
 from .uci import open_engine
@@ -49,7 +49,7 @@ reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate
 terminations = {"outoftime": "time forfeit", "timeout": "abandoned", "noStart": "abandoned", "aborted": "abandoned"}
 default_settings = {
     "resignation": resignation.validate_settings({}),
-    "shutdown_grace": 15,
+    "shutdown_grace": 15, "pv_plies": 4,
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
@@ -250,7 +250,7 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, resignation_settings=None):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, resignation_settings=None, pv_plies=4):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
@@ -259,6 +259,7 @@ class lichess_bot:
         self.learner, self.pgn_dir, self.events = learner, pgn_dir, events
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.contempt_window, self.margin = contempt_window, margin
+        self.pv_plies = pv_plies
         self.context = self.session = None
         self.id = self.name = None
         self.game = None
@@ -670,9 +671,10 @@ class lichess_game:
             self.record.on_move(self.board, remaining / 1000, elapsed)
             self.clocks[mover] = remaining
         if before.turn != self.color:
-            left = f", {clock_text(remaining / 1000)} left" if remaining is not None else ""
+            left = f" | {clock_text(remaining / 1000)} left" if remaining is not None else ""
+            spent = f" | {elapsed:.1f}s" if remaining is not None and previous is not None else ""
             name = self.player(not self.color).get("name") or "them"
-            self.bot.on_line(f"-- {before.variation_san([move])} by {name}{left}")
+            self.bot.on_line(f"{numbered_move(before, move)} | {name}{spent}{left}")
         search = self.record.searches.get(before.ply())
         self.emit("move", ply=self.board.ply(), san=before.san(move), uci=move.uci(), fen=self.board.fen(),
                   by="us" if before.turn == self.color else "them", clock_ms=clock_ms,
@@ -737,7 +739,6 @@ class lichess_game:
             self.abort_position = None
             return
         seconds, numbered = time.monotonic() - started, board.variation_san([move])
-        left = f", {clock_text(max(0.0, clock - seconds))} left"
         why = self.opening.why if kind == "book" and self.opening is not None else None
         if why and why[0] in ("book", "learned", "signature", "revenge"):
             self.last_book, self.left_book = book_whisper(numbered, why, self.opening), None
@@ -746,7 +747,7 @@ class lichess_game:
         if kind == "engine":
             pv = variation(board, info.get("pv", []))
             self.last_eval = f"{board.san(move)} {describe(info, board.turn)}" + (f", expecting {pv}" if pv else "")
-            bot.on_line(f"-- {numbered} {describe(info, board.turn)} {seconds:.1f}s{left}" + (f" pv {pv}" if pv else ""))
+            bot.on_line(console_search(board, move, info, seconds, clock, bot.pv_plies))
         else:
             source = book_whisper(numbered, why, self.opening, compact=True) if why else f"{numbered} {info['source']}"
             self.last_eval = source
@@ -947,9 +948,12 @@ def load_settings(path):
              "challenge_idle": int, "challenge_window": int}
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
+    types["pv_plies"] = int
     for key, value in loaded.items():
         if key == "shutdown_grace":
             value = online_shutdown.grace_seconds(value)
+        if key == "pv_plies" and (type(value) is not int or value < 0):
+            raise ValueError("pv_plies must be a nonnegative integer")
         if key == "resignation":
             value = resignation.validate_settings(value)
         if key not in types:
@@ -975,8 +979,10 @@ def run(options, parser):
     except (OSError, ValueError) as error:
         parser.error(str(error))
     flags = {"engine": options.engine, "speeds": options.speed, "games": options.games, "pgn_dir": options.pgn_dir,
-             "variety": options.variety, "live_feed": options.live_feed, "pgn_post": options.pgn_post}
+             "pv_plies": options.pv_plies, "variety": options.variety, "live_feed": options.live_feed, "pgn_post": options.pgn_post}
     configured.update({key: value for key, value in flags.items() if value is not None})
+    if configured["pv_plies"] < 0:
+        parser.error("pv_plies must be a nonnegative integer")
     if options.no_accept:
         configured["accept"] = False
     if options.no_learning or options.no_pgn:
@@ -1042,7 +1048,7 @@ def run(options, parser):
                           contempt_window=configured["contempt_window"],
                           challenge_idle=configured["challenge_idle"] or 0,
                           challenge_window=configured["challenge_window"],
-                          resignation_settings=configured["resignation"],
+                          resignation_settings=configured["resignation"], pv_plies=configured["pv_plies"],
                           local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))
         state["bot"] = bot
         if controller.requested:

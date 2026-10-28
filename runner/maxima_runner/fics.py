@@ -288,7 +288,7 @@ seek_pattern = re.compile(r"\d{1,3} \d{1,3}(?: [a-z0-9+-]+)*")
 rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
 default_settings = {
     "resignation": resignation.validate_settings({}),
-    "shutdown_grace": 15,
+    "shutdown_grace": 15, "pv_plies": 4,
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
@@ -391,7 +391,7 @@ class play_policy:
     def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=0, games=None, guest=True,
                  owner=None, notes=(), contempt_window=100, first_move_wait=60,
                  whisper=False, follow_key=None, reseek_minutes=10, losers=False,
-                 losers_seeks=(), losers_seeks_at_once=1):
+                 losers_seeks=(), losers_seeks_at_once=1, pv_plies=4):
         self.seek_pool = None
         self.seeks = list(seeks)
         self.losers_seeks = list(losers_seeks)
@@ -407,6 +407,7 @@ class play_policy:
         self.contempt_window = contempt_window
         self.first_move_wait = first_move_wait
         self.whisper = whisper
+        self.pv_plies = pv_plies
         self.follow_key = follow_key  # "tell <us> <key> <command>" steers us remotely (on_tell)
         self.reseek_seconds = reseek_minutes * 60  # 0: seeks stay as posted while idle
 
@@ -481,6 +482,35 @@ def clock_text(seconds):
     """Clock as m:ss."""
     minutes, rest = divmod(int(seconds), 60)
     return f"{minutes}:{rest:02d}"
+
+
+def numbered_move(board, move):
+    return f"{board.fullmove_number}{'.' if board.turn else '...'}{board.san(move)}"
+
+
+def console_search(board, move, info, seconds, clock, pv_plies=4):
+    """Compact search status, with up to pv_plies replies after the played move."""
+    fields = [numbered_move(board, move)]
+    if info.get("_ponder_hit"):
+        fields.append("pondered")
+    fields.append(f"d{info.get('depth', 0)}")
+    score = info.get("score")
+    if score is not None:
+        relative = score.pov(board.turn)
+        fields.append(f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}")
+    if info.get("tbhits"):
+        fields.append("TB")
+    if info.get("nps"):
+        fields.append(speed(info["nps"]).replace("Knps", "kN/s").replace("Mnps", "MN/s").replace("nps", "N/s"))
+    fields.extend((f"{seconds:.1f}s", f"{clock_text(max(0.0, clock - seconds))} left"))
+    moves = info.get("pv", [])
+    if moves and moves[0] == move and pv_plies:
+        replay = board.copy()
+        replay.push(move)
+        pv = variation(replay, moves[1:], limit=pv_plies)
+        if pv:
+            fields.append("PV: " + re.sub(r"(\d+\.) ", r"\1", pv))
+    return " | ".join(fields)
 
 
 def book_whisper(san, why, opening, *, compact=False):
@@ -1032,7 +1062,7 @@ class engine_player:
                     move = before.pop()
                     self.loss.on_reply(before, move, position.elapsed)
                     name = position.black if position.turn == chess.WHITE else position.white
-                    self.on_line(f"-- {before.variation_san([move])} by {name}, {clock_text(mover_ms / 1000)} left")
+                    self.on_line(f"{numbered_move(before, move)} | {name} | {position.elapsed:.1f}s | {clock_text(mover_ms / 1000)} left")
             elif change:
                 self.loss.reset()
                 self.abort_position = None
@@ -1159,7 +1189,6 @@ class engine_player:
         if self.record is not None:
             self.record.on_search(board, move, info)
         seconds, numbered = time.monotonic() - started, board.variation_san([move])
-        left = f", {clock_text(max(0.0, clock - seconds))} left"
         explaining = self.whispering or self.followers
         if kind != "engine":
             book = kind == "book" and self.opening is not None and self.opening.why
@@ -1171,8 +1200,7 @@ class engine_player:
                 await self.explain(f"{board.variation_san([move])} {info['source']}")
             self.from_book = kind == "book"
             return
-        pv = variation(board, info.get("pv", []))
-        self.on_line(f"-- {numbered} {describe(info, board.turn)} {seconds:.1f}s{left}" + (f" pv {pv}" if pv else ""))
+        self.on_line(console_search(board, move, info, seconds, clock, self.policy.pv_plies))
         if explaining:
             note = None
             if self.opening is not None and self.opening.why == ("left book",):
@@ -1301,9 +1329,12 @@ def load_settings(path):
              "losers": bool, "losers_seeks": list, "losers_seeks_at_once": int}
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
+    types["pv_plies"] = int
     for key, value in loaded.items():
         if key == "shutdown_grace":
             value = online_shutdown.grace_seconds(value)
+        if key == "pv_plies" and (type(value) is not int or value < 0):
+            raise ValueError("pv_plies must be a nonnegative integer")
         if key == "resignation":
             value = resignation.validate_settings(value)
         if key not in types:
@@ -1377,12 +1408,14 @@ def run(options, parser):
     except (OSError, ValueError) as error:
         parser.error(str(error))
     flags = {"host": options.host, "port": options.port, "handle": options.handle, "engine": options.engine,
-             "seeks": options.seek, "seeks_at_once": options.seeks_at_once, "rematches": options.rematches,
+             "pv_plies": options.pv_plies, "seeks": options.seek, "seeks_at_once": options.seeks_at_once, "rematches": options.rematches,
              "games": options.games, "pgn_dir": options.pgn_dir, "variety": options.variety,
              "live_feed": options.live_feed, "pgn_post": options.pgn_post,
              "losers": options.losers, "losers_seeks": options.losers_seek,
              "losers_seeks_at_once": options.losers_seeks_at_once}
     configured.update({key: value for key, value in flags.items() if value is not None})
+    if configured["pv_plies"] < 0:
+        parser.error("pv_plies must be a nonnegative integer")
     configured["losers"] = (configured["losers"] or bool(configured["losers_seeks"])
                             or any("losers" in spec.split()[2:] for spec in configured["seeks"]))
     if options.no_seek:
@@ -1438,7 +1471,7 @@ def run(options, parser):
                          configured["rematches"], configured["games"], guest=options.handle == "guest",
                          owner=configured["owner"], notes=configured["notes"],
                          contempt_window=configured["contempt_window"],
-                         first_move_wait=configured["first_move_wait"], whisper=configured["whisper"],
+                         first_move_wait=configured["first_move_wait"], whisper=configured["whisper"], pv_plies=configured["pv_plies"],
                          follow_key=os.environ.get("MAXDRONE_KEY") or None,
                          reseek_minutes=configured["reseek_minutes"], losers=configured["losers"],
                          losers_seeks=configured["losers_seeks"], losers_seeks_at_once=configured["losers_seeks_at_once"])

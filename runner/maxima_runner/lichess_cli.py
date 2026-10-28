@@ -21,6 +21,8 @@ def parser():
                "examples:\n"
                "  maxima lichess\n"
                "  maxima lichess --speed blitz --speed rapid --games 20 --live-feed 8765")
+    parser.add_argument("--pv-plies", type=int, metavar="N",
+                        help="console PV replies after our move (default: 4; 0 hides PV); config: pv_plies")
     parser.add_argument("--shutdown-grace", type=float, metavar="SECONDS",
                         help="wait for the current game after SIGTERM/SIGINT, then save and close (default: 15)")
     parser.add_argument("--config", metavar="FILE",

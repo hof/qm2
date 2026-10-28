@@ -1780,8 +1780,10 @@ clock-only updates, and is canceled on a reply, takeback, or game end. FICS abor
 without agreement before both players have moved; later requests require the
 opponent's agreement (or server permission once they run out of time). Games
 aborted before both sides move are not saved.
-The log shows each searched move with depth, score, time, and the expected line
-(`pv`). Both servers use compact console book lines, for example
+Search console lines use `9...Nc6 | d19 | +0.10 | 543kN/s | 3.2s | 4:56 left | PV: 10.Qa3 h6 11.O-O g5`.
+The PV excludes the played move and defaults to four plies; `--pv-plies N` or
+`"pv_plies": N` in either server config changes this (0 hides PV). Opponent
+lines use `10.Qa3 | John | 2.1s | 4:54 left`; unavailable timing is omitted. Both servers use compact console book lines, for example
 `1...e5 | FireBook (pick 43%) | 0.1s | 4:59 left`, omitting support.
 Available learning results appear after the pick chance as separate fields, for
 example `Masters +23 =1 -1 | vs John +2 =0 -1`; absent results add no field.

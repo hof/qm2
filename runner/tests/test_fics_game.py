@@ -207,7 +207,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle(start.replace(" 17 GuestHJGC", " 18 GuestHJGC"))
         await self.settle(player)
         self.assertEqual(player.connection.sent, ["e2e4"])
-        self.assertTrue(any(line.startswith("-- 1. e4 d3 +0.25") and line.endswith("left pv 1. e4") for line in self.lines))
+        self.assertTrue(any(line.startswith("1.e4 | d3 | +0.25 | ") and line.endswith(" left") for line in self.lines))
         self.assertEqual(self.positions.read_text().split("\n")[0], "position startpos")
         self.assertNotIn("DrawContempt", self.positions.read_text())
 
@@ -272,6 +272,23 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         lines = fics.learning_report(game, record, [record, dict(record, score=1.0)])
         self.assertEqual(lines, ["learned: 3 moves | vs John +1 =0 -1",
                                  "revenge filed: 1. e4 e5 2. f4"])
+
+    def test_compact_search_limits_replies_and_preserves_board(self):
+        board = chess.Board()
+        fen = board.fen()
+        moves = [chess.Move.from_uci(uci) for uci in ("e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6")]
+        info = {"depth": 19, "score": chess.engine.PovScore(chess.engine.Cp(10), chess.WHITE),
+                "nps": 543000, "pv": moves}
+        prefix = "1.e4 | d19 | +0.10 | 543kN/s | 3.2s | 4:56 left"
+        self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300),
+                         prefix + " | PV: 1...e5 2.Nf3 Nc6 3.Bb5")
+        self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300, 2),
+                         prefix + " | PV: 1...e5 2.Nf3")
+        self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300, 0), prefix)
+        self.assertTrue(fics.console_search(board, moves[0], info, 3.2, 300, 6).endswith("3.Bb5 a6"))
+        info["pv"] = moves[:2] + [moves[0]]
+        self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300), prefix + " | PV: 1...e5")
+        self.assertEqual(board.fen(), fen)
 
     def test_whispers_explain_book_choices_simply(self):
         opening = learning.opening_book([], opponent="John", group="humans", mood="parham")
