@@ -1956,10 +1956,9 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
     const bool in_check = stack->in_check;
     const U64 key = position_key(brd);
-    const bool use_q_tt = q_tt_enabled;
     stack->tt_key = key;
     tt_hit_t tt;
-    if (use_q_tt) {
+    if (q_tt_enabled) {
         const bool usable = trans_table::probe(key, brd.ply, brd.stack->fifty_count, tt) && tt.bound;
         const int tt_score = tt.score, tt_flag = tt.bound;
         if (usable && alpha + 1 == beta && brd.stack->fifty_count < 90 && (tt_flag == score::EXACT
@@ -1970,18 +1969,18 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     }
     // Forced inline: GCC otherwise splits the store into a call at every exit.
     const auto finish = [&](int value, int flag) __attribute__((always_inline)) {
-        if (use_q_tt) {
+        if (q_tt_enabled) {
             trans_table::store(key, brd.root_ply, brd.ply, 0, value,
                 stack->best_move.to_compact(), flag);
         }
         return value;
     };
 
-    const int eval = evaluate(this, use_q_tt ? &tt : nullptr);
+    const int eval = evaluate(this, q_tt_enabled ? &tt : nullptr);
     if (eval >= beta && !in_check) {
         return finish(eval, score::LOWERBOUND);
     }
-    if (use_q_tt) {
+    if (q_tt_enabled) {
         stack->tt_move.set_compact(&brd, tt.move);
     }
 
