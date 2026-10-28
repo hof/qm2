@@ -1915,16 +1915,10 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     assert(alpha >= -score::INF);
     assert(beta <= score::INF);
 
-    /*
-     * Stop conditions
-     */
-
-    // Time
     if (abort()) {
         return alpha;
     }
 
-    // Ceiling
     if (brd.ply >= (MAX_PLY - 1)) {
         return ceiling_score();
     }
@@ -1943,7 +1937,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         }
     }
 
-    // Draw by lack of material or fifty quiet moves
     if (is_draw()) {
         return draw_score();
     }
@@ -1957,12 +1950,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return alpha;
     }
 
-    /*
-     * Node setup
-     */
-
-    // Only what quiescence search uses: its children are quiescence nodes
-    // too, so the main search's node fields are never read here.
     stack->best_move.clear();
     stack->tt_move.clear();
     sel_depth = std::max(brd.ply, sel_depth);
@@ -1981,7 +1968,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             return tt_score;
         }
     }
-    // Only completed results reach this helper; qsearch stores at depth 0.
     // Forced inline: GCC otherwise splits the store into a call at every exit.
     const auto finish = [&](int value, int flag) __attribute__((always_inline)) {
         if (use_q_tt) {
@@ -1991,17 +1977,14 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return value;
     };
 
-    // Stand pat: return if the evaluation is already good enough
     const int eval = evaluate(this, use_q_tt ? &tt : nullptr);
     if (eval >= beta && !in_check) {
         return finish(eval, score::LOWERBOUND);
     }
     if (use_q_tt) {
-        // Decode only when selecting moves; the picker validates the hint.
         stack->tt_move.set_compact(&brd, tt.move);
     }
 
-    // First move; without one it is mate, stalemate, or there are no tactical moves
     move_t * move = move::first(this, depth);
     if (!move) {
         if (in_check) {
@@ -2016,10 +1999,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         alpha = eval;
     }
 
-    /*
-     * Moves loop
-     */
-
     // Keep the best searched score independently of the window: a fail-low
     // still carries a useful upper bound below alpha.
     int best_score = in_check ? -score::INF : eval;
@@ -2028,9 +2007,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     const int futility = eval + quiescence_futility_margin;
     do {
 
-        // Move pruning
-
-        // After one evasion, skip evasions that lose material.
         if (ffp_enabled && in_check && searched_moves > 0 && best_score > -decisive
                 && !brd.see(move, 0)) {
             continue;
@@ -2049,12 +2025,9 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             }
         }
 
-        // Go forward and search the next node
-
         if (!brd.legal(move)) {
             continue;
         }
-        // Futility may already have needed this result; otherwise wait until make.
         if (gives_check < 0) {
             gives_check = brd.gives_check(move);
         }
@@ -2062,8 +2035,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         ++searched_moves;
         int score = -qsearch(-beta, -alpha, depth - 1);
         backward(move);
-
-        // Handle results: cut off or raise alpha
 
         if (stop_all) {
             return alpha;
