@@ -750,7 +750,7 @@ class lichess_game:
         else:
             source = book_whisper(numbered, why, self.opening, compact=True) if why else f"{numbered} {info['source']}"
             self.last_eval = source
-            bot.on_line(f"-- {source} {seconds:.1f}s{left}")
+            bot.on_line(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left")
 
     def stats_line(self):
         """Our record against the opponent and on Lichess, from the experience."""

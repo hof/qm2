@@ -484,7 +484,7 @@ def clock_text(seconds):
 
 
 def book_whisper(san, why, opening, *, compact=False):
-    """Name the main source, the move's pick chance, and actual results for this move."""
+    """Show source and pick chance; include support and results in detailed output."""
     kind = why[0]
     opponent = opening.names["opponent"]
     probability, parts, source = why[1], why[2], why[3]
@@ -493,9 +493,13 @@ def book_whisper(san, why, opening, *, compact=False):
              "mood": f"{(opening.mood or '').replace('_', ' ')} mood"}
     support = [words[name] for name in learning.layer_names if parts.get(name, 0) >= 0.05 * probability]
     lead = {"signature": f"signature vs {opponent}", "revenge": f"revenge vs {opponent}"}.get(kind, words[source])
+    if compact:
+        lead = {"base book": "BaseBook", "fire book": "FireBook", "draw book": "DrawBook",
+                "surprise book": "SurpriseBook"}.get(lead, lead)
+        return f"{san} | {lead} (pick {probability:.0%})"
     results = "; ".join(f"{words[name]} +{wins} ={draws} -{losses}"
                         for name, (wins, draws, losses) in opening.choice_results.items())
-    detail = f" | support: {', '.join(support)}" if not compact and len(support) > 1 else ""
+    detail = f" | support: {', '.join(support)}" if len(support) > 1 else ""
     return f"{san} {lead} | {probability:.0%} pick chance{detail} | learned: {results or 'no results yet'}"
 
 
@@ -1158,7 +1162,7 @@ class engine_player:
         if kind != "engine":
             book = kind == "book" and self.opening is not None and self.opening.why
             source = book_whisper(numbered, self.opening.why, self.opening, compact=True) if book else f"{numbered} {info['source']}"
-            self.on_line(f"-- {source} {seconds:.1f}s{left}")
+            self.on_line(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left")
             if explaining and kind == "book" and self.opening.why:
                 await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
             elif explaining and kind == "tablebase":

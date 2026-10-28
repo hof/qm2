@@ -332,6 +332,8 @@ class command_line_tests(unittest.TestCase):
         opening.choice_results = {"global": (23, 1, 1), "group": (10, 0, 1)}
         self.assertEqual(lichess.book_whisper("5...Nc6", ("book", 0.5, {"book": 0.475, "fire": 0.025}, "book"), opening),
                          "5...Nc6 base book | 50% pick chance | support: base book, fire book | learned: all games +23 =1 -1; engines +10 =0 -1")
+        self.assertEqual(lichess.book_whisper("1...e5", ("book", 0.43, {"fire": 0.43}, "fire"), opening, compact=True),
+                         "1...e5 | FireBook (pick 43%)")
 
 
 class rematch_tests(unittest.IsolatedAsyncioTestCase):
