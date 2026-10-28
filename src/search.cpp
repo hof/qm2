@@ -2035,8 +2035,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
         // Move pruning
 
-        int gives_check = brd.gives_check(move);
-
         // After one evasion, skip evasions that lose material.
         if (ffp_enabled && in_check && searched_moves > 0 && best_score > -decisive
                 && !brd.see(move, 0)) {
@@ -2044,19 +2042,26 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         }
 
         // Futility: a losing tactical move cannot lift a hopeless stand pat.
-        const bool recapture = (stack - 1)->current_move.piece
-            && move->tsq == (stack - 1)->current_move.tsq;
-        const bool use_futility = ffp_enabled;
-        if (use_futility && !in_check && !gives_check && !recapture && best_score > -decisive
-                && futility <= alpha && std::abs(futility) < decisive && !brd.see(move, 1)) {
-            best_score = std::max(best_score, futility);
-            continue;
+        int gives_check = -1;
+        if (ffp_enabled && !in_check && best_score > -decisive
+                && futility <= alpha && std::abs(futility) < decisive
+                && !((stack - 1)->current_move.piece
+                    && move->tsq == (stack - 1)->current_move.tsq)) {
+            gives_check = brd.gives_check(move);
+            if (!gives_check && !brd.see(move, 1)) {
+                best_score = std::max(best_score, futility);
+                continue;
+            }
         }
 
         // Go forward and search the next node
 
         if (!brd.legal(move)) {
             continue;
+        }
+        // Futility may already have needed this result; otherwise wait until make.
+        if (gives_check < 0) {
+            gives_check = brd.gives_check(move);
         }
         forward(move, gives_check);
         ++searched_moves;

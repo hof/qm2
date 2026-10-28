@@ -15,6 +15,23 @@ void prepare(search_t & search) {
     search.tablebase_limit = 0;
 }
 
+bool test_lazy_qsearch_check() {
+    const char * fen = "4r2k/8/8/8/5q2/8/4N3/4K3 w - - 0 1";
+    trans_table::clear();
+    auto search = std::make_unique<search_t>(fen);
+    prepare(*search);
+    const int expected = evaluate(search.get());
+    move_t hint;
+    hint.set(&search->brd, "e2f4");
+    trans_table::store(position_key(search->brd), 0, 0, 0, 0, hint.to_compact(), 0);
+    const int value = search->qsearch(-score::INF, score::INF, 0);
+    const auto & facts = search->brd._check_info[0];
+    return check("illegal pinned captures must not query gives_check",
+        value == expected && search->nodes == 0 && facts.check_questions == 0
+        && !facts.checks_ready && search->brd.to_string() == fen
+        && search->stack == search->root_stack);
+}
+
 bool test_warm_qsearch() {
     const char * fen = "7k/8/8/3q4/8/8/8/K2R4 w - - 0 1";
     trans_table::clear();
@@ -243,7 +260,8 @@ bool test_unusable_hints() {
 int main() {
     magic::init();
     trans_table::set_size(4);
-    bool success = test_warm_qsearch();
+    bool success = test_lazy_qsearch_check();
+    success &= test_warm_qsearch();
     success &= test_shared_entries();
     success &= test_cancellation();
     success &= test_mates_and_terminals();
