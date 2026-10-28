@@ -315,7 +315,7 @@ class opening_book:
         self.variety = max(variety, 0.05)
         self.layers = ({}, {}, {})  # global, group, opponent: (key, move) -> [value sum, games]
         self.totals = ({}, {}, {})  # the same per position: key -> games
-        self.results = ({}, {}, {})  # unweighted W/D/L per position and move, from the mover's side
+        self.results = ({}, {}, {})  # unweighted W/D/L only for moves played by Maxima
         self.choice_results = {}
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
@@ -328,6 +328,9 @@ class opening_book:
             layers = [(0, weight if registered else weight / 2)]
             if registered and group is not None and record["group"] == group:
                 layers.append((1, weight))
+            first = 0 if record.get("color") == "white" else 1
+            own_moves = ({tuple(played) for played in record.get("moves", [])[first::2]}
+                         if record.get("color") in ("white", "black") else set())
             ours = set()
             personal = server is None or record.get("server") == server
             if registered and personal and opponent and record["opponent"].lower() == opponent:
@@ -347,7 +350,7 @@ class opening_book:
                     entry[0] += layer_weight * value
                     entry[1] += layer_weight
                     self.totals[layer][key] = self.totals[layer].get(key, 0.0) + layer_weight
-                    if result in (1.0, 0.5, 0.0) and (key, move) not in counted:
+                    if (key, move) in own_moves and result in (1.0, 0.5, 0.0) and (key, move) not in counted:
                         outcomes = self.results[layer].setdefault((key, move), [0, 0, 0])
                         outcomes[(1.0, 0.5, 0.0).index(result)] += 1
                 if result is not None:

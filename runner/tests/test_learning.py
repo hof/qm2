@@ -134,6 +134,8 @@ class selection_tests(unittest.TestCase):
                    record([[start_key, "e2e4", 0.0]], group="engines"),
                    record([[start_key, "e2e4", None]], group="masters")]
         records[-1]["values"][0][2] = 0.6
+        for item in records:
+            item.update(color="white", moves=[[start_key, "e2e4"]])
         book = self.opening(records, group="masters")
         pair = (start_key, "e2e4")
         self.assertEqual(book.results[0][pair], [1, 1, 1])
@@ -147,6 +149,23 @@ class selection_tests(unittest.TestCase):
         self.assertEqual(book.choice_results, {"global": (1, 1, 1), "group": (1, 1, 0), "opponent": (1, 1, 1)})
         book.choose(chess.Board("8/8/8/4k3/8/8/8/4K3 w - - 0 1"))
         self.assertEqual(book.choice_results, {})
+
+    def test_displayed_results_only_count_moves_played_by_maxima(self):
+        records = [learning.digest(make_game([0] * 10, ours=color, result=result))
+                   for color in ("white", "black") for result in ("1-0", "1/2-1/2", "0-1")]
+        for item in records:
+            item["opponent"] = "John"
+        book = self.opening(records)
+        first = (start_key, "e2e4")
+        reply = (f"{chess.polyglot.zobrist_hash(board_after('e2e4')):016x}", "e7e5")
+        for results in book.results:
+            self.assertEqual(results[first], [1, 1, 1])
+            self.assertEqual(results[reply], [1, 1, 1])
+        # Opponents' moves still contribute to the learned move selection.
+        self.assertEqual(book.layers[0][first][1], 6)
+        self.assertEqual(book.layers[0][reply][1], 6)
+        only_opponents = self.opening(records[3:])
+        self.assertNotIn(first, only_opponents.results[0])
 
     def setUp(self):
         directory = tempfile.TemporaryDirectory()

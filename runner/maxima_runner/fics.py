@@ -519,7 +519,7 @@ def book_whisper(san, why, opening, *, compact=False):
     opponent = opening.names["opponent"]
     probability, parts, source = why[1], why[2], why[3]
     words = {"book": "base book", "fire": "fire book", "draw": "draw book", "experiment": "surprise book",
-             "global": "all games", "group": opening.names["group"], "opponent": f"vs {opponent}",
+             "global": "learn", "group": opening.names["group"], "opponent": f"vs {opponent}",
              "mood": f"{(opening.mood or '').replace('_', ' ')} mood"}
     support = [words[name] for name in learning.layer_names if parts.get(name, 0) >= 0.05 * probability]
     lead = {"signature": f"signature vs {opponent}", "revenge": f"revenge vs {opponent}"}.get(kind, words[source])

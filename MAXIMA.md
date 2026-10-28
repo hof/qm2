@@ -1803,9 +1803,11 @@ Both servers show the move's overall `pick chance`, including all active book
 and learned layers. This is a selection probability, not a win rate. Observer
 whispers and `!book` also name supporting layers contributing at least 5% of the
 move's weight, without a second set of percentages.
-`learned: all games +23 =1 -1; masters +10 =0 -1; vs John +2 =0 -1` gives actual
-unweighted wins, draws and losses for this position and move, from the mover's
-side. Each game counts once even if the position repeats; unfinished games add
+`Learn +23 =1 -1` in console output (or `learn` in observer explanations) gives
+actual unweighted wins, draws and losses only in games where Maxima played this
+move from this position, from Maxima's side. Opponents playing the same move
+do not count in these displayed results. Group and opponent fields use the same
+rule. Each game counts once even if the position repeats; unfinished games add
 no result. The group and opponent are overlapping subsets of all games, not
 additional games. Opponent history is specific to the current server, and
 variants stay separate. Absent results say `learned: no results yet`. These

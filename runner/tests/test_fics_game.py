@@ -482,7 +482,8 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         learner = learning.learner(Path(self.directory.name) / "experience", folder, profiles=profiles)
         key = f"{chess.polyglot.zobrist_hash(chess.Board()):016x}"
         learner.records = [{"opponent": "guestNinja", "group": "humans", "type": "blitz",
-                            "values": [[key, "d2d4", 0.9, 1.0]], "analyses": []}] * 6
+                            "color": "white", "moves": [[key, "d2d4"]],
+                            "values": [[key, "d2d4", 0.44, 1.0]], "analyses": []}] * 6
         fixture_view = patch.object(learner.store, "load", return_value=learner.records)
         fixture_view.start()
         self.addCleanup(fixture_view.stop)
@@ -493,7 +494,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle(start)
         await self.settle(player)
         self.assertEqual(player.connection.sent[-1], "d2d4")
-        self.assertTrue(any(line.startswith("1. d4 | all games (pick 100%) | All games +6 =0 -0 | ") and line.endswith(" left")
+        self.assertTrue(any(line.startswith("1. d4 | learn (pick 100%) | Learn +6 =0 -0 | ") and line.endswith(" left")
                             for line in self.lines))
         self.assertEqual(player.opponent_group(), "humans")
         after_d4 = after_e4.replace("----P--- -------- PPPP-PPP", "---P---- -------- PPP-PPPP").replace(
