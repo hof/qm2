@@ -508,8 +508,6 @@ def console_learning(board, move, opening):
 def console_search(board, move, info, seconds, clock, pv_plies=2, opening=None):
     """Compact search status, with up to pv_plies replies after the played move."""
     fields = [numbered_move(board, move)]
-    if info.get("_ponder_hit"):
-        fields.append("pondered")
     fields.append(f"d{info.get('depth', 0)}")
     score = info.get("score")
     if score is not None:

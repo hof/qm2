@@ -1994,11 +1994,12 @@ A filesystem failure is logged and does not prevent engine/connection cleanup.
 Deploy one active client per server account, including during upgrades. Health
 checks and account-lock automation are outside this shutdown increment.
 
-Searched-move descriptions on both servers start with `pondered` only when
+Observer searched-move descriptions on both servers start with `pondered` only when
 the protocol actually sent `ponderhit` for that play request. Per-search
 `_ponder_hit` metadata survives immediate completion without fresh info and the
 next background ponder, and resets for every request and engine restart.
 Prediction misses, game changes and ordinary searches keep their usual wording.
+Compact console move summaries omit this label; ponder time remains in parentheses.
 
 ### 10.3 Lichess client (MaximaEngine)
 
