@@ -196,6 +196,25 @@ for line in sys.stdin:
 
 
 class ponder_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_string_configuration_preserves_ponder_hits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script, log = Path(directory) / 'engine.py', Path(directory) / 'commands'
+            script.write_text(ponder_engine.replace(
+                "print('option name Ponder type check default false')",
+                "print('option name Ponder type check default false')\n"
+                "        print('option name OwnBook type check default true')\n"
+                "        print('option name Hash type spin default 256 min 1 max 1024')"))
+            async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
+                await session.configure({'OwnBook': 'false', 'Hash': '16'})
+                board, game = chess.Board(), object()
+                limit = chess.engine.Limit(white_clock=60, black_clock=60)
+                first = await session.play(board, limit, game=game)
+                board.push(first.move)
+                board.push(first.ponder)
+                hit = await session.play(board, limit, game=game)
+                self.assertTrue(hit.info['_ponder_hit'])
+                self.assertEqual(log.read_text().splitlines().count('ponderhit'), 1)
+
     async def test_completed_ponder_keeps_score_and_miss_discards_it(self):
         with tempfile.TemporaryDirectory() as directory:
             script, log = Path(directory) / 'engine.py', Path(directory) / 'commands'

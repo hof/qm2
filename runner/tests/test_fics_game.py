@@ -193,12 +193,16 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_opponent_line_marks_actual_ponder_hit(self):
         from test_uci import ponder_engine
-        self.script.write_text(ponder_engine)
+        self.script.write_text(ponder_engine.replace(
+            "print('option name Ponder type check default false')",
+            "print('option name Ponder type check default false')\n"
+            "        print('option name OwnBook type check default true')"))
         player = fics.engine_player(
             lambda: open_engine([sys.executable, str(self.script), str(self.positions)],
                                 self.directory.name, timeout=5),
             self.lines.append, online_tablebase=False)
         await player.start()
+        await player.session.configure({'OwnBook': 'false'})
         self.addAsyncCleanup(player.close)
         player.connection = fake_connection()
         await player.handle(start)

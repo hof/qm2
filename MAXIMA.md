@@ -1911,6 +1911,8 @@ reply starts `go ponder` during the opponent turn; matching replies use
 `ponderhit`, otherwise the old search is stopped and a new timed search begins.
 Book/tablebase choices and game ends stop background pondering. Game tokens,
 position history and option changes prevent reuse across incompatible searches.
+The runner parses configured UCI values to their advertised types before storing
+them, so text settings such as `OwnBook=false` or `Hash=256` preserve ponder reuse.
 The ordinary allocation and casual thinking ceiling apply after the actual reply.
 A completed ponder search retains its evaluation and PV for an instant hit;
 missed predictions discard those reports. Resignation still requires a score

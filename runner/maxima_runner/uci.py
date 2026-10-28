@@ -77,7 +77,8 @@ class engine_session:
         return [f"{name} {value}" for name, value in self.protocol.id.items()]
 
     async def configure(self, settings):
-        applied = {name: value for name, value in settings.items()
+        # python-chess compares saved target values with parsed values for ponder reuse.
+        applied = {name: self.protocol.options[name].parse(value) for name, value in settings.items()
                    if name in self.protocol.options}
         # python-chess manages these when starting analysis.
         configurable = {name: value for name, value in applied.items()
