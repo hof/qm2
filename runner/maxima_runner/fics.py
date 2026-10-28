@@ -489,7 +489,24 @@ def numbered_move(board, move):
     return f"{board.fullmove_number}{'. ' if board.turn else '...'}{board.san(move)}"
 
 
-def console_search(board, move, info, seconds, clock, pv_plies=4):
+def console_learning(board, move, opening):
+    """Own move history: played move first, then the most tried alternatives, up to three."""
+    if opening is None:
+        return ""
+    key = f"{chess.polyglot.zobrist_hash(board):016x}"
+    results = [(chess.Move.from_uci(uci), counts) for (position, uci), counts in opening.results[0].items()
+               if position == key and sum(counts) > 0 and chess.Move.from_uci(uci) in board.legal_moves]
+    results.sort(key=lambda item: (item[0] != move, -sum(item[1]), item[0].uci()))
+    entries = []
+    for candidate, (wins, draws, losses) in results[:3]:
+        games = wins + draws + losses
+        score = (wins + draws / 2) / games
+        detail = f"{score:.0%}, +{wins} ={draws} -{losses}" if candidate == move else f"{games}x, {score:.0%}"
+        entries.append(f"{board.san(candidate)} ({detail})")
+    return "Learn: " + " ".join(entries) if entries else ""
+
+
+def console_search(board, move, info, seconds, clock, pv_plies=4, opening=None):
     """Compact search status, with up to pv_plies replies after the played move."""
     fields = [numbered_move(board, move)]
     if info.get("_ponder_hit"):
@@ -503,6 +520,9 @@ def console_search(board, move, info, seconds, clock, pv_plies=4):
         fields.append("TB")
     if info.get("nps"):
         fields.append(speed(info["nps"]).replace("Knps", "kN/s").replace("Mnps", "MN/s").replace("nps", "N/s"))
+    learned = console_learning(board, move, opening)
+    if learned:
+        fields.append(learned)
     fields.extend((f"{seconds:.1f}s", f"{clock_text(max(0.0, clock - seconds))} left"))
     moves = info.get("pv", [])
     if moves and moves[0] == move and pv_plies:
@@ -527,9 +547,7 @@ def book_whisper(san, why, opening, *, compact=False):
     if compact:
         lead = {"base book": "BaseBook", "fire book": "FireBook", "draw book": "DrawBook",
                 "surprise book": "SurpriseBook"}.get(lead, lead)
-        results = "".join(f" | {words[name] if name == 'opponent' else words[name].capitalize()} +{wins} ={draws} -{losses}"
-                          for name, (wins, draws, losses) in opening.choice_results.items())
-        return f"{san} | {lead} (pick {probability:.0%}){results}"
+        return f"{san} | {lead} (pick {probability:.0%})"
     results = "; ".join(f"{words[name]} +{wins} ={draws} -{losses}"
                         for name, (wins, draws, losses) in opening.choice_results.items())
     detail = f" | support: {', '.join(support)}" if len(support) > 1 else ""
@@ -1194,6 +1212,8 @@ class engine_player:
         if kind != "engine":
             book = kind == "book" and self.opening is not None and self.opening.why
             source = book_whisper(numbered, self.opening.why, self.opening, compact=True) if book else f"{numbered} {info['source']}"
+            learned = console_learning(board, move, self.opening)
+            source += f" | {learned}" if learned else ""
             self.on_line(styled(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left", "90"))
             if explaining and kind == "book" and self.opening.why:
                 await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
@@ -1201,7 +1221,7 @@ class engine_player:
                 await self.explain(f"{board.variation_san([move])} {info['source']}")
             self.from_book = kind == "book"
             return
-        self.on_line(styled(console_search(board, move, info, seconds, clock, self.policy.pv_plies), "90"))
+        self.on_line(styled(console_search(board, move, info, seconds, clock, self.policy.pv_plies, self.opening), "90"))
         if explaining:
             note = None
             if self.opening is not None and self.opening.why == ("left book",):

@@ -17,7 +17,7 @@ import chess.engine
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
 from .cli import styled
-from .fics import book_whisper, chess_titles, clock_text, console_search, draw_contempt, layer_profiles, \
+from .fics import book_whisper, chess_titles, clock_text, console_learning, console_search, draw_contempt, layer_profiles, \
     learning_report, numbered_move, read_commands, restart_status, style_books
 from .move_choice import describe, search_summary, variation
 from .project import data_root, engine_path, env_value
@@ -748,9 +748,11 @@ class lichess_game:
         if kind == "engine":
             pv = variation(board, info.get("pv", []))
             self.last_eval = f"{board.san(move)} {describe(info, board.turn)}" + (f", expecting {pv}" if pv else "")
-            bot.on_line(styled(console_search(board, move, info, seconds, clock, bot.pv_plies), "90"))
+            bot.on_line(styled(console_search(board, move, info, seconds, clock, bot.pv_plies, self.opening), "90"))
         else:
             source = book_whisper(numbered, why, self.opening, compact=True) if why else f"{numbered} {info['source']}"
+            learned = console_learning(board, move, self.opening)
+            source += f" | {learned}" if learned else ""
             self.last_eval = source
             bot.on_line(styled(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left", "90"))
 

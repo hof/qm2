@@ -1787,8 +1787,14 @@ lines use `10. Qa3 | John | 2.1s | 4:54 left`; unavailable timing is omitted. Bo
 `1...e5 | FireBook (pick 43%) | 0.1s | 4:59 left`, omitting support.
 Maxima's book and search lines use muted gray in a terminal; opponent lines keep
 the default color. Redirected output stays plain, and `NO_COLOR` disables color.
-Available learning results appear after the pick chance as separate fields, for
-example `Masters +23 =1 -1 | vs John +2 =0 -1`; absent results add no field.
+Available own move history appears on the same line, for example
+`Learn: d4 (94%, +35 =5 -0) e4 (30x, 80%) f4 (1x, 100%)`.
+Up to three moves from the current position appear: the played move first when
+it has history, then the most played alternatives (ties by UCI move).
+The played move shows full results; alternatives show their game count with `x`.
+Percentages are historical scores (wins plus half the draws, divided by games),
+not selection probabilities or estimates of move strength. Book and searched
+moves both show this field; absent results add no field.
 Base, fire, draw and surprise books appear as `BaseBook`, `FireBook`,
 `DrawBook` and `SurpriseBook`. `whisper` (or `--whisper`) explains every move to observers (never to the
 opponent, unlike kibitz) in plain words:
@@ -1805,11 +1811,11 @@ Both servers show the move's overall `pick chance`, including all active book
 and learned layers. This is a selection probability, not a win rate. Observer
 whispers and `!book` also name supporting layers contributing at least 5% of the
 move's weight, without a second set of percentages.
-`Learn +23 =1 -1` in console output (or `learn` in observer explanations) gives
+`Learn:` in console output (or `learn` in observer explanations) gives
 actual unweighted wins, draws and losses only in games where Maxima played this
 move from this position, from Maxima's side. Opponents playing the same move
-do not count in these displayed results. Group and opponent fields use the same
-rule. Each game counts once even if the position repeats; unfinished games add
+do not count in these displayed results. Observer group and opponent fields use
+the same rule. Each game counts once even if the position repeats; unfinished games add
 no result. The group and opponent are overlapping subsets of all games, not
 additional games. Opponent history is specific to the current server, and
 variants stay separate. Absent results say `learned: no results yet`. These

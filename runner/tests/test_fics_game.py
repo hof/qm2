@@ -302,11 +302,32 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         opening.choice_results = {"group": (23, 1, 1), "opponent": (2, 0, 1)}
         opening.names["group"] = "masters"
         self.assertEqual(fics.book_whisper("1...c6", ("book", 0.55, parts, "book"), opening, compact=True),
-                         "1...c6 | BaseBook (pick 55%) | Masters +23 =1 -1 | vs John +2 =0 -1")
+                         "1...c6 | BaseBook (pick 55%)")
         self.assertEqual([fics.speed(nps) for nps in (850, 512_345, 1_234_567)], ["850nps", "512Knps", "1.2Mnps"])
         info = {"depth": 18, "score": chess.engine.PovScore(chess.engine.Mate(5), chess.BLACK), "tbhits": 3}
         self.assertEqual(fics.search_whisper(info, chess.BLACK, "21...Qd5+ 22. Qd6", "out of book"),
                          "d18 #5 TB 21...Qd5+ 22. Qd6 (out of book)")
+
+    def test_console_learning_shows_played_move_and_most_tried_alternatives(self):
+        board = chess.Board()
+        fen = board.fen()
+        key = f"{chess.polyglot.zobrist_hash(board):016x}"
+        opening = learning.opening_book([])
+        opening.results[0].update({(key, "d2d4"): [35, 5, 0], (key, "e2e4"): [80, 0, 20],
+                                   (key, "f2f4"): [1, 0, 0], (key, "g8f6"): [500, 0, 0],
+                                   ("another_position", "c2c4"): [500, 0, 0], (key, "b2b4"): [0, 0, 0]})
+        move = chess.Move.from_uci("d2d4")
+        expected = "Learn: d4 (94%, +35 =5 -0) e4 (100x, 80%) f4 (1x, 100%)"
+        self.assertEqual(fics.console_learning(board, move, opening), expected)
+        self.assertIn(f" | {expected} | 0.3s | ", fics.console_search(board, move, {}, 0.3, 180, opening=opening))
+        opening.results[0][(key, "c2c4")] = [15, 0, 5]
+        self.assertEqual(fics.console_learning(board, chess.Move.from_uci("f2f4"), opening),
+                         "Learn: f4 (100%, +1 =0 -0) e4 (100x, 80%) d4 (40x, 94%)")
+        self.assertEqual(fics.console_learning(board, chess.Move.from_uci("g1f3"), opening),
+                         "Learn: e4 (100x, 80%) d4 (40x, 94%) c4 (20x, 75%)")
+        self.assertEqual(fics.console_learning(board, move, None), "")
+        self.assertEqual(fics.console_learning(board, move, learning.opening_book([])), "")
+        self.assertEqual(board.fen(), fen)
 
     async def test_game_events_follow_the_game(self):
         events = connectors.game_events()
@@ -494,7 +515,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle(start)
         await self.settle(player)
         self.assertEqual(player.connection.sent[-1], "d2d4")
-        self.assertTrue(any(line.startswith("1. d4 | learn (pick 100%) | Learn +6 =0 -0 | ") and line.endswith(" left")
+        self.assertTrue(any(line.startswith("1. d4 | learn (pick 100%) | Learn: d4 (100%, +6 =0 -0) | ") and line.endswith(" left")
                             for line in self.lines))
         self.assertEqual(player.opponent_group(), "humans")
         after_d4 = after_e4.replace("----P--- -------- PPPP-PPP", "---P---- -------- PPP-PPPP").replace(
