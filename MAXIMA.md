@@ -1738,6 +1738,11 @@ Up to two moves from the current position appear: the played move first when
 it has history, then the most played alternative (ties by UCI move).
 If the played move has no history, the two most played moves appear instead.
 The played move shows full results; alternatives show their game count with `x`.
+When the played move has group or opponent history, both clients append fields
+such as `| bots +5 =77 -5 | Kapablanca +0 =3 -0`. The group is the current
+opponent's category (`humans`, `masters`, or `bots`); opponent history is specific
+to the current server. Each field is omitted when it has no completed results.
+All records show Maxima's wins, draws, and losses, regardless of its colour.
 Percentages are historical scores (wins plus half the draws, divided by games),
 not selection probabilities or estimates of move strength. Book and searched
 moves both show this field; absent results add no field.

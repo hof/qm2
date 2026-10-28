@@ -329,6 +329,46 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fics.console_learning(board, move, learning.opening_book([])), "")
         self.assertEqual(board.fen(), fen)
 
+    def test_console_learning_includes_available_played_move_group_and_opponent(self):
+        board = chess.Board()
+        key = f"{chess.polyglot.zobrist_hash(board):016x}"
+        move = chess.Move.from_uci("d2d4")
+        opening = learning.opening_book([], group="engines", opponent="Kapablanca")
+        opening.results[0][(key, "d2d4")] = [5, 80, 5]
+        opening.results[0][(key, "e2e4")] = [20, 0, 0]
+        opening.results[1][(key, "d2d4")] = [5, 77, 5]
+        opening.results[2][(key, "d2d4")] = [0, 3, 0]
+        # Alternatives' personal records must not be attributed to the played move.
+        opening.results[2][(key, "e2e4")] = [20, 0, 0]
+        base = "Learn: d4 (50%, +5 =80 -5) e4 (20x, 100%)"
+        for group, label in (("engines", "bots"), ("humans", "humans"), ("masters", "masters")):
+            opening.names["group"] = group
+            expected = f"{base} | {label} +5 =77 -5 | Kapablanca +0 =3 -0"
+            self.assertEqual(fics.console_learning(board, move, opening), expected)
+            self.assertIn(expected, fics.console_search(board, move, {}, 0.3, 180, opening=opening))
+        opening.results[1].clear()
+        self.assertEqual(fics.console_learning(board, move, opening), base + " | Kapablanca +0 =3 -0")
+        opening.results[2][(key, "d2d4")] = [0, 0, 0]
+        self.assertEqual(fics.console_learning(board, move, opening), base)
+        self.assertNotIn("Kapablanca", fics.console_learning(board, chess.Move.from_uci("g1f3"), opening))
+
+    def test_console_learning_results_are_maximas_for_either_colour(self):
+        from test_learning import make_game
+
+        for colour, win, loss in (("white", "1-0", "0-1"), ("black", "0-1", "1-0")):
+            records = [learning.digest(make_game([0] * 10, ours=colour, result=result,
+                       opponent_headers={"LearningGroup": "engines", "LearningServer": "fics"}))
+                       for result in (win, win, loss)]
+            for record in records:
+                record["opponent"] = "Kapablanca"
+            opening = learning.opening_book(records, group="engines", opponent="Kapablanca", server="fics")
+            board = chess.Board()
+            if colour == "black":
+                board.push_uci("e2e4")
+            move = chess.Move.from_uci("e2e4" if colour == "white" else "e7e5")
+            self.assertEqual(fics.console_learning(board, move, opening),
+                             f"Learn: {board.san(move)} (67%, +2 =0 -1) | bots +2 =0 -1 | Kapablanca +2 =0 -1")
+
     async def test_game_events_follow_the_game(self):
         events = connectors.game_events()
         seen = []
