@@ -1979,8 +1979,6 @@ int search_t::qsearch(int alpha, int beta, int depth) {
                 || (tt_flag == score::UPPERBOUND && tt_score <= alpha))) {
             return tt_score;
         }
-        // Decode only; the picker validates the hint if move selection is needed.
-        stack->tt_move.set_compact(&brd, tt.move);
     }
     // Only completed results reach this helper; qsearch stores at depth 0.
     // Forced inline: GCC otherwise splits the store into a call at every exit.
@@ -1996,6 +1994,10 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     const int eval = evaluate(this, use_q_tt ? &tt : nullptr);
     if (eval >= beta && !in_check) {
         return finish(eval, score::LOWERBOUND);
+    }
+    if (use_q_tt) {
+        // Decode only when selecting moves; the picker validates the hint.
+        stack->tt_move.set_compact(&brd, tt.move);
     }
 
     // First move; without one it is mate, stalemate, or there are no tactical moves

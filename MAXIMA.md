@@ -270,11 +270,12 @@ cutoffs do not prove that a legal move exists. Results are
 fail-soft. `QsearchTT` probes and stores qsearch results at depth 0 in the
 main table; null-window qsearch nodes below clock 90 take cutoffs from any
 bound, and any valid TT move is searched first.
-The picker checks TT-move geometry only when selecting the hint, after TT and
-stand-pat cutoffs. Search checks king safety after move pruning, immediately
-before making the move. Check detection runs only when futility needs its check
-exemption or after legality, immediately before make; a result used by futility
-is reused. A cached-score cutoff does not require a playable hint.
+The TT move is decoded only after TT and stand-pat cutoffs. The picker checks
+its geometry when selecting the hint. Search checks king safety after move
+pruning, immediately before making the move. Check detection runs only when
+futility needs its check exemption or after legality, immediately before make;
+a result used by futility is reused. A cached-score cutoff does not require a
+playable hint.
 
 ### 4.6 Move ordering and histories
 
