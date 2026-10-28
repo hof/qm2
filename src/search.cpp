@@ -376,7 +376,7 @@ void search_t::go() {
         + " completed_depth " + std::to_string(completed_depth)
         + " attempted_depth " + std::to_string(attempted_depth)
         + " interrupted " + std::to_string(interrupted));
-    uci::send_pv(result_score, result_depth, sel_depth, nodes, game.tm.elapsed(),
+    uci::send_pv(result_score, result_depth, sel_depth, nodes, game.tm.search_elapsed(),
         pv_to_string().c_str(), result_flag, tablebase_hits);
 
     // Work limits may finish a search, but only protocol control releases its result.
@@ -483,7 +483,7 @@ void search_t::iterative_deepening() {
         result_score = score;
         result_flag = score::EXACT;
         result_source = result_source_t::complete;
-        uci::send_pv(result_score, depth, sel_depth, nodes, game.tm.elapsed(),
+        uci::send_pv(result_score, depth, sel_depth, nodes, game.tm.search_elapsed(),
             pv_to_string().c_str(), result_flag, tablebase_hits);
         store_pv();
         if (timed_search && !pondering()) {
@@ -1207,7 +1207,7 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             if (exact || !move->equals(&stack->pv_moves[0])) {
                 update_pv(&rmove->move);
             }
-            uci::send_pv(best, report_depth, sel_depth, nodes, game.tm.elapsed(),
+            uci::send_pv(best, report_depth, sel_depth, nodes, game.tm.search_elapsed(),
                     pv_to_string().c_str(), result_flag, tablebase_hits);
 
             // A fail-high bounds the root immediately. A fail-low requires

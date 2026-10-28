@@ -390,7 +390,17 @@ class search_lifecycle_tests(unittest.TestCase):
             self.assertGreater(elapsed, 0.1)
             self.assertLess(elapsed, 0.7)
             fields = [line for line in engine.transcript if line.startswith("info depth ")][-1].split()
-            self.assertGreaterEqual(int(fields[fields.index("time") + 1]), 150)
+            reported_ms = int(fields[fields.index("time") + 1])
+            self.assertGreaterEqual(reported_ms, 450,
+                                    "reported search time must include pondering and the move budget")
+            reports = [line.split() for line in engine.transcript if line.startswith("info depth ")]
+            times = [int(report[report.index("time") + 1]) for report in reports]
+            self.assertEqual(times, sorted(times), "ponderhit must not reset reported elapsed time")
+            for report in reports:
+                nodes = int(report[report.index("nodes") + 1])
+                nps = int(report[report.index("nps") + 1])
+                milliseconds = int(report[report.index("time") + 1])
+                self.assertEqual(nps, nodes * 1000 // max(1, milliseconds))
             engine.send("quit")
             engine.wait_for_exit()
 

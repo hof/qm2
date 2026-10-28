@@ -53,6 +53,18 @@ bool test_elapsed_timer() {
     settings.init_tm(WHITE, std::chrono::steady_clock::now() - std::chrono::milliseconds(40));
     success &= check(settings.tm.time_is_up() && settings.tm.elapsed() >= 40,
         "timer setup must preserve time spent preparing the request");
+    time_manager_t ponder_timer;
+    ponder_timer.set_start(std::chrono::steady_clock::now() - std::chrono::milliseconds(1000));
+    ponder_timer.set_max(200);
+    bool clock_started = false;
+    int next_poll = 0;
+    success &= check(!ponder_timer.handle_abort(true, clock_started, next_poll) && !clock_started,
+        "pondering must defer the expired move budget");
+    success &= check(!ponder_timer.handle_abort(false, clock_started, next_poll) && clock_started,
+        "ponderhit must start a fresh move budget");
+    success &= check(ponder_timer.search_elapsed() >= 1000
+        && ponder_timer.search_elapsed() - ponder_timer.elapsed() >= 990,
+        "ponderhit must retain pondering time in search reports");
     return success;
 }
 

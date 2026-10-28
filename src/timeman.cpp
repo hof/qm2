@@ -87,6 +87,7 @@ time_manager_t::time_manager_t() {
 
 void time_manager_t::clear() {
     start = std::chrono::steady_clock::now();
+    search_start = start;
     max = start;
     tot_min = 0;
     tot_max = 0;
@@ -96,7 +97,7 @@ void time_manager_t::clear() {
 // expire the old budget between deciding to start it and testing its deadline.
 bool time_manager_t::handle_abort(bool pondering, bool & clock_started, int & next_poll) {
     if (!clock_started && !pondering) {
-        set_start();
+        start = std::chrono::steady_clock::now();
         set_max(reserved_max());
         clock_started = true;
     }

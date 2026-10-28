@@ -47,6 +47,7 @@ namespace time_man {
 class time_manager_t {
 private:
     std::chrono::steady_clock::time_point start;
+    std::chrono::steady_clock::time_point search_start;
     std::chrono::steady_clock::time_point max;
     int tot_min;
     int tot_max;
@@ -58,7 +59,7 @@ public:
         const int move_overhead = 50);
     
     void set_start(std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now()) {
-        start = started;
+        start = search_start = started;
     }
 
     void set_min(const int ms) {
@@ -87,6 +88,13 @@ public:
     int elapsed() const {
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - start).count();
+        return static_cast<int>(std::min<int64_t>(ms, std::numeric_limits<int>::max()));
+    }
+
+    // Search reports retain pondering time when the move budget restarts.
+    int search_elapsed() const {
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - search_start).count();
         return static_cast<int>(std::min<int64_t>(ms, std::numeric_limits<int>::max()));
     }
 
