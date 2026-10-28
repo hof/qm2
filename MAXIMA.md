@@ -265,7 +265,8 @@ Futility skips a nonchecking, non-recapture move that does not win
 material when `eval + 350 <= alpha`, raising the best score to that bound. In
 check, after one evasion, evasions that lose material are skipped; quiet
 evasions stay searchable. After exhausting tactical candidates without searching
-a legal move, a separate legal-move probe detects stalemate. Stand-pat and TT
+a legal move, a separate legal-move probe detects stalemate unless upcoming
+repetition already supplied a legal witness for this position. Stand-pat and TT
 cutoffs do not prove that a legal move exists. Results are
 fail-soft. `QsearchTT` probes and stores qsearch results at depth 0 in the
 main table; null-window qsearch nodes below clock 90 take cutoffs from any

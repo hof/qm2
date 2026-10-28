@@ -1952,7 +1952,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return tablebase_score;
     }
 
-    if (raise_repetition_alpha(alpha) && alpha >= beta) {
+    const bool legal_witness = raise_repetition_alpha(alpha);
+    if (legal_witness && alpha >= beta) {
         return alpha;
     }
 
@@ -2008,7 +2009,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         }
         // Match the normal fail-low path even when the picker is empty.
         // Merely having an illegal tactical candidate must not change the bound.
-        return !has_legal_move(brd) ? finish(draw_score(), score::EXACT)
+        return !legal_witness && !has_legal_move(brd) ? finish(draw_score(), score::EXACT)
             : finish(eval, score::UPPERBOUND);
     }
     if (eval > alpha && !in_check) {
@@ -2076,7 +2077,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             alpha = score;
         }
     } while ((move = move::next(this, depth)));
-    if (searched_moves == 0 && (in_check || !has_legal_move(brd))) {
+    if (searched_moves == 0 && (in_check || (!legal_witness && !has_legal_move(brd)))) {
         return finish(in_check ? -score::MATE + brd.ply : draw_score(), score::EXACT);
     }
     return finish(best_score, score::UPPERBOUND);
