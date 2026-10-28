@@ -1906,6 +1906,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 // Quiescence search: captures and promotions at every depth, all legal evasions
 // in check.
 int search_t::qsearch(int alpha, int beta, int depth) {
+
     // The parent copies this node's principal variation, even after an early exit.
     stack->pv_count = 0;
 
@@ -1924,28 +1925,37 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     }
 
     // Mate distance pruning: a mate in n needs no deeper search
+
     if ((score::MATE - brd.ply) < beta) {
         beta = score::MATE - brd.ply;
+
         if (alpha >= beta) {
             return beta;
         }
+
     }
+
     if ((-score::MATE + brd.ply) > alpha) {
         alpha = -score::MATE + brd.ply;
+
         if (beta <= alpha) {
             return alpha;
         }
+
     }
 
     if (is_draw()) {
         return draw_score();
     }
+
     int tablebase_score;
+
     if (tablebase_limit && probe_tablebase(depth, tablebase_score)) {
         return tablebase_score;
     }
 
     const bool legal_witness = raise_repetition_alpha(alpha);
+
     if (legal_witness && alpha >= beta) {
         return alpha;
     }
@@ -1958,42 +1968,54 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     const U64 key = position_key(brd);
     stack->tt_key = key;
     tt_hit_t tt;
+
     if (q_tt_enabled) {
         const bool usable = trans_table::probe(key, brd.ply, brd.stack->fifty_count, tt) && tt.bound;
         const int tt_score = tt.score, tt_flag = tt.bound;
+
         if (usable && alpha + 1 == beta && brd.stack->fifty_count < 90 && (tt_flag == score::EXACT
                 || (tt_flag == score::LOWERBOUND && tt_score >= beta)
                 || (tt_flag == score::UPPERBOUND && tt_score <= alpha))) {
             return tt_score;
         }
+
     }
+
     // Forced inline: GCC otherwise splits the store into a call at every exit.
     const auto finish = [&](int value, int flag) __attribute__((always_inline)) {
+
         if (q_tt_enabled) {
             trans_table::store(key, brd.root_ply, brd.ply, 0, value,
                 stack->best_move.to_compact(), flag);
         }
+
         return value;
     };
 
     const int eval = evaluate(this, q_tt_enabled ? &tt : nullptr);
+
     if (eval >= beta && !in_check) {
         return finish(eval, score::LOWERBOUND);
     }
+
     if (q_tt_enabled) {
         stack->tt_move.set_compact(&brd, tt.move);
     }
 
     move_t * move = move::first(this, depth);
+
     if (!move) {
+
         if (in_check) {
             return finish(-score::MATE + brd.ply, score::EXACT);
         }
+
         // Match the normal fail-low path even when the picker is empty.
         // Merely having an illegal tactical candidate must not change the bound.
         return !legal_witness && !has_legal_move(brd) ? finish(draw_score(), score::EXACT)
             : finish(eval, score::UPPERBOUND);
     }
+
     if (eval > alpha && !in_check) {
         alpha = eval;
     }
@@ -2013,23 +2035,28 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
         // Futility: a losing tactical move cannot lift a hopeless stand pat.
         int gives_check = -1;
+
         if (ffp_enabled && !in_check && best_score > -decisive
                 && futility <= alpha && std::abs(futility) < decisive
                 && !((stack - 1)->current_move.piece
                     && move->tsq == (stack - 1)->current_move.tsq)) {
             gives_check = brd.gives_check(move);
+
             if (!gives_check && !brd.see(move, 1)) {
                 best_score = std::max(best_score, futility);
                 continue;
             }
+
         }
 
         if (!brd.legal(move)) {
             continue;
         }
+
         if (gives_check < 0) {
             gives_check = brd.gives_check(move);
         }
+
         forward(move, gives_check);
         ++searched_moves;
         int score = -qsearch(-beta, -alpha, depth - 1);
@@ -2038,18 +2065,25 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         if (stop_all) {
             return alpha;
         }
+
         best_score = std::max(best_score, score);
+
         if (score > alpha) {
             stack->best_move.set(move);
+
             if (score >= beta) {
                 return finish(score, score::LOWERBOUND);
             }
+
             alpha = score;
         }
+
     } while ((move = move::next(this, depth)));
+
     if (searched_moves == 0 && (in_check || (!legal_witness && !has_legal_move(brd)))) {
         return finish(in_check ? -score::MATE + brd.ply : draw_score(), score::EXACT);
     }
+
     return finish(best_score, score::UPPERBOUND);
 }
 
