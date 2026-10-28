@@ -854,7 +854,7 @@ class engine_player:
             self.finished = True
             self.on_line(f"-- {action}")
         else:
-            self.on_line(f"-- {action} after this game; quit again to leave now")
+            self.on_line(f"-- {action} after this game")
 
     async def handle(self, line):
         position = fics_game.style12.parse(line) if line.startswith("<12> ") else None

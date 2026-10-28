@@ -306,7 +306,7 @@ class lichess_bot:
     def soft_quit(self, restart=False):
         self.stopping, self.restart = True, restart
         action = "restarting" if restart else "stopping"
-        self.on_line(f"-- {action} after this game; quit again to stop now" if self.game is not None
+        self.on_line(f"-- {action} after this game" if self.game is not None
                      else f"-- {action}")
 
     def set_challenging(self, enabled):
