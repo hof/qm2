@@ -1221,7 +1221,7 @@ class engine_player:
                 await self.explain(f"{board.variation_san([move])} {info['source']}")
             self.from_book = kind == "book"
             return
-        self.on_line(styled(console_search(board, move, info, seconds, clock, self.policy.pv_plies, self.opening), "90"))
+        self.on_line(styled(console_search(board, move, info, seconds, clock, self.policy.pv_plies, self.opening), "92"))
         if explaining:
             note = None
             if self.opening is not None and self.opening.why == ("left book",):

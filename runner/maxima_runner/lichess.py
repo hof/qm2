@@ -748,7 +748,7 @@ class lichess_game:
         if kind == "engine":
             pv = variation(board, info.get("pv", []))
             self.last_eval = f"{board.san(move)} {describe(info, board.turn)}" + (f", expecting {pv}" if pv else "")
-            bot.on_line(styled(console_search(board, move, info, seconds, clock, bot.pv_plies, self.opening), "90"))
+            bot.on_line(styled(console_search(board, move, info, seconds, clock, bot.pv_plies, self.opening), "92"))
         else:
             source = book_whisper(numbered, why, self.opening, compact=True) if why else f"{numbered} {info['source']}"
             learned = console_learning(board, move, self.opening)
