@@ -19,17 +19,23 @@ class online_protocol(chess.engine.UciProtocol):
         self.ponder_evidence = {}
         self.hit_info = {}
         self.ponder_hit = False
+        self.ponder_started = None
+        self.ponder_seconds = None
+        self.on_search_started = None
         self.search_started = None
         self.search_seconds = None
 
     def send_line(self, line):
         if line.startswith("go ponder"):
+            self.ponder_started = time.monotonic()
             self.collecting = False
             self.ponder_info = {}
             self.ponder_evidence = {}
         elif line.startswith("go ") or line == "ponderhit":
             self.collecting = True
             self.search_started = time.monotonic()
+            self.ponder_seconds = (self.search_started - self.ponder_started
+                                   if line == "ponderhit" and self.ponder_started is not None else None)
             self.hit_info = dict(self.ponder_info) if line == "ponderhit" else {}
             if self.evidence is not None:
                 self.evidence.clear()
@@ -38,6 +44,9 @@ class online_protocol(chess.engine.UciProtocol):
         if line == "ponderhit":
             self.ponder_hit = True
         super().send_line(line)
+        timed_search = line.startswith("go ") and not line.startswith("go ponder")
+        if (line == "ponderhit" or timed_search) and self.on_search_started is not None:
+            self.on_search_started(line == "ponderhit")
 
     def line_received(self, line):
         if line.startswith("bestmove ") and self.collecting and self.search_started is not None:
@@ -98,7 +107,8 @@ class engine_session:
             raise ValueError("unsupported board variant")
         return settings
 
-    async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None, ceiling=None):
+    async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None, ceiling=None,
+                   on_search_started=None):
         """Choose a move under game clocks; a new game token makes python-chess send ucinewgame.
 
         options are per-search UCI settings, applied only when the engine has them; None restores the
@@ -113,6 +123,8 @@ class engine_session:
             settings["UCI_AnalyseMode"] = False
 
         async def play_search():
+            self.protocol.on_search_started = on_search_started
+            self.protocol.ponder_seconds = None
             self.protocol.search_seconds = None
             self.pondering = False
             evidence = {}
@@ -136,10 +148,12 @@ class engine_session:
                 self.pondering = result.ponder is not None
                 result.info = dict(self.protocol.hit_info, **result.info)
                 result.info["_ponder_hit"] = self.protocol.ponder_hit
+                result.info["_ponder_seconds"] = self.protocol.ponder_seconds
                 result.info["_resignation"] = dict(evidence)
                 result.info["_search_seconds"] = self.protocol.search_seconds
                 return result
             finally:
+                self.protocol.on_search_started = None
                 self.protocol.evidence = None
                 if timer is not None:
                     timer.cancel()

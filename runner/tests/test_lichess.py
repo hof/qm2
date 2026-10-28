@@ -139,6 +139,9 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 await game.searching
                 self.assertIn("pondered", game.last_eval)
                 self.assertTrue(any("pondered" in line for line in lines))
+                self.assertTrue(any(line.startswith("1...Nh6 |") and line.endswith(" | ponder hit") for line in lines))
+                self.assertTrue(any("(+" in line for line in lines))
+                self.assertEqual(bot.pv_plies, 2)
                 replay = game.board.copy()
                 our_move = chess.Move.from_uci(api.posts[-1][0].rsplit("/", 1)[-1])
                 replay.push(our_move)
@@ -147,6 +150,7 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 await game.searching
                 self.assertNotIn("pondered", game.last_eval)
                 self.assertEqual(log.read_text().splitlines().count("ponderhit"), 1)
+                self.assertEqual(sum(line.endswith(" | ponder hit") for line in lines), 1)
                 await session.stop_pondering()
                 game.stop_waiting()
 

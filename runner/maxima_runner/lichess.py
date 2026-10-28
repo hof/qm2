@@ -50,7 +50,7 @@ reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate
 terminations = {"outoftime": "time forfeit", "timeout": "abandoned", "noStart": "abandoned", "aborted": "abandoned"}
 default_settings = {
     "resignation": resignation.validate_settings({}),
-    "shutdown_grace": 15, "pv_plies": 4,
+    "shutdown_grace": 15, "pv_plies": 2,
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
@@ -251,7 +251,7 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, resignation_settings=None, pv_plies=4):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, resignation_settings=None, pv_plies=2):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
@@ -464,6 +464,7 @@ class lichess_game:
         self.generation = object()
         self.state = None
         self.state_received_at = None
+        self.opponent_line = None
         self.reply_clock = None
         self.bot, self.id = bot, game_id
         self.initial = self.board = self.record = self.color = self.opponent = None
@@ -675,7 +676,8 @@ class lichess_game:
             left = f" | {clock_text(remaining / 1000)} left" if remaining is not None else ""
             spent = f" | {elapsed:.1f}s" if remaining is not None and previous is not None else ""
             name = self.player(not self.color).get("name") or "them"
-            self.bot.on_line(styled(f"{numbered_move(before, move)} | {name}{spent}{left}", "90"))
+            self.show_opponent_move()
+            self.opponent_line = f"{numbered_move(before, move)} | {name}{spent}{left}"
         search = self.record.searches.get(before.ply())
         self.emit("move", ply=self.board.ply(), san=before.san(move), uci=move.uci(), fen=self.board.fen(),
                   by="us" if before.turn == self.color else "them", clock_ms=clock_ms,
@@ -685,10 +687,16 @@ class lichess_game:
         if not task.cancelled() and task.exception() is not None:
             self.bot.on_line(f"-- move task failed: {task.exception()!r}")
 
+    def show_opponent_move(self, ponder_hit=False):
+        if self.opponent_line is not None:
+            self.bot.on_line(styled(self.opponent_line + (" | ponder hit" if ponder_hit else ""), "90"))
+            self.opponent_line = None
+
     async def play(self, board, state, retry=True):
         bot = self.bot
         generation = self.generation
         if self.over or self.loss.sent:
+            self.show_opponent_move()
             return
         ours = "w" if board.turn == chess.WHITE else "b"
         clock, increment = state[f"{ours}time"] / 1000, state[f"{ours}inc"] / 1000
@@ -700,7 +708,8 @@ class lichess_game:
                 bot.session, board, limit, opening=self.opening,
                 ceiling=self.loss.ceiling(self.full.get("rated")),
                 tablebase=bot.tablebase, game=(self.id, self.generation),
-                opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options={"DrawContempt": self.contempt})
+                opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options={"DrawContempt": self.contempt},
+                on_search_started=self.show_opponent_move)
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
             bot.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
             await bot.stop_engine()
@@ -708,6 +717,8 @@ class lichess_game:
             if retry:
                 await self.play(board, state, retry=False)
             return
+        finally:
+            self.show_opponent_move()
         if self.over or self.generation is not generation or self.board.fen() != board.fen():
             return
         if move is None or not board.is_legal(move):
@@ -838,6 +849,7 @@ class lichess_game:
 
     async def finish(self, status, winner):
         """Save, learn and report once, whichever of the game stream and the event stream ends it first."""
+        self.show_opponent_move()
         self.stop_waiting()
         if self.over:
             return

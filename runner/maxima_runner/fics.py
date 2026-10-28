@@ -289,7 +289,7 @@ seek_pattern = re.compile(r"\d{1,3} \d{1,3}(?: [a-z0-9+-]+)*")
 rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
 default_settings = {
     "resignation": resignation.validate_settings({}),
-    "shutdown_grace": 15, "pv_plies": 4,
+    "shutdown_grace": 15, "pv_plies": 2,
     "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
@@ -392,7 +392,7 @@ class play_policy:
     def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=0, games=None, guest=True,
                  owner=None, notes=(), contempt_window=100, first_move_wait=60,
                  whisper=False, follow_key=None, reseek_minutes=10, losers=False,
-                 losers_seeks=(), losers_seeks_at_once=1, pv_plies=4):
+                 losers_seeks=(), losers_seeks_at_once=1, pv_plies=2):
         self.seek_pool = None
         self.seeks = list(seeks)
         self.losers_seeks = list(losers_seeks)
@@ -505,7 +505,7 @@ def console_learning(board, move, opening):
     return " | ".join(fields)
 
 
-def console_search(board, move, info, seconds, clock, pv_plies=4, opening=None):
+def console_search(board, move, info, seconds, clock, pv_plies=2, opening=None):
     """Compact search status, with up to pv_plies replies after the played move."""
     fields = [numbered_move(board, move)]
     if info.get("_ponder_hit"):
@@ -522,7 +522,10 @@ def console_search(board, move, info, seconds, clock, pv_plies=4, opening=None):
     learned = console_learning(board, move, opening)
     if learned:
         fields.append(learned)
-    fields.extend((f"{seconds:.1f}s", f"{clock_text(max(0.0, clock - seconds))} left"))
+    spent = f"{seconds:.1f}s"
+    if info.get("_ponder_hit") and info.get("_ponder_seconds") is not None:
+        spent += f" (+{info['_ponder_seconds']:.1f}s)"
+    fields.extend((spent, f"{clock_text(max(0.0, clock - seconds))} left"))
     moves = info.get("pv", [])
     if moves and moves[0] == move and pv_plies:
         replay = board.copy()
@@ -597,6 +600,7 @@ class engine_player:
                  site="freechess.org", learner=None, events=None, online_tablebase=False, local_pieces=0,
                  resignation_settings=None, losers_learner=None):
         self.loss = resignation.loss_policy(resignation_settings)
+        self.opponent_line = None
         self.latest_position = None
         self.position_received_at = None
         self.open_session = open_session
@@ -997,6 +1001,7 @@ class engine_player:
         return headers
 
     def finished_game(self, end):
+        self.show_opponent_move()
         """The annotated PGN game, or None when nothing was played."""
         if self.record is None or self.history is None or not self.history.board.move_stack:
             return None
@@ -1080,7 +1085,9 @@ class engine_player:
                     move = before.pop()
                     self.loss.on_reply(before, move, position.elapsed)
                     name = position.black if position.turn == chess.WHITE else position.white
-                    self.on_line(styled(f"{numbered_move(before, move)} | {name} | {position.elapsed:.1f}s | {clock_text(mover_ms / 1000)} left", "90"))
+                    self.show_opponent_move()
+                    self.opponent_line = (f"{numbered_move(before, move)} | {name} | {position.elapsed:.1f}s"
+                                          f" | {clock_text(mover_ms / 1000)} left")
             elif change:
                 self.loss.reset()
                 self.abort_position = None
@@ -1135,6 +1142,11 @@ class engine_player:
         except (ConnectionError, OSError) as error:
             self.on_line(f"-- could not send {line!r}: {error}")
 
+    def show_opponent_move(self, ponder_hit=False):
+        if self.opponent_line is not None:
+            self.on_line(styled(self.opponent_line + (" | ponder hit" if ponder_hit else ""), "90"))
+            self.opponent_line = None
+
     async def play(self, position, board):
         clock = (position.white_ms if board.turn == chess.WHITE else position.black_ms) / 1000
         limit = chess.engine.Limit(white_clock=position.white_ms / 1000, black_clock=position.black_ms / 1000,
@@ -1142,6 +1154,7 @@ class engine_player:
         token = self.token
         started = time.monotonic()
         if self.loss.sent:
+            self.show_opponent_move()
             return
         if not self.opponent_ready.is_set():
             # The first search waits briefly for finger, so UCI_Opponent carries title and engine flag.
@@ -1167,13 +1180,15 @@ class engine_player:
                 ceiling=ceiling,
                 tablebase=self.tablebase,
                 game=self.token, opponent=self.opponent, timeout=max(clock, 1) + self.margin,
-                options=search_options)
+                options=search_options, on_search_started=self.show_opponent_move)
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
             self.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
             await self.stop_engine()
             await self.start()
             await self.send("refresh")
             return
+        finally:
+            self.show_opponent_move()
         if self.token is not token or self.history is None or self.history.board.fen() != board.fen():
             return
         if move is None or not board.is_legal(move):

@@ -191,6 +191,32 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.05)
         self.fail("search did not finish")
 
+    async def test_opponent_line_marks_actual_ponder_hit(self):
+        from test_uci import ponder_engine
+        self.script.write_text(ponder_engine)
+        player = fics.engine_player(
+            lambda: open_engine([sys.executable, str(self.script), str(self.positions)],
+                                self.directory.name, timeout=5),
+            self.lines.append, online_tablebase=False)
+        await player.start()
+        self.addAsyncCleanup(player.close)
+        player.connection = fake_connection()
+        await player.handle(start)
+        await self.settle(player)
+        await player.handle(after_e4)
+        reply = after_e4.replace("rnbqkbnr", "rnbqkb-r").replace(
+            "pppppppp -------- --------", "pppppppp -------n --------").replace(
+            " B 4 ", " W -1 ").replace("1 1 1 1 0 17", "1 1 1 1 1 17").replace(
+            "-1 3 0", "1 3 0").replace("180000 180000 1", "180000 179000 2").replace(
+            "P/e2-e4 (0:00.000) e4", "N/g8-h6 (0:01.000) Nh6")
+        await player.handle(reply)
+        await self.settle(player)
+        opponents = [line for line in self.lines if line.startswith("1...Nh6 |")]
+        self.assertEqual(len(opponents), 1)
+        self.assertTrue(opponents[0].endswith(" | ponder hit"))
+        self.assertTrue(any("(+" in line for line in self.lines))
+        self.assertEqual(self.positions.read_text().splitlines().count("ponderhit"), 1)
+
     async def test_reseeks_only_after_idle_minutes(self):
         player = await self.player("play", policy=fics.play_policy(seeks=["3 0"], reseek_minutes=10))
         await player.reseek_when_idle()
@@ -281,7 +307,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
                 "nps": 543000, "pv": moves}
         prefix = "1. e4 | d19 | +0.10 | 543kN/s | 3.2s | 4:56 left"
         self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300),
-                         prefix + " | PV: 1...e5 2. Nf3 Nc6 3. Bb5")
+                         prefix + " | PV: 1...e5 2. Nf3")
         self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300, 2),
                          prefix + " | PV: 1...e5 2. Nf3")
         self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300, 0), prefix)
@@ -289,6 +315,16 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         info["pv"] = moves[:2] + [moves[0]]
         self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300), prefix + " | PV: 1...e5")
         self.assertEqual(board.fen(), fen)
+
+    def test_compact_search_shows_only_hit_ponder_time(self):
+        board = chess.Board()
+        move = chess.Move.from_uci("e2e4")
+        info = {"_ponder_hit": True, "_ponder_seconds": 5.5}
+        self.assertIn(" | 2.3s (+5.5s) | 4:57 left", fics.console_search(board, move, info, 2.3, 300))
+        info["_ponder_hit"] = False
+        self.assertNotIn("(+", fics.console_search(board, move, info, 2.3, 300))
+        self.assertEqual(fics.play_policy().pv_plies, 2)
+        self.assertEqual(fics.default_settings["pv_plies"], 2)
 
     def test_whispers_explain_book_choices_simply(self):
         opening = learning.opening_book([], opponent="John", group="humans", mood="parham")
