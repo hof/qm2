@@ -496,7 +496,9 @@ def book_whisper(san, why, opening, *, compact=False):
     if compact:
         lead = {"base book": "BaseBook", "fire book": "FireBook", "draw book": "DrawBook",
                 "surprise book": "SurpriseBook"}.get(lead, lead)
-        return f"{san} | {lead} (pick {probability:.0%})"
+        results = "".join(f" | {words[name] if name == 'opponent' else words[name].capitalize()} +{wins} ={draws} -{losses}"
+                          for name, (wins, draws, losses) in opening.choice_results.items())
+        return f"{san} | {lead} (pick {probability:.0%}){results}"
     results = "; ".join(f"{words[name]} +{wins} ={draws} -{losses}"
                         for name, (wins, draws, losses) in opening.choice_results.items())
     detail = f" | support: {', '.join(support)}" if len(support) > 1 else ""

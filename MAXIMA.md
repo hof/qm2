@@ -1782,8 +1782,10 @@ opponent's agreement (or server permission once they run out of time). Games
 aborted before both sides move are not saved.
 The log shows each searched move with depth, score, time, and the expected line
 (`pv`). Both servers use compact console book lines, for example
-`1...e5 | FireBook (pick 43%) | 0.1s | 4:59 left`, omitting support and learned
-results. Base, fire, draw and surprise books appear as `BaseBook`, `FireBook`,
+`1...e5 | FireBook (pick 43%) | 0.1s | 4:59 left`, omitting support.
+Available learning results appear after the pick chance as separate fields, for
+example `Masters +23 =1 -1 | vs John +2 =0 -1`; absent results add no field.
+Base, fire, draw and surprise books appear as `BaseBook`, `FireBook`,
 `DrawBook` and `SurpriseBook`. `whisper` (or `--whisper`) explains every move to observers (never to the
 opponent, unlike kibitz) in plain words:
 
