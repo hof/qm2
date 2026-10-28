@@ -490,7 +490,7 @@ def numbered_move(board, move):
 
 
 def console_learning(board, move, opening):
-    """Own move history: played move first, then the most tried alternatives, up to three."""
+    """Own move history: played move first, then the most tried alternative, up to two."""
     if opening is None:
         return ""
     key = f"{chess.polyglot.zobrist_hash(board):016x}"
@@ -498,7 +498,7 @@ def console_learning(board, move, opening):
                if position == key and sum(counts) > 0 and chess.Move.from_uci(uci) in board.legal_moves]
     results.sort(key=lambda item: (item[0] != move, -sum(item[1]), item[0].uci()))
     entries = []
-    for candidate, (wins, draws, losses) in results[:3]:
+    for candidate, (wins, draws, losses) in results[:2]:
         games = wins + draws + losses
         score = (wins + draws / 2) / games
         detail = f"{score:.0%}, +{wins} ={draws} -{losses}" if candidate == move else f"{games}x, {score:.0%}"

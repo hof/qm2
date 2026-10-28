@@ -317,14 +317,14 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
                                    (key, "f2f4"): [1, 0, 0], (key, "g8f6"): [500, 0, 0],
                                    ("another_position", "c2c4"): [500, 0, 0], (key, "b2b4"): [0, 0, 0]})
         move = chess.Move.from_uci("d2d4")
-        expected = "Learn: d4 (94%, +35 =5 -0) e4 (100x, 80%) f4 (1x, 100%)"
+        expected = "Learn: d4 (94%, +35 =5 -0) e4 (100x, 80%)"
         self.assertEqual(fics.console_learning(board, move, opening), expected)
         self.assertIn(f" | {expected} | 0.3s | ", fics.console_search(board, move, {}, 0.3, 180, opening=opening))
         opening.results[0][(key, "c2c4")] = [15, 0, 5]
         self.assertEqual(fics.console_learning(board, chess.Move.from_uci("f2f4"), opening),
-                         "Learn: f4 (100%, +1 =0 -0) e4 (100x, 80%) d4 (40x, 94%)")
+                         "Learn: f4 (100%, +1 =0 -0) e4 (100x, 80%)")
         self.assertEqual(fics.console_learning(board, chess.Move.from_uci("g1f3"), opening),
-                         "Learn: e4 (100x, 80%) d4 (40x, 94%) c4 (20x, 75%)")
+                         "Learn: e4 (100x, 80%) d4 (40x, 94%)")
         self.assertEqual(fics.console_learning(board, move, None), "")
         self.assertEqual(fics.console_learning(board, move, learning.opening_book([])), "")
         self.assertEqual(board.fen(), fen)

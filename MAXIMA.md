@@ -1788,9 +1788,10 @@ lines use `10. Qa3 | John | 2.1s | 4:54 left`; unavailable timing is omitted. Bo
 Maxima's book and search lines use muted gray in a terminal; opponent lines keep
 the default color. Redirected output stays plain, and `NO_COLOR` disables color.
 Available own move history appears on the same line, for example
-`Learn: d4 (94%, +35 =5 -0) e4 (30x, 80%) f4 (1x, 100%)`.
-Up to three moves from the current position appear: the played move first when
-it has history, then the most played alternatives (ties by UCI move).
+`Learn: d4 (94%, +35 =5 -0) e4 (30x, 80%)`.
+Up to two moves from the current position appear: the played move first when
+it has history, then the most played alternative (ties by UCI move).
+If the played move has no history, the two most played moves appear instead.
 The played move shows full results; alternatives show their game count with `x`.
 Percentages are historical scores (wins plus half the draws, divided by games),
 not selection probabilities or estimates of move strength. Book and searched
