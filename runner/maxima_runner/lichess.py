@@ -17,7 +17,7 @@ import chess.engine
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
 from .cli import styled
-from .fics import book_whisper, chess_titles, clock_text, console_learning, console_search, draw_contempt, layer_profiles, \
+from .fics import book_whisper, chess_titles, console_time, console_learning, console_search, draw_contempt, layer_profiles, \
     learning_report, numbered_move, read_commands, restart_status, style_books
 from .move_choice import describe, search_summary, variation
 from .project import data_root, engine_path, env_value
@@ -673,11 +673,10 @@ class lichess_game:
             self.record.on_move(self.board, remaining / 1000, elapsed)
             self.clocks[mover] = remaining
         if before.turn != self.color:
-            left = f" | {clock_text(remaining / 1000)} left" if remaining is not None else ""
-            spent = f" | {elapsed:.1f}s" if remaining is not None and previous is not None else ""
-            name = self.player(not self.color).get("name") or "them"
+            timing = console_time(elapsed if remaining is not None and previous is not None else None,
+                                  remaining / 1000 if remaining is not None else None)
             self.show_opponent_move()
-            self.opponent_line = f"{numbered_move(before, move)} | {name}{spent}{left}"
+            self.opponent_line = numbered_move(before, move) + (f" | {timing}" if timing else "")
         search = self.record.searches.get(before.ply())
         self.emit("move", ply=self.board.ply(), san=before.san(move), uci=move.uci(), fen=self.board.fen(),
                   by="us" if before.turn == self.color else "them", clock_ms=clock_ms,
@@ -765,7 +764,7 @@ class lichess_game:
             learned = console_learning(board, move, self.opening)
             source += f" | {learned}" if learned else ""
             self.last_eval = source
-            bot.on_line(styled(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left", "92"))
+            bot.on_line(styled(f"{source} | {console_time(seconds, clock - seconds)}", "92"))
 
     def stats_line(self):
         """Our record against the opponent and on Lichess, from the experience."""

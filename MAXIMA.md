@@ -1723,14 +1723,14 @@ clock-only updates, and is canceled on a reply, takeback, or game end. FICS abor
 without agreement before both players have moved; later requests require the
 opponent's agreement (or server permission once they run out of time). Games
 aborted before both sides move are not saved.
-Search console lines use `9...Nc6 | d19 | +0.10 | 543kN/s | 3.2s | 4:56 left | PV: 10. Qa3 h6`.
+Search console lines use `9. ..Nc6 d19 +0.10 | 543kN/s | 3.2s (4:56) | PV: 10. Qa3 h6`.
 The PV excludes the played move and defaults to two plies; `--pv-plies N` or
 `"pv_plies": N` in either server config changes this (0 hides PV). Opponent
-lines use `10. Qa3 | John | 2.1s | 4:54 left`; unavailable timing is omitted.
+lines use `10. Qa3 | 2.1s (4:54)`; unavailable timing is omitted.
 An actual UCI `ponderhit` adds ` | ponder hit` to the opponent line. Our next
 search time includes the separate background thinking interval, for example
 `2.3s (+5.5s)`; only the 2.3 seconds is charged to our displayed clock. Both servers use compact console book lines, for example
-`1...e5 | FireBook (pick 43%) | 0.1s | 4:59 left`, omitting support.
+`1...e5 | FireBook (pick 43%) | 0.1s (4:59)`, omitting support.
 All Maxima move lines, including book and tablebase moves, use bright green in a
 terminal; the opponent's moves use muted gray. Runner status messages prefixed with `--` use
 cyan; raw server output keeps the default color.

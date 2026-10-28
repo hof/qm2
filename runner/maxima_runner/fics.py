@@ -486,7 +486,18 @@ def clock_text(seconds):
 
 
 def numbered_move(board, move):
-    return f"{board.fullmove_number}{'. ' if board.turn else '...'}{board.san(move)}"
+    return f"{board.fullmove_number}{'. ' if board.turn else '. ..'}{board.san(move)}"
+
+
+def console_time(seconds, remaining, ponder_seconds=None):
+    fields = []
+    if seconds is not None:
+        fields.append(f"{seconds:.1f}s")
+        if ponder_seconds is not None:
+            fields[-1] += f" (+{ponder_seconds:.1f}s)"
+    if remaining is not None:
+        fields.append(f"({clock_text(max(0.0, remaining))})")
+    return " ".join(fields)
 
 
 def console_learning(board, move, opening):
@@ -507,12 +518,12 @@ def console_learning(board, move, opening):
 
 def console_search(board, move, info, seconds, clock, pv_plies=2, opening=None):
     """Compact search status, with up to pv_plies replies after the played move."""
-    fields = [numbered_move(board, move)]
-    fields.append(f"d{info.get('depth', 0)}")
+    summary = [numbered_move(board, move), f"d{info.get('depth', 0)}"]
     score = info.get("score")
     if score is not None:
         relative = score.pov(board.turn)
-        fields.append(f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}")
+        summary.append(f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}")
+    fields = [" ".join(summary)]
     if info.get("tbhits"):
         fields.append("TB")
     if info.get("nps"):
@@ -520,17 +531,15 @@ def console_search(board, move, info, seconds, clock, pv_plies=2, opening=None):
     learned = console_learning(board, move, opening)
     if learned:
         fields.append(learned)
-    spent = f"{seconds:.1f}s"
-    if info.get("_ponder_hit") and info.get("_ponder_seconds") is not None:
-        spent += f" (+{info['_ponder_seconds']:.1f}s)"
-    fields.extend((spent, f"{clock_text(max(0.0, clock - seconds))} left"))
+    ponder_seconds = info.get("_ponder_seconds") if info.get("_ponder_hit") else None
+    fields.append(console_time(seconds, clock - seconds, ponder_seconds))
     moves = info.get("pv", [])
     if moves and moves[0] == move and pv_plies:
         replay = board.copy()
         replay.push(move)
         pv = variation(replay, moves[1:], limit=pv_plies)
         if pv:
-            fields.append("PV: " + pv)
+            fields.append("PV: " + re.sub(r"(\d+)\.\.\.", r"\1. ..", pv))
     return " | ".join(fields)
 
 
@@ -1082,10 +1091,9 @@ class engine_player:
                     before = self.history.board.copy()
                     move = before.pop()
                     self.loss.on_reply(before, move, position.elapsed)
-                    name = position.black if position.turn == chess.WHITE else position.white
                     self.show_opponent_move()
-                    self.opponent_line = (f"{numbered_move(before, move)} | {name} | {position.elapsed:.1f}s"
-                                          f" | {clock_text(mover_ms / 1000)} left")
+                    self.opponent_line = (f"{numbered_move(before, move)} | "
+                                          f"{console_time(position.elapsed, mover_ms / 1000)}")
             elif change:
                 self.loss.reset()
                 self.abort_position = None
@@ -1226,7 +1234,7 @@ class engine_player:
             source = book_whisper(numbered, self.opening.why, self.opening, compact=True) if book else f"{numbered} {info['source']}"
             learned = console_learning(board, move, self.opening)
             source += f" | {learned}" if learned else ""
-            self.on_line(styled(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left", "92"))
+            self.on_line(styled(f"{source} | {console_time(seconds, clock - seconds)}", "92"))
             if explaining and kind == "book" and self.opening.why:
                 await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
             elif explaining and kind == "tablebase":

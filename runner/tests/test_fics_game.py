@@ -215,7 +215,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
             "P/e2-e4 (0:00.000) e4", "N/g8-h6 (0:01.000) Nh6")
         await player.handle(reply)
         await self.settle(player)
-        opponents = [line for line in self.lines if line.startswith("1...Nh6 |")]
+        opponents = [line for line in self.lines if line.startswith("1. ..Nh6 |")]
         self.assertEqual(len(opponents), 1)
         self.assertTrue(opponents[0].endswith(" | ponder hit"))
         self.assertTrue(any("(+" in line for line in self.lines))
@@ -237,7 +237,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle(start.replace(" 17 GuestHJGC", " 18 GuestHJGC"))
         await self.settle(player)
         self.assertEqual(player.connection.sent, ["e2e4"])
-        self.assertTrue(any(line.startswith("1. e4 | d3 | +0.25 | ") and line.endswith(" left") for line in self.lines))
+        self.assertTrue(any(line.startswith("1. e4 d3 +0.25 | ") and line.endswith(")") for line in self.lines))
         self.assertEqual(self.positions.read_text().split("\n")[0], "position startpos")
         self.assertNotIn("DrawContempt", self.positions.read_text())
 
@@ -309,22 +309,44 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         moves = [chess.Move.from_uci(uci) for uci in ("e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6")]
         info = {"depth": 19, "score": chess.engine.PovScore(chess.engine.Cp(10), chess.WHITE),
                 "nps": 543000, "pv": moves}
-        prefix = "1. e4 | d19 | +0.10 | 543kN/s | 3.2s | 4:56 left"
+        prefix = "1. e4 d19 +0.10 | 543kN/s | 3.2s (4:56)"
         self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300),
-                         prefix + " | PV: 1...e5 2. Nf3")
+                         prefix + " | PV: 1. ..e5 2. Nf3")
         self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300, 2),
-                         prefix + " | PV: 1...e5 2. Nf3")
+                         prefix + " | PV: 1. ..e5 2. Nf3")
         self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300, 0), prefix)
         self.assertTrue(fics.console_search(board, moves[0], info, 3.2, 300, 6).endswith("3. Bb5 a6"))
         info["pv"] = moves[:2] + [moves[0]]
-        self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300), prefix + " | PV: 1...e5")
+        self.assertEqual(fics.console_search(board, moves[0], info, 3.2, 300), prefix + " | PV: 1. ..e5")
         self.assertEqual(board.fen(), fen)
+
+    def test_compact_console_matches_requested_layout(self):
+        board = chess.Board()
+        for san in ("e4", "e5", "Nf3", "Nc6", "Nc3"):
+            board.push_san(san)
+        move = board.parse_san("a6")
+        self.assertEqual(fics.numbered_move(board, move) + " | " + fics.console_time(3.2, 294),
+                         "3. ..a6 | 3.2s (4:54)")
+        board.push(move)
+        move = board.parse_san("Bc4")
+        replay = board.copy()
+        replay.push(move)
+        info = {"depth": 23, "score": chess.engine.PovScore(chess.engine.Cp(483), chess.WHITE),
+                "nps": 687000, "pv": [move, replay.parse_san("Qe7")]}
+        self.assertEqual(fics.console_search(board, move, info, 4.6, 300),
+                         "4. Bc4 d23 +4.83 | 687kN/s | 4.6s (4:55) | PV: 4. ..Qe7")
+
+    def test_compact_console_time_with_missing_clocks(self):
+        self.assertEqual(fics.console_time(3.2, 294), "3.2s (4:54)")
+        self.assertEqual(fics.console_time(None, 294), "(4:54)")
+        self.assertEqual(fics.console_time(None, None), "")
+        self.assertEqual(fics.console_time(3.2, -1), "3.2s (0:00)")
 
     def test_compact_search_shows_only_hit_ponder_time(self):
         board = chess.Board()
         move = chess.Move.from_uci("e2e4")
         info = {"_ponder_hit": True, "_ponder_seconds": 5.5}
-        self.assertIn(" | 2.3s (+5.5s) | 4:57 left", fics.console_search(board, move, info, 2.3, 300))
+        self.assertIn(" | 2.3s (+5.5s) (4:57)", fics.console_search(board, move, info, 2.3, 300))
         info["_ponder_hit"] = False
         self.assertNotIn("(+", fics.console_search(board, move, info, 2.3, 300))
         self.assertEqual(fics.play_policy().pv_plies, 2)
@@ -359,7 +381,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         move = chess.Move.from_uci("d2d4")
         expected = "learn +35 =5 -0"
         self.assertEqual(fics.console_learning(board, move, opening), expected)
-        self.assertIn(f" | {expected} | 0.3s | ", fics.console_search(board, move, {}, 0.3, 180, opening=opening))
+        self.assertIn(f" | {expected} | 0.3s (", fics.console_search(board, move, {}, 0.3, 180, opening=opening))
         opening.results[0][(key, "c2c4")] = [15, 0, 5]
         self.assertEqual(fics.console_learning(board, chess.Move.from_uci("f2f4"), opening),
                          "learn +1 =0 -0")
@@ -595,7 +617,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle(start)
         await self.settle(player)
         self.assertEqual(player.connection.sent[-1], "d2d4")
-        self.assertTrue(any(line.startswith("1. d4 | learn (pick 100%) | learn +6 =0 -0 | ") and line.endswith(" left")
+        self.assertTrue(any(line.startswith("1. d4 | learn (pick 100%) | learn +6 =0 -0 | ") and line.endswith(")")
                             for line in self.lines))
         self.assertEqual(player.opponent_group(), "humans")
         after_d4 = after_e4.replace("----P--- -------- PPPP-PPP", "---P---- -------- PPP-PPPP").replace(
