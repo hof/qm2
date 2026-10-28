@@ -1732,20 +1732,14 @@ All Maxima move lines, including book and tablebase moves, use bright green in a
 terminal; the opponent's moves use muted gray. Runner status messages prefixed with `--` use
 cyan; raw server output keeps the default color.
 Redirected output stays plain, and `NO_COLOR` disables color.
-Available own move history appears on the same line, for example
-`Learn: d4 (94%, +35 =5 -0) e4 (30x, 80%)`.
-Up to two moves from the current position appear: the played move first when
-it has history, then the most played alternative (ties by UCI move).
-If the played move has no history, the two most played moves appear instead.
-The played move shows full results; alternatives show their game count with `x`.
-When the played move has group or opponent history, both clients append fields
-such as `| bots +5 =77 -5 | Kapablanca +0 =3 -0`. The group is the current
-opponent's category (`humans`, `masters`, or `bots`); opponent history is specific
-to the current server. Each field is omitted when it has no completed results.
-All records show Maxima's wins, draws, and losses, regardless of its colour.
-Percentages are historical scores (wins plus half the draws, divided by games),
-not selection probabilities or estimates of move strength. Book and searched
-moves both show this field; absent results add no field.
+Available history for the played move appears on the same line, for example
+`learn +13 =1 -1 | bots +0 =1 -1 | Kapablanca_balls +0 =1 -0`.
+The `learn` field shows the global record for that move from this position.
+The group is the current opponent's category (`humans`, `masters`, or `bots`);
+opponent history is specific to the current server. Each field is omitted when
+it has no completed results. All records show Maxima's wins, draws, and losses,
+regardless of its colour. Book and searched moves both show these fields;
+alternative moves and historical score percentages are omitted.
 Base, fire, draw and surprise books appear as `BaseBook`, `FireBook`,
 `DrawBook` and `SurpriseBook`. `whisper` (or `--whisper`) explains every move to observers (never to the
 opponent, unlike kibitz) in plain words:
@@ -1762,7 +1756,7 @@ Both servers show the move's overall `pick chance`, including all active book
 and learned layers. This is a selection probability, not a win rate. Observer
 whispers and `!book` also name supporting layers contributing at least 5% of the
 move's weight, without a second set of percentages.
-`Learn:` in console output (or `learn` in observer explanations) gives
+`learn` in console output (or `learn` in observer explanations) gives
 actual unweighted wins, draws and losses only in games where Maxima played this
 move from this position, from Maxima's side. Opponents playing the same move
 do not count in these displayed results. Observer group and opponent fields use

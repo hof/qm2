@@ -490,24 +490,15 @@ def numbered_move(board, move):
 
 
 def console_learning(board, move, opening):
-    """Maxima's move results: global alternatives, then played-move group/opponent records."""
+    """Available played-move results, always from Maxima's point of view."""
     if opening is None:
         return ""
-    key = f"{chess.polyglot.zobrist_hash(board):016x}"
-    results = [(chess.Move.from_uci(uci), counts) for (position, uci), counts in opening.results[0].items()
-               if position == key and sum(counts) > 0 and chess.Move.from_uci(uci) in board.legal_moves]
-    results.sort(key=lambda item: (item[0] != move, -sum(item[1]), item[0].uci()))
-    entries = []
-    for candidate, (wins, draws, losses) in results[:2]:
-        games = wins + draws + losses
-        score = (wins + draws / 2) / games
-        detail = f"{score:.0%}, +{wins} ={draws} -{losses}" if candidate == move else f"{games}x, {score:.0%}"
-        entries.append(f"{board.san(candidate)} ({detail})")
-    fields = ["Learn: " + " ".join(entries)] if entries else []
-    for layer, name in ((1, "group"), (2, "opponent")):
-        wins, draws, losses = opening.results[layer].get((key, move.uci()), (0, 0, 0))
+    pair = (f"{chess.polyglot.zobrist_hash(board):016x}", move.uci())
+    fields = []
+    for layer, name in ((0, "global"), (1, "group"), (2, "opponent")):
+        wins, draws, losses = opening.results[layer].get(pair, (0, 0, 0))
         if wins + draws + losses:
-            label = opening.names[name]
+            label = "learn" if name == "global" else opening.names[name]
             if name == "group" and label == "engines":
                 label = "bots"
             fields.append(f"{label} +{wins} ={draws} -{losses}")
