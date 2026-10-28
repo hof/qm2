@@ -485,7 +485,7 @@ def clock_text(seconds):
 
 
 def numbered_move(board, move):
-    return f"{board.fullmove_number}{'.' if board.turn else '...'}{board.san(move)}"
+    return f"{board.fullmove_number}{'. ' if board.turn else '...'}{board.san(move)}"
 
 
 def console_search(board, move, info, seconds, clock, pv_plies=4):
@@ -509,7 +509,7 @@ def console_search(board, move, info, seconds, clock, pv_plies=4):
         replay.push(move)
         pv = variation(replay, moves[1:], limit=pv_plies)
         if pv:
-            fields.append("PV: " + re.sub(r"(\d+\.) ", r"\1", pv))
+            fields.append("PV: " + pv)
     return " | ".join(fields)
 
 
