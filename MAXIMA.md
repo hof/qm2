@@ -1785,8 +1785,9 @@ The PV excludes the played move and defaults to four plies; `--pv-plies N` or
 `"pv_plies": N` in either server config changes this (0 hides PV). Opponent
 lines use `10. Qa3 | John | 2.1s | 4:54 left`; unavailable timing is omitted. Both servers use compact console book lines, for example
 `1...e5 | FireBook (pick 43%) | 0.1s | 4:59 left`, omitting support.
-Maxima's book and search lines use muted gray in a terminal; opponent lines keep
-the default color. Redirected output stays plain, and `NO_COLOR` disables color.
+Both players' move lines use muted gray in a terminal. Runner status messages
+prefixed with `--` use cyan; raw server output keeps the default color.
+Redirected output stays plain, and `NO_COLOR` disables color.
 Available own move history appears on the same line, for example
 `Learn: d4 (94%, +35 =5 -0) e4 (30x, 80%)`.
 Up to two moves from the current position appear: the played move first when

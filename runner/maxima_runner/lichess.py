@@ -675,7 +675,7 @@ class lichess_game:
             left = f" | {clock_text(remaining / 1000)} left" if remaining is not None else ""
             spent = f" | {elapsed:.1f}s" if remaining is not None and previous is not None else ""
             name = self.player(not self.color).get("name") or "them"
-            self.bot.on_line(f"{numbered_move(before, move)} | {name}{spent}{left}")
+            self.bot.on_line(styled(f"{numbered_move(before, move)} | {name}{spent}{left}", "90"))
         search = self.record.searches.get(before.ply())
         self.emit("move", ply=self.board.ply(), san=before.san(move), uci=move.uci(), fen=self.board.fen(),
                   by="us" if before.turn == self.color else "them", clock_ms=clock_ms,
@@ -1022,7 +1022,7 @@ def run(options, parser):
     pgn_dir = None if options.no_pgn else Path(configured["pgn_dir"] or data_root() / "experience" / "games")
 
     def show(line):
-        print(line, flush=True)
+        print(styled(line, "36") if line.startswith("--") else line, flush=True)
 
     # Load before installing event-loop signal handlers so cold rebuilds remain interruptible.
     learner = None

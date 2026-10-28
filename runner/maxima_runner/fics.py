@@ -1081,7 +1081,7 @@ class engine_player:
                     move = before.pop()
                     self.loss.on_reply(before, move, position.elapsed)
                     name = position.black if position.turn == chess.WHITE else position.white
-                    self.on_line(f"{numbered_move(before, move)} | {name} | {position.elapsed:.1f}s | {clock_text(mover_ms / 1000)} left")
+                    self.on_line(styled(f"{numbered_move(before, move)} | {name} | {position.elapsed:.1f}s | {clock_text(mover_ms / 1000)} left", "90"))
             elif change:
                 self.loss.reset()
                 self.abort_position = None
@@ -1510,7 +1510,8 @@ def run(options, parser):
             stream.flush()
 
     def show(line):
-        print(redact(line), flush=True)
+        line = redact(line)
+        print(styled(line, "36") if line.startswith("--") else line, flush=True)
 
     if options.config is not None:
         show(f"-- configuration: {options.config}")
