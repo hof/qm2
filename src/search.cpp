@@ -600,7 +600,6 @@ void search_t::forward() {
     stack->current_move.clear();
     stack++;
     stack->in_check = false;
-    // Node fields such as improving and reduction are set by the child's own setup.
     stack->eval_result = score::INVALID;
     stack->excluded_move = 0;
     stack->move_count = 0;
@@ -630,7 +629,6 @@ void search_t::forward(move_t * move, bool gives_check) {
     (stack + 1)->repetition_start = stack->repetition_start;
     stack++;
     stack->in_check = gives_check;
-    // Node fields such as improving and reduction are set by the child's own setup.
     stack->eval_result = score::INVALID;
     stack->excluded_move = 0;
     stack->move_count = 0;
