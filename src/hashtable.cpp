@@ -40,6 +40,7 @@ void trans_table_t::set_size(int size_in_MB) {
     cluster_count = std::max<size_t>(1, size_t(size_in_MB) * 1024 * 1024 / sizeof(cluster_t));
     table = static_cast<cluster_t *>(::operator new[](sizeof(cluster_t) * cluster_count,
         std::align_val_t(TABLE_ALIGNMENT)));
+
     // Huge pages spare the page walk that random cluster accesses otherwise need.
     madvise(table, sizeof(cluster_t) * cluster_count, MADV_HUGEPAGE);
     size_in_mb = size_in_MB;
@@ -78,6 +79,7 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
     const auto age_distance = [current_age](const entry_t & entry) {
         return (AGES + current_age - trans_table_t::age(entry)) % AGES;
     };
+
     // Prefer the same position or an empty slot, else the shallowest, oldest entry.
     entry_t * slot = &entries[0];
     if (!(slot->depth == 0 || slot->tag == key_tag)) {
@@ -112,6 +114,7 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
         slot->score = int16_t(bound ? make_score(score, ply) : 0);
         slot->eval = int16_t(eval);
     } else if (move || eval != slot->eval) {
+
         // Keep the stronger score, but retain the newest move and evaluation.
         slot->move = uint16_t(move);
         slot->eval = int16_t(eval);

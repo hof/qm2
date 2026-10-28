@@ -68,6 +68,7 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
     tot_min = MAX(0, tot_min - move_overhead);
     tot_max = MAX(0, tot_max - move_overhead);
     if (moves_left == 1) {
+
         // Reach the next time control without gambling the whole clock on it.
         // Keep useful thinking time when already in severe time trouble.
         const int period_reserve = MAX(move_overhead, MIN(1000, my_time / 20));
@@ -100,6 +101,7 @@ bool time_manager_t::handle_abort(bool pondering, bool & clock_started, int & ne
         clock_started = true;
     }
     const int left = remaining();
+
     // Tighten polling near the deadline without taxing the ordinary hot path.
     next_poll = left <= 50 ? 64 : left <= 250 ? 512 : 5000;
     return !pondering && time_is_up();

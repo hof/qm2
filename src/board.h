@@ -133,6 +133,7 @@ public:
 
     board_stack_t _stack[MAX_PLY + 1];
     board_stack_t * stack;
+
     // Per ply, filled on first use: nodes that cut off before trying moves never pay for it.
     check_info_t _check_info[MAX_PLY + 1];
 

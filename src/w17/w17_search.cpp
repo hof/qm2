@@ -39,6 +39,7 @@ bool w17_search_t::w17_is_draw() {
     const bool fifty_move = brd.stack->fifty_count >= 100;
     const bool repetition = brd.stack->fifty_count >= 4 && is_repetition();
     if (fifty_move || repetition) {
+
         // Losing all non-king pieces, checkmate, and stalemate win before a draw.
         if (max_1(brd.all(brd.us())) || max_1(brd.all(brd.them()))) {
             return false;
@@ -172,6 +173,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
     if (quiet_pos) {
         if (depth <= 0) {
             if (in_mate_search == (int) us) {
+
                 //unknown if we can finish the forced mating sequence
                 return 1000 + brd.ply;
             }
@@ -210,6 +212,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
         } else {
             score = -w17_pvs(-alpha - 1, -alpha, in_mate_search, depth - 1 + extend);
             if (!stop_all && pv && score > alpha) {
+
                 //full window research
                 score = -w17_pvs(-beta, -alpha, in_mate_search, depth - 1 + extend);
             }
@@ -233,6 +236,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
                 if (depth > 0 && !move->capture && !move->promotion && !move->castle) {
                     update_killers(move);
                     update_history(move);
+
                     // History is nonnegative; saturate penalties before the shift becomes invalid.
                     const int history_shift = MIN(searched_moves, std::numeric_limits<int>::digits);
                     for (int i = 0; i < searched_moves; i++) {

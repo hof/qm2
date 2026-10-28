@@ -86,6 +86,7 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
     stop();
     _control.stop_requested.store(false);
     _control.ponder.store(_game.ponder);
+
     // Capture the position, limits, and search options before starting the worker.
     try {
         std::unique_ptr<search_t> next_search;
@@ -94,6 +95,7 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
         } else {
             next_search.reset(new search_t(_root_fen.c_str(), &_game, &_control, _position_history));
             if (_search && _search->wild == 0) {
+
                 // stop() joined the old worker before ownership transfer.
                 next_search->take_history(*_search);
             }

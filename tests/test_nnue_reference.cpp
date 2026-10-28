@@ -43,11 +43,9 @@ bool compare(search_t & search) {
     if (!search.brd.in_check()) {
         // Compare raw inference after real searches too: learned correction is
         // deliberately separate from this independent network oracle.
-        const bool correction_enabled = search.correction_history_enabled;
-        search.correction_history_enabled = false;
         success &= evaluate(&search)
-            == scale_network_score(reference_score, search.brd, search.brd.stack->fifty_count);
-        search.correction_history_enabled = correction_enabled;
+            == search.corrected_static_eval(scale_network_score(reference_score,
+                search.brd, search.brd.stack->fifty_count));
     }
     if (!success) {
         std::cerr << fen << ": reference=" << reference_score << " full=" << recomputed

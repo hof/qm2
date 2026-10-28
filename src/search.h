@@ -44,12 +44,6 @@ struct search_control_t {
 #include <array>
 #include <algorithm>
 
-struct quiet_history_policy_t {
-    bool main = true;
-    bool continuation = true;
-    bool pawn = true;
-};
-
 // Worker-owned tables. Piece keys include color; pawn buckets intentionally
 // share colliding structures, like other bounded history heuristics.
 struct quiet_history_t {
@@ -72,34 +66,29 @@ struct quiet_history_t {
         update_entry(continuation[previous.piece][previous.tsq][move.piece][move.tsq], bonus);
     }
 
-    int score(bool us, const move_t & move, const move_t * previous, U64 pawn_key,
-            const quiet_history_policy_t & policy = {}) const {
-        int value = 0;
-        if (policy.main) {
-            value += main[us][move.ssq][move.tsq];
-        }
-        if (policy.pawn) {
-            value += pawn[pawn_key % pawn_buckets][move.piece][move.tsq];
-        }
-        if (policy.continuation && previous && previous->piece) {
+    int score(bool us, const move_t & move, const move_t * previous, U64 pawn_key) const {
+        int value = main[us][move.ssq][move.tsq]
+            + pawn[pawn_key % pawn_buckets][move.piece][move.tsq];
+
+        if (previous && previous->piece) {
             value += continuation_score(move, *previous);
         }
+
         return value;
     }
 
     void update(bool us, const move_t & move, const move_t * previous, U64 pawn_key, int bonus,
-            const move_t * protected_move = nullptr, const quiet_history_policy_t & policy = {}) {
-        if (policy.main) {
-            update_entry(main[us][move.ssq][move.tsq], bonus);
-        }
+            const move_t * protected_move = nullptr) {
+        update_entry(main[us][move.ssq][move.tsq], bonus);
+
         if (protected_move && protected_move->piece == move.piece
                 && protected_move->tsq == move.tsq) {
             return;
         }
-        if (policy.pawn) {
-            update_entry(pawn[pawn_key % pawn_buckets][move.piece][move.tsq], bonus);
-        }
-        if (policy.continuation && previous && previous->piece) {
+
+        update_entry(pawn[pawn_key % pawn_buckets][move.piece][move.tsq], bonus);
+
+        if (previous && previous->piece) {
             update_continuation(move, *previous, bonus);
         }
     }
@@ -139,6 +128,7 @@ struct correction_history_t {
     static constexpr int limit = 16384;
     static constexpr int grain = 128;
     int16_t entries[2][size] = {};
+
     // Separate domains keep unlike features and continuation distances independent.
     int16_t pieces[4][2][size] = {}; //white/black nonpawn, minor, major
     int16_t continuation[2][2][size] = {};
@@ -257,6 +247,7 @@ private:
     bool _own_book;
 
 protected:
+
     // Repetition keys before the root, oldest first; never includes the root itself.
     std::vector<U64> _position_history;
     static bool has_legal_move(board_t & brd);
@@ -291,26 +282,10 @@ public:
     std::unique_ptr<quiet_history_t> quiet_history;
     std::unique_ptr<capture_history_t> capture_history;
     std::unique_ptr<correction_history_t> correction_history;
-    bool correction_history_enabled;
-    bool piece_correction_enabled;
-    bool continuation_correction_enabled;
     std::array<U64, 2> correction_context_keys() const;
     int correction_value() const;
-    bool tt_eval_enabled;
     int corrected_static_eval(int raw);
     void update_correction_history(int value, int bound, int depth);
-    bool lmp_enabled;
-    bool history_pruning_enabled;
-    bool tt_history_enabled;
-    bool capture_history_enabled;
-    bool long_continuation_enabled;
-    bool threat_ordering_enabled;
-    bool check_ordering_enabled;
-    quiet_history_policy_t quiet_history_policy;
-    bool countermoves_enabled;
-    bool killers_enabled;
-    bool upcoming_repetition_enabled;
-    bool evasions_enabled;
     uint16_t countermoves[BKING + 1][64];
     move_t ponder_move;
     std::string book_name;
@@ -318,20 +293,9 @@ public:
     bool root_wtm;
     int wild;
     int draw_contempt;
+
     // Total reduction includes the artificial pass itself.
-    bool null_verify;
-    bool null_enabled;
-    bool beta_pruning;
-    bool lmr_enabled;
-    bool lmr_history_enabled;
-    bool aspiration_enabled;
-    bool probcut_enabled;
-    bool singular_extensions_enabled;
-    bool razoring_enabled;
-    bool main_see_enabled;
-    bool iir_enabled;
-    bool q_tt_enabled;
-    bool ffp_enabled;
+    bool null_allowed;
 
     search_t(const char * fen, const game_t * g = NULL,
             const search_control_t * control = NULL,
@@ -374,6 +338,7 @@ public:
     void backward(move_t * move);
     void update_history(move_t * move);
     std::array<const move_t *, 2> long_continuation_contexts() const;
+
     // Standard search: learned history only, queried before making the move.
     int move_history_score(const move_t & move);
     void update_capture_cutoff(const move_t & move, int depth, int searched_moves);
@@ -414,6 +379,7 @@ public:
 };
 
 namespace repetition {
+
 // Decode a reversible non-pawn move delta; accept only a legal quiet move.
 bool find_move(board_t & board, U64 delta, move_t & move);
 }

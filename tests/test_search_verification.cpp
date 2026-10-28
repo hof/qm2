@@ -22,7 +22,6 @@ uint16_t compact(search_t & search, const char * text) {
 void prepare(search_t & search) {
     search.stack->in_check = search.brd.in_check();
     search.tablebase_limit = search.draw_contempt = 0;
-    search.q_tt_enabled = true;
 }
 bool restored(search_t & search, const char * fen) {
     return search.brd.to_string() == fen && !search.brd.ply

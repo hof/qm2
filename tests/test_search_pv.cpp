@@ -69,16 +69,15 @@ public:
     reporting_search_t(int depth, int count) : search_t(start_fen),
         interrupt_depth(depth), completed_children(count) {
         game.max_depth = 2;
-        aspiration_enabled = false;
     }
-    int pvs(int, int, int depth, bool = false) override {
+    int pvs(int, int, int, bool = false) override {
         nodes += 10;
         stack->pv_count = 0;
-        if (depth + 1 == interrupt_depth && children++ == completed_children) {
+        if (attempted_depth == interrupt_depth && children++ == completed_children) {
             stop_all = true;
             return 0;
         }
-        return depth == 0 ? -100 : -200;
+        return attempted_depth == 1 ? -100 : -200;
     }
 };
 

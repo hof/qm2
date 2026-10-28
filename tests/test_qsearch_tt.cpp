@@ -136,79 +136,42 @@ bool test_cancellation() {
     return success;
 }
 
-bool test_option_snapshot_and_off() {
-    const int saved = options::get_value("QsearchTT");
-    uci::silent(true);
-    uci::in("setoption name QsearchTT value true");
-    auto before = std::make_unique<search_t>("7k/8/8/3q4/8/8/8/K2R4 w - - 0 1");
-    trans_table::store(123, 0, 0, 1, 77, 0, score::EXACT);
-    uci::in("setoption name QsearchTT value false");
-    auto after = std::make_unique<search_t>(before->brd.to_string().c_str());
-    prepare(*after);
-    tt_hit_t hit;
-    bool success = check("changing QsearchTT must snapshot worker flags and clear incompatible cached results",
-        before->q_tt_enabled && !after->q_tt_enabled
-        && !trans_table::probe(123, 0, 0, hit));
-    trans_table::store(position_key(after->brd), 0, 0, 0, 12345, 0, score::EXACT);
-    success &= check("QsearchTT off must skip score probes",
-        after->qsearch(12344, 12345, -1) != 12345 && after->nodes > 0);
-    trans_table::clear();
-    after->nodes = 0;
-    after->qsearch(-score::INF, score::INF, -1);
-    success &= check("QsearchTT off must skip bound stores",
-        !trans_table::probe(position_key(after->brd), 0, 0, hit));
-    move_t hint;
-    hint.set(&after->brd, "d1d5");
-    trans_table::store(position_key(after->brd), 0, 0, 0, 0, hint.to_compact(), 0);
-    after->qsearch(-score::INF, score::INF, -1);
-    success &= check("QsearchTT off must also skip move-hint probes",
-        after->stack->move_list.returned_hints[0] == 0);
-    uci::in(std::string("setoption name QsearchTT value ") + (saved ? "true" : "false"));
-    uci::silent(false);
-    return success;
-}
-
 bool test_raw_eval_reuse() {
     bool success = true;
-    for (bool q_tt : {false, true}) {
-        for (bool tt_eval : {false, true}) {
-            for (int entry : {0, 1, 2, 3}) {
-                for (int clock : {0, 12, 50}) {
-                    trans_table::clear();
-                    const std::string fen = "7k/8/8/8/8/8/8/KQ6 w - - "
-                        + std::to_string(clock) + " 1";
-                    auto search = std::make_unique<search_t>(fen.c_str());
-                    prepare(*search);
-                    search->q_tt_enabled = q_tt;
-                    search->tt_eval_enabled = tt_eval;
-                    nnue::accumulator_t fresh;
-                    const int raw = search->evaluation_network->evaluate(search->brd, fresh);
-                    constexpr int cached_raw = 1000;
-                    const bool cached = tt_eval && entry >= 2;
-                    if (entry) {
-                        // Include eval-only entries and bounds that cannot cut
-                        // this full-window search. A hit need not have a bound.
-                        trans_table::store(position_key(search->brd), 0, 0, 0, 0, 0,
-                            entry == 3 ? score::UPPERBOUND : 0,
-                            entry >= 2 ? cached_raw : score::INVALID);
-                    }
-                    const int expected = scale_network_score(cached ? cached_raw : raw,
-                        search->brd, clock);
-                    success &= check("qsearch must reuse raw TT eval independently of bounds and QsearchTT",
-                        search->qsearch(-score::INF, score::INF, 0) == expected
-                        && search->nodes == 0);
-                    const auto & accumulator = search->evaluation_accumulators[0];
-                    success &= check("only a TTEval hit may skip inference",
-                        accumulator.ready[0] == !cached && accumulator.ready[1] == !cached);
-                    success &= check("raw eval reuse must preserve the board and search stack",
-                        search->brd.to_string() == fen && search->stack == search->root_stack
-                        && search->brd.ply == 0);
-                }
+    for (int entry : {0, 1, 2, 3}) {
+        for (int clock : {0, 12, 50}) {
+            trans_table::clear();
+            const std::string fen = "7k/8/8/8/8/8/8/KQ6 w - - "
+                + std::to_string(clock) + " 1";
+            auto search = std::make_unique<search_t>(fen.c_str());
+            prepare(*search);
+            nnue::accumulator_t fresh;
+            const int raw = search->evaluation_network->evaluate(search->brd, fresh);
+            constexpr int cached_raw = 1000;
+            const bool cached = entry >= 2;
+            if (entry) {
+                // Include eval-only entries and bounds that cannot cut
+                // this full-window search. A hit need not have a bound.
+                trans_table::store(position_key(search->brd), 0, 0, 0, 0, 0,
+                    entry == 3 ? score::UPPERBOUND : 0,
+                    entry >= 2 ? cached_raw : score::INVALID);
             }
+            const int expected = scale_network_score(cached ? cached_raw : raw,
+                search->brd, clock);
+            success &= check("qsearch must reuse raw TT eval independently of bounds",
+                search->qsearch(-score::INF, score::INF, 0) == expected
+                && search->nodes == 0);
+            const auto & accumulator = search->evaluation_accumulators[0];
+            success &= check("only a TTEval hit may skip inference",
+                accumulator.ready[0] == !cached && accumulator.ready[1] == !cached);
+            success &= check("raw eval reuse must preserve the board and search stack",
+                search->brd.to_string() == fen && search->stack == search->root_stack
+                && search->brd.ply == 0);
         }
     }
     return success;
 }
+
 
 bool test_unusable_hints() {
     struct fixture_t { const char * fen; const char * hint; bool valid; };
@@ -221,13 +184,10 @@ bool test_unusable_hints() {
         trans_table::clear();
         auto reference = std::make_unique<search_t>(fixture.fen);
         prepare(*reference);
-        reference->q_tt_enabled = reference->tt_eval_enabled = false;
-        reference->ffp_enabled = false;
         const int expected = reference->qsearch(-score::INF, score::INF, 0);
         trans_table::clear();
         auto search = std::make_unique<search_t>(fixture.fen);
         prepare(*search);
-        search->tt_eval_enabled = search->ffp_enabled = false;
         move_t hint;
         hint.set(&search->brd, fixture.hint);
         success &= check("TT hint fixtures must distinguish invalid geometry from king exposure",
@@ -265,7 +225,6 @@ int main() {
     success &= test_shared_entries();
     success &= test_cancellation();
     success &= test_mates_and_terminals();
-    success &= test_option_snapshot_and_off();
     success &= test_raw_eval_reuse();
     success &= test_unusable_hints();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;

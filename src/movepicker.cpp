@@ -1,22 +1,22 @@
 /**
- * Maxima, a chess playing program. 
- * Copyright (C) 1996-2026 Erik van het Hof and Hermen Reitsma 
- * 
+ * Maxima, a chess playing program.
+ * Copyright (C) 1996-2026 Erik van het Hof and Hermen Reitsma
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 3
  * of the License, or (at your option) any later version.
- *  
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *  
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, If not, see <http://www.gnu.org/licenses/>.
- *  
+ *
  * File: movepicker.cpp
- * Move Picker class to use by the search. The move picker handles move 
+ * Move Picker class to use by the search. The move picker handles move
  * generation in phases, typically following this order:
  * - TT move
  * - Good noisy moves
@@ -30,7 +30,7 @@
 
 #include "movepicker.h"
 #include "search.h"
-#include <algorithm> 
+#include <algorithm>
 #include <limits>
 
 /**
@@ -46,6 +46,7 @@ move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
 
         move_t * best = list->first;
         if (list->stage == stop && s->wild == 0) {
+
             // The previously selected maximum bounds this unchanged quiet list.
             // Stop at its first occurrence to preserve swap-removal tie order.
             const int maximum_score = list->best->score;
@@ -109,7 +110,7 @@ move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
 move_t * move_picker_t::first(search_t * s, int depth) {
     move::list_t * list = &s->stack->move_list;
     list->clear();
-    if (s->wild == 0 && s->evasions_enabled && s->stack->in_check) {
+    if (s->wild == 0 && s->stack->in_check) {
         list->evasion_targets = move::evasion_targets(s->brd);
     }
     list->stage = hash_move;
@@ -117,11 +118,11 @@ move_t * move_picker_t::first(search_t * s, int depth) {
 }
 
 /**
- * Gets the next available move. Generates moves "on the fly" depending on 
+ * Gets the next available move. Generates moves "on the fly" depending on
  * the current stage
  * @param s search object
  * @param depth remaining search depth
- * @return 
+ * @return
  */
 move_t * move_picker_t::next(search_t * s, int depth) {
     if (s->wild == 0) {
@@ -129,7 +130,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
     }
 
     /*
-     * 1. Pop the best move from the list. If a move is found, a just-in-time 
+     * 1. Pop the best move from the list. If a move is found, a just-in-time
      * legality check is done and the movepicker returns a valid, legal, move.
      */
     move::list_t * list = &s->stack->move_list;
@@ -267,6 +268,7 @@ move_t * move_picker_t::next(search_t * s, int depth) {
 }
 
 namespace {
+
 // Whether the hash move, a killer or the countermove already returned this move.
 bool returned_before(const move::list_t & list, const move_t & move) {
     const auto code = move.to_compact();
@@ -313,9 +315,9 @@ move_t * move_picker_t::pop_good_noisy(search_t * s, int see_threshold, bool def
         if (!s->brd.see(best, see_threshold)) {
             if (defer_bad_noisy) {
                 const int see = s->brd.see(best);
-                best->score = s->capture_history_enabled
-                    ? -2 * capture_history_t::limit + 16 * see + s->move_history_score(*best) : see;
+                best->score = -2 * capture_history_t::limit + 16 * see + s->move_history_score(*best);
             } else {
+
                 // Non-check qsearch never visits bad_noisy. Keep the slot to
                 // preserve swap-removal tie order among the remaining moves.
                 best->score = -1;
@@ -346,7 +348,8 @@ void move_picker_t::score_quiets(search_t * s, move_t * begin, move_t * end) {
     auto & board = s->brd;
     const bool us = board.stack->wtm;
     U64 lesser[WKING + 1] = {};
-    if (s->threat_ordering_enabled && begin != end) {
+    if (begin != end) {
+
         // Parent-position pseudo-attacks are ordering hints, not safety proofs.
         // Build once, only after earlier picker stages failed to cut off.
         lesser[WKNIGHT] = lesser[WBISHOP] = board.pawn_attacks(!us);
@@ -368,6 +371,7 @@ void move_picker_t::score_quiets(search_t * s, move_t * begin, move_t * end) {
     }
     for (auto * move = begin; move != end; ++move) {
         int score = s->move_history_score(*move);
+
         // Castling moves two pieces; the ordinary from/to hints do not apply.
         if (!move->castle) {
             const int type = (move->piece - 1) % 6 + 1;
@@ -375,7 +379,7 @@ void move_picker_t::score_quiets(search_t * s, move_t * begin, move_t * end) {
             const bool escaping = lesser[type] & BIT(move->ssq);
             const bool entering = lesser[type] & BIT(move->tsq);
             score += weight * (int(escaping) - int(entering));
-            if (s->check_ordering_enabled && board.gives_check(move)) {
+            if (board.gives_check(move)) {
                 const bool safe = board.see(move, 0);
                 if (safe) {
                     score += 10000;
@@ -396,6 +400,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
             case hash_move:
                 list->stage = captures;
                 result = &s->stack->tt_move;
+
                 // Qsearch reaches this check only after TT and stand-pat cutoffs.
                 // King safety remains the caller's responsibility before making it.
                 if (result->piece
@@ -409,6 +414,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 move::gen_captures(board, list);
                 move::gen_promotions(board, list);
                 if (!do_quiets) {
+
                     // Quiescence outside check considers queen promotions only.
                     auto * kept = list->first;
                     for (auto * move = list->first; move != list->last; ++move) {
@@ -420,10 +426,9 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 }
                 for (auto * move = list->first; move != list->last; ++move) {
                     const int material = board->mvvlva(move);
+
                     // Keep candidates positive until lazy SEE classifies them.
-                    move->score = s->capture_history_enabled
-                        ? 2 * capture_history_t::limit + 16 * material + s->move_history_score(*move)
-                        : material;
+                    move->score = 2 * capture_history_t::limit + 16 * material + s->move_history_score(*move);
                 }
                 list->stage = promotions;
                 break;
@@ -432,6 +437,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 if (result) {
                     return result;
                 }
+
                 // Quiescence outside check never searches losing noisy moves.
                 list->stage = do_quiets ? killer_1 : stop;
                 break;
@@ -440,7 +446,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 const int index = list->stage == killer_1 ? 0 : 1;
                 list->stage = index == 0 ? killer_2 : countermove;
                 result = &s->stack->killer[index];
-                if (s->killers_enabled && do_quiets && result->piece && !result->capture && !result->promotion
+                if (do_quiets && result->piece && !result->capture && !result->promotion
                         && !result->castle && board->valid(result)
                         && move::allows_evasion(*result, list->evasion_targets)
                         && result->to_compact() != list->returned_hints[0]
@@ -452,7 +458,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
             }
             case countermove:
                 list->stage = quiet_init;
-                if (s->countermoves_enabled && do_quiets && board->ply > 0) {
+                if (do_quiets && board->ply > 0) {
                     const auto & previous = (s->stack - 1)->current_move;
                     if (previous.piece) {
                         list->counter_candidate.set_compact(board,
@@ -477,6 +483,7 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                     move::gen_quiet_moves(board, list);
                 }
                 score_quiets(s, begin, list->last);
+
                 // From here on the bad noisy moves [first, quiets) and the
                 // quiets [quiets, last) are each walked in score order.
                 sort_by_score(list->first, begin);

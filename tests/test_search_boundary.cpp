@@ -35,10 +35,7 @@ void prepare(search_t & search, int configuration) {
     search.stack->in_check = search.brd.in_check();
     // 0: production defaults; 1: unpruned; 2..5: one heuristic enabled.
     if (configuration) {
-        search.beta_pruning = configuration == 2;
-        search.null_enabled = configuration == 3;
-        search.ffp_enabled = configuration == 4;
-        search.lmr_enabled = configuration == 5;
+        search.null_allowed = configuration == 3;
     }
 }
 

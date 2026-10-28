@@ -25,10 +25,7 @@ void prepare_search(search_t & search) {
     search.draw_contempt = 0;
     // Direct interior-node calls need the check flag normally supplied by forward().
     search.stack->in_check = search.brd.in_check();
-    search.null_enabled = false;
-    search.beta_pruning = false;
-    search.lmr_enabled = false;
-    search.ffp_enabled = false;
+    search.null_allowed = false;
 }
 
 bool restored_position(search_t & search, const char * fen) {
@@ -108,10 +105,7 @@ bool test_pruning_terminals() {
                         auto storage = std::make_unique<search_t>(fen);
                         search_t & search = *storage;
                         prepare_search(search);
-                        search.beta_pruning = configuration & 1;
-                        search.null_enabled = configuration & 2;
-                        search.lmr_enabled = true;
-                        search.ffp_enabled = true;
+                        search.null_allowed = configuration & 2;
                         move_t move;
                         if (transition) {
                             move.set(&search.brd, color == 0 ? "c4c3" : "c5c6");
@@ -123,7 +117,7 @@ bool test_pruning_terminals() {
                         const int beta = alpha == -score::INF ? score::INF : alpha + 1;
                         const int value = search.pvs(alpha, beta, depth);
                         // Reverse futility and null cutoffs do not prove stalemate.
-                        if (configuration == 0) {
+                        if (alpha == -score::INF) {
                             success &= check_score("trapped-bishop stalemate", "pruning PVS", value, 0);
                         }
                         success &= !search.stop_all;
@@ -423,9 +417,7 @@ bool test_quiet_order() {
             for (int hints = 0; hints < 2; ++hints) {
                 auto storage = std::make_unique<search_t>(fen);
                 auto & search = *storage;
-                // Keep this learned-only tie/order regression as a disabled control.
-                search.threat_ordering_enabled = false;
-                search.check_ordering_enabled = false;
+                // Reproduce production quiet scores independently of picker ordering.
                 search.stack->in_check = search.brd.in_check();
                 for (int from = 0; from < 64; ++from) {
                     for (int square = 0; square < 64; ++square) {
@@ -451,7 +443,34 @@ bool test_quiet_order() {
                     }
                 }
                 std::vector<move_t> pending(quiets.first, quiets.last);
-                for (auto & move : pending) move.score = search.move_history_score(move);
+                U64 lesser[WKING + 1] = {};
+                const bool us = search.brd.us();
+                lesser[WKNIGHT] = lesser[WBISHOP] = search.brd.pawn_attacks(!us);
+                lesser[WROOK] = lesser[WKNIGHT];
+                U64 pieces = search.brd.bb[KNIGHT[!us]];
+                while (pieces) {
+                    lesser[WROOK] |= KNIGHT_MOVES[::pop(pieces)];
+                }
+                pieces = search.brd.bb[BISHOP[!us]];
+                while (pieces) {
+                    lesser[WROOK] |= magic::bishop_moves(::pop(pieces), search.brd.all());
+                }
+                lesser[WQUEEN] = lesser[WROOK];
+                U64 rooks = search.brd.bb[ROOK[!us]];
+                while (rooks) {
+                    lesser[WQUEEN] |= magic::rook_moves(::pop(rooks), search.brd.all());
+                }
+                const auto quiet_score = [&](const move_t & move) {
+                    const int type = (move.piece - 1) % 6 + 1;
+                    const int weight = type == WQUEEN ? 12000 : type == WROOK ? 8000
+                        : type == WKNIGHT || type == WBISHOP ? 4000 : 0;
+                    return search.move_history_score(move)
+                        + weight * (int(bool(lesser[type] & BIT(move.ssq))) - int(bool(lesser[type] & BIT(move.tsq))))
+                        + (search.brd.gives_check(&move) && search.brd.see(&move, 0) ? 10000 : 0);
+                };
+                for (auto & move : pending) {
+                    move.score = quiet_score(move);
+                }
                 std::vector<int> expected;
                 // Independent original selection: first maximum, then swap-remove.
                 while (!pending.empty()) {
@@ -485,7 +504,7 @@ bool test_quiet_order() {
                     for (int code : actual) {
                         move_t move;
                         move.set(code);
-                        const int value = search.move_history_score(move);
+                        const int value = quiet_score(move);
                         ordered &= value <= previous_score;
                         previous_score = value;
                     }

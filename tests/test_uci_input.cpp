@@ -35,11 +35,7 @@ bool policy_cache_controls() {
         tt_hit_t hit;
         return !trans_table::probe(main_key, 0, 0, hit) && !trans_table::probe(q_key, 0, 0, hit);
     };
-    for (const char * name : {"NullMove", "BetaPruning", "LMR", "FutilityPruning",
-            "NullVerify", "Aspiration", "IIR", "MainSEE", "Razoring", "SingularExtensions", "ProbCut", "TTHistory", "TTEval", "LMP", "HistoryPruning", "QsearchTT", "MainHistory",
-            "ContinuationHistory", "PawnHistory", "Countermoves", "Killers", "UpcomingRepetition", "CheckEvasions", "CaptureHistory", "LongContinuationHistory", "ThreatOrdering", "CheckOrdering", "CorrectionHistory", "PieceCorrection", "ContinuationCorrection", "LMRHistory",
-            "DrawContempt", "SyzygyProbeLimit", "SyzygyProbeDepth"
-            }) {
+    for (const char * name : {"DrawContempt", "SyzygyProbeLimit", "SyzygyProbeDepth"}) {
         const int saved = options::get_value(name);
         const std::string command = std::string("setoption name ") + name + " value ";
         seed();

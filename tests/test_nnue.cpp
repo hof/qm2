@@ -199,7 +199,7 @@ int main() {
         cached->init(cached_fen, nullptr, nullptr);
         // Isolate worker-local invalidation: shared TT evaluation can otherwise
         // legitimately leave this freshly initialized accumulator lazy.
-        cached->tt_eval_enabled = false;
+        trans_table::clear();
         success &= check(evaluate(cached.get()) == scale_network_score(raw, cached->brd, 8)
             && cached->evaluation_accumulators[0].ready[0]
             && cached->evaluation_accumulators[0].ready[1],
@@ -229,10 +229,6 @@ int main() {
     success &= check(evaluate(&extreme) == std::min(extreme_score, score::TABLEBASE - MAX_PLY - 1)
         && extreme.neural_static_score() == score::TABLEBASE - 1,
         "Corrected evaluation must stay below the decisive band without changing raw NNUE");
-    extreme.correction_history_enabled = false;
-    success &= check(evaluate(&extreme) == extreme_score,
-        "Disabled correction must preserve the original NNUE limit");
-    extreme.correction_history_enabled = true;
     trans_table::clear(); // as on every model change; the TT holds the other model's evaluations
     neural.stack->eval_result = score::INVALID;
     success &= check(evaluate(&neural) == start_score, "Search must own immutable model across reloads");

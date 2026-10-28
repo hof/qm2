@@ -56,10 +56,9 @@ bool compare(search_t & search, int depth, int & positions, int & checked, int &
     return true;
 }
 
-bool picker(const char * fen, bool enabled) {
+bool picker(const char * fen) {
     auto worker = std::make_unique<search_t>(fen);
     auto & search = *worker;
-    search.evasions_enabled = enabled;
     search.stack->in_check = search.brd.in_check();
     int count = 0;
     const auto expected = generated(search.brd, false, count);
@@ -81,7 +80,7 @@ bool picker(const char * fen, bool enabled) {
             }
             actual.clear();
             for (auto * move = move::first(&search, -1); move; move = move::next(&search, -1)) {
-                if (enabled && !move::allows_evasion(*move, move::evasion_targets(search.brd))) {
+                if (!move::allows_evasion(*move, move::evasion_targets(search.brd))) {
                     return false;
                 }
                 if (search.brd.legal(move) && !actual.insert(move->to_compact()).second) {
@@ -123,15 +122,11 @@ int main() {
         if (!compare(*search, 2, positions, checked, removed)) {
             return EXIT_FAILURE;
         }
-        if (search->brd.in_check() && (!picker(fen, true) || !picker(fen, false))) {
+        if (search->brd.in_check() && !picker(fen)) {
             return EXIT_FAILURE;
         }
     }
-    options::get_option("CheckEvasions")->value = 0;
-    auto disabled = std::make_unique<search_t>(fixtures.front());
-    options::get_option("CheckEvasions")->value = 1;
-    auto enabled = std::make_unique<search_t>(fixtures.front());
-    if (disabled->evasions_enabled || !enabled->evasions_enabled || positions < 1000 || !checked || !removed) {
+    if (positions < 1000 || !checked || !removed) {
         return EXIT_FAILURE;
     }
     std::cout << positions << " positions, " << checked << " checks, " << removed

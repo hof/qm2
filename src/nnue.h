@@ -29,10 +29,12 @@ struct alignas(64) accumulator_t {
 class network_t {
 public:
     static std::shared_ptr<const network_t> load(const std::string & path, std::string & error);
+
     // Raw Stockfish 13 internal units. Convert before use by Maxima's search.
     int evaluate(const board_t & board, accumulator_t & accumulator,
         const accumulator_t * previous = nullptr
         ) const;
+
     // Prepared ancestors are ordered oldest first and exclude the current state.
     // Unready intermediate states supply changes only; their values are never read.
     int evaluate(const board_t & board, accumulator_t & accumulator,
@@ -62,6 +64,7 @@ int to_centipawns(int raw_score);
 // Configuration changes occur after stopping/joining the engine worker.
 // Snapshots also retain their weights across later reloads or unloads.
 bool set_path(const std::string & path, std::string & error);
+
 // Standard chess requires a network. Discover eval.nnue beside the book/engine.
 bool load_default(std::string & error);
 std::shared_ptr<const network_t> snapshot();
@@ -99,6 +102,7 @@ std::array<uint8_t, 512> clip_activations(
                 auto high = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(input.data() + i + 16));
                 low = _mm256_min_epi16(_mm256_max_epi16(low, zero), limit);
                 high = _mm256_min_epi16(_mm256_max_epi16(high, zero), limit);
+
                 // Packing is local to 128-bit halves; restore the original lane order.
                 const auto packed = _mm256_permute4x64_epi64(_mm256_packus_epi16(low, high), 0xd8);
                 _mm256_storeu_si256(reinterpret_cast<__m256i *>(destination + i), packed);
@@ -158,6 +162,7 @@ std::array<uint8_t, 32> affine(const std::array<uint8_t, input_size> & input,
         const std::array<int8_t, input_size * 32> & weights,
         const std::array<int32_t, 32> & biases, [[maybe_unused]] bool pair_sums_safe = false) {
     static_assert(input_size % 32 == 0 && input_size <= 512);
+
     // Inputs are [0,127], weights [-128,127], at most 512 products:
     // the dot product fits int32 even for extreme external weights.
     std::array<int32_t, 32> dots{};
@@ -184,6 +189,7 @@ std::array<uint8_t, 32> affine(const std::array<uint8_t, input_size> & input,
                             reinterpret_cast<const __m256i *>(packed + offset + block * 128));
                         return _mm256_maddubs_epi16(values, w);
                     };
+
                     // Loading proved the sum of all positive or all negative
                     // terms fits int16, so every intermediate also fits.
                     const auto low = _mm256_add_epi16(pair(in0, 0), pair(in1, 1));
@@ -206,6 +212,7 @@ std::array<uint8_t, 32> affine(const std::array<uint8_t, input_size> & input,
                 const auto * packed = weights.data() + column * 32;
                 auto products = [&](size_t offset) {
                     const auto w = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(packed + offset));
+
                     // A pair is in [-32512,32258], so maddubs cannot saturate.
                     // Widen each pair before adding more products: unrestricted
                     // networks can overflow int16 when several pairs are summed.
@@ -233,6 +240,7 @@ std::array<uint8_t, 32> affine(const std::array<uint8_t, input_size> & input,
     std::array<uint8_t, 32> output;
     constexpr int dot_bound = int(input_size) * 128 * 127;
     for (size_t row = 0; row < 32; ++row) {
+
         // Beyond these bias bounds every possible dot already clips to 0 or 127.
         // Clamping first preserves that result and bounds the int32 addition.
         const int bias = std::clamp(biases[row], -dot_bound, dot_bound + 127 * 64);

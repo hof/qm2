@@ -37,9 +37,7 @@ public:
     std::set<std::string> narrow;
 
     explicit tree_search_t(const char * fen) : search_t(fen) {
-        beta_pruning = null_enabled = ffp_enabled = lmr_enabled = false;
-        // This artificial child contract isolates bounds/history from pruning.
-        lmp_enabled = history_pruning_enabled = main_see_enabled = razoring_enabled = false;
+        // Supply certified child minimax values before selective interior search.
         tablebase_limit = draw_contempt = 0;
         stack->in_check = brd.in_check();
     }
@@ -55,16 +53,16 @@ public:
         } else if (beta - alpha == 1) {
             narrow.insert(fen);
         }
-        if (brd.ply == 2) {
-            // Explicit two-ply contract replaces qsearch. This isolates PVS
-            // bounds; it does not certify chess evaluation.
+        if (brd.ply == 1) {
+            // The independent two-ply solver supplies each child value.
+            // Root PVS still orders, narrows, re-searches and stores bounds.
             stack->pv_count = 0;
             stack->best_move.clear();
             if (abort(false)) {
                 return alpha;
             }
             auto found = oracle.find(fen);
-            valid &= check(found != oracle.end() && found->second->ply == 2,
+            valid &= check(found != oracle.end() && found->second->ply == 1,
                 "uncertified leaf", fen.c_str());
             return found == oracle.end() ? 0 : found->second->value;
         }

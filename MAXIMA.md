@@ -110,18 +110,12 @@ worker-owned histories. Every selective rule below is a heuristic: none is a
 proven bound. Royal losers (`Wild=losers`) has its own search in `src/w17/` and
 shares only the root driver; the rules in this chapter apply to standard chess.
 
-Every search-policy option is a UCI checkbox, default true, snapshotted by the
-worker. Changing one stops and joins the worker and clears the TT;
-unchanged or rejected values keep the cache. The switches are `NullMove`,
-`NullVerify`, `BetaPruning`, `FutilityPruning`, `Razoring`, `LMR`, `LMRHistory`,
-`LMP`, `HistoryPruning`, `MainSEE`, `IIR`, `ProbCut`, `SingularExtensions`,
-`Aspiration`, `UpcomingRepetition`, `CheckEvasions`, `QsearchTT`, `TTEval`,
-`TTHistory`, the history tables (`MainHistory`, `ContinuationHistory`,
-`LongContinuationHistory`, `PawnHistory`, `CaptureHistory`, `Countermoves`,
-`Killers`), ordering context (`ThreatOrdering`, `CheckOrdering`) and correction
-history (`CorrectionHistory`, `PieceCorrection`, `ContinuationCorrection`).
-`DrawContempt` (default -10 cp), the variant and tablebase settings also
-invalidate cached scores.
+Search pruning, reductions, extensions, histories, ordering, correction and TT
+evaluation caching are fixed parts of the standard search. They have no UCI
+enable/disable switches. Operational controls include hash size, time overhead,
+pondering, opening book, evaluation file, variant, tablebases and `DrawContempt`
+(default -10 cp). Changes affecting score compatibility stop and join the worker
+and clear the TT; unchanged or rejected values keep the cache.
 
 ### 4.1 Nodes and repetition
 
@@ -245,7 +239,7 @@ The applied reduction is clamped to `[0, depth − 2]`, so LMR never extends.
 
 A reduced move that beats alpha is re-searched at full depth on the null window,
 one ply deeper when it beat the best score by `32 + 8 * (reduction + 1)` and one
-shallower when it did not beat it by `new_depth`; `LMRHistory` then rewards or
+shallower when it did not beat it by `new_depth`; continuation-history learning then rewards or
 penalizes the quiet move's continuation history. Moves after the first use a
 null window; PV nodes re-search in the full window when the score beats alpha.
 
@@ -281,14 +275,13 @@ playable hint.
 ### 4.6 Move ordering and histories
 
 The picker stages are TT move, good noisy moves, killers, countermove, quiets,
-bad noisy moves. `CheckEvasions` restricts generation in check to captures of the
+bad noisy moves. Evasion generation in check is restricted to captures of the
 checker, blocks and king moves (king moves only in double check). Quiet scores
-combine main, continuation (one and two plies; three and five with
-`LongContinuationHistory`), pawn-structure history; captures use capture history
-plus MVV/LVA. `ThreatOrdering` adds 4000/8000/12000 for a minor/rook/queen
+combine main, continuation (one, two, three and five plies), and pawn-structure history; captures use capture history
+plus MVV/LVA. Threat ordering adds 4000/8000/12000 for a minor/rook/queen
 escaping a lower-value attack and subtracts the same for entering one;
-`CheckOrdering` adds 10000 for a quiet check with `see >= 0`. Picker bonuses
-never feed history-based decisions. `TTHistory` rewards a validated quiet TT
+Check ordering adds 10000 for a quiet check with `see >= 0`. Picker bonuses
+never feed history-based decisions. TT history rewards a validated quiet TT
 move whose score caused a cutoff and penalizes the early quiet predecessor that
 allowed it. Histories persist across moves; `ucinewgame` resets them.
 
@@ -316,12 +309,11 @@ lowest `depth - 4 * age_distance`. An existing entry of the same position is
 overwritten by an exact bound over a non-exact one, or when
 `depth + bound + age^2 / 4 + pv` reaches two thirds of its own depth plus
 bound; otherwise it keeps its score and takes the newer move and evaluation.
-`TTEval` stores the raw network score so other workers and later searches skip
+The TT stores the raw network score so other workers and later searches skip
 inference; it never authorizes a cutoff. Changes to options, the model or draw
 contempt clear the table.
 Qsearch passes its existing TT probe result, including a miss, to static
-evaluation. With `QsearchTT` disabled, evaluation still probes independently
-when `TTEval` is enabled. Raw-evaluation and result stores remain separate.
+evaluation. Raw-evaluation and result stores remain separate.
 
 ### 4.9 NNUE evaluation
 
@@ -818,15 +810,14 @@ hash, selected opening order, clocks, results, and terminations. Other engines
 may require additional book/learning/tablebase configuration; inspect the
 recorded options before accepting a baseline.
 
-Use repeatable per-engine overrides to compare search settings or evaluation
-backends with the same executable:
+Use repeatable per-engine overrides to compare advertised operational settings:
 
 ```bash
 ./maxima match:run --engine-a build/cpp26/release/src/maxima2 \
     --engine-b build/cpp26/release/src/maxima2 \
-    --option-a LMR=true --option-b LMR=false \
+    --option-a 'Move Overhead=50' --option-b 'Move Overhead=100' \
     --openings openings.json --pairs 2 --seconds 10 --increment 0.1 \
-    --pgn lmr.pgn --json lmr.json
+    --pgn overhead.pgn --json overhead.json
 ```
 
 Assignments use `NAME=VALUE`; quote assignments containing spaces. Option names
@@ -1024,8 +1015,7 @@ of that length; playable ceiling evaluations remain horizon approximations.
 
 `test_search_boundary` uses independently generated python-chess certificates
 for legal move sets, mating moves and clock-100 child results. It checks both
-colors, full and null windows, mate distance, production defaults and individual
-heuristics, cold/warm/disabled TT, parent clock-range propagation, interruption
+colors, full and null windows, mate distance, fixed production heuristics, cold/warm/disabled TT, parent clock-range propagation, interruption
 and restart, and board/hash/history restoration. The certified trees terminate
 after one reversible move; they do not establish general selective-search
 equivalence or quiescence accuracy before a legal move reaches the draw clock.
@@ -1035,12 +1025,12 @@ the runner environment, and review regenerated data before committing it.
 
 `test_search_tree` checks PVS against independently generated two-ply legal
 and minimax certificates, including arbitrary stable nonterminal leaf scores.
-Its test subclass supplies the explicit leaf contract through the virtual PVS
-boundary, stopping extensions at two plies. Null, beta, futility and LMR pruning
-are disabled: this isolates window/bound handling rather than asserting accuracy
-of the classical evaluator, quiescence or selective search. It compares every
+Its test subclass supplies independently solved child minimax values before
+selective interior search. Root PVS orders moves, narrows windows, re-searches
+and stores bounds under the fixed production configuration. This isolates root
+window/bound handling from evaluation and interior pruning. It compares every
 certified legal move set, crosses cold/warm/disabled TT with full and bounded
-windows, and checks state restoration and interrupted interior re-search restarts.
+windows, and checks state restoration and interrupted re-search restarts.
 Verify certificates with `python tests/data/search/generate_tree.py --check` in
 the runner environment; native checks need no python-chess installation.
 
@@ -1051,10 +1041,9 @@ depths 0/1 on independently certified capture, recapture, promotion, en passant,
 check-evasion and mate trees, including reversible clock 99. Its exhaustive
 reference uses certified legal/tactical move sets and terminal scores, Maxima's
 static stand-pat labels. It has no alpha-beta pruning, TT or move ordering; it
-does not independently validate evaluation or SEE. Full/null windows, selective options enabled and
-disabled, cold/warm/disabled TT, incompatible deep entries at quiescence entry,
+does not independently validate evaluation or SEE. Full/null windows, fixed production search, cold/warm/disabled TT, incompatible deep entries at quiescence entry,
 real repetition histories, node-budget restart and state restoration are
-checked. With selective search enabled, a one-node reverse-futility cutoff is
+checked. A one-node reverse-futility cutoff is
 checked against its documented static margin rather than the unpruned oracle.
 This is bounded search-integration coverage, not a general
 proof of selective search. Verify certificates with

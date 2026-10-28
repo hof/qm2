@@ -365,6 +365,7 @@ namespace uci {
                 }
             }
         }
+
         // An unrestricted go also analyses until stop; explicit depth 128 is bounded.
         candidate.infinite |= !candidate.ponder && !depth_limit && !candidate.max_nodes
             && !candidate.clock_limit && !candidate.movetime_limit;
@@ -621,6 +622,7 @@ namespace uci {
     void send_pv(int cp_score, int depth, int sel_depth, U64 nodes, int time, const char * pv, int flag, U64 tablebase_hits) {
         std::string msg = "info depth " + itoa(depth) + " seldepth " + itoa(MAX(depth, sel_depth));
         if (flag == 0) {
+
             // No evaluated score for book, fallback or incomplete fail-low work.
         } else if (ABS(cp_score) < score::DEEPEST_MATE) {
             msg += " score cp " + itoa(cp_score);
@@ -634,6 +636,7 @@ namespace uci {
         } else if (flag == score::LOWERBOUND) {
             msg += " lowerbound";
         }
+
         // A zero-millisecond sample uses a one-millisecond denominator. Split
         // the product to avoid overflow and saturate only unrepresentable rates.
         const U64 divisor = std::max(1, time);

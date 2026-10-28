@@ -80,6 +80,7 @@ namespace move {
         if (move.piece == WKING || move.piece == BKING) {
             return true;
         }
+
         // EP may capture a checking pawn or block a slider on another square.
         return targets && (move.en_passant || (BIT(move.tsq) & targets));
     }

@@ -149,15 +149,13 @@ class search_lifecycle_tests(unittest.TestCase):
                 engine.send("quit")
                 engine.wait_for_exit()
 
-    def test_search_option_changes_stop_active_search(self):
-        for name in ("Aspiration", "IIR", "MainSEE", "Razoring", "SingularExtensions", "ProbCut", "TTHistory", "TTEval", "LMP", "HistoryPruning", "QsearchTT", "NullMove", "NullVerify",
-                     "BetaPruning", "FutilityPruning", "LMR", "MainHistory",
-                     "ContinuationHistory", "PawnHistory", "Countermoves", "Killers",
-                     "UpcomingRepetition", "CheckEvasions", "CaptureHistory", "LongContinuationHistory", "ThreatOrdering", "CheckOrdering", "CorrectionHistory", "PieceCorrection", "ContinuationCorrection", "LMRHistory"):
+    def test_operational_option_changes_stop_active_search(self):
+        for name, value in (("DrawContempt", "0"), ("SyzygyProbeDepth", "2"),
+                            ("SyzygyProbeLimit", "0")):
             with self.subTest(option=name), running_engine() as engine:
                 engine.send("setoption name OwnBook value false")
                 engine.start_search()
-                engine.send(f"setoption name {name} value false")
+                engine.send(f"setoption name {name} value {value}")
                 engine.send("isready")
                 engine.wait_for_bestmove()
                 engine.wait_for("readyok")

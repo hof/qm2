@@ -55,6 +55,7 @@ namespace hash {
             C64(0xc1ffdb614601f352), C64(0x9f89eb06493a53c6), C64(0x9d5315743dccbe40), C64(0xc8431497b421f1f6)
         },
         {
+
             // white knight
             C64(0x1c6ac36174c5656A), C64(0xd7cd147723b006cA), C64(0x1368794ff27c6e26), C64(0x8c8ec5244e52dee8),
             C64(0x8e58d0236648f9c0), C64(0xb8c43cdbe3835958), C64(0xddffbf62b27180ee), C64(0xbc644ac1ace6f192),
@@ -74,6 +75,7 @@ namespace hash {
             C64(0x9ae7ef1369fb19b4), C64(0x44c4f7fbc77bbb4e), C64(0x34060e3bbed6057E), C64(0x33ddc1a01a0db636)
         },
         {
+
             // white bishop
             C64(0x4541f0ae0db63a6e), C64(0x9d193e082e369004), C64(0x48646b970742d6d0), C64(0x1b72afc7fd5d8b06),
             C64(0x800dba316c496e70), C64(0x8a6de9bc0196b790), C64(0xd117f53644a98734), C64(0xd91ccc0c96feeda2),
@@ -93,6 +95,7 @@ namespace hash {
             C64(0xf200ce636458292), C64(0xbfd79e530d7f19c2), C64(0x99fd056538e7c618), C64(0xe35b23d494d2f20c)
         },
         {
+
             // white rook
             C64(0x1b745b3ab0fbc9c), C64(0x6e423a3d07123b4A), C64(0xe61a1a2c7d9d6d86), C64(0x4b61a1bea6f768a2),
             C64(0x5d7cb660dcfc9f9E), C64(0x7c3686a5c631660), C64(0x11dea8c5c2ad8278), C64(0xc5b78e5ebe004a90),
@@ -112,6 +115,7 @@ namespace hash {
             C64(0xcb31fc09b746465E), C64(0xdbc930d7b12f044c), C64(0x4612626578a996cE), C64(0xc7a46ce1e2548588)
         },
         {
+
             // white queen
             C64(0xecb80e7695c7d722), C64(0x2b5e7e2ed31bdb30), C64(0xa69c34b717e4b23c), C64(0xf2ad20e4296d2cb6),
             C64(0xef690d9a5ddbb830), C64(0x8f0dcc71f29f8340), C64(0xbc06cb3ab4de612a), C64(0xc0d57786f5b216e6),
@@ -131,6 +135,7 @@ namespace hash {
             C64(0xa8b9f4fdae543568), C64(0xe997dc93cbb6fb9e), C64(0x389004cb5e0ee890), C64(0xcc8bc4e0528af6b2)
         },
         {
+
             // white king
             C64(0xab7bd992cc738d54), C64(0xb0a673069a1b2290), C64(0x315f52449426c25C), C64(0xddec815d08324888),
             C64(0x2fd682563b5c51be), C64(0xf0106a1321105c2E), C64(0xcb8217f5d0e7d90a), C64(0xe33dcb2ce13259c2),
@@ -150,6 +155,7 @@ namespace hash {
             C64(0x2d18a0c8e63fa05E), C64(0x77e30305d1187664), C64(0x569910e9f2bb9e38), C64(0x4254daf884fdcce2)
         },
         {
+
             //black pawn
             C64(0xd32358bf84db326a), C64(0x3c13d9b880ad8be4), C64(0x2d81ed4d8adddc44), C64(0xdbe9400833c39c0a),
             C64(0x74864922399f706c), C64(0x4f65576ee650089C), C64(0xb82c11d6af3d0abA), C64(0xcbdf036dad42ca50),
@@ -169,6 +175,7 @@ namespace hash {
             C64(0xf7b1b92e20478f5a), C64(0x243b3f0851b6fbf2), C64(0x7a394a8a164722fa), C64(0xe32fa23e87239b3e)
         },
         {
+
             //black knight
             C64(0x92b54c4a129311bc), C64(0x93889f5e50dd0720), C64(0x193947e03503b810), C64(0x58b281f7ae6faa74),
             C64(0x86a9ed3184e79308), C64(0xd89945255b0cb92e), C64(0x64302c48d40ab8e2), C64(0x2b5796912bbd9720),
@@ -188,6 +195,7 @@ namespace hash {
             C64(0x8ecac16a33d2838C), C64(0x6176e0ff2ff6e6a8), C64(0x82283bc602878e62), C64(0xa352617f34fae1e8)
         },
         {
+
             //black bishop
             C64(0xcf7f0c3384658a52), C64(0xf4f4f131c17042e6), C64(0xdf75b56a8bb4eebe), C64(0xcd50279b8bed5bfA),
             C64(0xffd3cb4d429b9f6c), C64(0x9e0054b3a75128a6), C64(0x2dc9ae53a94c4bcC), C64(0xcc470867fac24d0),
@@ -207,6 +215,7 @@ namespace hash {
             C64(0x790fd69edf617d94), C64(0xfe43e148c38eac3a), C64(0x5cbe855b3f411aaa), C64(0x1521e03af1b91ef2)
         },
         {
+
             //black rook
             C64(0xe4b4d8f26c4f2aa0), C64(0x15b0fa526b3dcc9c), C64(0x2873bf1f84664f80), C64(0x4bfdd67ca1961a2c),
             C64(0x1286d383616cac8), C64(0xe8000a446863d140), C64(0x11cadd3b36e412d0), C64(0x887bea0bdb9d0b82),
@@ -226,6 +235,7 @@ namespace hash {
             C64(0xc6e91317f390af82), C64(0x80e8e803ebc92d24), C64(0x71911a9a1e38ec28), C64(0x7acbbf91385970c4)
         },
         {
+
             //black queen
             C64(0x847e80c451784fc0), C64(0xba9ba9878f2bd4dA), C64(0xd2f79614f34335eA), C64(0xbcda096337b6576E),
             C64(0x14fa1f8f307ae920), C64(0xae99925e8eb68c24), C64(0x5985e0954b90bdaa), C64(0x123fa81d00b0406e),
@@ -245,6 +255,7 @@ namespace hash {
             C64(0xcc990ffd4468eee6), C64(0x61e4e4cea2b7743e), C64(0x5d712ad197535ffc), C64(0x3bdc8dca9e8276cc)
         },
         {
+
             // black king
             C64(0xe93ade1609366698), C64(0x556e4bba53774584), C64(0x6c2e95b54a231e88), C64(0x9cda0f0784329258),
             C64(0xb036972b7fab698a), C64(0x3dae7bc7c74765E), C64(0x540006fd2cabc974), C64(0xc3b05596eb7f1020),
@@ -264,6 +275,7 @@ namespace hash {
             C64(0x32144a5414b041e8), C64(0x2c3f642ba2709c1c), C64(0x1c34227db6c27beE), C64(0xa56e0ec590d4f78c)
         },
         {
+
             // promoted piece (w23 only)
             C64(0x50D862218D60494A), C64(0x3D74047DCB588FD8), C64(0x923BBD8CD74187E2), C64(0xC0F92468CC58465E),
             C64(0x23F2FD093D8AC13A), C64(0x349635DB892D30E2), C64(0x8E587A4C33DB0FC), C64(0x8B141E854B87710E),

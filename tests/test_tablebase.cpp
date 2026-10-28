@@ -15,10 +15,7 @@ bool check(const char * message, bool success) {
 void prepare(search_t & search) {
     search.draw_contempt = 0;
     search.stack->in_check = search.brd.in_check();
-    search.null_enabled = false;
-    search.beta_pruning = false;
-    search.lmr_enabled = false;
-    search.ffp_enabled = false;
+    search.null_allowed = false;
 }
 
 bool test_probes() {

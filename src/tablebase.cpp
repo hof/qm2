@@ -49,6 +49,7 @@ bool probe_root(board_t & board, int limit, root_result_t & result) {
         return false;
     }
     TbRootMoves moves;
+
     // Always rank wins by progress rather than treating all winning moves as equal.
     if (!tb_probe_root_dtz(board.all(WHITE), board.all(BLACK),
         board.bb[WKING] | board.bb[BKING], board.bb[WQUEEN] | board.bb[BQUEEN],
@@ -63,6 +64,7 @@ bool probe_root(board_t & board, int limit, root_result_t & result) {
             best = &moves.moves[i];
         }
     }
+
     // Rounded DTZ can be ambiguous exactly at the fifty-move boundary.
     if (best->tbRank == 900 || best->tbRank == -900) {
         return false;

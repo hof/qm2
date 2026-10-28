@@ -61,7 +61,6 @@ bool test_castling() {
                 search_t search(fixture.fen);
                 search.stack->in_check = search.brd.in_check();
                 search.draw_contempt = search.tablebase_limit = 0;
-                search.ffp_enabled = false; // certify the full evasion domain
                 const int result = search.qsearch(window.first, window.second, depth);
                 const bool valid = result <= window.first ? value <= result
                     : result >= window.second ? value >= result : value == result;
@@ -155,9 +154,6 @@ bool test_production_integration() {
             search_t original(fixture.fen);
             original.stack->in_check = original.brd.in_check();
             original.tablebase_limit = original.draw_contempt = 0;
-            ok &= check(original.null_enabled && original.beta_pruning
-                && original.ffp_enabled && original.lmr_enabled,
-                "integration requires production pruning defaults");
             const int cold = original.pvs(-score::INF, score::INF, depth);
             ok &= check(!original.stop_all && legal_pv(original), "production cold search/PV invalid");
             const U64 before = original.nodes;

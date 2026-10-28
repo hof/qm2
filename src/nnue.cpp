@@ -114,6 +114,7 @@ void network_t::add_feature(std::array<int16_t, 256> & values, bool color,
 void network_t::refresh(const board_t & board, accumulator_t & accumulator, bool color) const {
     accumulator.kings[color] = board.get_sq(KING[color]);
 #ifdef __AVX2__
+
     // Build addresses once; each tile visits the same pieces in square order.
     const int16_t * features[64];
     size_t count = 0;
@@ -124,6 +125,7 @@ void network_t::refresh(const board_t & board, accumulator_t & accumulator, bool
                 + feature_index(color, accumulator.kings[color], piece, square) * 256;
         }
     }
+
     // Eight vectors leave room for addresses and avoid accumulator load/store
     // traffic for every piece. Incremental updates retain their existing path.
     for (size_t offset = 0; offset < 256; offset += 128) {
@@ -252,6 +254,7 @@ int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
 }
 
 int to_centipawns(int raw_score) {
+
     // Pinned sf_13 UCI::value(): 100 centipawns = PawnValueEg (208 units).
     // This is a unit conversion, not Stockfish's material/tempo/rule50 scaling.
     const int64_t centipawns = int64_t(raw_score) * 100 / 208;

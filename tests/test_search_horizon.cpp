@@ -45,7 +45,7 @@ std::set<std::string> words(const char * text) {
 void prepare(search_t & search, bool selective) {
     search.stack->in_check = search.brd.in_check();
     search.draw_contempt = search.tablebase_limit = 0;
-    search.null_enabled = search.beta_pruning = search.ffp_enabled = search.lmr_enabled = selective;
+    search.null_allowed = selective;
 }
 
 // Exhaustive certified topology, without alpha-beta, TT, move ordering or

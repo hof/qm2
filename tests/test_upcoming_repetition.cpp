@@ -28,8 +28,7 @@ public:
 
 void prepare(search_t & search) {
     search.draw_contempt = 0;
-    search.null_enabled = search.beta_pruning = search.ffp_enabled = false;
-    search.lmr_enabled = false;
+    search.null_allowed = false;
     search.tablebase_limit = 0;
     search.stack->in_check = search.brd.in_check();
 }
@@ -198,17 +197,11 @@ bool search_bounds() {
             success &= check("alpha at draw must skip optional detection",
                 !search->raise_repetition_alpha(alpha));
             alpha = draw - 1;
-            search->upcoming_repetition_enabled = false;
-            success &= check("off switch must skip optional detection",
-                !search->raise_repetition_alpha(alpha) && alpha == draw - 1);
-            search->upcoming_repetition_enabled = true;
             search->stack->excluded_move = 1;
             success &= check("a singular search must not use a repetition escape",
                 !search->raise_repetition_alpha(alpha));
             search->stack->excluded_move = 0;
-            // Mandatory draw adjudication stays active with the feature disabled.
             play(*search, "f6g8");
-            search->upcoming_repetition_enabled = false;
             success &= check("normal repetition must remain mandatory above draw alpha",
                 search->is_draw() && search->pvs(draw + 1, draw + 2, 2) == search->draw_score()
                 && search->qsearch(draw + 1, draw + 2, -1) == search->draw_score());
@@ -274,11 +267,6 @@ bool cache_clock_and_stop() {
     int alpha = -1000;
     success &= check("actual root must not use the early descendant mechanism",
         !search->raise_repetition_alpha(alpha));
-    options::get_option("UpcomingRepetition")->value = 0;
-    auto snapshot = std::make_unique<probe_search_t>(cycle_fen);
-    options::get_option("UpcomingRepetition")->value = 1;
-    success &= check("worker feature snapshot must survive a global option change",
-        !snapshot->upcoming_repetition_enabled);
     return success;
 }
 

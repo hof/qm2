@@ -87,40 +87,34 @@ bool pawn_hint_geometry() {
     return true;
 }
 
-bool disabled_hints() {
-    for (int mask = 0; mask < 4; ++mask) {
-        auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
-        move_t parent;
-        parent.set(&search->brd, "d2c2");
-        search->forward(&parent, search->brd.gives_check(&parent));
-        search->killers_enabled = mask & 1;
-        search->countermoves_enabled = mask & 2;
-        search->stack->killer[0].set(&search->brd, "d8e8");
-        search->stack->killer[1].set(&search->brd, "d8f8");
-        move_t counter;
-        counter.set(&search->brd, "d8g8");
-        search->countermoves[WQUEEN][c2] = counter.to_compact();
-        std::set<uint16_t> seen;
-        int hints = 0;
-        for (auto * move = move::first(search.get(), 2); move; move = move::next(search.get(), 2)) {
-            if (!seen.insert(move->to_compact()).second) {
-                return false;
-            }
-            const bool killer = search->is_killer(move);
-            const bool is_countermove = move->equals(&counter);
-            if (killer || is_countermove) {
-                ++hints;
-                const bool enabled = killer ? search->killers_enabled : search->countermoves_enabled;
-                const int stage = search->stack->move_list.stage;
-                if ((enabled && stage != killer_2 && stage != countermove && stage != quiet_init)
-                        || (!enabled && stage != bad_quiets)) {
-                    return false;
-                }
-            }
-        }
-        if (hints != 3) {
+bool hint_stages() {
+    auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
+    move_t parent;
+    parent.set(&search->brd, "d2c2");
+    search->forward(&parent, search->brd.gives_check(&parent));
+    search->stack->killer[0].set(&search->brd, "d8e8");
+    search->stack->killer[1].set(&search->brd, "d8f8");
+    move_t counter;
+    counter.set(&search->brd, "d8g8");
+    search->countermoves[WQUEEN][c2] = counter.to_compact();
+    std::set<uint16_t> seen;
+    int hints = 0;
+    for (auto * move = move::first(search.get(), 2); move; move = move::next(search.get(), 2)) {
+        if (!seen.insert(move->to_compact()).second) {
             return false;
         }
+        const bool killer = search->is_killer(move);
+        const bool is_countermove = move->equals(&counter);
+        if (killer || is_countermove) {
+            ++hints;
+            const int stage = search->stack->move_list.stage;
+            if (stage != killer_2 && stage != countermove && stage != quiet_init) {
+                return false;
+            }
+        }
+    }
+    if (hints != 3) {
+        return false;
     }
     return true;
 }
@@ -174,45 +168,41 @@ bool staging_contract() {
 }
 
 bool quiescence_noisy_contract() {
-    for (bool history : {false, true}) {
-        for (int depth : {0, -1, -2}) {
-            for (bool hint : {false, true}) {
-                auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
-                search->capture_history_enabled = history;
-                if (hint) {
-                    search->stack->tt_move.set(&search->brd, "d2d5");
-                }
-                std::vector<std::string> actual;
-                for (auto * move = move::first(search.get(), depth); move;
-                        move = move::next(search.get(), depth)) {
-                    actual.push_back(move->to_string());
-                }
-                const std::vector<std::string> expected = hint
-                    ? std::vector<std::string>{"d2d5", "d2b2"}
-                    : std::vector<std::string>{"d2b2"};
-                if (actual != expected) {
-                    return false;
-                }
+    for (int depth : {0, -1, -2}) {
+        for (bool hint : {false, true}) {
+            auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
+            if (hint) {
+                search->stack->tt_move.set(&search->brd, "d2d5");
             }
-            auto search = std::make_unique<search_t>("7k/8/8/1b6/8/8/4r3/3QK3 w - - 0 1");
-            search->capture_history_enabled = history;
-            search->stack->in_check = search->brd.in_check();
-            move_t losing_evasion;
-            losing_evasion.set(&search->brd, "d1e2");
-            if (!search->stack->in_check || !search->brd.legal(&losing_evasion)
-                    || search->brd.see(&losing_evasion, quiescence_see_threshold)) {
-                return false;
-            }
-            int found = 0;
+            std::vector<std::string> actual;
             for (auto * move = move::first(search.get(), depth); move;
                     move = move::next(search.get(), depth)) {
-                if (move->equals(&losing_evasion)) {
-                    ++found;
-                }
+                actual.push_back(move->to_string());
             }
-            if (found != 1) {
+            const std::vector<std::string> expected = hint
+                ? std::vector<std::string>{"d2d5", "d2b2"}
+                : std::vector<std::string>{"d2b2"};
+            if (actual != expected) {
                 return false;
             }
+        }
+        auto search = std::make_unique<search_t>("7k/8/8/1b6/8/8/4r3/3QK3 w - - 0 1");
+        search->stack->in_check = search->brd.in_check();
+        move_t losing_evasion;
+        losing_evasion.set(&search->brd, "d1e2");
+        if (!search->stack->in_check || !search->brd.legal(&losing_evasion)
+                || search->brd.see(&losing_evasion, quiescence_see_threshold)) {
+            return false;
+        }
+        int found = 0;
+        for (auto * move = move::first(search.get(), depth); move;
+                move = move::next(search.get(), depth)) {
+            if (move->equals(&losing_evasion)) {
+                ++found;
+            }
+        }
+        if (found != 1) {
+            return false;
         }
     }
     return true;
@@ -222,7 +212,7 @@ bool quiescence_noisy_contract() {
 
 int main() {
     magic::init();
-    if (!legality_contract() || !pawn_hint_geometry() || !staging_contract() || !disabled_hints()
+    if (!legality_contract() || !pawn_hint_geometry() || !staging_contract() || !hint_stages()
             || !quiescence_noisy_contract()) {
         std::cerr << "pseudo-legal picker / lazy legality contract failed\n";
         return EXIT_FAILURE;

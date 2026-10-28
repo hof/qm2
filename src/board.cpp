@@ -639,6 +639,7 @@ bool board_t::legal(move_t * move) {
     const bool us = stack->wtm;
     const auto & info = pin_facts();
     const bool en_passant = stack->enpassant_sq && move->tsq == stack->enpassant_sq && move->piece == PAWN[us];
+
     // Out of check, only the king, a pinned piece or en passant can expose the own king.
     if (!info.in_check && move->piece != KING[us] && !en_passant && !(info.pinned & BIT(move->ssq))) {
         move->en_passant = false;
@@ -653,6 +654,7 @@ int board_t::gives_check(const move_t * move) {
         return gives_check_full(move);
     }
     const auto & info = check_facts();
+
     // Direct checks only; discovered checks and special moves take the full test.
     if (!move->castle && !move->en_passant && !move->promotion && !(info.discoverers & BIT(move->ssq))) {
         return (info.check_squares[move->piece] & BIT(move->tsq)) != 0;
@@ -872,6 +874,7 @@ see_exchange(board_t & board, const move_t * move, int threshold) {
             return initial_gain;
         }
     }
+
     // The opponent can decline, so the initial gain is an upper bound.
     if constexpr (threshold_test) {
         if (initial_gain < threshold) {
@@ -894,6 +897,7 @@ see_exchange(board_t & board, const move_t * move, int threshold) {
     int occupant = move->promotion ? move->promotion : move->piece;
     bool side = move->piece > WKING; // Opponent of the initial mover.
     const int king_square[2] = {board.get_sq(BKING), board.get_sq(WKING)};
+
     // Root score >= threshold iff the opponent's optional gain <= limit.
     // For W = max(0, capture_gain - next_W), each exchange flips <= to >=.
     int64_t limit = int64_t(initial_gain) - threshold;
@@ -917,6 +921,7 @@ see_exchange(board_t & board, const move_t * move, int threshold) {
                 return true;
             }
         }
+
         // Original bitboards remain valid at every source still occupied.
         // The target occupant is tracked separately and must be masked out.
         const U64 attackers = board.attacks_to(target, occupied) & board.all(side) & ~target_bit;
@@ -947,6 +952,7 @@ see_exchange(board_t & board, const move_t * move, int threshold) {
         const int promotion_gain = promotes ? board::PVAL[next_occupant] - board::PVAL[piece] : 0;
         const int capture_gain = board::PVAL[occupant] + promotion_gain;
         if constexpr (threshold_test) {
+
             // A legal king capture ends the exchange; otherwise declining
             // bounds W between zero and this actual capture's gain.
             if (piece == KING[side]) {
@@ -1015,6 +1021,7 @@ bool board_t::is_draw() {
     if (knights) {
         return false;
     }
+
     //Any number of bishops on a single square color cannot produce mate.
     return !(bishops & WHITE_SQUARES) || !(bishops & BLACK_SQUARES);
 }
@@ -1042,12 +1049,14 @@ bool board_t::has_legal_enpassant() {
  * @param fen the FEN string
  */
 void board_t::init(const char* fen) {
+
     //initialize:
     clear();
     int offset = a8;
     int pos = a8;
     bool wtm = true;
     int i, end = strlen(fen);
+
     //piece placement:
     for (i = 0; i < end; i++) {
         switch (fen[i]) {
@@ -1112,6 +1121,7 @@ void board_t::init(const char* fen) {
             break;
         };
     }
+
     //site to move:
     for (bool done = false; i <= end; i++) {
         switch (fen[i]) {
@@ -1130,6 +1140,7 @@ void board_t::init(const char* fen) {
             break;
         };
     }
+
     //castling status and en-passant square:
     bool castle_dash = true;
     for (; i <= end; i++) {
@@ -1184,6 +1195,7 @@ void board_t::init(const char* fen) {
                 break;
         }
     }
+
     //half move count and move number:
 half_move:
     int half_move = 0;

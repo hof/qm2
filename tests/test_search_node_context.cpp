@@ -70,7 +70,7 @@ public:
     int entry_ply = 0;
     bool force_research = false, refute_reduction = false, cancel = false;
     explicit context_probe_t() : search_t(start) {
-        null_enabled = beta_pruning = ffp_enabled = false;
+        null_allowed = false;
         tablebase_limit = 0;
     }
     int pvs(int alpha, int beta, int depth, bool cut_node = false) override {
@@ -97,7 +97,6 @@ bool test_propagation() {
     for (bool cut_node : {false, true}) {
         for (bool reductions : {false, true}) {
             auto search = std::make_unique<context_probe_t>();
-            search->lmr_enabled = reductions;
             search->refute_reduction = reductions;
             search->search_t::pvs(0, 1, 3, cut_node);
             success &= check(search->visits.size() >= 5, "context fixture must search multiple legal moves");

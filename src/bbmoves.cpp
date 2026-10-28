@@ -33,6 +33,7 @@ namespace magic {
      */
     
 #ifdef __BMI2__
+
     // PEXT indices are dense: allocate only the occupancy subsets of each square.
     alignas(64) U64 bishop_attack_data[5248];
     alignas(64) U64 rook_attack_data[102400];
