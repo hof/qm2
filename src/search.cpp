@@ -1282,26 +1282,32 @@ bool search_t::is_repetition() const {
 int search_t::upcoming_repetition(move_t & witness) {
     witness.clear();
     const int stop_ply = std::max(brd.ply - brd.stack->fifty_count, stack->repetition_start);
+
     if (wild != 0 || brd.ply >= MAX_PLY - 1 || brd.ply - stop_ply < 3) {
         return 0;
     }
+
     const U64 key = brd.stack->repetition_key();
     for (int ply = brd.ply - 3; ply >= stop_ply; ply -= 2) {
         const U64 target = ply >= 0 ? brd._stack[ply].repetition_key()
             : _position_history[static_cast<int>(_position_history.size()) + ply];
         move_t move{};
+
         if (!repetition::find_move(brd, key ^ target, move)) {
             continue;
         }
+
         // Full resulting identity also checks lost castling rights and expired
         // en passant. Board-only make/unmake leaves the search frame untouched.
         brd.forward(&move);
         const bool matches = brd.stack->repetition_key() == target;
         brd.backward(&move);
+
         if (matches) {
             witness = move;
             return brd.ply - ply;
         }
+
     }
     return 0;
 }
