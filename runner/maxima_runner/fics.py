@@ -1214,7 +1214,7 @@ class engine_player:
             source = book_whisper(numbered, self.opening.why, self.opening, compact=True) if book else f"{numbered} {info['source']}"
             learned = console_learning(board, move, self.opening)
             source += f" | {learned}" if learned else ""
-            self.on_line(styled(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left", "90"))
+            self.on_line(styled(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left", "92"))
             if explaining and kind == "book" and self.opening.why:
                 await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
             elif explaining and kind == "tablebase":

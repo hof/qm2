@@ -754,7 +754,7 @@ class lichess_game:
             learned = console_learning(board, move, self.opening)
             source += f" | {learned}" if learned else ""
             self.last_eval = source
-            bot.on_line(styled(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left", "90"))
+            bot.on_line(styled(f"{source} | {seconds:.1f}s | {clock_text(max(0.0, clock - seconds))} left", "92"))
 
     def stats_line(self):
         """Our record against the opponent and on Lichess, from the experience."""
