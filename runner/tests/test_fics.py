@@ -107,9 +107,9 @@ class fake_server:
             writer.close()
 
 
-async def guest_login(writer, read_line, name="GuestTEST"):
+async def guest_login(writer, read_line, name="GuestTEST", requested="guest"):
     writer.write(b"\n\r   ****** Welcome ******\n\r\n\rlogin: ")
-    assert await read_line() == "guest"
+    assert await read_line() == requested
     writer.write(f'\n\rLogging you in as "{name}".\n\rPress return to enter the server as "{name}":\n'
                  .encode() + b"\r\xff\xfc\x01\n")
     assert await read_line() == ""
@@ -119,7 +119,7 @@ async def guest_login(writer, read_line, name="GuestTEST"):
 
 
 def options(port, **overrides):
-    values = dict(host="127.0.0.1", port=port, handle="guest", password=None, timeseal=True, probe_interval=300)
+    values = dict(host="127.0.0.1", port=port, handle="guest", guest_name="guest", password=None, timeseal=True, probe_interval=300)
     values.update(overrides)
     return types.SimpleNamespace(**values)
 
@@ -144,6 +144,36 @@ class login_tests(unittest.IsolatedAsyncioTestCase):
                 await connection.close()
         self.assertEqual(server.connections[0][2:2 + len(fics.login_settings)], list(fics.login_settings))
         self.assertEqual(server.connections[0][-1], "who")
+
+    async def test_custom_and_random_guest_names(self):
+        for requested, assigned in (("GuestOTHER", "GuestOTHER"), ("guest", "GuestRAND")):
+            with self.subTest(requested=requested):
+                async def script(number, writer, read_line):
+                    await guest_login(writer, read_line, assigned, requested)
+
+                async with fake_server(script) as server:
+                    connection = await fics.ics_connection.open("127.0.0.1", server.port)
+                    try:
+                        self.assertEqual(await fics.login(connection, "guest", timeout=5,
+                                                         guest_name=requested), assigned)
+                    finally:
+                        await connection.close()
+
+    async def test_registered_guest_name_fails_without_sending_password(self):
+        async def script(number, writer, read_line):
+            writer.write(b"\n\rlogin: ")
+            self.assertEqual(await read_line(), "GuestTAKEN")
+            writer.write(b"\n\rpassword: ")
+            with self.assertRaises(ConnectionError):
+                await read_line()
+
+        async with fake_server(script, timeseal=False) as server:
+            connection = await fics.ics_connection.open("127.0.0.1", server.port, False)
+            try:
+                with self.assertRaisesRegex(fics.login_error, "choose another guest_name"):
+                    await fics.login(connection, "guest", timeout=5, guest_name="GuestTAKEN")
+            finally:
+                await connection.close()
 
     async def test_registered_login_masks_password(self):
         async def script(number, writer, read_line):
@@ -193,6 +223,9 @@ class login_tests(unittest.IsolatedAsyncioTestCase):
         for handle in ("ab", "with space", "x" * 18, "Guest1"):
             with self.assertRaises(fics.login_error):
                 await fics.login(None, handle, "secret")
+        for name in (None, "ab", "Guest1", "with space", "x" * 18, "Guest\nquit"):
+            with self.assertRaisesRegex(fics.login_error, "guest_name"):
+                await fics.login(None, "guest", guest_name=name)
         with self.assertRaisesRegex(fics.login_error, "needs a password"):
             await fics.login(None, "Maxima")
 

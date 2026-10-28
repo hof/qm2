@@ -1635,9 +1635,14 @@ plain `./maxima fics`, copy `docs/fics-mixed.json` to `.fics.json`; the local fi
 is Git-ignored. It sets `handle` to `guest`; all guest seeks are forced unrated,
 including any pool entries marked rated. Guest accounts have no finger notes.
 
+`guest_name` (or `--guest-name`) sets the requested guest login name; without it, FICS assigns a random name. Use
+`"guest_name": "GuestMXMA"` for a fixed name, or `guest` for a random one.
+Names must contain 3–17 letters. If the requested name is registered or unavailable, login fails; choose another guest name.
+Registered `handle` logins ignore `guest_name`.
+
 ```json
 {"seeks": ["3 0", "3 1", "5 2"], "seeks_at_once": 2, "accept": true, "rematches": 0,
- "games": 20, "handle": "guest", "engine": null, "options": {"Hash": "256"},
+ "games": 20, "handle": "guest", "guest_name": "GuestMXMA", "engine": null, "options": {"Hash": "256"},
  "owner": ["hof", "hajewiet"], "notes": ["Unrated test games welcome"]}
 ```
 

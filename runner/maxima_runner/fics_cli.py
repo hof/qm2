@@ -29,7 +29,7 @@ def parser():
                         help="wait for the current game after SIGTERM/SIGINT, then save and close (default: 15)")
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (default: first .fics.json in current, data, or project directory; "
-                             "keys: host, port, handle, engine, options, seeks, seeks_at_once, "
+                             "keys: host, port, handle, guest_name, engine, options, seeks, seeks_at_once, "
                              "accept, rematches, games, owner, notes, pgn_dir, learning, variety, contempt_window, "
                              "layer_profiles, style_books, first_move_wait, whisper, mood, live_feed, pgn_post, online_tablebase, "
                              "reseek_minutes, resignation, shutdown_grace, losers, losers_seeks, losers_seeks_at_once); "
@@ -37,6 +37,7 @@ def parser():
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
     parser.add_argument("--handle", help="registered handle (password from FICS_PASSWORD), default guest")
+    parser.add_argument("--guest-name", help="guest login name (default: server-assigned random name)")
     parser.add_argument("--no-timeseal", dest="timeseal", action="store_false",
                         help="send plain lines; the server then charges network lag to our clock")
     parser.add_argument("--probe-interval", type=float, default=300,

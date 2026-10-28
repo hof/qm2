@@ -228,7 +228,7 @@ class ics_connection:
 
 login_prompt = re.compile(r"login: ?$")
 password_prompt = re.compile(r"password: ?$")
-guest_name = re.compile(r'Press return to enter the server as "([A-Za-z]+)":')
+guest_prompt = re.compile(r'Press return to enter the server as "([A-Za-z]+)":')
 session_start = re.compile(r"\*\*\*\* Starting FICS session as ([A-Za-z]+)")
 login_rejected = re.compile(r"\*\*\*\* Invalid password! \*\*\*\*|^Sorry, .*")
 
@@ -237,22 +237,28 @@ def valid_handle(handle):
     return handle == "guest" or re.fullmatch(r"[A-Za-z]{3,17}", handle) is not None
 
 
-async def login(connection, handle, password=None, timeout=60, on_line=None):
+async def login(connection, handle, password=None, timeout=60, on_line=None, guest_name="guest"):
     """Log in and apply session settings; returns the server's name for this session."""
     if not valid_handle(handle):
         raise login_error("FICS handles have 3 to 17 letters")
     if handle != "guest" and not password:
         raise login_error(f"{handle} needs a password")
+    if handle == "guest":
+        if not isinstance(guest_name, str) or not valid_handle(guest_name):
+            raise login_error("guest_name must have 3 to 17 letters")
+        handle = guest_name
     await connection.expect([], timeout, on_line, prompts=[login_prompt])
     await connection.send(handle)
-    match = await connection.expect([guest_name, login_rejected], timeout, on_line, prompts=[password_prompt])
+    match = await connection.expect([guest_prompt, login_rejected], timeout, on_line, prompts=[password_prompt])
     if match.re is login_rejected:
         raise login_error(match.group(0))
-    if match.re is guest_name:
+    if match.re is guest_prompt:
         if password:
             raise login_error(f"{handle} is not a registered FICS name")
         await connection.send("")
     else:
+        if not password:
+            raise login_error(f"{handle} is registered; choose another guest_name")
         await connection.send(password, secret=True)
     match = await connection.expect([session_start, login_rejected], timeout, on_line)
     if match.re is login_rejected:
@@ -290,7 +296,7 @@ rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
 default_settings = {
     "resignation": resignation.validate_settings({}),
     "shutdown_grace": 15, "pv_plies": 2,
-    "host": "freechess.org", "port": 5000, "handle": "guest", "engine": None, "options": {},
+    "host": "freechess.org", "port": 5000, "handle": "guest", "guest_name": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
     "contempt_window": 100, "layer_profiles": {}, "style_books": {}, "first_move_wait": 60,
@@ -1322,7 +1328,7 @@ async def run_client(options, commands, on_line, backoff=backoff_seconds, transc
             connection = await ics_connection.open(options.host, options.port, options.timeseal, transcript)
             if player is not None and player.stopping:
                 return 0
-            name = await login(connection, options.handle, options.password, on_line=on_line)
+            name = await login(connection, options.handle, options.password, on_line=on_line, guest_name=options.guest_name)
             if player is not None and player.stopping:
                 return 0
             on_line(f"-- logged in as {name}")
@@ -1361,7 +1367,7 @@ def load_settings(path):
         loaded = json.load(stream)
     if not isinstance(loaded, dict):
         raise ValueError(f"{path}: expected a JSON object")
-    types = {"host": str, "port": int, "handle": str, "engine": str, "options": dict, "seeks": list,
+    types = {"host": str, "port": int, "handle": str, "guest_name": str, "engine": str, "options": dict, "seeks": list,
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
              "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
              "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float), "whisper": bool,
@@ -1448,7 +1454,7 @@ def run(options, parser):
             configured["shutdown_grace"] = online_shutdown.grace_seconds(options.shutdown_grace)
     except (OSError, ValueError) as error:
         parser.error(str(error))
-    flags = {"host": options.host, "port": options.port, "handle": options.handle, "engine": options.engine,
+    flags = {"host": options.host, "port": options.port, "handle": options.handle, "guest_name": options.guest_name, "engine": options.engine,
              "pv_plies": options.pv_plies, "seeks": options.seek, "seeks_at_once": options.seeks_at_once, "rematches": options.rematches,
              "games": options.games, "pgn_dir": options.pgn_dir, "variety": options.variety,
              "live_feed": options.live_feed, "pgn_post": options.pgn_post,
@@ -1470,7 +1476,7 @@ def run(options, parser):
         configured["learning"] = False
     if options.no_online_tablebase:
         configured["online_tablebase"] = False
-    for name in ("host", "port", "handle", "engine"):
+    for name in ("host", "port", "handle", "guest_name", "engine"):
         setattr(options, name, configured[name])
     settings = dict(configured["options"])
     if configured["learning"]:
@@ -1521,6 +1527,8 @@ def run(options, parser):
     options.password = os.environ.get("FICS_PASSWORD") if options.handle != "guest" else None
     if not valid_handle(options.handle):
         parser.error("FICS handles have 3 to 17 letters, or use guest")
+    if not isinstance(options.guest_name, str) or not valid_handle(options.guest_name):
+        parser.error("guest_name must have 3 to 17 letters")
     transcript = None
     if options.debug:
         stream = open(options.debug, "a", encoding="utf-8")

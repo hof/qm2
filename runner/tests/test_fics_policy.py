@@ -200,7 +200,8 @@ class settings_tests(unittest.TestCase):
         specs = ['3 0 ' + kind for kind in ('w2', 'w3', 'w4', 'w5', 'w8', 'losers')]
         arguments = parser()
         options = arguments.parse_args(['--config', self.write({
-            'seeks': specs, 'seeks_at_once': 6})])
+            'seeks': specs, 'seeks_at_once': 6, 'guest_name': 'GuestFILE'}),
+            '--guest-name', 'GuestFLAG'])
         policies = []
         factory = fics.play_policy
 
@@ -219,6 +220,8 @@ class settings_tests(unittest.TestCase):
         self.assertCountEqual(policies[0].seek_commands(),
                               ['seek ' + spec + ' u' for spec in specs])
         self.assertTrue(policies[0].losers)
+        self.assertTrue(policies[0].guest)
+        self.assertEqual(options.guest_name, "GuestFLAG")
 
     def test_config_rejects_unsupported_or_combined_variants(self):
         from maxima_runner.fics_cli import parser
@@ -236,6 +239,8 @@ class settings_tests(unittest.TestCase):
         settings = fics.load_settings(self.write({"seeks": ["1 0"], "games": 5, "options": {"Hash": 256}}))
         self.assertEqual((settings["seeks"], settings["games"], settings["options"]), (["1 0"], 5, {"Hash": "256"}))
         self.assertEqual(settings["host"], "freechess.org")
+        self.assertEqual(settings["guest_name"], "guest")
+        self.assertEqual(fics.load_settings(self.write({"guest_name": "GuestFILE"}))["guest_name"], "GuestFILE")
         self.assertEqual(fics.load_settings(None), fics.default_settings)
         profiles = fics.load_settings(self.write({"layer_profiles": {"weaker": {"fire": 35}}}))["layer_profiles"]
         self.assertEqual(profiles["weaker"]["fire"], 35)
