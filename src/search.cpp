@@ -1478,7 +1478,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
      */
 
     const bool in_check = stack->in_check;
-    const int eval = evaluate(this);
+    const int eval = evaluate(this, normal_search ? &tt : nullptr);
     stack->static_eval = eval;
 
     // A cached bound beyond the static evaluation refines it for static cutoffs.
