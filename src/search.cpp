@@ -1253,15 +1253,10 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
     return best;
 }
 
-// Draw by lack of material, fifty quiet moves or repetition. The actual root
+// After at least four reversible plies: material, fifty quiet moves or repetition. The actual root
 // needs three occurrences; descendants score the first match against game or
 // search history as a draw.
-bool search_t::is_draw() {
-
-    // Most nodes follow a capture or pawn move: no repetition or fifty-move draw yet.
-    if (brd.stack->fifty_count < 4) {
-        return brd.is_draw();
-    }
+bool search_t::is_reversible_draw() {
     if (brd.is_draw()) {
         return true;
     }

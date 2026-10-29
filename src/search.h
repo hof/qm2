@@ -332,7 +332,16 @@ public:
     int qsearch(int alpha, int beta, int depth);
     int qstatic(int beta, int gain);
     std::string pv_to_string();
-    bool is_draw();
+
+    // Most nodes follow a capture or pawn move: no repetition or fifty-move
+    // draw is possible yet, only the inline material check.
+    bool is_draw() {
+        if (brd.stack->fifty_count < 4) {
+            return brd.is_draw();
+        }
+        return is_reversible_draw();
+    }
+    bool is_reversible_draw();
     bool is_repetition() const;
     int upcoming_repetition(move_t & witness);
     bool is_improving() const;
