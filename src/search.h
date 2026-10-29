@@ -157,7 +157,7 @@ struct correction_history_t {
 class search_t;
 
 int scale_network_score(int raw, const board_t & board, int halfmoves);
-int evaluate(search_t * search, const tt_hit_t * tt = nullptr);
+int evaluate(search_t * search, const tt_hit_t * tt = nullptr, int * deferred_raw_eval = nullptr);
 
 // Halfmove clocks 0..13 share score bounds; later clocks use buckets of eight.
 // Scores within a bucket reuse each other; clock ranges still guard draws.
@@ -259,7 +259,7 @@ public:
     game_t game;
     std::shared_ptr<const nnue::network_t> evaluation_network;
     std::vector<nnue::accumulator_t> evaluation_accumulators;
-    int neural_static_score(const tt_hit_t * tt = nullptr);
+    int neural_static_score(const tt_hit_t * tt = nullptr, int * deferred_raw_eval = nullptr);
     board_t brd;
     root_t root;
     search_stack_t * stack;

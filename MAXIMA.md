@@ -315,7 +315,10 @@ The TT stores the raw network score so other workers and later searches skip
 inference; it never authorizes a cutoff. Changes to options, the model or draw
 contempt clear the table.
 Qsearch passes its existing TT probe result, including a miss, to static
-evaluation. Raw-evaluation and result stores remain separate.
+evaluation. A newly computed raw evaluation stays local until the first searched
+child, when it is published before recursion. A node without children stores
+the raw evaluation together with its result, preserving the final entry while
+avoiding a separate raw-evaluation store.
 
 ### 4.9 NNUE evaluation
 

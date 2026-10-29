@@ -132,6 +132,9 @@ bool test_cancellation() {
             search->stop_all && search->brd.to_string() == fen && search->brd.ply == 0
             && search->stack == search->root_stack
             && !(trans_table::probe(position_key(search->brd), 0, 0, hit) && hit.bound));
+        success &= check("cancellation after entering a child must retain its parent's raw evaluation",
+            trans_table::probe(position_key(search->brd), 0, 0, hit)
+            && hit.eval != score::INVALID && !hit.bound);
     }
     return success;
 }
@@ -161,6 +164,10 @@ bool test_raw_eval_reuse() {
             success &= check("qsearch must reuse raw TT eval independently of bounds",
                 search->qsearch(-score::INF, score::INF, 0) == expected
                 && search->nodes == 0);
+            tt_hit_t stored;
+            success &= check("a no-child result must retain the raw evaluation for later searches",
+                trans_table::probe(position_key(search->brd), 0, clock, stored)
+                && stored.eval == (cached ? cached_raw : raw));
             const auto & accumulator = search->evaluation_accumulators[0];
             success &= check("only a TTEval hit may skip inference",
                 accumulator.ready[0] == !cached && accumulator.ready[1] == !cached);

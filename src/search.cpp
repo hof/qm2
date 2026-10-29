@@ -189,7 +189,7 @@ void root_move_t::add_nodes(U64 count) {
 
 // Raw network scores depend on board/side and the immutable model snapshot,
 // not repetition history or the halfmove clock. Scaling is applied separately.
-int search_t::neural_static_score(const tt_hit_t * tt) {
+int search_t::neural_static_score(const tt_hit_t * tt, int * deferred_raw_eval) {
     assert(evaluation_network);
     tt_hit_t hit;
 
@@ -205,7 +205,11 @@ int search_t::neural_static_score(const tt_hit_t * tt) {
     const int value = std::clamp(evaluation_network->evaluate(brd, accumulator,
         std::span<const nnue::accumulator_t>(evaluation_accumulators.data(), brd.ply)),
         -score::TABLEBASE + 1, score::TABLEBASE - 1);
-    trans_table::store(position_key(brd), brd.root_ply, brd.ply, 0, 0, 0, 0, value);
+    if (deferred_raw_eval) {
+        *deferred_raw_eval = value;
+    } else {
+        trans_table::store(position_key(brd), brd.root_ply, brd.ply, 0, 0, 0, 0, value);
+    }
     return value;
 }
 
@@ -2003,16 +2007,18 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         return tt_score;
     }
 
+    int deferred_raw_eval = score::INVALID;
+
     // Forced inline: GCC otherwise splits the store into a call at every exit.
     const auto finish = [&](int value, int flag) __attribute__((always_inline)) {
 
         trans_table::store(key, brd.root_ply, brd.ply, 0, value,
-            stack->best_move.to_compact(), flag);
+            stack->best_move.to_compact(), flag, deferred_raw_eval);
 
         return value;
     };
 
-    const int eval = evaluate(this, &tt);
+    const int eval = evaluate(this, &tt, &deferred_raw_eval);
 
     if (eval >= beta && !in_check) {
         return finish(eval, score::LOWERBOUND);
@@ -2074,6 +2080,12 @@ int search_t::qsearch(int alpha, int beta, int depth) {
             gives_check = brd.gives_check(move);
         }
 
+        // Publish before recursion so descendants see the same raw-eval entry.
+        // A node without children combines this value with its result store.
+        if (deferred_raw_eval != score::INVALID) {
+            trans_table::store(key, brd.root_ply, brd.ply, 0, 0, 0, 0, deferred_raw_eval);
+            deferred_raw_eval = score::INVALID;
+        }
         forward(move, gives_check);
         ++searched_moves;
         int score = -qsearch(-beta, -alpha, depth - 1);
