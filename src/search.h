@@ -121,10 +121,17 @@ struct capture_history_t {
 };
 #include <algorithm>
 
+#ifndef MAXIMA_L2_CACHE_SIZE
+#define MAXIMA_L2_CACHE_SIZE 0
+#endif
+
 // Side-to-move pawn patterns share a bounded estimate of static-eval error.
 // Collisions are intentional; this is a heuristic, never a score certificate.
 struct correction_history_t {
-    static constexpr int size = 16384;
+
+    // The fourteen tables take at most half the per-core L2; unknown keeps the full size.
+    static constexpr int size = MAXIMA_L2_CACHE_SIZE == 0 || MAXIMA_L2_CACHE_SIZE >= 1024 * 1024 ? 16384
+        : MAXIMA_L2_CACHE_SIZE >= 512 * 1024 ? 8192 : 4096;
     static constexpr int limit = 16384;
     static constexpr int grain = 128;
     int16_t entries[2][size] = {};

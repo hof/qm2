@@ -9,6 +9,18 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_options(-march=native)
 
+# Like -march=native, size cache-bound tables for the build machine's per-core L2.
+set(maxima_l2_cache_size "" CACHE STRING "Per-core L2 cache bytes; empty detects the build machine")
+set(maxima_l2 "${maxima_l2_cache_size}")
+if(NOT maxima_l2)
+    execute_process(COMMAND getconf LEVEL2_CACHE_SIZE
+        OUTPUT_VARIABLE maxima_l2 OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+endif()
+if(NOT maxima_l2 MATCHES "^[0-9]+$")
+    set(maxima_l2 0)
+endif()
+add_compile_definitions(MAXIMA_L2_CACHE_SIZE=${maxima_l2})
+
 option(maxima_lto "Enable link-time optimization for Release builds" OFF)
 set(maxima_pgo_mode "off" CACHE STRING "GCC Release profiling: off, generate, or use")
 set_property(CACHE maxima_pgo_mode PROPERTY STRINGS off generate use)

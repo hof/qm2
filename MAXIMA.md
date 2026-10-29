@@ -297,6 +297,9 @@ minor and major piece keys (`PieceCorrection`) and the previous two moves
 (`ContinuationCorrection`). Updates follow completed searches whose best move is
 quiet, outside check and excluded-move nodes, below clock 90, and only when the
 bound is informative. The corrected value is clamped below the decisive band.
+The fourteen tables take at most half the build machine's per-core L2 cache:
+16384 entries each from 1 MiB, 8192 from 512 KiB, else 4096. An unknown cache
+size keeps 16384.
 
 ### 4.8 Transposition table
 
@@ -496,7 +499,9 @@ explicit `-Dmaxima_nnue_test_network=/absolute/path/to/network.nnue`. CTest
 supplies `MAXIMA_EVAL_FILE` to isolate model discovery from its working directory.
 Release builds retain `-O3 -DNDEBUG -march=native`; Debug builds retain assertions
 and debug symbols. Fathom is compiled separately as C11; a C compiler is also required.
-Native CPU tuning means the binary targets the build machine.
+Native CPU tuning means the binary targets the build machine. CMake also reads
+its per-core L2 size (`getconf LEVEL2_CACHE_SIZE`) to size cache-bound tables;
+`-Dmaxima_l2_cache_size=<bytes>` targets another machine.
 
 BMI2 builds use PEXT to index compact rook and bishop attack tables (about
 0.82 MiB instead of 2.25 MiB). Other builds retain multiplication-based magic
