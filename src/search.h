@@ -250,7 +250,7 @@ protected:
 
     // Repetition keys before the root, oldest first; never includes the root itself.
     std::vector<U64> _position_history;
-    static bool has_legal_move(board_t & brd);
+    static bool has_legal_move(board_t & brd, bool in_check = true);
     int ceiling_score();
     bool raise_repetition_alpha(int & alpha);
 

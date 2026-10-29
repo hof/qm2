@@ -113,9 +113,17 @@ struct search_frame_scope_t {
 
 // Most playable positions have a king escape. Fall back to fresh generation
 // without disturbing the active move picker or its exclusions.
-bool search_t::has_legal_move(board_t & brd) {
+bool search_t::has_legal_move(board_t & brd, bool in_check) {
     const bool us = brd.us(), them = !us;
     const int from = brd.get_sq(KING[us]);
+    if (!in_check) {
+        // An off-ray pawn cannot uncover an attack on its king.
+        const U64 pawns = brd.bb[PAWN[us]] & ~QUEEN_MOVES[from];
+        const U64 pushes = us ? pawns << 8 : pawns >> 8;
+        if (pushes & ~brd.bb[ALLPIECES]) {
+            return true;
+        }
+    }
     U64 targets = KING_MOVES[from] & ~brd.all(us);
     const U64 occupied = brd.bb[ALLPIECES] & ~BIT(from);
     const U64 diagonal = brd.bb[BISHOP[them]] | brd.bb[QUEEN[them]];
@@ -2035,7 +2043,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
         // Match the normal fail-low path even when the picker is empty.
         // Merely having an illegal tactical candidate must not change the bound.
-        return !legal_witness && !has_legal_move(brd) ? finish(draw_score(), score::EXACT)
+        return !legal_witness && !has_legal_move(brd, in_check) ? finish(draw_score(), score::EXACT)
             : finish(eval, score::UPPERBOUND);
     }
 
@@ -2109,7 +2117,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
     } while ((move = move::next(this, depth)));
 
-    if (searched_moves == 0 && (in_check || (!legal_witness && !has_legal_move(brd)))) {
+    if (searched_moves == 0 && (in_check || (!legal_witness && !has_legal_move(brd, in_check)))) {
         return finish(in_check ? -score::MATE + brd.ply : draw_score(), score::EXACT);
     }
 

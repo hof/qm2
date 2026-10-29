@@ -538,6 +538,8 @@ int main() {
         {"white checkmated by two knights", "8/8/8/8/8/5nn1/5k2/7K w - - 0 1", true, 0, -score::MATE},
         {"black stalemated", "7k/5K2/6Q1/8/8/8/8/8 b - - 0 1", false, 0, 0},
         {"white stalemated", "8/8/8/8/8/6q1/5k2/7K w - - 0 1", false, 0, 0},
+        {"white pinned pawn stalemate", "8/8/8/8/2qb4/8/1Pk5/K7 w - - 0 1", false, 0, 0},
+        {"black pinned pawn stalemate", "k7/1pK5/8/2QB4/8/8/8/8 b - - 0 1", false, 0, 0},
         {"bare kings on edges", "7k/8/8/8/8/8/8/K7 w - - 0 1", false, 3, 0},
         {"bare kings in center", "8/8/4k3/8/8/3K4/8/8 w - - 0 1", false, 8, 0},
         {"capture is the only check evasion", "7k/6Q1/8/8/8/8/8/K7 b - - 0 1", true, 1, 0},
