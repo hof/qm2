@@ -1003,29 +1003,6 @@ bool board_t::see(const move_t * move, int threshold) {
     return see_exchange<true>(*this, move, threshold);
 }
 
-/**
- * Recognize dead positions from material alone.
- * @return true: no legal sequence can lead to mate; false: not proven dead
- */
-bool board_t::is_draw() {
-    if (bb[WPAWN] || bb[BPAWN]
-            || bb[WROOK] || bb[BROOK]
-            || bb[WQUEEN] || bb[BQUEEN]) {
-        return false;
-    }
-    const U64 knights = bb[WKNIGHT] | bb[BKNIGHT];
-    const U64 bishops = bb[WBISHOP] | bb[BBISHOP];
-    if (!gt_1(knights | bishops)) {
-        return true; //bare kings, or a single minor against a bare king
-    }
-    if (knights) {
-        return false;
-    }
-
-    //Any number of bishops on a single square color cannot produce mate.
-    return !(bishops & WHITE_SQUARES) || !(bishops & BLACK_SQUARES);
-}
-
 bool board_t::has_legal_enpassant() {
     const int target = stack->enpassant_sq;
     const int capture_square = target + (us() ? -8 : 8);

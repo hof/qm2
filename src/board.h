@@ -139,7 +139,28 @@ public:
 
     void clear();
     void do_flip();
-    bool is_draw();
+
+    /**
+     * Recognize dead positions from material alone. Inline: nearly every
+     * position still has pawns or heavy pieces and exits at the first test.
+     * @return true: no legal sequence can lead to mate; false: not proven dead
+     */
+    bool is_draw() const {
+        if (bb[WPAWN] | bb[BPAWN] | bb[WROOK] | bb[BROOK] | bb[WQUEEN] | bb[BQUEEN]) {
+            return false;
+        }
+        const U64 knights = bb[WKNIGHT] | bb[BKNIGHT];
+        const U64 bishops = bb[WBISHOP] | bb[BBISHOP];
+        if (!gt_1(knights | bishops)) {
+            return true; //bare kings, or a single minor against a bare king
+        }
+        if (knights) {
+            return false;
+        }
+
+        //Any number of bishops on a single square color cannot produce mate.
+        return !(bishops & WHITE_SQUARES) || !(bishops & BLACK_SQUARES);
+    }
     bool has_legal_enpassant();
     void init(const char* fen);
     std::string to_string();
