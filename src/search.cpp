@@ -1257,6 +1257,11 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
 // needs three occurrences; descendants score the first match against game or
 // search history as a draw.
 bool search_t::is_draw() {
+
+    // Most nodes follow a capture or pawn move: no repetition or fifty-move draw yet.
+    if (brd.stack->fifty_count < 4) {
+        return brd.is_draw();
+    }
     if (brd.is_draw()) {
         return true;
     }
@@ -1267,9 +1272,6 @@ bool search_t::is_draw() {
         if (!stack->in_check || has_legal_move(brd)) {
             return true;
         }
-        return false;
-    }
-    if (brd.stack->fifty_count < 4) {
         return false;
     }
     return is_repetition();
