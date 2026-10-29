@@ -1326,16 +1326,6 @@ int search_t::upcoming_repetition(move_t & witness) {
     return 0;
 }
 
-bool search_t::raise_repetition_alpha(int & alpha) {
-    move_t witness;
-    if (brd.ply == 0
-            || stack->excluded_move || alpha >= draw_score() || !upcoming_repetition(witness)) {
-        return false;
-    }
-    alpha = draw_score();
-    return true;
-}
-
 // Compare real same-side positions only. A missing two-ply evaluation (for
 // example, check) may fall back to four plies; an artificial pass is a barrier.
 bool search_t::is_improving() const {

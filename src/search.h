@@ -252,7 +252,17 @@ protected:
     std::vector<U64> _position_history;
     static bool has_legal_move(board_t & brd, bool in_check = true);
     int ceiling_score();
-    bool raise_repetition_alpha(int & alpha);
+
+    // Fewer than three reversible plies cannot repeat: exit before the scan.
+    bool raise_repetition_alpha(int & alpha) {
+        move_t witness;
+        if (brd.ply == 0 || brd.stack->fifty_count < 3
+                || stack->excluded_move || alpha >= draw_score() || !upcoming_repetition(witness)) {
+            return false;
+        }
+        alpha = draw_score();
+        return true;
+    }
 
 public:
     search_stack_t _stack[MAX_PLY + 1];
