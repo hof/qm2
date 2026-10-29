@@ -31,15 +31,15 @@ public:
     static std::shared_ptr<const network_t> load(const std::string & path, std::string & error);
 
     // Raw Stockfish 13 internal units. Convert before use by Maxima's search.
-    int evaluate(const board_t & board, accumulator_t & accumulator,
-        const accumulator_t * previous = nullptr
-        ) const;
+    int evaluate(const board_t & board, accumulator_t & accumulator) const {
+        return evaluate(board, accumulator, {});
+    }
 
     // Prepared ancestors are ordered oldest first and exclude the current state.
-    // Unready intermediate states supply changes only; their values are never read.
+    // Unready states between the nearest ready one and this one are computed
+    // along the way and kept, so their other children start from them.
     int evaluate(const board_t & board, accumulator_t & accumulator,
-        std::span<const accumulator_t> ancestors
-        ) const;
+        std::span<accumulator_t> ancestors) const;
     void prepare(const board_t & board, const move_t * move, accumulator_t & accumulator) const;
     U64 fingerprint() const { return _fingerprint; }
 
@@ -60,6 +60,8 @@ private:
     bool _hidden1_pair_sums_safe = false, _hidden2_pair_sums_safe = false;
 
     void refresh(const board_t & board, accumulator_t & accumulator, bool color) const;
+    void update(const board_t & board, accumulator_t & accumulator,
+        std::span<accumulator_t> ancestors, bool color) const;
     void add_feature(std::array<int16_t, 256> & values, bool color,
         int king, int piece, int square, bool subtract) const;
 };

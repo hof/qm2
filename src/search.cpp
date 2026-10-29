@@ -211,7 +211,7 @@ int search_t::neural_static_score(const tt_hit_t * tt, int * deferred_raw_eval) 
     }
     auto & accumulator = evaluation_accumulators[brd.ply];
     const int value = std::clamp(evaluation_network->evaluate(brd, accumulator,
-        std::span<const nnue::accumulator_t>(evaluation_accumulators.data(), brd.ply)),
+        std::span<nnue::accumulator_t>(evaluation_accumulators.data(), brd.ply)),
         -score::TABLEBASE + 1, score::TABLEBASE - 1);
     if (deferred_raw_eval) {
         *deferred_raw_eval = value;

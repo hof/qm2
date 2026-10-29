@@ -191,63 +191,103 @@ void network_t::prepare(const board_t & board, const move_t * move, accumulator_
     }
 }
 
-int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
-        const accumulator_t * previous
-        ) const {
-    return evaluate(board, accumulator,
-        previous ? std::span<const accumulator_t>(previous, 1) : std::span<const accumulator_t>()
-        );
+void network_t::update(const board_t & board, accumulator_t & accumulator,
+        std::span<accumulator_t> ancestors, bool color) const {
+    const int king = accumulator.kings[color];
+    auto change_cost = [](const accumulator_t & state) {
+        int result = 0;
+        for (int i = 0; i < state.change_count; ++i) {
+            result += state.changes[i].from >= 0;
+            result += state.changes[i].to >= 0;
+        }
+        return result;
+    };
+
+    // Walk back to the nearest ready state with this king while the
+    // incremental work stays below a refresh.
+    const int refresh_cost = popcnt0(board.bb[ALLPIECES]) - 2;
+    int cost = change_cost(accumulator);
+    size_t first = ancestors.size();
+    while (true) {
+        if (first == 0 || cost >= refresh_cost || ancestors[first - 1].kings[color] != king) {
+            refresh(board, accumulator, color);
+            return;
+        }
+        if (ancestors[first - 1].ready[color]) {
+            break;
+        }
+        cost += change_cost(ancestors[first - 1]);
+        --first;
+    }
+    const accumulator_t & base = ancestors[first - 1];
+    auto state_at = [&](size_t index) -> accumulator_t & {
+        return index < ancestors.size() ? ancestors[index] : accumulator;
+    };
+    auto column = [&](const change_t & change, int square) {
+        return _features[feature_index(color, king, change.piece, square)].values.data();
+    };
+#ifdef __AVX2__
+
+    // Each tile stays in registers across the whole chain; every state stores its result.
+    for (size_t offset = 0; offset < 256; offset += 128) {
+        __m256i sums[8];
+        for (size_t i = 0; i < 8; ++i) {
+            sums[i] = _mm256_loadu_si256(
+                reinterpret_cast<const __m256i *>(base.values[color].data() + offset + i * 16));
+        }
+        for (size_t index = first; index <= ancestors.size(); ++index) {
+            accumulator_t & state = state_at(index);
+            for (int c = 0; c < state.change_count; ++c) {
+                const auto & change = state.changes[c];
+                if (change.from >= 0) {
+                    const int16_t * weights = column(change, change.from) + offset;
+                    for (size_t i = 0; i < 8; ++i) {
+                        sums[i] = _mm256_sub_epi16(sums[i],
+                            _mm256_loadu_si256(reinterpret_cast<const __m256i *>(weights + i * 16)));
+                    }
+                }
+                if (change.to >= 0) {
+                    const int16_t * weights = column(change, change.to) + offset;
+                    for (size_t i = 0; i < 8; ++i) {
+                        sums[i] = _mm256_add_epi16(sums[i],
+                            _mm256_loadu_si256(reinterpret_cast<const __m256i *>(weights + i * 16)));
+                    }
+                }
+            }
+            for (size_t i = 0; i < 8; ++i) {
+                _mm256_storeu_si256(
+                    reinterpret_cast<__m256i *>(state.values[color].data() + offset + i * 16), sums[i]);
+            }
+        }
+    }
+#else
+    const auto * previous = &base;
+    for (size_t index = first; index <= ancestors.size(); ++index) {
+        accumulator_t & state = state_at(index);
+        state.values[color] = previous->values[color];
+        for (int c = 0; c < state.change_count; ++c) {
+            const auto & change = state.changes[c];
+            if (change.from >= 0) {
+                add_feature(state.values[color], color, king, change.piece, change.from, true);
+            }
+            if (change.to >= 0) {
+                add_feature(state.values[color], color, king, change.piece, change.to, false);
+            }
+        }
+        previous = &state;
+    }
+#endif
+    for (size_t index = first; index <= ancestors.size(); ++index) {
+        state_at(index).ready[color] = true;
+    }
 }
 
 int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
-        std::span<const accumulator_t> ancestors
-        ) const {
-    const auto * previous = ancestors.empty() ? nullptr : &ancestors.back();
+        std::span<accumulator_t> ancestors) const {
     for (bool color : {false, true}) {
-        if (accumulator.ready[color]) {
-            continue;
+        if (!accumulator.ready[color]) {
+            update(board, accumulator, ancestors, color);
         }
-        const accumulator_t * base = previous;
-        size_t begin = ancestors.size();
-        int cost = 0;
-        auto change_cost = [](const accumulator_t & state) {
-            int result = 0;
-            for (int i = 0; i < state.change_count; ++i) {
-                result += state.changes[i].from >= 0;
-                result += state.changes[i].to >= 0;
-            }
-            return result;
-        };
-        const bool walk = base && base->kings[color] == accumulator.kings[color] && !base->ready[color];
-        if (walk) {
-            cost = change_cost(accumulator);
-        }
-        const int refresh_cost = walk ? popcnt0(board.bb[ALLPIECES]) - 2 : 0;
-        while (base && base->kings[color] == accumulator.kings[color] && !base->ready[color]) {
-            cost += change_cost(*base);
-            if (cost >= refresh_cost || begin <= 1) { base = nullptr; break; }
-            --begin;
-            base = &ancestors[begin - 1];
-        }
-        if (!base || !base->ready[color] || base->kings[color] != accumulator.kings[color]) {
-            refresh(board, accumulator, color);
-            continue;
-        }
-        accumulator.values[color] = base->values[color];
-        auto apply = [&](const accumulator_t & state) {
-            for (int i = 0; i < state.change_count; ++i) {
-                const auto & change = state.changes[i];
-                if (change.from >= 0) {
-                    add_feature(accumulator.values[color], color, accumulator.kings[color], change.piece, change.from, true);
-                }
-                if (change.to >= 0) {
-                    add_feature(accumulator.values[color], color, accumulator.kings[color], change.piece, change.to, false);
-                }
-            }
-        };
-        for (size_t index = begin; index < ancestors.size(); ++index) apply(ancestors[index]);
-        apply(accumulator);
-        accumulator.ready[color] = true;
     }
     const auto input = detail::clip_activations(accumulator.values, board.us());
     const auto hidden1 = detail::affine(input, _hidden1_weights, _hidden1_biases, _hidden1_pair_sums_safe);

@@ -15,7 +15,7 @@ bool compare(search_t & search) {
     const int recomputed = search.evaluation_network->evaluate(search.brd, fresh);
     auto & accumulator = search.evaluation_accumulators[search.brd.ply];
     const int incremental = search.evaluation_network->evaluate(search.brd, accumulator,
-        std::span<const nnue::accumulator_t>(search.evaluation_accumulators.data(), search.brd.ply));
+        std::span<nnue::accumulator_t>(search.evaluation_accumulators.data(), search.brd.ply));
     ++comparisons;
     // Independently refreshed reference accumulators also check the feature map
     // and every loaded feature weight, rather than only the final score.
