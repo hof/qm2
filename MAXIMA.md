@@ -261,7 +261,9 @@ check, after one evasion, evasions that lose material are skipped; quiet
 evasions stay searchable. After exhausting tactical candidates without searching
 a legal move, a separate legal-move probe detects stalemate unless upcoming
 repetition already supplied a legal witness for this position. Stand-pat and TT
-cutoffs do not prove that a legal move exists. Results are
+cutoffs do not prove that a legal move exists. The probe first tests adjacent
+king destinations directly against enemy attacks with the old king square
+vacated, then falls back to fresh move generation and legality checks. Results are
 fail-soft. `QsearchTT` probes and stores qsearch results at depth 0 in the
 main table; null-window qsearch nodes below clock 90 take cutoffs from any
 bound, and any valid TT move is searched first.

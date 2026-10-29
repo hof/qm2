@@ -114,16 +114,28 @@ struct search_frame_scope_t {
 // Most playable positions have a king escape. Fall back to fresh generation
 // without disturbing the active move picker or its exclusions.
 bool search_t::has_legal_move(board_t & brd) {
-    const int king = KING[brd.us()];
-    const int from = brd.get_sq(king);
-    U64 targets = KING_MOVES[from] & ~brd.all(brd.us());
+    const bool us = brd.us(), them = !us;
+    const int from = brd.get_sq(KING[us]);
+    U64 targets = KING_MOVES[from] & ~brd.all(us);
+    const U64 occupied = brd.bb[ALLPIECES] & ~BIT(from);
+    const U64 diagonal = brd.bb[BISHOP[them]] | brd.bb[QUEEN[them]];
+    const U64 straight = brd.bb[ROOK[them]] | brd.bb[QUEEN[them]];
     while (targets) {
         const int to = pop(targets);
-        move_t move{};
-        move.set(king, from, to, brd.matrix[to]);
-        if (brd.legal(&move)) {
-            return true;
+        if ((KNIGHT_MOVES[to] & brd.bb[KNIGHT[them]])
+                || (PAWN_CAPTURES[us][to] & brd.bb[PAWN[them]])
+                || (KING_MOVES[to] & brd.bb[KING[them]])) {
+            continue;
         }
+        // Rays from the destination ignore its occupant. Vacate the source
+        // so a king escape cannot hide a slider attack behind the old king.
+        if ((BISHOP_MOVES[to] & diagonal) && (magic::bishop_moves(to, occupied) & diagonal)) {
+            continue;
+        }
+        if ((ROOK_MOVES[to] & straight) && (magic::rook_moves(to, occupied) & straight)) {
+            continue;
+        }
+        return true;
     }
     move::list_t moves;
     for (auto generate : {move::gen_quiet_moves, move::gen_captures,
