@@ -74,8 +74,12 @@ std::shared_ptr<const network_t> network_t::load(const std::string & path, std::
         for (auto & weight : weights) weight = std::bit_cast<int8_t>(bytes[offset++]);
     };
     for (auto & bias : network->_biases) bias = read_i16();
-    network->_features.resize(41024 * 256);
-    for (auto & weight : network->_features) weight = read_i16();
+    network->_features.resize(41024);
+    for (auto & column : network->_features) {
+        for (auto & weight : column.values) {
+            weight = read_i16();
+        }
+    }
     offset += 4; // Already checked the affine architecture hash.
     for (auto & bias : network->_hidden1_biases) bias = read_i32();
     read_weights(network->_hidden1_weights);
@@ -94,7 +98,7 @@ std::shared_ptr<const network_t> network_t::load(const std::string & path, std::
 void network_t::add_feature(std::array<int16_t, 256> & values, bool color,
         int king, int piece, int square, bool subtract) const {
     const size_t index = feature_index(color, king, piece, square);
-    const int16_t * weights = _features.data() + index * 256;
+    const int16_t * weights = _features[index].values.data();
 #ifdef __AVX2__
     for (size_t i = 0; i < 256; i += 16) {
         const auto value = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(values.data() + i));
@@ -121,8 +125,8 @@ void network_t::refresh(const board_t & board, accumulator_t & accumulator, bool
     for (int square = 0; square < 64; ++square) {
         const int piece = board.matrix[square];
         if (piece && piece != WKING && piece != BKING) {
-            features[count++] = _features.data()
-                + feature_index(color, accumulator.kings[color], piece, square) * 256;
+            const size_t index = feature_index(color, accumulator.kings[color], piece, square);
+            features[count++] = _features[index].values.data();
         }
     }
 

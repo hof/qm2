@@ -44,8 +44,13 @@ public:
     U64 fingerprint() const { return _fingerprint; }
 
 private:
+    struct alignas(64) feature_column_t {
+        std::array<int16_t, 256> values;
+    };
+    static_assert(sizeof(feature_column_t) == 256 * sizeof(int16_t));
+
     std::array<int16_t, 256> _biases{};
-    std::vector<int16_t> _features;
+    std::vector<feature_column_t> _features;
     std::array<int32_t, 32> _hidden1_biases{}, _hidden2_biases{};
     std::array<int8_t, 512 * 32> _hidden1_weights{};
     std::array<int8_t, 32 * 32> _hidden2_weights{};

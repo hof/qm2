@@ -346,7 +346,8 @@ search and ply, updated lazily from the nearest ready ancestor; a king move
 refreshes its perspective, null moves swap perspectives. The loader checks
 size, version and architecture hashes. AVX2 feature accumulation, activation
 packing and byte dot products (`vpmaddubsw`/`vpmaddwd`) have scalar fallbacks.
-Full AVX2 refresh builds feature addresses once per perspective and sums two
+Feature weights use 64-byte-aligned, 512-byte columns owned by a vector, preserving
+the serialized lane order. Full AVX2 refresh builds addresses once per perspective and sums two
 128-value tiles in eight vector registers, storing each tile after all features.
 Feature order and int16 wrapping arithmetic are preserved. Refresh scratch
 addresses skip default initialization; only the explicitly written prefix is read.
