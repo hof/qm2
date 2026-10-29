@@ -49,25 +49,6 @@ void move_t::set(int move) {
 }
 
 /**
- * Copies/sets a move 
- * @param pc piece
- * @param from square where the piece is moving from (ssq)
- * @param to square where the piece is moving to (tsq)
- * @param captured_piece piece that is captured or 0 if no piece is captures
- * @param promotion_piece in case of promotion: the new piece type, 0 otherwise
- */
-void move_t::set(int pc, int from, int to, int captured_piece, int promotion_piece) {
-    piece = pc;
-    ssq = from;
-    tsq = to;
-    promotion = promotion_piece;
-    capture = captured_piece;
-    castle = 0;
-    en_passant = false;
-    score = score::INVALID;
-}
-
-/**
  * Copies/sets a move from string
  * @param board the actual board position 
  * @param move_str move string in xboard notation

@@ -25,6 +25,7 @@
 #define	MOVE_H
 
 #include "bits.h"
+#include "score.h"
 
 struct board_t;
 
@@ -41,7 +42,25 @@ public:
 
     void set(move_t * move);
     void set(int move);
-    void set(int pc, int from, int to, int captured_piece, int promotion_piece);
+
+    /**
+     * Copies/sets a move
+     * @param pc piece
+     * @param from square where the piece is moving from (ssq)
+     * @param to square where the piece is moving to (tsq)
+     * @param captured_piece piece that is captured or 0 if no piece is captures
+     * @param promotion_piece in case of promotion: the new piece type, 0 otherwise
+     */
+    void set(int pc, int from, int to, int captured_piece, int promotion_piece) {
+        piece = pc;
+        ssq = from;
+        tsq = to;
+        promotion = promotion_piece;
+        capture = captured_piece;
+        castle = 0;
+        en_passant = false;
+        score = score::INVALID;
+    }
     void set(board_t * pos, const char * move_str);
     std::string to_string();
     int to_int();
