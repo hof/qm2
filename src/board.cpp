@@ -925,6 +925,11 @@ see_exchange(board_t & board, const move_t * move, int threshold) {
         // Original bitboards remain valid at every source still occupied.
         // The target occupant is tracked separately and must be masked out.
         const U64 attackers = board.attacks_to(target, occupied) & board.all(side) & ~target_bit;
+
+        // Most exchanges end here: the side to move has no recapture at all.
+        if (!attackers) {
+            break;
+        }
         U64 from_bit = 0;
         int piece = PAWN[side];
         for (; piece <= KING[side]; ++piece) {
