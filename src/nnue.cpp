@@ -120,14 +120,13 @@ void network_t::refresh(const board_t & board, accumulator_t & accumulator, bool
 #ifdef __AVX2__
 
     // Build addresses once; both tiles read only the written prefix.
-    [[indeterminate]] const int16_t * features[64];
+    // Walking the occupancy avoids an unpredictable test per square.
+    [[indeterminate]] const int16_t * features[32];
     size_t count = 0;
-    for (int square = 0; square < 64; ++square) {
-        const int piece = board.matrix[square];
-        if (piece && piece != WKING && piece != BKING) {
-            const size_t index = feature_index(color, accumulator.kings[color], piece, square);
-            features[count++] = _features[index].values.data();
-        }
+    for (U64 pieces = board.bb[ALLPIECES] & ~(board.bb[WKING] | board.bb[BKING]); pieces;) {
+        const int square = pop(pieces);
+        const size_t index = feature_index(color, accumulator.kings[color], board.matrix[square], square);
+        features[count++] = _features[index].values.data();
     }
 
     // Eight vectors leave room for addresses and avoid accumulator load/store
