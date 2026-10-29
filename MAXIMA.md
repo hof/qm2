@@ -348,7 +348,8 @@ size, version and architecture hashes. AVX2 feature accumulation, activation
 packing and byte dot products (`vpmaddubsw`/`vpmaddwd`) have scalar fallbacks.
 Full AVX2 refresh builds feature addresses once per perspective and sums two
 128-value tiles in eight vector registers, storing each tile after all features.
-Feature order and int16 wrapping arithmetic are preserved.
+Feature order and int16 wrapping arithmetic are preserved. Refresh scratch
+addresses skip default initialization; only the explicitly written prefix is read.
 Dense weights are packed at load time into four-input blocks across outputs,
 so AVX2 inference broadcasts each input block and accumulates eight outputs per
 vector without horizontal reductions. The loader bounds positive and negative

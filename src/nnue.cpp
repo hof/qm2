@@ -115,8 +115,8 @@ void network_t::refresh(const board_t & board, accumulator_t & accumulator, bool
     accumulator.kings[color] = board.get_sq(KING[color]);
 #ifdef __AVX2__
 
-    // Build addresses once; each tile visits the same pieces in square order.
-    const int16_t * features[64];
+    // Build addresses once; both tiles read only the written prefix.
+    [[indeterminate]] const int16_t * features[64];
     size_t count = 0;
     for (int square = 0; square < 64; ++square) {
         const int piece = board.matrix[square];
