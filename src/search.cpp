@@ -2013,7 +2013,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     const auto finish = [&](int value, int flag) __attribute__((always_inline)) {
 
         trans_table::store(key, brd.root_ply, brd.ply, 0, value,
-            stack->best_move.to_compact(), flag, deferred_raw_eval);
+            stack->best_move.to_compact(), flag, deferred_raw_eval, false, tt.slot);
 
         return value;
     };
@@ -2083,7 +2083,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
         // Publish before recursion so descendants see the same raw-eval entry.
         // A node without children combines this value with its result store.
         if (deferred_raw_eval != score::INVALID) {
-            trans_table::store(key, brd.root_ply, brd.ply, 0, 0, 0, 0, deferred_raw_eval);
+            trans_table::store(key, brd.root_ply, brd.ply, 0, 0, 0, 0, deferred_raw_eval, false, tt.slot);
             deferred_raw_eval = score::INVALID;
         }
         forward(move, gives_check);

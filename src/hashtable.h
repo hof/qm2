@@ -38,6 +38,7 @@ struct tt_hit_t {
     int score = score::INVALID;
     int eval = score::INVALID;
     bool pv = false;
+    void * slot = nullptr; //found entry; a store of the same key may reuse it
 };
 
 class trans_table_t {
@@ -93,7 +94,7 @@ public:
 
     // Moves use move_t::to_compact(). Depth 0 is quiescence; a zero bound
     // stores only a move and evaluation.
-    void store(U64 key, int age, int ply, int depth, int score, int move, int bound, int eval, bool pv);
+    void store(U64 key, int age, int ply, int depth, int score, int move, int bound, int eval, bool pv, void * found = nullptr);
     bool probe(U64 key, int ply, int clock, tt_hit_t & hit);
 
     void prefetch(U64 key) {
@@ -113,7 +114,7 @@ namespace trans_table {
     extern trans_table_t _global_table;
     const int TABLE_SIZE = options::get_value("Hash");
     void store(U64 key, int age, int ply, int depth, int score, int move, int bound,
-        int eval = score::INVALID, bool pv = false);
+        int eval = score::INVALID, bool pv = false, void * found = nullptr);
     bool probe(U64 key, int ply, int clock, tt_hit_t & hit);
 
     // Starts loading the key's cluster so a probe soon after finds it cached.

@@ -70,27 +70,31 @@ int trans_table_t::unmake_score(int score, int ply, int clock) {
     return score;
 }
 
-void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int bound, int eval, bool pv) {
+void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int bound, int eval, bool pv, void * found) {
     assert(depth >= 0 && depth < 255);
     assert(bound >= 0 && bound <= 3);
     const int current_age = age % AGES;
-    auto & entries = cluster(key).entries;
     const uint16_t key_tag = tag(key);
     const auto age_distance = [current_age](const entry_t & entry) {
         return (AGES + current_age - trans_table_t::age(entry)) % AGES;
     };
 
     // Prefer the same position or an empty slot, else the shallowest, oldest entry.
-    entry_t * slot = &entries[0];
-    if (!(slot->depth == 0 || slot->tag == key_tag)) {
-        for (int i = 1; i < BUCKETS; ++i) {
-            entry_t & entry = entries[i];
-            if (entry.depth == 0 || entry.tag == key_tag) {
-                slot = &entry;
-                break;
-            }
-            if (slot->depth - 4 * age_distance(*slot) > entry.depth - 4 * age_distance(entry)) {
-                slot = &entry;
+    // A probed entry that still holds this key is that slot: empty slots only follow used ones.
+    entry_t * slot = static_cast<entry_t *>(found);
+    if (!slot || slot->depth == 0 || slot->tag != key_tag) {
+        auto & entries = cluster(key).entries;
+        slot = &entries[0];
+        if (!(slot->depth == 0 || slot->tag == key_tag)) {
+            for (int i = 1; i < BUCKETS; ++i) {
+                entry_t & entry = entries[i];
+                if (entry.depth == 0 || entry.tag == key_tag) {
+                    slot = &entry;
+                    break;
+                }
+                if (slot->depth - 4 * age_distance(*slot) > entry.depth - 4 * age_distance(entry)) {
+                    slot = &entry;
+                }
             }
         }
     }
@@ -127,8 +131,9 @@ bool trans_table_t::probe(U64 key, int ply, int clock, tt_hit_t & hit) {
         return false;
     }
     const uint16_t key_tag = tag(key);
-    for (const auto & entry : cluster(key).entries) {
+    for (auto & entry : cluster(key).entries) {
         if (entry.depth != 0 && entry.tag == key_tag) {
+            hit.slot = &entry;
             hit.move = entry.move;
             hit.depth = entry.depth - 1;
             hit.bound = entry.meta & 3;
@@ -145,9 +150,9 @@ namespace trans_table {
 
     trans_table_t _global_table(TABLE_SIZE);
 
-    void store(U64 key, int age, int ply, int depth, int score, int move, int bound, int eval, bool pv) {
+    void store(U64 key, int age, int ply, int depth, int score, int move, int bound, int eval, bool pv, void * found) {
         if (_global_table.enabled) {
-            _global_table.store(key, age, ply, depth, score, move, bound, eval, pv);
+            _global_table.store(key, age, ply, depth, score, move, bound, eval, pv, found);
         }
     }
 
