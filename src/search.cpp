@@ -585,16 +585,21 @@ int search_t::aspiration(int depth, int last_score) {
     }
 }
 
-// Polls whether the search must stop.
-bool search_t::abort(bool force_poll = false) {
+// Checks every stop condition and rearms the poll interval. A node budget
+// shortens the interval: each counted node is followed by an abort check, so
+// the search still stops at the first check that reaches the budget.
+bool search_t::poll() {
     bool result = false;
     if (game.max_nodes > 0 && nodes >= game.max_nodes) {
         result = true;
     } else if (stop_all || (_control && _control->stop_requested.load())) {
         result = true;
-    } else if (force_poll || --next_poll <= 0) {
+    } else {
         result = game.tm.handle_abort(pondering(), ponder_clock_started, next_poll)
             && root_stack->best_move.piece > 0;
+        if (game.max_nodes > 0) {
+            next_poll = int(std::min<U64>(next_poll, game.max_nodes - nodes));
+        }
     }
     stop_all = result;
     return result;

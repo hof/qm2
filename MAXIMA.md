@@ -424,8 +424,10 @@ with a 50 ms interface reserve. Other period moves and sudden death retain
 their current allocation. The boundary follows UCI's remaining-move count,
 not the board's move number; no next-period time is available until the GUI
 credits it. Periodic clock startup and deadline handling live in the time manager;
-search owns the stop latch, node limit and polling counter. Each clock poll uses
-one ponder-state snapshot. Clock polling tightens
+search owns the stop latch, node limit and polling counter. Each node only counts
+down; stop requests, the node limit and the clock are checked when the counter
+expires. A node limit shortens the interval so `go nodes` still stops exactly at
+the budget. Each clock poll uses one ponder-state snapshot. Clock polling tightens
 from 5000 visits to 512 within
 250 ms of the deadline and to 64 within 50 ms; scheduling or blocking I/O can
 still exceed those intervals, so these counts are not a hard real-time guarantee.

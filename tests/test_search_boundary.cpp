@@ -151,6 +151,17 @@ bool test_interruption() {
     return ok;
 }
 
+// Polling is periodic, yet a budget between polls must still stop exactly.
+bool test_large_budget() {
+    const char * fen = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3";
+    trans_table::clear();
+    auto search = std::make_unique<search_t>(fen);
+    prepare(*search, 0);
+    search->game.max_nodes = 7777;
+    search->pvs(-score::INF, score::INF, 12);
+    return check(search->stop_all && search->nodes == 7777, "a budget between polls is not exact", fen);
+}
+
 bool test_clock_resets() {
     bool ok = true;
     for (const char * fen : {"7k/4P3/8/8/8/8/8/KR6 w - - 99 1",
@@ -189,6 +200,7 @@ int main() {
         ok &= test_windows(test, probes);
     }
     ok &= test_interruption();
+    ok &= test_large_budget();
     ok &= test_clock_resets();
     std::cout << probes << " independent terminal/window/cache probes\n";
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;

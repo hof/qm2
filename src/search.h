@@ -326,7 +326,16 @@ public:
     bool is_repetition() const;
     int upcoming_repetition(move_t & witness);
     bool is_improving() const;
-    bool abort(bool force_poll);
+
+    // Polls whether the search must stop: one countdown per node, every stop
+    // condition only when the interval expires or a poll is forced.
+    bool abort(bool force_poll = false) {
+        if (!force_poll && --next_poll > 0) {
+            return stop_all;
+        }
+        return poll();
+    }
+    bool poll();
     bool pondering();
     int init_root_moves();
     void order_root_moves(int depth);
