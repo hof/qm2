@@ -685,6 +685,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
     async def test_white_wants_more_than_a_draw_at_any_sign(self):
         self.assertEqual([learning.color_contempt(18, white) for white in (True, False)], [14, 22])
         self.assertEqual([learning.color_contempt(-10, white) for white in (True, False)], [-12, -8])
+        self.assertEqual([learning.color_contempt(0, white) for white in (True, False)], [-2, 2])
 
     async def test_ignores_observed_games_and_invalid_boards(self):
         player = await self.player("play")
