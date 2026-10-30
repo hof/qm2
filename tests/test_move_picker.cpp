@@ -215,13 +215,13 @@ bool pruned_quiets_contract() {
         return false;
     }
 
-    // Bad noisy moves follow the quiets, so those must still be walked.
+    // Bad noisy moves follow the good quiets but end the walk.
     auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
-    int bad_noisy_found = 0;
+    std::string last;
     for (auto * move = move::first(search.get(), 2); move; move = move::next(search.get(), 2, true)) {
-        bad_noisy_found += move->to_string() == "d2d5";
+        last = move->to_string();
     }
-    return bad_noisy_found == 1;
+    return last == "d2d5";
 }
 
 }

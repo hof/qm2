@@ -492,9 +492,14 @@ move_t * move_picker_t::next_standard(search_t * s, int depth, bool quiets_prune
                 score_quiets(s, begin, list->last);
 
                 // From here on the bad noisy moves [first, quiets) and the
-                // quiets [quiets, last) are each walked in score order.
+                // quiets [quiets, last) are each walked in score order. Pruned
+                // quiets only need the good ones counted before the bad noisy.
                 sort_by_score(list->first, begin);
-                sort_by_score(begin, list->last);
+                if (quiets_pruned) {
+                    std::partition(begin, list->last, [](const move_t & move) { return move.score > 0; });
+                } else {
+                    sort_by_score(begin, list->last);
+                }
                 list->quiets = list->current = begin;
                 list->stage = good_quiets;
                 break;
@@ -514,6 +519,9 @@ move_t * move_picker_t::next_standard(search_t * s, int depth, bool quiets_prune
                 list->stage = bad_quiets;
                 break;
             case bad_quiets:
+                if (quiets_pruned) {
+                    return nullptr;
+                }
                 result = pop_sorted(s, list->current, list->last, std::numeric_limits<int>::min());
                 if (result) {
                     return result;
