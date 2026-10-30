@@ -27,6 +27,8 @@ result_share = 0.2
 signature_wins = 3
 signature_share = 0.7
 signature_eval = 0.45
+repeat_share = 0.9  # chance to repeat our move after a good result against a stronger opponent
+lost_damp = 0.03  # weight of a move this opponent has only beaten
 revenge_plies = 24  # the opening of a lost game whose moves we play back at the opponent
 mood_hours = 24  # how long one mood lasts in a running session
 game_types = ("lightning", "blitz", "standard")
@@ -447,8 +449,10 @@ class opening_book:
             total = sum(weighted.values())
             layers[name] = {move: weight / total for move, weight in weighted.items()}
             weights[name] = self.weights[name] * games / (games + self.prior)
-        # Proven losers drop in every layer, book.bin included.
-        damp = {move: 0.1 if rates[move][0][1] >= 4 and rates[move][-1][0] < 0.3 else 1.0 for move in candidates}
+        # Proven losers drop in every layer, book.bin included, after four games at a poor rate. Moves this
+        # opponent has only beaten drop at once, below the untried moves until those have failed as well.
+        damp = {move: lost_damp if self.personal_score(key, move) == 0.0
+                else 0.1 if rates[move][0][1] >= 4 and rates[move][-1][0] < 0.3 else 1.0 for move in candidates}
         shares = {move: {name: weights[name] * layers[name].get(move, 0) * damp[move] for name in layers}
                   for move in candidates}
         search = 0.0 if "book" in books else self.weights.get("book", 0)
@@ -463,11 +467,30 @@ class opening_book:
         if signature is not None:
             # The signature line: same opening again, with some variety left.
             moves, search = self.boost(moves, search, signature, signature_share)
+        repeat = self.repeat_move(key, moves) if signature is None else None
+        if repeat is not None:
+            # A good result against a stronger opponent: walk the same line again.
+            moves, search = self.boost(moves, search, repeat, repeat_share)
         revenge = self.revenge_move(board, key, moves)
-        if revenge is not None and revenge != signature:
+        if revenge is not None and revenge != signature and revenge != repeat:
             # Revenge: the line this opponent beat us with, played back at them.
             moves, search = self.boost(moves, search, revenge, self.weights.get("revenge", 0) / 100)
         return moves, in_book, search
+
+    def personal_score(self, key, move):
+        """Our score with the move against this opponent, a draw counting draw_value; None when untried."""
+        wins, draws, losses = self.results[2].get((key, move.uci()), (0, 0, 0))
+        games = wins + draws + losses
+        return (wins + draws * self.draw_value) / games if games else None
+
+    def repeat_move(self, key, moves):
+        """Our best move here that beat expectations against a stronger opponent, if any."""
+        if self.draw_value <= 0.5:
+            return None
+        scores = {move: self.personal_score(key, move) or 0.0 for move, (probability, _) in moves.items()
+                  if probability > 0}
+        move = max(scores, key=lambda move: (scores[move], move.uci()), default=None)
+        return move if move is not None and scores[move] > 0.5 else None
 
     @staticmethod
     def boost(moves, search, chosen, share):

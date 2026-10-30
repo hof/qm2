@@ -194,6 +194,26 @@ class selection_tests(unittest.TestCase):
             reasons.add(reason.split(":")[0].split()[0])
         return counts, reasons
 
+    def test_lost_moves_wait_behind_untried_moves_until_those_lost_too(self):
+        board, key = chess.Board(), "start"
+        e4, d4 = chess.Move.from_uci("e2e4"), chess.Move.from_uci("d2d4")
+        book = self.opening()
+        book.results[2][(key, "e2e4")] = [0, 0, 1]
+        moves, _, _ = book.distribution(board, key)
+        self.assertLess(moves[e4][0], moves[d4][0] / 5)
+        book.results[2][(key, "d2d4")] = [0, 0, 1]
+        moves, _, _ = book.distribution(board, key)
+        self.assertAlmostEqual(moves[e4][0], moves[d4][0])
+
+    def test_a_draw_against_a_stronger_opponent_is_repeated(self):
+        board, key = chess.Board(), "start"
+        e4 = chess.Move.from_uci("e2e4")
+        stronger, equal = self.opening(contempt=24), self.opening(contempt=0)
+        for book in (stronger, equal):
+            book.results[2][(key, "e2e4")] = [0, 1, 0]
+        self.assertEqual(stronger.distribution(board, key)[0][e4][0], learning.repeat_share)
+        self.assertLess(equal.distribution(board, key)[0][e4][0], learning.repeat_share)
+
     def test_books_ignore_do_not_play_weights(self):
         board = board_after("d2d4 d7d5")
         polyglot_book(self.book, [(board, "c2c4", 1), (board, "h2h3", 1), (board, "g1f3", 0)])

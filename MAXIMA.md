@@ -1426,7 +1426,11 @@ MaxDrone config). In each position:
    So book.bin and the style books keep their floor, and John's layer counts more as
    games against John accumulate.
 4. Proven losers (at least 4 games, rate under 30%) are multiplied by 0.1 in
-   every layer, book.bin included.
+   every layer, book.bin included. Moves this opponent has only ever beaten us
+   with are multiplied by 0.03 at once, so untried moves come first; once those
+   have lost as well the shares even out again. Against a stronger opponent, our
+   best move here that scored above 50% (a draw counts its draw value) gets a
+   90% chance, so a good line is walked again.
 5. Signature lines, for psychology: when our move beat this registered opponent
    three times in a row, each time with our eval after it at 45% or better, it
    gets 70% of the choice there (`signature` in the PGN comment); the rest keeps
