@@ -1379,16 +1379,17 @@ base: its moves are good in principle), the style books `fire` (sharp, e.g.
 gambits), `draw` (playing for the draw), and `experiment`, the current `mood`, and the
 learned layers, each with a percentage from the game's profile:
 
-| profile | book | fire | draw | experiment | mood | global | group | opponent | search | revenge |
-|---|---|---|---|---|---|---|---|---|---|---|
-| equal | 45 | 0 | 0 | 0 | 10 | 15 | 5 | 25 | 5 | 30 |
-| much weaker | 20 | 25 | 0 | 0 | 10 | 5 | 5 | 35 | 5 | 40 |
-| much stronger | 30 | 0 | 25 | 0 | 0 | 10 | 10 | 25 | 5 | 15 |
-| unrated | 30 | 30 | 0 | 10 | 15 | 15 | 0 | 0 | 10 | 50 |
+| profile | book | fire | draw | experiment | mood | global | group | opponent | search | revenge | repeat |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| equal | 45 | 0 | 0 | 0 | 10 | 15 | 5 | 25 | 5 | 30 | 70 |
+| much weaker | 20 | 25 | 0 | 0 | 10 | 5 | 5 | 35 | 5 | 40 | 70 |
+| much stronger | 30 | 0 | 25 | 0 | 0 | 10 | 10 | 25 | 5 | 15 | 70 |
+| unrated | 30 | 30 | 0 | 10 | 15 | 15 | 0 | 0 | 10 | 50 | 70 |
 
 The layers sum to 100. `search` is the chance per game to leave the book once at a random
 ply, so the engine can bring in new moves; `revenge` is the least probability of the
-opponent's own winning line (below).
+opponent's own winning line (below), and `repeat` the same for our move after a good
+result against a stronger opponent.
 
 Rated games slide from *equal* toward *much weaker* or *much stronger* with
 the draw contempt (none within ±0.20, fully at ±1.00); unrated games (guests)
@@ -1429,8 +1430,8 @@ MaxDrone config). In each position:
    every layer, book.bin included. Moves this opponent has only ever beaten us
    with are multiplied by 0.03 at once, so untried moves come first; once those
    have lost as well the shares even out again. Against a stronger opponent, our
-   best move here that scored above 50% (a draw counts its draw value) gets a
-   70% chance, so a good line is walked again.
+   best move here that scored above 50% (a draw counts its draw value) gets at
+   least the profile's `repeat` chance, so a good line is walked again.
 5. Signature lines, for psychology: when our move beat this registered opponent
    three times in a row, each time with our eval after it at 45% or better, it
    gets 70% of the choice there (`signature` in the PGN comment); the rest keeps

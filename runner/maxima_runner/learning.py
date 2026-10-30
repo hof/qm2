@@ -238,13 +238,13 @@ style_names = ("fire", "draw", "experiment")
 layer_names = ("book",) + style_names + ("mood", "global", "group", "opponent")
 layer_profiles = {
     "equal": {"book": 45, "fire": 0, "draw": 0, "experiment": 0, "mood": 10, "global": 15, "group": 5,
-              "opponent": 25, "search": 5, "revenge": 30},
+              "opponent": 25, "search": 5, "revenge": 30, "repeat": 70},
     "weaker": {"book": 20, "fire": 25, "draw": 0, "experiment": 0, "mood": 10, "global": 5, "group": 5,
-               "opponent": 35, "search": 5, "revenge": 40},
+               "opponent": 35, "search": 5, "revenge": 40, "repeat": 70},
     "stronger": {"book": 30, "fire": 0, "draw": 25, "experiment": 0, "mood": 0, "global": 10, "group": 10,
-                 "opponent": 25, "search": 5, "revenge": 15},
+                 "opponent": 25, "search": 5, "revenge": 15, "repeat": 70},
     "unrated": {"book": 30, "fire": 30, "draw": 0, "experiment": 10, "mood": 15, "global": 15, "group": 0,
-                "opponent": 0, "search": 10, "revenge": 50},
+                "opponent": 0, "search": 10, "revenge": 50, "repeat": 70},
 }
 
 
@@ -469,7 +469,7 @@ class opening_book:
         repeat = self.repeat_move(key, moves) if signature is None else None
         if repeat is not None:
             # A good result against a stronger opponent: walk the same line again.
-            moves, search = self.boost(moves, search, repeat, signature_share)
+            moves, search = self.boost(moves, search, repeat, self.weights.get("repeat", 0) / 100)
         revenge = self.revenge_move(board, key, moves)
         if revenge is not None and revenge != signature and revenge != repeat:
             # Revenge: the line this opponent beat us with, played back at them.
