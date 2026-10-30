@@ -30,7 +30,7 @@ signature_eval = 0.45
 lost_damp = 0.03  # weight of a move this opponent has only beaten
 revenge_plies = 24  # the opening of a lost game whose moves we play back at the opponent
 mood_hours = 24  # how long one mood lasts in a running session
-older_contempt = -10  # the same before games stored their DrawContempt tag
+older_contempt = -10  # the equal-rating value before games stored their DrawContempt tag; unknown ratings still use it
 equal_contempt = 0  # the draw contempt between equal ratings, 4 Elo per centipawn away from it
 game_types = ("lightning", "blitz", "standard")
 lichess_speeds = {"bullet": "lightning", "blitz": "blitz", "rapid": "standard", "classical": "standard"}
@@ -54,8 +54,6 @@ def color_contempt(contempt, white):
     """The draw score the engine plays with: White wants more than a draw, Black settles a little sooner.
 
     A fifth of the contempt's size, added, so the direction stays right at any sign."""
-    if contempt is None:
-        return None
     shift = round(abs(contempt) / 5)
     return contempt - shift if white else contempt + shift
 

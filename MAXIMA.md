@@ -114,7 +114,7 @@ Search pruning, reductions, extensions, histories, ordering, correction and TT
 evaluation caching are fixed parts of the standard search. They have no UCI
 enable/disable switches. Operational controls include hash size, time overhead,
 pondering, opening book, evaluation file, variant, tablebases and `DrawContempt`
-(default 0 cp). Changes affecting score compatibility stop and join the worker
+(default -10 cp). Changes affecting score compatibility stop and join the worker
 and clear the TT; unchanged or rejected values keep the cache.
 
 ### 4.1 Nodes and repetition
@@ -1882,15 +1882,15 @@ config overrides its percentages per profile, e.g. `{"layer_profiles": {"weaker"
 Draw contempt follows the rating gap: at `Creating:` MaxDrone sets the engine's
 `DrawContempt` (cp, our view) to a quarter of the opponent's
 rating minus ours, clamped to `contempt_window` (default ±100 cp = ±1 pawn; 0
-disables). Equal ratings give 0; 200 points stronger gives +50 (a draw is
+disables the rating part). Equal ratings give 0; 200 points stronger gives +50 (a draw is
 welcome); 400 or more weaker gives -100 (avoid draws). White then subtracts a
 fifth of that value's size and Black adds it, so +28 becomes +22 with White and
 +34 with Black, and -10 becomes -12 and -8: White wants more than a draw at any
 sign. The engine, draw offers, opening stalls and the `DrawContempt` PGN tag use
 this value; book profiles and the draw's learning value use the rating gap alone.
-Without both ratings
-(guests, unrated) the engine default is sent, as python-chess would otherwise
-keep the previous game's value.
+Without both ratings (guests, unrated), `unknown_contempt` (default -10) takes
+the place of the rating value, with the same colour shift. Outside the online
+clients the engine uses its own `DrawContempt` default of -10, without a shift.
 
 Every game with at least one move is atomically saved to a pending
 `experience/games/<LearningId>.pgn`, then completed games are moved by
@@ -2138,7 +2138,7 @@ individual opponents and rating statistics remain server-specific. The learner m
 rapid and classical to standard); the PGN keeps the real speed in `Event`
 (`Lichess rated blitz game`) and links the game in `Site`. Settings files take
 `engine`, `options`, `speeds`, `accept`, `games`, `pgn_dir`, `learning`,
-`variety`, `contempt_window`, `layer_profiles`, `style_books`, `mood`,
+`variety`, `contempt_window`, `unknown_contempt`, `layer_profiles`, `style_books`, `mood`,
 `live_feed`, `pgn_post`, `online_tablebase`, `resignation` and `shutdown_grace`, as on FICS.
 
 Streams are read line by line; Lichess sends a keepalive every 7 seconds, so 30

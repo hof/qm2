@@ -9,7 +9,7 @@ from . import online_tablebase
 
 tablebase_wait = 1.0  # seconds at most; the engine's move stands when the answer is later
 draw_categories = ("draw", "cursed-win", "blessed-loss")  # the last two are draws under the fifty-move rule
-engine_draw_value = 0  # the engine's DrawContempt default, in cp from our side
+engine_draw_value = -10  # the engine's DrawContempt default, in cp from our side
 
 
 def opening_abort_position(board, move, info, kind, contempt):

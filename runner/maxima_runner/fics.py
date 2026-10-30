@@ -300,7 +300,7 @@ default_settings = {
     "host": "freechess.org", "port": 5000, "handle": "guest", "guest_name": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
-    "contempt_window": 100, "layer_profiles": {}, "style_books": {}, "first_move_wait": 60,
+    "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {}, "style_books": {}, "first_move_wait": 60,
     "whisper": False, "mood": "auto", "live_feed": None, "pgn_post": None,
     "online_tablebase": True, "reseek_minutes": 10,
     "losers": False, "losers_seeks": [], "losers_seeks_at_once": 1,
@@ -388,7 +388,7 @@ class play_policy:
     """When to seek, accept, rematch, and stop; mirrors JDrone's seek pool and rematch limit."""
 
     def __init__(self, seeks=(), seeks_at_once=2, accept=True, rematches=0, games=None, guest=True,
-                 owner=None, notes=(), contempt_window=100, first_move_wait=60,
+                 owner=None, notes=(), contempt_window=100, unknown_contempt=-10, first_move_wait=60,
                  whisper=False, follow_key=None, reseek_minutes=10, losers=False,
                  losers_seeks=(), losers_seeks_at_once=1, pv_plies=2):
         self.seek_pool = None
@@ -404,6 +404,7 @@ class play_policy:
         self.owner = owner
         self.notes = list(notes)
         self.contempt_window = contempt_window
+        self.unknown_contempt = unknown_contempt
         self.first_move_wait = first_move_wait
         self.whisper = whisper
         self.pv_plies = pv_plies
@@ -919,7 +920,8 @@ class engine_player:
         self.created = match.groupdict()
         our_rating = match["white_rating"] if we_are_white else match["black_rating"]
         self.contempt = draw_contempt(rating_of(our_rating), rating_of(rating), self.policy.contempt_window)
-        self.draw_score = learning.color_contempt(self.contempt, we_are_white)
+        self.draw_score = learning.color_contempt(
+            self.policy.unknown_contempt if self.contempt is None else self.contempt, we_are_white)
         if self.contempt is not None:
             self.on_line(f"-- draw contempt {self.draw_score / 100:+.2f} ({rating_of(our_rating)} vs {rating_of(rating)})")
         if not playable(match["type"], match["time"], match["increment"], self.policy.losers):
@@ -1365,7 +1367,7 @@ def load_settings(path):
         raise ValueError(f"{path}: expected a JSON object")
     types = {"host": str, "port": int, "handle": str, "guest_name": str, "engine": str, "options": dict, "seeks": list,
              "seeks_at_once": int, "accept": bool, "rematches": int, "games": int, "owner": (str, list), "notes": list,
-             "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int,
+             "pgn_dir": str, "learning": bool, "variety": (int, float), "contempt_window": int, "unknown_contempt": int,
              "layer_profiles": dict, "style_books": dict, "first_move_wait": (int, float), "whisper": bool,
              "mood": str, "live_feed": str, "pgn_post": str,
              "online_tablebase": bool, "reseek_minutes": (int, float),
@@ -1513,7 +1515,7 @@ def run(options, parser):
     policy = play_policy(configured["seeks"], configured["seeks_at_once"], configured["accept"],
                          configured["rematches"], configured["games"], guest=options.handle == "guest",
                          owner=configured["owner"], notes=configured["notes"],
-                         contempt_window=configured["contempt_window"],
+                         contempt_window=configured["contempt_window"], unknown_contempt=configured["unknown_contempt"],
                          first_move_wait=configured["first_move_wait"], whisper=configured["whisper"], pv_plies=configured["pv_plies"],
                          follow_key=os.environ.get("MAXDRONE_KEY") or None,
                          reseek_minutes=configured["reseek_minutes"], losers=configured["losers"],

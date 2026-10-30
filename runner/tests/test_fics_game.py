@@ -164,7 +164,7 @@ for line in sys.stdin:
     command = line.strip()
     if command == "uci":
         print("id name fics fixture")
-        print("option name DrawContempt type spin default 0 min -100 max 100")
+        print("option name DrawContempt type spin default -10 min -100 max 100")
         print("uciok", flush=True)
     elif command == "isready":
         print("readyok", flush=True)
@@ -679,13 +679,12 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle(start.replace(" 17 GuestHJGC guestNinja", " 18 GuestHJGC GuestOther"))
         await self.settle(player)
         sent = self.positions.read_text()
-        self.assertGreater(sent.rfind("setoption name DrawContempt value 0"),
+        self.assertGreater(sent.rfind("setoption name DrawContempt value -12"),
                            sent.rfind("setoption name DrawContempt value 40"))
 
     async def test_white_wants_more_than_a_draw_at_any_sign(self):
         self.assertEqual([learning.color_contempt(18, white) for white in (True, False)], [14, 22])
         self.assertEqual([learning.color_contempt(-10, white) for white in (True, False)], [-12, -8])
-        self.assertIsNone(learning.color_contempt(None, True))
 
     async def test_ignores_observed_games_and_invalid_boards(self):
         player = await self.player("play")

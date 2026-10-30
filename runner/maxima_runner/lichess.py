@@ -52,7 +52,7 @@ default_settings = {
     "resignation": resignation.validate_settings({}),
     "shutdown_grace": 15, "pv_plies": 2,
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
-    "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "layer_profiles": {},
+    "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
     "challenge_idle": 30, "challenge_window": 300,
 }
@@ -250,7 +250,7 @@ class lichess_bot:
     """Accept challenges one game at a time and play them; owners steer it from the game chat."""
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
-                 owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100,
+                 owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
                  margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, resignation_settings=None, pv_plies=2):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
@@ -259,7 +259,7 @@ class lichess_bot:
         self.owners = {name.lower() for name in owners}
         self.learner, self.pgn_dir, self.events = learner, pgn_dir, events
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
-        self.contempt_window, self.margin = contempt_window, margin
+        self.contempt_window, self.unknown_contempt, self.margin = contempt_window, unknown_contempt, margin
         self.pv_plies = pv_plies
         self.context = self.session = None
         self.id = self.name = None
@@ -573,7 +573,8 @@ class lichess_game:
         self.opponent = chess.engine.Opponent(them.get("name"), title if title in chess_titles else None,
                                               them.get("rating"), title == "BOT")
         self.contempt = draw_contempt(self.player(self.color).get("rating"), them.get("rating"), bot.contempt_window)
-        self.draw_score = learning.color_contempt(self.contempt, self.color == chess.WHITE)
+        self.draw_score = learning.color_contempt(
+            bot.unknown_contempt if self.contempt is None else self.contempt, self.color == chess.WHITE)
         self.record = fics_game.game_record({})
         if bot.learner is not None:
             group = "engines" if title == "BOT" else "masters" if title in chess_titles else "humans"
@@ -960,7 +961,7 @@ def load_settings(path):
     if not isinstance(loaded, dict):
         raise ValueError(f"{path}: expected a JSON object")
     types = {"engine": str, "options": dict, "speeds": list, "accept": bool, "games": int, "pgn_dir": str,
-             "learning": bool, "variety": (int, float), "contempt_window": int, "layer_profiles": dict,
+             "learning": bool, "variety": (int, float), "contempt_window": int, "unknown_contempt": int, "layer_profiles": dict,
              "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
              "challenge_idle": int, "challenge_window": int}
     types["resignation"] = dict
@@ -1062,7 +1063,7 @@ def run(options, parser):
         bot = lichess_bot(api, engine_session, show, speeds=configured["speeds"], accept=configured["accept"],
                           games=configured["games"], owners=owners, learner=learner, pgn_dir=pgn_dir, events=events,
                           online_tablebase=configured["online_tablebase"],
-                          contempt_window=configured["contempt_window"],
+                          contempt_window=configured["contempt_window"], unknown_contempt=configured["unknown_contempt"],
                           challenge_idle=configured["challenge_idle"] or 0,
                           challenge_window=configured["challenge_window"],
                           resignation_settings=configured["resignation"], pv_plies=configured["pv_plies"],
