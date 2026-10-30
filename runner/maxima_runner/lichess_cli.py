@@ -7,7 +7,8 @@ def parser():
     parser = argparse.ArgumentParser(
         prog="maxima lichess", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="environment (or .env in the checkout):\n"
-               "  LICHESS_BOT_TOKEN    token of the bot account, scope bot:play (never logged)\n"
+               "  LICHESS_BOT_TOKEN    token of the bot account (never logged): scope bot:play,\n"
+               "                       and team:write for --team\n"
                "  LICHESS_OWNERS       Lichess users who may send commands, comma-separated\n"
                "  MAXDRONE_POST_TOKEN  bearer token for --pgn-post (never logged)\n\n"
                "commands for anyone, in the game's chat: !help, !name; !eval, !stats, !book (spectator room only)\n"
@@ -28,7 +29,7 @@ def parser():
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: engine, options, speeds, accept, games, pgn_dir, learning, variety, "
                              "contempt_window, unknown_contempt, layer_profiles, style_books, mood, live_feed, pgn_post, "
-                             "online_tablebase, resignation, shutdown_grace); flags override it")
+                             "online_tablebase, resignation, shutdown_grace, teams); flags override it")
     parser.add_argument("--engine", help="UCI engine to play with (default: the Release Maxima build)")
     parser.add_argument("--option", action="append", default=[], metavar="NAME=VALUE",
                         help="UCI option for the engine, repeatable (e.g. Hash=256)")
@@ -50,6 +51,8 @@ def parser():
     parser.add_argument("--challenge-idle", type=int, metavar="MINUTES",
                         help="challenge an online bot after this many idle minutes (default 30)")
     parser.add_argument("--no-challenge", action="store_true", help="never challenge, only accept")
+    parser.add_argument("--team", action="append", metavar="ID",
+                        help="join this team at startup, repeatable; a team's id is in its URL")
     parser.add_argument("--server", default="https://lichess.org", help=argparse.SUPPRESS)
     return parser
 

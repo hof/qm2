@@ -29,7 +29,7 @@ speed_rank = {name: rank for rank, name in enumerate(("ultraBullet",) + speeds +
 stream_timeout = 30  # seconds of silence before a stream counts as dead; Lichess sends keepalives every 7 s
 rate_limit_pause = 60  # Lichess asks clients to wait a full minute after HTTP 429
 owner_commands = ("softquit", "softrestart", "resign", "abort", "draw", "challenge", "nochallenge")
-console_commands = ("help", "quit") + owner_commands
+console_commands = ("help", "quit", "team") + owner_commands
 public_commands = ("help", "name", "eval", "stats", "book")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
@@ -54,7 +54,7 @@ default_settings = {
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
-    "challenge_idle": 30, "challenge_window": 300,
+    "challenge_idle": 30, "challenge_window": 300, "teams": [],
 }
 
 
@@ -66,7 +66,10 @@ class lichess_api:
         self.paused_until = 0.0
 
     def open(self, method, path, data=None, timeout=10):
-        body = urllib.parse.urlencode(data).encode() if data is not None else (b"" if method == "POST" else None)
+        if isinstance(data, bytes):
+            body = data
+        else:
+            body = urllib.parse.urlencode(data).encode() if data is not None else (b"" if method == "POST" else None)
         request = urllib.request.Request(self.server + path, body, method=method,
                                          headers={"Authorization": f"Bearer {self.token}",
                                                   "User-Agent": "MaximaEngine (https://github.com/hof/qm2)"})
@@ -251,7 +254,7 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, resignation_settings=None, pv_plies=2):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, resignation_settings=None, pv_plies=2, teams=()):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
@@ -260,7 +263,7 @@ class lichess_bot:
         self.learner, self.pgn_dir, self.events = learner, pgn_dir, events
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.contempt_window, self.unknown_contempt, self.margin = contempt_window, unknown_contempt, margin
-        self.pv_plies = pv_plies
+        self.pv_plies, self.teams = pv_plies, tuple(teams)
         self.context = self.session = None
         self.id = self.name = None
         self.game = None
@@ -288,6 +291,26 @@ class lichess_bot:
         self.on_line(f"-- logged in as {self.name}; accepting {', '.join(self.speeds)}"
                      + (f"; owners {', '.join(sorted(self.owners))}" if self.owners else "; no owners for commands"))
         self.on_line("-- type help for console commands")
+        if self.teams:
+            if "team:write" in await self.missing_scopes(("team:write",)):
+                self.on_line("-- LICHESS_BOT_TOKEN lacks team:write; team joins will fail (MAXIMA.md 10.3)")
+            for team in self.teams:
+                await self.join_team(team)
+
+    async def missing_scopes(self, needed):
+        """Which needed scopes the token lacks; none when Lichess cannot tell."""
+        answer = await self.api.call("POST", "/api/token/test", self.api.token.encode())
+        if answer is None:
+            return []
+        scopes = ((answer.get(self.api.token) or {}).get("scopes") or "").split(",")
+        return [scope for scope in needed if scope not in scopes]
+
+    async def join_team(self, team, message=None):
+        """Join a team, or ask to: a team that reviews requests needs a message of 30 to 2000 characters."""
+        joined = await self.api.post(f"/team/{urllib.parse.quote(team, safe='')}/join",
+                                     {"message": message} if message else None)
+        self.on_line(f"-- {'joined' if joined else 'could not join'} team {team}")
+        return joined
 
     async def start_engine(self):
         self.context = self.open_session()
@@ -315,10 +338,11 @@ class lichess_bot:
 
     async def console(self, text):
         """Run a console command (a leading ! is optional); True stops at once (quit while stopping)."""
-        words = text.strip().lstrip("!").lower().split()
+        words = text.strip().lstrip("!").split()  # arguments keep their case
         if not words:
             return False
-        command = "quit" if words[0] in ("exit", "softquit") else words[0]
+        command = words[0].lower()
+        command = "quit" if command in ("exit", "softquit") else command
         if command in ("quit", "softrestart"):
             if self.stopping and command == "quit":
                 return True
@@ -332,6 +356,11 @@ class lichess_bot:
                 self.on_line(f"-- {command} sent")
             else:
                 self.on_line(f"-- could not {command}")
+        elif command == "team":
+            if len(words) < 2:
+                self.on_line("-- usage: team <id> [message]")
+            else:
+                await self.join_team(words[1], " ".join(words[2:]))
         elif command == "help":
             self.on_line("-- commands: " + ", ".join(console_commands) + "; quit stops after the game")
         else:
@@ -963,7 +992,7 @@ def load_settings(path):
     types = {"engine": str, "options": dict, "speeds": list, "accept": bool, "games": int, "pgn_dir": str,
              "learning": bool, "variety": (int, float), "contempt_window": int, "unknown_contempt": int, "layer_profiles": dict,
              "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
-             "challenge_idle": int, "challenge_window": int}
+             "challenge_idle": int, "challenge_window": int, "teams": list}
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     types["pv_plies"] = int
@@ -981,6 +1010,8 @@ def load_settings(path):
             raise ValueError(f"{path}: {key} must be {' or '.join(kind.__name__ for kind in kinds)}")
         if key == "speeds" and (not value or not all(speed in speeds for speed in value)):
             raise ValueError(f"{path}: speeds are {', '.join(speeds)}")
+        if key == "teams" and not all(isinstance(team, str) and team for team in value or ()):
+            raise ValueError(f"{path}: teams must be team ids")
         if key == "layer_profiles":
             value = layer_profiles(value, path)
         settings[key] = value
@@ -997,7 +1028,8 @@ def run(options, parser):
     except (OSError, ValueError) as error:
         parser.error(str(error))
     flags = {"engine": options.engine, "speeds": options.speed, "games": options.games, "pgn_dir": options.pgn_dir,
-             "pv_plies": options.pv_plies, "variety": options.variety, "live_feed": options.live_feed, "pgn_post": options.pgn_post}
+             "pv_plies": options.pv_plies, "variety": options.variety, "live_feed": options.live_feed, "pgn_post": options.pgn_post,
+             "teams": options.team}
     configured.update({key: value for key, value in flags.items() if value is not None})
     if configured["pv_plies"] < 0:
         parser.error("pv_plies must be a nonnegative integer")
@@ -1067,6 +1099,7 @@ def run(options, parser):
                           challenge_idle=configured["challenge_idle"] or 0,
                           challenge_window=configured["challenge_window"],
                           resignation_settings=configured["resignation"], pv_plies=configured["pv_plies"],
+                          teams=configured["teams"] or (),
                           local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))
         state["bot"] = bot
         if controller.requested:

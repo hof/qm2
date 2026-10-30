@@ -113,6 +113,26 @@ class command_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(lines), 5)
 
 
+class team_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_joins_a_team_with_its_case_and_message(self):
+        api, lines = stub_api(), []
+        bot = lichess.lichess_bot(api, None, lines.append)
+        await bot.console("team Bot-Battle please let this bot play in your team")
+        self.assertEqual(api.posts, [("/team/Bot-Battle/join", {"message": "please let this bot play in your team"})])
+        await bot.console("team")
+        self.assertEqual(len(api.posts), 1)
+
+    async def test_reports_a_missing_scope(self):
+        class scoped_api(stub_api):
+            token = "secret"
+
+            async def call(self, method, path, data=None):
+                return {"secret": {"scopes": "bot:play"}}
+
+        bot = lichess.lichess_bot(scoped_api(), None, lambda line: None)
+        self.assertEqual(await bot.missing_scopes(("bot:play", "team:write")), ["team:write"])
+
+
 class stub_session:
     async def play(self, board, limit, **unused):
         move = next(iter(board.legal_moves))

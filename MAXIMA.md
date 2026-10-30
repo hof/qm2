@@ -2078,7 +2078,14 @@ curl -d '' -H "Authorization: Bearer $LICHESS_BOT_TOKEN" https://lichess.org/api
 The client reads `LICHESS_BOT_TOKEN` and `LICHESS_OWNERS` (Lichess users who may
 send commands, comma-separated) from the environment or from `.env` in the
 checkout (git-ignored; the environment wins). It refuses to start unless the
-token belongs to a BOT account.
+token belongs to a BOT account. The token needs scope `bot:play`, and
+`team:write` to join teams. Lichess cannot add a scope to a token, so a new scope
+means a new token; the client warns at startup when `teams` is set without it.
+
+`--team ID` (repeatable) or the `teams` setting joins teams at startup, and the
+console command `team <id> [message]` joins one at any time. A team that reviews
+requests needs a message of 30 to 2000 characters; password-protected teams are
+not supported.
 
 Bots cannot seek, so MaximaEngine plays challenges, its own and others'.
 After `challenge_idle` minutes without a game (default 30, `--challenge-idle`;
