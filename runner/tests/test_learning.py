@@ -205,6 +205,18 @@ class selection_tests(unittest.TestCase):
         moves, _, _ = book.distribution(board, key)
         self.assertAlmostEqual(moves[e4][0], moves[d4][0])
 
+    def test_a_bad_first_eval_damps_the_book_line_that_led_to_it(self):
+        board = chess.Board()
+        key = f"{chess.polyglot.zobrist_hash(board):016x}"
+        records = [{"color": "white", "variant": "standard", "type": "blitz", "group": "humans", "opponent": "X",
+                    "moves": [[key, "e2e4"], ["after", "e7e5"], ["next", "g1f3"]], "values": [], "score": 0.5,
+                    "analyses": [["next", "g1f3", 20, eval_after]]} for eval_after in (-70, -90)]
+        book = learning.opening_book(records)
+        self.assertTrue(book.bad_start(key, chess.Move.from_uci("e2e4")))
+        self.assertFalse(book.bad_start(key, chess.Move.from_uci("d2d4")))
+        records.append(dict(records[0], analyses=[["next", "g1f3", 20, 40]]))
+        self.assertFalse(learning.opening_book(records).bad_start(key, chess.Move.from_uci("e2e4")))
+
     def test_a_draw_against_a_stronger_opponent_is_repeated(self):
         board, key = chess.Board(), "start"
         e4 = chess.Move.from_uci("e2e4")

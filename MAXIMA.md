@@ -1427,7 +1427,9 @@ MaxDrone config). In each position:
    So book.bin and the style books keep their floor, and John's layer counts more as
    games against John accumulate.
 4. Proven losers (at least 4 games, rate under 30%) are multiplied by 0.1 in
-   every layer, book.bin included. Moves this opponent has only ever beaten us
+   every layer, book.bin included, and so are book moves whose games, against
+   anyone, average a first searched eval of -0.70 or worse: such a line does not
+   suit Maxima, and early moves shared with good lines average out. Moves this opponent has only ever beaten us
    with are multiplied by 0.03 at once, so untried moves come first; once those
    have lost as well the shares even out again. Against a stronger opponent, our
    best move here that scored above 50% (a draw counts its draw value) gets at
