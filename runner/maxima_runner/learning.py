@@ -29,7 +29,6 @@ signature_share = 0.7
 signature_eval = 0.45
 lost_damp = 0.03  # weight of a move this opponent has only beaten
 revenge_plies = 24  # the opening of a lost game whose moves we play back at the opponent
-bad_first_eval = -70  # our first searched eval, in centipawns, that says a book line does not suit us
 mood_hours = 24  # how long one mood lasts in a running session
 equal_contempt = -10  # the draw contempt between equal ratings, 4 Elo per centipawn away from it
 game_types = ("lightning", "blitz", "standard")
@@ -322,7 +321,7 @@ class opening_book:
         self.choice_results = {}
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
-        self.first_evals = {}  # (key, move) -> [sum, games] of our first searched eval after our book move
+        self.comfort_scores = {}  # (key, move) -> [sum, games] of the first eval, halved per book move back
         opponent = (opponent or "").lower()
         for record in records:
             if learning_variant(record.get("variant", "standard")) != self.variant:
@@ -343,7 +342,7 @@ class opening_book:
                 ours = {tuple(played) for played in record.get("moves", [])[first::2]}
             if personal and opponent and record["opponent"].lower() == opponent and record.get("color") in ("white", "black"):
                 self.track_revenge(record)
-            self.track_first_eval(record)
+            self.track_comfort(record)
             counted = set()
             for key, move, evaluated, result in record["values"]:
                 if (key, move) in ours:
@@ -370,17 +369,18 @@ class opening_book:
         elif record.get("score") == 1.0:
             self.revenge.pop(ours, None)
 
-    def track_first_eval(self, record):
-        """Credit our first searched eval to our moves before it, the book line that led there."""
+    def track_comfort(self, record):
+        """Our first searched eval judges the book line before it: the last book move fully, each earlier
+        one half of the next, so early moves are not blamed for what came much later."""
         if record.get("color") not in ("white", "black") or not record.get("analyses"):
             return
         position, move, _, centipawns = record["analyses"][0][:4]
         played = [tuple(entry) for entry in record.get("moves", [])]
         if (position, move) in played:
-            line = played[:played.index((position, move))]
-            for entry in line[0 if record["color"] == "white" else 1::2]:
-                total = self.first_evals.setdefault(entry, [0, 0])
-                total[0] += centipawns
+            line = played[:played.index((position, move))][0 if record["color"] == "white" else 1::2]
+            for distance, entry in enumerate(reversed(line)):
+                total = self.comfort_scores.setdefault(entry, [0.0, 0])
+                total[0] += centipawns / 2 ** distance
                 total[1] += 1
 
     def value(self, evaluated, result):
@@ -465,12 +465,11 @@ class opening_book:
             total = sum(weighted.values())
             layers[name] = {move: weight / total for move, weight in weighted.items()}
             weights[name] = self.weights[name] * games / (games + self.prior)
-        # Proven losers drop in every layer, book.bin included, after four games at a poor rate, and so do
-        # book lines we understand badly. Moves this opponent has only beaten drop at once, below the untried
-        # moves until those have failed as well.
-        damp = {move: lost_damp if self.personal_score(key, move) == 0.0
-                else 0.1 if rates[move][0][1] >= 4 and rates[move][-1][0] < 0.3 or self.bad_start(key, move)
-                else 1.0 for move in candidates}
+        # Proven losers drop in every layer, book.bin included, after four games at a poor rate. Moves this
+        # opponent has only beaten drop at once, below the untried moves until those have failed as well.
+        # Comfort then moves every layer toward the lines Maxima understands.
+        damp = {move: self.comfort(key, move) * (lost_damp if self.personal_score(key, move) == 0.0
+                else 0.1 if rates[move][0][1] >= 4 and rates[move][-1][0] < 0.3 else 1.0) for move in candidates}
         # The mood keeps its share: a damped move yields to the mood's other lines, or stays if it has none.
         mood = {move: share * damp.get(move, 0) for move, share in layers.get("mood", {}).items()}
         kept = sum(mood.values())
@@ -506,10 +505,11 @@ class opening_book:
         games = wins + draws + losses
         return (wins + draws * self.draw_value) / games if games else None
 
-    def bad_start(self, key, move):
-        """Whether our first searched eval after this book move averages bad_first_eval or worse."""
-        total, games = self.first_evals.get((key, move.uci()), (0, 0))
-        return bool(games) and total / games <= bad_first_eval
+    def comfort(self, key, move):
+        """How well Maxima understands the move's lines: x0.1 at a score of -0.70, up to x2 from +1.00."""
+        total, games = self.comfort_scores.get((key, move.uci()), (0.0, 1))
+        score = total / games
+        return max(0.1, 10 ** (score / 70)) if score < 0 else min(2.0, 1 + score / 100)
 
     def repeat_move(self, key, moves):
         """Our best move here that beat expectations against a stronger opponent, if any."""

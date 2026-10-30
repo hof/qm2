@@ -205,17 +205,18 @@ class selection_tests(unittest.TestCase):
         moves, _, _ = book.distribution(board, key)
         self.assertAlmostEqual(moves[e4][0], moves[d4][0])
 
-    def test_a_bad_first_eval_damps_the_book_line_that_led_to_it(self):
-        board = chess.Board()
-        key = f"{chess.polyglot.zobrist_hash(board):016x}"
-        records = [{"color": "white", "variant": "standard", "type": "blitz", "group": "humans", "opponent": "X",
-                    "moves": [[key, "e2e4"], ["after", "e7e5"], ["next", "g1f3"]], "values": [], "score": 0.5,
-                    "analyses": [["next", "g1f3", 20, eval_after]]} for eval_after in (-70, -90)]
-        book = learning.opening_book(records)
-        self.assertTrue(book.bad_start(key, chess.Move.from_uci("e2e4")))
-        self.assertFalse(book.bad_start(key, chess.Move.from_uci("d2d4")))
-        records.append(dict(records[0], analyses=[["next", "g1f3", 20, 40]]))
-        self.assertFalse(learning.opening_book(records).bad_start(key, chess.Move.from_uci("e2e4")))
+    def test_the_first_eval_judges_the_last_book_moves_most(self):
+        def record(centipawns):
+            return {"color": "white", "variant": "standard", "type": "blitz", "group": "humans", "opponent": "X",
+                    "moves": [["a", "e2e4"], ["b", "e7e5"], ["c", "g1f3"], ["d", "b8c6"], ["e", "f1c4"]],
+                    "values": [], "score": 0.5, "analyses": [["e", "f1c4", 20, centipawns]]}
+
+        book = learning.opening_book([record(-70)])
+        last, early = book.comfort("c", chess.Move.from_uci("g1f3")), book.comfort("a", chess.Move.from_uci("e2e4"))
+        self.assertLess(last, early)
+        self.assertLess(early, 1.0)
+        self.assertEqual(book.comfort("c", chess.Move.from_uci("d2d4")), 1.0)
+        self.assertGreater(learning.opening_book([record(100)]).comfort("c", chess.Move.from_uci("g1f3")), 1.0)
 
     def test_a_draw_against_a_stronger_opponent_is_repeated(self):
         board, key = chess.Board(), "start"

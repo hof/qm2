@@ -1427,15 +1427,20 @@ MaxDrone config). In each position:
    So book.bin and the style books keep their floor, and John's layer counts more as
    games against John accumulate.
 4. Proven losers (at least 4 games, rate under 30%) are multiplied by 0.1 in
-   every layer, book.bin included, and so are book moves whose games, against
-   anyone, average a first searched eval of -0.70 or worse: such a line does not
-   suit Maxima, and early moves shared with good lines average out. Moves this opponent has only ever beaten us
+   every layer, book.bin included. Moves this opponent has only ever beaten us
    with are multiplied by 0.03 at once, so untried moves come first; once those
    have lost as well the shares even out again. Against a stronger opponent, our
    best move here that scored above 50% (a draw counts its draw value) gets at
    least the profile's `repeat` chance, so a good line is walked again. The mood
    is exempt: it keeps its percentage, a damped move gives way to the mood's other
    lines at that position and stays when the mood has none.
+
+   Comfort plays the openings Maxima understands. The first searched eval of a
+   game, against anyone, judges the book line before it: our last book move gets
+   the whole eval, each earlier one half of the next, so 1.e4 is not blamed for a
+   weird line much later. A move's comfort score is its mean over the games
+   through it. It multiplies the move in every layer but the mood: ×0.1 at -0.70
+   or worse, about ×0.3 at -0.35, ×1 at 0.00, up to ×2 from +1.00.
 5. Signature lines, for psychology: when our move beat this registered opponent
    three times in a row, each time with our eval after it at 45% or better, it
    gets 70% of the choice there (`signature` in the PGN comment); the rest keeps
