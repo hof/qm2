@@ -27,7 +27,6 @@ result_share = 0.2
 signature_wins = 3
 signature_share = 0.7
 signature_eval = 0.45
-repeat_share = 0.9  # chance to repeat our move after a good result against a stronger opponent
 lost_damp = 0.03  # weight of a move this opponent has only beaten
 revenge_plies = 24  # the opening of a lost game whose moves we play back at the opponent
 mood_hours = 24  # how long one mood lasts in a running session
@@ -470,7 +469,7 @@ class opening_book:
         repeat = self.repeat_move(key, moves) if signature is None else None
         if repeat is not None:
             # A good result against a stronger opponent: walk the same line again.
-            moves, search = self.boost(moves, search, repeat, repeat_share)
+            moves, search = self.boost(moves, search, repeat, signature_share)
         revenge = self.revenge_move(board, key, moves)
         if revenge is not None and revenge != signature and revenge != repeat:
             # Revenge: the line this opponent beat us with, played back at them.

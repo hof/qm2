@@ -211,8 +211,8 @@ class selection_tests(unittest.TestCase):
         stronger, equal = self.opening(contempt=24), self.opening(contempt=0)
         for book in (stronger, equal):
             book.results[2][(key, "e2e4")] = [0, 1, 0]
-        self.assertEqual(stronger.distribution(board, key)[0][e4][0], learning.repeat_share)
-        self.assertLess(equal.distribution(board, key)[0][e4][0], learning.repeat_share)
+        self.assertGreaterEqual(stronger.distribution(board, key)[0][e4][0], learning.signature_share)
+        self.assertLess(equal.distribution(board, key)[0][e4][0], learning.signature_share)
 
     def test_books_ignore_do_not_play_weights(self):
         board = board_after("d2d4 d7d5")

@@ -1430,7 +1430,7 @@ MaxDrone config). In each position:
    with are multiplied by 0.03 at once, so untried moves come first; once those
    have lost as well the shares even out again. Against a stronger opponent, our
    best move here that scored above 50% (a draw counts its draw value) gets a
-   90% chance, so a good line is walked again.
+   70% chance, so a good line is walked again.
 5. Signature lines, for psychology: when our move beat this registered opponent
    three times in a row, each time with our eval after it at 45% or better, it
    gets 70% of the choice there (`signature` in the PGN comment); the rest keeps
