@@ -30,6 +30,7 @@ signature_eval = 0.45
 lost_damp = 0.03  # weight of a move this opponent has only beaten
 revenge_plies = 24  # the opening of a lost game whose moves we play back at the opponent
 mood_hours = 24  # how long one mood lasts in a running session
+equal_contempt = -10  # the draw contempt between equal ratings, 4 Elo per centipawn away from it
 game_types = ("lightning", "blitz", "standard")
 lichess_speeds = {"bullet": "lightning", "blitz": "blitz", "rapid": "standard", "classical": "standard"}
 
@@ -241,7 +242,7 @@ layer_profiles = {
               "opponent": 25, "search": 5, "revenge": 30, "repeat": 70},
     "weaker": {"book": 20, "fire": 25, "draw": 0, "experiment": 0, "mood": 10, "global": 5, "group": 5,
                "opponent": 35, "search": 5, "revenge": 40, "repeat": 70},
-    "stronger": {"book": 30, "fire": 0, "draw": 25, "experiment": 0, "mood": 0, "global": 10, "group": 10,
+    "stronger": {"book": 20, "fire": 0, "draw": 35, "experiment": 0, "mood": 0, "global": 10, "group": 10,
                  "opponent": 25, "search": 5, "revenge": 15, "repeat": 70},
     "unrated": {"book": 30, "fire": 30, "draw": 0, "experiment": 10, "mood": 15, "global": 15, "group": 0,
                 "opponent": 0, "search": 10, "revenge": 50, "repeat": 70},
@@ -263,10 +264,10 @@ def pick_mood(setting, available, previous=None):
 
 
 def style_share(contempt):
-    """How far a rated game leans to the weaker or stronger profile: none within ±0.20, all at ±1.00."""
+    """How far a rated game leans to the weaker or stronger profile: none within 20 Elo, all from 120 Elo."""
     if contempt is None:
         return 0.0
-    return max(0.0, min(1.0, (abs(contempt) - 20) / 80))
+    return max(0.0, min(1.0, (abs(contempt - equal_contempt) - 5) / 25))
 
 
 def game_profile(contempt, rated, profiles=None):

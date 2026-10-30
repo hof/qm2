@@ -1383,7 +1383,7 @@ learned layers, each with a percentage from the game's profile:
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | equal | 45 | 0 | 0 | 0 | 10 | 15 | 5 | 25 | 5 | 30 | 70 |
 | much weaker | 20 | 25 | 0 | 0 | 10 | 5 | 5 | 35 | 5 | 40 | 70 |
-| much stronger | 30 | 0 | 25 | 0 | 0 | 10 | 10 | 25 | 5 | 15 | 70 |
+| much stronger | 20 | 0 | 35 | 0 | 0 | 10 | 10 | 25 | 5 | 15 | 70 |
 | unrated | 30 | 30 | 0 | 10 | 15 | 15 | 0 | 0 | 10 | 50 | 70 |
 
 The layers sum to 100. `search` is the chance per game to leave the book once at a random
@@ -1392,7 +1392,7 @@ opponent's own winning line (below), and `repeat` the same for our move after a 
 result against a stronger opponent.
 
 Rated games slide from *equal* toward *much weaker* or *much stronger* with
-the draw contempt (none within ±0.20, fully at ±1.00); unrated games (guests)
+the rating gap behind the draw contempt (none within 20 Elo, fully from 120 Elo); unrated games (guests)
 play fire, experiment, and the mood. book.bin is the source of truth and is never
 rewritten; other layers only add to it.
 

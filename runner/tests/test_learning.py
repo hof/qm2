@@ -408,8 +408,9 @@ class multi_layer_book_tests(unittest.TestCase):
         profiles = learning.layer_profiles
         self.assertEqual(learning.game_profile(-10, True), profiles["equal"])
         self.assertEqual(learning.game_profile(-100, True), profiles["weaker"])
-        self.assertEqual(learning.game_profile(-60, True)["fire"], 12.5)
-        self.assertEqual(learning.game_profile(100, True)["draw"], 25)
+        self.assertEqual(learning.game_profile(-25, True)["fire"], 10)
+        self.assertEqual(learning.game_profile(24, True), profiles["stronger"])
+        self.assertEqual(learning.game_profile(100, True)["draw"], 35)
         self.assertEqual(learning.game_profile(None, True), profiles["equal"])
         unrated = learning.game_profile(-100, False)
         self.assertEqual(unrated, profiles["unrated"])
