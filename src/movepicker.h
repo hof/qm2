@@ -56,18 +56,18 @@ private:
     move_t * pop(search_t * s, move::list_t * list);
     move_t * pop_good_noisy(search_t * s, int see_threshold, bool defer_bad_noisy);
     move_t * pop_sorted(search_t * s, move_t *& cursor, move_t * end, int minimum);
-    move_t * next_standard(search_t * s, int depth);
+    move_t * next_standard(search_t * s, int depth, bool quiets_pruned);
     void score_quiets(search_t * s, move_t * begin, move_t * end);
 
 public:
     move_t * first(search_t * s, int depth);
-    move_t * next(search_t * s, int depth); 
+    move_t * next(search_t * s, int depth, bool quiets_pruned = false);
 };
 
 namespace move {
     move_picker_t * picker();
     move_t * first(search_t * s, int depth);
-    move_t * next(search_t * s, int depth); 
+    move_t * next(search_t * s, int depth, bool quiets_pruned = false);
 };
 
 #endif	/* MOVEPICKER_H */

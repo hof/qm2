@@ -208,12 +208,28 @@ bool quiescence_noisy_contract() {
     return true;
 }
 
+bool pruned_quiets_contract() {
+    auto quiet_search = std::make_unique<search_t>("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    quiet_search->stack->tt_move.set(&quiet_search->brd, "e2e4");
+    if (!move::first(quiet_search.get(), 2) || move::next(quiet_search.get(), 2, true)) {
+        return false;
+    }
+
+    // Bad noisy moves follow the quiets, so those must still be walked.
+    auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
+    int bad_noisy_found = 0;
+    for (auto * move = move::first(search.get(), 2); move; move = move::next(search.get(), 2, true)) {
+        bad_noisy_found += move->to_string() == "d2d5";
+    }
+    return bad_noisy_found == 1;
+}
+
 }
 
 int main() {
     magic::init();
     if (!legality_contract() || !pawn_hint_geometry() || !staging_contract() || !hint_stages()
-            || !quiescence_noisy_contract()) {
+            || !quiescence_noisy_contract() || !pruned_quiets_contract()) {
         std::cerr << "pseudo-legal picker / lazy legality contract failed\n";
         return EXIT_FAILURE;
     }

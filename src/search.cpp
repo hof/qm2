@@ -1754,6 +1754,13 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         - (minimum_estimate + lmr_tt_pv_depth_offset * stack->tt_pv - lmr_depth_offset) / 1024) < 9;
     const int move_limit = (3 + depth * depth) / (2 - int(stack->improving));
     stack->best_move.clear();
+
+    // The next legal quiet and all after it fall to the certain LMP test below.
+    // Nothing changes these facts while moves are only being pruned.
+    const auto quiets_pruned = [&] {
+        return quiet_lmp_certain && considered_moves + 1 >= move_limit
+            && brd.ply && searched_moves && !in_check && best > -decisive_score;
+    };
     do {
         if (excluded_move && move->to_compact() == excluded_move) {
             continue;
@@ -1903,7 +1910,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
             }
         }
         stack->searched[searched_moves++].set(move);
-    } while ((move = move::next(this, depth)));
+    } while ((move = move::next(this, depth, quiets_pruned())));
 
     /*
      * Store the result

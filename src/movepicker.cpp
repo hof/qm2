@@ -122,11 +122,12 @@ move_t * move_picker_t::first(search_t * s, int depth) {
  * the current stage
  * @param s search object
  * @param depth remaining search depth
+ * @param quiets_pruned the caller will prune every quiet not yet returned
  * @return
  */
-move_t * move_picker_t::next(search_t * s, int depth) {
+move_t * move_picker_t::next(search_t * s, int depth, bool quiets_pruned) {
     if (s->wild == 0) {
-        return next_standard(s, depth);
+        return next_standard(s, depth, quiets_pruned);
     }
 
     /*
@@ -391,7 +392,7 @@ void move_picker_t::score_quiets(search_t * s, move_t * begin, move_t * end) {
     }
 }
 
-move_t * move_picker_t::next_standard(search_t * s, int depth) {
+move_t * move_picker_t::next_standard(search_t * s, int depth, bool quiets_pruned) {
     auto * list = &s->stack->move_list;
     auto * board = &s->brd;
     const bool do_quiets = depth > 0 || s->stack->in_check;
@@ -478,6 +479,11 @@ move_t * move_picker_t::next_standard(search_t * s, int depth) {
                 }
                 break;
             case quiet_init: {
+
+                // Nothing follows the quiets, so they need not exist at all.
+                if (quiets_pruned && list->first == list->last) {
+                    return nullptr;
+                }
                 auto * begin = list->last;
                 if (do_quiets) {
                     move::gen_castles(board, list);
@@ -531,8 +537,8 @@ namespace move {
         return _picker.first(s, depth);
     }
 
-    move_t * next(search_t * s, int depth) {
-        return _picker.next(s, depth);
+    move_t * next(search_t * s, int depth, bool quiets_pruned) {
+        return _picker.next(s, depth, quiets_pruned);
     }
 };
 
