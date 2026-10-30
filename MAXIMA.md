@@ -2095,7 +2095,8 @@ challenge or rematch is sent, so nothing can overlap a pairing. The join itself
 waits until no game is running or expected. While idle the client repeats the
 join about every 50 seconds, because a request to be paired lasts one minute.
 It also reads the arena then, and returns to normal when Lichess reports it
-finished, when its scheduled end is a minute past, or when it does not allow bots.
+finished, when its scheduled end is a minute past, when it does not allow bots,
+or when it is not standard chess; the last two are found before joining.
 `leave` withdraws, as does stopping; `--no-accept` and `!challenge` do not change
 any of this. A configured arena is entered again after a restart, one entered by
 command is not. Swiss and team-battle events are not supported.

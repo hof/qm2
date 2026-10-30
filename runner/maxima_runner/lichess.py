@@ -369,6 +369,9 @@ class lichess_bot:
             if info.get("botsAllowed") is False:
                 self.tournament_over("does not allow bots")
                 return
+            if info.get("variant", "standard") != "standard":  # pairings skip the challenge filter
+                self.tournament_over(f"is {info['variant']}, and we play standard chess only")
+                return
             finish, start, minutes = info.get("secondsToFinish"), info.get("secondsToStart"), info.get("minutes")
             if isinstance(finish, int):
                 self.tournament_ends = now + finish + tournament_grace

@@ -215,8 +215,9 @@ class tournament_tests(unittest.IsolatedAsyncioTestCase):
         await bot.tournament_tick()
         self.assertTrue(bot.in_tournament)
 
-    async def test_ends_when_finished_past_its_schedule_or_closed_to_bots(self):
-        for info in ({"isFinished": True}, {"secondsToFinish": -lichess.tournament_grace}, {"botsAllowed": False}):
+    async def test_ends_when_finished_past_its_schedule_closed_to_bots_or_a_variant(self):
+        for info in ({"isFinished": True}, {"secondsToFinish": -lichess.tournament_grace}, {"botsAllowed": False},
+                     {"variant": "atomic"}):
             bot = self.bot(tournament_api(info))
             await bot.join_tournament("AbCd")
             await bot.tournament_tick()
