@@ -82,6 +82,18 @@ class shared_learning_tests(unittest.TestCase):
         self.assertEqual(before, {path: (path.read_bytes(), path.stat().st_mtime_ns)
                                   for path in self.root.rglob('*') if path.is_file()})
 
+    def test_startup_reports_only_a_needed_rebuild_and_why(self):
+        self.store.add(game_for())
+        lines = []
+        learning.learner(self.root, notify=lines.append)
+        self.assertEqual(lines, [])
+        self.store.snapshot.write_text('broken')
+        learning.learner(self.root, notify=lines.append)
+        self.store.snapshot.unlink()
+        learning.learner(self.root, notify=lines.append)
+        self.assertEqual(lines, ['-- rebuilding experience from PGNs (index invalid)',
+                                 '-- rebuilding experience from PGNs (index missing)'])
+
     def test_startup_rebuilds_missing_or_invalid_index(self):
         self.store.add(game_for())
         expected = self.store.load()

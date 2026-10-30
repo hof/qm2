@@ -1548,18 +1548,18 @@ def run(options, parser):
     learner = None
     losers_learner = None
     if configured["learning"] and not options.no_engine:
-        show("-- loading experience (rebuild only if the index is missing or invalid)")
+        show("-- loading experience")
         learner = learning.learner(data_root() / "experience", pgn_dir, data_root() / "book.bin",
                                    configured["variety"],
                                    style_books(configured["style_books"]),
                                    configured["layer_profiles"] or None, configured["mood"],
-                                   data_root() / "moods", server=options.host)
+                                   data_root() / "moods", server=options.host, notify=show)
         show(f"-- experience: {len(learner.records)} games")
         if policy.losers:
             losers_games = pgn_dir.parent / "losers" / pgn_dir.name
             losers_learner = learning.learner(data_root() / "experience" / "losers", losers_games,
                                              variety=configured["variety"], mood="off", server=options.host,
-                                             variant="losers")
+                                             variant="losers", notify=show)
             show(f"-- losers experience: {len(losers_learner.records)} games")
 
     @asynccontextmanager

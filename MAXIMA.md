@@ -1333,7 +1333,7 @@ uploads without sufficient evaluations teach nothing.
 `experience:build` reconstructs learning exclusively from PGNs: `index/` and
 `players/` can be deleted and rebuilt completely. Keep **all PGNs**, including
 source/evaluation annotations. Online startup loads the published index directly;
-it rebuilds only if that index is missing or invalid. Run `experience:build`
+it rebuilds only if that index is missing or invalid, and says so. Run `experience:build`
 to recover a durable game whose snapshot publication was interrupted, or after
 changing archived PGNs outside the shared store. Experience loading runs before
 the online signal controller starts, so Ctrl-C can interrupt a cold rebuild.

@@ -556,7 +556,7 @@ class learner:
     """MaxDrone's experience: digests kept in memory, a fresh opening_book per game."""
 
     def __init__(self, experience_dir, games_dir=None, book_path=None, variety=1.0, style_books=None,
-                 profiles=None, mood="auto", moods_dir=None, server=None, variant="standard"):
+                 profiles=None, mood="auto", moods_dir=None, server=None, variant="standard", notify=None):
         self.experience_dir = Path(experience_dir)
         self.variant = learning_variant(variant)
         self.mood, self.moods_dir = mood, moods_dir
@@ -564,7 +564,7 @@ class learner:
         self.profiles = profiles
         self.games_dir = Path(games_dir or self.experience_dir / "games")
         self.server = learning_store.server_name(server) if server else None
-        self.store = learning_store.shared_store(self.experience_dir, variant)
+        self.store = learning_store.shared_store(self.experience_dir, variant, notify)
         self.book_path = book_path
         self.variety = variety
         if self.games_dir.exists() and self.experience_dir.resolve() not in self.games_dir.resolve().parents and self.games_dir.resolve() != self.experience_dir.resolve():

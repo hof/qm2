@@ -242,8 +242,9 @@ def find_archived(game, directory):
 
 
 class shared_store:
-    def __init__(self, root, variant='standard'):
+    def __init__(self, root, variant='standard', notify=None):
         self.variant = learning_variant(variant)
+        self.notify = notify
         self.root = Path(root)
         self.snapshot = self.root / 'index' / 'shared.json'
         self.lock = self.root / '.learning.lock'
@@ -308,6 +309,9 @@ class shared_store:
 
     def _rebuild(self):
         from .monthly_pgn import recover_all
+        if self.notify:
+            reason = 'invalid' if self.snapshot.exists() else 'missing'
+            self.notify(f'-- rebuilding experience from PGNs (index {reason})')
         recover_all(self.games)
         # Include both old server layouts on first use; never delete the original PGNs.
         paths = set(self.games.rglob('*.pgn')) if self.games.exists() else set()

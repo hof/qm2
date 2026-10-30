@@ -1038,10 +1038,10 @@ def run(options, parser):
     # Load before installing event-loop signal handlers so cold rebuilds remain interruptible.
     learner = None
     if configured["learning"]:
-        show("-- loading experience (rebuild only if the index is missing or invalid)")
+        show("-- loading experience")
         learner = learning.learner(data_root() / "experience", pgn_dir, data_root() / "book.bin", configured["variety"],
                                    style_books(configured["style_books"]), configured["layer_profiles"] or None,
-                                   configured["mood"], data_root() / "moods", server=options.server)
+                                   configured["mood"], data_root() / "moods", server=options.server, notify=show)
         show(f"-- experience: {len(learner.records)} games")
 
     @asynccontextmanager
