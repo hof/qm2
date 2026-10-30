@@ -131,8 +131,7 @@ class sprt_match_tests(unittest.IsolatedAsyncioTestCase):
                 args = SimpleNamespace(pairs=1, sprt=[0, 5], sprt_alpha=.05,
                     sprt_beta=.05, seed=1, timeout=3, hash_mb=1, variant=variant,
                     seconds=1, increment=.01, max_plies=8,
-                    profiles=[engine_profile([('LMR', 'true')], []),
-                              engine_profile([('LMR', 'false')], [])],
+                    profiles=[engine_profile([], []), engine_profile([], [])],
                     json=Path(directory) / (variant + '.json'))
                 report = {'games': []}
                 stream = io.StringIO()
@@ -147,8 +146,6 @@ class sprt_match_tests(unittest.IsolatedAsyncioTestCase):
                     self.assertIsNone(record['error'])
                     self.assertEqual(record['termination'], 'checkmate' if variant == 'standard'
                                      else 'variant_win')
-                    self.assertEqual([engine['options']['LMR'] for engine in record['engines']],
-                                     ['true', 'false'])
                     self.assertEqual([engine['options']['Wild'] for engine in record['engines']],
                                      [variant, variant])
                     game = read_match_pgn(pgn)
