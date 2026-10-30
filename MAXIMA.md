@@ -1438,7 +1438,9 @@ MaxDrone config). In each position:
    Comfort plays the openings Maxima understands. The first searched eval of a
    game, against anyone, judges the book line before it: our last book move gets
    the whole eval, each earlier one half of the next, so 1.e4 is not blamed for a
-   weird line much later. A move's comfort score is its mean over the games
+   weird line much later. An eval equal to that game's draw contempt (the
+   `DrawContempt` PGN tag, or the ratings in older games) is a drawn line and
+   counts as 0.00. A move's comfort score is its mean over the games
    through it. It multiplies the move in every layer but the mood: ×0.1 at -0.70
    or worse, about ×0.3 at -0.35, ×1 at 0.00, up to ×2 from +1.00.
 5. Signature lines, for psychology: when our move beat this registered opponent

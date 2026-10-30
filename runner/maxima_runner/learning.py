@@ -40,6 +40,25 @@ def expected_score(centipawns):
     return 1 / (1 + 10 ** (-max(-2000, min(2000, centipawns)) / 400))
 
 
+def draw_contempt(our_rating, their_rating, window=100, default=equal_contempt, elo_per_cp=4):
+    """DrawContempt in cp from our view: draws welcome against stronger players, avoided against weaker.
+
+    None when a rating is unknown, so the engine keeps its own default."""
+    if not window or our_rating is None or their_rating is None:
+        return None
+    return int(max(-window, min(window, default + round((their_rating - our_rating) / elo_per_cp))))
+
+
+def game_contempt(headers, our_color):
+    """The draw score the engine searched with: the DrawContempt tag, or from the ratings in older games."""
+    if headers.get("DrawContempt", "").lstrip("-").isdigit():
+        return int(headers["DrawContempt"])
+    ours, theirs = (headers.get(f"{prefix}Elo", "") for prefix in
+                    (("White", "Black") if our_color == chess.WHITE else ("Black", "White")))
+    contempt = draw_contempt(int(ours), int(theirs)) if ours.isdigit() and theirs.isdigit() else None
+    return equal_contempt if contempt is None else contempt
+
+
 def game_type(event):
     """FICS type from the Event tag; Lichess speeds map to the nearest one."""
     words = event.lower().split()
@@ -127,7 +146,7 @@ def digest(game):
         "time_control": headers.get("TimeControl", ""),
         "score": score,
         "moves": [move[:2] for move in moves[:horizon_plies]],
-        "values": values, "analyses": analyses,
+        "values": values, "analyses": analyses, "contempt": game_contempt(headers, our_color),
     }
 
 
@@ -375,6 +394,8 @@ class opening_book:
         if record.get("color") not in ("white", "black") or not record.get("analyses"):
             return
         position, move, _, centipawns = record["analyses"][0][:4]
+        # A score equal to the draw contempt is a drawn line: level, whatever the rating gap was.
+        centipawns = 0 if centipawns == record.get("contempt") else centipawns
         played = [tuple(entry) for entry in record.get("moves", [])]
         if (position, move) in played:
             line = played[:played.index((position, move))][0 if record["color"] == "white" else 1::2]

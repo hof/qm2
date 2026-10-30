@@ -20,6 +20,7 @@ from .variants import royal_losers_board, wild_boards
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
 from .cli import styled
+from .learning import draw_contempt
 from .move_choice import describe, search_summary, speed, variation
 from .project import data_root, engine_path, project_root
 from .uci import open_engine
@@ -381,15 +382,6 @@ def parse_seek_pool(text):
 
 def rating_of(text):
     return int(text) if text.strip().isdigit() else None
-
-
-def draw_contempt(our_rating, their_rating, window=100, default=-10, elo_per_cp=4):
-    """DrawContempt in cp from our view: draws welcome against stronger players, avoided against weaker.
-
-    None when a rating is unknown, so the engine keeps its own default."""
-    if not window or our_rating is None or their_rating is None:
-        return None
-    return int(max(-window, min(window, default + round((their_rating - our_rating) / elo_per_cp))))
 
 
 class play_policy:
@@ -1011,6 +1003,8 @@ class engine_player:
                     headers[f"{color}Account"] = "unregistered"
         if self.opening is not None and self.opening.mood:
             headers["Mood"] = self.opening.mood
+        if self.contempt is not None:
+            headers["DrawContempt"] = str(self.contempt)
         return headers
 
     def finished_game(self, end):

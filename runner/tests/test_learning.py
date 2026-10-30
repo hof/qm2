@@ -218,6 +218,15 @@ class selection_tests(unittest.TestCase):
         self.assertEqual(book.comfort("c", chess.Move.from_uci("d2d4")), 1.0)
         self.assertGreater(learning.opening_book([record(100)]).comfort("c", chess.Move.from_uci("g1f3")), 1.0)
 
+    def test_a_drawn_line_is_level_comfort_at_any_contempt(self):
+        record = {"color": "white", "variant": "standard", "type": "blitz", "group": "humans", "opponent": "X",
+                  "moves": [["a", "e2e4"], ["b", "e7e5"]], "values": [], "score": 0.5, "contempt": -10,
+                  "analyses": [["b", "e7e5", 20, -10]]}
+        self.assertEqual(learning.opening_book([record]).comfort("a", chess.Move.from_uci("e2e4")), 1.0)
+        self.assertEqual(learning.game_contempt({"DrawContempt": "22"}, chess.WHITE), 22)
+        self.assertEqual(learning.game_contempt({"WhiteElo": "2872", "BlackElo": "2982"}, chess.WHITE), 18)
+        self.assertEqual(learning.game_contempt({}, chess.BLACK), -10)
+
     def test_a_draw_against_a_stronger_opponent_is_repeated(self):
         board, key = chess.Board(), "start"
         e4 = chess.Move.from_uci("e2e4")

@@ -253,7 +253,7 @@ class shared_store:
     def _read(self):
         try:
             value = json.loads(self.snapshot.read_text(encoding='utf-8'))
-            if (value.get('version') == 2 and value.get('variant', 'standard') == self.variant
+            if (value.get('version') == 3 and value.get('variant', 'standard') == self.variant
                     and isinstance(value.get('games'), dict)):
                 return value['games']
         except (OSError, ValueError, AttributeError):
@@ -275,7 +275,7 @@ class shared_store:
     def _publish(self, cached):
         from .learning import player_stats, write_player_stats
         write_player_stats(player_stats(self.records(cached)), self.root / 'players')
-        atomic_text(self.snapshot, json.dumps({'version': 2, 'variant': self.variant, 'games': cached}, sort_keys=True) + '\n')
+        atomic_text(self.snapshot, json.dumps({'version': 3, 'variant': self.variant, 'games': cached}, sort_keys=True) + '\n')
 
     def _ingest(self, games, cached, replace=False):
         from .learning import digest

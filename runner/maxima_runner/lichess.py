@@ -913,6 +913,8 @@ class lichess_game:
                 headers[f"{tag}Engine"] = engine_name
         if self.opening is not None and self.opening.mood:
             headers["Mood"] = self.opening.mood
+        if self.contempt is not None:
+            headers["DrawContempt"] = str(self.contempt)
         return headers
 
     def save(self, game):
