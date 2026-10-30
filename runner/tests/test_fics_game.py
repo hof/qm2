@@ -80,6 +80,31 @@ class history_tests(unittest.TestCase):
         self.assertEqual(history.update(fics_game.style12.parse(after_e4)), "takeback")
         self.assertEqual([move.uci() for move in history.board.move_stack], ["e2e4"])
 
+    def style12_of(self, board, san):
+        rows = " ".join(str(board).replace(" ", "").replace(".", "-").split("\n"))
+        turn = "W" if board.turn else "B"
+        return fics_game.style12.parse(f"<12> {rows} {turn} -1 1 1 1 1 0 1 A B 1 3 0 39 39 180000 180000 "
+                                       f"{board.fullmove_number} N/g1-f3 (0:00.000) {san}")
+
+    def test_repetition_is_not_a_takeback(self):
+        server = chess.Board()
+        history = fics_game.game_history(self.style12_of(server, "none"))
+        for san in "Nf3 Nf6 Ng1 Ng8 Nf3 Nf6 Ng1 Ng8".split():
+            server.push_san(san)
+            self.assertEqual(history.update(self.style12_of(server, san)), "move")
+        self.assertEqual(history.board.move_stack, server.move_stack)
+        self.assertTrue(history.board.is_repetition(3))
+
+    def test_takeback_of_a_repeated_position_finds_its_ply(self):
+        server = chess.Board()
+        history = fics_game.game_history(self.style12_of(server, "none"))
+        for san in "Nf3 Nf6 Ng1 Ng8 Nf3 Nf6".split():
+            server.push_san(san)
+            history.update(self.style12_of(server, san))
+        server.pop()
+        self.assertEqual(history.update(self.style12_of(server, "none")), "takeback")
+        self.assertEqual(history.board.move_stack, server.move_stack)
+
     def test_ics_moves(self):
         self.assertEqual(fics_game.ics_move(chess.Move.from_uci("e2e4")), "e2e4")
         self.assertEqual(fics_game.ics_move(chess.Move.from_uci("e1g1")), "e1g1")

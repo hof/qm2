@@ -89,9 +89,12 @@ class game_history:
         """Apply the server's latest board: 'move', 'takeback', 'reset', or False when nothing changed."""
         if same_position(self.board, position):
             return False
-        replay = self.board.copy()
-        while replay.move_stack:
-            replay.pop()
+        # Only an earlier ply is a takeback; the same position at a later ply is a repetition.
+        ply = 2 * (position.move_number - 1) + (position.turn == chess.BLACK)
+        if ply < self.board.ply():
+            replay = self.board.copy()
+            while replay.move_stack and replay.ply() > ply:
+                replay.pop()
             if same_position(replay, position):
                 # A takeback keeps the earlier moves, so the PGN stays complete.
                 self.board = replay
