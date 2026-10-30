@@ -49,6 +49,16 @@ def draw_contempt(our_rating, their_rating, window=100, default=equal_contempt, 
     return int(max(-window, min(window, default + round((their_rating - our_rating) / elo_per_cp))))
 
 
+def color_contempt(contempt, white):
+    """The draw score the engine plays with: White wants more than a draw, Black settles a little sooner.
+
+    A fifth of the contempt's size, added, so the direction stays right at any sign."""
+    if contempt is None:
+        return None
+    shift = round(abs(contempt) / 5)
+    return contempt - shift if white else contempt + shift
+
+
 def game_contempt(headers, our_color):
     """The draw score the engine searched with: the DrawContempt tag, or from the ratings in older games."""
     if headers.get("DrawContempt", "").lstrip("-").isdigit():

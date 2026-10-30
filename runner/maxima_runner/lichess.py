@@ -468,7 +468,7 @@ class lichess_game:
         self.reply_clock = None
         self.bot, self.id = bot, game_id
         self.initial = self.board = self.record = self.color = self.opponent = None
-        self.full = self.opening = self.contempt = None
+        self.full = self.opening = self.contempt = self.draw_score = None
         self.task = self.searching = None
         self.searched = None
         self.clocks = {}
@@ -573,6 +573,7 @@ class lichess_game:
         self.opponent = chess.engine.Opponent(them.get("name"), title if title in chess_titles else None,
                                               them.get("rating"), title == "BOT")
         self.contempt = draw_contempt(self.player(self.color).get("rating"), them.get("rating"), bot.contempt_window)
+        self.draw_score = learning.color_contempt(self.contempt, self.color == chess.WHITE)
         self.record = fics_game.game_record({})
         if bot.learner is not None:
             group = "engines" if title == "BOT" else "masters" if title in chess_titles else "humans"
@@ -707,7 +708,7 @@ class lichess_game:
                 bot.session, board, limit, opening=self.opening,
                 ceiling=self.loss.ceiling(self.full.get("rated")),
                 tablebase=bot.tablebase, game=(self.id, self.generation),
-                opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options={"DrawContempt": self.contempt},
+                opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options={"DrawContempt": self.draw_score},
                 on_search_started=self.show_opponent_move)
         except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
             bot.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
@@ -739,13 +740,13 @@ class lichess_game:
             bot.on_line(f"-- resigning game {self.id}: {json.dumps(evidence)}")
             await bot.api.post(self.path("resign"))
             return
-        if self.draw_offered and move_choice.accept_draw(board, info, self.contempt):
+        if self.draw_offered and move_choice.accept_draw(board, info, self.draw_score):
             # Accept, and move too: a withdrawn offer must not leave our clock running.
             bot.on_line(f"-- game {self.id}: accepting the draw offer")
             await bot.api.post(self.path("draw/yes"))
         # Recorded before sending: the stream may report the move before the POST returns.
         self.record.on_search(board, move, info)
-        self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.contempt)
+        self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.draw_score)
         if not await bot.api.post(self.path(f"move/{move.uci()}")):
             self.abort_position = None
             return
@@ -913,8 +914,8 @@ class lichess_game:
                 headers[f"{tag}Engine"] = engine_name
         if self.opening is not None and self.opening.mood:
             headers["Mood"] = self.opening.mood
-        if self.contempt is not None:
-            headers["DrawContempt"] = str(self.contempt)
+        if self.draw_score is not None:
+            headers["DrawContempt"] = str(self.draw_score)
         return headers
 
     def save(self, game):

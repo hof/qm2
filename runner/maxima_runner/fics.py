@@ -618,7 +618,7 @@ class engine_player:
         self.from_book = self.draw_offered = False
         self.abort_position = self.waiting_position = None
         self.announced_mood = None
-        self.contempt = None
+        self.contempt = self.draw_score = None
         self.fingered = False
         self.pgn_dir = pgn_dir
         self.site = site
@@ -919,8 +919,9 @@ class engine_player:
         self.created = match.groupdict()
         our_rating = match["white_rating"] if we_are_white else match["black_rating"]
         self.contempt = draw_contempt(rating_of(our_rating), rating_of(rating), self.policy.contempt_window)
+        self.draw_score = learning.color_contempt(self.contempt, we_are_white)
         if self.contempt is not None:
-            self.on_line(f"-- draw contempt {self.contempt / 100:+.2f} ({rating_of(our_rating)} vs {rating_of(rating)})")
+            self.on_line(f"-- draw contempt {self.draw_score / 100:+.2f} ({rating_of(our_rating)} vs {rating_of(rating)})")
         if not playable(match["type"], match["time"], match["increment"], self.policy.losers):
             self.on_line(f"-- aborting unsupported game: {match['type']} {match['time']} {match['increment']}")
             await self.send("abort")
@@ -947,7 +948,8 @@ class engine_player:
         self.save(game)
         self.emit("game_end", game=self.game, result=end["result"], reason=end["reason"],
                   headers=dict(game.headers) if game else None, pgn=str(game) if game else None)
-        self.game = self.history = self.opponent = self.record = self.created = self.opening = self.contempt = None
+        self.game = self.history = self.opponent = self.record = self.created = self.opening = None
+        self.contempt = self.draw_score = None
         self.opponent_ready.set()
         self.played += 1
         self.streak = self.streak + 1 if opponent == self.last_opponent else 1
@@ -1003,8 +1005,8 @@ class engine_player:
                     headers[f"{color}Account"] = "unregistered"
         if self.opening is not None and self.opening.mood:
             headers["Mood"] = self.opening.mood
-        if self.contempt is not None:
-            headers["DrawContempt"] = str(self.contempt)
+        if self.draw_score is not None:
+            headers["DrawContempt"] = str(self.draw_score)
         return headers
 
     def finished_game(self, end):
@@ -1176,7 +1178,7 @@ class engine_player:
             self.opening = learner.for_game(self.opponent.name if self.opponent else None,
                                                  self.opponent_group(), game_type, self.contempt, rated)
         try:
-            search_options = {"DrawContempt": self.contempt}
+            search_options = {"DrawContempt": self.draw_score}
             if self.is_losers:
                 search_options["OwnBook"] = False
             ceiling = None if self.is_losers else self.loss.ceiling(
@@ -1218,12 +1220,12 @@ class engine_player:
             self.on_line(f"-- resigning game {self.game}: {json.dumps(evidence)}")
             await self.send("resign")
             return
-        if self.draw_offered and move_choice.accept_draw(board, info, self.contempt):
+        if self.draw_offered and move_choice.accept_draw(board, info, self.draw_score):
             # Accept, and move too: a withdrawn offer must not leave our clock running.
             self.on_line("-- accepting the draw offer")
             await self.send("draw")
         self.draw_offered = False
-        self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.contempt)
+        self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.draw_score)
         await self.send(fics_game.ics_move(move))
         if self.record is not None:
             self.record.on_search(board, move, info)

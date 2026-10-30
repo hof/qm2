@@ -668,8 +668,8 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle("Finger of guestNinja:")
         await player.handle(start)
         await self.settle(player)
-        self.assertIn("setoption name DrawContempt value 40", self.positions.read_text())
-        self.assertTrue(any(line.startswith("-- draw contempt +0.40 (1700 vs 1900)") for line in self.lines))
+        self.assertIn("setoption name DrawContempt value 32", self.positions.read_text())
+        self.assertTrue(any(line.startswith("-- draw contempt +0.32 (1700 vs 1900)") for line in self.lines))
         await player.handle("Creating: guestNinja (1900) GuestHJGC (1700) rated blitz 3 0")
         self.assertEqual(player.contempt, 40)
         await player.handle("{Game 17 (GuestHJGC vs. guestNinja) guestNinja resigns} 1-0")
@@ -680,7 +680,12 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await self.settle(player)
         sent = self.positions.read_text()
         self.assertGreater(sent.rfind("setoption name DrawContempt value -10"),
-                           sent.rfind("setoption name DrawContempt value 40"))
+                           sent.rfind("setoption name DrawContempt value 32"))
+
+    async def test_white_wants_more_than_a_draw_at_any_sign(self):
+        self.assertEqual([learning.color_contempt(18, white) for white in (True, False)], [14, 22])
+        self.assertEqual([learning.color_contempt(-10, white) for white in (True, False)], [-12, -8])
+        self.assertIsNone(learning.color_contempt(None, True))
 
     async def test_ignores_observed_games_and_invalid_boards(self):
         player = await self.player("play")
