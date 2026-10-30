@@ -53,9 +53,10 @@ def draw_contempt(our_rating, their_rating, window=100, default=equal_contempt, 
 def color_contempt(contempt, white):
     """The draw score the engine plays with: White wants more than a draw, Black settles a little sooner.
 
-    A fifth of the contempt's size, at least 2 cp, added so the direction stays right at any sign."""
+    A fifth of the contempt's size, at least 2 cp, added so the direction stays right at any sign,
+    within the engine's option range."""
     shift = max(2, round(abs(contempt) / 5))
-    return contempt - shift if white else contempt + shift
+    return max(-100, min(100, contempt - shift if white else contempt + shift))
 
 
 def game_contempt(headers, our_color):

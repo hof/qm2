@@ -1885,7 +1885,7 @@ rating minus ours, clamped to `contempt_window` (default ±100 cp = ±1 pawn; 0
 disables the rating part). Equal ratings give 0; 200 points stronger gives +50 (a draw is
 welcome); 400 or more weaker gives -100 (avoid draws). White then subtracts a
 fifth of that value's size, at least 2 cp, and Black adds it, so 0 becomes -2
-with White and +2 with Black, +28 becomes +22 with White and
+with White and +2 with Black, never past ±100, +28 becomes +22 with White and
 +34 with Black, and -10 becomes -12 and -8: White wants more than a draw at any
 sign. The engine, draw offers, opening stalls and the `DrawContempt` PGN tag use
 this value; book profiles and the draw's learning value use the rating gap alone.
