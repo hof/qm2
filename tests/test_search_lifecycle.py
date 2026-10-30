@@ -375,24 +375,42 @@ class search_lifecycle_tests(unittest.TestCase):
                 fields = info.split()
                 self.assertGreaterEqual(int(fields[fields.index("time") + 1]), 1200)
 
-    def test_ponderhit_starts_fresh_clock_budget(self):
+    def ponderhit_seconds(self, engine, command, pondered):
+        engine.send("setoption name OwnBook value false")
+        engine.start_search(command)
+        time.sleep(pondered)
+        engine.send("isready")
+        engine.wait_for("readyok")
+        self.assertFalse(any(line.startswith("bestmove ") for line in engine.transcript))
+        started = time.monotonic()
+        engine.send("ponderhit")
+        engine.wait_for_bestmove()
+        return time.monotonic() - started
+
+    def test_ponderhit_past_the_budget_moves_at_once(self):
         with running_engine() as engine:
-            engine.send("setoption name OwnBook value false")
-            engine.start_search("go ponder movetime 200")
-            time.sleep(0.3)
-            engine.send("isready")
-            engine.wait_for("readyok")
-            self.assertFalse(any(line.startswith("bestmove ") for line in engine.transcript))
-            started = time.monotonic()
-            engine.send("ponderhit")
-            engine.wait_for_bestmove()
-            elapsed = time.monotonic() - started
-            self.assertGreater(elapsed, 0.1)
-            self.assertLess(elapsed, 0.7)
+            self.assertLess(self.ponderhit_seconds(engine, "go ponder movetime 200", 0.3), 0.15)
+            engine.send("quit")
+            engine.wait_for_exit()
+        with running_engine() as engine:
+
+            # Past a normal stop, well inside the maximum.
+            self.assertLess(self.ponderhit_seconds(engine, "go ponder wtime 12000 btime 12000", 1.5), 0.3)
+            engine.send("quit")
+            engine.wait_for_exit()
+
+    def test_ponderhit_within_the_budget_keeps_thinking(self):
+        with running_engine() as engine:
+            self.assertGreater(self.ponderhit_seconds(engine, "go ponder wtime 120000 btime 120000", 0.1), 0.3)
+            engine.send("quit")
+            engine.wait_for_exit()
+
+    def test_ponderhit_reports_keep_the_elapsed_time(self):
+        with running_engine() as engine:
+            self.ponderhit_seconds(engine, "go ponder movetime 200", 0.3)
             fields = [line for line in engine.transcript if line.startswith("info depth ")][-1].split()
-            reported_ms = int(fields[fields.index("time") + 1])
-            self.assertGreaterEqual(reported_ms, 450,
-                                    "reported search time must include pondering and the move budget")
+            self.assertGreaterEqual(int(fields[fields.index("time") + 1]), 250,
+                                    "reported search time must include pondering")
             reports = [line.split() for line in engine.transcript if line.startswith("info depth ")]
             times = [int(report[report.index("time") + 1]) for report in reports]
             self.assertEqual(times, sorted(times), "ponderhit must not reset reported elapsed time")

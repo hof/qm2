@@ -465,10 +465,11 @@ completed iteration selected.
 Search deadlines and UCI elapsed times use a monotonic wall clock. Time spent
 preparing the search or waiting to run its worker counts toward the budget; a
 process pause does not extend the deadline. Pondering suppresses deadline
-cancellation until `ponderhit`, then starts the move clock budget on the worker
-without restarting the search. UCI elapsed time and NPS retain the full search
-interval, including pondering; only the move-budget timer restarts on a hit.
-Pondering does not consume the timed allocation.
+cancellation until `ponderhit`, without restarting the search. Time pondered
+counts: the minimum, maximum and elapsed time all run from `go`, as in a normal
+search. Each iteration completed while pondering takes the normal stop decision
+and remembers it, so a hit moves at once when a normal search would have stopped
+by then or the maximum has passed, and keeps thinking otherwise.
 Explicit zero clocks and `movetime 0` retain a time limit and return a legal
 move without requiring `stop`; absent time limits retain untimed search behavior.
 `go searchmoves` accepts a nonempty list of legal root moves, including losers'

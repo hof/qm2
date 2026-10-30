@@ -330,7 +330,7 @@ public:
     uint16_t countermoves[BKING + 1][64];
     move_t ponder_move;
     std::string book_name;
-    bool ponder_clock_started;
+    bool ponder_stop; // a search without ponder would have stopped by now
     bool root_wtm;
     int wild;
     int draw_contempt;
