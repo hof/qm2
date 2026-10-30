@@ -215,7 +215,7 @@ bool pruned_quiets_contract() {
         return false;
     }
 
-    // Bad noisy moves follow the good quiets but end the walk.
+    // Bad noisy moves are still returned and end the walk.
     auto search = std::make_unique<search_t>("3q3k/8/8/3p4/8/8/1p1Q4/7K w - - 0 1");
     std::string last;
     for (auto * move = move::first(search.get(), 2); move; move = move::next(search.get(), 2, true)) {

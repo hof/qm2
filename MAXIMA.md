@@ -210,8 +210,8 @@ rejects a quiet even with its maximum history, refutation and check bonuses,
 search skips its unused check and history queries. Legality and the considered
 move ordinal are still evaluated; pruning decisions and move ordering are unchanged.
 If that proof already covers every remaining quiet when the picker reaches them,
-quiets are not generated when no bad noisy move remains. Otherwise they are
-partitioned instead of sorted, and the walk ends after the bad noisy moves.
+quiets are not generated and only bad noisy moves follow, so those moves count
+fewer considered moves before them.
 
 All move pruning needs one searched legal alternative and a nondecisive best
 score, applies in PV nodes too, and checks legality before recording a skip.
