@@ -360,6 +360,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
                 "nps": 687000, "pv": [move, replay.parse_san("Qe7")]}
         self.assertEqual(fics.console_search(board, move, info, 4.6, 300),
                          "4. Bc4 d23 +4.83 | 687kN/s | 4.6s (4:55) | PV: 4. ..Qe7")
+        self.assertIn(" | TB 12313 | ", fics.console_search(board, move, dict(info, tbhits=12313), 4.6, 300))
 
     def test_compact_console_time_with_missing_clocks(self):
         self.assertEqual(fics.console_time(3.2, 294), "3.2s (4:54)")

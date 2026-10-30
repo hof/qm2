@@ -531,7 +531,7 @@ def console_search(board, move, info, seconds, clock, pv_plies=2, opening=None):
         summary.append(f"#{relative.mate()}" if relative.is_mate() else f"{relative.score() / 100:+.2f}")
     fields = [" ".join(summary)]
     if info.get("tbhits"):
-        fields.append("TB")
+        fields.append(f"TB {info['tbhits']}")
     if info.get("nps"):
         fields.append(speed(info["nps"]).replace("Knps", "kN/s").replace("Mnps", "MN/s").replace("nps", "N/s"))
     learned = console_learning(board, move, opening)
