@@ -2078,14 +2078,27 @@ curl -d '' -H "Authorization: Bearer $LICHESS_BOT_TOKEN" https://lichess.org/api
 The client reads `LICHESS_BOT_TOKEN` and `LICHESS_OWNERS` (Lichess users who may
 send commands, comma-separated) from the environment or from `.env` in the
 checkout (git-ignored; the environment wins). It refuses to start unless the
-token belongs to a BOT account. The token needs scope `bot:play`, and
-`team:write` to join teams. Lichess cannot add a scope to a token, so a new scope
-means a new token; the client warns at startup when `teams` is set without it.
+token belongs to a BOT account. The token needs scope `bot:play`, `team:write` to
+join teams and `tournament:write` to play arenas. Lichess cannot add a scope to a
+token, so a new scope means a new token; the client warns at startup when `teams`
+or `tournament` is set without its scope.
 
 `--team ID` (repeatable) or the `teams` setting joins teams at startup, and the
 console command `team <id> [message]` joins one at any time. A team that reviews
 requests needs a message of 30 to 2000 characters; password-protected teams are
 not supported.
+
+`--tournament ID`, the `tournament` setting or the console command
+`tournament <id> [password]` enters one arena. From that moment until the arena
+ends, even before it starts, every challenge is declined with `generic` and no
+challenge or rematch is sent, so nothing can overlap a pairing. The join itself
+waits until no game is running or expected. While idle the client repeats the
+join about every 50 seconds, because a request to be paired lasts one minute.
+It also reads the arena then, and returns to normal when Lichess reports it
+finished, when its scheduled end is a minute past, or when it does not allow bots.
+`leave` withdraws, as does stopping; `--no-accept` and `!challenge` do not change
+any of this. A configured arena is entered again after a restart, one entered by
+command is not. Swiss and team-battle events are not supported.
 
 Bots cannot seek, so MaximaEngine plays challenges, its own and others'.
 After `challenge_idle` minutes without a game (default 30, `--challenge-idle`;

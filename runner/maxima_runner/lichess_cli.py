@@ -8,7 +8,7 @@ def parser():
         prog="maxima lichess", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="environment (or .env in the checkout):\n"
                "  LICHESS_BOT_TOKEN    token of the bot account (never logged): scope bot:play,\n"
-               "                       and team:write for --team\n"
+               "                       team:write for --team, tournament:write for --tournament\n"
                "  LICHESS_OWNERS       Lichess users who may send commands, comma-separated\n"
                "  MAXDRONE_POST_TOKEN  bearer token for --pgn-post (never logged)\n\n"
                "commands for anyone, in the game's chat: !help, !name; !eval, !stats, !book (spectator room only)\n"
@@ -17,7 +17,8 @@ def parser():
                "  !softrestart   restart after this game (exit 75, for a supervisor loop)\n"
                "  !resign, !abort, !draw   act on the game now\n"
                "  !challenge, !nochallenge   challenge other bots when idle, or only accept\n"
-               "the same commands work typed here, without the !; help lists them;\n"
+               "the same commands work typed here, without the !; help lists them; only here:\n"
+               "  team <id> [message], tournament <id> [password], leave\n"
                "quit stops after the game and a second quit at once; kill -USR1 <pid> also stops\n\n"
                "examples:\n"
                "  maxima lichess\n"
@@ -29,7 +30,7 @@ def parser():
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (keys: engine, options, speeds, accept, games, pgn_dir, learning, variety, "
                              "contempt_window, unknown_contempt, layer_profiles, style_books, mood, live_feed, pgn_post, "
-                             "online_tablebase, resignation, shutdown_grace, teams); flags override it")
+                             "online_tablebase, resignation, shutdown_grace, teams, tournament); flags override it")
     parser.add_argument("--engine", help="UCI engine to play with (default: the Release Maxima build)")
     parser.add_argument("--option", action="append", default=[], metavar="NAME=VALUE",
                         help="UCI option for the engine, repeatable (e.g. Hash=256)")
@@ -53,6 +54,8 @@ def parser():
     parser.add_argument("--no-challenge", action="store_true", help="never challenge, only accept")
     parser.add_argument("--team", action="append", metavar="ID",
                         help="join this team at startup, repeatable; a team's id is in its URL")
+    parser.add_argument("--tournament", metavar="ID",
+                        help="play this arena: declines challenges and sends none until it ends")
     parser.add_argument("--server", default="https://lichess.org", help=argparse.SUPPRESS)
     return parser
 

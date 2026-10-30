@@ -29,7 +29,7 @@ speed_rank = {name: rank for rank, name in enumerate(("ultraBullet",) + speeds +
 stream_timeout = 30  # seconds of silence before a stream counts as dead; Lichess sends keepalives every 7 s
 rate_limit_pause = 60  # Lichess asks clients to wait a full minute after HTTP 429
 owner_commands = ("softquit", "softrestart", "resign", "abort", "draw", "challenge", "nochallenge")
-console_commands = ("help", "quit", "team") + owner_commands
+console_commands = ("help", "quit", "team", "tournament", "leave") + owner_commands
 public_commands = ("help", "name", "eval", "stats", "book")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
@@ -44,6 +44,9 @@ challenge_shares = {"bullet": 30, "blitz": 50, "rapid": 20}
 challenge_wait = 60  # seconds for an answer before we cancel, and between attempts
 challenge_rest = 24 * 3600  # seconds a bot is left alone for a speed after it declined
 rematch_delay = 5  # seconds after a game before we offer a bot one rematch
+tournament_gap = 50  # seconds between tournament calls: a request to be paired lasts one minute
+tournament_grace = 60  # seconds past a tournament's scheduled end before we stop waiting for Lichess to finish it
+tournament_limit = 24 * 3600  # seconds in a tournament while Lichess has not told us its schedule
 reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate", "timeout": "opponent left",
            "draw": "draw", "outoftime": "time forfeit", "cheat": "cheat detected", "noStart": "no first move",
            "aborted": "aborted", "unknownFinish": "unknown finish", "variantEnd": "variant end"}
@@ -54,7 +57,7 @@ default_settings = {
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
-    "challenge_idle": 30, "challenge_window": 300, "teams": [],
+    "challenge_idle": 30, "challenge_window": 300, "teams": [], "tournament": None,
 }
 
 
@@ -175,13 +178,13 @@ class matchmaker:
         await asyncio.sleep(delay)
         now = time.monotonic()
         if (not self.enabled or self.streak >= 2 or self.pending is not None or bot.game is not None
-                or bot.stopping or bot.accepted[0] or self.resting.get((opponent, speed), 0) > now
+                or bot.stopping or bot.in_tournament or bot.accepted[0] or self.resting.get((opponent, speed), 0) > now
                 or bot.games is not None and bot.played >= bot.games):
             return
         await self.challenge(bot, name, opponent, speed, limit, increment, rated, "rematch")
 
     async def challenge(self, bot, name, opponent, speed, limit, increment, rated=True, why="challenging"):
-        if bot.stopping:
+        if bot.stopping or bot.in_tournament:
             return
         self.challenging = True
         try:
@@ -221,13 +224,16 @@ class matchmaker:
         now = time.monotonic()
         if self.pending is not None:
             challenge_id, opponent, speed, sent = self.pending
-            if now - sent >= challenge_wait:
+            if bot.in_tournament:  # sent while we were joining
+                self.pending = None
+                await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
+            elif now - sent >= challenge_wait:
                 self.pending, self.next_try = None, now + challenge_wait
                 self.resting[(opponent, speed)] = now + challenge_rest
                 self.on_line(f"-- no answer from {opponent}; challenge cancelled")
                 await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
             return
-        if not self.due(now) or bot.game is not None or bot.stopping or bot.accepted[0]:
+        if not self.due(now) or bot.game is not None or bot.stopping or bot.in_tournament or bot.accepted[0]:
             return
         self.next_try = now + challenge_wait
         account = await bot.api.call("GET", "/api/account")
@@ -254,7 +260,7 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, resignation_settings=None, pv_plies=2, teams=()):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
@@ -271,6 +277,18 @@ class lichess_bot:
         self.played = 0
         self.stopping = self.restart = False
         self.matchmaker = matchmaker(challenge_idle, challenge_window, self.speeds, on_line)
+        self.tournament, self.tournament_password = tournament, None
+        self.tournament_joined = False
+        self.tournament_ends = time.monotonic() + tournament_limit
+        self.next_tournament_call = 0.0
+
+    @property
+    def in_tournament(self):
+        return self.tournament is not None
+
+    @property
+    def tournament_path(self):
+        return f"/api/tournament/{urllib.parse.quote(self.tournament, safe='')}"
 
     @property
     def finished(self):
@@ -291,11 +309,12 @@ class lichess_bot:
         self.on_line(f"-- logged in as {self.name}; accepting {', '.join(self.speeds)}"
                      + (f"; owners {', '.join(sorted(self.owners))}" if self.owners else "; no owners for commands"))
         self.on_line("-- type help for console commands")
-        if self.teams:
-            if "team:write" in await self.missing_scopes(("team:write",)):
-                self.on_line("-- LICHESS_BOT_TOKEN lacks team:write; team joins will fail (MAXIMA.md 10.3)")
-            for team in self.teams:
-                await self.join_team(team)
+        needed = ("team:write",) * bool(self.teams) + ("tournament:write",) * self.in_tournament
+        if needed:
+            for scope in await self.missing_scopes(needed):
+                self.on_line(f"-- LICHESS_BOT_TOKEN lacks {scope}; those joins will fail (MAXIMA.md 10.3)")
+        for team in self.teams:
+            await self.join_team(team)
 
     async def missing_scopes(self, needed):
         """Which needed scopes the token lacks; none when Lichess cannot tell."""
@@ -311,6 +330,65 @@ class lichess_bot:
                                      {"message": message} if message else None)
         self.on_line(f"-- {'joined' if joined else 'could not join'} team {team}")
         return joined
+
+    async def join_tournament(self, tournament, password=None):
+        """Stop taking and sending challenges now; tournament_tick joins once no game can overlap."""
+        self.tournament, self.tournament_password, self.tournament_joined = tournament, password, False
+        self.tournament_ends = time.monotonic() + tournament_limit
+        self.next_tournament_call = 0.0
+        self.on_line(f"-- entering tournament {tournament}; challenges are off until it ends")
+        await self.cancel_challenge()
+
+    def tournament_over(self, why):
+        self.on_line(f"-- tournament {self.tournament} {why}; challenges are on again")
+        self.tournament, self.tournament_password, self.tournament_joined = None, None, False
+        self.matchmaker.busy()
+
+    async def leave_tournament(self):
+        path, joined = self.tournament_path, self.tournament_joined
+        self.tournament_over("left")
+        if joined:
+            await self.api.post(f"{path}/withdraw")
+
+    async def tournament_tick(self):
+        """Keep a tournament going while idle: notice its end and ask again to be paired."""
+        if not self.in_tournament:
+            return
+        if self.stopping:
+            await self.leave_tournament()
+            return
+        now = time.monotonic()
+        if self.game is not None or now < self.next_tournament_call:
+            return
+        self.next_tournament_call = now + tournament_gap
+        info = await self.api.call("GET", self.tournament_path)
+        if isinstance(info, dict):
+            if info.get("isFinished"):
+                self.tournament_over("finished")
+                return
+            if info.get("botsAllowed") is False:
+                self.tournament_over("does not allow bots")
+                return
+            finish, start, minutes = info.get("secondsToFinish"), info.get("secondsToStart"), info.get("minutes")
+            if isinstance(finish, int):
+                self.tournament_ends = now + finish + tournament_grace
+            elif isinstance(start, int) and isinstance(minutes, int):
+                self.tournament_ends = now + start + minutes * 60 + tournament_grace
+        if now >= self.tournament_ends:
+            self.tournament_over("passed its end")
+            return
+        accepted, when = self.accepted
+        if accepted and now - when < 20 or self.matchmaker.pending is not None or self.matchmaker.challenging:
+            return
+        data = {"pairMeAsap": "true"}
+        if self.tournament_password:
+            data["password"] = self.tournament_password
+        joined = await self.api.post(f"{self.tournament_path}/join", data)
+        if joined and not self.tournament_joined:
+            self.tournament_joined = True
+            self.on_line(f"-- joined tournament {self.tournament}")
+        elif not joined and not self.tournament_joined:
+            self.tournament_over("could not be joined")
 
     async def start_engine(self):
         self.context = self.open_session()
@@ -361,6 +439,18 @@ class lichess_bot:
                 self.on_line("-- usage: team <id> [message]")
             else:
                 await self.join_team(words[1], " ".join(words[2:]))
+        elif command == "tournament":
+            if len(words) < 2:
+                self.on_line("-- usage: tournament <id> [password]")
+            elif self.in_tournament:
+                self.on_line(f"-- already in tournament {self.tournament}; type leave first")
+            else:
+                await self.join_tournament(words[1], words[2] if len(words) > 2 else None)
+        elif command == "leave":
+            if self.in_tournament:
+                await self.leave_tournament()
+            else:
+                self.on_line("-- not in a tournament")
         elif command == "help":
             self.on_line("-- commands: " + ", ".join(console_commands) + "; quit stops after the game")
         else:
@@ -378,6 +468,7 @@ class lichess_bot:
                 done, _ = await asyncio.wait({events, command}, timeout=1, return_when=asyncio.FIRST_COMPLETED)
                 if events in done:
                     events.result()
+                await self.tournament_tick()
                 if not self.stopping and (self.games is None or self.played < self.games):
                     try:
                         await self.matchmaker.tick(self)
@@ -397,6 +488,11 @@ class lichess_bot:
                     await asyncio.wait_for(self.cancel_challenge(), 2)
                 except asyncio.TimeoutError:
                     self.on_line("-- outgoing challenge cancellation timed out")
+            if self.in_tournament:
+                try:
+                    await asyncio.wait_for(self.leave_tournament(), 2)
+                except asyncio.TimeoutError:
+                    self.on_line("-- tournament withdrawal timed out")
 
     async def cancel_challenge(self):
         pending = self.matchmaker.pending
@@ -444,6 +540,8 @@ class lichess_bot:
 
     def decline_reason(self, challenge, compat):
         """Lichess's own decline reasons, or None to accept."""
+        if self.in_tournament:
+            return "generic"
         if challenge["variant"]["key"] != "standard":
             return "standard"
         speed = challenge["speed"]
@@ -479,6 +577,7 @@ class lichess_bot:
     def ended(self):
         self.game = None
         self.matchmaker.busy()
+        self.next_tournament_call = 0.0  # back in the pairing pool without waiting
         self.played += 1
         if self.games is not None and self.played >= self.games:
             self.on_line(f"-- played {self.played} games; stopping")
@@ -992,7 +1091,7 @@ def load_settings(path):
     types = {"engine": str, "options": dict, "speeds": list, "accept": bool, "games": int, "pgn_dir": str,
              "learning": bool, "variety": (int, float), "contempt_window": int, "unknown_contempt": int, "layer_profiles": dict,
              "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
-             "challenge_idle": int, "challenge_window": int, "teams": list}
+             "challenge_idle": int, "challenge_window": int, "teams": list, "tournament": str}
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     types["pv_plies"] = int
@@ -1029,7 +1128,7 @@ def run(options, parser):
         parser.error(str(error))
     flags = {"engine": options.engine, "speeds": options.speed, "games": options.games, "pgn_dir": options.pgn_dir,
              "pv_plies": options.pv_plies, "variety": options.variety, "live_feed": options.live_feed, "pgn_post": options.pgn_post,
-             "teams": options.team}
+             "teams": options.team, "tournament": options.tournament}
     configured.update({key: value for key, value in flags.items() if value is not None})
     if configured["pv_plies"] < 0:
         parser.error("pv_plies must be a nonnegative integer")
@@ -1099,7 +1198,7 @@ def run(options, parser):
                           challenge_idle=configured["challenge_idle"] or 0,
                           challenge_window=configured["challenge_window"],
                           resignation_settings=configured["resignation"], pv_plies=configured["pv_plies"],
-                          teams=configured["teams"] or (),
+                          teams=configured["teams"] or (), tournament=configured["tournament"],
                           local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))
         state["bot"] = bot
         if controller.requested:

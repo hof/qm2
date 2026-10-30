@@ -133,6 +133,125 @@ class team_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await bot.missing_scopes(("bot:play", "team:write")), ["team:write"])
 
 
+class tournament_api(stub_api):
+    def __init__(self, info=None, joins=True):
+        super().__init__()
+        self.info, self.joins = {} if info is None else info, joins
+
+    async def call(self, method, path, data=None):
+        return self.info
+
+    async def post(self, path, data=None):
+        await super().post(path, data)
+        return self.joins or not path.endswith("/join")
+
+
+class tournament_tests(unittest.IsolatedAsyncioTestCase):
+    def bot(self, api=None, **settings):
+        self.lines = []
+        return lichess.lichess_bot(api or tournament_api(), None, self.lines.append, challenge_idle=1, **settings)
+
+    def paths(self, bot):
+        return [path for path, _ in bot.api.posts]
+
+    async def test_declines_every_challenge_and_sends_none(self):
+        bot = self.bot()
+        await bot.join_tournament("AbCd")
+        self.assertTrue(bot.in_tournament)
+        self.assertEqual(bot.decline_reason(challenge(variant="chess960"), {}), "generic")
+        await bot.on_challenge(challenge(), {})
+        self.assertEqual(bot.api.posts, [("/api/challenge/c1/decline", {"reason": "generic"})])
+        bot.set_challenging(True)
+        bot.matchmaker.idle_since = bot.matchmaker.next_try = 0
+        await bot.matchmaker.tick(bot)
+        await bot.matchmaker.challenge(bot, "Other", "other", "blitz", 180, 0)
+        await bot.matchmaker.rematch(bot, "Other", "other", "blitz", 180, 0, delay=0)
+        self.assertEqual(len(bot.api.posts), 1)
+
+    async def test_entering_cancels_our_challenge(self):
+        bot = self.bot()
+        bot.matchmaker.pending = ("c2", "other", "blitz", time.monotonic())
+        await bot.join_tournament("AbCd")
+        self.assertEqual(self.paths(bot), ["/api/challenge/c2/cancel"])
+        self.assertIsNone(bot.matchmaker.pending)
+
+    async def test_a_challenge_sent_while_joining_is_cancelled(self):
+        bot = self.bot()
+        await bot.join_tournament("AbCd")
+        bot.matchmaker.pending = ("c2", "other", "blitz", time.monotonic())
+        await bot.matchmaker.tick(bot)
+        self.assertEqual(self.paths(bot), ["/api/challenge/c2/cancel"])
+        self.assertEqual(bot.matchmaker.resting, {})
+
+    async def test_joins_only_when_no_game_can_overlap_and_again_after_a_game(self):
+        bot = self.bot()
+        await bot.join_tournament("AbCd", "Secret")
+        bot.game = object()
+        await bot.tournament_tick()
+        self.assertEqual(bot.api.posts, [])
+        bot.game = None
+        bot.accepted = ("c1", time.monotonic())
+        await bot.tournament_tick()
+        self.assertEqual(bot.api.posts, [])
+        bot.accepted = (None, 0.0)
+        bot.next_tournament_call = 0.0
+        await bot.tournament_tick()
+        self.assertEqual(bot.api.posts, [("/api/tournament/AbCd/join", {"pairMeAsap": "true", "password": "Secret"})])
+        await bot.tournament_tick()  # within the gap
+        self.assertEqual(len(bot.api.posts), 1)
+        bot.ended()
+        await bot.tournament_tick()
+        self.assertEqual(len(bot.api.posts), 2)
+
+    async def test_a_failed_first_join_ends_it_and_a_failed_repeat_does_not(self):
+        bot = self.bot(tournament_api(joins=False))
+        await bot.join_tournament("AbCd")
+        await bot.tournament_tick()
+        self.assertFalse(bot.in_tournament)
+        bot = self.bot(tournament_api(joins=True))
+        await bot.join_tournament("AbCd")
+        await bot.tournament_tick()
+        bot.api.joins, bot.next_tournament_call = False, 0.0
+        await bot.tournament_tick()
+        self.assertTrue(bot.in_tournament)
+
+    async def test_ends_when_finished_past_its_schedule_or_closed_to_bots(self):
+        for info in ({"isFinished": True}, {"secondsToFinish": -lichess.tournament_grace}, {"botsAllowed": False}):
+            bot = self.bot(tournament_api(info))
+            await bot.join_tournament("AbCd")
+            await bot.tournament_tick()
+            self.assertFalse(bot.in_tournament, info)
+            self.assertFalse(any(path.endswith("/join") for path in self.paths(bot)))
+            self.assertIsNone(bot.decline_reason(challenge(), {"bot": True}))
+
+    async def test_silence_from_lichess_cannot_hold_it_forever(self):
+        api = tournament_api()
+        api.info = None
+        bot = self.bot(api)
+        await bot.join_tournament("AbCd")
+        bot.tournament_ends = 0
+        await bot.tournament_tick()
+        self.assertFalse(bot.in_tournament)
+
+    async def test_stopping_withdraws_even_during_a_game(self):
+        bot = self.bot(tournament="AbCd")
+        await bot.tournament_tick()
+        bot.game = object()
+        bot.stopping = True
+        await bot.tournament_tick()
+        self.assertEqual(self.paths(bot)[-1], "/api/tournament/AbCd/withdraw")
+        self.assertFalse(bot.in_tournament)
+
+    async def test_console_keeps_the_ids_case(self):
+        bot = self.bot()
+        await bot.console("tournament AbCd")
+        await bot.console("tournament Other")
+        self.assertEqual(bot.tournament, "AbCd")
+        await bot.console("leave")
+        self.assertFalse(bot.in_tournament)
+        self.assertEqual(bot.api.posts, [])  # never joined, so nothing to withdraw from
+
+
 class stub_session:
     async def play(self, board, limit, **unused):
         move = next(iter(board.legal_moves))
@@ -227,6 +346,7 @@ class fake_lichess(http.server.ThreadingHTTPServer):
         super().__init__(("127.0.0.1", 0), handler)
         self.streams = {"/api/stream/event": queue.Queue(), "/api/bot/game/stream/g1": queue.Queue()}
         self.posts = []
+        self.tournament = {"secondsToFinish": 600}
 
     def close_streams(self):
         for lines in self.streams.values():
@@ -244,6 +364,9 @@ class handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/account":
             self.reply({"id": "maximaengine", "username": "MaximaEngine", "title": "BOT"})
+            return
+        if self.path.startswith("/api/tournament/"):
+            self.reply(self.server.tournament)
             return
         lines = self.server.streams[self.path]
         self.send_response(200)
@@ -304,6 +427,37 @@ class game_tests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class tournament_stream_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_tournament_over_http_from_join_to_withdraw_free_end(self):
+        server = fake_lichess()
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.close_streams)
+        api = lichess.lichess_api("token", f"http://127.0.0.1:{server.server_address[1]}", lambda line: None)
+        bot = lichess.lichess_bot(api, None, lambda line: None, tournament="AbCd")
+        bot.id = "maximaengine"
+        commands = asyncio.Queue()
+        running = asyncio.ensure_future(bot.run(commands))
+
+        async def until(condition):
+            for _ in range(200):
+                if condition():
+                    return
+                await asyncio.sleep(0.05)
+            self.fail("timed out")
+
+        await until(lambda: ("/api/tournament/AbCd/join", "pairMeAsap=true") in server.posts)
+        server.streams["/api/stream/event"].put({"type": "challenge", "challenge": challenge(), "compat": {}})
+        await until(lambda: ("/api/challenge/c1/decline", "reason=generic") in server.posts)
+        server.tournament, bot.next_tournament_call = {"isFinished": True}, 0.0
+        await until(lambda: not bot.in_tournament)
+        self.assertIsNone(bot.decline_reason(challenge(), {"bot": True}))
+        await commands.put("quit")
+        await asyncio.wait_for(running, 5)
+        self.assertFalse(any(path.endswith("/withdraw") for path, _ in server.posts))
 
 
 class chat_line_tests(unittest.TestCase):
