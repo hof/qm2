@@ -164,7 +164,7 @@ for line in sys.stdin:
     command = line.strip()
     if command == "uci":
         print("id name fics fixture")
-        print("option name DrawContempt type spin default -10 min -100 max 100")
+        print("option name DrawContempt type spin default 0 min -100 max 100")
         print("uciok", flush=True)
     elif command == "isready":
         print("readyok", flush=True)
@@ -655,8 +655,8 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(learner.records), 6)  # one move teaches nothing
 
     async def test_draw_contempt_follows_the_rating_gap(self):
-        self.assertEqual(fics.draw_contempt(1800, 1800), -10)
-        self.assertEqual(fics.draw_contempt(1800, 2000), 40)
+        self.assertEqual(fics.draw_contempt(1800, 1800), 0)
+        self.assertEqual(fics.draw_contempt(1800, 2000), 50)
         self.assertEqual(fics.draw_contempt(1800, 2600), 100)
         self.assertEqual(fics.draw_contempt(2000, 1500), -100)
         self.assertIsNone(fics.draw_contempt(None, 1500))
@@ -664,14 +664,14 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         player = await self.player("play")
         player.name = "GuestHJGC"
         await player.handle("Creating: GuestHJGC (1700) guestNinja (1900) rated blitz 3 0")
-        self.assertEqual(player.contempt, 40)
+        self.assertEqual(player.contempt, 50)
         await player.handle("Finger of guestNinja:")
         await player.handle(start)
         await self.settle(player)
-        self.assertIn("setoption name DrawContempt value 32", self.positions.read_text())
-        self.assertTrue(any(line.startswith("-- draw contempt +0.32 (1700 vs 1900)") for line in self.lines))
+        self.assertIn("setoption name DrawContempt value 40", self.positions.read_text())
+        self.assertTrue(any(line.startswith("-- draw contempt +0.40 (1700 vs 1900)") for line in self.lines))
         await player.handle("Creating: guestNinja (1900) GuestHJGC (1700) rated blitz 3 0")
-        self.assertEqual(player.contempt, 40)
+        self.assertEqual(player.contempt, 50)
         await player.handle("{Game 17 (GuestHJGC vs. guestNinja) guestNinja resigns} 1-0")
         await player.handle("Creating: GuestHJGC (++++) GuestOther (++++) unrated blitz 3 0")
         self.assertIsNone(player.contempt)
@@ -679,8 +679,8 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle(start.replace(" 17 GuestHJGC guestNinja", " 18 GuestHJGC GuestOther"))
         await self.settle(player)
         sent = self.positions.read_text()
-        self.assertGreater(sent.rfind("setoption name DrawContempt value -10"),
-                           sent.rfind("setoption name DrawContempt value 32"))
+        self.assertGreater(sent.rfind("setoption name DrawContempt value 0"),
+                           sent.rfind("setoption name DrawContempt value 40"))
 
     async def test_white_wants_more_than_a_draw_at_any_sign(self):
         self.assertEqual([learning.color_contempt(18, white) for white in (True, False)], [14, 22])

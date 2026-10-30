@@ -225,7 +225,7 @@ class selection_tests(unittest.TestCase):
         self.assertEqual(learning.opening_book([record]).comfort("a", chess.Move.from_uci("e2e4")), 1.0)
         self.assertEqual(learning.game_contempt({"DrawContempt": "22"}, chess.WHITE), 22)
         self.assertEqual(learning.game_contempt({"WhiteElo": "2872", "BlackElo": "2982"}, chess.WHITE), 18)
-        self.assertEqual(learning.game_contempt({}, chess.BLACK), -10)
+        self.assertEqual(learning.game_contempt({}, chess.BLACK), -10)  # older games played at the old default
 
     def test_a_draw_against_a_stronger_opponent_is_repeated(self):
         board, key = chess.Board(), "start"
@@ -428,10 +428,10 @@ class multi_layer_book_tests(unittest.TestCase):
 
     def test_profiles_follow_rating_gap_and_unrated_games_play_fire_and_experiment(self):
         profiles = learning.layer_profiles
-        self.assertEqual(learning.game_profile(-10, True), profiles["equal"])
+        self.assertEqual(learning.game_profile(0, True), profiles["equal"])
         self.assertEqual(learning.game_profile(-100, True), profiles["weaker"])
-        self.assertEqual(learning.game_profile(-25, True)["fire"], 10)
-        self.assertEqual(learning.game_profile(24, True), profiles["stronger"])
+        self.assertEqual(learning.game_profile(-15, True)["fire"], 10)
+        self.assertEqual(learning.game_profile(30, True), profiles["stronger"])
         self.assertEqual(learning.game_profile(100, True)["draw"], 35)
         self.assertEqual(learning.game_profile(None, True), profiles["equal"])
         unrated = learning.game_profile(-100, False)
@@ -449,7 +449,7 @@ class multi_layer_book_tests(unittest.TestCase):
         return {move.uci(): round(probability, 3) for move, (probability, _) in moves.items()}, book
 
     def test_style_books_pull_but_book_bin_keeps_its_share(self):
-        self.assertEqual(self.shares(contempt=-10)[0], {"g1f3": 0.9, "b1c3": 0.1})
+        self.assertEqual(self.shares(contempt=0)[0], {"g1f3": 0.9, "b1c3": 0.1})
         weaker, book = self.shares(contempt=-100)
         self.assertEqual(set(book.paths), {"book", "fire"})
         self.assertEqual(weaker, {"g1f3": round((20 * 0.9 + 25 * 0.5) / 45, 3), "b1c3": round(2 / 45, 3),

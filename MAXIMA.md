@@ -114,7 +114,7 @@ Search pruning, reductions, extensions, histories, ordering, correction and TT
 evaluation caching are fixed parts of the standard search. They have no UCI
 enable/disable switches. Operational controls include hash size, time overhead,
 pondering, opening book, evaluation file, variant, tablebases and `DrawContempt`
-(default -10 cp). Changes affecting score compatibility stop and join the worker
+(default 0 cp). Changes affecting score compatibility stop and join the worker
 and clear the TT; unchanged or rejected values keep the cache.
 
 ### 4.1 Nodes and repetition
@@ -1880,12 +1880,12 @@ config overrides its percentages per profile, e.g. `{"layer_profiles": {"weaker"
 `unrated`).
 
 Draw contempt follows the rating gap: at `Creating:` MaxDrone sets the engine's
-`DrawContempt` (cp, our view) to the default -10 plus a quarter of the opponent's
+`DrawContempt` (cp, our view) to a quarter of the opponent's
 rating minus ours, clamped to `contempt_window` (default ±100 cp = ±1 pawn; 0
-disables). Equal ratings keep -10; 200 points stronger gives +40 (a draw is
+disables). Equal ratings give 0; 200 points stronger gives +50 (a draw is
 welcome); 400 or more weaker gives -100 (avoid draws). White then subtracts a
-fifth of that value's size and Black adds it, so +18 becomes +14 with White and
-+22 with Black, and -10 becomes -12 and -8: White wants more than a draw at any
+fifth of that value's size and Black adds it, so +28 becomes +22 with White and
++34 with Black, and -10 becomes -12 and -8: White wants more than a draw at any
 sign. The engine, draw offers, opening stalls and the `DrawContempt` PGN tag use
 this value; book profiles and the draw's learning value use the rating gap alone.
 Without both ratings

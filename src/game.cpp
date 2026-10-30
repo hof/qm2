@@ -33,7 +33,7 @@ namespace options {
         { "UCI_AnalyseMode", BOOL, 0, "type check default false" },
         { "UCI_Opponent", STRING, 0, "type string" },
         { "Wild", STRING, 0, "type combo default standard var standard var losers", true },
-        { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100", true },
+        { "DrawContempt", INT, 0, "type spin default 0 min -100 max 100", true },
         { "SyzygyPath", STRING, 0, "type string default <empty>" },
         { "SyzygyProbeLimit", INT, 5, "type spin default 5 min 0 max 5", true },
         { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64", true },
