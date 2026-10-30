@@ -428,17 +428,13 @@ class multi_layer_book_tests(unittest.TestCase):
                 self.assertGreater(moves[chess.Move.from_uci("f2f4")][1][layer], 0)
                 self.assertTrue(all(self.after_e5.is_legal(move) for move in moves))
 
-    def test_mood_rotates_weekly_and_joins_the_book(self):
+    def test_mood_changes_with_time_and_joins_the_book(self):
         moods = ["dutch", "parham", "traxler"]
-        monday = __import__("datetime").date(2026, 10, 19)
-        weeks = [learning.current_mood("auto", moods, monday + __import__("datetime").timedelta(weeks=week))
-                 for week in range(4)]
-        self.assertEqual(len(set(weeks[:3])), 3)  # each mood gets its week in turn
-        self.assertEqual(weeks[0], weeks[3])
-        self.assertEqual(learning.current_mood("auto", moods, __import__("datetime").date(2026, 10, 25)), weeks[0])
-        self.assertEqual(learning.current_mood("parham", moods), "parham")
-        self.assertIsNone(learning.current_mood("off", moods))
-        self.assertIsNone(learning.current_mood("missing", moods))
+        self.assertTrue(all(learning.pick_mood("auto", moods, "parham") != "parham" for _ in range(50)))
+        self.assertEqual(learning.pick_mood("auto", ["parham"], "parham"), "parham")
+        self.assertEqual(learning.pick_mood("parham", moods), "parham")
+        self.assertIsNone(learning.pick_mood("off", moods))
+        self.assertIsNone(learning.pick_mood("missing", moods))
         (self.root / "moods").mkdir()
         polyglot_book(self.root / "moods" / "parham.bin", [(self.after_e5, "d1h5", 100)])
         library = learning.learner(self.root, book_path=self.main, mood="parham", moods_dir=self.root / "moods")
@@ -446,6 +442,11 @@ class multi_layer_book_tests(unittest.TestCase):
         self.assertEqual(book.mood, "parham")
         moves, _, _ = book.distribution(self.after_e5, "")
         self.assertIn("mood", book.describe(*moves[chess.Move.from_uci("d1h5")]))
+        polyglot_book(self.root / "moods" / "dutch.bin", [(self.after_e5, "f7f5", 100)])
+        library = learning.learner(self.root, book_path=self.main, moods_dir=self.root / "moods")
+        first = library.today_mood(now=0)
+        self.assertEqual(library.today_mood(now=learning.mood_hours * 3600 - 1), first)
+        self.assertNotEqual(library.today_mood(now=learning.mood_hours * 3600), first)
 
     def test_where_book_bin_has_nothing_its_share_goes_to_search(self):
         board = board_after("e2e4 e7e5 f2f4")

@@ -1,11 +1,12 @@
 """Opening learning from MaxDrone's PGN games (MAXIMA.md 9.2): digests, player stats, and the multi-layer book."""
 import argparse
-from datetime import date, datetime
+from datetime import datetime
 import json
 from pathlib import Path
 import random
 import re
 import struct
+from time import monotonic
 
 import chess
 import chess.pgn
@@ -27,6 +28,7 @@ signature_wins = 3
 signature_share = 0.7
 signature_eval = 0.45
 revenge_plies = 24  # the opening of a lost game whose moves we play back at the opponent
+mood_hours = 24  # how long one mood lasts in a running session
 game_types = ("lightning", "blitz", "standard")
 lichess_speeds = {"bullet": "lightning", "blitz": "blitz", "rapid": "standard", "classical": "standard"}
 
@@ -250,15 +252,13 @@ def mood_names(directory):
     return sorted(path.stem for path in Path(directory).glob("*.bin")) if directory else []
 
 
-def current_mood(setting, available, today=None):
-    """The mood for today's games: none for "off", the configured name, or for "auto" each mood in turn for
-    an ISO week, so every machine agrees without keeping state."""
+def pick_mood(setting, available, previous=None):
+    """The next mood: none for "off", the configured name, or for "auto" a random one other than the last."""
     if setting == "off" or not available:
         return None
     if setting != "auto":
         return setting if setting in available else None
-    year, week, _ = (today or date.today()).isocalendar()
-    return available[(year * 53 + week) % len(available)]
+    return random.choice([name for name in available if name != previous] or available)
 
 
 def style_share(contempt):
@@ -287,7 +287,7 @@ def learned_factor(rate):
 
 class opening_book:
     """One game's multi-layer book (MAXIMA.md 9.2): book.bin, the style books fire, draw, and experiment,
-    the week's mood, and the learned layers global, group, and opponent, each with a percentage from the
+    the current mood, and the learned layers global, group, and opponent, each with a percentage from the
     game's profile. style_books may carry the mood's book under "mood"."""
 
     def __init__(self, records, opponent=None, group=None, game_type=None, book_path=None, prior=8.0,
@@ -560,6 +560,7 @@ class learner:
         self.experience_dir = Path(experience_dir)
         self.variant = learning_variant(variant)
         self.mood, self.moods_dir = mood, moods_dir
+        self.picked_mood, self.mood_picked_at = None, None
         self.style_books = style_books
         self.profiles = profiles
         self.games_dir = Path(games_dir or self.experience_dir / "games")
@@ -571,8 +572,13 @@ class learner:
             self.store.sync(self.games_dir)
         self.records = self.store.load()
 
-    def today_mood(self):
-        return current_mood(self.mood, mood_names(self.moods_dir))
+    def today_mood(self, now=None):
+        """The session's mood, picked at the first game and again once mood_hours have passed."""
+        now = monotonic() if now is None else now
+        if self.mood_picked_at is None or now - self.mood_picked_at >= mood_hours * 3600:
+            self.picked_mood = pick_mood(self.mood, mood_names(self.moods_dir), self.picked_mood)
+            self.mood_picked_at = now
+        return self.picked_mood
 
     def for_game(self, opponent, group, game_type, contempt=None, rated=True):
         # Existing opening_book instances own their view; only the next game reloads.

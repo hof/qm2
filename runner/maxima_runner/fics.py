@@ -821,13 +821,13 @@ class engine_player:
                 await asyncio.sleep(tell_gap)
 
     async def announce(self):
-        """Finger notes for registered accounts, with the week's mood after the configured notes."""
+        """Finger notes for registered accounts, with the current mood after the configured notes."""
         if self.policy.guest:
             return
         mood = self.learner.today_mood() if self.learner is not None else None
         if self.announced_mood is not None and mood == self.announced_mood:
             return
-        extra = list(self.policy.notes) + ([f"Mood this week: {mood_title(mood)}"] if mood else [])
+        extra = list(self.policy.notes) + ([f"Current mood: {mood_title(mood)}"] if mood else [])
         for number, note in enumerate(finger_notes(*self.engine_facts(), extra), 1):
             await self.send(f"set {number} {note}")
         self.announced_mood = mood or ""
@@ -1176,7 +1176,7 @@ class engine_player:
                 self.opponent_ready.set()
         learner = self.game_learner
         if learner is not None and self.opening is None:
-            await self.announce()  # a new week may bring a new mood
+            await self.announce()  # the mood may have changed
             game_type = self.created["type"].lower() if self.created else None
             rated = bool(self.created) and self.created["rated"] == "rated"
             self.opening = learner.for_game(self.opponent.name if self.opponent else None,
