@@ -369,8 +369,9 @@ void move_picker_t::score_quiets(search_t * s, move_t * begin, move_t * end) {
         }
         lesser[WQUEEN] = attacks;
     }
+    const auto context = s->quiet_context();
     for (auto * move = begin; move != end; ++move) {
-        int score = s->move_history_score(*move);
+        int score = quiet_history_t::score(context, *move);
 
         // Castling moves two pieces; the ordinary from/to hints do not apply.
         if (!move->castle) {

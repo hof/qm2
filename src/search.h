@@ -58,6 +58,30 @@ struct quiet_history_t {
         entry += bonus - int(entry) * std::abs(bonus) / limit;
     }
 
+    // History rows of one parent position, gathered once for all its quiet moves.
+    // Missing contexts read the piece-0 row, which updates never write.
+    struct context_t {
+        const int16_t (*main)[64];
+        const int16_t (*pawn)[64];
+        const int16_t (*continuation[3])[64];
+    };
+
+    context_t context(bool us, U64 pawn_key, const move_t * previous[3]) const {
+        context_t result{main[us], pawn[pawn_key % pawn_buckets], {}};
+        for (int i = 0; i < 3; ++i) {
+            result.continuation[i] = continuation[previous[i] ? previous[i]->piece : 0]
+                [previous[i] ? previous[i]->tsq : 0];
+        }
+        return result;
+    }
+
+    static int score(const context_t & context, const move_t & move) {
+        return context.main[move.ssq][move.tsq] + context.pawn[move.piece][move.tsq]
+            + context.continuation[0][move.piece][move.tsq]
+            + context.continuation[1][move.piece][move.tsq]
+            + context.continuation[2][move.piece][move.tsq];
+    }
+
     int continuation_score(const move_t & move, const move_t & previous) const {
         return continuation[previous.piece][previous.tsq][move.piece][move.tsq];
     }
@@ -375,6 +399,7 @@ public:
     std::array<const move_t *, 2> long_continuation_contexts() const;
 
     // Standard search: learned history only, queried before making the move.
+    quiet_history_t::context_t quiet_context() const;
     int move_history_score(const move_t & move);
     void update_capture_cutoff(const move_t & move, int depth, int searched_moves);
     void take_history(search_t & previous);

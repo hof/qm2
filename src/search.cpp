@@ -868,6 +868,13 @@ std::array<const move_t *, 2> search_t::long_continuation_contexts() const {
     return contexts;
 }
 
+quiet_history_t::context_t search_t::quiet_context() const {
+    const auto contexts = long_continuation_contexts();
+    const move_t * previous[3] = {brd.ply > 0 ? &(stack - 1)->current_move : nullptr,
+        contexts[0], contexts[1]};
+    return quiet_history->context(brd.us(), brd.stack->pawn_key, previous);
+}
+
 int search_t::move_history_score(const move_t & move) {
 
     // Read learned history in the parent position. Picker scores also contain
@@ -876,16 +883,7 @@ int search_t::move_history_score(const move_t & move) {
         const int value = capture_history->score(move);
         return value;
     }
-    const auto * previous = brd.ply > 0 ? &(stack - 1)->current_move : nullptr;
-    int value = quiet_history->score(brd.us(), move, previous, brd.stack->pawn_key);
-    const auto contexts = long_continuation_contexts();
-    for (int i = 0; i < 2; ++i) {
-        if (contexts[i]) {
-            const int score = quiet_history->continuation_score(move, *contexts[i]);
-            value += score;
-        }
-    }
-    return value;
+    return quiet_history_t::score(quiet_context(), move);
 }
 
 // Cached fail-highs supply ordering evidence even though no move was searched here.
