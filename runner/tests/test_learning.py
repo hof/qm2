@@ -481,6 +481,22 @@ class multi_layer_book_tests(unittest.TestCase):
         self.assertEqual(library.today_mood(now=learning.mood_hours * 3600 - 1), first)
         self.assertNotEqual(library.today_mood(now=learning.mood_hours * 3600), first)
 
+    def test_the_mood_survives_a_lost_line_and_tries_its_other_lines_first(self):
+        mood = self.root / "mood.bin"
+        polyglot_book(mood, [(self.after_e5, "d1h5", 100)])
+        books = {"mood": mood}
+        lost = chess.Move.from_uci("d1h5")
+
+        def share():
+            book = learning.opening_book([], book_path=self.main, style_books=books, rated=False,
+                                         random_source=__import__("random").Random(1))
+            book.personal_score = lambda key, move: 0.0 if move == lost else None
+            return book.distribution(self.after_e5, "")[0][lost][0]
+
+        self.assertGreater(share(), 0.05)
+        polyglot_book(mood, [(self.after_e5, "d1h5", 100), (self.after_e5, "f1c4", 100)])
+        self.assertLess(share(), 0.05)
+
     def test_where_book_bin_has_nothing_its_share_goes_to_search(self):
         board = board_after("e2e4 e7e5 f2f4")
         polyglot_book(self.fire, [(board, "e5f4", 100)])

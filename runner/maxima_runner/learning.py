@@ -471,8 +471,13 @@ class opening_book:
         damp = {move: lost_damp if self.personal_score(key, move) == 0.0
                 else 0.1 if rates[move][0][1] >= 4 and rates[move][-1][0] < 0.3 or self.bad_start(key, move)
                 else 1.0 for move in candidates}
-        shares = {move: {name: weights[name] * layers[name].get(move, 0) * damp[move] for name in layers}
-                  for move in candidates}
+        # The mood keeps its share: a damped move yields to the mood's other lines, or stays if it has none.
+        mood = {move: share * damp.get(move, 0) for move, share in layers.get("mood", {}).items()}
+        kept = sum(mood.values())
+        if kept:
+            layers["mood"] = {move: share / kept for move, share in mood.items()}
+        shares = {move: {name: weights[name] * layers[name].get(move, 0) * (1.0 if name == "mood" else damp[move])
+                         for name in layers} for move in candidates}
         search = 0.0 if "book" in books else self.weights.get("book", 0)
         total = sum(sum(parts.values()) for parts in shares.values())
         if not total:

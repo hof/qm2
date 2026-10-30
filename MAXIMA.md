@@ -1433,7 +1433,9 @@ MaxDrone config). In each position:
    with are multiplied by 0.03 at once, so untried moves come first; once those
    have lost as well the shares even out again. Against a stronger opponent, our
    best move here that scored above 50% (a draw counts its draw value) gets at
-   least the profile's `repeat` chance, so a good line is walked again.
+   least the profile's `repeat` chance, so a good line is walked again. The mood
+   is exempt: it keeps its percentage, a damped move gives way to the mood's other
+   lines at that position and stays when the mood has none.
 5. Signature lines, for psychology: when our move beat this registered opponent
    three times in a row, each time with our eval after it at 45% or better, it
    gets 70% of the choice there (`signature` in the PGN comment); the rest keeps
