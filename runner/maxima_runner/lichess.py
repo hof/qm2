@@ -2,11 +2,13 @@
 learning, online tablebase and connectors (MAXIMA.md 10.3)."""
 import asyncio
 from contextlib import asynccontextmanager
+import http.client
 import json
 from pathlib import Path
 import random
 import re
 import signal
+import statistics
 import threading
 import time
 import urllib.error
@@ -64,12 +66,44 @@ default_settings = {
 
 
 class lichess_api:
-    """Blocking urllib calls run in threads; ndjson streams are read line by line by a thread."""
+    """Calls run in threads on kept-open connections, which save the handshake on every move;
+    ndjson streams are read line by line by a thread."""
 
     def __init__(self, token, server=server_url, on_line=print):
         self.token, self.server, self.on_line = token, server.rstrip("/"), on_line
         self.paused_until = 0.0
         self.limit_seconds = 0  # the wait Lichess named in the last failed call
+        self.local = threading.local()  # each worker thread's connection
+
+    def connection(self):
+        if getattr(self.local, "connection", None) is None:
+            url = urllib.parse.urlsplit(self.server)
+            kind = http.client.HTTPSConnection if url.scheme == "https" else http.client.HTTPConnection
+            self.local.connection = kind(url.netloc, timeout=10)
+        return self.local.connection
+
+    def exchange(self, method, path, data=None):
+        """(status, body) on this thread's connection, reconnecting once when the server dropped it."""
+        body = data if isinstance(data, bytes) else (
+            urllib.parse.urlencode(data).encode() if data is not None else (b"" if method == "POST" else None))
+        headers = {"Authorization": f"Bearer {self.token}", "User-Agent": "MaximaEngine (https://github.com/hof/qm2)"}
+        if isinstance(data, dict):
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+        for retry in (True, False):
+            connection = self.connection()
+            try:
+                connection.request(method, path, body, headers)
+                response = connection.getresponse()
+                return response.status, response.read()
+            except (http.client.RemoteDisconnected, http.client.CannotSendRequest, ConnectionError):
+                connection.close()
+                self.local.connection = None
+                if not retry:
+                    raise
+            except (OSError, http.client.HTTPException):
+                connection.close()
+                self.local.connection = None
+                raise
 
     def open(self, method, path, data=None, timeout=10):
         if isinstance(data, bytes):
@@ -96,18 +130,17 @@ class lichess_api:
         """Parsed JSON, or None after logging the failure."""
         await self.wait_for_limit()
 
-        def send():
-            with self.open(method, path, data) as response:
-                return json.loads(response.read() or b"null")
-
         try:
-            return await asyncio.get_running_loop().run_in_executor(None, send)
-        except urllib.error.HTTPError as error:
-            detail = error.read().decode("utf-8", "replace")
+            status, body = await asyncio.get_running_loop().run_in_executor(None, self.exchange, method, path, data)
+            if status < 300:
+                return json.loads(body or b"null")
+            if status == 429:
+                self.paused_until = time.monotonic() + rate_limit_pause
+            detail = body.decode("utf-8", "replace")
             wait = re.search(r'"ratelimit":.*?"seconds":\s*(\d+)', detail)
             self.limit_seconds = int(wait[1]) if wait else 0
-            self.on_line(f"-- Lichess {method} {path}: HTTP {error.code} {detail[:200]}")
-        except (OSError, ValueError) as error:
+            self.on_line(f"-- Lichess {method} {path}: HTTP {status} {detail[:200]}")
+        except (OSError, ValueError, http.client.HTTPException) as error:
             self.on_line(f"-- Lichess {method} {path}: {error}")
         return None
 
@@ -623,6 +656,7 @@ class lichess_game:
         self.bot, self.id = bot, game_id
         self.initial = self.board = self.record = self.color = self.opponent = None
         self.full = self.opening = self.contempt = self.draw_score = None
+        self.delays = []  # per move (book choice, sending, before choosing), in seconds
         self.task = self.searching = None
         self.searched = None
         self.clocks = {}
@@ -876,6 +910,7 @@ class lichess_game:
         if move is None or not board.is_legal(move):
             bot.on_line(f"-- engine returned no legal move in {board.fen()}")
             return
+        chosen = time.monotonic()
         fresh = self.loss.on_search(board, move, info, kind)
         latest = self.state or state
         received_at = self.state_received_at if self.state_received_at is not None else started
@@ -903,6 +938,8 @@ class lichess_game:
             self.abort_position = None
             return
         seconds, numbered = time.monotonic() - started, board.variation_san([move])
+        self.delays.append((chosen - started if kind == "book" else None, time.monotonic() - chosen,
+                            started - self.state_received_at if self.state_received_at is not None else 0.0))
         if board.ply() < 2 and self.opening is not None:
             # A rated game earns a remark only with a clear rating gap, at 4 Elo per centipawn of contempt.
             remark = kind == "book" and (not self.full.get("rated") or abs(self.contempt or 0) * 4 >= bot.style_gap)
@@ -1026,6 +1063,11 @@ class lichess_game:
             result = "1/2-1/2"
         reason = reasons.get(status, status)
         bot.on_line(f"-- game {self.id} over: {reason} {result}")
+        if self.delays:
+            book, post, wait = zip(*self.delays)
+            book = [delay for delay in book if delay is not None] or [0.0]
+            bot.on_line(f"-- move delays, median ms: book choice {statistics.median(book) * 1000:.0f}, "
+                        f"sending {statistics.median(post) * 1000:.0f}, before choosing {statistics.median(wait) * 1000:.0f}")
         if status not in ("aborted", "noStart"):
             self.chat("player", random.choice(player_farewells))
             self.chat("spectator", "Thanks for watching!")

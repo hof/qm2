@@ -1,7 +1,7 @@
 """Lichess bot: which challenges it accepts, owner commands, and one game through a fake Lichess server."""
 import asyncio
+import http.client
 import http.server
-import io
 import json
 from pathlib import Path
 import queue
@@ -10,7 +10,6 @@ import tempfile
 import threading
 import time
 import unittest
-import urllib.error
 from unittest.mock import patch
 
 import chess
@@ -632,15 +631,37 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         for speed in ("blitz", "rapid"):
             self.assertGreater(bot.matchmaker.resting[("odonata", speed)], now + 900)
 
-    async def test_reads_the_wait_from_a_refused_call(self):
-        body = json.dumps({"error": "x" * 300, "ratelimit": {"key": "bot.vsBot.day", "seconds": 24430}}).encode()
-        error = urllib.error.HTTPError("https://lichess.org", 400, "Bad Request", {}, io.BytesIO(body))
+    async def test_reconnects_once_when_the_server_dropped_the_connection(self):
+        class dropped:
+            def request(self, *_):
+                raise http.client.RemoteDisconnected("gone")
 
-        def refuse(*_):
-            raise error
+            def close(self):
+                pass
+
+        class working(dropped):
+            def request(self, *_):
+                pass
+
+            def getresponse(self):
+                class response:
+                    status = 200
+
+                    def read(self):
+                        return b"{}"
+
+                return response()
 
         api = lichess.lichess_api("token", on_line=lambda line: None)
-        api.open = refuse
+        connections = [dropped(), working()]
+        api.connection = lambda: connections.pop(0)
+        self.assertEqual(api.exchange("POST", "/api/bot/game/g1/move/e2e4"), (200, b"{}"))
+
+    async def test_reads_the_wait_from_a_refused_call(self):
+        body = json.dumps({"error": "x" * 300, "ratelimit": {"key": "bot.vsBot.day", "seconds": 24430}}).encode()
+
+        api = lichess.lichess_api("token", on_line=lambda line: None)
+        api.exchange = lambda *_: (400, body)
         self.assertIsNone(await api.call("POST", "/api/challenge/Odonata"))
         self.assertEqual(api.limit_seconds, 24430)
 

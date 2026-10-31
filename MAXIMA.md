@@ -2055,7 +2055,8 @@ Compact console move summaries omit this label; ponder time remains in parenthes
 
 ### 10.3 Lichess client (MaximaEngine)
 
-`maxima lichess` plays on Lichess through the Bot API as MaximaEngine: it
+`maxima lichess` plays on Lichess through the Bot API as MaximaEngine, sending
+calls on kept-open connections to save the handshake on every move: it
 accepts challenges, plays them with the Release Maxima build, saves them as
 PGN and learns from them. Rated and casual challenges are both welcome; a clock
 over `max_clock` minutes per side (default 60, `--max-clock`, counted as limit +
