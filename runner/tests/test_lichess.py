@@ -334,7 +334,7 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_spectators_get_the_mood_and_once_the_book_odds(self):
         class book:
-            mood, why, odds, results = "kings_indian", None, {}, ({}, {}, {})
+            mood, why, odds, results, weights = "kings_indian", None, {}, ({}, {}, {}), {}
             names = {"opponent": "Someone"}
 
             def choose(self, board):
@@ -504,6 +504,11 @@ class tournament_stream_tests(unittest.IsolatedAsyncioTestCase):
 
 
 class chat_line_tests(unittest.TestCase):
+    def test_a_clear_book_style_earns_a_remark(self):
+        self.assertIn(lichess.style_line({"draw": 13, "fire": 0}), lichess.style_lines["draw"])
+        self.assertIn(lichess.style_line({"draw": 0, "fire": 25}), lichess.style_lines["fire"])
+        self.assertIsNone(lichess.style_line({"draw": 9, "fire": 0}))
+
     def test_spectators_see_the_top_three_book_moves(self):
         board = chess.Board()
         odds = {board.parse_san(san): (share, {}) for san, share in

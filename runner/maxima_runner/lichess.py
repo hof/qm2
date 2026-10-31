@@ -35,6 +35,9 @@ public_commands = ("help", "name", "eval", "stats", "book")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
 # Each room gets its own wording: Lichess silently drops a line equal to one of our previous two.
+style_lines = {"draw": ("A draw would not be bad.", "Half a point would be fine here.", "Safety first today."),
+               "fire": ("Let's put the board on fire!", "Time to light some fires!", "This could get wild!")}
+style_share = 10  # the percentage of a game's book mix from which we mention its style
 player_greeting = "Hi, I'm Maxima running on MaxDrone. Good luck!"
 greeting = "Hi! I'm Maxima, running on MaxDrone. {}Type !help for available commands."
 player_farewells = ("Good game, thanks for playing!", "Thanks for the game!")
@@ -896,7 +899,8 @@ class lichess_game:
             return
         seconds, numbered = time.monotonic() - started, board.variation_san([move])
         if board.ply() < 2 and kind == "book" and self.opening is not None:
-            self.chat("spectator", book_odds(board, self.opening.odds, self.opening.names["opponent"]))
+            odds = book_odds(board, self.opening.odds, self.opening.names["opponent"])
+            self.chat("spectator", " ".join(filter(None, (odds, style_line(self.opening.weights)))))
         why = self.opening.why if kind == "book" and self.opening is not None else None
         if why and why[0] in ("book", "learned", "signature", "revenge"):
             self.last_book, self.left_book = book_whisper(numbered, why, self.opening), None
@@ -1086,6 +1090,12 @@ class lichess_game:
             if bot.learner is not None and getattr(bot.learner, 'experience_dir', None) is not None:
                 paths.append(bot.learner.experience_dir / 'games' / (game.headers['LearningId'] + '.pgn'))
             archive_saved(paths, bot.on_line)
+
+
+def style_line(weights):
+    """A varied remark when the game's book mix leans clearly to the draw or fire book."""
+    style = max(style_lines, key=lambda name: weights.get(name, 0))
+    return random.choice(style_lines[style]) if weights.get(style, 0) >= style_share else None
 
 
 def book_odds(board, odds, name):
