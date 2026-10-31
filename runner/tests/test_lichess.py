@@ -332,6 +332,38 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(timer.cancelled())
             self.assertEqual(sum(path.endswith("/abort") for path, _ in api.posts), 1)
 
+    async def test_spectators_get_the_mood_and_once_the_book_odds(self):
+        class book:
+            mood, why, odds, results = "kings_indian", None, {}, ({}, {}, {})
+            names = {"opponent": "Someone"}
+
+            def choose(self, board):
+                move = chess.Move.from_uci("e2e4")
+                self.odds = {move: (0.5, {})}
+                return move, "book 50%"
+
+        class learner:
+            records, server = [], "lichess.org"
+
+            def for_game(self, *_):
+                return book()
+
+            def expect(self, *_):
+                pass
+
+        api = stub_api()
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot.id, bot.session, bot.learner = "maximaengine", stub_session(), learner()
+        game = lichess.lichess_game(bot, "g1")
+        full = game_full()
+        game.setup(full)
+        await game.on_state(full["state"])
+        await game.searching
+        await asyncio.sleep(0.01)
+        chats = [data["text"] for path, data in api.posts if path.endswith("/chat") and data["room"] == "spectator"]
+        self.assertEqual(chats, ["Hi! I'm Maxima, running on MaxDrone. Mood: Kings Indian. Type !help for available commands.",
+                                 "vs Someone: e4 (50%)"])
+
     async def test_draw_offer_is_accepted_in_a_tablebase_draw(self):
         api = stub_api()
         bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
@@ -472,12 +504,11 @@ class tournament_stream_tests(unittest.IsolatedAsyncioTestCase):
 
 
 class chat_line_tests(unittest.TestCase):
-    def test_spectators_see_the_record_after_a_first_game(self):
-        record = lambda history: lichess.record_line(history, "Ferrite")
-        self.assertIsNone(record(None))
-        self.assertIsNone(record((0, 0, 0)))
-        self.assertEqual(record((1, 2, 3)), "vs Ferrite: +1 =2 -3.")
-        self.assertEqual(record((0, 1, 0)), "vs Ferrite: +0 =1 -0.")
+    def test_spectators_see_the_top_three_book_moves(self):
+        board = chess.Board()
+        odds = {board.parse_san(san): (share, {}) for san, share in
+                (("Nf3", 0.12), ("e4", 0.5), ("c4", 0.03), ("d4", 0.13))}
+        self.assertEqual(lichess.book_odds(board, odds, "Ferrite"), "vs Ferrite: e4 (50%) d4 (13%) Nf3 (12%)")
 
 
 class matchmaker_tests(unittest.IsolatedAsyncioTestCase):

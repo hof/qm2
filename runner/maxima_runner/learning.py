@@ -349,6 +349,7 @@ class opening_book:
         self.totals = ({}, {}, {})  # the same per position: key -> games
         self.results = ({}, {}, {})  # unweighted W/D/L only for moves played by Maxima
         self.choice_results = {}
+        self.odds = {}  # the last book decision: move -> (probability, parts)
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
         self.comfort_scores = {}  # (key, move) -> [sum, games] of the first eval, halved per book move back
@@ -607,6 +608,7 @@ class opening_book:
             return None
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         moves, in_book, search = self.distribution(board, key)
+        self.odds = moves
         if moves:
             ordered = sorted(moves, key=chess.Move.uci)
             move = self.random.choices(ordered + [None], [moves[move][0] for move in ordered] + [search])[0]

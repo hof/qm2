@@ -36,7 +36,7 @@ public_gap = 5  # seconds between answers to anyone's commands, so chat spam can
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
 # Each room gets its own wording: Lichess silently drops a line equal to one of our previous two.
 player_greeting = "Hi, I'm Maxima running on MaxDrone. Good luck!"
-greeting = "Hi! I'm Maxima, running on MaxDrone. Type !help for available commands."
+greeting = "Hi! I'm Maxima, running on MaxDrone. {}Type !help for available commands."
 player_farewells = ("Good game, thanks for playing!", "Thanks for the game!")
 # Our own challenges after idle time: (limit, increment) seconds per speed and each speed's share.
 challenge_clocks = {"bullet": ((60, 0), (60, 1), (120, 1)), "blitz": ((180, 0), (180, 2), (300, 0), (300, 3)),
@@ -726,12 +726,9 @@ class lichess_game:
             group = "engines" if title == "BOT" else "masters" if title in chess_titles else "humans"
             self.opening = bot.learner.for_game(them.get("name"), group, learning.lichess_speeds.get(full["speed"]),
                                                 self.contempt, full.get("rated", False))
-            stats = learning.player_stats(bot.learner.records, bot.learner.server).get((them.get("name") or "").lower(), {})
-            history = tuple(stats.get(outcome, 0) for outcome in ("wins", "draws", "losses"))
-        else:
-            history = None
         self.chat("player", player_greeting)
-        self.chat("spectator", " ".join(filter(None, (greeting, record_line(history, them.get("name") or "you")))))
+        mood = self.opening.mood if self.opening is not None else None
+        self.chat("spectator", greeting.format(f"Mood: {mood.replace('_', ' ').title()}. " if mood else ""))
         clock = full.get("clock") or {}
         bot.on_line(f"-- game {self.id}: {full['white'].get('name')} vs {full['black'].get('name')}, "
                     f"{full['speed']} {'rated' if full.get('rated') else 'casual'} {bot.api.server}/{self.id}")
@@ -898,6 +895,8 @@ class lichess_game:
             self.abort_position = None
             return
         seconds, numbered = time.monotonic() - started, board.variation_san([move])
+        if board.ply() < 2 and kind == "book" and self.opening is not None:
+            self.chat("spectator", book_odds(board, self.opening.odds, self.opening.names["opponent"]))
         why = self.opening.why if kind == "book" and self.opening is not None else None
         if why and why[0] in ("book", "learned", "signature", "revenge"):
             self.last_book, self.left_book = book_whisper(numbered, why, self.opening), None
@@ -1089,12 +1088,10 @@ class lichess_game:
             archive_saved(paths, bot.on_line)
 
 
-def record_line(history, name):
-    """Compact spectator record from (wins, draws, losses), omitted before a first game."""
-    if not history or not sum(history):
-        return None
-    wins, draws, losses = history
-    return f"vs {name}: +{wins} ={draws} -{losses}."
+def book_odds(board, odds, name):
+    """The book's top three first moves against this opponent, for the spectators."""
+    top = sorted(odds.items(), key=lambda item: -item[1][0])[:3]
+    return f"vs {name}: " + " ".join(f"{board.san(move)} ({share:.0%})" for move, (share, _) in top)
 
 
 def load_settings(path):

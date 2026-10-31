@@ -2128,10 +2128,11 @@ variants). Takeback requests are declined; draw offers are accepted only in dead
 draws or when a draw is worth at least our score (below). When the opponent leaves and Lichess allows it, the win is claimed.
 
 The player room opens with "Hi, I'm Maxima running on MaxDrone. Good luck!",
-the spectator room with "Hi! I'm Maxima, running on MaxDrone. Type !help for
-available commands." A known opponent's record follows on the same chat line,
-for example "vs Quirky2000: +1 =2 -3." from Maxima's side; it is omitted for a
-first game or without learning. There is no second greeting line. Lichess silently
+the spectator room with "Hi! I'm Maxima, running on MaxDrone. Mood: Scandinavian.
+Type !help for available commands." (the mood only when the game has one). After
+our first move, once, when it came from the book, the spectators see the book's top
+three moves with their pick chances against this opponent, for example
+"vs Quirky2000: e4 (50%) d4 (13%) Nf3 (12%)". Lichess silently
 drops repeated messages, so the rooms use different wording. At the end the player room gets a thank-you for the game and the
 spectator room "Thanks for watching!". Chat lines carry no links, which Lichess
 blanks. MaximaEngine posts nothing else unasked. Anyone may type `!help`, `!name` (engine,
