@@ -1099,8 +1099,9 @@ class lichess_game:
 
 def style_line(weights, lines):
     """A varied remark from the configured lines when the game's book mix leans clearly to one style."""
-    style = max(lines, key=lambda name: weights.get(name, 0), default=None)
-    return random.choice(lines[style]) if style and lines[style] and weights.get(style, 0) >= style_share else None
+    active = [style for style, sentences in lines.items() if sentences
+              and weights.get("experiment" if style == "surprise" else style, 0) >= style_share]
+    return random.choice(lines[random.choice(active)]) if active else None
 
 
 def book_odds(board, odds, name):
@@ -1143,10 +1144,10 @@ def load_settings(path):
             raise ValueError(f"{path}: teams must be team ids")
         if key == "layer_profiles":
             value = layer_profiles(value, path)
-        if key == "style_lines" and not all(name in ("draw", "fire") and isinstance(sentences, list)
+        if key == "style_lines" and not all(name in ("draw", "fire", "surprise") and isinstance(sentences, list)
                                             and all(isinstance(line, str) and line for line in sentences)
                                             for name, sentences in (value or {}).items()):
-            raise ValueError(f"{path}: style_lines takes lists of sentences for draw and fire")
+            raise ValueError(f"{path}: style_lines takes lists of sentences for draw, fire and surprise")
         if key == "style_lines":
             value = {**default_style_lines, **(value or {})}
         settings[key] = value
