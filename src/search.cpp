@@ -692,6 +692,11 @@ std::string search_t::pv_to_string() {
                 break;
             }
             m.set_compact(&b, tt_move);
+
+            // A partial key can match another position: never print or play its move.
+            if (!m.piece || !b.valid(&m) || !b.legal(&m)) {
+                break;
+            }
             result += m.to_string() + " ";
             b.forward(&m);
         }
