@@ -8,7 +8,7 @@ import chess.engine
 from .variants import royal_losers_board, orthodox_wild_board
 
 
-guess_depth = 6  # plies of the quick search that guesses a reply outside the book
+guess_seconds = 0.2  # the quick search that guesses a reply outside the book, on the opponent's clock
 
 
 class online_protocol(chess.engine.UciProtocol):
@@ -177,7 +177,7 @@ class engine_session:
         settings = self.play_settings(board, options)
         self.protocol.on_search_started = None
         if reply is None:
-            guess = await self.protocol.play(board, chess.engine.Limit(depth=guess_depth), game=game,
+            guess = await self.protocol.play(board, chess.engine.Limit(time=guess_seconds), game=game,
                                              options=settings, opponent=opponent)
             reply = guess.move
             if not waiting():
