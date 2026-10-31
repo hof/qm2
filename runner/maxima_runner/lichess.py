@@ -35,7 +35,8 @@ public_commands = ("help", "name", "eval", "stats", "book")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
 # Each room gets its own wording: Lichess silently drops a line equal to one of our previous two.
-style_lines = {"draw": ("A draw would not be bad.", "Let's try to split this point.", "Going for the solid lines."),
+style_lines = {"draw": ("A draw would not be bad.", "Let's try to split this point.", "Going for the solid lines.",
+                        "Let's try not to fall asleep."),
                "fire": ("Let's put the board on fire!", "Chaos is my favorite opening strategy.",
                         "Sacrifices are definitely on the menu.", "Brace yourselves. We are in for a ride.",
                         "Fasten your seatbelts.")}
