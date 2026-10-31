@@ -592,6 +592,19 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         maker.declined({"id": "c2", "declineReasonKey": "casual"})
         self.assertIsNone(maker.pick(bots, {"blitz": 2900}, "us", time.monotonic()))
 
+    async def test_a_game_against_someone_else_cancels_our_open_challenge(self):
+        api = stub_api()
+        bot = lichess.lichess_bot(api, None, lambda line: None)
+        bot.id = "maximaengine"
+        for opponent, cancels in (("other", 1), ("arasanx", 0)):
+            api.posts.clear()
+            bot.game = None
+            bot.matchmaker.pending = ("c1", "arasanx", "blitz", time.monotonic())
+            with patch.object(lichess.lichess_game, "start"):
+                await bot.on_event({"type": "gameStart", "game": {"gameId": "g1", "opponent": {"id": opponent}}})
+            self.assertEqual(len([path for path, _ in api.posts if path == "/api/challenge/c1/cancel"]), cancels)
+            self.assertIsNone(bot.matchmaker.pending)
+
     async def test_leaves_a_limited_bot_alone_at_every_speed_for_the_wait_lichess_names(self):
         class api:
             limit_seconds = 1000

@@ -546,7 +546,10 @@ class lichess_bot:
             if self.accepted[0] == game_id:
                 self.accepted = (None, 0.0)
             if self.game is None:
-                self.matchmaker.busy((event["game"].get("opponent") or {}).get("id"))
+                opponent = (event["game"].get("opponent") or {}).get("id")
+                if self.matchmaker.pending is not None and self.matchmaker.pending[1] != opponent:
+                    await self.cancel_challenge()  # a late acceptance would start a second game
+                self.matchmaker.busy(opponent)
                 self.game = lichess_game(self, game_id)
                 self.game.start()
             elif self.game.id != game_id:
