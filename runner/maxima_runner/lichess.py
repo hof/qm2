@@ -18,7 +18,7 @@ import chess.engine
 
 from . import connectors, fics_game, learning, move_choice, online_tablebase, resignation, online_shutdown
 from .cli import styled
-from .fics import book_whisper, chess_titles, console_time, console_learning, console_search, draw_contempt, layer_profiles, \
+from .fics import book_whisper, chess_titles, config_path, console_time, console_learning, console_search, draw_contempt, layer_profiles, \
     learning_report, numbered_move, read_commands, restart_status, style_books
 from .move_choice import describe, search_summary, variation
 from .project import data_root, engine_path, env_value
@@ -35,11 +35,6 @@ public_commands = ("help", "name", "eval", "stats", "book")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
 # Each room gets its own wording: Lichess silently drops a line equal to one of our previous two.
-style_lines = {"draw": ("A draw would not be bad.", "Let's try to split this point.", "Going for the solid lines.",
-                        "Let's try not to fall asleep."),
-               "fire": ("Let's put the board on fire!", "Chaos is my favorite opening strategy.",
-                        "Sacrifices are definitely on the menu.", "Brace yourselves. We are in for a ride.",
-                        "Fasten your seatbelts.")}
 style_share = 10  # the percentage of a game's book mix from which we mention its style
 player_greeting = "Hi, I'm Maxima running on MaxDrone. Good luck!"
 greeting = "Hi! I'm Maxima, running on MaxDrone. {}Type !help for available commands."
@@ -64,7 +59,7 @@ default_settings = {
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
-    "challenge_idle": 30, "challenge_window": 300, "max_clock": 60, "teams": [], "tournament": None,
+    "challenge_idle": 30, "challenge_window": 300, "max_clock": 60, "style_lines": {}, "teams": [], "tournament": None,
 }
 
 
@@ -278,7 +273,7 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, max_clock=60, style_lines=None, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
@@ -288,6 +283,7 @@ class lichess_bot:
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.contempt_window, self.unknown_contempt, self.margin = contempt_window, unknown_contempt, margin
         self.pv_plies, self.teams, self.max_clock = pv_plies, tuple(teams), max_clock
+        self.style_lines = style_lines or {}
         self.context = self.session = None
         self.id = self.name = None
         self.game = None
@@ -903,7 +899,7 @@ class lichess_game:
         seconds, numbered = time.monotonic() - started, board.variation_san([move])
         if board.ply() < 2 and kind == "book" and self.opening is not None:
             odds = book_odds(board, self.opening.odds, self.opening.names["opponent"])
-            self.chat("spectator", " ".join(filter(None, (odds, style_line(self.opening.weights)))))
+            self.chat("spectator", " ".join(filter(None, (odds, style_line(self.opening.weights, bot.style_lines)))))
         why = self.opening.why if kind == "book" and self.opening is not None else None
         if why and why[0] in ("book", "learned", "signature", "revenge"):
             self.last_book, self.left_book = book_whisper(numbered, why, self.opening), None
@@ -1095,10 +1091,10 @@ class lichess_game:
             archive_saved(paths, bot.on_line)
 
 
-def style_line(weights):
-    """A varied remark when the game's book mix leans clearly to the draw or fire book."""
-    style = max(style_lines, key=lambda name: weights.get(name, 0))
-    return random.choice(style_lines[style]) if weights.get(style, 0) >= style_share else None
+def style_line(weights, lines):
+    """A varied remark from the configured lines when the game's book mix leans clearly to one style."""
+    style = max(lines, key=lambda name: weights.get(name, 0), default=None)
+    return random.choice(lines[style]) if style and lines[style] and weights.get(style, 0) >= style_share else None
 
 
 def book_odds(board, odds, name):
@@ -1119,7 +1115,7 @@ def load_settings(path):
     types = {"engine": str, "options": dict, "speeds": list, "accept": bool, "games": int, "pgn_dir": str,
              "learning": bool, "variety": (int, float), "contempt_window": int, "unknown_contempt": int, "layer_profiles": dict,
              "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
-             "challenge_idle": int, "challenge_window": int, "max_clock": int, "teams": list, "tournament": str}
+             "challenge_idle": int, "challenge_window": int, "max_clock": int, "style_lines": dict, "teams": list, "tournament": str}
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     types["pv_plies"] = int
@@ -1141,6 +1137,10 @@ def load_settings(path):
             raise ValueError(f"{path}: teams must be team ids")
         if key == "layer_profiles":
             value = layer_profiles(value, path)
+        if key == "style_lines" and not all(name in ("draw", "fire") and isinstance(sentences, list)
+                                            and all(isinstance(line, str) and line for line in sentences)
+                                            for name, sentences in (value or {}).items()):
+            raise ValueError(f"{path}: style_lines takes lists of sentences for draw and fire")
         settings[key] = value
     settings["options"] = {str(name): str(value) for name, value in (settings["options"] or {}).items()}
     return settings
@@ -1149,6 +1149,7 @@ def load_settings(path):
 def run(options, parser):
     """Play with parsed options; parser reports configuration errors."""
     try:
+        options.config = config_path(options.config, ".lichess.json")
         configured = load_settings(options.config)
         if options.shutdown_grace is not None:
             configured["shutdown_grace"] = online_shutdown.grace_seconds(options.shutdown_grace)
@@ -1227,6 +1228,7 @@ def run(options, parser):
                           contempt_window=configured["contempt_window"], unknown_contempt=configured["unknown_contempt"],
                           challenge_idle=configured["challenge_idle"] or 0,
                           challenge_window=configured["challenge_window"], max_clock=configured["max_clock"],
+                          style_lines=configured["style_lines"],
                           resignation_settings=configured["resignation"], pv_plies=configured["pv_plies"],
                           teams=configured["teams"] or (), tournament=configured["tournament"],
                           local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))

@@ -1,0 +1,18 @@
+{
+  "max_clock": 60,
+  "style_lines": {
+    "draw": [
+      "A draw would not be bad.",
+      "Let's try to split this point.",
+      "Going for the solid lines.",
+      "Let's try not to fall asleep."
+    ],
+    "fire": [
+      "Let's put the board on fire!",
+      "Chaos is my favorite opening strategy.",
+      "Sacrifices are definitely on the menu.",
+      "Brace yourselves. We are in for a ride.",
+      "Fasten your seatbelts."
+    ]
+  }
+}

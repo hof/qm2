@@ -505,9 +505,20 @@ class tournament_stream_tests(unittest.IsolatedAsyncioTestCase):
 
 class chat_line_tests(unittest.TestCase):
     def test_a_clear_book_style_earns_a_remark(self):
-        self.assertIn(lichess.style_line({"draw": 13, "fire": 0}), lichess.style_lines["draw"])
-        self.assertIn(lichess.style_line({"draw": 0, "fire": 25}), lichess.style_lines["fire"])
-        self.assertIsNone(lichess.style_line({"draw": 9, "fire": 0}))
+        lines = {"draw": ["Solid."], "fire": ["Wild!"]}
+        self.assertEqual(lichess.style_line({"draw": 13, "fire": 0}, lines), "Solid.")
+        self.assertEqual(lichess.style_line({"draw": 0, "fire": 25}, lines), "Wild!")
+        self.assertIsNone(lichess.style_line({"draw": 9, "fire": 0}, lines))
+        self.assertIsNone(lichess.style_line({"draw": 13}, {}))
+
+    def test_rejects_malformed_style_lines(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "lichess.json"
+            path.write_text(json.dumps({"style_lines": {"draw": ["Solid."]}}))
+            self.assertEqual(lichess.load_settings(path)["style_lines"], {"draw": ["Solid."]})
+            path.write_text(json.dumps({"style_lines": {"draw": "Solid."}}))
+            with self.assertRaises(ValueError):
+                lichess.load_settings(path)
 
     def test_spectators_see_the_top_three_book_moves(self):
         board = chess.Board()

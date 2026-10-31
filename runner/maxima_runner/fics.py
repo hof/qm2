@@ -1355,12 +1355,12 @@ async def run_client(options, commands, on_line, backoff=backoff_seconds, transc
                 await connection.close()
 
 
-def config_path(path=None):
-    """An explicit file wins; otherwise use the first local/data/project .fics.json."""
+def config_path(path=None, name=".fics.json"):
+    """An explicit file wins; otherwise use the first local/data/project file of that name."""
     if path is not None:
         return Path(path).expanduser()
-    return next((root / ".fics.json" for root in (Path.cwd(), data_root(), project_root())
-                 if (root / ".fics.json").exists()), None)
+    return next((root / name for root in (Path.cwd(), data_root(), project_root())
+                 if (root / name).exists()), None)
 
 
 def load_settings(path):
