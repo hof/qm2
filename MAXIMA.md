@@ -2109,7 +2109,9 @@ speeds), a random clock of that speed (1+0, 1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
 10+0, 10+5, 15+10), and a bot within `challenge_window` rating points (default
 300) at that speed, never the last opponent. Lichess is asked only then, at most
 once a minute; an unanswered challenge is cancelled after a minute, and a bot
-that declined or did not answer is left alone for that speed for a day. Owners
+that declined or did not answer is left alone for that speed for a day. A bot at
+a Lichess limit, such as its daily games, is left alone at every speed for the
+wait Lichess names. Owners
 switch it with `!challenge` and `!nochallenge` in a game's chat. Five seconds
 after a game against a bot it offers that bot one rematch with the same clock and rating mode,
 never a second in a row, and not while challenges are switched off.

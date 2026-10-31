@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import json
 from pathlib import Path
 import random
+import re
 import signal
 import threading
 import time
@@ -67,6 +68,7 @@ class lichess_api:
     def __init__(self, token, server=server_url, on_line=print):
         self.token, self.server, self.on_line = token, server.rstrip("/"), on_line
         self.paused_until = 0.0
+        self.limit_seconds = 0  # the wait Lichess named in the last failed call
 
     def open(self, method, path, data=None, timeout=10):
         if isinstance(data, bytes):
@@ -100,8 +102,10 @@ class lichess_api:
         try:
             return await asyncio.get_running_loop().run_in_executor(None, send)
         except urllib.error.HTTPError as error:
-            detail = error.read().decode("utf-8", "replace")[:200]
-            self.on_line(f"-- Lichess {method} {path}: HTTP {error.code} {detail}")
+            detail = error.read().decode("utf-8", "replace")
+            wait = re.search(r'"ratelimit":.*?"seconds":\s*(\d+)', detail)
+            self.limit_seconds = int(wait[1]) if wait else 0
+            self.on_line(f"-- Lichess {method} {path}: HTTP {error.code} {detail[:200]}")
         except (OSError, ValueError) as error:
             self.on_line(f"-- Lichess {method} {path}: {error}")
         return None
@@ -192,6 +196,10 @@ class matchmaker:
                 "rated": "true" if rated else "false", "clock.limit": limit, "clock.increment": increment,
                 "color": "random", "variant": "standard"})
             challenge_id = ((answer or {}).get("challenge") or answer or {}).get("id")
+            if answer is None and bot.api.limit_seconds:
+                # Lichess named the wait, such as a bot's daily game limit: it holds at every speed.
+                until = time.monotonic() + bot.api.limit_seconds
+                self.resting.update(((opponent, name), until) for name in self.speeds)
             if challenge_id:
                 self.pending = (challenge_id, opponent, speed, time.monotonic())
                 self.on_line(f"-- {why} {name} ({speed} {limit / 60:g}+{increment}, {'rated' if rated else 'casual'})")
