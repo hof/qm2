@@ -390,7 +390,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         opening.choice_results = {"group": (23, 1, 1), "opponent": (2, 0, 1)}
         opening.names["group"] = "masters"
         self.assertEqual(fics.book_whisper("1...c6", ("book", 0.55, parts, "book"), opening, compact=True),
-                         "1...c6 | BaseBook (pick 55%)")
+                         "1...c6 | Book (55%): Base+Parham+Fire")
         self.assertEqual([fics.speed(nps) for nps in (850, 512_345, 1_234_567)], ["850nps", "512Knps", "1.2Mnps"])
         info = {"depth": 18, "score": chess.engine.PovScore(chess.engine.Mate(5), chess.BLACK), "tbhits": 3}
         self.assertEqual(fics.search_whisper(info, chess.BLACK, "21...Qd5+ 22. Qd6", "out of book"),
@@ -643,7 +643,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         await player.handle(start)
         await self.settle(player)
         self.assertEqual(player.connection.sent[-1], "d2d4")
-        self.assertTrue(any(line.startswith("1. d4 | learn (pick 100%) | learn +6 =0 -0 | ") and line.endswith(")")
+        self.assertTrue(any(line.startswith("1. d4 | Book (100%): Learn | learn +6 =0 -0 | ") and line.endswith(")")
                             for line in self.lines))
         self.assertEqual(player.opponent_group(), "humans")
         after_d4 = after_e4.replace("----P--- -------- PPPP-PPP", "---P---- -------- PPP-PPPP").replace(

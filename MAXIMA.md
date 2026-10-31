@@ -1775,7 +1775,8 @@ lines use `10. Qa3 | 2.1s (4:54)`; unavailable timing is omitted.
 An actual UCI `ponderhit` adds ` | ponder hit` to the opponent line. Our next
 search time includes the separate background thinking interval, for example
 `2.3s (+5.5s)`; only the 2.3 seconds is charged to our displayed clock. Both servers use compact console book lines, for example
-`1...e5 | FireBook (pick 43%) | 0.1s (4:59)`, omitting support.
+`1...e5 | Book (70%): Base+Draw+Traxler | 0.1s (4:59)`: the move's pick chance, then each
+layer giving at least a tenth of it, largest first.
 All Maxima move lines, including book and tablebase moves, use bright green in a
 terminal; the opponent's moves use muted gray. Runner status messages prefixed with `--` use
 cyan; raw server output keeps the default color.
@@ -1788,8 +1789,7 @@ opponent history is specific to the current server. Each field is omitted when
 it has no completed results. All records show Maxima's wins, draws, and losses,
 regardless of its colour. Book and searched moves both show these fields;
 alternative moves and historical score percentages are omitted.
-Base, fire, draw and surprise books appear as `BaseBook`, `FireBook`,
-`DrawBook` and `SurpriseBook`. `whisper` (or `--whisper`) explains every move to observers (never to the
+`whisper` (or `--whisper`) explains every move to observers (never to the
 opponent, unlike kibitz) in plain words:
 
     1...e5 fire book | 35% pick chance | learned: masters +23 =1 -1

@@ -553,9 +553,16 @@ def book_whisper(san, why, opening, *, compact=False):
     support = [words[name] for name in learning.layer_names if parts.get(name, 0) >= 0.05 * probability]
     lead = {"signature": f"signature vs {opponent}", "revenge": f"revenge vs {opponent}"}.get(kind, words[source])
     if compact:
-        lead = {"base book": "BaseBook", "fire book": "FireBook", "draw book": "DrawBook",
-                "surprise book": "SurpriseBook"}.get(lead, lead)
-        return f"{san} | {lead} (pick {probability:.0%})"
+        short = {"book": "Base", "fire": "Fire", "draw": "Draw", "experiment": "Surprise",
+                 "mood": (opening.mood or "").replace("_", " ").title(), "global": "Learn",
+                 "group": {"engines": "Bots"}.get(opening.names["group"], opening.names["group"].title()),
+                 "opponent": opponent}
+        voters = [name for name in learning.layer_names if parts.get(name, 0) >= 0.1 * probability]
+        voters.sort(key=lambda name: -parts[name])
+        labels = [short[name] for name in voters]
+        if kind in ("signature", "revenge"):
+            labels.insert(0, kind.title())
+        return f"{san} | Book ({probability:.0%}): {'+'.join(labels)}"
     results = "; ".join(f"{words[name]} +{wins} ={draws} -{losses}"
                         for name, (wins, draws, losses) in opening.choice_results.items())
     detail = f" | support: {', '.join(support)}" if len(support) > 1 else ""
