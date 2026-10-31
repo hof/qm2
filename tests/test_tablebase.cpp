@@ -135,6 +135,12 @@ bool test_root() {
     prepare(repeated);
     repeated.init_root_moves();
     success &= check("Root shortcut must not ignore reversible game history", !repeated.tablebase_lookup());
+    board.init("k7/8/2K5/8/8/8/P7/8 w - - 0 1");
+    const std::vector<U64> drawn_history = {board.stack->repetition_key()};
+    search_t drawn("k7/8/2K5/8/8/8/P7/8 w - - 8 1", nullptr, nullptr, drawn_history);
+    prepare(drawn);
+    drawn.init_root_moves();
+    success &= check("Repetition must not send a tablebase draw back to search", drawn.tablebase_lookup());
     const std::vector<U64> unique_history = {1, 2, 3, 4};
     search_t unique("7k/8/8/8/8/8/8/KR6 w - - 8 1", nullptr, nullptr, unique_history);
     prepare(unique);

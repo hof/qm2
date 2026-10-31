@@ -1202,7 +1202,9 @@ selects moves that make progress; ambiguous rounded results at the fifty-move
 boundary fall back to search. Unique reversible game history permits direct DTZ play: minimizing DTZ prevents
 cycles before the next capture/pawn move, so previously unique positions cannot
 become a threefold repetition. If any position has already repeated in that
-history (including the current root), retain normal history-aware search.
+history (including the current root), a decisive result retains normal
+history-aware search; a tablebase draw is still played directly, since repetition
+cannot change it.
 Missing DTZ files, ambiguous boundary results, and an excluded DTZ move under
 `searchmoves` also retain normal search.
 Tablebase wins/losses use large centipawn scores, not invented mate distances;

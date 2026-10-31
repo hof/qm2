@@ -409,25 +409,29 @@ void search_t::go() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
-// DTZ guides direct play unless an existing repetition needs search adjudication.
+// DTZ guides direct play unless an existing repetition could change a decisive result.
 bool search_t::tablebase_lookup() {
     if (wild != 0 || tablebase_limit == 0 || root.move_count == 0
             || popcnt0(brd.all()) > tablebase_limit || abort(true)) {
         return false;
     }
 
-    // A DTZ-minimizing continuation cannot cycle before its next zeroing move.
-    // Unique past positions cannot turn that continuation into a threefold.
-    // Already repeated positions need history-aware search instead.
-    std::vector<U64> history = _position_history;
-    history.push_back(brd.stack->repetition_key());
-    std::sort(history.begin(), history.end());
-    if (std::adjacent_find(history.begin(), history.end()) != history.end()) {
-        return false;
-    }
     tablebase::root_result_t result;
     if (!tablebase::probe_root(brd, tablebase_limit, result)) {
         return false;
+    }
+
+    // A draw stays a draw whatever repeats; only decisive results depend on game history.
+    // A DTZ-minimizing continuation cannot cycle before its next zeroing move.
+    // Unique past positions cannot turn that continuation into a threefold.
+    // Already repeated positions need history-aware search instead.
+    if (result.outcome != 0) {
+        std::vector<U64> history = _position_history;
+        history.push_back(brd.stack->repetition_key());
+        std::sort(history.begin(), history.end());
+        if (std::adjacent_find(history.begin(), history.end()) != history.end()) {
+            return false;
+        }
     }
     for (int i = 0; i < root.move_count; ++i) {
         move_t & move = root.moves[i].move;
