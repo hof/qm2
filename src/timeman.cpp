@@ -24,7 +24,7 @@
 #include "timeman.h"
 
 void time_manager_t::set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left,
-        const int move_overhead) {
+        const int move_overhead, const int time_factor) {
 
     //determine M, the guessed amount of moves left
     int M_MAX, M_MIN;
@@ -63,6 +63,13 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         const int max_inc_bonus = MIN(my_inc, my_time - tot_max);
         tot_min += static_cast<int>((int64_t(196) * min_inc_bonus) / 256);
         tot_max += max_inc_bonus;
+    }
+
+    // A longer think on request, never past half the clock unless already allotted.
+    if (time_factor != 100) {
+        const int ceiling = MAX(tot_max, my_time / 2);
+        tot_max = static_cast<int>(MIN(int64_t(tot_max) * time_factor / 100, int64_t(ceiling)));
+        tot_min = static_cast<int>(MIN(int64_t(tot_min) * time_factor / 100, int64_t(tot_max)));
     }
 
     tot_min = MAX(0, tot_min - move_overhead);

@@ -42,8 +42,9 @@ namespace options {
         bool clears_tt = false;
     };
 
-    const int length = 14;
+    const int length = 16;
     extern option_t PARAM[length+1];
+    extern std::string root_hint; // A remembered root move; setoption stops the search first.
     
     option_t * get_option(const char * key);
     int get_value(const char * key);

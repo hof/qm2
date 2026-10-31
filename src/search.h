@@ -334,6 +334,7 @@ public:
     bool root_wtm;
     int wild;
     int draw_contempt;
+    std::string root_hint;
 
     // Total reduction includes the artificial pass itself.
     bool null_allowed;
@@ -389,6 +390,7 @@ public:
     bool pondering();
     int init_root_moves();
     void order_root_moves(int depth);
+    void move_root_hint(int position);
     void store_pv();
     void trace_root(int alpha, int beta, int depth);
     void forward();

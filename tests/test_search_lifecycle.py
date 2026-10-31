@@ -149,6 +149,27 @@ class search_lifecycle_tests(unittest.TestCase):
                 engine.send("quit")
                 engine.wait_for_exit()
 
+    def test_root_hint_is_searched_first(self):
+        def first_move(engine, hint):
+            engine.send(f"setoption name RootHint value {hint}")
+            engine.send("position startpos")
+            engine.transcript.clear()
+            engine.send("go depth 1")
+            engine.wait_for_bestmove()
+            lines = [line.split() for line in engine.transcript if " pv " in line]
+            self.assertTrue(lines, engine.transcript)
+            return lines[0][lines[0].index("pv") + 1]
+
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            normal = first_move(engine, "<empty>")
+            hint = "h2h4" if normal != "h2h4" else "a2a4"
+            self.assertEqual(first_move(engine, hint), hint)
+            self.assertEqual(first_move(engine, "e2e5"), normal, "an illegal hint does nothing")
+            self.assertEqual(first_move(engine, "<empty>"), normal)
+            engine.send("quit")
+            engine.wait_for_exit()
+
     def test_operational_option_changes_stop_active_search(self):
         for name, value in (("DrawContempt", "0"), ("SyzygyProbeDepth", "2"),
                             ("SyzygyProbeLimit", "0")):

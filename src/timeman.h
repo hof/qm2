@@ -55,7 +55,7 @@ public:
     time_manager_t();
     void clear();
     void set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left,
-        const int move_overhead = 50);
+        const int move_overhead = 50, const int time_factor = 100);
     
     void set_start(std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now()) {
         start = started;

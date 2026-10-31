@@ -121,6 +121,17 @@ int main() {
         success &= check("invalid overhead preserves the previous value",
             options::get_value("Move Overhead") == 5000);
     }
+    {
+        time_manager_t normal, longer, low_clock;
+        normal.set(60000, 60000, 0, 0, 0, 0);
+        longer.set(60000, 60000, 0, 0, 0, 0, 175);
+        success &= check("time factor extends both budgets",
+            longer.reserved_min() == normal.reserved_min() * 175 / 100
+            && longer.reserved_max() == normal.reserved_max() * 175 / 100);
+        low_clock.set(100, 100, 1000, 1000, 0, 0, 200);
+        success &= check("time factor stays inside the existing clock limit",
+            low_clock.reserved_max() <= 100 && low_clock.reserved_min() <= low_clock.reserved_max());
+    }
     uci::in("setoption name Move Overhead value 50");
     {
         time_manager_t period_timer;
