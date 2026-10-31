@@ -53,6 +53,8 @@ class draw_offer_tests(unittest.TestCase):
         offers = draw_offers()
         moves = [number for number in range(1, 33) if offers.due(info(12), 12)]
         self.assertEqual(moves, [4, 8, 14, 22, 32])
+        spaced = draw_offers(shortest_gap=11)
+        self.assertEqual([number for number in range(1, 27) if spaced.due(info(12), 12)], [4, 15, 26])
         offers.reset()
         self.assertFalse(any([offers.due(info(12), 12) for _ in range(3)] + [offers.due({"source": "book"}, 12)]))
         self.assertFalse(any([offers.due(info(12), 12) for _ in range(3)] + [offers.due(info(13), 12)]))

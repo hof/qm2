@@ -139,7 +139,8 @@ def accept_draw(board, info, contempt=None):
 class draw_offers:
     """Courtesy draw offers for one game, due once our searches keep scoring exactly the draw value."""
 
-    def __init__(self):
+    def __init__(self, shortest_gap=0):
+        self.shortest_gap = shortest_gap  # our moves between offers that the server lets through
         self.reset()
 
     def reset(self):
@@ -153,7 +154,8 @@ class draw_offers:
             self.reset()
             return False
         self.streak += 1
-        if self.streak < draw_offer_gaps[min(self.made, len(draw_offer_gaps) - 1)]:
+        gap = draw_offer_gaps[min(self.made, len(draw_offer_gaps) - 1)]
+        if self.streak < (max(gap, self.shortest_gap) if self.made else gap):
             return False
         self.streak = 0
         self.made += 1

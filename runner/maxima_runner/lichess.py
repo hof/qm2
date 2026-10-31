@@ -678,7 +678,7 @@ class lichess_game:
         self.last_eval = self.last_book = self.left_book = None
         self.answered = 0.0
         self.over = self.draw_offered = False
-        self.draw_offers = move_choice.draw_offers()
+        self.draw_offers = move_choice.draw_offers(shortest_gap=11)  # Lichess drops repeats within 20 plies
         self.abort_position = self.waiting_position = self.waiting = None
 
     def start(self):
