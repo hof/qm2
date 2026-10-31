@@ -2217,10 +2217,10 @@ state.
 
 We offer a draw ourselves, as a courtesy, when four of our searches in a row score
 exactly the draw value (`move_choice.draw_offers`): a score other than that, or a
-move without a search, starts the count over. Refused offers repeat after four,
-six and eight more such moves, then every ten. The offer travels with the move on
-Lichess and follows it on FICS; losers games make none. Lichess silently drops a
-repeat within 20 plies of our last offer, so repeats there come every eleven moves.
+move without a search, starts the count over. Refused offers repeat every eleven
+such moves on both servers, because Lichess silently drops a repeat within 20
+plies of our last offer. The offer travels with the move on Lichess and follows it
+on FICS; losers games make none.
 
 ## 11. Connectors
 

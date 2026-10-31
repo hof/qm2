@@ -12,7 +12,7 @@ tablebase_wait = 1.0  # seconds at most; the engine's move stands when the answe
 draw_categories = ("draw", "cursed-win", "blessed-loss")  # the last two are draws under the fifty-move rule
 engine_draw_value = -10  # the engine's DrawContempt default, in cp from our side
 long_think_percent = 175  # above 150 so the stored search can stand on its own next time
-draw_offer_gaps = (4, 4, 6, 8, 10)  # our moves at the draw score before each offer; the last gap repeats
+draw_offer_first, draw_offer_repeat = 4, 11  # our moves at the draw score; Lichess drops repeats within 20 plies
 
 
 def opening_abort_position(board, move, info, kind, contempt):
@@ -139,8 +139,7 @@ def accept_draw(board, info, contempt=None):
 class draw_offers:
     """Courtesy draw offers for one game, due once our searches keep scoring exactly the draw value."""
 
-    def __init__(self, shortest_gap=0):
-        self.shortest_gap = shortest_gap  # our moves between offers that the server lets through
+    def __init__(self):
         self.reset()
 
     def reset(self):
@@ -154,8 +153,7 @@ class draw_offers:
             self.reset()
             return False
         self.streak += 1
-        gap = draw_offer_gaps[min(self.made, len(draw_offer_gaps) - 1)]
-        if self.streak < (max(gap, self.shortest_gap) if self.made else gap):
+        if self.streak < (draw_offer_repeat if self.made else draw_offer_first):
             return False
         self.streak = 0
         self.made += 1

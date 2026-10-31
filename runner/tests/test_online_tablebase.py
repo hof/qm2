@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
 
 class draw_offer_tests(unittest.TestCase):
-    def test_offers_after_a_streak_at_the_draw_score_and_repeats_at_growing_gaps(self):
+    def test_offers_after_a_streak_at_the_draw_score_and_repeats_at_the_server_limit(self):
         from maxima_runner.move_choice import draw_offers
         import chess.engine
 
@@ -51,10 +51,7 @@ class draw_offer_tests(unittest.TestCase):
             return {"score": chess.engine.PovScore(chess.engine.Cp(cp), chess.WHITE), "depth": 30}
 
         offers = draw_offers()
-        moves = [number for number in range(1, 33) if offers.due(info(12), 12)]
-        self.assertEqual(moves, [4, 8, 14, 22, 32])
-        spaced = draw_offers(shortest_gap=11)
-        self.assertEqual([number for number in range(1, 27) if spaced.due(info(12), 12)], [4, 15, 26])
+        self.assertEqual([number for number in range(1, 27) if offers.due(info(12), 12)], [4, 15, 26])
         offers.reset()
         self.assertFalse(any([offers.due(info(12), 12) for _ in range(3)] + [offers.due({"source": "book"}, 12)]))
         self.assertFalse(any([offers.due(info(12), 12) for _ in range(3)] + [offers.due(info(13), 12)]))
