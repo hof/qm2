@@ -72,6 +72,7 @@ async def choose_move(session, board, limit, *, opening=None, tablebase=None, ce
     if opening is not None:
         clock = limit.white_clock if board.turn else limit.black_clock
         increment = (limit.white_inc if board.turn else limit.black_inc) or 0
+        opening.live_nps = getattr(session, "nps", None)
         found = opening.choose(board, None if clock is None else clock / 30 + increment)
         if found is not None:
             move, reason = found
@@ -96,8 +97,6 @@ async def choose_move(session, board, limit, *, opening=None, tablebase=None, ce
     except asyncio.CancelledError:
         searching.cancel()
         raise
-    if opening is not None and result.info.get("nps"):
-        opening.live_nps = result.info["nps"]
     return result.move, result.info, "engine"
 
 

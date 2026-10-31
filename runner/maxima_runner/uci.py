@@ -124,6 +124,7 @@ class engine_session:
         self.timeout = timeout
         self.pondering = False
         self.ponder_fen = None
+        self.nps = None  # the latest search speed, kept across games
 
     @property
     def identity(self):
@@ -230,6 +231,7 @@ class engine_session:
                 result = await self.protocol.play(board, limit, game=game, info=chess.engine.INFO_ALL,
                                                   ponder=True, options=settings, opponent=opponent)
                 self.pondering = result.ponder is not None
+                self.nps = result.info.get("nps") or self.nps
                 if self.pondering:
                     replay = board.copy()
                     replay.push(result.move)

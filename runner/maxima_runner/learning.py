@@ -362,7 +362,7 @@ class opening_book:
         self.results = ({}, {}, {})  # unweighted W/D/L only for moves played by Maxima
         self.choice_results = {}
         self.analyses = {}  # key -> strongest earlier search: [move, depth, cp, mate, ms, halfmove clock, nodes, nps]
-        self.live_nps = None  # this game's latest search speed
+        self.live_nps = None  # the engine session's latest search speed
         self.long_think = False  # the position is known: search it longer, for a stronger record next time
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it

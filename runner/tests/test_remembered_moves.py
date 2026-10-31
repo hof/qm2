@@ -22,10 +22,11 @@ def book_with(board, *, nodes=30_000_000, nps=1_000_000, clock=None, value=0.9, 
 class fake_session:
     def __init__(self):
         self.options = None
+        self.nps = 900_000
 
     async def play(self, board, limit, **search):
         self.options = search.get("options")
-        return chess.engine.PlayResult(chess.Move.from_uci("d2d4"), None, {"nps": 900_000})
+        return chess.engine.PlayResult(chess.Move.from_uci("d2d4"), None)
 
 
 class remembered_tests(unittest.TestCase):
