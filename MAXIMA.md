@@ -1463,7 +1463,8 @@ MaxDrone config). In each position:
    is played directly, shown as `Learn d21 (3.1M nodes)` and `recalled d21` in the
    PGN, when its nodes reach 1.5 × NPS × ⅔ × (clock/30 + increment) and its rate is at
    least 50%; ⅔ is the archive's median real spend. NPS is the engine session's latest search speed,
-   kept across games, or the saved one before its first search; with neither, the move is not played directly. Otherwise the position is searched with `TimeFactor` 175, shown as
+   kept across games, or before its first search the median of the last 200 archived
+   searches; with neither, the move is not played directly. Otherwise the position is searched with `TimeFactor` 175, shown as
    `Learn: thinking longer`, also where the line went badly, so the
    record grows. A ponder hit keeps its search and skips the option, because python-chess
    discards a ponder search when options change; a played remembered move is followed by

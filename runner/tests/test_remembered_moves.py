@@ -14,6 +14,7 @@ def book_with(board, *, nodes=30_000_000, nps=1_000_000, clock=None, value=0.9, 
     key = f"{chess.polyglot.zobrist_hash(board):016x}"
     opening.search_ply = 0 if ply_search else None
     opening.analyses[key] = ["e2e4", 21, 40, 0, 3000, board.halfmove_clock if clock is None else clock, nodes, nps]
+    opening.speeds.append(nps)
     opening.layers[0][(key, "e2e4")] = [value, 1.0]
     opening.results[0][(key, "e2e4")] = [1, 0, 0]
     return opening

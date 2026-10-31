@@ -1,10 +1,12 @@
 """Opening learning from MaxDrone's PGN games (MAXIMA.md 9.2): digests, player stats, and the multi-layer book."""
 import argparse
+import collections
 from datetime import datetime
 import json
 from pathlib import Path
 import random
 import re
+import statistics
 import struct
 from time import monotonic
 
@@ -34,6 +36,7 @@ mood_hours = 24  # how long one mood lasts in a running session
 # real spend (archive median 0.66), and the saved search must beat that spend by this margin.
 real_spend = 2 / 3
 recall_margin = 1.5
+recent_speeds = 200  # searches behind the speed estimate before the session has its own
 older_contempt = -10  # the equal-rating value before games stored their DrawContempt tag; unknown ratings still use it
 equal_contempt = 0  # the draw contempt between equal ratings, 4 Elo per centipawn away from it
 fire_contempt = -25  # fire only below this draw contempt: the opponent is over 100 Elo weaker
@@ -363,6 +366,7 @@ class opening_book:
         self.choice_results = {}
         self.analyses = {}  # key -> strongest earlier search: [move, depth, cp, mate, ms, halfmove clock, nodes, nps]
         self.live_nps = None  # the engine session's latest search speed
+        self.speeds = collections.deque(maxlen=recent_speeds)  # earlier games' speeds, for a fresh session
         self.long_think = False  # the position is known: search it longer, for a stronger record next time
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
@@ -437,6 +441,8 @@ class opening_book:
                 continue
             key, move, depth, centipawns, mate, think_ms, clock = saved[:7]
             nodes, nps = saved[7:9] if len(saved) >= 9 else (None, None)
+            if nps:
+                self.speeds.append(nps)
             known = self.analyses.get(key)
             rank = analysis_rank(depth, centipawns, mate, think_ms, nodes)
             if known is None or rank > analysis_rank(*known[1:5], known[6]):
@@ -628,7 +634,8 @@ class opening_book:
         saved = self.analyses.get(key)
         if saved is None or self.variant != "standard" or saved[5] != board.halfmove_clock:
             return None
-        text, depth, nodes, nps = saved[0], saved[1], saved[6], self.live_nps or saved[7]
+        text, depth, nodes = saved[0], saved[1], saved[6]
+        nps = self.live_nps or (statistics.median(self.speeds) if self.speeds else None)
         move = chess.Move.from_uci(text)
         if not board.is_legal(move):
             return None
