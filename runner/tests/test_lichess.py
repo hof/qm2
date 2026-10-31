@@ -334,12 +334,14 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_spectators_get_the_mood_and_once_the_book_odds(self):
         class book:
-            mood, why, odds, results, weights = "kings_indian", None, {}, ({}, {}, {}), {"fire": 20}
-            names = {"opponent": "Someone"}
+            mood, why, odds, results = "kings_indian", None, {}, ({}, {}, {})
+            mood, choice_results = "kings_indian", {}
+            names = {"opponent": "Someone", "group": "engines"}
 
             def choose(self, board):
                 move = chess.Move.from_uci("e2e4")
                 self.odds = {move: (0.5, {})}
+                self.why = ("book", 0.5, {"book": 0.3, "fire": 0.2}, "book")
                 return move, "book 50%"
 
         class learner:
@@ -516,14 +518,14 @@ class tournament_stream_tests(unittest.IsolatedAsyncioTestCase):
 
 class chat_line_tests(unittest.TestCase):
     def test_a_clear_book_style_earns_a_remark(self):
-        lines = {"draw": ["Solid."], "fire": ["Wild!"]}
-        self.assertEqual(lichess.style_line({"draw": 13, "fire": 0}, lines), "Solid.")
-        self.assertEqual(lichess.style_line({"draw": 0, "fire": 25}, lines), "Wild!")
-        self.assertIsNone(lichess.style_line({"draw": 9, "fire": 0}, lines))
-        self.assertIsNone(lichess.style_line({"draw": 13}, {}))
-        self.assertEqual(lichess.style_line({"experiment": 10}, {"surprise": ["New."]}), "New.")
-        self.assertIn(lichess.style_line({"fire": 30, "experiment": 10}, {"fire": ["Wild!"], "surprise": ["New."]}),
-                      ("Wild!", "New."))
+        lines = {"draw": ["Solid."], "fire": ["Wild!"], "surprise": ["New."]}
+        move = lambda parts: lichess.style_line(("book", 0.5, parts, "book"), lines)
+        self.assertEqual(move({"book": 0.3, "draw": 0.2}), "Solid.")
+        self.assertEqual(move({"book": 0.3, "fire": 0.2}), "Wild!")
+        self.assertEqual(move({"book": 0.4, "experiment": 0.1}), "New.")
+        self.assertIsNone(move({"book": 0.47, "fire": 0.03}))
+        self.assertIn(move({"fire": 0.3, "experiment": 0.2}), ("Wild!", "New."))
+        self.assertIsNone(lichess.style_line(("book", 0.5, {"draw": 0.5}, "draw"), {}))
 
     def test_rejects_malformed_style_lines(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -35,7 +35,7 @@ public_commands = ("help", "name", "eval", "stats", "book")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
 # Each room gets its own wording: Lichess silently drops a line equal to one of our previous two.
-style_share = 10  # the percentage of a game's book mix from which we mention its style
+style_share = 0.1  # the part of a played move's votes from which we mention that book's style
 player_greeting = "Hi, I'm Maxima running on MaxDrone. Good luck!"
 greeting = "Hi! I'm Maxima, running on MaxDrone. {}Type !help for available commands."
 player_farewells = ("Good game, thanks for playing!", "Thanks for the game!")
@@ -901,7 +901,7 @@ class lichess_game:
             odds = book_odds(board, self.opening.odds, self.opening.names["opponent"])
             # A rated game earns a remark only with a clear rating gap, at 4 Elo per centipawn of contempt.
             remark = not self.full.get("rated") or abs(self.contempt or 0) * 4 >= bot.style_gap
-            line = style_line(self.opening.weights, bot.style_lines) if remark else None
+            line = style_line(self.opening.why, bot.style_lines) if remark else None
             self.chat("spectator", " ".join(filter(None, (odds, line))))
         why = self.opening.why if kind == "book" and self.opening is not None else None
         if why and why[0] in ("book", "learned", "signature", "revenge"):
@@ -1094,10 +1094,11 @@ class lichess_game:
             archive_saved(paths, bot.on_line)
 
 
-def style_line(weights, lines):
-    """A varied remark from the configured lines when the game's book mix leans clearly to one style."""
+def style_line(why, lines):
+    """A varied remark from the configured lines for a style that really helped choose the played move."""
+    _, probability, parts, _ = why
     active = [style for style, sentences in lines.items() if sentences
-              and weights.get("experiment" if style == "surprise" else style, 0) >= style_share]
+              and parts.get("experiment" if style == "surprise" else style, 0) >= style_share * probability]
     return random.choice(lines[random.choice(active)]) if active else None
 
 
