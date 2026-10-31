@@ -60,7 +60,7 @@ default_settings = {
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
-    "challenge_idle": 30, "challenge_window": 300, "min_clock": 90, "max_clock": 60, "teams": [], "tournament": None,
+    "challenge_idle": 30, "challenge_window": 300, "challenge_skip": ("leela", "odds"), "min_clock": 90, "max_clock": 60, "teams": [], "tournament": None,
 }
 
 
@@ -192,8 +192,9 @@ class matchmaker:
     """Challenge another online bot after idle minutes: rated unless it asked for casual, a random clock weighted by speed, opponents
     within window rating points, never the last opponent or a bot that declined or ignored us recently."""
 
-    def __init__(self, idle_minutes, window, speeds, on_line, choose=random):
+    def __init__(self, idle_minutes, window, speeds, on_line, choose=random, skip=()):
         self.idle, self.window, self.on_line, self.random = idle_minutes * 60, window, on_line, choose
+        self.skip = tuple(word.lower() for word in skip)  # never challenge a bot with one of these in its name
         self.speeds = [speed for speed in challenge_clocks if speed in speeds]
         self.enabled = bool(idle_minutes) and bool(self.speeds)
         self.idle_since = self.next_try = time.monotonic()
@@ -258,6 +259,7 @@ class matchmaker:
             return None
         fitting = [bot for bot in bots if bot.get("id") not in (own_id, self.last_opponent)
                    and not bot.get("disabled") and not bot.get("tosViolation")
+                   and not any(word in bot.get("id", "") for word in self.skip)
                    and self.resting.get((bot.get("id"), speed), 0) <= now
                    and abs(bot.get("perfs", {}).get(speed, {}).get("rating", ours + self.window + 1) - ours)
                    <= self.window]
@@ -311,7 +313,7 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, min_clock=90, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, challenge_skip=(), min_clock=90, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
@@ -327,7 +329,7 @@ class lichess_bot:
         self.accepted = (None, 0.0)  # a challenge accepted whose game has not started yet
         self.played = 0
         self.stopping = self.restart = False
-        self.matchmaker = matchmaker(challenge_idle, challenge_window, self.speeds, on_line)
+        self.matchmaker = matchmaker(challenge_idle, challenge_window, self.speeds, on_line, skip=challenge_skip)
         self.tournament, self.tournament_password = tournament, None
         self.tournament_joined = False
         self.tournament_ends = time.monotonic() + tournament_limit
@@ -1161,7 +1163,7 @@ def load_settings(path):
     types = {"engine": str, "options": dict, "speeds": list, "accept": bool, "games": int, "pgn_dir": str,
              "learning": bool, "variety": (int, float), "contempt_window": int, "unknown_contempt": int, "layer_profiles": dict,
              "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
-             "challenge_idle": int, "challenge_window": int, "min_clock": int, "max_clock": int, "teams": list, "tournament": str}
+             "challenge_idle": int, "challenge_window": int, "challenge_skip": list, "min_clock": int, "max_clock": int, "teams": list, "tournament": str}
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     types["pv_plies"] = int
@@ -1273,7 +1275,7 @@ def run(options, parser):
                           online_tablebase=configured["online_tablebase"],
                           contempt_window=configured["contempt_window"], unknown_contempt=configured["unknown_contempt"],
                           challenge_idle=configured["challenge_idle"] or 0,
-                          challenge_window=configured["challenge_window"], min_clock=configured["min_clock"], max_clock=configured["max_clock"],
+                          challenge_window=configured["challenge_window"], challenge_skip=configured["challenge_skip"], min_clock=configured["min_clock"], max_clock=configured["max_clock"],
                           resignation_settings=configured["resignation"], pv_plies=configured["pv_plies"],
                           teams=configured["teams"] or (), tournament=configured["tournament"],
                           local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))

@@ -2117,7 +2117,9 @@ speeds), a random clock of that speed (1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
 10+0, 10+5, 15+10), and a bot within `challenge_window` rating points (default
 300) at that speed, never the last opponent. Lichess is asked only then, at most
 once a minute; an unanswered challenge is cancelled after a minute, and a bot
-that declined or did not answer is left alone at every speed for a day. A bot at
+that declined or did not answer is left alone at every speed for a day, and bots
+with a `challenge_skip` word in their name (default leela and odds, built for humans)
+are never challenged. A bot at
 a Lichess limit, such as its daily games, is left alone at every speed for the
 wait Lichess names. A bot that asks for casual games gets casual challenges from
 then on, until the runner restarts. Owners

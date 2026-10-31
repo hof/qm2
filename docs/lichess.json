@@ -10,6 +10,10 @@
   "games": null,
   "challenge_idle": 30,
   "challenge_window": 300,
+  "challenge_skip": [
+    "leela",
+    "odds"
+  ],
   "teams": [],
   "tournament": null,
   "mood": "auto",

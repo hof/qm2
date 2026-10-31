@@ -588,6 +588,11 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len([path for path, _ in api.posts if path == "/api/challenge/c1/cancel"]), cancels)
             self.assertIsNone(bot.matchmaker.pending)
 
+    def test_never_picks_a_bot_with_a_skipped_word_in_its_name(self):
+        maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None, skip=("Odds",))
+        bots = [{"id": "leelarookodds", "perfs": {"blitz": {"rating": 2800}}}]
+        self.assertIsNone(maker.pick(bots, {"blitz": 2800}, "me", 0))
+
     async def test_a_decline_or_no_answer_rests_the_bot_at_every_speed(self):
         api = stub_api()
         bot = lichess.lichess_bot(api, None, lambda line: None, speeds=("blitz", "rapid"), challenge_idle=30)
