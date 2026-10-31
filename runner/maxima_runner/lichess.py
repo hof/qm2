@@ -155,7 +155,7 @@ class lichess_api:
 
 class matchmaker:
     """Challenge another online bot after idle minutes: rated unless it asked for casual, a random clock weighted by speed, opponents
-    within window rating points, never the last opponent or a bot that declined that speed recently."""
+    within window rating points, never the last opponent or a bot that declined or ignored us recently."""
 
     def __init__(self, idle_minutes, window, speeds, on_line, choose=random):
         self.idle, self.window, self.on_line, self.random = idle_minutes * 60, window, on_line, choose
@@ -180,7 +180,7 @@ class matchmaker:
 
     async def rematch(self, bot, name, opponent, speed, limit, increment, rated=True, delay=rematch_delay):
         """Offer a bot one rematch with the same clock after a few seconds, unless the game was a rematch
-        already, something else started, or the bot declined that speed recently."""
+        already, something else started, or the bot declined recently."""
         await asyncio.sleep(delay)
         now = time.monotonic()
         if (not self.enabled or self.streak >= 2 or self.pending is not None or bot.game is not None
@@ -200,13 +200,16 @@ class matchmaker:
             challenge_id = ((answer or {}).get("challenge") or answer or {}).get("id")
             if answer is None and bot.api.limit_seconds:
                 # Lichess named the wait, such as a bot's daily game limit: it holds at every speed.
-                until = time.monotonic() + bot.api.limit_seconds
-                self.resting.update(((opponent, name), until) for name in self.speeds)
+                self.rest(opponent, time.monotonic() + bot.api.limit_seconds)
             if challenge_id:
                 self.pending = (challenge_id, opponent, speed, time.monotonic())
                 self.on_line(f"-- {why} {name} ({speed} {limit / 60:g}+{increment}, {'rated' if rated else 'casual'})")
         finally:
             self.challenging = False
+
+    def rest(self, opponent, until):
+        """No more challenges to this bot at any speed until then."""
+        self.resting.update(((opponent, speed), until) for speed in self.speeds)
 
     def due(self, now):
         return (self.enabled and self.pending is None and now >= self.next_try
@@ -239,7 +242,7 @@ class matchmaker:
                 await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
             elif now - sent >= challenge_wait:
                 self.pending, self.next_try = None, now + challenge_wait
-                self.resting[(opponent, speed)] = now + challenge_rest
+                self.rest(opponent, now + challenge_rest)
                 self.on_line(f"-- no answer from {opponent}; challenge cancelled")
                 await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
             return
@@ -256,17 +259,15 @@ class matchmaker:
         await self.challenge(bot, *choice)
 
     def declined(self, challenge):
-        """Our challenge was declined: leave that bot alone for that speed, or ask it for casual games."""
+        """Our challenge was declined: leave that bot alone, or ask it for casual games."""
         if self.pending is not None and self.pending[0] == challenge.get("id"):
             _, opponent, speed, _ = self.pending
             now = time.monotonic()
             self.pending, self.next_try = None, now + challenge_wait
             if challenge.get("declineReasonKey") == "casual" and opponent not in self.casual:
                 self.casual.add(opponent)
-            elif challenge.get("declineReasonKey") == "nobot":
-                self.resting.update(((opponent, name), now + challenge_rest) for name in self.speeds)
             else:
-                self.resting[(opponent, speed)] = now + challenge_rest
+                self.rest(opponent, now + challenge_rest)
             self.on_line(f"-- {opponent} declined: {challenge.get('declineReasonKey') or challenge.get('declineReason')}")
 
 
