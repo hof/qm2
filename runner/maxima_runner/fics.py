@@ -530,6 +530,8 @@ def console_search(board, move, info, seconds, clock, pv_plies=2, opening=None):
     learned = console_learning(board, move, opening)
     if learned:
         fields.append(learned)
+    if opening is not None and opening.long_think:
+        fields.append("Learn: thinking longer")
     ponder_seconds = info.get("_ponder_seconds") if info.get("_ponder_hit") else None
     fields.append(console_time(seconds, clock - seconds, ponder_seconds))
     moves = info.get("pv", [])
@@ -557,6 +559,9 @@ def book_layers(why, opening):
 def book_whisper(san, why, opening, *, compact=False):
     """Show source and pick chance; include support and results in detailed output."""
     kind = why[0]
+    if kind == "remembered":
+        depth, nodes = why[4], why[5]
+        return f"{san} | Learn d{depth} ({nodes / 1e6:.1f}M nodes)" if compact else f"{san} remembered from an earlier d{depth} search"
     opponent = opening.names["opponent"]
     probability, parts, source = why[1], why[2], why[3]
     words = {"book": "base book", "fire": "fire book", "draw": "draw book", "experiment": "surprise book",

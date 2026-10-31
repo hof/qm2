@@ -359,7 +359,7 @@ class selection_tests(unittest.TestCase):
         self.assertGreater(moves[chess.Move.from_uci("e2e4")][0], 0)
         self.assertGreater(moves[chess.Move.from_uci("d2d4")][0], 0)
 
-    def test_saved_analysis_is_passive(self):
+    def test_saved_analysis_without_a_budget_only_lengthens_the_search(self):
         from unittest.mock import Mock
         rows = [[start_key, move, depth, cp, mate, 60000, 0, nodes, 1000]
                 for move, depth, cp, mate, nodes in
@@ -369,8 +369,7 @@ class selection_tests(unittest.TestCase):
         book.random.choices = Mock()
         self.assertIsNone(book.choose(chess.Board()))
         book.random.choices.assert_not_called()
-        self.assertFalse(hasattr(book, "analyses"))
-        self.assertFalse(hasattr(book, "reuse"))
+        self.assertTrue(book.long_think)
 
     def test_out_of_book_a_learned_move_needs_evidence(self):
         board = board_after("e2e4 e7e5 g1f3 b8c6")

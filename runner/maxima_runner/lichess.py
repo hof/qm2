@@ -955,7 +955,7 @@ class lichess_game:
         if board.ply() < 2 and kind == "book" and self.opening is not None:
             self.chat("spectator", book_tell(board, move, numbered, self.opening))
         why = self.opening.why if kind == "book" and self.opening is not None else None
-        if why and why[0] in ("book", "learned", "signature", "revenge"):
+        if why and why[0] in ("book", "learned", "signature", "revenge", "remembered"):
             self.last_book, self.left_book = book_whisper(numbered, why, self.opening), None
         elif self.last_book and self.left_book is None:
             self.left_book = numbered

@@ -113,8 +113,9 @@ shares only the root driver; the rules in this chapter apply to standard chess.
 Search pruning, reductions, extensions, histories, ordering, correction and TT
 evaluation caching are fixed parts of the standard search. They have no UCI
 enable/disable switches. Operational controls include hash size, time overhead,
-pondering, opening book, evaluation file, variant, tablebases and `DrawContempt`
-(default -10 cp). Changes affecting score compatibility stop and join the worker
+pondering, opening book, evaluation file, variant, tablebases, `TimeFactor`
+(percent of the clock budget, 100–200, default 100, capped at half the clock) and
+`DrawContempt` (default -10 cp). Changes affecting score compatibility stop and join the worker
 and clear the TT; unchanged or rejected values keep the cache.
 
 ### 4.1 Nodes and repetition
@@ -1455,11 +1456,18 @@ MaxDrone config). In each position:
    the line returns when the opponent comes back months later; a loss or a poor
    eval with it resets the streak.
 6. The move is drawn from the result. Out of book a learned move is played only
-   with real evidence (two games at 50% or more). Saved analysis alone starts a normal
-   search. A deliberate search choice always runs an ordinary engine search.
-   Saved analysis metadata remains in historical records but neither selects
-   candidates nor shortens searches; opening books keep no analysis cache.
-   Search depth, nodes, NPS, duration and PV are still recorded in PGNs.
+   with real evidence (two games at 50% or more). A deliberate search choice always
+   runs an ordinary engine search.
+7. Where this would search, the strongest earlier search of the exact position
+   (same halfmove clock, first 40 plies, standard chess) is the remembered move. It
+   is played directly, shown as `Learn d21 (3.1M nodes)` and `recalled d21` in the
+   PGN, when its nodes reach 1.5 × NPS × ⅔ × (clock/30 + increment) and its rate is at
+   least 50%; ⅔ is the archive's median real spend. NPS is this game's latest search speed,
+   or the saved one before the first search; with neither, the move is not played directly. Otherwise the position is searched with `TimeFactor` 175, shown as
+   `Learn: thinking longer`, also where the line went badly, so the
+   record grows. A ponder hit keeps its search and skips the option, because python-chess
+   discards a ponder search when options change; a played remembered move is followed by
+   ordinary book pondering.
    Retired `learning_nps` and `learning_margin` settings are rejected as unknown.
 
 The *search* column is the share of games that leave the book once, at a

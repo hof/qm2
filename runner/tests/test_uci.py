@@ -380,8 +380,8 @@ class search_lifecycle_tests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(final=final), tempfile.TemporaryDirectory() as directory:
                 script, log = Path(directory) / "engine.py", Path(directory) / "commands"
                 script.write_text(timed_engine.replace("FINAL", final))
-                opening = SimpleNamespace(reuse=None)
-                def choose(board):
+                opening = SimpleNamespace(reuse=None, long_think=False)
+                def choose(board, seconds=None):
                     opening.reuse = (chess.Move.from_uci("e2e4"), [25, 30, False, 60000, 0, 1400, 1000])
                 opening.choose = choose
                 async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
@@ -416,8 +416,8 @@ class search_lifecycle_tests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             script, log = Path(directory) / "engine.py", Path(directory) / "commands"
             script.write_text(timed_engine.replace("FINAL", "e2e4"))
-            opening = SimpleNamespace(reuse=None)
-            def choose(board):
+            opening = SimpleNamespace(reuse=None, long_think=False)
+            def choose(board, seconds=None):
                 opening.reuse = (chess.Move.from_uci("e2e4"), [25, 30, False, 60000, 0, 1400, 1000])
             opening.choose = choose
             async def lookup():

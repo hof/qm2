@@ -13,7 +13,7 @@ import chess.pgn
 import chess.polyglot
 
 from . import learning_store
-from .search_effort import effort
+from .search_effort import analysis_rank, effort
 from .variants import board_variant, experience_variants, learning_variant
 
 horizon_plies = 40
@@ -30,6 +30,10 @@ signature_eval = 0.45
 lost_damp = 0.03  # weight of a move this opponent has only beaten
 revenge_plies = 24  # the opening of a lost game whose moves we play back at the opponent
 mood_hours = 24  # how long one mood lasts in a running session
+# A remembered move: an earlier search of this exact position. Clock/30 + increment overstates a move's
+# real spend (archive median 0.66), and the saved search must beat that spend by this margin.
+real_spend = 2 / 3
+recall_margin = 1.5
 older_contempt = -10  # the equal-rating value before games stored their DrawContempt tag; unknown ratings still use it
 equal_contempt = 0  # the draw contempt between equal ratings, 4 Elo per centipawn away from it
 fire_contempt = -25  # fire only below this draw contempt: the opponent is over 100 Elo weaker
@@ -345,6 +349,7 @@ class opening_book:
                           opponent=opponent or "opponent")
         # The search layer: some games leave the book once, at a random ply of ours.
         self.search_ply = None
+        self.deliberate = False  # this search was chosen to find new moves
         if self.random.random() * 100 < self.weights.get("search", 0):
             self.search_ply = self.random.randrange(horizon_plies)
         # JDrone's draw factor, tied to DrawContempt, for the result part: a draw is worth up to 0.95
@@ -356,6 +361,9 @@ class opening_book:
         self.totals = ({}, {}, {})  # the same per position: key -> games
         self.results = ({}, {}, {})  # unweighted W/D/L only for moves played by Maxima
         self.choice_results = {}
+        self.analyses = {}  # key -> strongest earlier search: [move, depth, cp, mate, ms, halfmove clock, nodes, nps]
+        self.live_nps = None  # this game's latest search speed
+        self.long_think = False  # the position is known: search it longer, for a stronger record next time
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
         self.comfort_scores = {}  # (key, move) -> [sum, games] of the first eval, halved per book move back
@@ -380,6 +388,7 @@ class opening_book:
             if personal and opponent and record["opponent"].lower() == opponent and record.get("color") in ("white", "black"):
                 self.track_revenge(record)
             self.track_comfort(record)
+            self.track_analyses(record)
             counted = set()
             for key, move, evaluated, result in record["values"]:
                 if (key, move) in ours:
@@ -421,6 +430,17 @@ class opening_book:
                 total = self.comfort_scores.setdefault(entry, [0.0, 0])
                 total[0] += centipawns / 2 ** distance
                 total[1] += 1
+
+    def track_analyses(self, record):
+        for saved in record.get("analyses", []):
+            if len(saved) < 7:
+                continue
+            key, move, depth, centipawns, mate, think_ms, clock = saved[:7]
+            nodes, nps = saved[7:9] if len(saved) >= 9 else (None, None)
+            known = self.analyses.get(key)
+            rank = analysis_rank(depth, centipawns, mate, think_ms, nodes)
+            if known is None or rank > analysis_rank(*known[1:5], known[6]):
+                self.analyses[key] = [move, depth, centipawns, mate, think_ms, clock, nodes, nps]
 
     def value(self, evaluated, result):
         """Maxima's eval is the main signal; the result adds what evals miss, such as time trouble."""
@@ -601,20 +621,53 @@ class opening_book:
         moves = self.distribution(board, f"{chess.polyglot.zobrist_hash(board):016x}")[0]
         return max(sorted(moves, key=chess.Move.uci), key=lambda move: moves[move][0], default=None)
 
-    def choose(self, board):
+    def remembered(self, board, seconds):
+        """(move, reason) when an earlier, stronger search of this position stands; otherwise None, with
+        long_think set for any position searched before, also where the line went badly."""
+        key = f"{chess.polyglot.zobrist_hash(board):016x}"
+        saved = self.analyses.get(key)
+        if saved is None or self.variant != "standard" or saved[5] != board.halfmove_clock:
+            return None
+        text, depth, nodes, nps = saved[0], saved[1], saved[6], self.live_nps or saved[7]
+        move = chess.Move.from_uci(text)
+        if not board.is_legal(move):
+            return None
+        strong = nodes and nps and seconds is not None and nodes >= recall_margin * nps * seconds * real_spend
+        if not strong or self.estimate(key, text)[0] < 0.5:
+            self.long_think = True
+            return None
+        self.why = ("remembered", 1.0, {"global": 1.0}, "global", depth, nodes)
+        self.choice_results = {name: tuple(results[(key, text)])
+                               for name, results in zip(("global", "group", "opponent"), self.results)
+                               if (key, text) in results}
+        return move, f"recalled d{depth}"
+
+    def choose(self, board, seconds=None):
+        """choose_book, then an earlier search of this position; seconds is clock/30 + increment."""
+        self.long_think = self.deliberate = False
+        found = self.choose_book(board)
+        if found is None and not self.deliberate and self.book_applies(board):
+            return self.remembered(board, seconds)
+        return found
+
+    def book_applies(self, board):
+        return (learning_variant(board_variant(board)) == self.variant and board.ply() < horizon_plies
+                and board.halfmove_clock < 90 and not board.is_repetition(2))
+
+    def choose_book(self, board):
         """(move, reason) to play without searching, or None to let the engine search.
 
-        why keeps the last decision for observers: ("left book",), ("book" | "learned" | "signature" |
+        why keeps the last decision for observers: ("left book",), ("book" | "learned" | "signature" | "remembered" |
         "revenge", probability, parts, source).
         The source is the layer with
         the largest share of the move; ties go to the more specific layer."""
         self.why = None
         self.choice_results = {}
-        if (learning_variant(board_variant(board)) != self.variant or board.ply() >= horizon_plies or board.halfmove_clock >= 90
-                or board.is_repetition(2)):
+        if not self.book_applies(board):
             return None
         if self.search_ply is not None and board.ply() >= self.search_ply:
             self.search_ply = None
+            self.deliberate = True
             self.why = ("left book",)
             return None
         key = f"{chess.polyglot.zobrist_hash(board):016x}"

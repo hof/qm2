@@ -123,6 +123,7 @@ class engine_session:
         self.protocol = protocol
         self.timeout = timeout
         self.pondering = False
+        self.ponder_fen = None
 
     @property
     def identity(self):
@@ -190,6 +191,7 @@ class engine_session:
         settings.update(self.protocol._opponent_configuration(opponent=opponent))
         await self.protocol.communicate(lambda engine: book_ponder_command(engine, ours, limit, game, settings))
         self.pondering = True
+        self.ponder_fen = ours.fen()
 
     async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None, ceiling=None,
                    on_search_started=None):
@@ -200,6 +202,9 @@ class engine_session:
         sends stop while retaining the ordinary clock allocation and collects bestmove."""
         self.protocol.ponder_hit = False
         settings = self.play_settings(board, options)
+        if self.pondering and board.fen() == self.ponder_fen:
+            # python-chess drops a ponder search when any option changes: the hit is worth more.
+            settings.pop("TimeFactor", None)
 
         async def play_search():
             self.protocol.on_search_started = on_search_started
@@ -225,6 +230,11 @@ class engine_session:
                 result = await self.protocol.play(board, limit, game=game, info=chess.engine.INFO_ALL,
                                                   ponder=True, options=settings, opponent=opponent)
                 self.pondering = result.ponder is not None
+                if self.pondering:
+                    replay = board.copy()
+                    replay.push(result.move)
+                    replay.push(result.ponder)
+                    self.ponder_fen = replay.fen()
                 result.info = dict(self.protocol.hit_info, **result.info)
                 result.info["_ponder_hit"] = self.protocol.ponder_hit
                 result.info["_ponder_seconds"] = self.protocol.ponder_seconds

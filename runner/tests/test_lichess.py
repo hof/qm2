@@ -346,7 +346,7 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
             mood, choice_results = "kings_indian", {}
             names = {"opponent": "Someone", "group": "engines", "global": "global"}
 
-            def choose(self, board):
+            def choose(self, board, seconds=None):
                 move = chess.Move.from_uci("e2e4")
                 self.why = ("book", 0.5, {"book": 0.3, "fire": 0.2}, "book")
                 return move, "book 50%"

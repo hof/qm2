@@ -11,6 +11,7 @@ from . import online_tablebase
 tablebase_wait = 1.0  # seconds at most; the engine's move stands when the answer is later
 draw_categories = ("draw", "cursed-win", "blessed-loss")  # the last two are draws under the fifty-move rule
 engine_draw_value = -10  # the engine's DrawContempt default, in cp from our side
+long_think_percent = 175  # above 150 so the stored search can stand on its own next time
 
 
 def opening_abort_position(board, move, info, kind, contempt):
@@ -69,12 +70,16 @@ async def choose_move(session, board, limit, *, opening=None, tablebase=None, ce
     """(move, info, kind) with kind "book", "tablebase" or "engine"; book and tablebase info carry "source".
     Engine failures propagate; search are engine_session.play keywords."""
     if opening is not None:
-        found = opening.choose(board)
+        clock = limit.white_clock if board.turn else limit.black_clock
+        increment = (limit.white_inc if board.turn else limit.black_inc) or 0
+        found = opening.choose(board, None if clock is None else clock / 30 + increment)
         if found is not None:
             move, reason = found
             if hasattr(session, "stop_pondering"):
                 await session.stop_pondering()
             return move, {"source": reason}, "book"
+        search["options"] = dict(search.get("options") or {},
+                                 TimeFactor=long_think_percent if opening.long_think else None)
     lookup = tablebase.ask(board) if tablebase is not None else None
     if ceiling is not None:
         search["ceiling"] = ceiling
@@ -91,6 +96,8 @@ async def choose_move(session, board, limit, *, opening=None, tablebase=None, ce
     except asyncio.CancelledError:
         searching.cancel()
         raise
+    if opening is not None and result.info.get("nps"):
+        opening.live_nps = result.info["nps"]
     return result.move, result.info, "engine"
 
 
