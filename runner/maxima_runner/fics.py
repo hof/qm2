@@ -635,6 +635,7 @@ class engine_player:
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.opening = None
         self.from_book = self.draw_offered = False
+        self.draw_offers = move_choice.draw_offers()
         self.abort_position = self.waiting_position = None
         self.announced_mood = None
         self.contempt = self.draw_score = None
@@ -1098,6 +1099,7 @@ class engine_player:
             self.record = fics_game.game_record({})
             self.opening = None
             self.from_book = self.draw_offered = False
+            self.draw_offers.reset()
             self.abort_position = None
             self.our_color = position.turn if position.relation == fics_game.playing_my_move else not position.turn
             self.on_line(f"-- game {self.game}: {position.white} vs {position.black}, "
@@ -1240,13 +1242,18 @@ class engine_player:
             self.on_line(f"-- resigning game {self.game}: {json.dumps(evidence)}")
             await self.send("resign")
             return
-        if self.draw_offered and move_choice.accept_draw(board, info, self.draw_score):
+        accepting = self.draw_offered and move_choice.accept_draw(board, info, self.draw_score)
+        offering = self.draw_offers.due(info, self.draw_score) and not accepting and not self.is_losers
+        if accepting:
             # Accept, and move too: a withdrawn offer must not leave our clock running.
             self.on_line("-- accepting the draw offer")
             await self.send("draw")
         self.draw_offered = False
         self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.draw_score)
         await self.send(fics_game.ics_move(move))
+        if offering:
+            self.on_line("-- offering a draw")
+            await self.send("draw")
         if self.record is not None:
             self.record.on_search(board, move, info)
         seconds, numbered = time.monotonic() - started, board.variation_san([move])

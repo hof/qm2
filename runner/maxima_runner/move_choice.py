@@ -12,6 +12,7 @@ tablebase_wait = 1.0  # seconds at most; the engine's move stands when the answe
 draw_categories = ("draw", "cursed-win", "blessed-loss")  # the last two are draws under the fifty-move rule
 engine_draw_value = -10  # the engine's DrawContempt default, in cp from our side
 long_think_percent = 175  # above 150 so the stored search can stand on its own next time
+draw_offer_gaps = (4, 4, 6, 8, 10)  # our moves at the draw score before each offer; the last gap repeats
 
 
 def opening_abort_position(board, move, info, kind, contempt):
@@ -133,6 +134,30 @@ def accept_draw(board, info, contempt=None):
     if info.get("tbhits") and chess.popcount(board.occupied) <= online_tablebase.max_pieces and ours == 0:
         return True
     return ours <= (engine_draw_value if contempt is None else contempt)
+
+
+class draw_offers:
+    """Courtesy draw offers for one game, due once our searches keep scoring exactly the draw value."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.streak = self.made = 0
+
+    def due(self, info, contempt=None):
+        """Count our move's search; True when it completes the gap before the next offer."""
+        score = info.get("score")
+        ours = None if score is None or score.is_mate() or not info.get("depth") else score.relative.score()
+        if ours != (engine_draw_value if contempt is None else contempt):
+            self.reset()
+            return False
+        self.streak += 1
+        if self.streak < draw_offer_gaps[min(self.made, len(draw_offer_gaps) - 1)]:
+            return False
+        self.streak = 0
+        self.made += 1
+        return True
 
 
 def tablebase_reason(answer):

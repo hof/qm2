@@ -43,6 +43,20 @@ if __name__ == "__main__":
 
 
 class draw_offer_tests(unittest.TestCase):
+    def test_offers_after_a_streak_at_the_draw_score_and_repeats_at_growing_gaps(self):
+        from maxima_runner.move_choice import draw_offers
+        import chess.engine
+
+        def info(cp):
+            return {"score": chess.engine.PovScore(chess.engine.Cp(cp), chess.WHITE), "depth": 30}
+
+        offers = draw_offers()
+        moves = [number for number in range(1, 33) if offers.due(info(12), 12)]
+        self.assertEqual(moves, [4, 8, 14, 22, 32])
+        offers.reset()
+        self.assertFalse(any([offers.due(info(12), 12) for _ in range(3)] + [offers.due({"source": "book"}, 12)]))
+        self.assertFalse(any([offers.due(info(12), 12) for _ in range(3)] + [offers.due(info(13), 12)]))
+
     def test_accepts_dead_draws_and_scores_no_better_than_a_draw(self):
         from maxima_runner.move_choice import accept_draw
         import chess.engine

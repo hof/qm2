@@ -678,6 +678,7 @@ class lichess_game:
         self.last_eval = self.last_book = self.left_book = None
         self.answered = 0.0
         self.over = self.draw_offered = False
+        self.draw_offers = move_choice.draw_offers()
         self.abort_position = self.waiting_position = self.waiting = None
 
     def start(self):
@@ -941,16 +942,20 @@ class lichess_game:
             bot.on_line(f"-- resigning game {self.id}: {json.dumps(evidence)}")
             await bot.api.post(self.path("resign"))
             return
-        if self.draw_offered and move_choice.accept_draw(board, info, self.draw_score):
+        accepting = self.draw_offered and move_choice.accept_draw(board, info, self.draw_score)
+        offering = self.draw_offers.due(info, self.draw_score) and not accepting
+        if accepting:
             # Accept, and move too: a withdrawn offer must not leave our clock running.
             bot.on_line(f"-- game {self.id}: accepting the draw offer")
             await bot.api.post(self.path("draw/yes"))
         # Recorded before sending: the stream may report the move before the POST returns.
         self.record.on_search(board, move, info)
         self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.draw_score)
-        if not await bot.api.post(self.path(f"move/{move.uci()}")):
+        if not await bot.api.post(self.path(f"move/{move.uci()}" + ("?offeringDraw=true" if offering else ""))):
             self.abort_position = None
             return
+        if offering:
+            bot.on_line(f"-- game {self.id}: offering a draw")
         seconds, numbered = time.monotonic() - started, board.variation_san([move])
         if board.ply() < 2 and kind == "book" and self.opening is not None:
             self.chat("spectator", book_tell(board, move, numbered, self.opening))

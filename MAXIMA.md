@@ -2215,6 +2215,12 @@ anyway, so an offer withdrawn meanwhile does not leave our clock running. FICS
 offers are read from `<name> offers you a draw.`, Lichess offers from the game
 state.
 
+We offer a draw ourselves, as a courtesy, when four of our searches in a row score
+exactly the draw value (`move_choice.draw_offers`): a score other than that, or a
+move without a search, starts the count over. Refused offers repeat after four,
+six and eight more such moves, then every ten. The offer travels with the move on
+Lichess and follows it on FICS; losers games make none.
+
 ## 11. Connectors
 
 A game source plays games somewhere: FICS (10.2) and Lichess (10.3). It reports

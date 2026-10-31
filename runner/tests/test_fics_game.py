@@ -505,6 +505,13 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
             await self.settle(player)
         self.assertEqual(player.connection.sent, ["draw", "a1a7"])
 
+    async def test_a_draw_is_offered_after_the_move_at_the_settled_draw_score(self):
+        player = await self.player("play")
+        with patch.object(player.draw_offers, "due", return_value=True):
+            await player.handle(start)
+            await self.settle(player)
+        self.assertEqual(player.connection.sent[-2:], ["e2e4", "draw"])
+
     async def test_engine_move_stands_when_the_tablebase_is_late(self):
         ending = ("<12> ----k--- -------- -------- -------- -------- -------- ----P--- R---K--- W -1 0 0 0 0 0 17 "
                   "GuestHJGC guestNinja 1 3 0 5 0 180000 180000 1 none (0:00.000) none 0 0 0")

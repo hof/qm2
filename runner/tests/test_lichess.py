@@ -390,6 +390,20 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(actions[0], "/api/bot/game/g1/draw/yes")
         self.assertTrue(actions[1].startswith("/api/bot/game/g1/move/"))
 
+    async def test_a_draw_is_offered_with_the_move_at_the_settled_draw_score(self):
+        api = stub_api()
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot.id, bot.session = "maximaengine", stub_session()
+        game = lichess.lichess_game(bot, "g1")
+        full = game_full()
+        game.setup(full)
+        game.draw_score, game.draw_offers.streak = 0, 3
+        await game.on_state(full["state"])
+        await game.searching
+        moves = [path for path, _ in api.posts if "/move/" in path]
+        self.assertEqual(len(moves), 1)
+        self.assertTrue(moves[0].endswith("?offeringDraw=true"))
+
 
 class fake_lichess(http.server.ThreadingHTTPServer):
     daemon_threads = True
