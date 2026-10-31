@@ -17,28 +17,5 @@
   "unknown_contempt": -10,
   "online_tablebase": true,
   "pv_plies": 2,
-  "shutdown_grace": 15,
-  "style_gap": 100,
-  "style_lines": {
-    "draw": [
-      "A draw would not be bad.",
-      "Let's try to split this point.",
-      "Going for the solid lines.",
-      "Let's try not to fall asleep."
-    ],
-    "fire": [
-      "Let's put the board on fire!",
-      "Chaos is my favorite opening strategy.",
-      "Sacrifices are definitely on the menu.",
-      "Brace yourselves. We are in for a ride.",
-      "Fasten your seatbelts."
-    ],
-    "surprise": [
-      "Let's try something different.",
-      "Time to try something unusual.",
-      "Off the beaten path today.",
-      "No theory for this one.",
-      "It's not as bad as it looks."
-    ]
-  }
+  "shutdown_grace": 15
 }

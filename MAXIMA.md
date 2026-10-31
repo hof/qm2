@@ -2132,17 +2132,12 @@ draws or when a draw is worth at least our score (below). When the opponent leav
 The player room opens with "Hi, I'm Maxima running on MaxDrone. Good luck!",
 the spectator room with "Hi! I'm Maxima, running on MaxDrone. Mood: Scandinavian.
 Type !help for available commands." (the mood only when the game has one). After
-our first move, once, the spectators see our results against this opponent with the
-three moves played most from that position, for example
-"vs Quirky2000: e4 (83%) d4 (25%)." with our score per move, or "vs Quirky2000: e4 +2 =1 -0."
-for a single move; without such games it stays out. In a casual game, or a rated game with
-a rating gap of at least `style_gap` (default 100), and when the draw, fire or surprise book
-gave at least 10% of the played move's votes, a random sentence from that style in the
-`style_lines` setting follows, a random style when several qualify; a style without
-sentences stays silent. With no
-`--config`, the client loads the first `.lichess.json` in the current, data or
-project directory; `docs/lichess.json` lists the main settings with their defaults,
-and any setting left out keeps its default. Lichess silently
+our first move, once, when it came from the book, the spectators see the layers behind
+it and what we learned about it, for example "1...e5 Book: Draw 41%, Base 33%, Learn 20%
+(pick 78%). Learn: +89 =13 -3, bots +0 =13 -1, vs Ferrite +0 =1 -0.". With no `--config`,
+the client loads the first `.lichess.json` in the current, data or project directory;
+`docs/lichess.json` lists the main settings with their defaults, and any setting left
+out keeps its default. Lichess silently
 drops repeated messages, so the rooms use different wording. At the end the player room gets a thank-you for the game and the
 spectator room "Thanks for watching!". Chat lines carry no links, which Lichess
 blanks. MaximaEngine posts nothing else unasked. Anyone may type `!help`, `!name` (engine,

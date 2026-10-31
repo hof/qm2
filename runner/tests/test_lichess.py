@@ -334,9 +334,9 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
     async def test_spectators_get_the_mood_and_once_the_book_odds(self):
         class book:
             mood, why = "kings_indian", None
-            results = ({}, {}, {(f"{chess.polyglot.zobrist_hash(chess.Board()):016x}", "e2e4"): [1, 0, 0]})
+            results = ({}, {}, {})
             mood, choice_results = "kings_indian", {}
-            names = {"opponent": "Someone", "group": "engines"}
+            names = {"opponent": "Someone", "group": "engines", "global": "global"}
 
             def choose(self, board):
                 move = chess.Move.from_uci("e2e4")
@@ -353,7 +353,7 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
                 pass
 
         api = stub_api()
-        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False, style_lines={"fire": ["Wild!"]})
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
         bot.id, bot.session, bot.learner = "maximaengine", stub_session(), learner()
         game = lichess.lichess_game(bot, "g1")
         full = game_full()
@@ -363,18 +363,7 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.01)
         chats = [data["text"] for path, data in api.posts if path.endswith("/chat") and data["room"] == "spectator"]
         self.assertEqual(chats, ["Hi! I'm Maxima, running on MaxDrone. Mood: Kings Indian. Type !help for available commands.",
-                                 "vs Someone: e4 +1 =0 -0. Wild!"])
-
-        api.posts.clear()
-        full = dict(game_full(), rated=True)
-        full["white"] = dict(full["white"], rating=2060)
-        full["black"] = dict(full["black"], rating=2000)
-        game = lichess.lichess_game(bot, "g2")
-        game.setup(full)
-        await game.on_state(full["state"])
-        await game.searching
-        await asyncio.sleep(0.01)
-        self.assertIn("vs Someone: e4 +1 =0 -0.", [data["text"] for path, data in api.posts if path.endswith("/chat")])
+                                 "1. e4 Book: Base 60%, Fire 40% (pick 50%)."])
 
     async def test_draw_offer_is_accepted_in_a_tablebase_draw(self):
         api = stub_api()
@@ -516,35 +505,20 @@ class tournament_stream_tests(unittest.IsolatedAsyncioTestCase):
 
 
 class chat_line_tests(unittest.TestCase):
-    def test_a_clear_book_style_earns_a_remark(self):
-        lines = {"draw": ["Solid."], "fire": ["Wild!"], "surprise": ["New."]}
-        move = lambda parts: lichess.style_line(("book", 0.5, parts, "book"), lines)
-        self.assertEqual(move({"book": 0.3, "draw": 0.2}), "Solid.")
-        self.assertEqual(move({"book": 0.3, "fire": 0.2}), "Wild!")
-        self.assertEqual(move({"book": 0.4, "experiment": 0.1}), "New.")
-        self.assertIsNone(move({"book": 0.47, "fire": 0.03}))
-        self.assertIn(move({"fire": 0.3, "experiment": 0.2}), ("Wild!", "New."))
-        self.assertIsNone(lichess.style_line(("book", 0.5, {"draw": 0.5}, "draw"), {}))
-
-    def test_rejects_malformed_style_lines(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "lichess.json"
-            path.write_text(json.dumps({"style_lines": {"draw": ["Solid."]}}))
-            self.assertEqual(lichess.load_settings(path)["style_lines"], {"draw": ["Solid."]})
-            self.assertEqual(lichess.load_settings(None)["style_lines"], {})
-            path.write_text(json.dumps({"style_lines": {"draw": "Solid."}}))
-            with self.assertRaises(ValueError):
-                lichess.load_settings(path)
-
-    def test_spectators_see_our_results_with_each_move_against_the_opponent(self):
+    def test_spectators_see_the_book_layers_and_what_we_learned(self):
         board = chess.Board()
+        board.push_uci("e2e4")
+        move = chess.Move.from_uci("e7e5")
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
-        opening = lichess.learning.opening_book([], opponent="Ferrite")
-        self.assertIsNone(lichess.opponent_record(board, opening))
-        opening.results[2][(key, "d2d4")] = [0, 1, 1]
-        self.assertEqual(lichess.opponent_record(board, opening), "vs Ferrite: d4 +0 =1 -1.")
-        opening.results[2].update({(key, "e2e4"): [2, 1, 0], ("other", "c2c4"): [9, 0, 0]})
-        self.assertEqual(lichess.opponent_record(board, opening), "vs Ferrite: e4 (83%) d4 (25%).")
+        opening = lichess.learning.opening_book([], opponent="Ferrite", group="engines", mood="traxler")
+        opening.why = ("book", 0.8, {"book": 0.5, "draw": 0.28, "global": 0.02}, "book")
+        self.assertEqual(lichess.book_tell(board, move, "1...e5", opening), "1...e5 Book: Base 62%, Draw 35% (pick 80%).")
+        opening.why = ("book", 1.0, {"book": 1.0}, "book")
+        opening.results[0][(key, "e7e5")] = [9, 1, 3]
+        opening.results[1][(key, "e7e5")] = [0, 2, 1]
+        opening.results[2][(key, "e7e5")] = [0, 1, 0]
+        self.assertEqual(lichess.book_tell(board, move, "1...e5", opening),
+                         "1...e5 Book: Base 100%. Learn: +9 =1 -3, bots +0 =2 -1, vs Ferrite +0 =1 -0.")
 
 
 class matchmaker_tests(unittest.IsolatedAsyncioTestCase):

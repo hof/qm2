@@ -542,6 +542,18 @@ def console_search(board, move, info, seconds, clock, pv_plies=2, opening=None):
     return " | ".join(fields)
 
 
+def book_layers(why, opening):
+    """(label, share of the move) for each layer giving at least a tenth of it, largest first."""
+    probability, parts = why[1], why[2]
+    short = {"book": "Base", "fire": "Fire", "draw": "Draw", "experiment": "Surprise",
+             "mood": (opening.mood or "").replace("_", " ").title(), "global": "Learn",
+             "group": {"engines": "Bots"}.get(opening.names["group"], opening.names["group"].title()),
+             "opponent": opening.names["opponent"]}
+    layers = [name for name in learning.layer_names if parts.get(name, 0) >= 0.1 * probability]
+    layers.sort(key=lambda name: -parts[name])
+    return [(short[name], parts[name] / probability) for name in layers]
+
+
 def book_whisper(san, why, opening, *, compact=False):
     """Show source and pick chance; include support and results in detailed output."""
     kind = why[0]
@@ -553,13 +565,7 @@ def book_whisper(san, why, opening, *, compact=False):
     support = [words[name] for name in learning.layer_names if parts.get(name, 0) >= 0.05 * probability]
     lead = {"signature": f"signature vs {opponent}", "revenge": f"revenge vs {opponent}"}.get(kind, words[source])
     if compact:
-        short = {"book": "Base", "fire": "Fire", "draw": "Draw", "experiment": "Surprise",
-                 "mood": (opening.mood or "").replace("_", " ").title(), "global": "Learn",
-                 "group": {"engines": "Bots"}.get(opening.names["group"], opening.names["group"].title()),
-                 "opponent": opponent}
-        voters = [name for name in learning.layer_names if parts.get(name, 0) >= 0.1 * probability]
-        voters.sort(key=lambda name: -parts[name])
-        labels = [short[name] for name in voters]
+        labels = [label for label, _ in book_layers(why, opening)]
         if kind in ("signature", "revenge"):
             labels.insert(0, kind.title())
         return f"{san} | Book ({probability:.0%}): {'+'.join(labels)}"
