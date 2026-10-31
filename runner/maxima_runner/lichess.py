@@ -45,6 +45,7 @@ challenge_clocks = {"bullet": ((60, 1), (120, 1)), "blitz": ((180, 0), (180, 2),
 challenge_shares = {"bullet": 30, "blitz": 50, "rapid": 20}
 challenge_wait = 60  # seconds for an answer before we cancel, and between attempts
 challenge_rest = 24 * 3600  # seconds a bot is left alone for a speed after it declined
+login_attempts = 8  # about two minutes of a Lichess outage before we give up at startup
 rematch_delay = 5  # seconds after a game before we offer a bot one rematch
 tournament_gap = 50  # seconds between tournament calls: a request to be paired lasts one minute
 tournament_grace = 60  # seconds past a tournament's scheduled end before we stop waiting for Lichess to finish it
@@ -71,6 +72,7 @@ class lichess_api:
         self.token, self.server, self.on_line = token, server.rstrip("/"), on_line
         self.paused_until = 0.0
         self.limit_seconds = 0  # the wait Lichess named in the last failed call
+        self.status = 0  # HTTP status of the last call, 0 when none came back
         self.local = threading.local()  # each worker thread's connection
 
     def connection(self):
@@ -128,8 +130,10 @@ class lichess_api:
         """Parsed JSON, or None after logging the failure."""
         await self.wait_for_limit()
 
+        self.status = 0
         try:
             status, body = await asyncio.get_running_loop().run_in_executor(None, self.exchange, method, path, data)
+            self.status = status
             if status < 300:
                 return json.loads(body or b"null")
             if status == 429:
@@ -344,9 +348,16 @@ class lichess_bot:
                 and (self.accepted[0] is None or time.monotonic() - self.accepted[1] >= 20))
 
     async def start(self):
-        account = await self.api.call("GET", "/api/account")
-        if account is None:
-            raise RuntimeError("Lichess rejected LICHESS_BOT_TOKEN")
+        for attempt in range(login_attempts):
+            account = await self.api.call("GET", "/api/account")
+            if account is not None:
+                break
+            if self.api.status in (401, 403):
+                raise RuntimeError("Lichess rejected LICHESS_BOT_TOKEN")
+            if attempt < login_attempts - 1:
+                await asyncio.sleep(2 ** attempt)
+        else:
+            raise RuntimeError("Lichess is not answering; try again later")
         if account.get("title") != "BOT":
             raise RuntimeError(f"{account.get('username')} is not a bot account (MAXIMA.md 10.3)")
         self.id, self.name = account["id"], account["username"]

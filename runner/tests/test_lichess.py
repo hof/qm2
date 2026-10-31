@@ -639,6 +639,26 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         api.connection = lambda: connections.pop(0)
         self.assertEqual(api.exchange("POST", "/api/bot/game/g1/move/e2e4"), (200, b"{}"))
 
+    async def test_startup_waits_out_an_outage_but_not_a_bad_token(self):
+        async def run(*statuses):
+            api = lichess.lichess_api("token", on_line=lambda line: None)
+            answers = iter(statuses)
+
+            async def call(method, path, data=None):
+                api.status = next(answers)
+                return {"id": "m", "username": "M", "title": "BOT"} if api.status == 200 else None
+
+            api.call = call
+            bot = lichess.lichess_bot(api, None, lambda line: None)
+            bot.start_engine = bot.start_events = None
+            with unittest.mock.patch("asyncio.sleep", unittest.mock.AsyncMock()):
+                await bot.start()
+
+        with self.assertRaisesRegex(RuntimeError, "rejected"):
+            await run(502, 401)
+        with self.assertRaisesRegex(RuntimeError, "not answering"):
+            await run(*[502] * lichess.login_attempts)
+
     async def test_reads_the_wait_from_a_refused_call(self):
         body = json.dumps({"error": "x" * 300, "ratelimit": {"key": "bot.vsBot.day", "seconds": 24430}}).encode()
 
