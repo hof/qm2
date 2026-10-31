@@ -2132,7 +2132,8 @@ the spectator room with "Hi! I'm Maxima, running on MaxDrone. Mood: Scandinavian
 Type !help for available commands." (the mood only when the game has one). After
 our first move, once, when it came from the book, the spectators see the book's top
 three moves with their pick chances against this opponent, for example
-"vs Quirky2000: e4 (50%) d4 (13%) Nf3 (12%)". When at least 10% of the game's book
+"vs Quirky2000: e4 (50%) d4 (13%) Nf3 (12%).". In a casual game, or a rated game with
+a rating gap of at least `style_gap` (default 100), and when at least 10% of the game's book
 mix is the draw, fire or surprise book, a random sentence from that style in the
 `style_lines` setting follows, a random style when several qualify; a style without
 sentences stays silent. With no

@@ -18,6 +18,7 @@
   "online_tablebase": true,
   "pv_plies": 2,
   "shutdown_grace": 15,
+  "style_gap": 100,
   "style_lines": {
     "draw": [
       "A draw would not be bad.",

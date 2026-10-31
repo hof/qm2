@@ -334,7 +334,7 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_spectators_get_the_mood_and_once_the_book_odds(self):
         class book:
-            mood, why, odds, results, weights = "kings_indian", None, {}, ({}, {}, {}), {}
+            mood, why, odds, results, weights = "kings_indian", None, {}, ({}, {}, {}), {"fire": 20}
             names = {"opponent": "Someone"}
 
             def choose(self, board):
@@ -352,7 +352,7 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
                 pass
 
         api = stub_api()
-        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False, style_lines={"fire": ["Wild!"]})
         bot.id, bot.session, bot.learner = "maximaengine", stub_session(), learner()
         game = lichess.lichess_game(bot, "g1")
         full = game_full()
@@ -362,7 +362,18 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.01)
         chats = [data["text"] for path, data in api.posts if path.endswith("/chat") and data["room"] == "spectator"]
         self.assertEqual(chats, ["Hi! I'm Maxima, running on MaxDrone. Mood: Kings Indian. Type !help for available commands.",
-                                 "vs Someone: e4 (50%)"])
+                                 "vs Someone: e4 (50%). Wild!"])
+
+        api.posts.clear()
+        full = dict(game_full(), rated=True)
+        full["white"] = dict(full["white"], rating=2060)
+        full["black"] = dict(full["black"], rating=2000)
+        game = lichess.lichess_game(bot, "g2")
+        game.setup(full)
+        await game.on_state(full["state"])
+        await game.searching
+        await asyncio.sleep(0.01)
+        self.assertIn("vs Someone: e4 (50%).", [data["text"] for path, data in api.posts if path.endswith("/chat")])
 
     async def test_draw_offer_is_accepted_in_a_tablebase_draw(self):
         api = stub_api()
@@ -528,7 +539,7 @@ class chat_line_tests(unittest.TestCase):
         board = chess.Board()
         odds = {board.parse_san(san): (share, {}) for san, share in
                 (("Nf3", 0.12), ("e4", 0.5), ("c4", 0.03), ("d4", 0.13))}
-        self.assertEqual(lichess.book_odds(board, odds, "Ferrite"), "vs Ferrite: e4 (50%) d4 (13%) Nf3 (12%)")
+        self.assertEqual(lichess.book_odds(board, odds, "Ferrite"), "vs Ferrite: e4 (50%) d4 (13%) Nf3 (12%).")
 
 
 class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
