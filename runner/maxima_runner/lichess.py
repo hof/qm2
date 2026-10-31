@@ -58,7 +58,7 @@ default_settings = {
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
-    "challenge_idle": 30, "challenge_window": 300, "teams": [], "tournament": None,
+    "challenge_idle": 30, "challenge_window": 300, "max_clock": 30, "teams": [], "tournament": None,
 }
 
 
@@ -272,7 +272,7 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, max_clock=30, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
@@ -281,7 +281,7 @@ class lichess_bot:
         self.learner, self.pgn_dir, self.events = learner, pgn_dir, events
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.contempt_window, self.unknown_contempt, self.margin = contempt_window, unknown_contempt, margin
-        self.pv_plies, self.teams = pv_plies, tuple(teams)
+        self.pv_plies, self.teams, self.max_clock = pv_plies, tuple(teams), max_clock
         self.context = self.session = None
         self.id = self.name = None
         self.game = None
@@ -565,6 +565,9 @@ class lichess_bot:
             allowed = sorted(speed_rank[name] for name in self.speeds)
             rank = speed_rank.get(speed, len(speed_rank))
             return "tooFast" if rank < allowed[0] else "tooSlow" if rank > allowed[-1] else "timeControl"
+        clock = challenge.get("timeControl", {})
+        if clock.get("limit", 0) + 40 * clock.get("increment", 0) > self.max_clock * 60:
+            return "tooSlow"  # the minutes each side may use over forty moves
         accepted, when = self.accepted
         if not self.accept or self.stopping or self.game is not None or accepted and time.monotonic() - when < 20:
             return "later"
@@ -1106,7 +1109,7 @@ def load_settings(path):
     types = {"engine": str, "options": dict, "speeds": list, "accept": bool, "games": int, "pgn_dir": str,
              "learning": bool, "variety": (int, float), "contempt_window": int, "unknown_contempt": int, "layer_profiles": dict,
              "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
-             "challenge_idle": int, "challenge_window": int, "teams": list, "tournament": str}
+             "challenge_idle": int, "challenge_window": int, "max_clock": int, "teams": list, "tournament": str}
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     types["pv_plies"] = int
@@ -1153,6 +1156,8 @@ def run(options, parser):
         configured["learning"] = False
     if options.no_online_tablebase:
         configured["online_tablebase"] = False
+    if options.max_clock is not None:
+        configured["max_clock"] = options.max_clock
     if options.challenge_idle is not None:
         configured["challenge_idle"] = options.challenge_idle
     if options.no_challenge or options.no_accept:
@@ -1211,7 +1216,7 @@ def run(options, parser):
                           online_tablebase=configured["online_tablebase"],
                           contempt_window=configured["contempt_window"], unknown_contempt=configured["unknown_contempt"],
                           challenge_idle=configured["challenge_idle"] or 0,
-                          challenge_window=configured["challenge_window"],
+                          challenge_window=configured["challenge_window"], max_clock=configured["max_clock"],
                           resignation_settings=configured["resignation"], pv_plies=configured["pv_plies"],
                           teams=configured["teams"] or (), tournament=configured["tournament"],
                           local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))
