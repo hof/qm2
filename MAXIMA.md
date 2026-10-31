@@ -2119,7 +2119,7 @@ speeds), a random clock of that speed (1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
 once a minute; an unanswered challenge is cancelled after a minute, and a bot
 that declined or did not answer is left alone at every speed for a day, and bots
 with a `challenge_skip` word in their name (default leela and odds, built for humans)
-are never challenged. A bot at
+are never challenged. The fewer games we have against a bot, the likelier it is picked. A bot at
 a Lichess limit, such as its daily games, is left alone at every speed for the
 wait Lichess names. A bot that asks for casual games gets casual challenges from
 then on, until the runner restarts. Owners

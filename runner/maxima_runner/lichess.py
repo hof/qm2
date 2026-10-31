@@ -1,6 +1,7 @@
 """MaximaEngine on Lichess: accept challenges and play them through the Bot API, with MaxDrone's book,
 learning, online tablebase and connectors (MAXIMA.md 10.3)."""
 import asyncio
+from collections import Counter
 from contextlib import asynccontextmanager
 import http.client
 import json
@@ -251,8 +252,9 @@ class matchmaker:
         return (self.enabled and self.pending is None and now >= self.next_try
                 and now - self.idle_since >= self.idle)
 
-    def pick(self, bots, ratings, own_id, now):
-        """(name, opponent id, speed, limit, increment, rated) for a challenge, or None without a fitting bot."""
+    def pick(self, bots, ratings, own_id, now, met=None):
+        """(name, opponent id, speed, limit, increment, rated) for a challenge, or None without a fitting bot.
+        met counts our games per opponent id: the fewer, the likelier."""
         speed = self.random.choices(self.speeds, [challenge_shares[name] for name in self.speeds])[0]
         ours = ratings.get(speed)
         if ours is None:
@@ -265,7 +267,7 @@ class matchmaker:
                    <= self.window]
         if not fitting:
             return None
-        bot = self.random.choice(fitting)
+        bot = self.random.choices(fitting, [1 / (1 + (met or {}).get(bot["id"], 0)) for bot in fitting])[0]
         limit, increment = self.random.choice(challenge_clocks[speed])
         return bot.get("username", bot["id"]), bot["id"], speed, limit, increment, bot["id"] not in self.casual
 
@@ -290,7 +292,8 @@ class matchmaker:
         bots = [line async for line in bot.api.stream("/api/bot/online?nb=100")]
         ratings = {speed: perf["rating"] for speed, perf in (account or {}).get("perfs", {}).items()
                    if isinstance(perf, dict) and "rating" in perf}
-        choice = self.pick(bots, ratings, bot.id, now)
+        met = Counter(record["opponent"].lower() for record in getattr(bot.learner, "records", ()))
+        choice = self.pick(bots, ratings, bot.id, now, met)
         if choice is None:
             return
         await self.challenge(bot, *choice)

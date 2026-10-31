@@ -588,6 +588,12 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len([path for path, _ in api.posts if path == "/api/challenge/c1/cancel"]), cancels)
             self.assertIsNone(bot.matchmaker.pending)
 
+    def test_prefers_bots_we_met_less(self):
+        maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None)
+        bots = [{"id": name, "perfs": {"blitz": {"rating": 2800}}} for name in ("ferrite", "newbot")]
+        picks = [maker.pick(bots, {"blitz": 2800}, "me", 0, {"ferrite": 99})[1] for _ in range(200)]
+        self.assertGreater(picks.count("newbot"), 180)
+
     def test_never_picks_a_bot_with_a_skipped_word_in_its_name(self):
         maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None, skip=("Odds",))
         bots = [{"id": "leelarookodds", "perfs": {"blitz": {"rating": 2800}}}]
