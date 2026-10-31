@@ -2133,8 +2133,9 @@ Type !help for available commands." (the mood only when the game has one). After
 our first move, once, when it came from the book, the spectators see the book's top
 three moves with their pick chances against this opponent, for example
 "vs Quirky2000: e4 (50%) d4 (13%) Nf3 (12%)". When at least 10% of the game's book
-mix is the draw or fire book, a random sentence from the `style_lines` setting
-follows (built-in sentences unless set; an empty list silences a style). With no
+mix is the draw, fire or surprise book, a random sentence from that style in the
+`style_lines` setting follows, a random style when several qualify; a style without
+sentences stays silent. With no
 `--config`, the client loads the first `.lichess.json` in the current, data or
 project directory; `docs/lichess.json` lists the main settings with their defaults,
 and any setting left out keeps its default. Lichess silently

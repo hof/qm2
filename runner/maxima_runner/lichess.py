@@ -53,19 +53,13 @@ reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate
            "draw": "draw", "outoftime": "time forfeit", "cheat": "cheat detected", "noStart": "no first move",
            "aborted": "aborted", "unknownFinish": "unknown finish", "variantEnd": "variant end"}
 terminations = {"outoftime": "time forfeit", "timeout": "abandoned", "noStart": "abandoned", "aborted": "abandoned"}
-default_style_lines = {
-    "draw": ["A draw would not be bad.", "Let's try to split this point.", "Going for the solid lines.",
-             "Let's try not to fall asleep."],
-    "fire": ["Let's put the board on fire!", "Chaos is my favorite opening strategy.",
-             "Sacrifices are definitely on the menu.", "Brace yourselves. We are in for a ride.", "Fasten your seatbelts."],
-}
 default_settings = {
     "resignation": resignation.validate_settings({}),
     "shutdown_grace": 15, "pv_plies": 2,
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
-    "challenge_idle": 30, "challenge_window": 300, "max_clock": 60, "style_lines": default_style_lines, "teams": [], "tournament": None,
+    "challenge_idle": 30, "challenge_window": 300, "max_clock": 60, "style_lines": {}, "teams": [], "tournament": None,
 }
 
 
@@ -1148,8 +1142,6 @@ def load_settings(path):
                                             and all(isinstance(line, str) and line for line in sentences)
                                             for name, sentences in (value or {}).items()):
             raise ValueError(f"{path}: style_lines takes lists of sentences for draw, fire and surprise")
-        if key == "style_lines":
-            value = {**default_style_lines, **(value or {})}
         settings[key] = value
     settings["options"] = {str(name): str(value) for name, value in (settings["options"] or {}).items()}
     return settings

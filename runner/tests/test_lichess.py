@@ -510,14 +510,16 @@ class chat_line_tests(unittest.TestCase):
         self.assertEqual(lichess.style_line({"draw": 0, "fire": 25}, lines), "Wild!")
         self.assertIsNone(lichess.style_line({"draw": 9, "fire": 0}, lines))
         self.assertIsNone(lichess.style_line({"draw": 13}, {}))
+        self.assertEqual(lichess.style_line({"experiment": 10}, {"surprise": ["New."]}), "New.")
+        self.assertIn(lichess.style_line({"fire": 30, "experiment": 10}, {"fire": ["Wild!"], "surprise": ["New."]}),
+                      ("Wild!", "New."))
 
     def test_rejects_malformed_style_lines(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "lichess.json"
             path.write_text(json.dumps({"style_lines": {"draw": ["Solid."]}}))
-            self.assertEqual(lichess.load_settings(path)["style_lines"],
-                             {"draw": ["Solid."], "fire": lichess.default_style_lines["fire"]})
-            self.assertEqual(lichess.load_settings(None)["style_lines"], lichess.default_style_lines)
+            self.assertEqual(lichess.load_settings(path)["style_lines"], {"draw": ["Solid."]})
+            self.assertEqual(lichess.load_settings(None)["style_lines"], {})
             path.write_text(json.dumps({"style_lines": {"draw": "Solid."}}))
             with self.assertRaises(ValueError):
                 lichess.load_settings(path)
