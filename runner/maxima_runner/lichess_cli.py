@@ -56,7 +56,7 @@ def parser():
     parser.add_argument("--variety", type=float,
                         help="opening variety: above 1 explores more, below 1 repeats winners (default: 1)")
     parser.add_argument("--challenge-idle", type=int, metavar="MINUTES",
-                        help="challenge an online bot after this many idle minutes (default 30)")
+                        help="challenge an online bot after this many idle minutes (default 5)")
     parser.add_argument("--no-challenge", action="store_true", help="never challenge, only accept")
     parser.add_argument("--team", action="append", metavar="ID",
                         help="join this team at startup, repeatable; a team's id is in its URL")
