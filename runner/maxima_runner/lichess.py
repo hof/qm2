@@ -970,24 +970,10 @@ class lichess_game:
             self.last_eval = source
             bot.on_line(styled(f"{source} | {console_time(seconds, clock - seconds)}", "92"))
         if kind == "book":
-            await self.ponder_after_book(board, move, limit)
-
-    async def ponder_after_book(self, board, move, limit):
-        """Think on the opponent's time while in book, so that leaving it starts with a filled hash."""
-        bot, after = self.bot, board.copy()
-        after.push(move)
-        before = self.board.fen(), after.fen()
-        waiting = lambda: not self.over and self.board.fen() in before
-        ponder = chess.engine.Limit(
-            white_clock=limit.white_clock + (limit.white_inc or 0), white_inc=limit.white_inc,
-            black_clock=limit.black_clock + (limit.black_inc or 0), black_inc=limit.black_inc)
-        try:
-            if waiting() and hasattr(bot.session, "ponder_book"):
-                await bot.session.ponder_book(after, ponder, waiting, reply=self.opening.predict(after),
-                                              game=(self.id, self.generation), opponent=self.opponent,
-                                              options={"DrawContempt": self.draw_score})
-        except (RuntimeError, OSError, chess.engine.EngineError) as error:
-            bot.on_line(f"-- no pondering in book: {error or type(error).__name__}")
+            await move_choice.ponder_after_book(
+                bot.session, board, move, limit, self.opening, lambda: None if self.over else self.board.fen(),
+                bot.on_line, game=(self.id, self.generation), opponent=self.opponent,
+                options={"DrawContempt": self.draw_score})
 
     def stats_line(self):
         """Our record against the opponent and on Lichess, from the experience."""

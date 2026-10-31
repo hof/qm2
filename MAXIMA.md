@@ -464,7 +464,7 @@ completed iteration selected.
 
 Search deadlines and UCI elapsed times use a monotonic wall clock. Time spent
 preparing the search or waiting to run its worker counts toward the budget; a
-process pause does not extend the deadline. After a book move the Lichess client ponders on the likeliest book reply, or the engine's
+process pause does not extend the deadline. After a book move the Lichess and FICS clients ponder on the likeliest book reply, or the engine's
 quick guess, so leaving the book starts with a filled hash. Pondering suppresses deadline
 cancellation until `ponderhit`, without restarting the search. Time pondered
 counts: the minimum, maximum and elapsed time all run from `go`, as in a normal

@@ -4,6 +4,7 @@ import asyncio
 import time
 
 import chess
+import chess.engine
 
 from . import online_tablebase
 
@@ -91,6 +92,23 @@ async def choose_move(session, board, limit, *, opening=None, tablebase=None, ce
         searching.cancel()
         raise
     return result.move, result.info, "engine"
+
+
+async def ponder_after_book(session, board, move, limit, opening, position, on_line, **search):
+    """Think on the opponent's time while in book, so that leaving it starts with a filled hash.
+    position gives the game's current FEN, None once it is over; search are ponder_book keywords."""
+    after = board.copy()
+    after.push(move)
+    before = board.fen(), after.fen()
+    waiting = lambda: position() in before
+    ponder = chess.engine.Limit(
+        white_clock=limit.white_clock + (limit.white_inc or 0), white_inc=limit.white_inc,
+        black_clock=limit.black_clock + (limit.black_inc or 0), black_inc=limit.black_inc)
+    try:
+        if waiting() and hasattr(session, "ponder_book"):
+            await session.ponder_book(after, ponder, waiting, reply=opening.predict(after), **search)
+    except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
+        on_line(f"-- no pondering in book: {error or type(error).__name__}")
 
 
 def accept_draw(board, info, contempt=None):

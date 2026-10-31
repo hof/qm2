@@ -177,8 +177,9 @@ class engine_session:
         settings = self.play_settings(board, options)
         self.protocol.on_search_started = None
         if reply is None:
-            guess = await self.protocol.play(board, chess.engine.Limit(time=guess_seconds), game=game,
-                                             options=settings, opponent=opponent)
+            guess = await asyncio.wait_for(
+                self.protocol.play(board, chess.engine.Limit(time=guess_seconds), game=game, options=settings,
+                                   opponent=opponent), guess_seconds + 1)
             reply = guess.move
             if not waiting():
                 return

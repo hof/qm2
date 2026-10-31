@@ -1257,6 +1257,11 @@ class engine_player:
             elif explaining and kind == "tablebase":
                 await self.explain(f"{board.variation_san([move])} {info['source']}")
             self.from_book = kind == "book"
+            if self.from_book and not self.is_losers:
+                await move_choice.ponder_after_book(
+                    self.session, board, move, limit, self.opening,
+                    lambda: self.history.board.fen() if self.token is token and self.history is not None else None,
+                    self.on_line, game=self.token, opponent=self.opponent, options={"DrawContempt": self.draw_score})
             return
         self.on_line(styled(console_search(board, move, info, seconds, clock, self.policy.pv_plies, self.opening), "92"))
         if explaining:

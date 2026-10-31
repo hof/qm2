@@ -135,6 +135,21 @@ class variant_session_tests(unittest.IsolatedAsyncioTestCase):
             await session.search(chess.variant.SuicideBoard(), chess.engine.Limit(depth=1))
         protocol.analysis.assert_not_called()
 
+    async def test_book_pondering_waits_for_the_opponent(self):
+        from unittest.mock import AsyncMock, Mock
+        from types import SimpleNamespace
+        from maxima_runner import move_choice
+        board = chess.Board()
+        move = chess.Move.from_uci("e2e4")
+        clocks = chess.engine.Limit(white_clock=60, black_clock=50, white_inc=2, black_inc=2)
+        opening = Mock(predict=Mock(return_value=chess.Move.from_uci("e7e5")))
+        session = SimpleNamespace(ponder_book=AsyncMock())
+        await move_choice.ponder_after_book(session, board, move, clocks, opening, lambda: None, print)
+        session.ponder_book.assert_not_called()
+        await move_choice.ponder_after_book(session, board, move, clocks, opening, board.fen, print, game="g1")
+        self.assertEqual(session.ponder_book.call_args.args[1].white_clock, 62)
+        self.assertEqual(session.ponder_book.call_args.kwargs["reply"].uci(), "e7e5")
+
     async def test_real_engine_ponders_after_a_book_move(self):
         import os
         engine = os.environ.get("MAXIMA_ENGINE")
