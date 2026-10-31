@@ -493,7 +493,9 @@ void search_t::book_calc() {
 void search_t::iterative_deepening() {
     int last_score = -score::INF;
     const int max_time = game.tm.reserved_max();
-    const int min_time = game.tm.reserved_min();
+
+    // A ponder search earns about one extra ply: the opponent's time pays most of it.
+    const int min_time = game.tm.reserved_min() * (game.ponder ? 2 : 1);
     bool timed_search = game.white_time || game.black_time;
     int depth;
     for (depth = 1; depth <= game.max_depth; depth++) {
