@@ -515,7 +515,9 @@ class chat_line_tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "lichess.json"
             path.write_text(json.dumps({"style_lines": {"draw": ["Solid."]}}))
-            self.assertEqual(lichess.load_settings(path)["style_lines"], {"draw": ["Solid."]})
+            self.assertEqual(lichess.load_settings(path)["style_lines"],
+                             {"draw": ["Solid."], "fire": lichess.default_style_lines["fire"]})
+            self.assertEqual(lichess.load_settings(None)["style_lines"], lichess.default_style_lines)
             path.write_text(json.dumps({"style_lines": {"draw": "Solid."}}))
             with self.assertRaises(ValueError):
                 lichess.load_settings(path)
