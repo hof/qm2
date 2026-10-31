@@ -32,6 +32,7 @@ revenge_plies = 24  # the opening of a lost game whose moves we play back at the
 mood_hours = 24  # how long one mood lasts in a running session
 older_contempt = -10  # the equal-rating value before games stored their DrawContempt tag; unknown ratings still use it
 equal_contempt = 0  # the draw contempt between equal ratings, 4 Elo per centipawn away from it
+fire_contempt = -25  # fire only below this draw contempt: the opponent is over 100 Elo weaker
 game_types = ("lightning", "blitz", "standard")
 lichess_speeds = {"bullet": "lightning", "blitz": "blitz", "rapid": "standard", "classical": "standard"}
 
@@ -300,16 +301,22 @@ def style_share(contempt):
     return max(0.0, min(1.0, (abs(contempt - equal_contempt) - 5) / 25))
 
 
-def game_profile(contempt, rated, profiles=None):
+def game_profile(contempt, rated, profiles=None, bot=False):
     """Layer percentages for one game: unrated games (guests) use the unrated profile; rated games slide
-    from equal toward weaker (fire) or stronger (draw) with the draw contempt."""
+    from equal toward weaker (fire) or stronger (draw) with the draw contempt. Rated games and bots get
+    fire only when clearly weaker; its share then goes to the base book."""
     profiles = profiles or layer_profiles
-    if not rated:
-        return dict(profiles["unrated"])
-    side = "weaker" if contempt is not None and contempt < 0 else "stronger"
-    share = style_share(contempt)
-    return {name: (1 - share) * profiles["equal"].get(name, 0) + share * profiles[side].get(name, 0)
-            for name in profiles["equal"]}
+    if rated:
+        side = "weaker" if contempt is not None and contempt < 0 else "stronger"
+        share = style_share(contempt)
+        weights = {name: (1 - share) * profiles["equal"].get(name, 0) + share * profiles[side].get(name, 0)
+                   for name in profiles["equal"]}
+    else:
+        weights = dict(profiles["unrated"])
+    if (rated or bot) and (contempt is None or contempt >= fire_contempt):
+        weights["book"] += weights.get("fire", 0)
+        weights["fire"] = 0
+    return weights
 
 
 def learned_factor(rate):
@@ -329,7 +336,7 @@ class opening_book:
         self.mood = mood
         self.variant = learning_variant(variant)
         self.random = random_source or random.Random()
-        self.weights = game_profile(contempt, rated, profiles)
+        self.weights = game_profile(contempt, rated, profiles, group == "engines")
         self.paths = {"book": book_path}
         self.paths.update({name: path for name, path in (style_books or {}).items()
                            if name in style_names + ("mood",) and self.weights.get(name) and path

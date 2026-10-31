@@ -430,13 +430,19 @@ class multi_layer_book_tests(unittest.TestCase):
         profiles = learning.layer_profiles
         self.assertEqual(learning.game_profile(0, True), profiles["equal"])
         self.assertEqual(learning.game_profile(-100, True), profiles["weaker"])
-        self.assertEqual(learning.game_profile(-15, True)["fire"], 10)
+        self.assertEqual(learning.game_profile(-25, True)["fire"], 0)
+        self.assertEqual(learning.game_profile(-25, True)["book"], 45)
+        self.assertEqual(learning.game_profile(-26, True)["fire"], 21)
         self.assertEqual(learning.game_profile(30, True), profiles["stronger"])
         self.assertEqual(learning.game_profile(100, True)["draw"], 35)
         self.assertEqual(learning.game_profile(None, True), profiles["equal"])
         unrated = learning.game_profile(-100, False)
         self.assertEqual(unrated, profiles["unrated"])
         self.assertGreaterEqual(unrated["fire"], unrated["book"])
+        self.assertEqual(learning.game_profile(None, False), profiles["unrated"])
+        self.assertEqual(learning.game_profile(-25, False, bot=True)["fire"], 0)
+        self.assertEqual(learning.game_profile(None, False, bot=True)["fire"], 0)
+        self.assertEqual(learning.game_profile(-26, False, bot=True), profiles["unrated"])
         for weights in profiles.values():
             self.assertEqual(sum(weights[name] for name in learning.layer_names), 100)
 

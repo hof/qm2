@@ -1395,7 +1395,9 @@ result against a stronger opponent.
 
 Rated games slide from *equal* toward *much weaker* or *much stronger* with
 the rating gap behind the draw contempt (none within 20 Elo, fully from 120 Elo); unrated games (guests)
-play fire, experiment, and the mood. book.bin is the source of truth and is never
+play fire, experiment, and the mood. Fire needs an opponent over 100 Elo weaker in rated
+games and in every game against a bot: below that gap, or with an unknown rating, its
+share goes to the base book. book.bin is the source of truth and is never
 rewritten; other layers only add to it.
 
 **Revenge.** When an opponent (guest or registered) beats Maxima, their moves from the
