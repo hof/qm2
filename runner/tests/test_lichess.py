@@ -542,8 +542,10 @@ class chat_line_tests(unittest.TestCase):
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         opening = lichess.learning.opening_book([], opponent="Ferrite")
         self.assertIsNone(lichess.opponent_record(board, opening))
-        opening.results[2].update({(key, "d2d4"): [0, 1, 1], (key, "e2e4"): [2, 1, 0], ("other", "c2c4"): [9, 0, 0]})
-        self.assertEqual(lichess.opponent_record(board, opening), "vs Ferrite: e4 +2 =1 -0, d4 +0 =1 -1.")
+        opening.results[2][(key, "d2d4")] = [0, 1, 1]
+        self.assertEqual(lichess.opponent_record(board, opening), "vs Ferrite: d4 +0 =1 -1.")
+        opening.results[2].update({(key, "e2e4"): [2, 1, 0], ("other", "c2c4"): [9, 0, 0]})
+        self.assertEqual(lichess.opponent_record(board, opening), "vs Ferrite: e4 (83%) d4 (25%).")
 
 
 class matchmaker_tests(unittest.IsolatedAsyncioTestCase):

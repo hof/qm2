@@ -1115,8 +1115,12 @@ def opponent_record(board, opening):
                      if position == key), reverse=True)[:3]
     if not played:
         return None
-    return f"vs {opening.names['opponent']}: " + ", ".join(
-        f"{board.san(chess.Move.from_uci(move))} +{wins} ={draws} -{losses}" for _, move, (wins, draws, losses) in played) + "."
+    if len(played) == 1:
+        (_, move, (wins, draws, losses)), = played
+        return f"vs {opening.names['opponent']}: {board.san(chess.Move.from_uci(move))} +{wins} ={draws} -{losses}."
+    return f"vs {opening.names['opponent']}: " + " ".join(
+        f"{board.san(chess.Move.from_uci(move))} ({(wins + draws / 2) / games:.0%})"
+        for games, move, (wins, draws, losses) in played) + "."
 
 
 def load_settings(path):
