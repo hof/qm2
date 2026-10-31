@@ -61,7 +61,7 @@ default_settings = {
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
-    "challenge_idle": 30, "challenge_window": 300, "challenge_skip": ("leela", "odds"), "min_clock": 90, "max_clock": 60, "teams": [], "tournament": None,
+    "challenge_idle": 5, "challenge_window": 300, "challenge_skip": ("leela", "odds"), "min_clock": 90, "max_clock": 60, "teams": [], "tournament": None,
 }
 
 

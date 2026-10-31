@@ -2111,7 +2111,7 @@ any of this. A configured arena is entered again after a restart, one entered by
 command is not. Swiss and team-battle events are not supported.
 
 Bots cannot seek, so MaximaEngine plays challenges, its own and others'.
-After `challenge_idle` minutes without a game (default 30, `--challenge-idle`;
+After `challenge_idle` minutes without a game (default 5, `--challenge-idle`;
 0 or `--no-challenge` turns it off) it challenges one online bot to a rated
 game: a speed by share (bullet 30, blitz 50, rapid 20, among the configured
 speeds), a random clock of that speed (1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
