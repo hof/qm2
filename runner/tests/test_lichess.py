@@ -507,6 +507,17 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(path.startswith("/api/challenge/") for _, path, _ in api.calls[calls:]))
 
 
+    async def test_asks_a_bot_that_wants_casual_games_for_casual_games(self):
+        bots = [{"id": "casual", "username": "Casual", "perfs": {"blitz": {"rating": 2900}}}]
+        maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None)
+        self.assertTrue(maker.pick(bots, {"blitz": 2900}, "us", 0)[-1])
+        maker.pending = ("c1", "casual", "blitz", 0)
+        maker.declined({"id": "c1", "declineReasonKey": "casual"})
+        self.assertFalse(maker.pick(bots, {"blitz": 2900}, "us", 0)[-1])
+        maker.pending = ("c2", "casual", "blitz", 0)
+        maker.declined({"id": "c2", "declineReasonKey": "casual"})
+        self.assertIsNone(maker.pick(bots, {"blitz": 2900}, "us", time.monotonic()))
+
     async def test_leaves_a_limited_bot_alone_at_every_speed_for_the_wait_lichess_names(self):
         class api:
             limit_seconds = 1000

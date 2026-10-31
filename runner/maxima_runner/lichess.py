@@ -153,7 +153,7 @@ class lichess_api:
 
 
 class matchmaker:
-    """Challenge another online bot after idle minutes: rated, a random clock weighted by speed, opponents
+    """Challenge another online bot after idle minutes: rated unless it asked for casual, a random clock weighted by speed, opponents
     within window rating points, never the last opponent or a bot that declined that speed recently."""
 
     def __init__(self, idle_minutes, window, speeds, on_line, choose=random):
@@ -164,6 +164,7 @@ class matchmaker:
         self.challenging = False
         self.pending = None  # (challenge id, opponent id, speed, sent)
         self.resting = {}  # (opponent id, speed) -> monotonic time until which we leave it alone
+        self.casual = set()  # opponent ids that asked for casual games
         self.last_opponent = None
         self.streak = 0  # games in a row against last_opponent
 
@@ -211,7 +212,7 @@ class matchmaker:
                 and now - self.idle_since >= self.idle)
 
     def pick(self, bots, ratings, own_id, now):
-        """(name, opponent id, speed, limit, increment) for a challenge, or None without a fitting bot."""
+        """(name, opponent id, speed, limit, increment, rated) for a challenge, or None without a fitting bot."""
         speed = self.random.choices(self.speeds, [challenge_shares[name] for name in self.speeds])[0]
         ours = ratings.get(speed)
         if ours is None:
@@ -225,7 +226,7 @@ class matchmaker:
             return None
         bot = self.random.choice(fitting)
         limit, increment = self.random.choice(challenge_clocks[speed])
-        return bot.get("username", bot["id"]), bot["id"], speed, limit, increment
+        return bot.get("username", bot["id"]), bot["id"], speed, limit, increment, bot["id"] not in self.casual
 
     async def tick(self, bot):
         """Send one challenge when due; cancel an unanswered one after challenge_wait seconds."""
@@ -254,12 +255,15 @@ class matchmaker:
         await self.challenge(bot, *choice)
 
     def declined(self, challenge):
-        """Our challenge was declined: leave that bot alone for that speed."""
+        """Our challenge was declined: leave that bot alone for that speed, or ask it for casual games."""
         if self.pending is not None and self.pending[0] == challenge.get("id"):
             _, opponent, speed, _ = self.pending
             now = time.monotonic()
             self.pending, self.next_try = None, now + challenge_wait
-            self.resting[(opponent, speed)] = now + challenge_rest
+            if challenge.get("declineReasonKey") == "casual" and opponent not in self.casual:
+                self.casual.add(opponent)
+            else:
+                self.resting[(opponent, speed)] = now + challenge_rest
             self.on_line(f"-- {opponent} declined: {challenge.get('declineReasonKey') or challenge.get('declineReason')}")
 
 
