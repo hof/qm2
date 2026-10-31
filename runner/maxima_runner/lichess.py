@@ -263,6 +263,8 @@ class matchmaker:
             self.pending, self.next_try = None, now + challenge_wait
             if challenge.get("declineReasonKey") == "casual" and opponent not in self.casual:
                 self.casual.add(opponent)
+            elif challenge.get("declineReasonKey") == "nobot":
+                self.resting.update(((opponent, name), now + challenge_rest) for name in self.speeds)
             else:
                 self.resting[(opponent, speed)] = now + challenge_rest
             self.on_line(f"-- {opponent} declined: {challenge.get('declineReasonKey') or challenge.get('declineReason')}")

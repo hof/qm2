@@ -605,6 +605,12 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len([path for path, _ in api.posts if path == "/api/challenge/c1/cancel"]), cancels)
             self.assertIsNone(bot.matchmaker.pending)
 
+    async def test_leaves_a_bot_that_refuses_bots_alone_at_every_speed(self):
+        maker = lichess.matchmaker(30, 300, ("blitz", "rapid"), lambda line: None)
+        maker.pending = ("c1", "leela", "blitz", 0)
+        maker.declined({"id": "c1", "declineReasonKey": "nobot"})
+        self.assertEqual(set(maker.resting), {("leela", "blitz"), ("leela", "rapid")})
+
     async def test_leaves_a_limited_bot_alone_at_every_speed_for_the_wait_lichess_names(self):
         class api:
             limit_seconds = 1000
