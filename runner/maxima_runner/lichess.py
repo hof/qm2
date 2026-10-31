@@ -8,7 +8,6 @@ from pathlib import Path
 import random
 import re
 import signal
-import statistics
 import threading
 import time
 import urllib.error
@@ -41,7 +40,7 @@ player_greeting = "Hi, I'm Maxima running on MaxDrone. Good luck!"
 greeting = "Hi! I'm Maxima, running on MaxDrone. {}Type !help for available commands."
 player_farewells = ("Good game, thanks for playing!", "Thanks for the game!")
 # Our own challenges after idle time: (limit, increment) seconds per speed and each speed's share.
-challenge_clocks = {"bullet": ((60, 0), (60, 1), (120, 1)), "blitz": ((180, 0), (180, 2), (300, 0), (300, 3)),
+challenge_clocks = {"bullet": ((60, 1), (120, 1)), "blitz": ((180, 0), (180, 2), (300, 0), (300, 3)),
                     "rapid": ((600, 0), (600, 5), (900, 10))}
 challenge_shares = {"bullet": 30, "blitz": 50, "rapid": 20}
 challenge_wait = 60  # seconds for an answer before we cancel, and between attempts
@@ -60,7 +59,7 @@ default_settings = {
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
-    "challenge_idle": 30, "challenge_window": 300, "max_clock": 60, "teams": [], "tournament": None,
+    "challenge_idle": 30, "challenge_window": 300, "min_clock": 90, "max_clock": 60, "teams": [], "tournament": None,
 }
 
 
@@ -308,7 +307,7 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, min_clock=90, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
@@ -317,7 +316,7 @@ class lichess_bot:
         self.learner, self.pgn_dir, self.events = learner, pgn_dir, events
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.contempt_window, self.unknown_contempt, self.margin = contempt_window, unknown_contempt, margin
-        self.pv_plies, self.teams, self.max_clock = pv_plies, tuple(teams), max_clock
+        self.pv_plies, self.teams, self.min_clock, self.max_clock = pv_plies, tuple(teams), min_clock, max_clock
         self.context = self.session = None
         self.id = self.name = None
         self.game = None
@@ -605,8 +604,11 @@ class lichess_bot:
             rank = speed_rank.get(speed, len(speed_rank))
             return "tooFast" if rank < allowed[0] else "tooSlow" if rank > allowed[-1] else "timeControl"
         clock = challenge.get("timeControl", {})
-        if clock.get("limit", 0) + 40 * clock.get("increment", 0) > self.max_clock * 60:
-            return "tooSlow"  # the minutes each side may use over forty moves
+        estimate = clock.get("limit", 0) + 40 * clock.get("increment", 0)  # seconds each side may use over forty moves
+        if estimate > self.max_clock * 60:
+            return "tooSlow"
+        if "limit" in clock and estimate < self.min_clock:
+            return "tooFast"  # the 0.25s Lichess charges per move eats a clock without increment
         accepted, when = self.accepted
         if not self.accept or self.stopping or self.game is not None or accepted and time.monotonic() - when < 20:
             return "later"
@@ -654,7 +656,6 @@ class lichess_game:
         self.bot, self.id = bot, game_id
         self.initial = self.board = self.record = self.color = self.opponent = None
         self.full = self.opening = self.contempt = self.draw_score = None
-        self.delays = []  # per move (book choice, sending, before choosing), in seconds
         self.task = self.searching = None
         self.searched = None
         self.clocks = {}
@@ -908,7 +909,6 @@ class lichess_game:
         if move is None or not board.is_legal(move):
             bot.on_line(f"-- engine returned no legal move in {board.fen()}")
             return
-        chosen = time.monotonic()
         fresh = self.loss.on_search(board, move, info, kind)
         latest = self.state or state
         received_at = self.state_received_at if self.state_received_at is not None else started
@@ -936,8 +936,6 @@ class lichess_game:
             self.abort_position = None
             return
         seconds, numbered = time.monotonic() - started, board.variation_san([move])
-        self.delays.append((chosen - started if kind == "book" else None, time.monotonic() - chosen,
-                            started - self.state_received_at if self.state_received_at is not None else 0.0))
         if board.ply() < 2 and kind == "book" and self.opening is not None:
             self.chat("spectator", book_tell(board, move, numbered, self.opening))
         why = self.opening.why if kind == "book" and self.opening is not None else None
@@ -1056,11 +1054,6 @@ class lichess_game:
             result = "1/2-1/2"
         reason = reasons.get(status, status)
         bot.on_line(f"-- game {self.id} over: {reason} {result}")
-        if self.delays:
-            book, post, wait = zip(*self.delays)
-            book = [delay for delay in book if delay is not None] or [0.0]
-            bot.on_line(f"-- move delays, median ms: book choice {statistics.median(book) * 1000:.0f}, "
-                        f"sending {statistics.median(post) * 1000:.0f}, before choosing {statistics.median(wait) * 1000:.0f}")
         if status not in ("aborted", "noStart"):
             self.chat("player", random.choice(player_farewells))
             self.chat("spectator", "Thanks for watching!")
@@ -1157,7 +1150,7 @@ def load_settings(path):
     types = {"engine": str, "options": dict, "speeds": list, "accept": bool, "games": int, "pgn_dir": str,
              "learning": bool, "variety": (int, float), "contempt_window": int, "unknown_contempt": int, "layer_profiles": dict,
              "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
-             "challenge_idle": int, "challenge_window": int, "max_clock": int, "teams": list, "tournament": str}
+             "challenge_idle": int, "challenge_window": int, "min_clock": int, "max_clock": int, "teams": list, "tournament": str}
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     types["pv_plies"] = int
@@ -1205,6 +1198,8 @@ def run(options, parser):
         configured["learning"] = False
     if options.no_online_tablebase:
         configured["online_tablebase"] = False
+    if options.min_clock is not None:
+        configured["min_clock"] = options.min_clock
     if options.max_clock is not None:
         configured["max_clock"] = options.max_clock
     if options.challenge_idle is not None:
@@ -1267,7 +1262,7 @@ def run(options, parser):
                           online_tablebase=configured["online_tablebase"],
                           contempt_window=configured["contempt_window"], unknown_contempt=configured["unknown_contempt"],
                           challenge_idle=configured["challenge_idle"] or 0,
-                          challenge_window=configured["challenge_window"], max_clock=configured["max_clock"],
+                          challenge_window=configured["challenge_window"], min_clock=configured["min_clock"], max_clock=configured["max_clock"],
                           resignation_settings=configured["resignation"], pv_plies=configured["pv_plies"],
                           teams=configured["teams"] or (), tournament=configured["tournament"],
                           local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))

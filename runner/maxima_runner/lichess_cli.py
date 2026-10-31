@@ -30,12 +30,15 @@ def parser():
     parser.add_argument("--config", metavar="FILE",
                         help="JSON settings (default: first .lichess.json in current, data, or project directory; keys: engine, options, speeds, accept, games, pgn_dir, learning, variety, "
                              "contempt_window, unknown_contempt, layer_profiles, style_books, mood, live_feed, pgn_post, "
-                             "online_tablebase, resignation, shutdown_grace, max_clock, teams, tournament); flags override it")
+                             "online_tablebase, resignation, shutdown_grace, min_clock, max_clock, teams, tournament); flags override it")
     parser.add_argument("--engine", help="UCI engine to play with (default: the Release Maxima build)")
     parser.add_argument("--option", action="append", default=[], metavar="NAME=VALUE",
                         help="UCI option for the engine, repeatable (e.g. Hash=256)")
     parser.add_argument("--speed", action="append", choices=("bullet", "blitz", "rapid", "classical"),
                         help="accepted speed, repeatable (default: bullet, blitz, rapid)")
+    parser.add_argument("--min-clock", type=int, metavar="SECONDS",
+                        help="decline clocks under this many seconds per side, counted as limit + 40 x increment "
+                             "(default: 90, which declines 1+0); config: min_clock")
     parser.add_argument("--max-clock", type=int, metavar="MINUTES",
                         help="decline clocks over this many minutes per side, counted as limit + 40 x increment "
                              "(default: 60); config: max_clock")

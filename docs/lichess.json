@@ -5,6 +5,7 @@
     "rapid"
   ],
   "accept": true,
+  "min_clock": 90,
   "max_clock": 60,
   "games": null,
   "challenge_idle": 30,

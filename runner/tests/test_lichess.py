@@ -57,6 +57,14 @@ class challenge_tests(unittest.TestCase):
         bot.game = object()
         self.assertEqual(bot.decline_reason(challenge("blitz"), {}), "later")
 
+    def test_declines_clocks_without_time_to_cover_the_lag(self):
+        bot = lichess.lichess_bot(stub_api(), None, lambda line: None)
+        offered = challenge("bullet")
+        offered["timeControl"].update(limit=60, increment=0)
+        self.assertEqual(bot.decline_reason(offered, {}), "tooFast")
+        offered["timeControl"].update(limit=60, increment=1)
+        self.assertIsNone(bot.decline_reason(offered, {}))
+
     def test_declines_clocks_over_the_maximum(self):
         bot = lichess.lichess_bot(stub_api(), None, lambda line: None, speeds=("rapid", "classical"), max_clock=30)
         offered = challenge("classical")

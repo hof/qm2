@@ -2060,7 +2060,9 @@ calls on kept-open connections to save the handshake on every move: it
 accepts challenges, plays them with the Release Maxima build, saves them as
 PGN and learns from them. Rated and casual challenges are both welcome; a clock
 over `max_clock` minutes per side (default 60, `--max-clock`, counted as limit +
-40 x increment) is declined as too slow. The move choice is the same as on FICS
+40 x increment) is declined as too slow, and one under `min_clock` seconds (default
+90, `--min-clock`) as too fast: Lichess charges about 0.25 seconds per move, which a
+1+0 clock never gets back. The move choice is the same as on FICS
 (`runner/maxima_runner/move_choice.py`): the multi-layer book and experience
 (9.2), then the engine while the online tablebase is asked (11.4), with draw
 contempt from the rating gap.
@@ -2109,7 +2111,7 @@ Bots cannot seek, so MaximaEngine plays challenges, its own and others'.
 After `challenge_idle` minutes without a game (default 30, `--challenge-idle`;
 0 or `--no-challenge` turns it off) it challenges one online bot to a rated
 game: a speed by share (bullet 30, blitz 50, rapid 20, among the configured
-speeds), a random clock of that speed (1+0, 1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
+speeds), a random clock of that speed (1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
 10+0, 10+5, 15+10), and a bot within `challenge_window` rating points (default
 300) at that speed, never the last opponent. Lichess is asked only then, at most
 once a minute; an unanswered challenge is cancelled after a minute, and a bot
