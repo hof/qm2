@@ -2130,9 +2130,9 @@ draws or when a draw is worth at least our score (below). When the opponent leav
 The player room opens with "Hi, I'm Maxima running on MaxDrone. Good luck!",
 the spectator room with "Hi! I'm Maxima, running on MaxDrone. Mood: Scandinavian.
 Type !help for available commands." (the mood only when the game has one). After
-our first move, once, when it came from the book, the spectators see the book's top
-three moves with their pick chances against this opponent, for example
-"vs Quirky2000: e4 (50%) d4 (13%) Nf3 (12%).". In a casual game, or a rated game with
+our first move, once, the spectators see our results against this opponent with the
+three moves played most from that position, for example
+"vs Quirky2000: e4 +2 =1 -0, d4 +0 =1 -1."; without such games it stays out. In a casual game, or a rated game with
 a rating gap of at least `style_gap` (default 100), and when the draw, fire or surprise book
 gave at least 10% of the played move's votes, a random sentence from that style in the
 `style_lines` setting follows, a random style when several qualify; a style without

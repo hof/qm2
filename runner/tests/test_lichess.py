@@ -334,13 +334,13 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_spectators_get_the_mood_and_once_the_book_odds(self):
         class book:
-            mood, why, odds, results = "kings_indian", None, {}, ({}, {}, {})
+            mood, why = "kings_indian", None
+            results = ({}, {}, {(f"{chess.polyglot.zobrist_hash(chess.Board()):016x}", "e2e4"): [1, 0, 0]})
             mood, choice_results = "kings_indian", {}
             names = {"opponent": "Someone", "group": "engines"}
 
             def choose(self, board):
                 move = chess.Move.from_uci("e2e4")
-                self.odds = {move: (0.5, {})}
                 self.why = ("book", 0.5, {"book": 0.3, "fire": 0.2}, "book")
                 return move, "book 50%"
 
@@ -364,7 +364,7 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.01)
         chats = [data["text"] for path, data in api.posts if path.endswith("/chat") and data["room"] == "spectator"]
         self.assertEqual(chats, ["Hi! I'm Maxima, running on MaxDrone. Mood: Kings Indian. Type !help for available commands.",
-                                 "vs Someone: e4 (50%). Wild!"])
+                                 "vs Someone: e4 +1 =0 -0. Wild!"])
 
         api.posts.clear()
         full = dict(game_full(), rated=True)
@@ -375,7 +375,7 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         await game.on_state(full["state"])
         await game.searching
         await asyncio.sleep(0.01)
-        self.assertIn("vs Someone: e4 (50%).", [data["text"] for path, data in api.posts if path.endswith("/chat")])
+        self.assertIn("vs Someone: e4 +1 =0 -0.", [data["text"] for path, data in api.posts if path.endswith("/chat")])
 
     async def test_draw_offer_is_accepted_in_a_tablebase_draw(self):
         api = stub_api()
@@ -537,11 +537,13 @@ class chat_line_tests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 lichess.load_settings(path)
 
-    def test_spectators_see_the_top_three_book_moves(self):
+    def test_spectators_see_our_results_with_each_move_against_the_opponent(self):
         board = chess.Board()
-        odds = {board.parse_san(san): (share, {}) for san, share in
-                (("Nf3", 0.12), ("e4", 0.5), ("c4", 0.03), ("d4", 0.13))}
-        self.assertEqual(lichess.book_odds(board, odds, "Ferrite"), "vs Ferrite: e4 (50%) d4 (13%) Nf3 (12%).")
+        key = f"{chess.polyglot.zobrist_hash(board):016x}"
+        opening = lichess.learning.opening_book([], opponent="Ferrite")
+        self.assertIsNone(lichess.opponent_record(board, opening))
+        opening.results[2].update({(key, "d2d4"): [0, 1, 1], (key, "e2e4"): [2, 1, 0], ("other", "c2c4"): [9, 0, 0]})
+        self.assertEqual(lichess.opponent_record(board, opening), "vs Ferrite: e4 +2 =1 -0, d4 +0 =1 -1.")
 
 
 class matchmaker_tests(unittest.IsolatedAsyncioTestCase):

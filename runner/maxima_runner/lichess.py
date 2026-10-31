@@ -897,12 +897,13 @@ class lichess_game:
             self.abort_position = None
             return
         seconds, numbered = time.monotonic() - started, board.variation_san([move])
-        if board.ply() < 2 and kind == "book" and self.opening is not None:
-            odds = book_odds(board, self.opening.odds, self.opening.names["opponent"])
+        if board.ply() < 2 and self.opening is not None:
             # A rated game earns a remark only with a clear rating gap, at 4 Elo per centipawn of contempt.
-            remark = not self.full.get("rated") or abs(self.contempt or 0) * 4 >= bot.style_gap
-            line = style_line(self.opening.why, bot.style_lines) if remark else None
-            self.chat("spectator", " ".join(filter(None, (odds, line))))
+            remark = kind == "book" and (not self.full.get("rated") or abs(self.contempt or 0) * 4 >= bot.style_gap)
+            texts = (opponent_record(board, self.opening),
+                     style_line(self.opening.why, bot.style_lines) if remark else None)
+            if any(texts):
+                self.chat("spectator", " ".join(filter(None, texts)))
         why = self.opening.why if kind == "book" and self.opening is not None else None
         if why and why[0] in ("book", "learned", "signature", "revenge"):
             self.last_book, self.left_book = book_whisper(numbered, why, self.opening), None
@@ -1102,10 +1103,15 @@ def style_line(why, lines):
     return random.choice(lines[random.choice(active)]) if active else None
 
 
-def book_odds(board, odds, name):
-    """The book's top three first moves against this opponent, for the spectators."""
-    top = sorted(odds.items(), key=lambda item: -item[1][0])[:3]
-    return f"vs {name}: " + " ".join(f"{board.san(move)} ({share:.0%})" for move, (share, _) in top) + "."
+def opponent_record(board, opening):
+    """Our results with the three moves played most here against this opponent, for the spectators."""
+    key = f"{chess.polyglot.zobrist_hash(board):016x}"
+    played = sorted(((sum(results), move, results) for (position, move), results in opening.results[2].items()
+                     if position == key), reverse=True)[:3]
+    if not played:
+        return None
+    return f"vs {opening.names['opponent']}: " + ", ".join(
+        f"{board.san(chess.Move.from_uci(move))} +{wins} ={draws} -{losses}" for _, move, (wins, draws, losses) in played) + "."
 
 
 def load_settings(path):
