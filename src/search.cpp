@@ -239,7 +239,6 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     _book_seeded = false;
     null_allowed = true;
     draw_contempt = options::get_value("DrawContempt");
-    root_hint = options::root_hint;
     evaluation_network.reset();
     if (wild == 0) {
         std::string error;
@@ -1016,22 +1015,7 @@ int search_t::init_root_moves() {
         root_move_t * rmove = &root.moves[root.move_count++];
         rmove->init(move, gives_check, is_dangerous, wild != 0 ? brd.see(move) : 0);
     }
-    move_root_hint(0);
     return root.move_count;
-}
-
-// A remembered move starts first and later stays right behind the current best,
-// so that it is never reduced like a late move. moves[0] remains the best move.
-void search_t::move_root_hint(int position) {
-    if (wild != 0 || root_hint.empty()) {
-        return;
-    }
-    for (int i = position + 1; i < root.move_count; ++i) {
-        if (root.moves[i].move.to_string() == root_hint) {
-            std::rotate(root.moves + position, root.moves + i, root.moves + i + 1);
-            return;
-        }
-    }
 }
 
 // Order standard root moves like an interior node: the move picker with the
@@ -1048,7 +1032,6 @@ void search_t::order_root_moves(int depth) {
             }
         }
     }
-    move_root_hint(1);
 }
 
 // Guesses from the node distribution whether the position is complex.

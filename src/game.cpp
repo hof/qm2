@@ -22,9 +22,7 @@
 #include "game.h"
 
 namespace options {
-
-    std::string root_hint;
-
+    
     option_t PARAM[length+1] = {
         { "", INT, 0, ""}, //dummy value
         { "Revision", STRING, 1, "type string default " MAXIMA_REVISION },
@@ -36,7 +34,6 @@ namespace options {
         { "UCI_Opponent", STRING, 0, "type string" },
         { "Wild", STRING, 0, "type combo default standard var standard var losers", true },
         { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100", true },
-        { "RootHint", STRING, 0, "type string default <empty>" },
         { "TimeFactor", INT, 100, "type spin default 100 min 100 max 200" },
         { "SyzygyPath", STRING, 0, "type string default <empty>" },
         { "SyzygyProbeLimit", INT, 5, "type spin default 5 min 0 max 5", true },

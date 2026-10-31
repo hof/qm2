@@ -510,9 +510,7 @@ namespace uci {
                         opt->value = candidate;
 
                         //handle option
-                        if (name == "RootHint") {
-                            options::root_hint = value == "<empty>" ? "" : value;
-                        } else if (name == "BookFile") {
+                        if (name == "BookFile") {
                             book::set_path(value == "<empty>" ? "" : value);
                         } else if (name == "SyzygyPath") {
                             const bool initialized = tablebase::set_path(value);
