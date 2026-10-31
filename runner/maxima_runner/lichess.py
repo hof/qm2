@@ -35,7 +35,9 @@ public_commands = ("help", "name", "eval", "stats", "book")
 public_gap = 5  # seconds between answers to anyone's commands, so chat spam cannot exhaust the rate limit
 credits = "Maxima, a chess engine by hof and hajewiet"  # no links: Lichess blanks chat lines with URLs
 # Each room gets its own wording: Lichess silently drops a line equal to one of our previous two.
-style_lines = {"draw": "A draw would not be bad.", "fire": "Let's put the board on fire!"}
+style_lines = {"draw": ("A draw would not be bad.", "Let's try to split this point.", "Going for the solid lines."),
+               "fire": ("Let's put the board on fire!", "Chaos is my favorite opening strategy.",
+                        "Sacrifices are definitely on the menu.")}
 style_share = 10  # the percentage of a game's book mix from which we mention its style
 player_greeting = "Hi, I'm Maxima running on MaxDrone. Good luck!"
 greeting = "Hi! I'm Maxima, running on MaxDrone. {}Type !help for available commands."
@@ -1092,9 +1094,9 @@ class lichess_game:
 
 
 def style_line(weights):
-    """A remark when the game's book mix leans clearly to the draw or fire book."""
+    """A varied remark when the game's book mix leans clearly to the draw or fire book."""
     style = max(style_lines, key=lambda name: weights.get(name, 0))
-    return style_lines[style] if weights.get(style, 0) >= style_share else None
+    return random.choice(style_lines[style]) if weights.get(style, 0) >= style_share else None
 
 
 def book_odds(board, odds, name):

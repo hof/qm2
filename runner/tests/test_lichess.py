@@ -505,8 +505,8 @@ class tournament_stream_tests(unittest.IsolatedAsyncioTestCase):
 
 class chat_line_tests(unittest.TestCase):
     def test_a_clear_book_style_earns_a_remark(self):
-        self.assertEqual(lichess.style_line({"draw": 13, "fire": 0}), "A draw would not be bad.")
-        self.assertEqual(lichess.style_line({"draw": 0, "fire": 25}), "Let's put the board on fire!")
+        self.assertIn(lichess.style_line({"draw": 13, "fire": 0}), lichess.style_lines["draw"])
+        self.assertIn(lichess.style_line({"draw": 0, "fire": 25}), lichess.style_lines["fire"])
         self.assertIsNone(lichess.style_line({"draw": 9, "fire": 0}))
 
     def test_spectators_see_the_top_three_book_moves(self):
