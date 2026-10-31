@@ -2057,7 +2057,7 @@ Compact console move summaries omit this label; ponder time remains in parenthes
 `maxima lichess` plays on Lichess through the Bot API as MaximaEngine: it
 accepts challenges, plays them with the Release Maxima build, saves them as
 PGN and learns from them. Rated and casual challenges are both welcome; a clock
-over `max_clock` minutes per side (default 30, `--max-clock`, counted as limit +
+over `max_clock` minutes per side (default 60, `--max-clock`, counted as limit +
 40 x increment) is declined as too slow. The move choice is the same as on FICS
 (`runner/maxima_runner/move_choice.py`): the multi-layer book and experience
 (9.2), then the engine while the online tablebase is asked (11.4), with draw

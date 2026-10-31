@@ -58,7 +58,7 @@ default_settings = {
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
-    "challenge_idle": 30, "challenge_window": 300, "max_clock": 30, "teams": [], "tournament": None,
+    "challenge_idle": 30, "challenge_window": 300, "max_clock": 60, "teams": [], "tournament": None,
 }
 
 
@@ -272,7 +272,7 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, max_clock=30, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line

@@ -38,7 +38,7 @@ def parser():
                         help="accepted speed, repeatable (default: bullet, blitz, rapid)")
     parser.add_argument("--max-clock", type=int, metavar="MINUTES",
                         help="decline clocks over this many minutes per side, counted as limit + 40 x increment "
-                             "(default: 30); config: max_clock")
+                             "(default: 60); config: max_clock")
     parser.add_argument("--no-accept", action="store_true", help="decline all challenges")
     parser.add_argument("--games", type=int, help="stop after this many games")
     parser.add_argument("--pgn-dir", help="directory for atomic per-game PGNs (default: experience/games)")
