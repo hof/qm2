@@ -135,6 +135,31 @@ class variant_session_tests(unittest.IsolatedAsyncioTestCase):
             await session.search(chess.variant.SuicideBoard(), chess.engine.Limit(depth=1))
         protocol.analysis.assert_not_called()
 
+    async def test_real_engine_ponders_after_a_book_move(self):
+        import os
+        engine = os.environ.get("MAXIMA_ENGINE")
+        if not engine:
+            self.skipTest("MAXIMA_ENGINE is unset")
+        clocks = chess.engine.Limit(white_clock=60, black_clock=60, white_inc=1, black_inc=1)
+        async with open_engine([engine], None, 5) as session:
+            await session.configure({"OwnBook": False, "UseExperience": False})
+            board = chess.Board()
+            board.push_uci("e2e4")
+            await session.ponder_book(board, clocks, lambda: True, reply=chess.Move.from_uci("e7e5"), game="g1")
+            self.assertTrue(session.pondering)
+            board.push_uci("e7e5")
+            hit = await session.play(board, clocks, game="g1")
+            self.assertTrue(hit.info["_ponder_hit"])
+            self.assertIn(hit.move, board.legal_moves)
+            await session.stop_pondering()
+            board.push(hit.move)
+            await session.ponder_book(board, clocks, lambda: True, game="g1")
+            self.assertTrue(session.pondering)
+            board.push(next(move for move in board.legal_moves))
+            missed = await session.play(board, clocks, game="g1")
+            self.assertIn(missed.move, board.legal_moves)
+            await session.stop_pondering()
+
     async def test_real_engine_switches_variants_and_preserves_history(self):
         import os
         from maxima_runner.variants import royal_losers_board

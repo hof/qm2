@@ -596,6 +596,11 @@ class opening_book:
                            if parts.get(name, 0) >= 0.005 * probability)
         return f"{label} {probability:.0%} selection: {detail}"
 
+    def predict(self, board):
+        """The likeliest book move in board for pondering, or None; the book's state stays as it is."""
+        moves = self.distribution(board, f"{chess.polyglot.zobrist_hash(board):016x}")[0]
+        return max(sorted(moves, key=chess.Move.uci), key=lambda move: moves[move][0], default=None)
+
     def choose(self, board):
         """(move, reason) to play without searching, or None to let the engine search.
 

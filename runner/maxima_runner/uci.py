@@ -8,6 +8,9 @@ import chess.engine
 from .variants import royal_losers_board, orthodox_wild_board
 
 
+guess_depth = 6  # plies of the quick search that guesses a reply outside the book
+
+
 class online_protocol(chess.engine.UciProtocol):
     """Keep complete evaluation reports alongside python-chess's managed pondering."""
 
@@ -66,6 +69,55 @@ class online_protocol(chess.engine.UciProtocol):
         super().line_received(line)
 
 
+class book_ponder_command(chess.engine.BaseCommand):
+    """go ponder on a position we did not search toward: python-chess only ponders after its own play.
+    Its next play of the same position in the same game turns this into a ponderhit."""
+
+    def __init__(self, engine, board, limit, game, options):
+        super().__init__(engine)
+        self.engine, self.board, self.limit, self.game, self.options = engine, board, limit, game, options
+        self.waiting = False
+
+    def start(self):
+        for name, value in (("Ponder", True), ("MultiPV", None)):
+            if name in self.engine.options:
+                self.engine._setoption(name, self.engine.options[name].default if value is None else value)
+        self.engine._configure(self.options)
+        if self.engine.first_game or self.engine.game != self.game:
+            self.engine.game = self.game
+            self.engine._ucinewgame()
+            self.waiting = True
+            self.engine._isready()
+        else:
+            self.go()
+
+    def go(self):
+        self.engine._position(self.board)
+        self.engine._go(self.limit, ponder=True)
+        self.result.set_result(None)
+
+    def line_received(self, line):
+        if line.strip() == "readyok" and self.waiting:
+            self.waiting = False
+            self.go()
+        elif line.startswith("bestmove"):
+            self.engine.may_ponderhit = None
+            self.set_finished()
+
+    def cancel(self):
+        target = self.engine.may_ponderhit
+        if target and target.move_stack == self.board.move_stack and target == self.board:
+            self.engine.ponderhit = True
+            self.engine.may_ponderhit = None
+            self.set_finished()
+        else:
+            self.engine.send_line("stop")
+
+    def engine_terminated(self, exc):
+        if not self.result.done():
+            super().engine_terminated(exc)
+
+
 class engine_session:
     def __init__(self, protocol, timeout):
         self.protocol = protocol
@@ -108,6 +160,36 @@ class engine_session:
             raise ValueError("unsupported board variant")
         return settings
 
+    def play_settings(self, board, options):
+        settings = {name: self.protocol.options[name].default if value is None else value
+                    for name, value in (options or {}).items() if name in self.protocol.options}
+        settings.update(self.variant_settings(board))
+        # Keep game evaluation behavior while python-chess manages pondering.
+        if "UCI_AnalyseMode" in self.protocol.options:
+            settings["UCI_AnalyseMode"] = False
+        return settings
+
+    async def ponder_book(self, board, limit, waiting, *, reply=None, game=None, opponent=None, options=None):
+        """After our book move: ponder on the predicted reply, or the engine's own guess at it.
+        waiting tells whether the opponent is still to move once that guess is in."""
+        if board.is_game_over():
+            return
+        settings = self.play_settings(board, options)
+        self.protocol.on_search_started = None
+        if reply is None:
+            guess = await self.protocol.play(board, chess.engine.Limit(depth=guess_depth), game=game,
+                                             options=settings, opponent=opponent)
+            reply = guess.move
+            if not waiting():
+                return
+        ours = board.copy()
+        ours.push(reply)
+        if ours.is_game_over():
+            return
+        settings.update(self.protocol._opponent_configuration(opponent=opponent))
+        await self.protocol.communicate(lambda engine: book_ponder_command(engine, ours, limit, game, settings))
+        self.pondering = True
+
     async def play(self, board, limit, *, game=None, opponent=None, timeout=None, options=None, ceiling=None,
                    on_search_started=None):
         """Choose a move under game clocks; a new game token makes python-chess send ucinewgame.
@@ -116,12 +198,7 @@ class engine_session:
         option's default, since python-chess keeps the last value sent. An optional ceiling
         sends stop while retaining the ordinary clock allocation and collects bestmove."""
         self.protocol.ponder_hit = False
-        settings = {name: self.protocol.options[name].default if value is None else value
-                    for name, value in (options or {}).items() if name in self.protocol.options}
-        settings.update(self.variant_settings(board))
-        # Keep game evaluation behavior while python-chess manages pondering.
-        if "UCI_AnalyseMode" in self.protocol.options:
-            settings["UCI_AnalyseMode"] = False
+        settings = self.play_settings(board, options)
 
         async def play_search():
             self.protocol.on_search_started = on_search_started
