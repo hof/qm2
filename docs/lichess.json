@@ -1,5 +1,23 @@
 {
+  "speeds": [
+    "bullet",
+    "blitz",
+    "rapid"
+  ],
+  "accept": true,
   "max_clock": 60,
+  "games": null,
+  "challenge_idle": 30,
+  "challenge_window": 300,
+  "teams": [],
+  "tournament": null,
+  "mood": "auto",
+  "variety": 1.0,
+  "contempt_window": 100,
+  "unknown_contempt": -10,
+  "online_tablebase": true,
+  "pv_plies": 2,
+  "shutdown_grace": 15,
   "style_lines": {
     "draw": [
       "A draw would not be bad.",
