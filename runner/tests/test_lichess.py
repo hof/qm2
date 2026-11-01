@@ -419,6 +419,23 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(moves[0].endswith("?offeringDraw=true"))
 
 
+class game_end_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_the_event_stream_waits_for_the_last_move(self):
+        bot = lichess.lichess_bot(stub_api(), None, lambda line: None, online_tablebase=False)
+        bot.id = "maximaengine"
+        game = bot.game = lichess.lichess_game(bot, "g1")
+        full = game_full()
+        game.setup(full)
+        final = dict(game_full("e2e4 e7e5")["state"], status="mate", winner="white")
+
+        async def stream_ends():
+            await asyncio.sleep(0.01)
+            await game.on_state(final)
+        game.task = asyncio.ensure_future(stream_ends())
+        await bot.on_event({"type": "gameFinish", "game": {"gameId": "g1", "status": {"name": "mate"}, "winner": "white"}})
+        self.assertEqual(len(game.board.move_stack), 2)
+
+
 class console_log_tests(unittest.TestCase):
     def test_lines_are_kept_with_their_time_and_without_colour(self):
         with tempfile.TemporaryDirectory() as directory:

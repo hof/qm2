@@ -34,6 +34,7 @@ stream_timeout = 30  # seconds of silence before a stream counts as dead; Liches
 request_timeout = 5  # seconds for an answer to a call
 connection_idle = 20  # seconds before a kept-open connection is replaced: routers drop idle ones silently, and the call then hangs
 move_retry_wait = 1  # seconds between attempts to send a move
+final_state_wait = 2  # seconds for the game stream's last move after the event stream reports the end
 rate_limit_pause = 60  # Lichess asks clients to wait a full minute after HTTP 429
 owner_commands = ("softquit", "softrestart", "resign", "abort", "draw", "challenge", "nochallenge")
 console_commands = ("help", "quit", "team", "tournament", "leave") + owner_commands
@@ -624,8 +625,11 @@ class lichess_bot:
             elif self.game.id != game_id:
                 self.on_line(f"-- ignoring game {game_id}: already playing {self.game.id}")
         elif kind == "gameFinish" and self.game is not None and self.game.id == event["game"]["gameId"]:
-            game = event["game"]
-            await self.game.finish(game.get("status", {}).get("name", "unknownFinish"), game.get("winner"))
+            # The event stream can beat the game stream, which still holds the last move.
+            game, ended = self.game, event["game"]
+            if game.task is not None:
+                await asyncio.wait({game.task}, timeout=final_state_wait)
+            await game.finish(ended.get("status", {}).get("name", "unknownFinish"), ended.get("winner"))
 
     def decline_reason(self, challenge, compat):
         """Lichess's own decline reasons, or None to accept."""
