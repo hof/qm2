@@ -68,6 +68,14 @@ class online_protocol(chess.engine.UciProtocol):
                     evidence.update(report)
         super().line_received(line)
 
+    async def communicate(self, command_factory):
+        # A newer command replaces a queued one, but python-chess asserts on doing that: an old ponder queued
+        # behind a search that is still stopping would otherwise kill the next move.
+        if self.next_command is not None:
+            self.next_command.result.cancel()
+            self.next_command = None
+        return await super().communicate(command_factory)
+
 
 class book_ponder_command(chess.engine.BaseCommand):
     """go ponder on a position we did not search toward: python-chess only ponders after its own play.
@@ -79,6 +87,9 @@ class book_ponder_command(chess.engine.BaseCommand):
         self.waiting = False
 
     def start(self):
+        if self.result.cancelled():
+            self.set_finished()
+            return
         for name, value in (("Ponder", True), ("MultiPV", None)):
             if name in self.engine.options:
                 self.engine._setoption(name, self.engine.options[name].default if value is None else value)
@@ -99,12 +110,17 @@ class book_ponder_command(chess.engine.BaseCommand):
     def line_received(self, line):
         if line.strip() == "readyok" and self.waiting:
             self.waiting = False
-            self.go()
+            if self.result.cancelled():  # the opponent moved first: a search now would never be stopped
+                self.set_finished()
+            else:
+                self.go()
         elif line.startswith("bestmove"):
             self.engine.may_ponderhit = None
             self.set_finished()
 
     def cancel(self):
+        if self.waiting:
+            return  # nothing to stop yet; readyok ends this command
         target = self.engine.may_ponderhit
         if target and target.move_stack == self.board.move_stack and target == self.board:
             self.engine.ponderhit = True

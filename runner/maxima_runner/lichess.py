@@ -940,7 +940,7 @@ class lichess_game:
                 tablebase=bot.tablebase, game=(self.id, self.generation),
                 opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options={"DrawContempt": self.draw_score},
                 on_search_started=self.show_opponent_move)
-        except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
+        except (asyncio.TimeoutError, AssertionError, RuntimeError, OSError, chess.engine.EngineError) as error:
             bot.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
             await bot.stop_engine()
             await bot.start_engine()

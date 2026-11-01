@@ -1975,7 +1975,10 @@ avoids both.
 FICS and Lichess engine moves enable UCI pondering automatically. A legal predicted
 reply starts `go ponder` during the opponent turn; matching replies use
 `ponderhit`, otherwise the old search is stopped and a new timed search begins.
-Book/tablebase choices and game ends stop background pondering. Game tokens,
+Book/tablebase choices and game ends stop background pondering; a reply that beats
+the engine's `readyok` cancels book pondering before its search starts, and a newer
+command replaces one still queued. A session that breaks mid-game restarts the engine
+and plays the move. Game tokens,
 position history and option changes prevent reuse across incompatible searches.
 The runner parses configured UCI values to their advertised types before storing
 them, so text settings such as `OwnBook=false` or `Hash=256` preserve ponder reuse.

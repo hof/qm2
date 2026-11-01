@@ -11,7 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import chess
 import chess.engine
@@ -501,6 +501,26 @@ class move_timeout_tests(unittest.IsolatedAsyncioTestCase):
         started = time.monotonic()
         self.assertFalse(await api.post("/move", timeout=0.1))
         self.assertLess(time.monotonic() - started, 1)
+
+
+class engine_failure_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_broken_engine_session_is_restarted_and_the_move_played(self):
+        api = stub_api()
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot.id = "maximaengine"
+        move = chess.Move.from_uci("e2e4")
+        result = chess.engine.PlayResult(move, None, {})
+        sessions = [AsyncMock(play=AsyncMock(side_effect=AssertionError("NEW"))), AsyncMock(play=AsyncMock(return_value=result))]
+        bot.session = sessions[0]
+        bot.stop_engine = AsyncMock()
+
+        async def start_engine():
+            bot.session = sessions[1]
+        bot.start_engine = start_engine
+        game = bot.game = lichess.lichess_game(bot, "g1")
+        game.setup(game_full())
+        await game.play(game.board.copy(), game_full()["state"])
+        self.assertEqual(path_move(api), "e2e4")
 
 
 class fake_lichess(http.server.ThreadingHTTPServer):

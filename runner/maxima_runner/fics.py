@@ -1211,7 +1211,7 @@ class engine_player:
                 tablebase=self.tablebase,
                 game=self.token, opponent=self.opponent, timeout=max(clock, 1) + self.margin,
                 options=search_options, on_search_started=self.show_opponent_move)
-        except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
+        except (asyncio.TimeoutError, AssertionError, RuntimeError, OSError, chess.engine.EngineError) as error:
             self.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
             await self.stop_engine()
             await self.start()

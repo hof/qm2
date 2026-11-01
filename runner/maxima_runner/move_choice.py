@@ -116,7 +116,7 @@ async def ponder_after_book(session, board, move, limit, opening, position, on_l
     try:
         if waiting() and hasattr(session, "ponder_book"):
             await session.ponder_book(after, ponder, waiting, reply=opening.predict(after), **search)
-    except (asyncio.TimeoutError, RuntimeError, OSError, chess.engine.EngineError) as error:
+    except (asyncio.TimeoutError, AssertionError, RuntimeError, OSError, chess.engine.EngineError) as error:
         on_line(f"-- no pondering in book: {error or type(error).__name__}")
 
 

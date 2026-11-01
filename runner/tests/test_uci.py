@@ -29,6 +29,28 @@ for line in sys.stdin:
 '''
 
 
+slow_ready_engine = '''
+import sys, time
+pondering = False
+for line in sys.stdin:
+    command = line.strip()
+    if command == 'uci':
+        print('uciok', flush=True)
+    elif command == 'isready':
+        time.sleep(0.2)
+        print('readyok', flush=True)
+    elif command.startswith('go ponder'):
+        pondering = True
+    elif command == 'stop' and pondering:
+        pondering = False
+        print('bestmove a7a6', flush=True)
+    elif command.startswith('go '):
+        print('bestmove a7a6', flush=True)
+    elif command == 'quit':
+        break
+'''
+
+
 class uci_tests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -36,6 +58,22 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
         self.script = Path(self.directory.name) / 'engine.py'
         self.script.write_text(fake_engine)
         self.command = [sys.executable, str(self.script)]
+
+    async def test_fast_replies_during_ucinewgame_leave_the_engine_usable(self):
+        self.script.write_text(slow_ready_engine)
+        clocks = chess.engine.Limit(white_clock=60, black_clock=60, white_inc=1, black_inc=1)
+        board = chess.Board()
+        async with open_engine(self.command, self.directory.name, 2) as session:
+            pondering = []
+            for reply in ("e2e4", "e7e5"):
+                pondering.append(asyncio.ensure_future(session.ponder_book(
+                    board.copy(), clocks, lambda: True, reply=chess.Move.from_uci(reply), game="g1")))
+                await asyncio.sleep(0.05)
+                board.push_uci(reply)
+            board.push_uci("g1f3")
+            played = await session.play(board, clocks, game="g1")
+            self.assertEqual(played.move.uci(), "a7a6")
+            await asyncio.wait(pondering)
 
     async def test_search_leaves_event_loop_responsive(self):
         async with open_engine(self.command, self.directory.name, 2) as engine:
