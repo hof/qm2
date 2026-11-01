@@ -938,11 +938,12 @@ class lichess_game:
         latest = self.state or state
         received_at = self.state_received_at if self.state_received_at is not None else started
         their_side = "b" if self.color == chess.WHITE else "w"
+        ours_left = max(0, latest[f"{ours}time"] / 1000 - (time.monotonic() - received_at))
+        theirs_left = latest.get(f"{their_side}time", 0) / 1000
         evidence = self.loss.decision(
             our_rating=self.player(self.color).get("rating"), their_rating=self.player(not self.color).get("rating"),
             bot=True if self.player(not self.color).get("title") == "BOT" else None, speed=self.full.get("speed"),
-            ours=max(0, latest[f"{ours}time"] / 1000 - (time.monotonic() - received_at)),
-            theirs=latest.get(f"{their_side}time", 0) / 1000,
+            ours=ours_left, theirs=theirs_left,
             increment=latest[f"{their_side}inc"] / 1000 if f"{their_side}inc" in latest else None,
             info=info, board=board) if fresh else None
         if evidence is not None:
@@ -951,7 +952,9 @@ class lichess_game:
             await bot.api.post(self.path("resign"))
             return
         accepting = self.draw_offered and move_choice.accept_draw(board, info, self.draw_score)
-        offering = self.draw_offers.due(info, self.draw_score) and not accepting
+        ahead = move_choice.winning_on_time(ours_left, theirs_left, increment,
+                                            self.player(not self.color).get("title") == "BOT")
+        offering = self.draw_offers.due(info, self.draw_score, ahead) and not accepting
         if accepting:
             # Accept, and move too: a withdrawn offer must not leave our clock running.
             bot.on_line(f"-- game {self.id}: accepting the draw offer")

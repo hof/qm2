@@ -1229,13 +1229,14 @@ class engine_player:
         received_at = self.position_received_at if self.position_received_at is not None else started
         created = self.created or {}
         our_tag = "white" if self.our_color == chess.WHITE else "black"
+        ours_left = max(0, (latest.white_ms if self.our_color else latest.black_ms) / 1000 - (time.monotonic() - received_at))
+        theirs_left = (latest.black_ms if self.our_color else latest.white_ms) / 1000
         evidence = self.loss.decision(
             our_rating=rating_of(created.get(f"{our_tag}_rating", "")),
             their_rating=self.opponent.rating if self.opponent else None,
             bot=True if self.opponent and self.opponent.is_engine else None,
             speed=created.get("type"),
-            ours=max(0, (latest.white_ms if self.our_color else latest.black_ms) / 1000 - (time.monotonic() - received_at)),
-            theirs=(latest.black_ms if self.our_color else latest.white_ms) / 1000,
+            ours=ours_left, theirs=theirs_left,
             increment=latest.increment_seconds, info=info, board=board) if fresh and not self.is_losers else None
         if evidence is not None:
             self.loss.sent = True
@@ -1243,7 +1244,9 @@ class engine_player:
             await self.send("resign")
             return
         accepting = self.draw_offered and move_choice.accept_draw(board, info, self.draw_score)
-        offering = self.draw_offers.due(info, self.draw_score) and not accepting and not self.is_losers
+        ahead = move_choice.winning_on_time(ours_left, theirs_left, latest.increment_seconds,
+                                            bool(self.opponent and self.opponent.is_engine))
+        offering = self.draw_offers.due(info, self.draw_score, ahead) and not accepting and not self.is_losers
         if accepting:
             # Accept, and move too: a withdrawn offer must not leave our clock running.
             self.on_line("-- accepting the draw offer")

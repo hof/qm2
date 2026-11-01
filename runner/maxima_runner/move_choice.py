@@ -13,6 +13,8 @@ draw_categories = ("draw", "cursed-win", "blessed-loss")  # the last two are dra
 engine_draw_value = -10  # the engine's DrawContempt default, in cp from our side
 long_think_percent = 175  # above 150 so the stored search can stand on its own next time
 draw_offer_first, draw_offer_repeat = 4, 11  # our moves at the draw score; Lichess drops repeats within 20 plies
+time_win_lead, time_win_moves = 1.5, 40  # our time over theirs, each with the increments of that many moves
+time_win_bot_increment, time_win_human_increment = 1, 3  # seconds from which the opponent will not flag
 
 
 def opening_abort_position(board, move, info, kind, contempt):
@@ -136,6 +138,15 @@ def accept_draw(board, info, contempt=None):
     return ours <= (engine_draw_value if contempt is None else contempt)
 
 
+def winning_on_time(ours, theirs, increment, bot):
+    """Whether the game may still end on their flag: our clock, in seconds, far enough ahead of theirs, with an
+    increment too small to save them. Bots live on any increment, humans on a few seconds."""
+    if increment >= (time_win_bot_increment if bot else time_win_human_increment):
+        return False
+    extra = time_win_moves * increment
+    return ours + extra > time_win_lead * (theirs + extra)
+
+
 class draw_offers:
     """Courtesy draw offers for one game, due once our searches keep scoring exactly the draw value."""
 
@@ -145,15 +156,15 @@ class draw_offers:
     def reset(self):
         self.streak = self.made = 0
 
-    def due(self, info, contempt=None):
-        """Count our move's search; True when it completes the gap before the next offer."""
+    def due(self, info, contempt=None, holding=False):
+        """Count our move's search; True when it completes the gap before the next offer, which holding delays."""
         score = info.get("score")
         ours = None if score is None or score.is_mate() or not info.get("depth") else score.relative.score()
         if ours != (engine_draw_value if contempt is None else contempt):
             self.reset()
             return False
         self.streak += 1
-        if self.streak < (draw_offer_repeat if self.made else draw_offer_first):
+        if holding or self.streak < (draw_offer_repeat if self.made else draw_offer_first):
             return False
         self.streak = 0
         self.made += 1

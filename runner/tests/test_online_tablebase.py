@@ -56,6 +56,21 @@ class draw_offer_tests(unittest.TestCase):
         self.assertFalse(any([offers.due(info(12), 12) for _ in range(3)] + [offers.due({"source": "book"}, 12)]))
         self.assertFalse(any([offers.due(info(12), 12) for _ in range(3)] + [offers.due(info(13), 12)]))
 
+    def test_a_due_offer_waits_while_we_are_winning_on_time(self):
+        from maxima_runner.move_choice import draw_offers, winning_on_time
+        import chess.engine
+
+        settled = {"score": chess.engine.PovScore(chess.engine.Cp(12), chess.WHITE), "depth": 30}
+        self.assertTrue(winning_on_time(60, 20, 0, False))
+        self.assertTrue(winning_on_time(60, 20, 0, True))
+        self.assertFalse(winning_on_time(60, 50, 0, False))
+        self.assertTrue(winning_on_time(60, 5, 2, False))
+        self.assertFalse(winning_on_time(60, 5, 2, True))
+        self.assertFalse(winning_on_time(60, 5, 3, False))
+        offers = draw_offers()
+        self.assertFalse(any(offers.due(settled, 12, True) for _ in range(6)))
+        self.assertTrue(offers.due(settled, 12, False))
+
     def test_accepts_dead_draws_and_scores_no_better_than_a_draw(self):
         from maxima_runner.move_choice import accept_draw
         import chess.engine

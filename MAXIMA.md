@@ -2221,8 +2221,13 @@ We offer a draw ourselves, as a courtesy, when four of our searches in a row sco
 exactly the draw value (`move_choice.draw_offers`): a score other than that, or a
 move without a search, starts the count over. Refused offers repeat every eleven
 such moves on both servers, because Lichess silently drops a repeat within 20
-plies of our last offer. The offer travels with the move on Lichess and follows it
-on FICS; losers games make none.
+plies of our last offer. While we can still win on time (`move_choice.winning_on_time`:
+our clock above 1.5 times theirs, each with forty increments added, and an increment
+below 1 s against a bot or 3 s against a human, which otherwise keeps them from
+flagging) a due offer waits, and goes out with the first move at the draw score
+after that chance is gone.
+The offer travels with the move on Lichess and follows it on FICS; losers games
+make none.
 
 ## 11. Connectors
 

@@ -404,6 +404,20 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(moves), 1)
         self.assertTrue(moves[0].endswith("?offeringDraw=true"))
 
+    async def test_no_draw_is_offered_while_winning_on_time(self):
+        api = stub_api()
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot.id, bot.session = "maximaengine", stub_session()
+        game = lichess.lichess_game(bot, "g1")
+        full = game_full()
+        game.setup(full)
+        game.draw_score, game.draw_offers.streak = 0, 3
+        await game.on_state(dict(full["state"], btime=5000, binc=0, winc=0))
+        await game.searching
+        moves = [path for path, _ in api.posts if "/move/" in path]
+        self.assertEqual(len(moves), 1)
+        self.assertFalse(moves[0].endswith("?offeringDraw=true"))
+
 
 class flaky_api(stub_api):
     """Fails move calls with the given statuses, then accepts them; on_failure runs after each failed one."""
