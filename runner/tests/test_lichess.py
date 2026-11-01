@@ -405,6 +405,54 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(moves[0].endswith("?offeringDraw=true"))
 
 
+class flaky_api(stub_api):
+    """Fails move calls with the given statuses, then accepts them; on_failure runs after each failed one."""
+
+    def __init__(self, *statuses, on_failure=lambda: None):
+        super().__init__()
+        self.statuses, self.status, self.on_failure = list(statuses), 0, on_failure
+
+    async def post(self, path, data=None):
+        await super().post(path, data)
+        if "/move/" not in path or not self.statuses:
+            return True
+        self.status = self.statuses.pop(0)
+        self.on_failure()
+        return False
+
+
+class move_delivery_tests(unittest.IsolatedAsyncioTestCase):
+    async def play(self, api):
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot.id, bot.session = "maximaengine", stub_session()
+        game = lichess.lichess_game(bot, "g1")
+        full = game_full()
+        game.setup(full)
+        self.game = game
+        with patch.object(lichess, "move_retry_wait", 0):
+            await game.on_state(full["state"])
+            await game.searching
+        return [path for path, _ in api.posts if "/move/" in path]
+
+    async def test_an_unanswered_move_is_sent_again(self):
+        self.assertEqual(len(await self.play(flaky_api(0, 502, 429))), 4)
+
+    async def test_a_refused_move_is_not_sent_again(self):
+        self.assertEqual(len(await self.play(flaky_api(400))), 1)
+
+    async def test_no_resend_once_the_stream_shows_the_move_arrived(self):
+        api = flaky_api(0, 0, on_failure=lambda: self.game.board.push(self.game.board.parse_uci(path_move(api))))
+        self.assertEqual(len(await self.play(api)), 1)
+
+    async def test_no_resend_after_the_game_ended(self):
+        api = flaky_api(0, 0, on_failure=lambda: setattr(self.game, "over", True))
+        self.assertEqual(len(await self.play(api)), 1)
+
+
+def path_move(api):
+    return next(path for path, _ in api.posts if "/move/" in path).split("/move/")[1].split("?")[0]
+
+
 class fake_lichess(http.server.ThreadingHTTPServer):
     daemon_threads = True
 
@@ -663,6 +711,13 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         connections = [dropped(), working()]
         api.connection = lambda: connections.pop(0)
         self.assertEqual(api.exchange("POST", "/api/bot/game/g1/move/e2e4"), (200, b"{}"))
+
+    async def test_an_idle_connection_is_replaced_before_use(self):
+        api = lichess.lichess_api("token", on_line=lambda line: None)
+        first = api.connection()
+        self.assertIs(api.connection(), first)
+        api.local.used -= lichess.connection_idle + 1
+        self.assertIsNot(api.connection(), first)
 
     async def test_startup_waits_out_an_outage_but_not_a_bad_token(self):
         async def run(*statuses):

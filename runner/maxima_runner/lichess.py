@@ -30,6 +30,9 @@ server_url = "https://lichess.org"
 speeds = ("bullet", "blitz", "rapid", "classical")
 speed_rank = {name: rank for rank, name in enumerate(("ultraBullet",) + speeds + ("correspondence",))}
 stream_timeout = 30  # seconds of silence before a stream counts as dead; Lichess sends keepalives every 7 s
+request_timeout = 5  # seconds for an answer to a call
+connection_idle = 20  # seconds before a kept-open connection is replaced: routers drop idle ones silently, and the call then hangs
+move_retry_wait = 1  # seconds between attempts to send a move
 rate_limit_pause = 60  # Lichess asks clients to wait a full minute after HTTP 429
 owner_commands = ("softquit", "softrestart", "resign", "abort", "draw", "challenge", "nochallenge")
 console_commands = ("help", "quit", "team", "tournament", "leave") + owner_commands
@@ -77,10 +80,15 @@ class lichess_api:
         self.local = threading.local()  # each worker thread's connection
 
     def connection(self):
+        now, connection = time.monotonic(), getattr(self.local, "connection", None)
+        if connection is not None and now - self.local.used > connection_idle:
+            connection.close()
+            self.local.connection = None
+        self.local.used = now
         if getattr(self.local, "connection", None) is None:
             url = urllib.parse.urlsplit(self.server)
             kind = http.client.HTTPSConnection if url.scheme == "https" else http.client.HTTPConnection
-            self.local.connection = kind(url.netloc, timeout=10)
+            self.local.connection = kind(url.netloc, timeout=request_timeout)
         return self.local.connection
 
     def exchange(self, method, path, data=None):
@@ -951,9 +959,19 @@ class lichess_game:
         # Recorded before sending: the stream may report the move before the POST returns.
         self.record.on_search(board, move, info)
         self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.draw_score)
-        if not await bot.api.post(self.path(f"move/{move.uci()}" + ("?offeringDraw=true" if offering else ""))):
-            self.abort_position = None
-            return
+        # Keep sending until Lichess answers: a move it never got loses on time, as the stream stays silent on our turn.
+        path = self.path(f"move/{move.uci()}" + ("?offeringDraw=true" if offering else ""))
+        while not await bot.api.post(path):
+            status = bot.api.status
+            if status and status != 429 and status < 500:  # refused, which trying again cannot change
+                self.abort_position = None
+                return
+            await asyncio.sleep(move_retry_wait)
+            if self.over or self.generation is not generation:
+                self.abort_position = None
+                return
+            if self.board.fen() != board.fen():
+                break  # the stream shows that an unanswered attempt arrived
         if offering:
             bot.on_line(f"-- game {self.id}: offering a draw")
         seconds, numbered = time.monotonic() - started, board.variation_san([move])
