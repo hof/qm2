@@ -120,13 +120,15 @@ async def ponder_after_book(session, board, move, limit, opening, position, on_l
         on_line(f"-- no pondering in book: {error or type(error).__name__}")
 
 
-def accept_draw(board, info, contempt=None):
-    """Whether to accept a draw offer, judged on our own choice for board: no mating material, a tablebase
-    draw for us, a search that reached the tablebases and scores exactly zero with seven pieces or fewer, or
+def accept_draw(board, info, contempt=None, ahead=False):
+    """Whether to accept a draw offer, judged on our own choice for board: no mating material, or, unless
+    we can still win on time (ahead), a tablebase draw for us, a search that reached the tablebases and scores exactly zero with seven pieces or fewer, or
     a search that values the position no higher than a draw. The engine scores a draw as its DrawContempt
     (contempt, cp from our side), so the last case never accepts while we are better than that."""
     if board.is_insufficient_material():
         return True
+    if ahead:
+        return False
     if "tablebase" in info:
         return info["tablebase"]["category"] in draw_categories
     score = info.get("score")

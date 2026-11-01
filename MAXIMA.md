@@ -2225,7 +2225,8 @@ plies of our last offer. While we can still win on time (`move_choice.winning_on
 our clock above 1.5 times theirs, each with forty increments added, and an increment
 below 1 s against a bot or 3 s against a human, which otherwise keeps them from
 flagging) a due offer waits, and goes out with the first move at the draw score
-after that chance is gone.
+after that chance is gone. The same chance declines offers made to us, tablebase
+draws included; only a position without mating material is still accepted.
 The offer travels with the move on Lichess and follows it on FICS; losers games
 make none.
 

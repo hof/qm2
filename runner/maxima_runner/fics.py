@@ -1243,9 +1243,9 @@ class engine_player:
             self.on_line(f"-- resigning game {self.game}: {json.dumps(evidence)}")
             await self.send("resign")
             return
-        accepting = self.draw_offered and move_choice.accept_draw(board, info, self.draw_score)
         ahead = move_choice.winning_on_time(ours_left, theirs_left, latest.increment_seconds,
                                             bool(self.opponent and self.opponent.is_engine))
+        accepting = self.draw_offered and move_choice.accept_draw(board, info, self.draw_score, ahead)
         offering = self.draw_offers.due(info, self.draw_score, ahead) and not accepting and not self.is_losers
         if accepting:
             # Accept, and move too: a withdrawn offer must not leave our clock running.

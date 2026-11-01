@@ -87,6 +87,9 @@ class draw_offer_tests(unittest.TestCase):
         self.assertTrue(accept_draw(chess.Board(), {"score": score(10), "depth": 30}, contempt=10))
         self.assertFalse(accept_draw(chess.Board(), {"score": score(11), "depth": 30}, contempt=10))
         self.assertTrue(accept_draw(chess.Board(), {"score": score(-60), "depth": 30}, contempt=-50))
+        self.assertFalse(accept_draw(chess.Board(), {"score": score(10), "depth": 30}, contempt=10, ahead=True))
+        self.assertFalse(accept_draw(rook_ending, {"tablebase": {"category": "draw"}}, ahead=True))
+        self.assertTrue(accept_draw(bishop, {}, ahead=True))
 
 
 class describe_tests(unittest.TestCase):

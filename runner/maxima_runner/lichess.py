@@ -951,9 +951,9 @@ class lichess_game:
             bot.on_line(f"-- resigning game {self.id}: {json.dumps(evidence)}")
             await bot.api.post(self.path("resign"))
             return
-        accepting = self.draw_offered and move_choice.accept_draw(board, info, self.draw_score)
         ahead = move_choice.winning_on_time(ours_left, theirs_left, increment,
                                             self.player(not self.color).get("title") == "BOT")
+        accepting = self.draw_offered and move_choice.accept_draw(board, info, self.draw_score, ahead)
         offering = self.draw_offers.due(info, self.draw_score, ahead) and not accepting
         if accepting:
             # Accept, and move too: a withdrawn offer must not leave our clock running.
