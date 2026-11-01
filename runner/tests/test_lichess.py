@@ -738,6 +738,8 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_reconnects_once_when_the_server_dropped_the_connection(self):
         class dropped:
+            sock = None
+
             def request(self, *_):
                 raise http.client.RemoteDisconnected("gone")
 
