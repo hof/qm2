@@ -2071,8 +2071,9 @@ Compact console move summaries omit this label; ponder time remains in parenthes
 
 `maxima lichess` plays on Lichess through the Bot API as MaximaEngine, sending
 calls on kept-open connections, replaced after 20 idle seconds because a silently
-dropped one hangs the call. A move is sent again until Lichess answers, the stream
-shows it arrived or the game moves on. Everything the console shows also goes,
+dropped one hangs the call. A move waits 2 seconds for an answer (other calls 5)
+and is sent again until Lichess answers, the stream shows it arrived or the game
+moves on; Lichess refuses a repeat of a move it already has. Everything the console shows also goes,
 with the time, to `logs/lichess-<date>.log` in the data directory. It
 accepts challenges, plays them with the Release Maxima build, saves them as
 PGN and learns from them. Rated and casual challenges are both welcome; a clock

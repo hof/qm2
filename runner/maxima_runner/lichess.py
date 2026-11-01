@@ -33,7 +33,8 @@ speed_rank = {name: rank for rank, name in enumerate(("ultraBullet",) + speeds +
 stream_timeout = 30  # seconds of silence before a stream counts as dead; Lichess sends keepalives every 7 s
 request_timeout = 5  # seconds for an answer to a call
 connection_idle = 20  # seconds before a kept-open connection is replaced: routers drop idle ones silently, and the call then hangs
-move_retry_wait = 1  # seconds between attempts to send a move
+move_timeout = 2  # seconds for an answer to a move: on the clock, and sending it again is safe
+move_retry_wait = 0.5  # seconds between attempts to send a move
 final_state_wait = 2  # seconds for the game stream's last move after the event stream reports the end
 rate_limit_pause = 60  # Lichess asks clients to wait a full minute after HTTP 429
 owner_commands = ("softquit", "softrestart", "resign", "abort", "draw", "challenge", "nochallenge")
@@ -104,7 +105,7 @@ class lichess_api:
             self.local.connection = kind(url.netloc, timeout=request_timeout)
         return self.local.connection
 
-    def exchange(self, method, path, data=None):
+    def exchange(self, method, path, data=None, timeout=request_timeout):
         """(status, body) on this thread's connection, reconnecting once when the server dropped it."""
         body = data if isinstance(data, bytes) else (
             urllib.parse.urlencode(data).encode() if data is not None else (b"" if method == "POST" else None))
@@ -113,6 +114,9 @@ class lichess_api:
             headers["Content-Type"] = "application/x-www-form-urlencoded"
         for retry in (True, False):
             connection = self.connection()
+            connection.timeout = timeout
+            if connection.sock is not None:
+                connection.sock.settimeout(timeout)
             try:
                 connection.request(method, path, body, headers)
                 response = connection.getresponse()
@@ -148,13 +152,13 @@ class lichess_api:
             self.on_line(f"-- rate limited by Lichess; waiting {remaining:.0f}s")
             await asyncio.sleep(remaining)
 
-    async def call(self, method, path, data=None):
+    async def call(self, method, path, data=None, timeout=request_timeout):
         """Parsed JSON, or None after logging the failure."""
         await self.wait_for_limit()
 
         self.status = 0
         try:
-            status, body = await asyncio.get_running_loop().run_in_executor(None, self.exchange, method, path, data)
+            status, body = await asyncio.get_running_loop().run_in_executor(None, self.exchange, method, path, data, timeout)
             self.status = status
             if status < 300:
                 return json.loads(body or b"null")
@@ -168,8 +172,8 @@ class lichess_api:
             self.on_line(f"-- Lichess {method} {path}: {error}")
         return None
 
-    async def post(self, path, data=None):
-        return await self.call("POST", path, data) is not None
+    async def post(self, path, data=None, timeout=request_timeout):
+        return await self.call("POST", path, data, timeout) is not None
 
     async def stream(self, path):
         """Each JSON line of an ndjson stream; ends when the server closes it, raises OSError when it fails."""
@@ -980,17 +984,19 @@ class lichess_game:
         self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.draw_score)
         # Keep sending until Lichess answers: a move it never got loses on time, as the stream stays silent on our turn.
         path = self.path(f"move/{move.uci()}" + ("?offeringDraw=true" if offering else ""))
-        while not await bot.api.post(path):
+        while not await bot.api.post(path, timeout=move_timeout):
             status = bot.api.status
-            if status and status != 429 and status < 500:  # refused, which trying again cannot change
-                self.abort_position = None
-                return
-            await asyncio.sleep(move_retry_wait)
+            refused = status and status != 429 and status < 500  # trying again cannot change that
+            if not refused:
+                await asyncio.sleep(move_retry_wait)
             if self.over or self.generation is not generation:
                 self.abort_position = None
                 return
             if self.board.fen() != board.fen():
                 break  # the stream shows that an unanswered attempt arrived
+            if refused:
+                self.abort_position = None
+                return
         if offering:
             bot.on_line(f"-- game {self.id}: offering a draw")
         seconds, numbered = time.monotonic() - started, board.variation_san([move])

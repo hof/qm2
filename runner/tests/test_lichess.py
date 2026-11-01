@@ -5,6 +5,7 @@ import http.server
 import json
 from pathlib import Path
 import queue
+import socket
 import sys
 import tempfile
 import threading
@@ -41,7 +42,7 @@ class stub_api:
     def __init__(self):
         self.posts = []
 
-    async def post(self, path, data=None):
+    async def post(self, path, data=None, timeout=None):
         self.posts.append((path, data))
         return True
 
@@ -158,7 +159,7 @@ class tournament_api(stub_api):
     async def call(self, method, path, data=None):
         return self.info
 
-    async def post(self, path, data=None):
+    async def post(self, path, data=None, timeout=None):
         await super().post(path, data)
         return self.joins or not path.endswith("/join")
 
@@ -451,7 +452,7 @@ class flaky_api(stub_api):
         super().__init__()
         self.statuses, self.status, self.on_failure = list(statuses), 0, on_failure
 
-    async def post(self, path, data=None):
+    async def post(self, path, data=None, timeout=None):
         await super().post(path, data)
         if "/move/" not in path or not self.statuses:
             return True
@@ -490,6 +491,16 @@ class move_delivery_tests(unittest.IsolatedAsyncioTestCase):
 
 def path_move(api):
     return next(path for path, _ in api.posts if "/move/" in path).split("/move/")[1].split("?")[0]
+
+
+class move_timeout_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_silent_server_costs_the_move_timeout_not_the_call_timeout(self):
+        listener = socket.create_server(("127.0.0.1", 0))
+        self.addCleanup(listener.close)
+        api = lichess.lichess_api("token", f"http://127.0.0.1:{listener.getsockname()[1]}", lambda line: None)
+        started = time.monotonic()
+        self.assertFalse(await api.post("/move", timeout=0.1))
+        self.assertLess(time.monotonic() - started, 1)
 
 
 class fake_lichess(http.server.ThreadingHTTPServer):
