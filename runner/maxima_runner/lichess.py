@@ -3,6 +3,7 @@ learning, online tablebase and connectors (MAXIMA.md 10.3)."""
 import asyncio
 from collections import Counter
 from contextlib import asynccontextmanager
+from datetime import datetime
 import http.client
 import json
 from pathlib import Path
@@ -66,6 +67,17 @@ default_settings = {
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
     "challenge_idle": 5, "challenge_window": 300, "challenge_skip": ("leela", "odds"), "min_clock": 90, "max_clock": 60, "teams": [], "tournament": None,
 }
+
+
+def log_line(folder, line):
+    """Keep a console line with its time in one file per day; the session never depends on it."""
+    now = datetime.now()
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / f"lichess-{now:%Y-%m-%d}.log", "a", encoding="utf-8") as log:
+            log.write(f"{now:%H:%M:%S.%f}"[:-3] + " " + re.sub(r"\033\[[\d;]*m", "", line) + "\n")
+    except OSError:
+        pass
 
 
 class lichess_api:
@@ -1280,6 +1292,7 @@ def run(options, parser):
 
     def show(line):
         print(styled(line, "36") if line.startswith("--") else line, flush=True)
+        log_line(data_root() / "logs", line)
 
     # Load before installing event-loop signal handlers so cold rebuilds remain interruptible.
     learner = None

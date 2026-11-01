@@ -419,6 +419,14 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(moves[0].endswith("?offeringDraw=true"))
 
 
+class console_log_tests(unittest.TestCase):
+    def test_lines_are_kept_with_their_time_and_without_colour(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lichess.log_line(Path(directory) / "logs", "\033[92m1. e4\033[0m")
+            log = next((Path(directory) / "logs").glob("lichess-*.log")).read_text()
+        self.assertRegex(log, r"^\d\d:\d\d:\d\d\.\d{3} 1\. e4\n$")
+
+
 class flaky_api(stub_api):
     """Fails move calls with the given statuses, then accepts them; on_failure runs after each failed one."""
 
