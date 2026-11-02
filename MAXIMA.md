@@ -680,6 +680,9 @@ Release checks. When using the local toolchain, prefix these commands with
 - For concurrency changes, check cancellation, repeated searches, race
   conditions, and scaling across worker counts.
 - Use sanitizer builds when investigating memory safety or undefined behavior;
+`python3 runner/tools/uci_stress.py <engine> --seconds 60 --seed 1` drives a real engine with random UCI
+command order and timing, and fails when it stops answering; run it on sanitizer builds with `halt_on_error=1`.
+
   inspect diagnostics as well as test exit status.
 - For documentation-only changes, review the content and diff; a build is not
   necessary.
