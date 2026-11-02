@@ -285,7 +285,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         player = await self.player("play")
         player.followers = ["hermen", "hof"]
         with patch.object(fics, "tell_gap", 0.05):
-            for text in ("e4 book: base (base 100%)", "learned: 3 moves"):
+            for text in ("e4 book: base (base 100%)", "learned: 3 plies"):
                 player.tell_followers(text)
             await asyncio.sleep(0)
             await player.handle("hof is not logged in.")
@@ -325,7 +325,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
             game.end().add_main_variation(chess.Move.from_uci(uci))
         record = {"opponent": "John", "values": [1, 2, 3], "score": 0.0}
         lines = fics.learning_report(game, record, [record, dict(record, score=1.0)])
-        self.assertEqual(lines, ["learned: 3 moves | vs John +1 =0 -1",
+        self.assertEqual(lines, ["learned: 3 plies | vs John +1 =0 -1",
                                  "revenge filed: 1. e4 e5 2. f4"])
 
     def test_compact_search_limits_replies_and_preserves_board(self):

@@ -1810,7 +1810,7 @@ opponent, unlike kibitz) in plain words:
     1...e5 fire book | 35% pick chance | learned: masters +23 =1 -1
     2. f4 revenge vs John | 40% pick chance | learned: vs John +0 =0 -1
     d19 +2.07 36.6s 7...Bd6 8. c4 O-O 9. cxd5 Bxd5 10. Bxd5 (out of book)
-    learned: 24 moves | vs John +2 =0 -1
+    learned: 24 plies | vs John +2 =0 -1
 
 Searched moves show depth, score (`#5` for mate), `TB` when tablebases were hit, the
 time, the speed (`850Knps`, `1.2Mnps`), and the first six plies of the line in numbered SAN, starting with the move played. Book moves name the layer

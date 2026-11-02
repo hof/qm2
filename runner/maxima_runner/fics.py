@@ -586,11 +586,11 @@ def learning_report(game, record, records):
     if record is None:
         return ["not learned: under ten moves or too few searches"]
     opponent = record["opponent"]
-    moves = sum(1 for _ in record["values"])
+    plies = sum(1 for _ in record["values"])
     played = [other["score"] for other in records if other["opponent"].lower() == opponent.lower()
               and other.get("server") == record.get("server")]
     wins, draws, losses = played.count(1.0), played.count(0.5), played.count(0.0)
-    lines = [f"learned: {moves} moves | vs {opponent} +{wins} ={draws} -{losses}"]
+    lines = [f"learned: {plies} plies | vs {opponent} +{wins} ={draws} -{losses}"]
     if record["score"] == 0.0:
         board, line = game.board(), list(game.mainline_moves())[:learning.revenge_plies // 2]
         lines.append(f"revenge filed: {board.variation_san(line)}")
