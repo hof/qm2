@@ -22,7 +22,7 @@ from . import connectors, fics_game, learning, move_choice, online_tablebase, re
 from .cli import styled
 from .learning import draw_contempt
 from .move_choice import describe, search_summary, speed, variation
-from .project import data_root, engine_path, log_levels, log_line, project_root
+from .project import data_root, engine_path, log_line, project_root
 from .uci import open_engine
 
 timeseal_key = b"Timestamp (FICS) v1.0 - programmed by Henrik Gram."
@@ -296,7 +296,7 @@ seek_pattern = re.compile(r"\d{1,3} \d{1,3}(?: [a-z0-9+-]+)*")
 rated_word = re.compile(r"\b(?:r|u|rated|unrated)\b")
 default_settings = {
     "resignation": resignation.validate_settings({}),
-    "shutdown_grace": 15, "pv_plies": 2, "log_level": "high",
+    "shutdown_grace": 15, "pv_plies": 2, "verbose": False,
     "host": "freechess.org", "port": 5000, "handle": "guest", "guest_name": "guest", "engine": None, "options": {},
     "seeks": ["3 0", "3 1", "5 0"], "seeks_at_once": 2, "accept": True, "rematches": 0, "games": None,
     "owner": None, "notes": [], "pgn_dir": None, "learning": True, "variety": 1.0,
@@ -1408,14 +1408,12 @@ def load_settings(path):
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     types["pv_plies"] = int
-    types["log_level"] = str
+    types["verbose"] = bool
     for key, value in loaded.items():
         if key == "shutdown_grace":
             value = online_shutdown.grace_seconds(value)
         if key == "pv_plies" and (type(value) is not int or value < 0):
             raise ValueError("pv_plies must be a nonnegative integer")
-        if key == "log_level" and value not in log_levels:
-            raise ValueError(f"{path}: log_level is {' or '.join(log_levels)}")
         if key == "resignation":
             value = resignation.validate_settings(value)
         if key not in types:
@@ -1563,8 +1561,8 @@ def run(options, parser):
         parser.error("FICS handles have 3 to 17 letters, or use guest")
     if not isinstance(options.guest_name, str) or not valid_handle(options.guest_name):
         parser.error("guest_name must have 3 to 17 letters")
-    configured["log_level"] = options.log_level or configured["log_level"]
-    debug = configured["log_level"] == "debug"
+    configured["verbose"] = options.verbose or configured["verbose"]
+    debug = configured["verbose"]
     transcript = (lambda text: log_line(data_root() / "logs", redact(text), "fics-wire")) if debug else None
     engine_log = (lambda line: log_line(data_root() / "logs", line, "uci-fics")) if debug else None
     if options.debug:

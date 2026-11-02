@@ -2078,7 +2078,7 @@ dropped one hangs the call. A move waits 2 seconds for an answer (other calls 5)
 and is sent again until Lichess answers, the stream shows it arrived or the game
 moves on; Lichess refuses a repeat of a move it already has. Everything the console shows also goes,
 with the time, to `logs/lichess-<date>.log` in the data directory, as FICS does to
-`logs/fics-<date>.log`. `log_level` (`--log-level`) is `high` by default; `debug` adds every
+`logs/fics-<date>.log`. `verbose` (`--verbose`) adds every
 line to and from the engine in `logs/uci-lichess-<date>.log` or `logs/uci-fics-<date>.log`,
 and the FICS wire traffic in `logs/fics-wire-<date>.log`. Logs go after 7 days. It
 accepts challenges, plays them with the Release Maxima build, saves them as

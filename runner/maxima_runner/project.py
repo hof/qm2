@@ -5,7 +5,6 @@ from pathlib import Path
 import re
 
 
-log_levels = ("high", "debug")  # debug adds every engine line and, on FICS, the wire traffic
 log_days = 7  # log files are deleted after this many days
 
 
