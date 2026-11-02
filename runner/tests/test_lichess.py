@@ -745,11 +745,11 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(maker.resting("fast", "blitz"))
         self.assertFalse(maker.resting("fast", "rapid"))
 
-    async def test_silence_blacklists_for_a_week(self):
+    async def test_silence_blacklists_for_two_days(self):
         bot = lichess.lichess_bot(stub_api(), None, lambda line: None, speeds=("blitz",), challenge_idle=30)
         bot.matchmaker.pending = ("c2", "weiawaga", "blitz", 0)
         await bot.matchmaker.tick(bot)
-        self.assertGreater(self.rest_days(bot.matchmaker, ("weiawaga", None)), 6.9)
+        self.assertGreater(self.rest_days(bot.matchmaker, ("weiawaga", None)), 1.9)
 
     async def test_a_limited_bot_waits_as_lichess_says_and_a_refusing_one_a_month(self):
         class api:
