@@ -2136,7 +2136,11 @@ speeds), a random clock of that speed (1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
 10+0, 10+5, 15+10), and a bot within `challenge_window` rating points (default
 300) at that speed, never the last opponent. Lichess is asked only then, at most
 once a minute; an unanswered challenge is cancelled after a minute, and a bot
-that declined or did not answer is left alone at every speed for a day, and bots
+that refused goes on a blacklist kept across restarts in
+`experience/lichess/challenge_blacklist.json`, listing each bot, its expiry and the
+reason: `later` 30 minutes, `nobot` or a bot that refuses all challenges 30 days, no
+answer 7 days, a daily game limit the wait Lichess names, a decline of the clock a day
+at that speed only, anything else a day at every speed, and bots
 with a `challenge_skip` word in their name (default leela and odds, built for humans)
 are never challenged. The fewer games we have against a bot, the likelier it is picked. A bot at
 a Lichess limit, such as its daily games, is left alone at every speed for the

@@ -199,7 +199,7 @@ class tournament_tests(unittest.IsolatedAsyncioTestCase):
         bot.matchmaker.pending = ("c2", "other", "blitz", time.monotonic())
         await bot.matchmaker.tick(bot)
         self.assertEqual(self.paths(bot), ["/api/challenge/c2/cancel"])
-        self.assertEqual(bot.matchmaker.resting, {})
+        self.assertEqual(bot.matchmaker.blacklist, {})
 
     async def test_joins_only_when_no_game_can_overlap_and_again_after_a_game(self):
         bot = self.bot()
@@ -699,13 +699,13 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
     async def test_asks_a_bot_that_wants_casual_games_for_casual_games(self):
         bots = [{"id": "casual", "username": "Casual", "perfs": {"blitz": {"rating": 2900}}}]
         maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None)
-        self.assertTrue(maker.pick(bots, {"blitz": 2900}, "us", 0)[-1])
+        self.assertTrue(maker.pick(bots, {"blitz": 2900}, "us")[-1])
         maker.pending = ("c1", "casual", "blitz", 0)
         maker.declined({"id": "c1", "declineReasonKey": "casual"})
-        self.assertFalse(maker.pick(bots, {"blitz": 2900}, "us", 0)[-1])
+        self.assertFalse(maker.pick(bots, {"blitz": 2900}, "us")[-1])
         maker.pending = ("c2", "casual", "blitz", 0)
         maker.declined({"id": "c2", "declineReasonKey": "casual"})
-        self.assertIsNone(maker.pick(bots, {"blitz": 2900}, "us", time.monotonic()))
+        self.assertIsNone(maker.pick(bots, {"blitz": 2900}, "us"))
 
     async def test_a_game_against_someone_else_cancels_our_open_challenge(self):
         api = stub_api()
@@ -723,38 +723,61 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
     def test_prefers_bots_we_met_less(self):
         maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None)
         bots = [{"id": name, "perfs": {"blitz": {"rating": 2800}}} for name in ("ferrite", "newbot")]
-        picks = [maker.pick(bots, {"blitz": 2800}, "me", 0, {"ferrite": 99})[1] for _ in range(200)]
+        picks = [maker.pick(bots, {"blitz": 2800}, "me", {"ferrite": 99})[1] for _ in range(200)]
         self.assertGreater(picks.count("newbot"), 180)
 
     def test_never_picks_a_bot_with_a_skipped_word_in_its_name(self):
         maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None, skip=("Odds",))
         bots = [{"id": "leelarookodds", "perfs": {"blitz": {"rating": 2800}}}]
-        self.assertIsNone(maker.pick(bots, {"blitz": 2800}, "me", 0))
+        self.assertIsNone(maker.pick(bots, {"blitz": 2800}, "me"))
 
-    async def test_a_decline_or_no_answer_rests_the_bot_at_every_speed(self):
-        api = stub_api()
-        bot = lichess.lichess_bot(api, None, lambda line: None, speeds=("blitz", "rapid"), challenge_idle=30)
-        maker = bot.matchmaker
-        maker.pending = ("c1", "leela", "blitz", 0)
-        maker.declined({"id": "c1", "declineReasonKey": "later"})
-        self.assertEqual(set(maker.resting), {("leela", "blitz"), ("leela", "rapid")})
-        maker.pending = ("c2", "weiawaga", "blitz", 0)
-        await maker.tick(bot)
-        self.assertIn(("weiawaga", "rapid"), maker.resting)
+    def rest_days(self, maker, key):
+        return (maker.blacklist[key][0] - time.time()) / lichess.day
 
-    async def test_leaves_a_limited_bot_alone_at_every_speed_for_the_wait_lichess_names(self):
+    def test_each_decline_sets_its_own_blacklist_time(self):
+        maker = lichess.matchmaker(30, 300, ("blitz", "rapid"), lambda line: None)
+        for number, (name, reason) in enumerate((("soon", "later"), ("never", "noBot"), ("fast", "tooFast"), ("other", "generic"))):
+            maker.pending = (f"c{number}", name, "blitz", 0)
+            maker.declined({"id": f"c{number}", "declineReasonKey": reason})
+        self.assertLess(self.rest_days(maker, ("soon", None)), 0.1)
+        self.assertGreater(self.rest_days(maker, ("never", None)), 29)
+        self.assertLess(self.rest_days(maker, ("other", None)), 1.1)
+        self.assertTrue(maker.resting("fast", "blitz"))
+        self.assertFalse(maker.resting("fast", "rapid"))
+
+    async def test_silence_blacklists_for_a_week(self):
+        bot = lichess.lichess_bot(stub_api(), None, lambda line: None, speeds=("blitz",), challenge_idle=30)
+        bot.matchmaker.pending = ("c2", "weiawaga", "blitz", 0)
+        await bot.matchmaker.tick(bot)
+        self.assertGreater(self.rest_days(bot.matchmaker, ("weiawaga", None)), 6.9)
+
+    async def test_a_limited_bot_waits_as_lichess_says_and_a_refusing_one_a_month(self):
         class api:
-            limit_seconds = 1000
+            limit_seconds, status = 1000, 400
 
             async def call(self, method, path, data=None):
                 return None
 
         bot = lichess.lichess_bot(api(), None, lambda line: None, speeds=("blitz", "rapid"), challenge_idle=30)
-        await bot.matchmaker.challenge(bot, "Odonata", "odonata", "blitz", 180, 0)
-        self.assertIsNone(bot.matchmaker.pending)
-        now = time.monotonic()
-        for speed in ("blitz", "rapid"):
-            self.assertGreater(bot.matchmaker.resting[("odonata", speed)], now + 900)
+        maker = bot.matchmaker
+        await maker.challenge(bot, "Odonata", "odonata", "blitz", 180, 0)
+        self.assertIsNone(maker.pending)
+        self.assertLess(self.rest_days(maker, ("odonata", None)), 0.1)
+        api.limit_seconds = 0
+        await maker.challenge(bot, "Silent", "silent", "blitz", 180, 0)
+        self.assertGreater(self.rest_days(maker, ("silent", None)), 29)
+
+    def test_the_blacklist_survives_a_restart_and_entries_expire(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "blacklist.json"
+            maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None, blacklist_file=path)
+            maker.rest("gone", -1, "later")
+            maker.rest("kept", 1000, "no answer")
+            entries = json.loads(path.read_text())
+            self.assertEqual([(entry["bot"], entry["reason"]) for entry in entries], [("kept", "no answer")])
+            again = lichess.matchmaker(30, 300, ("blitz",), lambda line: None, blacklist_file=path)
+            self.assertTrue(again.resting("kept", "rapid"))
+            self.assertFalse(again.resting("gone", "blitz"))
 
     async def test_reconnects_once_when_the_server_dropped_the_connection(self):
         class dropped:

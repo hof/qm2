@@ -51,7 +51,12 @@ challenge_clocks = {"bullet": ((60, 1), (120, 1)), "blitz": ((180, 0), (180, 2),
                     "rapid": ((600, 0), (600, 5), (900, 10))}
 challenge_shares = {"bullet": 30, "blitz": 50, "rapid": 20}
 challenge_wait = 60  # seconds for an answer before we cancel, and between attempts
-challenge_rest = 24 * 3600  # seconds a bot is left alone for a speed after it declined
+day = 24 * 3600
+challenge_rest = day  # seconds a bot is left alone after a decline without a rest of its own
+no_answer_rest = 7 * day  # silence: it probably cannot handle challenges
+refused_rest = 30 * day  # it does not take challenges, or none from bots
+decline_rests = {"later": 1800, "nobot": refused_rest}  # by Lichess's decline reason, in lower case
+speed_declines = ("toofast", "tooslow", "timecontrol")  # about this clock: other speeds stay open
 login_attempts = 8  # about two minutes of a Lichess outage before we give up at startup
 rematch_delay = 5  # seconds after a game before we offer a bot one rematch
 tournament_gap = 50  # seconds between tournament calls: a request to be paired lasts one minute
@@ -69,6 +74,17 @@ default_settings = {
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
     "challenge_idle": 5, "challenge_window": 300, "challenge_skip": ("leela", "odds"), "min_clock": 90, "max_clock": 60, "teams": [], "tournament": None,
 }
+
+
+def load_blacklist(path):
+    """{(bot id, speed or None for every speed): (epoch until, reason)} from the file, without what expired."""
+    try:
+        entries = json.loads(Path(path).read_text(encoding="utf-8"))
+        loaded = {(entry["bot"], entry.get("speed")): (datetime.fromisoformat(entry["until"]).timestamp(), entry["reason"])
+                  for entry in entries}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
+    return {key: value for key, value in loaded.items() if value[0] > time.time()}
 
 
 def log_line(folder, line):
@@ -156,7 +172,7 @@ class lichess_api:
         """Parsed JSON, or None after logging the failure."""
         await self.wait_for_limit()
 
-        self.status = 0
+        self.status, self.limit_seconds = 0, 0
         try:
             status, body = await asyncio.get_running_loop().run_in_executor(None, self.exchange, method, path, data, timeout)
             self.status = status
@@ -216,9 +232,10 @@ class lichess_api:
 
 class matchmaker:
     """Challenge another online bot after idle minutes: rated unless it asked for casual, a random clock weighted by speed, opponents
-    within window rating points, never the last opponent or a bot that declined or ignored us recently."""
+    within window rating points, never the last opponent or a bot on the blacklist: a file kept across
+    restarts naming each bot, when it comes off and why, as its refusal decides how long we stay away."""
 
-    def __init__(self, idle_minutes, window, speeds, on_line, choose=random, skip=()):
+    def __init__(self, idle_minutes, window, speeds, on_line, choose=random, skip=(), blacklist_file=None):
         self.idle, self.window, self.on_line, self.random = idle_minutes * 60, window, on_line, choose
         self.skip = tuple(word.lower() for word in skip)  # never challenge a bot with one of these in its name
         self.speeds = [speed for speed in challenge_clocks if speed in speeds]
@@ -226,7 +243,8 @@ class matchmaker:
         self.idle_since = self.next_try = time.monotonic()
         self.challenging = False
         self.pending = None  # (challenge id, opponent id, speed, sent)
-        self.resting = {}  # (opponent id, speed) -> monotonic time until which we leave it alone
+        self.blacklist_file = blacklist_file
+        self.blacklist = load_blacklist(blacklist_file) if blacklist_file else {}
         self.casual = set()  # opponent ids that asked for casual games
         self.last_opponent = None
         self.streak = 0  # games in a row against last_opponent
@@ -244,9 +262,8 @@ class matchmaker:
         """Offer a bot one rematch with the same clock after a few seconds, unless the game was a rematch
         already, something else started, or the bot declined recently."""
         await asyncio.sleep(delay)
-        now = time.monotonic()
         if (not self.enabled or self.streak >= 2 or self.pending is not None or bot.game is not None
-                or bot.stopping or bot.in_tournament or bot.accepted[0] or self.resting.get((opponent, speed), 0) > now
+                or bot.stopping or bot.in_tournament or bot.accepted[0] or self.resting(opponent, speed)
                 or bot.games is not None and bot.played >= bot.games):
             return
         await self.challenge(bot, name, opponent, speed, limit, increment, rated, "rematch")
@@ -262,22 +279,48 @@ class matchmaker:
             challenge_id = ((answer or {}).get("challenge") or answer or {}).get("id")
             if answer is None and bot.api.limit_seconds:
                 # Lichess named the wait, such as a bot's daily game limit: it holds at every speed.
-                self.rest(opponent, time.monotonic() + bot.api.limit_seconds)
+                self.rest(opponent, bot.api.limit_seconds, "daily game limit")
+            elif answer is None and bot.api.status == 400:
+                self.rest(opponent, refused_rest, "refuses challenges")
             if challenge_id:
                 self.pending = (challenge_id, opponent, speed, time.monotonic())
                 self.on_line(f"-- {why} {name} ({speed} {limit / 60:g}+{increment}, {'rated' if rated else 'casual'})")
         finally:
             self.challenging = False
 
-    def rest(self, opponent, until):
-        """No more challenges to this bot at any speed until then."""
-        self.resting.update(((opponent, speed), until) for speed in self.speeds)
+    def rest(self, opponent, seconds, reason, speed=None):
+        """Blacklist this bot for the coming seconds, at one speed or at all of them."""
+        until = time.time() + seconds
+        self.blacklist[(opponent, speed)] = (until, reason)
+        self.on_line(f"-- blacklisted {opponent}{f' for {speed}' if speed else ''} "
+                     f"until {datetime.fromtimestamp(until):%Y-%m-%d %H:%M}: {reason}")
+        self.save_blacklist()
+
+    def resting(self, opponent, speed):
+        now = time.time()
+        return any(self.blacklist.get((opponent, key), (0,))[0] > now for key in (None, speed))
+
+    def save_blacklist(self):
+        if not self.blacklist_file:
+            return
+        now = time.time()
+        entries = [{"bot": bot, "speed": speed, "until": datetime.fromtimestamp(until).isoformat(timespec="seconds"), "reason": reason}
+                   for (bot, speed), (until, reason) in sorted(self.blacklist.items(), key=lambda item: item[1][0])
+                   if until > now]
+        path = Path(self.blacklist_file)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text("[\n" + ",\n".join(json.dumps(entry) for entry in entries) + "\n]\n", encoding="utf-8")
+            temporary.replace(path)
+        except OSError as error:
+            self.on_line(f"-- could not save the blacklist: {error}")
 
     def due(self, now):
         return (self.enabled and self.pending is None and now >= self.next_try
                 and now - self.idle_since >= self.idle)
 
-    def pick(self, bots, ratings, own_id, now, met=None):
+    def pick(self, bots, ratings, own_id, met=None):
         """(name, opponent id, speed, limit, increment, rated) for a challenge, or None without a fitting bot.
         met counts our games per opponent id: the fewer, the likelier."""
         speed = self.random.choices(self.speeds, [challenge_shares[name] for name in self.speeds])[0]
@@ -287,7 +330,7 @@ class matchmaker:
         fitting = [bot for bot in bots if bot.get("id") not in (own_id, self.last_opponent)
                    and not bot.get("disabled") and not bot.get("tosViolation")
                    and not any(word in bot.get("id", "") for word in self.skip)
-                   and self.resting.get((bot.get("id"), speed), 0) <= now
+                   and not self.resting(bot.get("id"), speed)
                    and abs(bot.get("perfs", {}).get(speed, {}).get("rating", ours + self.window + 1) - ours)
                    <= self.window]
         if not fitting:
@@ -306,7 +349,7 @@ class matchmaker:
                 await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
             elif now - sent >= challenge_wait:
                 self.pending, self.next_try = None, now + challenge_wait
-                self.rest(opponent, now + challenge_rest)
+                self.rest(opponent, no_answer_rest, "no answer")
                 self.on_line(f"-- no answer from {opponent}; challenge cancelled")
                 await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
             return
@@ -318,7 +361,7 @@ class matchmaker:
         ratings = {speed: perf["rating"] for speed, perf in (account or {}).get("perfs", {}).items()
                    if isinstance(perf, dict) and "rating" in perf}
         met = Counter(record["opponent"].lower() for record in getattr(bot.learner, "records", ()))
-        choice = self.pick(bots, ratings, bot.id, now, met)
+        choice = self.pick(bots, ratings, bot.id, met)
         if choice is None:
             return
         await self.challenge(bot, *choice)
@@ -329,11 +372,13 @@ class matchmaker:
             _, opponent, speed, _ = self.pending
             now = time.monotonic()
             self.pending, self.next_try = None, now + challenge_wait
-            if challenge.get("declineReasonKey") == "casual" and opponent not in self.casual:
+            reason = (challenge.get("declineReasonKey") or "generic").lower()
+            self.on_line(f"-- {opponent} declined: {challenge.get('declineReasonKey') or challenge.get('declineReason')}")
+            if reason == "casual" and opponent not in self.casual:
                 self.casual.add(opponent)
             else:
-                self.rest(opponent, now + challenge_rest)
-            self.on_line(f"-- {opponent} declined: {challenge.get('declineReasonKey') or challenge.get('declineReason')}")
+                self.rest(opponent, decline_rests.get(reason, challenge_rest), reason,
+                          speed if reason in speed_declines else None)
 
 
 class lichess_bot:
@@ -341,7 +386,7 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, challenge_skip=(), min_clock=90, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, challenge_skip=(), blacklist_file=None, min_clock=90, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
@@ -357,7 +402,8 @@ class lichess_bot:
         self.accepted = (None, 0.0)  # a challenge accepted whose game has not started yet
         self.played = 0
         self.stopping = self.restart = False
-        self.matchmaker = matchmaker(challenge_idle, challenge_window, self.speeds, on_line, skip=challenge_skip)
+        self.matchmaker = matchmaker(challenge_idle, challenge_window, self.speeds, on_line, skip=challenge_skip,
+                                     blacklist_file=blacklist_file)
         self.tournament, self.tournament_password = tournament, None
         self.tournament_joined = False
         self.tournament_ends = time.monotonic() + tournament_limit
@@ -1332,7 +1378,8 @@ def run(options, parser):
                           online_tablebase=configured["online_tablebase"],
                           contempt_window=configured["contempt_window"], unknown_contempt=configured["unknown_contempt"],
                           challenge_idle=configured["challenge_idle"] or 0,
-                          challenge_window=configured["challenge_window"], challenge_skip=configured["challenge_skip"], min_clock=configured["min_clock"], max_clock=configured["max_clock"],
+                          challenge_window=configured["challenge_window"], challenge_skip=configured["challenge_skip"],
+                          blacklist_file=data_root() / "experience" / "lichess" / "challenge_blacklist.json", min_clock=configured["min_clock"], max_clock=configured["max_clock"],
                           resignation_settings=configured["resignation"], pv_plies=configured["pv_plies"],
                           teams=configured["teams"] or (), tournament=configured["tournament"],
                           local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))
