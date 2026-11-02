@@ -517,7 +517,10 @@ void search_t::iterative_deepening() {
             pv_to_string().c_str(), result_flag, tablebase_hits);
         store_pv();
         if (timed_search) {
-            bool score_jump = depth >= 6 && ((ABS(score - last_score) > 20) || score > score::WIN);
+            // A swing that keeps the search going: the further from level, the more the score moves anyway.
+            const int score_change = score - last_score;
+            bool score_jump = depth >= 6 && (score_change > 20 + ABS(last_score) / 10
+                || -score_change > 20 + ABS(last_score) / 20 || score > score::WIN);
             int elapsed = game.tm.elapsed();
             bool do_stop = false;
             if (root.move_count <= 1 && elapsed > min_time / 8) {
