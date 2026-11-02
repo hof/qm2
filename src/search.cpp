@@ -504,8 +504,8 @@ void search_t::iterative_deepening() {
     int last_score = -score::INF;
     const int max_time = game.tm.reserved_max();
 
-    // A ponder search earns about one extra ply: the opponent's time pays most of it.
-    const int min_time = game.tm.reserved_min() * (game.ponder ? 2 : 1);
+    // A ponder search gets a quarter more: the opponent's time pays part of it.
+    const int min_time = game.tm.reserved_min() * (game.ponder ? 5 : 4) / 4;
     bool timed_search = game.white_time || game.black_time;
     int iteration_start = 0;
     int depth;
@@ -555,9 +555,9 @@ void search_t::iterative_deepening() {
                 // Easy position, half time control
                 do_stop = true;
                 stop_reason = "easy";
-            } else if (elapsed > min_time && !score_jump && !root.is_complex()) {
+            } else if (elapsed > min_time && !score_jump && (score == draw_score() || !root.is_complex())) {
 
-                // Neutral position, normal time control
+                // Neutral position, normal time control; a drawn score is never complex
                 do_stop = true;
                 stop_reason = "normal";
             } else if (score::mate_in_ply(score) && depth > score::mate_in_ply(score)) {

@@ -49,12 +49,9 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
     tot_min = static_cast<int>(my_time / M_MIN);
     tot_max = static_cast<int>(my_time / M_MAX);
 
-    //adjustment based on opponent's time
+    // Spend less when far behind on the clock; a lead is no reason to spend more.
     const int delta = my_time - opp_time;
-    if (delta > 0 && tot_max < delta && my_inc >= opp_inc && opp_time > 0) {
-        tot_min += delta / 8;
-        tot_max += delta / 4;
-    } else if (delta < 0 && tot_max < -delta && my_inc <= opp_inc && moves_left == 0) {
+    if (delta < 0 && tot_max < -delta && my_inc <= opp_inc && moves_left == 0) {
         const double factor = MAX(0.5, (1.0 * my_time) / (1.0 * opp_time + 1.0));
         tot_min *= factor;
         tot_max *= factor;
