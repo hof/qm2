@@ -41,7 +41,7 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         M_MIN = time_man::M_MIN_LOW_TIME - (time_man::M_MIN_LOW_TIME - time_man::M_MIN) * left;
         M_MAX = time_man::M_MAX_LOW_TIME - (time_man::M_MAX_LOW_TIME - time_man::M_MAX) * left;
     } else {
-        M_MIN = time_man::M_MIN;
+        M_MIN = my_inc > 0 ? time_man::M_MIN_INCREMENT : time_man::M_MIN;
         M_MAX = time_man::M_MAX;
     }
 
@@ -64,7 +64,7 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
     if (my_inc > 0) {
         const int min_inc_bonus = MIN(my_inc, my_time - tot_min);
         const int max_inc_bonus = MIN(my_inc, my_time - tot_max);
-        tot_min += static_cast<int>((int64_t(196) * min_inc_bonus) / 256);
+        tot_min += static_cast<int>((int64_t(9) * min_inc_bonus) / 10);
         tot_max += max_inc_bonus;
     }
 

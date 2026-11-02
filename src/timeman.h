@@ -39,6 +39,7 @@ namespace time_man {
     const int M = 24; //assume game is decided after M moves from now
     const int M_MIN = M*2;
     const int M_MAX = M/4;
+    const int M_MIN_INCREMENT = 32; //the increment pays back, so spend the clock a bit faster
     const int M_MIN_LOW_TIME = M*4;
     const int M_MAX_LOW_TIME = M;
     const int LOW_TIME = 120000; //two minutes, the budget shrinks gradually below this
