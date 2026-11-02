@@ -1372,7 +1372,7 @@ def run(options, parser):
 
     def show(line):
         print(styled(line, "36") if line.startswith("--") else line, flush=True)
-        log_line(data_root() / "logs", line)
+        log_line(data_root() / "logs", "cons " + line)
 
     configured["verbose"] = options.verbose or configured["verbose"]
     engine_log = ((lambda line: log_line(data_root() / "logs", "uci " + line))

@@ -1575,7 +1575,7 @@ def run(options, parser):
     def show(line):
         line = redact(line)
         print(styled(line, "36") if line.startswith("--") else line, flush=True)
-        log_line(data_root() / "logs", line, "fics")
+        log_line(data_root() / "logs", "cons " + line, "fics")
 
     if options.config is not None:
         show(f"-- configuration: {options.config}")
