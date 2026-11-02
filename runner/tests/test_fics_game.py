@@ -290,7 +290,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0)
             await player.handle("hof is not logged in.")
             await player.teller
-        self.assertEqual(player.connection.sent, ["tell hermen e4 book: base (base 100%) | learned: 3 moves"])
+        self.assertEqual(player.connection.sent, ["tell hermen e4 book: base (base 100%) | learned: 3 plies"])
         self.assertEqual(player.followers, ["hermen"])
 
     async def test_remote_control_needs_the_key(self):
