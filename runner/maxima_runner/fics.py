@@ -1563,8 +1563,8 @@ def run(options, parser):
         parser.error("guest_name must have 3 to 17 letters")
     configured["verbose"] = options.verbose or configured["verbose"]
     debug = configured["verbose"]
-    transcript = (lambda text: log_line(data_root() / "logs", redact(text), "fics-wire")) if debug else None
-    engine_log = (lambda line: log_line(data_root() / "logs", line, "uci-fics")) if debug else None
+    transcript = (lambda text: log_line(data_root() / "logs", "wire " + redact(text), "fics")) if debug else None
+    engine_log = (lambda line: log_line(data_root() / "logs", "uci " + line, "fics")) if debug else None
     if options.debug:
         stream = open(options.debug, "a", encoding="utf-8")
 

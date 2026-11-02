@@ -1375,7 +1375,7 @@ def run(options, parser):
         log_line(data_root() / "logs", line)
 
     configured["verbose"] = options.verbose or configured["verbose"]
-    engine_log = ((lambda line: log_line(data_root() / "logs", line, "uci-lichess"))
+    engine_log = ((lambda line: log_line(data_root() / "logs", "uci " + line))
                   if configured["verbose"] else None)
 
     # Load before installing event-loop signal handlers so cold rebuilds remain interruptible.
