@@ -3,6 +3,7 @@ import asyncio
 import http.client
 import http.server
 import json
+import os
 from pathlib import Path
 import queue
 import socket
@@ -443,6 +444,19 @@ class console_log_tests(unittest.TestCase):
             lichess.log_line(Path(directory) / "logs", "\033[92m1. e4\033[0m")
             log = next((Path(directory) / "logs").glob("lichess-*.log")).read_text()
         self.assertRegex(log, r"^\d\d:\d\d:\d\d\.\d{3} 1\. e4\n$")
+
+
+class log_retention_tests(unittest.TestCase):
+    def test_a_new_day_drops_logs_past_their_age_and_keeps_the_rest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            old, recent = folder / "uci-fics-2000-01-01.log", folder / "uci-fics-recent.log"
+            old.write_text("old")
+            recent.write_text("recent")
+            os.utime(old, (0, 0))
+            lichess.log_line(folder, "line")
+            self.assertFalse(old.exists())
+            self.assertTrue(recent.exists())
 
 
 class flaky_api(stub_api):

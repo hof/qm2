@@ -5,6 +5,9 @@ from pathlib import Path
 import re
 
 
+log_days = 14  # log files are deleted after this many days
+
+
 def project_root():
     configured = os.environ.get("MAXIMA_PROJECT_DIR")
     if configured:
@@ -58,7 +61,12 @@ def log_line(folder, line, name="lichess"):
     now = datetime.now()
     try:
         folder.mkdir(parents=True, exist_ok=True)
-        with open(folder / f"{name}-{now:%Y-%m-%d}.log", "a", encoding="utf-8") as log:
+        path = folder / f"{name}-{now:%Y-%m-%d}.log"
+        if not path.exists():  # a new day: drop what is too old to matter, so logs cannot fill the disk
+            for old in folder.glob("*.log"):
+                if now.timestamp() - old.stat().st_mtime > log_days * 86400:
+                    old.unlink()
+        with open(path, "a", encoding="utf-8") as log:
             log.write(f"{now:%H:%M:%S.%f}"[:-3] + " " + re.sub(r"\033\[[\d;]*m", "", line) + "\n")
     except OSError:
         pass
