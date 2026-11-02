@@ -530,7 +530,7 @@ void search_t::iterative_deepening() {
             // A swing that keeps the search going: the further from level, the more the score moves anyway.
             const int score_change = score - last_score;
             bool score_jump = depth >= 6 && (score_change > 20 + ABS(last_score) / 10
-                || -score_change > 20 + ABS(last_score) / 20 || score > score::WIN);
+                || -score_change > 20 + ABS(last_score) / 20);
             int elapsed = game.tm.elapsed();
             bool do_stop = false;
             stop_reason = "none";
