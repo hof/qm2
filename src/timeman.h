@@ -41,7 +41,8 @@ namespace time_man {
     const int M_MAX = M/4;
     const int M_MIN_LOW_TIME = M*4;
     const int M_MAX_LOW_TIME = M;
-    const int LOW_TIME = 60000; //one minute
+    const int LOW_TIME = 120000; //two minutes, the budget shrinks gradually below this
+    const int MIN_SEARCH_TIME = 50; //floor on the budget, never above 1/16 of the clock
 };
 
 class time_manager_t {

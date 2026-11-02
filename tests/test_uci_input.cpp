@@ -107,9 +107,9 @@ int main() {
         limits.white_time = limits.black_time = 1000;
         limits.moves_left = 2;
         limits.init_tm(true);
-        success &= check("configured overhead reduces both clock budgets and saturates at zero",
-            limits.tm.reserved_min() == std::max(0, 250 - overhead)
-            && limits.tm.reserved_max() == std::max(0, 500 - overhead));
+        success &= check("configured overhead reduces both clock budgets down to the search floor",
+            limits.tm.reserved_min() == std::max(50, 250 - overhead)
+            && limits.tm.reserved_max() == std::max(100, 500 - overhead));
         limits.movetime_limit = true;
         limits.max_time_per_move = 300;
         limits.init_tm(true);
@@ -161,9 +161,11 @@ int main() {
         period_timer.set(24000, 24000, 0, 0, 20, 100);
         success &= check("mid-period allocation retains its previous budget",
             period_timer.reserved_min() == 500 && period_timer.reserved_max() == 3900);
-        period_timer.set(24000, 24000, 0, 0, 0, 100);
-        success &= check("sudden-death allocation retains its previous budget",
-            period_timer.reserved_min() == 150 && period_timer.reserved_max() == 900);
+        period_timer.set(120000, 120000, 0, 0, 0, 100);
+        const int budget_above = period_timer.reserved_max();
+        period_timer.set(119000, 119000, 0, 0, 0, 100);
+        success &= check("sudden-death budget has no step at two minutes",
+            period_timer.reserved_max() > budget_above * 9 / 10);
     }
     uci::in("setoption name Ponder value true");
     uci::in("setoption name Ponder value maybe");

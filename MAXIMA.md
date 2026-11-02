@@ -418,10 +418,13 @@ logging; `bestmove` then flushes the log, and a new game resets it after stoppin
 the prior worker. Per-line file opens/flushes are avoided. Timed UCI searches
 start their monotonic budget when `go` enters the command handler, before
 logging, parsing, prior-worker joining, allocation, and search setup.
+Below two minutes without increment the budget shrinks gradually, from clock/48 and a maximum of clock/6 at two minutes
+to clock/96 and clock/24 at an empty clock. Every timed search gets at least 50 ms, or 1/16 of the clock when that is
+less, with twice that as its maximum.
 The UCI `Move Overhead` option reserves 50 ms by default (range 0–5000 ms)
 from each allocated clock budget for interface and transport delays. Adjust it
 in the GUI engine options; for example, `setoption name Move Overhead value 100`.
-Budgets saturate at zero when the reserve exceeds the allocation. Explicit
+The floor holds when the reserve exceeds the allocation. Explicit
 `go movetime` limits retain their requested duration. When UCI supplies
 `movestogo 1`, clock-based searches also cap both budgets to leave 5% of the
 remaining own clock, capped at 1000 ms, or `Move Overhead` if larger. This

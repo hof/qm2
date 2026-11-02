@@ -27,7 +27,7 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         const int move_overhead, const int time_factor) {
 
     //determine M, the guessed amount of moves left
-    int M_MAX, M_MIN;
+    double M_MAX, M_MIN;
     if (my_inc > my_time) {
         M_MAX = 1;
         M_MIN = 1;
@@ -35,16 +35,19 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         M_MIN = 2 * MIN(moves_left, time_man::M_MIN / 2);
         M_MAX = MIN(moves_left, time_man::M_MAX);
     } else if (my_inc == 0 && my_time < time_man::LOW_TIME) {
-        M_MIN = time_man::M_MIN_LOW_TIME;
-        M_MAX = time_man::M_MAX_LOW_TIME;
+
+        // Slide towards the low time divisors as the clock runs down, so no single move changes the budget much.
+        const double left = 1.0 * my_time / time_man::LOW_TIME;
+        M_MIN = time_man::M_MIN_LOW_TIME - (time_man::M_MIN_LOW_TIME - time_man::M_MIN) * left;
+        M_MAX = time_man::M_MAX_LOW_TIME - (time_man::M_MAX_LOW_TIME - time_man::M_MAX) * left;
     } else {
         M_MIN = time_man::M_MIN;
         M_MAX = time_man::M_MAX;
     }
 
     //set the min/max time range based on time left and M
-    tot_min = my_time / M_MIN;
-    tot_max = my_time / M_MAX;
+    tot_min = static_cast<int>(my_time / M_MIN);
+    tot_max = static_cast<int>(my_time / M_MAX);
 
     //adjustment based on opponent's time
     const int delta = my_time - opp_time;
@@ -74,6 +77,11 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
 
     tot_min = MAX(0, tot_min - move_overhead);
     tot_max = MAX(0, tot_max - move_overhead);
+
+    // Always a real search: the overhead must not eat the whole budget of a short clock.
+    const int floor_time = MIN(time_man::MIN_SEARCH_TIME, my_time / 16);
+    tot_min = MAX(tot_min, floor_time);
+    tot_max = MAX(tot_max, floor_time * 2);
     if (moves_left == 1) {
 
         // Reach the next time control without gambling the whole clock on it.
