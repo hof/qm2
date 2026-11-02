@@ -767,6 +767,15 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         await maker.challenge(bot, "Silent", "silent", "blitz", 180, 0)
         self.assertGreater(self.rest_days(maker, ("silent", None)), 29)
 
+    def test_a_bot_that_wants_casual_games_is_remembered_across_restarts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "blacklist.json"
+            maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None, blacklist_file=path)
+            maker.pending = ("c1", "resolutebot", "blitz", 0)
+            maker.declined({"id": "c1", "declineReasonKey": "casual"})
+            again = lichess.matchmaker(30, 300, ("blitz",), lambda line: None, blacklist_file=path)
+            self.assertIn("resolutebot", again.casual)
+
     def test_the_blacklist_survives_a_restart_and_entries_expire(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "blacklist.json"

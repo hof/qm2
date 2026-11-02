@@ -87,6 +87,14 @@ def load_blacklist(path):
     return {key: value for key, value in loaded.items() if value[0] > time.time()}
 
 
+def load_casual(path):
+    """The bot ids in the file that asked for casual games."""
+    try:
+        return set(json.loads(Path(path).read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError):
+        return set()
+
+
 def log_line(folder, line):
     """Keep a console line with its time in one file per day; the session never depends on it."""
     now = datetime.now()
@@ -245,7 +253,9 @@ class matchmaker:
         self.pending = None  # (challenge id, opponent id, speed, sent)
         self.blacklist_file = blacklist_file
         self.blacklist = load_blacklist(blacklist_file) if blacklist_file else {}
-        self.casual = set()  # opponent ids that asked for casual games
+        # Opponent ids that asked for casual games, kept next to the blacklist.
+        self.casual_file = Path(blacklist_file).with_name("challenge_casual.json") if blacklist_file else None
+        self.casual = load_casual(self.casual_file) if self.casual_file else set()
         self.last_opponent = None
         self.streak = 0  # games in a row against last_opponent
 
@@ -299,6 +309,15 @@ class matchmaker:
     def resting(self, opponent, speed):
         now = time.time()
         return any(self.blacklist.get((opponent, key), (0,))[0] > now for key in (None, speed))
+
+    def save_casual(self):
+        if not self.casual_file:
+            return
+        try:
+            self.casual_file.parent.mkdir(parents=True, exist_ok=True)
+            self.casual_file.write_text(json.dumps(sorted(self.casual)) + "\n", encoding="utf-8")
+        except OSError as error:
+            self.on_line(f"-- could not save the casual bots: {error}")
 
     def save_blacklist(self):
         if not self.blacklist_file:
@@ -376,6 +395,7 @@ class matchmaker:
             self.on_line(f"-- {opponent} declined: {challenge.get('declineReasonKey') or challenge.get('declineReason')}")
             if reason == "casual" and opponent not in self.casual:
                 self.casual.add(opponent)
+                self.save_casual()
             else:
                 self.rest(opponent, decline_rests.get(reason, challenge_rest), reason,
                           speed if reason in speed_declines else None)
