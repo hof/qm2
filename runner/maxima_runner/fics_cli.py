@@ -43,6 +43,8 @@ def parser():
     parser.add_argument("--probe-interval", type=float, default=300,
                         help="seconds without traffic either way before a probe (default: 300)")
     parser.add_argument("--debug", metavar="FILE", help="append a wire transcript (password masked)")
+    parser.add_argument("--log-level", choices=("high", "debug"),
+                        help="high logs the console, debug also every engine line (default: high); config: log_level")
     parser.add_argument("--engine", help="UCI engine to play with (default: the Release Maxima build)")
     parser.add_argument("--option", action="append", default=[], metavar="NAME=VALUE",
                         help="UCI option for the engine, repeatable (e.g. Hash=256)")

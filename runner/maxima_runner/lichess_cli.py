@@ -31,6 +31,8 @@ def parser():
                         help="JSON settings (default: first .lichess.json in current, data, or project directory; keys: engine, options, speeds, accept, games, pgn_dir, learning, variety, "
                              "contempt_window, unknown_contempt, layer_profiles, style_books, mood, live_feed, pgn_post, "
                              "online_tablebase, resignation, shutdown_grace, min_clock, max_clock, teams, tournament); flags override it")
+    parser.add_argument("--log-level", choices=("high", "debug"),
+                        help="high logs the console, debug also every engine line (default: high); config: log_level")
     parser.add_argument("--engine", help="UCI engine to play with (default: the Release Maxima build)")
     parser.add_argument("--option", action="append", default=[], metavar="NAME=VALUE",
                         help="UCI option for the engine, repeatable (e.g. Hash=256)")

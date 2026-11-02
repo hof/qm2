@@ -24,7 +24,7 @@ from .cli import styled
 from .fics import book_layers, book_whisper, chess_titles, config_path, console_time, console_learning, console_search, draw_contempt, layer_profiles, \
     learning_report, numbered_move, read_commands, restart_status, style_books
 from .move_choice import describe, search_summary, variation
-from .project import data_root, engine_path, env_value, log_line
+from .project import data_root, engine_path, env_value, log_levels, log_line
 from .uci import open_engine
 
 server_url = "https://lichess.org"
@@ -69,7 +69,7 @@ reasons = {"mate": "checkmate", "resign": "resignation", "stalemate": "stalemate
 terminations = {"outoftime": "time forfeit", "timeout": "abandoned", "noStart": "abandoned", "aborted": "abandoned"}
 default_settings = {
     "resignation": resignation.validate_settings({}),
-    "shutdown_grace": 15, "pv_plies": 2,
+    "shutdown_grace": 15, "pv_plies": 2, "log_level": "high",
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
@@ -1292,11 +1292,14 @@ def load_settings(path):
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     types["pv_plies"] = int
+    types["log_level"] = str
     for key, value in loaded.items():
         if key == "shutdown_grace":
             value = online_shutdown.grace_seconds(value)
         if key == "pv_plies" and (type(value) is not int or value < 0):
             raise ValueError("pv_plies must be a nonnegative integer")
+        if key == "log_level" and value not in log_levels:
+            raise ValueError(f"{path}: log_level is {' or '.join(log_levels)}")
         if key == "resignation":
             value = resignation.validate_settings(value)
         if key not in types:
@@ -1373,6 +1376,10 @@ def run(options, parser):
         print(styled(line, "36") if line.startswith("--") else line, flush=True)
         log_line(data_root() / "logs", line)
 
+    configured["log_level"] = options.log_level or configured["log_level"]
+    engine_log = ((lambda line: log_line(data_root() / "logs", line, "uci-lichess"))
+                  if configured["log_level"] == "debug" else None)
+
     # Load before installing event-loop signal handlers so cold rebuilds remain interruptible.
     learner = None
     if options.config is not None:
@@ -1387,8 +1394,7 @@ def run(options, parser):
     @asynccontextmanager
     async def engine_session():
         # The data directory resolves the engine's relative eval.nnue and book.bin defaults.
-        async with open_engine([str(configured["engine"] or engine_path())], str(data_root()),
-                               log=lambda line: log_line(data_root() / "logs", line, "uci-lichess")) as session:
+        async with open_engine([str(configured["engine"] or engine_path())], str(data_root()), log=engine_log) as session:
             await session.configure(settings)
             yield session
 

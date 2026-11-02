@@ -2077,9 +2077,10 @@ calls on kept-open connections, replaced after 20 idle seconds because a silentl
 dropped one hangs the call. A move waits 2 seconds for an answer (other calls 5)
 and is sent again until Lichess answers, the stream shows it arrived or the game
 moves on; Lichess refuses a repeat of a move it already has. Everything the console shows also goes,
-with the time, to `logs/lichess-<date>.log` in the data directory, and every line to
-and from the engine to `logs/uci-lichess-<date>.log`; FICS keeps the same two logs as
-`logs/fics-<date>.log` and `logs/uci-fics-<date>.log`. Logs go after 14 days. It
+with the time, to `logs/lichess-<date>.log` in the data directory, as FICS does to
+`logs/fics-<date>.log`. `log_level` (`--log-level`) is `high` by default; `debug` adds every
+line to and from the engine in `logs/uci-lichess-<date>.log` or `logs/uci-fics-<date>.log`,
+and the FICS wire traffic in `logs/fics-wire-<date>.log`. Logs go after 7 days. It
 accepts challenges, plays them with the Release Maxima build, saves them as
 PGN and learns from them. Rated and casual challenges are both welcome; a clock
 over `max_clock` minutes per side (default 60, `--max-clock`, counted as limit +
