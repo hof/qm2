@@ -734,6 +734,13 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
     def rest_days(self, maker, key):
         return (maker.blacklist[key][0] - time.time()) / lichess.day
 
+    def test_startup_skips_the_idle_wait_but_a_game_does_not(self):
+        maker = lichess.matchmaker(2, 300, ("blitz",), lambda line: None)
+        self.assertFalse(maker.due(time.monotonic()))
+        self.assertTrue(maker.due(time.monotonic() + lichess.refusal_wait))
+        maker.busy()
+        self.assertFalse(maker.due(time.monotonic() + lichess.refusal_wait))
+
     def test_each_decline_sets_its_own_blacklist_time(self):
         maker = lichess.matchmaker(30, 300, ("blitz", "rapid"), lambda line: None)
         for number, (name, reason) in enumerate((("soon", "later"), ("never", "noBot"), ("fast", "tooFast"), ("other", "generic"))):
