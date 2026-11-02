@@ -129,6 +129,14 @@ class search_lifecycle_tests(unittest.TestCase):
                     engine.send("quit")
                     engine.wait_for_exit()
 
+    def test_a_timed_search_names_the_rule_that_stopped_it(self):
+        with running_engine() as engine:
+            engine.send("position startpos")
+            engine.send("go wtime 2000 btime 2000")
+            engine.wait_for_bestmove()
+            result = next(line for line in engine.transcript if line.startswith("info string search_result "))
+            self.assertRegex(result, r" stop (one_move|half_max|no_time|easy|normal|mate|cap) jump [01] min \d+ max \d+$")
+
     def test_reported_nps_uses_elapsed_milliseconds(self):
         for variant in ("standard", "losers"):
             with self.subTest(variant=variant), running_engine() as engine:

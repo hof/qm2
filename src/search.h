@@ -318,6 +318,8 @@ public:
     int completed_depth;
     int attempted_depth;
     bool interrupted;
+    const char * stop_reason;  // the rule that ended a timed search
+    bool stop_jump;  // a score swing held back the normal stops
     result_source_t result_source;
     int history[BKING + 1][64]; //legacy royal-losers ordering
     std::unique_ptr<quiet_history_t> quiet_history;

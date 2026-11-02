@@ -31,6 +31,7 @@
  * - Upcoming-repetition detection
  */
 
+#include <string_view>
 #include "search.h"
 #include <bit>
 #include <limits>
@@ -267,6 +268,8 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     result_flag = 0;
     result_depth = completed_depth = attempted_depth = 0;
     interrupted = false;
+    stop_reason = "none";
+    stop_jump = false;
     result_source = result_source_t::none;
 
     // Plain data apart from move list pointers, which every node resets before use.
@@ -399,7 +402,10 @@ void search_t::go() {
     uci::out(std::string("info string search_result ") + source
         + " completed_depth " + std::to_string(completed_depth)
         + " attempted_depth " + std::to_string(attempted_depth)
-        + " interrupted " + std::to_string(interrupted));
+        + " interrupted " + std::to_string(interrupted)
+        + " stop " + stop_reason + " jump " + std::to_string(stop_jump)
+        + " min " + std::to_string(game.tm.reserved_min())
+        + " max " + std::to_string(game.tm.reserved_max()));
     uci::send_pv(result_score, result_depth, sel_depth, nodes, game.tm.elapsed(),
         pv_to_string().c_str(), result_flag, tablebase_hits);
 
@@ -501,12 +507,16 @@ void search_t::iterative_deepening() {
     // A ponder search earns about one extra ply: the opponent's time pays most of it.
     const int min_time = game.tm.reserved_min() * (game.ponder ? 2 : 1);
     bool timed_search = game.white_time || game.black_time;
+    int iteration_start = 0;
     int depth;
     for (depth = 1; depth <= game.max_depth; depth++) {
         attempted_depth = depth;
         int score = aspiration(depth, last_score);
         if (abort(true)) {
             interrupted = true;
+            if (std::string_view(stop_reason) == "none") {
+                stop_reason = game.tm.time_is_up() ? "cap" : "external";
+            }
             break;
         }
         completed_depth = result_depth = depth;
@@ -523,31 +533,44 @@ void search_t::iterative_deepening() {
                 || -score_change > 20 + ABS(last_score) / 20 || score > score::WIN);
             int elapsed = game.tm.elapsed();
             bool do_stop = false;
+            stop_reason = "none";
+            stop_jump = score_jump;
             if (root.move_count <= 1 && elapsed > min_time / 8) {
 
                 // One legal move, still search a bit to get a ponder move
                 do_stop = true;
+                stop_reason = "one_move";
             } else if (elapsed > max_time / 2) {
 
                 // Complex position, maximum (emergency) time control
                 do_stop = true;
+                stop_reason = "half_max";
+            } else if (elapsed + (elapsed - iteration_start) * 9 / 5 > max_time) {
+
+                // The next iteration cannot finish within the maximum, even at 1.8x this one
+                do_stop = true;
+                stop_reason = "no_time";
             } else if (elapsed > min_time / 2 && !score_jump && root.is_easy()) {
 
                 // Easy position, half time control
                 do_stop = true;
+                stop_reason = "easy";
             } else if (elapsed > min_time && !score_jump && !root.is_complex()) {
 
                 // Neutral position, normal time control
                 do_stop = true;
+                stop_reason = "normal";
             } else if (score::mate_in_ply(score) && depth > score::mate_in_ply(score)) {
 
                 // Mate in N and search depth > N
                 do_stop = true;
+                stop_reason = "mate";
             }
             if (do_stop && !pondering()) {
                 break;
             }
             ponder_stop = do_stop;
+            iteration_start = elapsed;
         } else if (depth >= 15 && game.target_score && score >= game.target_score &&
                 game.target_move.piece && game.target_move.equals(&stack->best_move)) {
             break;
