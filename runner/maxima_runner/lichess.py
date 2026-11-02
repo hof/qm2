@@ -50,7 +50,8 @@ player_farewells = ("Good game, thanks for playing!", "Thanks for the game!")
 challenge_clocks = {"bullet": ((60, 1), (120, 1)), "blitz": ((180, 0), (180, 2), (300, 0), (300, 3)),
                     "rapid": ((600, 0), (600, 5), (900, 10))}
 challenge_shares = {"bullet": 30, "blitz": 50, "rapid": 20}
-challenge_wait = 60  # seconds for an answer before we cancel, and between attempts
+challenge_wait = 60  # seconds for an answer before we cancel, and before looking again when no bot fits
+refusal_wait = 10  # seconds before the next challenge after a refusal: enough for the rate limits
 day = 24 * 3600
 challenge_rest = day  # seconds a bot is left alone after a decline without a rest of its own
 no_answer_rest = 2 * day  # silence: it may just be busy, or unable to handle challenges
@@ -251,6 +252,8 @@ class matchmaker:
         self.idle_since = self.next_try = time.monotonic()
         self.challenging = False
         self.pending = None  # (challenge id, opponent id, speed, sent)
+        self.sent = None  # (name, opponent id, speed, limit, increment) of our latest challenge
+        self.retry = None  # the same, to send again at once as casual
         self.blacklist_file = blacklist_file
         self.blacklist = load_blacklist(blacklist_file) if blacklist_file else {}
         # Opponent ids that asked for casual games, kept next to the blacklist.
@@ -262,7 +265,7 @@ class matchmaker:
     def busy(self, opponent=None):
         """A game started or ended: the idle time starts again."""
         self.idle_since = time.monotonic()
-        self.pending = None
+        self.pending = self.retry = None
         if opponent:
             opponent = opponent.lower()
             self.streak = self.streak + 1 if opponent == self.last_opponent else 1
@@ -290,10 +293,13 @@ class matchmaker:
             if answer is None and bot.api.limit_seconds:
                 # Lichess named the wait, such as a bot's daily game limit: it holds at every speed.
                 self.rest(opponent, bot.api.limit_seconds, "daily game limit")
+                self.next_try = time.monotonic() + refusal_wait
             elif answer is None and bot.api.status == 400:
                 self.rest(opponent, refused_rest, "refuses challenges")
+                self.next_try = time.monotonic() + refusal_wait
             if challenge_id:
                 self.pending = (challenge_id, opponent, speed, time.monotonic())
+                self.sent = (name, opponent, speed, limit, increment)
                 self.on_line(f"-- {why} {name} ({speed} {limit / 60:g}+{increment}, {'rated' if rated else 'casual'})")
         finally:
             self.challenging = False
@@ -367,12 +373,17 @@ class matchmaker:
                 self.pending = None
                 await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
             elif now - sent >= challenge_wait:
-                self.pending, self.next_try = None, now + challenge_wait
+                self.pending, self.next_try = None, now + refusal_wait
                 self.rest(opponent, no_answer_rest, "no answer")
                 self.on_line(f"-- no answer from {opponent}; challenge cancelled")
                 await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
             return
         if not self.due(now) or bot.game is not None or bot.stopping or bot.in_tournament or bot.accepted[0]:
+            return
+        if self.retry is not None:
+            retry, self.retry = self.retry, None
+            self.next_try = now + challenge_wait
+            await self.challenge(bot, *retry, rated=False)
             return
         self.next_try = now + challenge_wait
         account = await bot.api.call("GET", "/api/account")
@@ -390,12 +401,14 @@ class matchmaker:
         if self.pending is not None and self.pending[0] == challenge.get("id"):
             _, opponent, speed, _ = self.pending
             now = time.monotonic()
-            self.pending, self.next_try = None, now + challenge_wait
+            self.pending, self.next_try = None, now + refusal_wait
             reason = (challenge.get("declineReasonKey") or "generic").lower()
             self.on_line(f"-- {opponent} declined: {challenge.get('declineReasonKey') or challenge.get('declineReason')}")
             if reason == "casual" and opponent not in self.casual:
                 self.casual.add(opponent)
                 self.save_casual()
+                if self.sent is not None and self.sent[1] == opponent:
+                    self.retry = self.sent
             else:
                 self.rest(opponent, decline_rests.get(reason, challenge_rest), reason,
                           speed if reason in speed_declines else None)

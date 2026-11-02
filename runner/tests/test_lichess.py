@@ -767,6 +767,33 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         await maker.challenge(bot, "Silent", "silent", "blitz", 180, 0)
         self.assertGreater(self.rest_days(maker, ("silent", None)), 29)
 
+    async def test_a_casual_decline_is_answered_with_a_casual_challenge_shortly(self):
+        class api(stub_api):
+            status, limit_seconds, calls = 0, 0, []
+
+            async def call(self, method, path, data=None):
+                self.calls.append(data)
+                return {"id": f"c{len(self.calls)}"}
+
+        bot = lichess.lichess_bot(api(), None, lambda line: None, speeds=("blitz",), challenge_idle=30)
+        maker = bot.matchmaker
+        maker.idle_since = 0
+        await maker.challenge(bot, "Casual", "casual", "blitz", 180, 2)
+        maker.declined({"id": "c1", "declineReasonKey": "casual"})
+        await maker.tick(bot)
+        self.assertEqual(api.calls[-1]["rated"], "true")  # not yet
+        maker.next_try = 0
+        await maker.tick(bot)
+        self.assertEqual(api.calls[-1]["rated"], "false")
+        self.assertEqual(api.calls[-1]["clock.limit"], 180)
+        self.assertEqual(maker.pending[0], "c2")
+
+    async def test_a_refusal_moves_on_in_seconds(self):
+        maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None)
+        maker.pending = ("c1", "other", "blitz", 0)
+        maker.declined({"id": "c1", "declineReasonKey": "later"})
+        self.assertLessEqual(maker.next_try - time.monotonic(), lichess.refusal_wait)
+
     def test_a_bot_that_wants_casual_games_is_remembered_across_restarts(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "blacklist.json"

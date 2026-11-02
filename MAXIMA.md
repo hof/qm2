@@ -2134,8 +2134,9 @@ After `challenge_idle` minutes without a game (default 5, `--challenge-idle`;
 game: a speed by share (bullet 30, blitz 50, rapid 20, among the configured
 speeds), a random clock of that speed (1+1, 2+1; 3+0, 3+2, 5+0, 5+3;
 10+0, 10+5, 15+10), and a bot within `challenge_window` rating points (default
-300) at that speed, never the last opponent. Lichess is asked only then, at most
-once a minute; an unanswered challenge is cancelled after a minute, and a bot
+300) at that speed, never the last opponent. Lichess is asked only then. An unanswered challenge
+is cancelled after a minute, the next challenge follows 10 seconds after any refusal, a
+`casual` decline getting a casual challenge at the same clock, and a bot
 that refused goes on a blacklist kept across restarts in
 `experience/lichess/challenge_blacklist.json`, listing each bot, its expiry and the
 reason: `later` 30 minutes, `nobot` or a bot that refuses all challenges 30 days, no
