@@ -27,8 +27,11 @@ class online_protocol(chess.engine.UciProtocol):
         self.on_search_started = None
         self.search_started = None
         self.search_seconds = None
+        self.log = None  # takes every line to and from the engine
 
     def send_line(self, line):
+        if self.log is not None:
+            self.log("> " + line)
         if line.startswith("go ponder"):
             self.ponder_started = time.monotonic()
             self.collecting = False
@@ -52,6 +55,8 @@ class online_protocol(chess.engine.UciProtocol):
             self.on_search_started(line == "ponderhit")
 
     def line_received(self, line):
+        if self.log is not None:
+            self.log("< " + line)
         if line.startswith("bestmove ") and self.collecting and self.search_started is not None:
             self.search_seconds = time.monotonic() - self.search_started
         if line.startswith("info ") and (not self.collecting or self.evidence is not None):
@@ -306,11 +311,12 @@ class engine_session:
 
 
 @asynccontextmanager
-async def open_engine(command, directory, timeout=30):
+async def open_engine(command, directory, timeout=30, log=None):
     transport = protocol = None
     try:
         # Keep the transport before the handshake so every failure can reap it.
         transport, protocol = await online_protocol.popen(command, cwd=directory)
+        protocol.log = log
         await asyncio.wait_for(protocol.initialize(), timeout)
         yield engine_session(protocol, timeout)
     except asyncio.TimeoutError as error:

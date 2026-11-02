@@ -75,6 +75,14 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(played.move.uci(), "a7a6")
             await asyncio.wait(pondering)
 
+    async def test_every_engine_line_reaches_the_log(self):
+        lines = []
+        async with open_engine(self.command, self.directory.name, 2, log=lines.append) as session:
+            await session.search(chess.Board(), chess.engine.Limit(nodes=8))
+        self.assertIn("> uci", lines)
+        self.assertIn("< uciok", lines)
+        self.assertIn("< bestmove e2e4", lines)
+
     async def test_search_leaves_event_loop_responsive(self):
         async with open_engine(self.command, self.directory.name, 2) as engine:
             protocol = engine.protocol

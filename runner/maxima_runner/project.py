@@ -1,6 +1,8 @@
 """Repository-specific paths; generic UCI code does not depend on this module."""
+from datetime import datetime
 import os
 from pathlib import Path
+import re
 
 
 def project_root():
@@ -49,3 +51,14 @@ def engine_path(root=None):
         if path.is_file() and os.access(path, os.X_OK):
             return path
     return root / "build/cpp26/release/src/maxima2"
+
+
+def log_line(folder, line, name="lichess"):
+    """Keep a console line with its time in one file per day; the session never depends on it."""
+    now = datetime.now()
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / f"{name}-{now:%Y-%m-%d}.log", "a", encoding="utf-8") as log:
+            log.write(f"{now:%H:%M:%S.%f}"[:-3] + " " + re.sub(r"\033\[[\d;]*m", "", line) + "\n")
+    except OSError:
+        pass

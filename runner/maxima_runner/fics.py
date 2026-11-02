@@ -22,7 +22,7 @@ from . import connectors, fics_game, learning, move_choice, online_tablebase, re
 from .cli import styled
 from .learning import draw_contempt
 from .move_choice import describe, search_summary, speed, variation
-from .project import data_root, engine_path, project_root
+from .project import data_root, engine_path, log_line, project_root
 from .uci import open_engine
 
 timeseal_key = b"Timestamp (FICS) v1.0 - programmed by Henrik Gram."
@@ -1571,6 +1571,7 @@ def run(options, parser):
     def show(line):
         line = redact(line)
         print(styled(line, "36") if line.startswith("--") else line, flush=True)
+        log_line(data_root() / "logs", line, "fics")
 
     if options.config is not None:
         show(f"-- configuration: {options.config}")
@@ -1596,7 +1597,8 @@ def run(options, parser):
     @asynccontextmanager
     async def engine_session():
         # The data directory resolves the engine's relative eval.nnue and book.bin defaults.
-        async with open_engine([str(options.engine or engine_path())], str(data_root())) as session:
+        async with open_engine([str(options.engine or engine_path())], str(data_root()),
+                               log=lambda line: log_line(data_root() / "logs", line, "uci-fics")) as session:
             await session.configure(settings)
             yield session
 

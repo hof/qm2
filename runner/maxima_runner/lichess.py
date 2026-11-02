@@ -24,7 +24,7 @@ from .cli import styled
 from .fics import book_layers, book_whisper, chess_titles, config_path, console_time, console_learning, console_search, draw_contempt, layer_profiles, \
     learning_report, numbered_move, read_commands, restart_status, style_books
 from .move_choice import describe, search_summary, variation
-from .project import data_root, engine_path, env_value
+from .project import data_root, engine_path, env_value, log_line
 from .uci import open_engine
 
 server_url = "https://lichess.org"
@@ -94,17 +94,6 @@ def load_casual(path):
         return set(json.loads(Path(path).read_text(encoding="utf-8")))
     except (OSError, ValueError, TypeError):
         return set()
-
-
-def log_line(folder, line):
-    """Keep a console line with its time in one file per day; the session never depends on it."""
-    now = datetime.now()
-    try:
-        folder.mkdir(parents=True, exist_ok=True)
-        with open(folder / f"lichess-{now:%Y-%m-%d}.log", "a", encoding="utf-8") as log:
-            log.write(f"{now:%H:%M:%S.%f}"[:-3] + " " + re.sub(r"\033\[[\d;]*m", "", line) + "\n")
-    except OSError:
-        pass
 
 
 class lichess_api:
@@ -1398,7 +1387,8 @@ def run(options, parser):
     @asynccontextmanager
     async def engine_session():
         # The data directory resolves the engine's relative eval.nnue and book.bin defaults.
-        async with open_engine([str(configured["engine"] or engine_path())], str(data_root())) as session:
+        async with open_engine([str(configured["engine"] or engine_path())], str(data_root()),
+                               log=lambda line: log_line(data_root() / "logs", line, "uci-lichess")) as session:
             await session.configure(settings)
             yield session
 
