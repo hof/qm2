@@ -2169,7 +2169,7 @@ a Lichess limit, such as its daily games, is left alone at every speed for the
 wait Lichess names. A bot that asks for casual games gets casual challenges from
 then on, until the runner restarts. Owners
 switch it with `!challenge` and `!nochallenge` in a game's chat. Five seconds
-after a game against a bot it offers that bot one rematch with the same clock and rating mode,
+after a game against a bot it offers that bot one rematch with the same clock and rating mode and the other colour,
 never a second in a row, and not while challenges are switched off.
 
 It accepts standard

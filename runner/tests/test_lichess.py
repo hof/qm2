@@ -969,6 +969,23 @@ class command_line_tests(unittest.TestCase):
 
 
 class rematch_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_rematch_asks_for_the_colour_we_did_not_have(self):
+        bot = lichess.lichess_bot(stub_api(), None, lambda line: None, online_tablebase=False)
+        bot.id = "maximaengine"
+        game = lichess.lichess_game(bot, "g1")
+        full = game_full()
+        full["black"]["title"] = "BOT"
+        game.setup(full)
+        offered = []
+
+        async def rematch(*arguments, **options):
+            offered.append(options.get("color"))
+
+        with patch.object(bot.matchmaker, "rematch", rematch):
+            await game.finish("resign", "white")
+            await asyncio.sleep(0)
+        self.assertEqual(offered, ["black"])
+
     async def test_offers_one_rematch_to_a_bot(self):
         class api:
             calls = []
@@ -982,9 +999,10 @@ class rematch_tests(unittest.IsolatedAsyncioTestCase):
 
         bot = lichess.lichess_bot(api(), None, lambda line: None, challenge_idle=30)
         bot.matchmaker.busy("Ferrite")
-        await bot.matchmaker.rematch(bot, "Ferrite", "ferrite", "blitz", 180, 2, rated=False, delay=0)
+        await bot.matchmaker.rematch(bot, "Ferrite", "ferrite", "blitz", 180, 2, rated=False, delay=0, color="black")
         self.assertEqual(api.calls, ["/api/challenge/Ferrite"])
         self.assertEqual(api.sent[-1]["rated"], "false")  # the same terms as the game
+        self.assertEqual(api.sent[-1]["color"], "black")  # the colour we did not have
         bot.matchmaker.busy("Ferrite")  # the rematch was played
         await bot.matchmaker.rematch(bot, "Ferrite", "ferrite", "blitz", 180, 2, delay=0)
         self.assertEqual(len(api.calls), 1)

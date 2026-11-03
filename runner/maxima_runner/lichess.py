@@ -271,24 +271,26 @@ class matchmaker:
             self.streak = self.streak + 1 if opponent == self.last_opponent else 1
             self.last_opponent = opponent
 
-    async def rematch(self, bot, name, opponent, speed, limit, increment, rated=True, delay=rematch_delay):
-        """Offer a bot one rematch with the same clock after a few seconds, unless the game was a rematch
-        already, something else started, or the bot declined recently."""
+    async def rematch(self, bot, name, opponent, speed, limit, increment, rated=True, delay=rematch_delay,
+                      color="random"):
+        """Offer a bot one rematch with the same clock, and with the colour we did not have, after a few
+        seconds, unless the game was a rematch already, something else started, or the bot declined recently."""
         await asyncio.sleep(delay)
         if (not self.enabled or self.streak >= 2 or self.pending is not None or bot.game is not None
                 or bot.stopping or bot.in_tournament or bot.accepted[0] or self.resting(opponent, speed)
                 or bot.games is not None and bot.played >= bot.games):
             return
-        await self.challenge(bot, name, opponent, speed, limit, increment, rated, "rematch")
+        await self.challenge(bot, name, opponent, speed, limit, increment, rated, "rematch", color)
 
-    async def challenge(self, bot, name, opponent, speed, limit, increment, rated=True, why="challenging"):
+    async def challenge(self, bot, name, opponent, speed, limit, increment, rated=True, why="challenging",
+                        color="random"):
         if bot.stopping or bot.in_tournament:
             return
         self.challenging = True
         try:
             answer = await bot.api.call("POST", f"/api/challenge/{name}", {
                 "rated": "true" if rated else "false", "clock.limit": limit, "clock.increment": increment,
-                "color": "random", "variant": "standard"})
+                "color": color, "variant": "standard"})
             challenge_id = ((answer or {}).get("challenge") or answer or {}).get("id")
             if answer is None and bot.api.limit_seconds:
                 # Lichess named the wait, such as a bot's daily game limit: it holds at every speed.
@@ -1233,7 +1235,8 @@ class lichess_game:
         if status not in ("aborted", "noStart") and them.get("title") == "BOT" and clock and them.get("id"):
             asyncio.ensure_future(bot.matchmaker.rematch(bot, them.get("name") or them["id"], them["id"],
                                                          self.full["speed"], clock["initial"] // 1000,
-                                                         clock["increment"] // 1000, bool(self.full.get("rated"))))
+                                                         clock["increment"] // 1000, bool(self.full.get("rated")),
+                                                         color="black" if self.color == chess.WHITE else "white"))
         if self.task is not None and self.task is not asyncio.current_task():
             self.task.cancel()  # ended by the event stream; the game stream has nothing more to say
 
