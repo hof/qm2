@@ -508,6 +508,7 @@ void search_t::iterative_deepening() {
     const int min_time = game.tm.reserved_min() * (game.ponder ? 5 : 4) / 4;
     bool timed_search = game.white_time || game.black_time;
     int iteration_start = 0;
+    bool drawn = false;  // the last iteration scored the draw value, so the deadline is the minimum
     int depth;
     for (depth = 1; depth <= game.max_depth; depth++) {
         attempted_depth = depth;
@@ -515,7 +516,7 @@ void search_t::iterative_deepening() {
         if (abort(true)) {
             interrupted = true;
             if (std::string_view(stop_reason) == "none") {
-                stop_reason = game.tm.time_is_up() ? "cap" : "external";
+                stop_reason = game.tm.time_is_up() ? (drawn ? "draw" : "cap") : "external";
             }
             break;
         }
@@ -572,6 +573,10 @@ void search_t::iterative_deepening() {
             }
             ponder_stop = do_stop;
             iteration_start = elapsed;
+
+            // A drawn score is settled: the next iteration may run to the minimum, not the maximum.
+            drawn = score == draw_score() && !score_jump && min_time < max_time;
+            game.tm.set_max(drawn ? min_time : max_time);
         } else if (depth >= 15 && game.target_score && score >= game.target_score &&
                 game.target_move.piece && game.target_move.equals(&stack->best_move)) {
             break;
