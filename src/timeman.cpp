@@ -55,10 +55,10 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         tot_max *= factor;
     }
 
-    // M more increments arrive before the game is decided: share clock + M*inc the same way, so the budget
-    // gets inc/2 and the cap 2*inc. The increment never takes a move past half the clock.
+    // A normal move spends what comes back; M more increments before the game is decided give the cap 2*inc.
+    // The increment never takes a move past half the clock.
     if (my_inc > 0) {
-        tot_min += MIN(my_inc / 2, MAX(0, my_time / 2 - tot_min));
+        tot_min += MIN(my_inc, MAX(0, my_time / 2 - tot_min));
         tot_max += MIN(2 * my_inc, MAX(0, my_time / 2 - tot_max));
     }
 
