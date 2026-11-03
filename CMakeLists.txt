@@ -100,6 +100,15 @@ if (GIT_FOUND)
         OUTPUT_VARIABLE GIT_BRANCH
         OUTPUT_STRIP_TRAILING_WHITESPACE)
         message(STATUS "Git branch: ${GIT_BRANCH}")
+
+    # Reconfigure when HEAD moves (commit, checkout, reset), so a rebuild never keeps an old revision.
+    execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --absolute-git-dir
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE GIT_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (EXISTS "${GIT_DIR}/logs/HEAD")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${GIT_DIR}/logs/HEAD")
+    endif()
 else()
     set(REVISION "unknown")
     set(GIT_BRANCH "unknown")
