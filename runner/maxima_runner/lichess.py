@@ -54,7 +54,7 @@ challenge_wait = 60  # seconds for an answer before we cancel, and before lookin
 refusal_wait = 10  # seconds before the next challenge after a refusal: enough for the rate limits
 day = 24 * 3600
 challenge_rest = day  # seconds a bot is left alone after a decline without a rest of its own
-no_answer_rest = 2 * day  # silence: it may just be busy, or unable to handle challenges
+no_answer_rests = (3600, 2 * 3600, 4 * 3600, 8 * 3600)  # silence, again and again: it may just be busy
 refused_rest = 30 * day  # it does not take challenges, or none from bots
 decline_rests = {"later": 1800, "nobot": refused_rest}  # by Lichess's decline reason, in lower case
 speed_declines = ("toofast", "tooslow", "timecontrol")  # about this clock: other speeds stay open
@@ -78,14 +78,21 @@ default_settings = {
 
 
 def load_blacklist(path):
-    """{(bot id, speed or None for every speed): (epoch until, reason)} from the file, without what expired."""
+    """{(bot id, speed or None for every speed): (epoch until, reason, silences)} from the file, without what expired;
+    silences outlive their rest by a day, so the next one rests longer."""
     try:
         entries = json.loads(Path(path).read_text(encoding="utf-8"))
-        loaded = {(entry["bot"], entry.get("speed")): (datetime.fromisoformat(entry["until"]).timestamp(), entry["reason"])
+        loaded = {(entry["bot"], entry.get("speed")): (datetime.fromisoformat(entry["until"]).timestamp(), entry["reason"],
+                                                      int(entry.get("silences", 0)))
                   for entry in entries}
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return {}
-    return {key: value for key, value in loaded.items() if value[0] > time.time()}
+    return {key: value for key, value in loaded.items() if kept(value)}
+
+
+def kept(entry):
+    """A rest still running, or a silence within a day of its end."""
+    return entry[0] + (day if entry[2] else 0) > time.time()
 
 
 def load_casual(path):
@@ -260,6 +267,7 @@ class matchmaker:
         self.told_none = False
         if opponent:
             opponent = opponent.lower()
+            self.answered(opponent)
             self.streak = self.streak + 1 if opponent == self.last_opponent else 1
             self.last_opponent = opponent
 
@@ -296,13 +304,19 @@ class matchmaker:
         finally:
             self.challenging = False
 
-    def rest(self, opponent, seconds, reason, speed=None):
+    def rest(self, opponent, seconds, reason, speed=None, silences=0):
         """Blacklist this bot for the coming seconds, at one speed or at all of them."""
         until = time.time() + seconds
-        self.blacklist[(opponent, speed)] = (until, reason)
+        self.blacklist[(opponent, speed)] = (until, reason, silences)
         self.on_line(f"-- blacklisted {opponent}{f' for {speed}' if speed else ''} "
                      f"until {datetime.fromtimestamp(until):%Y-%m-%d %H:%M}: {reason}")
         self.save_blacklist()
+
+    def answered(self, opponent):
+        """A bot that answers or plays us was not silent: its next silence rests an hour again."""
+        if self.blacklist.get((opponent, None), (0, ""))[1] == "no answer":
+            del self.blacklist[(opponent, None)]
+            self.save_blacklist()
 
     def resting(self, opponent, speed):
         now = time.time()
@@ -320,10 +334,10 @@ class matchmaker:
     def save_blacklist(self):
         if not self.blacklist_file:
             return
-        now = time.time()
-        entries = [{"bot": bot, "speed": speed, "until": datetime.fromtimestamp(until).isoformat(timespec="seconds"), "reason": reason}
-                   for (bot, speed), (until, reason) in sorted(self.blacklist.items(), key=lambda item: item[1][0])
-                   if until > now]
+        entries = [{"bot": bot, "speed": speed, "until": datetime.fromtimestamp(until).isoformat(timespec="seconds"), "reason": reason,
+                    **({"silences": silences} if silences else {})}
+                   for (bot, speed), (until, reason, silences) in sorted(self.blacklist.items(), key=lambda item: item[1][0])
+                   if kept((until, reason, silences))]
         path = Path(self.blacklist_file)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -366,7 +380,9 @@ class matchmaker:
                 await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
             elif now - sent >= challenge_wait:
                 self.pending, self.next_try = None, now + refusal_wait
-                self.rest(opponent, no_answer_rest, "no answer")
+                previous = self.blacklist.get((opponent, None))
+                silences = (previous[2] if previous else 0) + 1
+                self.rest(opponent, no_answer_rests[min(silences, len(no_answer_rests)) - 1], "no answer", silences=silences)
                 self.on_line(f"-- no answer from {opponent}; challenge cancelled")
                 await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
             return
@@ -395,6 +411,7 @@ class matchmaker:
         """Our challenge was declined: leave that bot alone, or ask it for casual games."""
         if self.pending is not None and self.pending[0] == challenge.get("id"):
             _, opponent, speed, _ = self.pending
+            self.answered(opponent)
             now = time.monotonic()
             self.pending, self.next_try = None, now + refusal_wait
             reason = (challenge.get("declineReasonKey") or "generic").lower()

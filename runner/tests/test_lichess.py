@@ -785,11 +785,25 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(maker.resting("fast", "blitz"))
         self.assertFalse(maker.resting("fast", "rapid"))
 
-    async def test_silence_blacklists_for_two_days(self):
+    async def test_each_silence_rests_twice_as_long_up_to_eight_hours(self):
         bot = lichess.lichess_bot(stub_api(), None, lambda line: None, speeds=("blitz",), challenge_idle=30)
-        bot.matchmaker.pending = ("c2", "weiawaga", "blitz", 0)
-        await bot.matchmaker.tick(bot)
-        self.assertGreater(self.rest_days(bot.matchmaker, ("weiawaga", None)), 1.9)
+        hours = []
+        for _ in range(5):
+            bot.matchmaker.pending = ("c2", "weiawaga", "blitz", 0)
+            await bot.matchmaker.tick(bot)
+            hours.append(round(self.rest_days(bot.matchmaker, ("weiawaga", None)) * 24))
+        self.assertEqual(hours, [1, 2, 4, 8, 8])
+
+    async def test_silences_survive_their_rest_and_a_restart_until_the_bot_answers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "blacklist.json"
+            maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None, blacklist_file=path)
+            maker.rest("weiawaga", -60, "no answer", silences=2)
+            again = lichess.matchmaker(30, 300, ("blitz",), lambda line: None, blacklist_file=path)
+            self.assertFalse(again.resting("weiawaga", "blitz"))
+            self.assertEqual(again.blacklist[("weiawaga", None)][2], 2)
+            again.busy("weiawaga")
+            self.assertNotIn(("weiawaga", None), again.blacklist)
 
     async def test_a_limited_bot_waits_as_lichess_says_and_a_refusing_one_a_month(self):
         class api:
