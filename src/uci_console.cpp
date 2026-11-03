@@ -21,6 +21,7 @@
  */
 
 #include "uci_console.h"
+#include "maxima/version.h"
 #include <mutex>
 #include "tablebase.h"
 #include "book.h"

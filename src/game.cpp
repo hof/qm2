@@ -20,6 +20,7 @@
  */
 
 #include "game.h"
+#include "maxima/version.h"
 
 namespace options {
     

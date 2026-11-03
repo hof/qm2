@@ -91,7 +91,6 @@ private:
 };
 #include "uci_console.h"
 #include "timeman.h"
-#include "maxima/version.h"
 
 struct search_result_t {
     move_t move{};
