@@ -420,7 +420,8 @@ start their monotonic budget when `go` enters the command handler, before
 logging, parsing, prior-worker joining, allocation, and search setup.
 The time manager assumes the game is decided M moves from now (UCI `TimeMoves`, default 16, range 4–64):
 without increment the budget is clock/2M with a maximum of clock/(M/2), so clock/32 and clock/8 by default;
-with an increment the budget is clock/2M plus 90% of the increment. Below two minutes without increment the
+with an increment, M more increments are counted in (clock + M × increment shared the same way), so the
+budget gains half the increment and the maximum twice the increment, never past half the clock. Below two minutes without increment the
 budget shrinks gradually, from clock/2M and clock/(M/2) at two minutes to clock/4M and clock/1.5M at an empty clock. Every timed search gets at least 50 ms, or 1/16 of the clock when that is
 less, with twice that as its maximum.
 The UCI `Move Overhead` option reserves 50 ms by default (range 0–5000 ms)
