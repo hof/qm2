@@ -251,11 +251,13 @@ class matchmaker:
         self.casual = load_casual(self.casual_file) if self.casual_file else set()
         self.last_opponent = None
         self.streak = 0  # games in a row against last_opponent
+        self.told_none = False  # said once per idle stretch that no bot fits
 
     def busy(self, opponent=None):
         """A game started or ended: the idle time starts again."""
         self.idle_since = time.monotonic()
         self.pending = self.retry = None
+        self.told_none = False
         if opponent:
             opponent = opponent.lower()
             self.streak = self.streak + 1 if opponent == self.last_opponent else 1
@@ -383,6 +385,9 @@ class matchmaker:
         met = Counter(record["opponent"].lower() for record in getattr(bot.learner, "records", ()))
         choice = self.pick(bots, ratings, bot.id, met)
         if choice is None:
+            if not self.told_none:
+                self.told_none = True
+                self.on_line(f"-- no bot to challenge among {len(bots)} online; looking again each minute")
             return
         await self.challenge(bot, *choice)
 

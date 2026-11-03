@@ -734,6 +734,25 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len([path for path, _ in api.posts if path == "/api/challenge/c1/cancel"]), cancels)
             self.assertIsNone(bot.matchmaker.pending)
 
+    async def test_says_once_per_idle_stretch_that_no_bot_fits(self):
+        class api:
+            async def call(self, method, path, data=None):
+                return {"perfs": {"blitz": {"rating": 2900}}}
+
+            async def stream(self, path):
+                yield {"id": "far", "perfs": {"blitz": {"rating": 1000}}}
+
+        lines = []
+        bot = lichess.lichess_bot(api(), None, lines.append, speeds=("blitz",), challenge_idle=30)
+        bot.id, maker = "maximaengine", bot.matchmaker
+        for _ in range(2):
+            maker.idle_since = maker.next_try = 0
+            await maker.tick(bot)
+        maker.busy()
+        maker.idle_since = maker.next_try = 0
+        await maker.tick(bot)
+        self.assertEqual(len([line for line in lines if line.startswith("-- no bot to challenge")]), 2)
+
     def test_prefers_bots_we_met_less(self):
         maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None)
         bots = [{"id": name, "perfs": {"blitz": {"rating": 2800}}} for name in ("ferrite", "newbot")]
