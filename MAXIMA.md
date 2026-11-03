@@ -1380,7 +1380,8 @@ A move's value is `0.8 × eval + 0.2 × result`; either one alone when the other
 is missing (book tails, unfinished games). When at least three of the four evals
 equal that game's draw contempt (the `DrawContempt` PGN tag, or the ratings in
 older games), the line is drawn: it carries no eval, only the result, and our
-moves into it join the draw layer (below). A game teaches only when it lasted
+moves into it join the draw layer (below). Otherwise an eval at the draw score
+counts as level (0.00): contempt is not a judgement of the position. A game teaches only when it lasted
 10 moves and Maxima searched at least four of its moves: early resignations,
 aborts, disconnects, and book-only wins carry a result but no judgement. In the result part a draw is
 worth `0.5 + 0.45 × DrawContempt/100` (JDrone's draw factor), so draws are

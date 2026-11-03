@@ -127,7 +127,9 @@ def digest(game):
         if mover == our_color and evaluation is not None and depth:
             relative = evaluation.pov(mover)
             centipawns = relative.score(mate_score=2000)
-            evals.append((ply, expected_score(centipawns), centipawns == contempt))
+            drawn_score = centipawns == contempt
+            # The draw score is our contempt, not a judgement of the position: it counts as level.
+            evals.append((ply, expected_score(0 if drawn_score else centipawns), drawn_score))
             if ply < horizon_plies:
                 nodes, nps, seconds = effort(node)
                 analyses.append([key, node.move.uci(), depth, centipawns, int(relative.is_mate()),

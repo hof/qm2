@@ -54,6 +54,12 @@ class digest_tests(unittest.TestCase):
         self.assertEqual(level["draws"], [])
         self.assertIsNotNone(next(value for value in level["values"] if value[1] == "e2e4")[2])
 
+    def test_the_draw_score_counts_as_level_when_judging_a_line(self):
+        record = learning.digest(make_game([48, 5, -15, -8], result="1/2-1/2", opponent_headers={"DrawContempt": "48"}))
+        self.assertEqual(record["draws"], [])
+        self.assertAlmostEqual(next(value for value in record["values"] if value[1] == "e2e4")[2],
+                               learning.expected_score(0), places=3)
+
     def test_expected_score_curve(self):
         self.assertAlmostEqual(learning.expected_score(0), 0.5)
         self.assertAlmostEqual(learning.expected_score(100), 0.64, places=2)
