@@ -28,10 +28,7 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
 
     //determine M, the guessed amount of moves left
     double M_MAX, M_MIN;
-    if (my_inc > my_time) {
-        M_MAX = 1;
-        M_MIN = 1;
-    } else if (moves_left > 0) {
+    if (moves_left > 0) {
         M_MIN = 2 * MIN(moves_left, m);
         M_MAX = MIN(1.0 * moves_left, m / 2.0);
     } else if (my_inc == 0 && my_time < time_man::LOW_TIME) {
