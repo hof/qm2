@@ -159,8 +159,8 @@ int main() {
         success &= check("five-second clock never reserves a fixed second",
             period_timer.reserved_max() == 4750);
         period_timer.set(24000, 24000, 0, 0, 20, 100);
-        success &= check("mid-period allocation retains its previous budget",
-            period_timer.reserved_min() == 500 && period_timer.reserved_max() == 3900);
+        success &= check("mid-period allocation spreads the clock over the assumed moves",
+            period_timer.reserved_min() == 650 && period_timer.reserved_max() == 3900);
         period_timer.set(120000, 120000, 0, 0, 0, 100);
         const int budget_above = period_timer.reserved_max();
         period_timer.set(119000, 119000, 0, 0, 0, 100);

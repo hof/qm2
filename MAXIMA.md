@@ -418,9 +418,10 @@ logging; `bestmove` then flushes the log, and a new game resets it after stoppin
 the prior worker. Per-line file opens/flushes are avoided. Timed UCI searches
 start their monotonic budget when `go` enters the command handler, before
 logging, parsing, prior-worker joining, allocation, and search setup.
-With an increment the budget is clock/32 plus 90% of the increment.
-Below two minutes without increment the budget shrinks gradually, from clock/48 and a maximum of clock/6 at two minutes
-to clock/96 and clock/24 at an empty clock. Every timed search gets at least 50 ms, or 1/16 of the clock when that is
+The time manager assumes the game is decided 16 moves from now, a value set from the clock left in real
+games: without increment the budget is clock/32 with a maximum of clock/6; with an increment the budget is
+clock/32 plus 90% of the increment. Below two minutes without increment the budget shrinks gradually, from
+clock/32 and a maximum of clock/6 at two minutes to clock/64 and clock/24 at an empty clock. Every timed search gets at least 50 ms, or 1/16 of the clock when that is
 less, with twice that as its maximum.
 The UCI `Move Overhead` option reserves 50 ms by default (range 0–5000 ms)
 from each allocated clock budget for interface and transport delays. Adjust it

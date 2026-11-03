@@ -418,7 +418,7 @@ class search_lifecycle_tests(unittest.TestCase):
 
     def test_ponderhit_within_the_budget_keeps_thinking(self):
         with running_engine() as engine:
-            self.assertGreater(self.ponderhit_seconds(engine, "go ponder wtime 120000 btime 120000", 0.1), 0.3)
+            self.assertGreater(self.ponderhit_seconds(engine, "go ponder wtime 60000 btime 60000", 0.1), 0.3)
             engine.send("quit")
             engine.wait_for_exit()
 
