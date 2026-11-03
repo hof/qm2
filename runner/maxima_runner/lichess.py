@@ -396,6 +396,12 @@ class matchmaker:
         self.next_try = now + challenge_wait
         account = await bot.api.call("GET", "/api/account")
         bots = [line async for line in bot.api.stream("/api/bot/online?nb=100")]
+        # A bot in a game rarely answers: leave it for the next tick instead of resting it as silent.
+        ids = ",".join(entry["id"] for entry in bots if isinstance(entry, dict) and "id" in entry)
+        status = await bot.api.call("GET", f"/api/users/status?ids={ids}") if ids else None
+        playing = {entry.get("id") for entry in status if isinstance(entry, dict) and entry.get("playing")} \
+            if isinstance(status, list) else set()
+        bots = [entry for entry in bots if entry.get("id") not in playing]
         ratings = {speed: perf["rating"] for speed, perf in (account or {}).get("perfs", {}).items()
                    if isinstance(perf, dict) and "rating" in perf}
         met = Counter(record["opponent"].lower() for record in getattr(bot.learner, "records", ()))

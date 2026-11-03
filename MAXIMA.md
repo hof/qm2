@@ -2159,7 +2159,8 @@ that refused goes on a blacklist kept across restarts in
 `experience/lichess/challenge_blacklist.json`, listing each bot, its expiry and the
 reason: `later` 30 minutes, `nobot` or a bot that refuses all challenges 30 days, no
 answer an hour, doubling with each further silence up to 8 hours (the count lasts a
-day past the rest and clears when the bot answers or plays us), a daily game limit the wait Lichess names, a decline of the clock a day
+day past the rest and clears when the bot answers or plays us; a bot Lichess shows in
+a game is not challenged at all that minute), a daily game limit the wait Lichess names, a decline of the clock a day
 at that speed only, anything else a day at every speed; a bot that asks for casual games is asked for those
 from then on, remembered in `challenge_casual.json` beside it, and bots
 with a `challenge_skip` word in their name (default leela and odds, built for humans)

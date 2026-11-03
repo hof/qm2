@@ -753,6 +753,30 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         await maker.tick(bot)
         self.assertEqual(len([line for line in lines if line.startswith("-- no bot to challenge")]), 2)
 
+    async def test_never_challenges_a_bot_in_a_game(self):
+        class api:
+            limit_seconds, status, challenged = 0, 0, []
+
+            async def call(self, method, path, data=None):
+                if path.startswith("/api/users/status"):
+                    return [{"id": "busy", "playing": True}, {"id": "idle"}]
+                if path.startswith("/api/challenge/"):
+                    self.challenged.append(path.rsplit("/", 1)[1])
+                    return {"id": "c1"}
+                return {"perfs": {"blitz": {"rating": 2800}}}
+
+            async def stream(self, path):
+                for name in ("busy", "idle"):
+                    yield {"id": name, "perfs": {"blitz": {"rating": 2800}}}
+
+        bot = lichess.lichess_bot(api(), None, lambda line: None, speeds=("blitz",), challenge_idle=30)
+        bot.id, maker = "maximaengine", bot.matchmaker
+        for _ in range(10):
+            maker.idle_since = maker.next_try = 0
+            maker.pending = maker.last_opponent = None
+            await maker.tick(bot)
+        self.assertEqual(set(api.challenged), {"idle"})
+
     def test_prefers_bots_we_met_less(self):
         maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None)
         bots = [{"id": name, "perfs": {"blitz": {"rating": 2800}}} for name in ("ferrite", "newbot")]
