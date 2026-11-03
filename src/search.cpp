@@ -531,6 +531,7 @@ void search_t::iterative_deepening() {
             const int score_change = score - last_score;
             bool score_jump = depth >= 6 && (score_change > 20 + ABS(last_score) / 10
                 || -score_change > 20 + ABS(last_score) / 20);
+            const bool is_complex = score != draw_score() && score < score::WIN && root.is_complex();
             int elapsed = game.tm.elapsed();
             bool do_stop = false;
             stop_reason = "none";
@@ -555,9 +556,9 @@ void search_t::iterative_deepening() {
                 // Easy position, half time control
                 do_stop = true;
                 stop_reason = "easy";
-            } else if (elapsed > min_time && !score_jump && (score == draw_score() || !root.is_complex())) {
+            } else if (elapsed > min_time && !score_jump && !is_complex) {
 
-                // Neutral position, normal time control; a drawn score is never complex
+                // Neutral position, normal time control; a drawn score or proven win is never complex
                 do_stop = true;
                 stop_reason = "normal";
             } else if (score::mate_in_ply(score) && depth > score::mate_in_ply(score)) {

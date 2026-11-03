@@ -474,7 +474,7 @@ quick guess, so leaving the book starts with a filled hash. Pondering suppresses
 cancellation until `ponderhit`, without restarting the search. Time pondered
 counts: the minimum, maximum and elapsed time all run from `go`, as in a normal
 search, except that a ponder search adds a quarter to the minimum. A score equal to
-the draw value never counts as complex, and a lead on the clock does not raise the budget.
+the draw value or a proven win (mate or tablebase) never counts as complex, and a lead on the clock does not raise the budget.
 Each iteration completed while pondering takes the normal stop decision
 and remembers it, so a hit moves at once when a normal search would have stopped
 by then or the maximum has passed, and keeps thinking otherwise.
