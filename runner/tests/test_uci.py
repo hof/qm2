@@ -188,8 +188,12 @@ class variant_session_tests(unittest.IsolatedAsyncioTestCase):
         board = chess.Board()
         move = chess.Move.from_uci("e2e4")
         clocks = chess.engine.Limit(white_clock=60, black_clock=50, white_inc=2, black_inc=2)
-        opening = Mock(predict=Mock(return_value=chess.Move.from_uci("e7e5")))
+        reply = chess.Move.from_uci("e7e5")
+        opening = Mock(predict=Mock(return_value=reply))
         session = SimpleNamespace(ponder_book=AsyncMock())
+        await move_choice.ponder_after_book(session, board, move, clocks, opening, board.fen, print)
+        session.ponder_book.assert_not_called()  # our answer is in book too
+        opening.predict.side_effect = lambda position: reply if position.turn == chess.BLACK else None
         await move_choice.ponder_after_book(session, board, move, clocks, opening, lambda: None, print)
         session.ponder_book.assert_not_called()
         await move_choice.ponder_after_book(session, board, move, clocks, opening, board.fen, print, game="g1")

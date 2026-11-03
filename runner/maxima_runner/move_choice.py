@@ -113,9 +113,16 @@ async def ponder_after_book(session, board, move, limit, opening, position, on_l
     ponder = chess.engine.Limit(
         white_clock=limit.white_clock + (limit.white_inc or 0), white_inc=limit.white_inc,
         black_clock=limit.black_clock + (limit.black_inc or 0), black_inc=limit.black_inc)
+    if not waiting() or not hasattr(session, "ponder_book"):
+        return
+    reply = opening.predict(after)
+    if reply is not None:
+        ours = after.copy()
+        ours.push(reply)
+        if opening.book_applies(ours) and opening.predict(ours) is not None:
+            return  # our answer to the likeliest reply is a book move too: nothing to think about
     try:
-        if waiting() and hasattr(session, "ponder_book"):
-            await session.ponder_book(after, ponder, waiting, reply=opening.predict(after), **search)
+        await session.ponder_book(after, ponder, waiting, reply=reply, **search)
     except (asyncio.TimeoutError, AssertionError, RuntimeError, OSError, chess.engine.EngineError) as error:
         on_line(f"-- no pondering in book: {error or type(error).__name__}")
 
