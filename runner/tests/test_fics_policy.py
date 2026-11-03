@@ -214,7 +214,10 @@ class settings_tests(unittest.TestCase):
             coroutine.close()
             return 0
 
+        root = tempfile.TemporaryDirectory()
+        self.addCleanup(root.cleanup)
         with patch.object(fics, 'play_policy', side_effect=capture), \
+                patch.object(fics, 'data_root', return_value=Path(root.name)), \
                 patch.object(fics.asyncio, 'run', side_effect=without_connecting), patch('builtins.print'):
             self.assertEqual(fics.run(options, arguments), 0)
         self.assertCountEqual(policies[0].seek_commands(),
