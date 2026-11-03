@@ -38,16 +38,31 @@ def make_game(our_scores, ours="white", result="1-0", opponent_headers=None, pli
 
 
 class digest_tests(unittest.TestCase):
+    def test_an_opponent_blunder_does_not_make_our_line_look_good(self):
+        def value(scores):
+            record = learning.digest(make_game(scores))
+            return next(value for value in record["values"] if value[1] == "e2e4")[2]
+        self.assertAlmostEqual(value([10, 300, 300, 300]), value([10, 10, 10, 10]), places=4)
+        self.assertLess(value([-10, -80, -80, -80]), value([-10, 10, 10, 10]))
+
+    def test_a_line_searched_as_drawn_is_a_draw_not_a_poor_eval(self):
+        contempt = {"DrawContempt": "-30"}
+        drawn = learning.digest(make_game([-30, -20, -30, -30, 50], result="1/2-1/2", opponent_headers=contempt))
+        self.assertIn([start_key, "e2e4"], drawn["draws"])
+        self.assertIsNone(next(value for value in drawn["values"] if value[1] == "e2e4")[2])
+        level = learning.digest(make_game([-30, -20, -20, -30, 50], result="1/2-1/2", opponent_headers=contempt))
+        self.assertEqual(level["draws"], [])
+        self.assertIsNotNone(next(value for value in level["values"] if value[1] == "e2e4")[2])
+
     def test_expected_score_curve(self):
         self.assertAlmostEqual(learning.expected_score(0), 0.5)
         self.assertAlmostEqual(learning.expected_score(100), 0.64, places=2)
         self.assertAlmostEqual(learning.expected_score(-300), 0.15, places=2)
 
-    def test_each_move_gets_the_following_evals_and_the_result_from_its_movers_view(self):
+    def test_each_move_gets_our_next_eval_and_the_result_from_its_movers_view(self):
         record = learning.digest(make_game([0, 100, 100, 100, 100, 300, 300, 300, 300], result="0-1"))
         values = {move: (evaluated, result) for _, move, evaluated, result in record["values"]}
-        mean = (0.5 + 3 * learning.expected_score(100)) / 4
-        self.assertAlmostEqual(values["e2e4"][0], mean, places=3)
+        self.assertAlmostEqual(values["e2e4"][0], learning.expected_score(0), places=3)
         self.assertAlmostEqual(values["e7e5"][0], 1 - learning.expected_score(100), places=3)
         self.assertAlmostEqual(values["g1f3"][0], learning.expected_score(100), places=3)
         self.assertEqual((values["e2e4"][1], values["e7e5"][1]), (0.0, 1.0))
@@ -218,14 +233,20 @@ class selection_tests(unittest.TestCase):
         self.assertEqual(book.comfort("c", chess.Move.from_uci("d2d4")), 1.0)
         self.assertGreater(learning.opening_book([record(100)]).comfort("c", chess.Move.from_uci("g1f3")), 1.0)
 
-    def test_a_drawn_line_is_level_comfort_at_any_contempt(self):
+    def test_a_drawn_line_gives_no_comfort_at_any_contempt(self):
         record = {"color": "white", "variant": "standard", "type": "blitz", "group": "humans", "opponent": "X",
                   "moves": [["a", "e2e4"], ["b", "e7e5"]], "values": [], "score": 0.5, "contempt": -10,
-                  "analyses": [["b", "e7e5", 20, -10]]}
+                  "draws": [["a", "e2e4"]], "analyses": [["b", "e7e5", 20, -10]]}
         self.assertEqual(learning.opening_book([record]).comfort("a", chess.Move.from_uci("e2e4")), 1.0)
         self.assertEqual(learning.game_contempt({"DrawContempt": "22"}, chess.WHITE), 22)
         self.assertEqual(learning.game_contempt({"WhiteElo": "2872", "BlackElo": "2982"}, chess.WHITE), 18)
         self.assertEqual(learning.game_contempt({}, chess.BLACK), -10)  # older games played at the old default
+
+    def test_our_drawn_lines_join_the_draw_layer_against_stronger_opponents_only(self):
+        drawn = dict(record([]), draws=[[start_key, "c2c4"]])
+        c4 = chess.Move.from_uci("c2c4")
+        self.assertIn(c4, self.opening([drawn], contempt=24).distribution(chess.Board(), start_key)[0])
+        self.assertNotIn(c4, self.opening([drawn], contempt=0).distribution(chess.Board(), start_key)[0])
 
     def test_a_draw_against_a_stronger_opponent_is_repeated(self):
         board, key = chess.Board(), "start"

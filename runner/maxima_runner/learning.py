@@ -23,6 +23,7 @@ horizon_plies = 40
 # resignations, aborts, disconnects, and book-only games carry no eval, only a result.
 minimum_plies = 20
 eval_window = 4
+drawn_evals = 3  # of those evals at the draw score: a drawn line, judged as a draw rather than a poor eval
 result_share = 0.2
 # Signature lines: after this many convincing wins in a row against one opponent with a move, it gets
 # this share of the choice there; a win is convincing when our eval after the move stayed this good.
@@ -101,7 +102,8 @@ def digest(game):
     """One game's learning record, or None when it is not one of our games.
 
     Every opening move gets two values from the mover's point of view: Maxima's eval just after it
-    (the mean expected score of our next eval_window searched moves) and the game result."""
+    (the mean expected score of our next eval_window searched moves when most are below level, else the
+    first one) and the game result."""
     headers = game.headers
     if headers.get("LearningIncomplete") == "true":
         return None
@@ -114,6 +116,7 @@ def digest(game):
     variant = board_variant(game.board())
     our_color = ours[0]
     their_prefix = "Black" if our_color == chess.WHITE else "White"
+    contempt = game_contempt(headers, our_color)
     board = game.board()
     moves, evals, analyses = [], [], []
     for ply, node in enumerate(game.mainline()):
@@ -124,7 +127,7 @@ def digest(game):
         if mover == our_color and evaluation is not None and depth:
             relative = evaluation.pov(mover)
             centipawns = relative.score(mate_score=2000)
-            evals.append((ply, expected_score(centipawns)))
+            evals.append((ply, expected_score(centipawns), centipawns == contempt))
             if ply < horizon_plies:
                 nodes, nps, seconds = effort(node)
                 analyses.append([key, node.move.uci(), depth, centipawns, int(relative.is_mate()),
@@ -139,10 +142,17 @@ def digest(game):
         evals, analyses = [], []
     outcome = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(headers.get("Result"))
     score = None if outcome is None else (outcome if our_color == chess.WHITE else 1 - outcome)
-    values = []
+    values, draws = [], []
     for ply, (key, move, our_move) in enumerate(moves[:horizon_plies]):
-        after = [value for at, value in evals if at >= ply][:eval_window]
-        evaluated = round(sum(after) / len(after), 4) if after else None
+        after = [entry for entry in evals if entry[0] >= ply][:eval_window]
+        drawn = sum(entry[2] for entry in after) >= drawn_evals
+        # A line we keep scoring below level is a bad one; otherwise only our first eval counts, so an
+        # opponent's later blunder does not make the line look good.
+        negative = sum(entry[1] < 0.5 for entry in after) >= min(drawn_evals, len(after))
+        evaluated = None if not after or drawn else round(
+            sum(entry[1] for entry in after) / len(after) if negative else after[0][1], 4)
+        if drawn and our_move:
+            draws.append([key, move])
         result = score
         if not our_move:
             evaluated = None if evaluated is None else round(1 - evaluated, 4)
@@ -165,7 +175,7 @@ def digest(game):
         "time_control": headers.get("TimeControl", ""),
         "score": score,
         "moves": [move[:2] for move in moves[:horizon_plies]],
-        "values": values, "analyses": analyses, "contempt": game_contempt(headers, our_color),
+        "values": values, "draws": draws, "analyses": analyses, "contempt": contempt,
     }
 
 
@@ -371,6 +381,7 @@ class opening_book:
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it
         self.comfort_scores = {}  # (key, move) -> [sum, games] of the first eval, halved per book move back
+        self.draws = {}  # key -> {move: games}: our moves into lines we searched as drawn
         opponent = (opponent or "").lower()
         for record in records:
             if learning_variant(record.get("variant", "standard")) != self.variant:
@@ -392,6 +403,9 @@ class opening_book:
             if personal and opponent and record["opponent"].lower() == opponent and record.get("color") in ("white", "black"):
                 self.track_revenge(record)
             self.track_comfort(record)
+            for key, move in record.get("draws", []):
+                drawn = self.draws.setdefault(key, {})
+                drawn[move] = drawn.get(move, 0) + 1
             self.track_analyses(record)
             counted = set()
             for key, move, evaluated, result in record["values"]:
@@ -425,11 +439,11 @@ class opening_book:
         if record.get("color") not in ("white", "black") or not record.get("analyses"):
             return
         position, move, _, centipawns = record["analyses"][0][:4]
-        # A score equal to the draw contempt is a drawn line: level, whatever the rating gap was.
-        centipawns = 0 if centipawns == record.get("contempt") else centipawns
         played = [tuple(entry) for entry in record.get("moves", [])]
         if (position, move) in played:
             line = played[:played.index((position, move))][0 if record["color"] == "white" else 1::2]
+            if line and list(line[-1]) in record.get("draws", []):
+                return  # a drawn line: the draw layer learns it, comfort has nothing to judge
             for distance, entry in enumerate(reversed(line)):
                 total = self.comfort_scores.setdefault(entry, [0.0, 0])
                 total[0] += centipawns / 2 ** distance
@@ -500,6 +514,17 @@ class opening_book:
         and the chance to search instead: book.bin is the know-all base, so where it has no move, its
         percentage goes to the engine rather than to the other layers."""
         books = {name: self.read_book(path, board) for name, path in self.paths.items()}
+        drawn = self.draws.get(key) if self.weights.get("draw") else None
+        if drawn:
+            # Our own drawn lines join the draw book, trusted with their games where it knows the position.
+            games = sum(drawn.values())
+            book = books.get("draw", {})
+            trust = games / (games + self.prior) if book else 1.0
+            mixed = {move: (1 - trust) * share for move, share in book.items()}
+            for move, count in drawn.items():
+                move = chess.Move.from_uci(move)
+                mixed[move] = mixed.get(move, 0) + trust * count / games
+            books["draw"] = mixed
         books = {name: moves for name, moves in books.items() if moves}
         known = set().union(*books.values()) if books else set()
         learned = {chess.Move.from_uci(move) for (position, move) in self.layers[0] if position == key}

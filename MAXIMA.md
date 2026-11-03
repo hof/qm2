@@ -1367,15 +1367,20 @@ result observations.
 truth; an eval can miss something, but not for long. Every opening move (both
 sides, first 40 plies) gets two values from the mover's point of view:
 
-- *eval*: the mean expected score of our next four searched evals from that
-  move on (`1 / (1 + 10^(-cp/400))`: +1.00 ≈ 64%, +3.00 ≈ 85%), so book moves
-  are judged by the position they led to, and an opponent's move that left us
-  at -1.00 counts as a good move for that side;
+- *eval*: the expected score (`1 / (1 + 10^(-cp/400))`: +1.00 ≈ 64%,
+  +3.00 ≈ 85%) of our first searched eval from that move on, or the mean of our
+  next four when at least three are below level, so book moves are judged by the
+  position they led to, a line we keep scoring badly counts as bad, an opponent's
+  later blunder does not make a line look good, and an opponent's move that left
+  us at -1.00 counts as a good move for that side;
 - *result*: the game result (1, ½, 0), time forfeits included, since an
   opening that sets the opponent thinking is a real gain.
 
 A move's value is `0.8 × eval + 0.2 × result`; either one alone when the other
-is missing (book tails, unfinished games). A game teaches only when it lasted
+is missing (book tails, unfinished games). When at least three of the four evals
+equal that game's draw contempt (the `DrawContempt` PGN tag, or the ratings in
+older games), the line is drawn: it carries no eval, only the result, and our
+moves into it join the draw layer (below). A game teaches only when it lasted
 10 moves and Maxima searched at least four of its moves: early resignations,
 aborts, disconnects, and book-only wins carry a result but no judgement. In the result part a draw is
 worth `0.5 + 0.45 × DrawContempt/100` (JDrone's draw factor), so draws are
@@ -1454,9 +1459,8 @@ MaxDrone config). In each position:
    Comfort plays the openings Maxima understands. The first searched eval of a
    game, against anyone, judges the book line before it: our last book move gets
    the whole eval, each earlier one half of the next, so 1.e4 is not blamed for a
-   weird line much later. An eval equal to that game's draw contempt (the
-   `DrawContempt` PGN tag, or the ratings in older games) is a drawn line and
-   counts as 0.00. A move's comfort score is its mean over the games
+   weird line much later. A drawn line (above) gives no comfort score: it is
+   neither good nor bad, and the draw layer learns it. A move's comfort score is its mean over the games
    through it. It multiplies the move in every layer but the mood: ×0.1 at -0.70
    or worse, about ×0.3 at -0.35, ×1 at 0.00, up to ×2 from +1.00.
 5. Signature lines, for psychology: when our move beat this registered opponent
@@ -1489,7 +1493,9 @@ Style books are Polyglot files beside book.bin (`fire.bin`, `draw.bin`,
 `experiment.bin`, not tracked); any Polyglot book works, and `style_books` in
 the MaxDrone config points a style at another file, e.g. `{"style_books":
 {"fire": "ph-gambitbook.bin"}}` (relative to the project root). A missing file
-leaves that style's percentage to the other layers.
+leaves that style's percentage to the other layers. Our own drawn lines join the
+draw layer: where `draw.bin` knows the position they share it by games /
+(games + prior), and elsewhere they make up the layer alone.
 
 No published book aims at safe, drawish positions, so `./maxima
 books:draw` builds `draw.bin` from the Lichess masters explorer. Our
