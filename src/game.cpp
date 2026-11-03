@@ -35,6 +35,7 @@ namespace options {
         { "Wild", STRING, 0, "type combo default standard var standard var losers", true },
         { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100", true },
         { "TimeFactor", INT, 100, "type spin default 100 min 100 max 200" },
+        { "TimeMoves", INT, 16, "type spin default 16 min 4 max 64" },
         { "SyzygyPath", STRING, 0, "type string default <empty>" },
         { "SyzygyProbeLimit", INT, 5, "type spin default 5 min 0 max 5", true },
         { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64", true },
@@ -107,7 +108,8 @@ void game_t::init_tm(bool us, std::chrono::steady_clock::time_point started) {
         tm.set_max(max_time_per_move);
     } else if (clock_limit || white_time || black_time) {
         tm.set(time(us), time(!us), increment(us), increment(!us), moves_left,
-            options::get_value("Move Overhead"), options::get_value("TimeFactor"));
+            options::get_value("Move Overhead"), options::get_value("TimeFactor"),
+            options::get_value("TimeMoves"));
     } else {
         tm.set_min(time_man::INFINITE_TIME);
         tm.set_max(time_man::INFINITE_TIME);

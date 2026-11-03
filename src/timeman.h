@@ -36,12 +36,7 @@ class time_manager_t;
 
 namespace time_man {
     const int INFINITE_TIME = 24 * 60 * 60 * 1000;
-    const int M = 16; //assume game is decided after M moves from now; set from the clock left in real games
-    const int M_MIN = M*2;
-    const int M_MAX = 6; //the cap stays one sixth of the clock, whatever M
-    const int M_MIN_INCREMENT = 32; //the increment pays back, so spend the clock a bit faster
-    const int M_MIN_LOW_TIME = M*4;
-    const int M_MAX_LOW_TIME = 24;
+    const int M = 16; //assume game is decided after M moves from now (UCI TimeMoves); budget clock/2M, cap clock/(M/2)
     const int LOW_TIME = 120000; //two minutes, the budget shrinks gradually below this
     const int MIN_SEARCH_TIME = 50; //floor on the budget, never above 1/16 of the clock
 };
@@ -57,7 +52,7 @@ public:
     time_manager_t();
     void clear();
     void set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left,
-        const int move_overhead = 50, const int time_factor = 100);
+        const int move_overhead = 50, const int time_factor = 100, const int m = time_man::M);
     
     void set_start(std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now()) {
         start = started;

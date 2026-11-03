@@ -160,7 +160,13 @@ int main() {
             period_timer.reserved_max() == 4750);
         period_timer.set(24000, 24000, 0, 0, 20, 100);
         success &= check("mid-period allocation spreads the clock over the assumed moves",
-            period_timer.reserved_min() == 650 && period_timer.reserved_max() == 3900);
+            period_timer.reserved_min() == 650 && period_timer.reserved_max() == 2900);
+        time_manager_t short_game, long_game;
+        short_game.set(300000, 300000, 0, 0, 0, 0, 100, 16);
+        long_game.set(300000, 300000, 0, 0, 0, 0, 100, 32);
+        success &= check("TimeMoves sets the budget to clock/2M and the cap to clock/(M/2)",
+            short_game.reserved_min() == 9375 && short_game.reserved_max() == 37500
+            && long_game.reserved_min() == 4687 && long_game.reserved_max() == 18750);
         period_timer.set(120000, 120000, 0, 0, 0, 100);
         const int budget_above = period_timer.reserved_max();
         period_timer.set(119000, 119000, 0, 0, 0, 100);

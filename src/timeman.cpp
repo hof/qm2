@@ -24,7 +24,7 @@
 #include "timeman.h"
 
 void time_manager_t::set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left,
-        const int move_overhead, const int time_factor) {
+        const int move_overhead, const int time_factor, const int m) {
 
     //determine M, the guessed amount of moves left
     double M_MAX, M_MIN;
@@ -32,17 +32,18 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         M_MAX = 1;
         M_MIN = 1;
     } else if (moves_left > 0) {
-        M_MIN = 2 * MIN(moves_left, time_man::M_MIN / 2);
-        M_MAX = MIN(moves_left, time_man::M_MAX);
+        M_MIN = 2 * MIN(moves_left, m);
+        M_MAX = MIN(1.0 * moves_left, m / 2.0);
     } else if (my_inc == 0 && my_time < time_man::LOW_TIME) {
 
         // Slide towards the low time divisors as the clock runs down, so no single move changes the budget much.
+        // From clock/2M and clock/(M/2) at two minutes to clock/4M and clock/1.5M at an empty clock.
         const double left = 1.0 * my_time / time_man::LOW_TIME;
-        M_MIN = time_man::M_MIN_LOW_TIME - (time_man::M_MIN_LOW_TIME - time_man::M_MIN) * left;
-        M_MAX = time_man::M_MAX_LOW_TIME - (time_man::M_MAX_LOW_TIME - time_man::M_MAX) * left;
+        M_MIN = m * (4 - 2 * left);
+        M_MAX = m * (1.5 - left);
     } else {
-        M_MIN = my_inc > 0 ? time_man::M_MIN_INCREMENT : time_man::M_MIN;
-        M_MAX = time_man::M_MAX;
+        M_MIN = 2 * m;
+        M_MAX = m / 2.0;
     }
 
     //set the min/max time range based on time left and M
