@@ -29,8 +29,11 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
     //determine M, the guessed amount of moves left
     double M_MAX, M_MIN;
     if (moves_left > 0) {
-        M_MIN = 2 * MIN(moves_left, m);
-        M_MAX = MIN(1.0 * moves_left, m / 2.0);
+
+        // As sudden death until then, from M + M/2 moves to go every move gets the same budget, and M/2 budgets
+        // remain at the control; the cap is four budgets, at most the clock shared over the moves to go.
+        M_MIN = MIN(2.0 * m, moves_left + m / 2.0);
+        M_MAX = MIN(1.0 * moves_left, M_MIN / 4);
     } else if (my_inc == 0 && my_time < time_man::LOW_TIME) {
 
         // Slide towards the low time divisors as the clock runs down, so no single move changes the budget much.
@@ -50,10 +53,10 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
     // A clock lead adds a sixteenth to the budget and an eighth to the cap. A deficit takes half as much, at most
     // half of either, so an opponent who plays fast cannot run us out of time.
     const int delta = my_time - opp_time;
-    if (delta > 0 && my_inc >= opp_inc && moves_left == 0) {
+    if (delta > 0 && my_inc >= opp_inc) {
         tot_min += delta / 16;
         tot_max += delta / 8;
-    } else if (delta < 0 && my_inc <= opp_inc && moves_left == 0) {
+    } else if (delta < 0 && my_inc <= opp_inc) {
         tot_min -= MIN(-delta / 32, tot_min / 2);
         tot_max -= MIN(-delta / 16, tot_max / 2);
     }

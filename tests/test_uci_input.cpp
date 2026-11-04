@@ -108,7 +108,7 @@ int main() {
         limits.moves_left = 2;
         limits.init_tm(true);
         success &= check("configured overhead reduces both clock budgets down to the search floor",
-            limits.tm.reserved_min() == std::max(50, 250 - overhead)
+            limits.tm.reserved_min() == std::max(50, 100 - overhead)
             && limits.tm.reserved_max() == std::max(100, 500 - overhead));
         limits.movetime_limit = true;
         limits.max_time_per_move = 300;
@@ -150,8 +150,8 @@ int main() {
         success &= check("reported move-40 clock leaves one second for replenishment",
             period_timer.reserved_max() == 20363);
         period_timer.set(7338, 308343, 0, 0, 1, 100);
-        success &= check("reported move-80 clock retains a proportional reserve",
-            period_timer.reserved_max() == 6972);
+        success &= check("reported move-80 clock, far behind, spends at most half of it",
+            period_timer.reserved_max() == 3569);
         period_timer.set(1000, 1000, 10000, 10000, 1, 100);
         success &= check("last period move cannot spend increment before receiving it",
             period_timer.reserved_max() == 900);
@@ -160,7 +160,16 @@ int main() {
             period_timer.reserved_max() == 4750);
         period_timer.set(24000, 24000, 0, 0, 20, 100);
         success &= check("mid-period allocation spreads the clock over the assumed moves",
-            period_timer.reserved_min() == 650 && period_timer.reserved_max() == 2900);
+            period_timer.reserved_min() == 757 && period_timer.reserved_max() == 3328);
+        int period_clock = 300000, first_flat = 0, last_flat = 0;
+        for (int to_go = 40; to_go > 1; to_go--) {
+            period_timer.set(period_clock, period_clock, 0, 0, to_go, 0);
+            first_flat = to_go == 24 ? period_timer.reserved_min() : first_flat;
+            last_flat = period_timer.reserved_min();
+            period_clock -= last_flat;
+        }
+        success &= check("a 40-move period keeps the budget flat from 24 moves to go",
+            first_flat > 5000 && std::abs(last_flat - first_flat) <= 2);
         time_manager_t short_game, long_game;
         short_game.set(300000, 300000, 0, 0, 0, 0, 100, 16);
         long_game.set(300000, 300000, 0, 0, 0, 0, 100, 32);
