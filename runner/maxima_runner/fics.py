@@ -22,7 +22,7 @@ from . import connectors, fics_game, learning, move_choice, online_tablebase, re
 from .cli import styled
 from .learning import draw_contempt
 from .move_choice import describe, search_summary, speed, variation
-from .project import data_root, engine_path, log_line, project_root
+from .project import data_root, engine_path, env_value, log_line, project_root
 from .uci import open_engine
 
 timeseal_key = b"Timestamp (FICS) v1.0 - programmed by Henrik Gram."
@@ -1594,7 +1594,7 @@ def run(options, parser):
                          owner=configured["owner"], notes=configured["notes"],
                          contempt_window=configured["contempt_window"], unknown_contempt=configured["unknown_contempt"],
                          first_move_wait=configured["first_move_wait"], whisper=configured["whisper"], pv_plies=configured["pv_plies"],
-                         follow_key=os.environ.get("MAXDRONE_KEY") or None,
+                         follow_key=env_value("MAXDRONE_KEY"),
                          reseek_minutes=configured["reseek_minutes"], losers=configured["losers"],
                          losers_seeks=configured["losers_seeks"], losers_seeks_at_once=configured["losers_seeks_at_once"])
     redact = (lambda text: text.replace(policy.follow_key, "********")) if policy.follow_key else (lambda text: text)
