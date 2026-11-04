@@ -510,6 +510,7 @@ void search_t::iterative_deepening() {
     int iteration_start = 0;
     bool drawn = false;  // the last iteration scored the draw value, so the deadline is the minimum
     bool won_on_board = true;  // +8 or more from depth 1 on: the win is on the board, many moves keep it
+    int jump_depth = 0;  // the last iteration whose score jumped; an easy stop needs three calm ones after it
     int depth;
     for (depth = 1; depth <= game.max_depth; depth++) {
         attempted_depth = depth;
@@ -535,6 +536,9 @@ void search_t::iterative_deepening() {
                 || -score_change > 20 + ABS(last_score) / 20);
             const bool is_complex = score != draw_score() && score < score::WIN && root.is_complex();
             won_on_board = won_on_board && score >= 800;
+            if (score_jump) {
+                jump_depth = depth;
+            }
             int elapsed = game.tm.elapsed();
             bool do_stop = false;
             stop_reason = "none";
@@ -554,9 +558,9 @@ void search_t::iterative_deepening() {
                 // The next iteration cannot finish within the maximum, even at 1.8x this one
                 do_stop = true;
                 stop_reason = "no_time";
-            } else if (elapsed > min_time / 2 && !score_jump && ((won_on_board && depth >= 10) || root.is_easy())) {
+            } else if (elapsed > min_time / 2 && depth - jump_depth >= 3 && ((won_on_board && depth >= 10) || root.is_easy())) {
 
-                // Easy position or a win already on the board, half time control
+                // Easy position or a win already on the board, with a settled score: half time control
                 do_stop = true;
                 stop_reason = "easy";
             } else if (elapsed > min_time && !score_jump && !is_complex) {
