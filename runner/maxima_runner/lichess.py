@@ -1134,8 +1134,8 @@ class lichess_game:
     def hunt_flag(self, chance):
         """Play on past quick draws while their flag is a real chance; say so when that starts or ends."""
         if chance != self.flag_hunt:
-            self.bot.on_line(f"-- game {self.id}: " + ("their flag is a chance; playing on past quick draws"
-                                                       if chance else "no flag chance any more"))
+            self.bot.on_line(f"-- game {self.id}: " + ("time-strategy: avoiding quick draws because opponent might lose on time"
+                                                       if chance else "time-strategy: no longer avoiding quick draws"))
         self.flag_hunt = chance
 
     def stats_line(self):

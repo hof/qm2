@@ -1249,8 +1249,8 @@ class engine_player:
         chance = not self.is_losers and move_choice.flag_chance(
             clock, theirs, position.increment_seconds, bool(self.opponent and self.opponent.is_engine), self.pace)
         if chance != self.flag_hunt:
-            self.on_line("-- their flag is a chance; playing on past quick draws" if chance
-                         else "-- no flag chance any more")
+            self.on_line("-- time-strategy: avoiding quick draws because opponent might lose on time" if chance
+                         else "-- time-strategy: no longer avoiding quick draws")
         self.flag_hunt = chance
         try:
             search_options = {"DrawContempt": self.draw_score,

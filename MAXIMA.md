@@ -2281,7 +2281,8 @@ the clock, the move is searched with `ShortDrawOffset` -50: repetitions and othe
 quick draws score below the long ones, at most down to the engine's -10 cp floor,
 so the game goes on while their clock runs. A bot moving in a tenth of a second
 still has fifty moves in five seconds and never qualifies. The console says when
-this starts and ends; losers games never use it.
+this starts (`time-strategy: avoiding quick draws because opponent might lose on time`)
+and ends (`time-strategy: no longer avoiding quick draws`); losers games never use it.
 The offer travels with the move on Lichess and follows it on FICS; losers games
 make none.
 
