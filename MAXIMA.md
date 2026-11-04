@@ -422,7 +422,7 @@ The time manager assumes the game is decided M moves from now (UCI `TimeMoves`, 
 without increment the budget is clock/2M with a maximum of clock/(M/2), so clock/32 and clock/8 by default;
 with an increment the budget gains the whole increment and the maximum twice the increment (M more
 increments shared over M/2 moves), never past half the clock. Below two minutes without increment the
-budget shrinks gradually, from clock/2M and clock/(M/2) at two minutes to clock/4M and clock/1.5M at an empty clock. With more clock than the opponent and at least their increment, the budget gains a sixteenth of the lead and the maximum an eighth; far behind, both shrink to our share of the opponent's clock, at least half. Every timed search gets at least 50 ms, or 1/16 of the clock when that is
+budget shrinks gradually, from clock/2M and clock/(M/2) at two minutes to clock/4M and clock/1.5M at an empty clock. With more clock than the opponent and at least their increment, the budget gains a sixteenth of the lead and the maximum an eighth; behind on the clock with at most their increment, both lose half as much, never more than half. Every timed search gets at least 50 ms, or 1/16 of the clock when that is
 less, with twice that as its maximum.
 The UCI `Move Overhead` option reserves 50 ms by default (range 0–5000 ms)
 from each allocated clock budget for interface and transport delays. Adjust it

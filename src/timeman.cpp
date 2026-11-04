@@ -47,16 +47,15 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
     tot_min = static_cast<int>(my_time / M_MIN);
     tot_max = static_cast<int>(my_time / M_MAX);
 
-    // Spend less when far behind on the clock; when ahead, a sixteenth of the lead more on a normal move
-    // and an eighth more on a critical one.
+    // A clock lead adds a sixteenth to the budget and an eighth to the cap. A deficit takes half as much, at most
+    // half of either, so an opponent who plays fast cannot run us out of time.
     const int delta = my_time - opp_time;
-    if (delta < 0 && tot_max < -delta && my_inc <= opp_inc && moves_left == 0) {
-        const double factor = MAX(0.5, (1.0 * my_time) / (1.0 * opp_time + 1.0));
-        tot_min *= factor;
-        tot_max *= factor;
-    } else if (delta > 0 && my_inc >= opp_inc && moves_left == 0) {
+    if (delta > 0 && my_inc >= opp_inc && moves_left == 0) {
         tot_min += delta / 16;
         tot_max += delta / 8;
+    } else if (delta < 0 && my_inc <= opp_inc && moves_left == 0) {
+        tot_min -= MIN(-delta / 32, tot_min / 2);
+        tot_max -= MIN(-delta / 16, tot_max / 2);
     }
 
     // A normal move spends what comes back; M more increments before the game is decided give the cap 2*inc.
