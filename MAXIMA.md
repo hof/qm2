@@ -115,8 +115,16 @@ evaluation caching are fixed parts of the standard search. They have no UCI
 enable/disable switches. Operational controls include hash size, time overhead,
 pondering, opening book, evaluation file, variant, tablebases, `TimeFactor`
 (percent of the clock budget, 100–200, default 100, capped at half the clock), `TimeMoves` and
-`DrawContempt` (default -10 cp). Changes affecting score compatibility stop and join the worker
-and clear the TT; unchanged or rejected values keep the cache.
+`DrawContempt` (default -10 cp) and `ShortDrawOffset` (cp, -50 to 50, default 0). Changes affecting
+score compatibility stop and join the worker and clear the TT; unchanged or rejected values keep the cache.
+
+Draws come in two kinds. Long draws (fifty moves, tablebase draws) keep the game going and score
+`DrawContempt`. Short draws (repetition, stalemate, dead material) end it at once and score
+`DrawContempt + ShortDrawOffset`, but never below -10 cp unless the contempt itself is lower, so steering
+away from a quick draw cannot give a position away. A negative offset prefers playing on, for example
+to let an opponent's clock run; a positive one takes a quick draw in a dead drawn position. The offset
+may change every move without clearing the TT: a nonzero offset salts the TT keys, so entries searched
+with another offset never match, and with no offset the keys are the same as before.
 
 ### 4.1 Nodes and repetition
 

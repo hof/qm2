@@ -209,9 +209,13 @@ inline constexpr auto RULE50_SALTS = [] {
     return salts;
 }();
 
-inline U64 position_key(const board_t & board) {
+// Short draws score at most a tenth of a pawn below level, whatever the offset asks for.
+inline constexpr int SHORT_DRAW_FLOOR = -10;
+
+// The draw salt keeps entries searched with another short draw score apart, see draw_salt.
+inline U64 position_key(const board_t & board, U64 draw_salt = 0) {
     const int bucket = std::min(rule50_bucket(board.stack->fifty_count), int(RULE50_SALTS.size()) - 1);
-    return board.stack->tt_key ^ RULE50_SALTS[bucket];
+    return board.stack->tt_key ^ RULE50_SALTS[bucket] ^ draw_salt;
 }
 
 class root_move_t {
@@ -288,10 +292,10 @@ protected:
     bool raise_repetition_alpha(int & alpha) {
         move_t witness;
         if (brd.ply == 0 || brd.stack->fifty_count < 3
-                || stack->excluded_move || alpha >= draw_score() || !upcoming_repetition(witness)) {
+                || stack->excluded_move || alpha >= short_draw_score() || !upcoming_repetition(witness)) {
             return false;
         }
-        alpha = draw_score();
+        alpha = short_draw_score();
         return true;
     }
 
@@ -336,6 +340,8 @@ public:
     bool root_wtm;
     int wild;
     int draw_contempt;
+    int short_draw_offset = 0;  // ShortDrawOffset: short draws score this much above or below long ones
+    U64 draw_salt = 0;  // zero without an offset, so the default keys match those of older searches
 
     // Total reduction includes the artificial pass itself.
     bool null_allowed;
@@ -366,15 +372,18 @@ public:
     int qstatic(int beta, int gain);
     std::string pv_to_string();
 
-    // Most nodes follow a capture or pawn move: no repetition or fifty-move
-    // draw is possible yet, only the inline material check.
-    bool is_draw() {
+    // The score of a drawn node, or score::INVALID while the game goes on. Most nodes follow
+    // a capture or pawn move: no repetition or fifty-move draw is possible yet, only the inline material check.
+    int draw_value() {
         if (brd.stack->fifty_count < 4) {
-            return brd.is_draw();
+            return brd.is_draw() ? short_draw_score() : int(score::INVALID);
         }
-        return is_reversible_draw();
+        return reversible_draw_value();
     }
-    bool is_reversible_draw();
+    bool is_draw() {
+        return draw_value() != score::INVALID;
+    }
+    int reversible_draw_value();
     bool is_repetition() const;
     int upcoming_repetition(move_t & witness);
     bool is_improving() const;
@@ -415,8 +424,17 @@ public:
         bool pv, bool cut_node, int gives_check);
     void update_lmr_history(const move_t & move, int depth, int value, int alpha, int beta);
 
+    // Long draws (fifty moves, tablebase) keep the game going; short draws (repetition,
+    // stalemate, dead material) end it at once and score the offset more, never below the floor.
     int draw_score() {
         return brd.stack->wtm == root_wtm? draw_contempt: - draw_contempt;
+    }
+    int short_draw_score() {
+        const int value = MAX(draw_contempt + short_draw_offset, MIN(draw_contempt, SHORT_DRAW_FLOOR));
+        return brd.stack->wtm == root_wtm? value: - value;
+    }
+    bool is_draw_score(int value) {
+        return value == draw_score() || value == short_draw_score();
     }
 
     bool is_recapture(move_t * move) {

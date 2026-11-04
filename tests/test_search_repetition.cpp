@@ -317,6 +317,31 @@ bool test_enpassant_identity() {
 
 }
 
+// Short draws (repetition) take the offset, never below the floor; long draws (fifty moves) keep the contempt.
+bool test_short_draw_offset() {
+    std::vector<U64> game_history;
+    search_t repeated("7k/8/8/8/8/8/8/KR6 w - - 0 1");
+    for (int occurrence = 0; occurrence < 2; ++occurrence) {
+        for (const char * text : {"a1a2", "h8h7", "a2a1", "h7h8"}) {
+            play(repeated, text);
+        }
+    }
+    start_new_search(repeated, game_history);
+    search_t fifty("7k/8/8/8/8/8/8/KR6 w - - 100 80");
+    bool success = check("no offset must leave the keys unsalted", repeated.draw_salt == 0);
+    repeated.draw_contempt = fifty.draw_contempt = 20;
+    repeated.short_draw_offset = fifty.short_draw_offset = -50;
+    success &= check("a repetition must score the offset down to the floor",
+        repeated.draw_value() == SHORT_DRAW_FLOOR);
+    success &= check("a fifty-move draw must keep the contempt", fifty.draw_value() == 20);
+    repeated.draw_contempt = -40;
+    success &= check("the floor must not raise a lower contempt", repeated.draw_value() == -40);
+    repeated.draw_contempt = 0;
+    repeated.short_draw_offset = 30;
+    success &= check("a positive offset must make a repetition welcome", repeated.draw_value() == 30);
+    return success;
+}
+
 int main() {
     magic::init();
     bool success = test_owned_history();
@@ -326,5 +351,6 @@ int main() {
     success &= test_enpassant_identity();
     success &= test_pre_root_matches();
     success &= test_repetition_scores();
+    success &= test_short_draw_offset();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

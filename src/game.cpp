@@ -35,6 +35,7 @@ namespace options {
         { "UCI_Opponent", STRING, 0, "type string" },
         { "Wild", STRING, 0, "type combo default standard var standard var losers", true },
         { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100", true },
+        { "ShortDrawOffset", INT, 0, "type spin default 0 min -50 max 50" },
         { "TimeFactor", INT, 100, "type spin default 100 min 100 max 200" },
         { "TimeMoves", INT, 16, "type spin default 16 min 4 max 64" },
         { "SyzygyPath", STRING, 0, "type string default <empty>" },

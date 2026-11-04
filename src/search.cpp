@@ -204,7 +204,7 @@ int search_t::neural_static_score(const tt_hit_t * tt, int * deferred_raw_eval) 
 
     // A supplied result includes misses: do not probe the same node twice.
     if (!tt) {
-        trans_table::probe(position_key(brd), brd.ply, brd.stack->fifty_count, hit);
+        trans_table::probe(position_key(brd, draw_salt), brd.ply, brd.stack->fifty_count, hit);
         tt = &hit;
     }
     if (tt->eval != score::INVALID) {
@@ -217,7 +217,7 @@ int search_t::neural_static_score(const tt_hit_t * tt, int * deferred_raw_eval) 
     if (deferred_raw_eval) {
         *deferred_raw_eval = value;
     } else {
-        trans_table::store(position_key(brd), brd.root_ply, brd.ply, 0, 0, 0, 0, value);
+        trans_table::store(position_key(brd, draw_salt), brd.root_ply, brd.ply, 0, 0, 0, 0, value);
     }
     return value;
 }
@@ -240,6 +240,16 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
     _book_seeded = false;
     null_allowed = true;
     draw_contempt = options::get_value("DrawContempt");
+
+    // Another short draw score changes stored scores: salt the TT keys instead of clearing the table.
+    short_draw_offset = options::get_value("ShortDrawOffset");
+    draw_salt = 0;
+    if (short_draw_offset) {
+        U64 key = U64(short_draw_offset) ^ 0x73686f7274647277ULL;
+        key = (key ^ (key >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        key = (key ^ (key >> 27)) * 0x94d049bb133111ebULL;
+        draw_salt = key ^ (key >> 31);
+    }
     evaluation_network.reset();
     if (wild == 0) {
         std::string error;
@@ -386,7 +396,7 @@ void search_t::go() {
         }
     } else {
         result_source = result_source_t::terminal;
-        result_score = root.in_check ? -score::MATE : draw_score();
+        result_score = root.in_check ? -score::MATE : short_draw_score();
         result_flag = score::EXACT;
     }
     const char * source = "none";
@@ -534,7 +544,7 @@ void search_t::iterative_deepening() {
             const int score_change = score - last_score;
             bool score_jump = depth >= 6 && (score_change > 20 + ABS(last_score) / 10
                 || -score_change > 20 + ABS(last_score) / 20);
-            const bool is_complex = score != draw_score() && score < score::WIN && root.is_complex();
+            const bool is_complex = !is_draw_score(score) && score < score::WIN && root.is_complex();
             won_on_board = won_on_board && score >= 800;
             if (score_jump) {
                 jump_depth = depth;
@@ -581,7 +591,7 @@ void search_t::iterative_deepening() {
             iteration_start = elapsed;
 
             // A drawn score is settled: the next iteration may run to the minimum, not the maximum.
-            drawn = score == draw_score() && !score_jump && min_time < max_time;
+            drawn = is_draw_score(score) && !score_jump && min_time < max_time;
             game.tm.set_max(drawn ? min_time : max_time);
         } else if (depth >= 15 && game.target_score && score >= game.target_score &&
                 game.target_move.piece && game.target_move.equals(&stack->best_move)) {
@@ -694,7 +704,7 @@ void search_t::forward(move_t * move, bool gives_check) {
     stack->excluded_move = 0;
     stack->move_count = 0;
     brd.forward(move);
-    trans_table::prefetch(position_key(brd));
+    trans_table::prefetch(position_key(brd, draw_salt));
     if (wild == 0 && evaluation_network) {
         evaluation_network->prepare(brd, move, evaluation_accumulators[brd.ply]);
     }
@@ -730,7 +740,7 @@ std::string search_t::pv_to_string() {
         move_t m;
         for (int i = 0; i < 8; i++) {
             tt_hit_t hit;
-            trans_table::probe(position_key(b), 0, b.stack->fifty_count, hit);
+            trans_table::probe(position_key(b, draw_salt), 0, b.stack->fifty_count, hit);
             const int tt_move = hit.move;
             if (tt_move == 0) {
                 break;
@@ -757,7 +767,7 @@ void search_t::store_pv() {
     move_t m;
     for (int i = 0; i < stack->pv_count; i++) {
         if (i > 0) {
-            const U64 key = position_key(b);
+            const U64 key = position_key(b, draw_salt);
             tt_hit_t hit;
             trans_table::probe(key, 0, b.stack->fifty_count, hit);
             m.set_compact(&b, hit.move);
@@ -1036,7 +1046,7 @@ void search_t::update_killers(move_t * move) {
 int search_t::init_root_moves() {
     root.move_count = 0;
     root.moves[0].move.clear();
-    stack->tt_key = position_key(brd);
+    stack->tt_key = position_key(brd, draw_salt);
     tt_hit_t hit;
     trans_table::probe(stack->tt_key, 0, brd.stack->fifty_count, hit);
     stack->tt_move.set_compact(&brd, hit.move);
@@ -1195,9 +1205,10 @@ void search_t::update_lmr_history(const move_t & move, int depth, int value, int
 // falling back to static evaluation, including check positions with an evasion.
 int search_t::ceiling_score() {
     if (!has_legal_move(brd)) {
-        return stack->in_check ? -score::MATE + brd.ply : draw_score();
+        return stack->in_check ? -score::MATE + brd.ply : short_draw_score();
     }
-    return is_draw() ? draw_score() : evaluate(this);
+    const int draw = draw_value();
+    return draw != score::INVALID ? draw : evaluate(this);
 }
 
 // Principal variation search at the root. Unlike pvs it sends new PVs to the
@@ -1307,20 +1318,20 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
 // After at least four reversible plies: material, fifty quiet moves or repetition. The actual root
 // needs three occurrences; descendants score the first match against game or
 // search history as a draw.
-bool search_t::is_reversible_draw() {
+int search_t::reversible_draw_value() {
     if (brd.is_draw()) {
-        return true;
+        return short_draw_score();
     }
     if (brd.stack->fifty_count >= 100) {
 
         // Checkmate takes precedence. Probe fresh legal evasions, including quiet moves.
         stack->tt_move.clear();
         if (!stack->in_check || has_legal_move(brd)) {
-            return true;
+            return draw_score();
         }
-        return false;
+        return score::INVALID;
     }
-    return is_repetition();
+    return is_repetition() ? short_draw_score() : int(score::INVALID);
 }
 
 bool search_t::is_repetition() const {
@@ -1439,9 +1450,9 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         }
     }
 
-    // Draw by lack of material or fifty quiet moves
-    if (is_draw()) {
-        return draw_score();
+    // Draw by repetition, lack of material or fifty quiet moves
+    if (const int draw = draw_value(); draw != score::INVALID) {
+        return draw;
     }
     int tablebase_score;
     if (!stack->excluded_move && tablebase_limit && probe_tablebase(depth, tablebase_score)) {
@@ -1476,7 +1487,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
 
     const auto excluded_move = stack->excluded_move;
     const bool normal_search = !excluded_move;
-    stack->tt_key = position_key(brd);
+    stack->tt_key = position_key(brd, draw_salt);
     tt_hit_t tt;
     const bool tt_hit = normal_search && trans_table::probe(stack->tt_key, brd.ply,
         brd.stack->fifty_count, tt);
@@ -1787,7 +1798,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         if (excluded_move) {
             return alpha;
         }
-        return in_check ? -score::MATE + brd.ply : draw_score();
+        return in_check ? -score::MATE + brd.ply : short_draw_score();
     }
 
     // Prepare and run the loop
@@ -1974,7 +1985,7 @@ int search_t::pvs(int alpha, int beta, int depth, bool cut_node) {
         if (excluded_move) {
             return alpha;
         }
-        return in_check ? -score::MATE + brd.ply : draw_score();
+        return in_check ? -score::MATE + brd.ply : short_draw_score();
     }
     assert(best > -score::INF);
     assert(best < beta);
@@ -2031,8 +2042,8 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
     }
 
-    if (is_draw()) {
-        return draw_score();
+    if (const int draw = draw_value(); draw != score::INVALID) {
+        return draw;
     }
 
     int tablebase_score;
@@ -2052,7 +2063,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     sel_depth = std::max(brd.ply, sel_depth);
 
     const bool in_check = stack->in_check;
-    const U64 key = position_key(brd);
+    const U64 key = position_key(brd, draw_salt);
     stack->tt_key = key;
     tt_hit_t tt;
 
@@ -2093,7 +2104,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
 
         // Match the normal fail-low path even when the picker is empty.
         // Merely having an illegal tactical candidate must not change the bound.
-        return !legal_witness && !has_legal_move(brd, in_check) ? finish(draw_score(), score::EXACT)
+        return !legal_witness && !has_legal_move(brd, in_check) ? finish(short_draw_score(), score::EXACT)
             : finish(eval, score::UPPERBOUND);
     }
 
@@ -2168,7 +2179,7 @@ int search_t::qsearch(int alpha, int beta, int depth) {
     } while ((move = move::next(this, depth)));
 
     if (searched_moves == 0 && (in_check || (!legal_witness && !has_legal_move(brd, in_check)))) {
-        return finish(in_check ? -score::MATE + brd.ply : draw_score(), score::EXACT);
+        return finish(in_check ? -score::MATE + brd.ply : short_draw_score(), score::EXACT);
     }
 
     return finish(best_score, score::UPPERBOUND);
