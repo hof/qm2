@@ -1785,6 +1785,9 @@ separate experience store.
 Challenges are accepted for standard lightning, blitz, or standard chess, plus
 royal losers when enabled, with a clock and only when idle (`--no-accept`
 declines all); games created with unsupported rules are aborted.
+A registered player who aborts on move one three times in a row rests 1, 2, 4, then 8 hours: their
+challenges are declined and games from our seeks aborted, silently. A played game clears the count;
+guests are not counted, as they return under a new name. Rests last until the client restarts.
 Rematches are off by default; `rematches` (or
 `--rematches`) offers `rematch` up to that many games in a row per opponent. At `Creating:` it
 fingers the opponent; the first search waits up to two seconds for the reply so

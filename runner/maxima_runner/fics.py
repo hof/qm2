@@ -281,6 +281,11 @@ max_followers = 5
 # FICS queues a guest's tells sent too fast ("Your communication has been queued"); we pace them ourselves and
 # merge what piles up per follower, so followers never fall behind the game.
 tell_gap = 2.0
+# A registered player who aborts on move one three times in a row rests 1h, 2h, 4h, then 8h; a played game clears it.
+# Guests are not counted: they come back under a new name.
+abort_rests = (3600, 2 * 3600, 4 * 3600, 8 * 3600)
+aborts_before_rest = 3
+opponent_aborted_line = "Your opponent has aborted the game on move one."
 gone_pattern = re.compile(r"^(?P<name>[A-Za-z]{3,17}) is not logged in\.$")
 remote_commands = ("follow", "softquit", "softrestart", "help", "!abort", "!resign", "!draw", "seek-pool", "reseek")
 # Exit status after softrestart (EX_TEMPFAIL): a supervisor loop starts MaxDrone again with the latest code.
@@ -658,6 +663,8 @@ class engine_player:
         self.name = self.opponent = self.last_opponent = None
         self.opponent_ready = asyncio.Event()
         self.opponent_ready.set()
+        self.opponent_aborted = False
+        self.aborts, self.rests = {}, {}  # lowercase name: aborts in a row; lowercase name: (rest until, rests so far)
         self.streak = self.played = 0
         self.stopping = self.finished = self.restart = False
         self.seeked = time.monotonic()
@@ -905,6 +912,8 @@ class engine_player:
         elif draw_offer_pattern.match(line) and self.game is not None:
             self.draw_offered = True
             self.on_line("-- draw offered; judged on our move")
+        elif line.strip() == opponent_aborted_line:
+            self.opponent_aborted = True
         elif creating_pattern.match(line):
             await self.on_creating(creating_pattern.match(line))
         elif challenge_pattern.match(line):
@@ -947,6 +956,10 @@ class engine_player:
             self.on_line(f"-- aborting unsupported game: {match['type']} {match['time']} {match['increment']}")
             await self.send("abort")
             return
+        if self.resting(name):
+            self.on_line(f"-- aborting game with {name}: resting after aborts on move one")
+            await self.send("abort")
+            return
         await self.send(f"finger {name}")
 
     async def on_challenge(self, match):
@@ -955,6 +968,9 @@ class engine_player:
             await self.send(f"decline {name}")
         elif not playable(match["type"], match["time"], match["increment"], self.policy.losers):
             self.on_line(f"-- declining {match['type']} {match['time']} {match['increment']} from {name}")
+            await self.send(f"decline {name}")
+        elif self.resting(name):
+            self.on_line(f"-- declining {name}: resting after aborts on move one")
             await self.send(f"decline {name}")
         else:
             await self.send(f"accept {name}")
@@ -965,6 +981,7 @@ class engine_player:
             await self.session.stop_pondering()
         self.on_line(f"-- game {self.game} over: {end['reason']} {end['result']}")
         opponent = end["black"] if self.name and end["white"].lower() == self.name.lower() else end["white"]
+        self.count_abort(opponent, end["result"])
         game = self.finished_game(end)
         self.save(game)
         self.emit("game_end", game=self.game, result=end["result"], reason=end["reason"],
@@ -985,6 +1002,32 @@ class engine_player:
         if self.streak <= self.policy.rematches:
             await self.send("rematch")
         await self.seek()
+
+    def resting(self, name):
+        rest = self.rests.get(name.lower())
+        return rest is not None and rest[0] > time.time()
+
+    def count_abort(self, opponent, result):
+        """Count a registered opponent's aborts on move one in a row; a played game clears the count and the rests."""
+        aborted, self.opponent_aborted = self.opponent_aborted, False
+        key = opponent.lower()
+        if not aborted:
+            if result != "*":
+                self.aborts.pop(key, None)
+                self.rests.pop(key, None)
+            return
+        created = self.created or {}
+        side = "white" if created.get("white", "").lower() == key else "black"
+        if created.get(f"{side}_rating") == "++++" or self.resting(opponent):
+            return
+        self.aborts[key] = self.aborts.get(key, 0) + 1
+        if self.aborts[key] < aborts_before_rest:
+            return
+        rests = self.rests[key][1] + 1 if key in self.rests else 1
+        seconds = abort_rests[min(rests, len(abort_rests)) - 1]
+        self.rests[key] = (time.time() + seconds, rests)
+        self.aborts[key] = 0
+        self.on_line(f"-- {opponent} aborted on move one {aborts_before_rest} times in a row; not playing them for {seconds // 3600}h")
 
     def save_interrupted(self):
         if self.game is None or self.history is None or self.record is None or self.latest_position is None:
