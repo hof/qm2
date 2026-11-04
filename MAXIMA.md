@@ -2270,7 +2270,17 @@ our clock above 1.5 times theirs, each with forty increments added, and an incre
 below 1 s against a bot or 3 s against a human, which otherwise keeps them from
 flagging) a due offer waits, and goes out with the first move at the draw score
 after that chance is gone. The same chance declines offers made to us, tablebase
-draws included; only a position without mating material is still accepted.
+draws included; only a position without mating material, or a lost one (our
+score at -1.50 or lower, or a mate against us), is still accepted.
+
+Without an increment their flag can also steer the search (`move_choice.flag_chance`).
+When we can win on time as above and the opponent, at their own pace over their
+last ten moves (`move_choice.opponent_pace`), has fewer than thirty moves left on
+the clock, the move is searched with `ShortDrawOffset` -50: repetitions and other
+quick draws score below the long ones, at most down to the engine's -10 cp floor,
+so the game goes on while their clock runs. A bot moving in a tenth of a second
+still has fifty moves in five seconds and never qualifies. The console says when
+this starts and ends; losers games never use it.
 The offer travels with the move on Lichess and follows it on FICS; losers games
 make none.
 

@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, patch
 import chess
 import chess.engine
 
-from maxima_runner import connectors, lichess
+from maxima_runner import connectors, lichess, move_choice
 from maxima_runner.uci import open_engine
 from test_fics_game import fake_engine
 from test_uci import ponder_engine
@@ -419,6 +419,45 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
         moves = [path for path, _ in api.posts if "/move/" in path]
         self.assertEqual(len(moves), 1)
         self.assertFalse(moves[0].endswith("?offeringDraw=true"))
+
+
+class flag_chance_tests(unittest.IsolatedAsyncioTestCase):
+    def pace(self, seconds_per_move, clock):
+        pace = move_choice.opponent_pace()
+        for ply in range(0, 2 * move_choice.flag_pace_window, 2):
+            pace.record(ply, clock, 0)
+            clock -= seconds_per_move
+        return pace, clock + seconds_per_move
+
+    def test_only_a_slow_opponent_without_increment_can_flag(self):
+        slow, slow_left = self.pace(3, 60)
+        fast, fast_left = self.pace(0.1, 6)
+        self.assertTrue(move_choice.flag_chance(200, slow_left, 0, True, slow))
+        self.assertFalse(move_choice.flag_chance(200, fast_left, 0, True, fast))  # fifty moves in five seconds
+        self.assertFalse(move_choice.flag_chance(200, slow_left, 1, True, slow))
+
+    def test_a_lost_position_still_takes_the_draw_ahead_on_time(self):
+        board = chess.Board()
+        lost = {"score": chess.engine.PovScore(chess.engine.Cp(-200), chess.WHITE), "depth": 20}
+        level = {"score": chess.engine.PovScore(chess.engine.Cp(0), chess.WHITE), "depth": 20}
+        self.assertTrue(move_choice.accept_draw(board, lost, 0, ahead=True))
+        self.assertFalse(move_choice.accept_draw(board, level, 0, ahead=True))
+
+    async def test_the_short_draw_offset_reaches_the_engine_while_hunting(self):
+        searched = []
+
+        class recording_session(stub_session):
+            async def play(self, board, limit, **search):
+                searched.append(search["options"])
+                return await super().play(board, limit)
+        bot = lichess.lichess_bot(stub_api(), None, lambda line: None, online_tablebase=False)
+        bot.id, bot.session = "maximaengine", recording_session()
+        game = lichess.lichess_game(bot, "g1")
+        game.setup(game_full())
+        game.pace, _ = self.pace(3, 60)
+        await game.on_state(dict(game_full()["state"], wtime=200000, btime=30000, winc=0, binc=0))
+        await game.searching
+        self.assertEqual(searched[-1]["ShortDrawOffset"], move_choice.flag_draw_offset)
 
 
 class game_end_tests(unittest.IsolatedAsyncioTestCase):

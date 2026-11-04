@@ -15,6 +15,9 @@ long_think_percent = 175  # above 150 so the stored search can stand on its own 
 draw_offer_first, draw_offer_repeat = 4, 11  # our moves at the draw score; Lichess drops repeats within 20 plies
 time_win_lead, time_win_moves = 1.5, 40  # our time over theirs, each with the increments of that many moves
 time_win_bot_increment, time_win_human_increment = 1, 3  # seconds from which the opponent will not flag
+flag_pace_moves, flag_pace_window = 30, 10  # a flag is a real chance when their recent pace leaves fewer moves
+flag_draw_offset = -50  # ShortDrawOffset while it is: play on past quick draws; the engine floors them at -10 cp
+draw_accept_lost = -150  # cp from our side: even while ahead on time, a lost position takes an offered draw
 
 
 def opening_abort_position(board, move, info, kind, contempt):
@@ -131,14 +134,15 @@ def accept_draw(board, info, contempt=None, ahead=False):
     """Whether to accept a draw offer, judged on our own choice for board: no mating material, or, unless
     we can still win on time (ahead), a tablebase draw for us, a search that reached the tablebases and scores exactly zero with seven pieces or fewer, or
     a search that values the position no higher than a draw. The engine scores a draw as its DrawContempt
-    (contempt, cp from our side), so the last case never accepts while we are better than that."""
+    (contempt, cp from our side), so the last case never accepts while we are better than that. Ahead on time,
+    a lost position (draw_accept_lost or a mate against us) still takes the draw, as a gentleman would."""
     if board.is_insufficient_material():
         return True
+    score = info.get("score") if "tablebase" not in info else None
     if ahead:
-        return False
+        return score is not None and bool(info.get("depth")) and score.relative.score(mate_score=100000) <= draw_accept_lost
     if "tablebase" in info:
         return info["tablebase"]["category"] in draw_categories
-    score = info.get("score")
     if score is None or score.is_mate() or not info.get("depth"):
         return False
     ours = score.relative.score()
@@ -154,6 +158,38 @@ def winning_on_time(ours, theirs, increment, bot):
         return False
     extra = time_win_moves * increment
     return ours + extra > time_win_lead * (theirs + extra)
+
+
+class opponent_pace:
+    """The opponent's seconds per move over their latest moves, from their clock at each of our turns."""
+
+    def __init__(self):
+        self.spent, self.last = [], None
+
+    def record(self, ply, theirs, increment):
+        """Their clock in seconds before our search at ply; a repeated ply, as on a retry, counts once."""
+        if self.last is not None and self.last[0] == ply:
+            return
+        if self.last is not None:
+            self.spent = (self.spent + [max(0.0, self.last[1] - theirs + increment)])[-flag_pace_window:]
+        self.last = ply, theirs
+
+    def moves_left(self, theirs):
+        """Their moves left at that pace, or None before half the window is known."""
+        if len(self.spent) < flag_pace_window // 2:
+            return None
+        pace = sum(self.spent) / len(self.spent)
+        return theirs / pace if pace > 0 else None
+
+
+def flag_chance(ours, theirs, increment, bot, pace):
+    """Whether their flag is a real chance: no increment, our clock far enough ahead (winning_on_time), and at
+    their own recent pace fewer than flag_pace_moves moves left. A bot that moves in a tenth of a second has
+    fifty moves in five seconds, so a small clock alone is not enough."""
+    if increment or not winning_on_time(ours, theirs, increment, bot):
+        return False
+    left = pace.moves_left(theirs)
+    return left is not None and left < flag_pace_moves
 
 
 class draw_offers:

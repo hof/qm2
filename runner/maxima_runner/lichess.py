@@ -806,6 +806,7 @@ class lichess_game:
         self.answered = 0.0
         self.over = self.draw_offered = False
         self.draw_offers = move_choice.draw_offers()
+        self.pace, self.flag_hunt = move_choice.opponent_pace(), False
         self.abort_position = self.waiting_position = self.waiting = None
 
     def start(self):
@@ -1032,12 +1033,16 @@ class lichess_game:
         limit = chess.engine.Limit(white_clock=state["wtime"] / 1000, black_clock=state["btime"] / 1000,
                                    white_inc=state["winc"] / 1000, black_inc=state["binc"] / 1000)
         started = time.monotonic()
+        theirs = "b" if ours == "w" else "w"
+        self.pace.record(board.ply(), state[f"{theirs}time"] / 1000, state[f"{theirs}inc"] / 1000)
+        self.hunt_flag(move_choice.flag_chance(clock, state[f"{theirs}time"] / 1000, state[f"{theirs}inc"] / 1000,
+                                               self.player(not self.color).get("title") == "BOT", self.pace))
         try:
             move, info, kind = await move_choice.choose_move(
                 bot.session, board, limit, opening=self.opening,
                 ceiling=self.loss.ceiling(self.full.get("rated")),
                 tablebase=bot.tablebase, game=(self.id, self.generation),
-                opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options={"DrawContempt": self.draw_score},
+                opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options=self.search_options(),
                 on_search_started=self.show_opponent_move)
         except (asyncio.TimeoutError, AssertionError, RuntimeError, OSError, chess.engine.EngineError) as error:
             bot.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
@@ -1120,7 +1125,18 @@ class lichess_game:
             await move_choice.ponder_after_book(
                 bot.session, board, move, limit, self.opening, lambda: None if self.over else self.board.fen(),
                 bot.on_line, game=(self.id, self.generation), opponent=self.opponent,
-                options={"DrawContempt": self.draw_score})
+                options=self.search_options())
+
+    def search_options(self):
+        return {"DrawContempt": self.draw_score,
+                "ShortDrawOffset": move_choice.flag_draw_offset if self.flag_hunt else 0}
+
+    def hunt_flag(self, chance):
+        """Play on past quick draws while their flag is a real chance; say so when that starts or ends."""
+        if chance != self.flag_hunt:
+            self.bot.on_line(f"-- game {self.id}: " + ("their flag is a chance; playing on past quick draws"
+                                                       if chance else "no flag chance any more"))
+        self.flag_hunt = chance
 
     def stats_line(self):
         """Our record against the opponent and on Lichess, from the experience."""

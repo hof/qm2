@@ -641,6 +641,7 @@ class engine_player:
         self.opening = None
         self.from_book = self.draw_offered = False
         self.draw_offers = move_choice.draw_offers()
+        self.pace, self.flag_hunt = move_choice.opponent_pace(), False
         self.abort_position = self.waiting_position = None
         self.announced_mood = None
         self.contempt = self.draw_score = None
@@ -1143,6 +1144,7 @@ class engine_player:
             self.opening = None
             self.from_book = self.draw_offered = False
             self.draw_offers.reset()
+            self.pace, self.flag_hunt = move_choice.opponent_pace(), False
             self.abort_position = None
             self.our_color = position.turn if position.relation == fics_game.playing_my_move else not position.turn
             self.on_line(f"-- game {self.game}: {position.white} vs {position.black}, "
@@ -1242,8 +1244,17 @@ class engine_player:
             rated = bool(self.created) and self.created["rated"] == "rated"
             self.opening = learner.for_game(self.opponent.name if self.opponent else None,
                                                  self.opponent_group(), game_type, self.contempt, rated)
+        theirs = (position.black_ms if board.turn == chess.WHITE else position.white_ms) / 1000
+        self.pace.record(board.ply(), theirs, position.increment_seconds)
+        chance = not self.is_losers and move_choice.flag_chance(
+            clock, theirs, position.increment_seconds, bool(self.opponent and self.opponent.is_engine), self.pace)
+        if chance != self.flag_hunt:
+            self.on_line("-- their flag is a chance; playing on past quick draws" if chance
+                         else "-- no flag chance any more")
+        self.flag_hunt = chance
         try:
-            search_options = {"DrawContempt": self.draw_score}
+            search_options = {"DrawContempt": self.draw_score,
+                              "ShortDrawOffset": move_choice.flag_draw_offset if chance else 0}
             if self.is_losers:
                 search_options["OwnBook"] = False
             ceiling = None if self.is_losers else self.loss.ceiling(
@@ -1319,7 +1330,7 @@ class engine_player:
                 await move_choice.ponder_after_book(
                     self.session, board, move, limit, self.opening,
                     lambda: self.history.board.fen() if self.token is token and self.history is not None else None,
-                    self.on_line, game=self.token, opponent=self.opponent, options={"DrawContempt": self.draw_score})
+                    self.on_line, game=self.token, opponent=self.opponent, options=search_options)
             return
         self.on_line(styled(console_search(board, move, info, seconds, clock, self.policy.pv_plies, self.opening), "92"))
         if explaining:
