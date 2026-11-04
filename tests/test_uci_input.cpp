@@ -164,6 +164,11 @@ int main() {
         time_manager_t short_game, long_game;
         short_game.set(300000, 300000, 0, 0, 0, 0, 100, 16);
         long_game.set(300000, 300000, 0, 0, 0, 0, 100, 32);
+        time_manager_t level, ahead;
+        level.set(140000, 140000, 0, 0, 0, 0);
+        ahead.set(140000, 40000, 0, 0, 0, 0);
+        success &= check("a clock lead adds a sixteenth to the budget and an eighth to the cap",
+            ahead.reserved_min() == level.reserved_min() + 6250 && ahead.reserved_max() == level.reserved_max() + 12500);
         success &= check("TimeMoves sets the budget to clock/2M and the cap to clock/(M/2)",
             short_game.reserved_min() == 9375 && short_game.reserved_max() == 37500
             && long_game.reserved_min() == 4687 && long_game.reserved_max() == 18750);
