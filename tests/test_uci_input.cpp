@@ -187,6 +187,10 @@ int main() {
         success &= check("TimeMoves sets the budget to clock/2M and the cap to clock/(M/2)",
             short_game.reserved_min() == 9375 && short_game.reserved_max() == 37500
             && long_game.reserved_min() == 4687 && long_game.reserved_max() == 18750);
+        time_manager_t increment_game;
+        increment_game.set(300000, 300000, 3000, 3000, 0, 0, 100, 16);
+        success &= check("an increment spends the clock as if the game were decided in two thirds of M",
+            increment_game.reserved_min() == 14062 + 3000 && increment_game.reserved_max() == 56250 + 6000);
         period_timer.set(120000, 120000, 0, 0, 0, 100);
         const int budget_above = period_timer.reserved_max();
         period_timer.set(119000, 119000, 0, 0, 0, 100);

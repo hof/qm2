@@ -42,8 +42,12 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         M_MIN = m * (4 - 2 * left);
         M_MAX = m * (1.5 - left);
     } else {
-        M_MIN = 2 * m;
-        M_MAX = m / 2.0;
+
+        // An increment comes back every move, so the clock it leaves need not last as long: spend it
+        // as if the game were decided in two thirds of the moves.
+        const double moves = my_inc > 0 ? m * 2.0 / 3 : m;
+        M_MIN = 2 * moves;
+        M_MAX = moves / 2;
     }
 
     //set the min/max time range based on time left and M
