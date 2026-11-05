@@ -525,10 +525,11 @@ void search_t::iterative_deepening() {
     /*
      * Depth milestones, in order of urgency: 8, 16, 22. Elo per extra ply, measured to depth 18:
      * 160-190 at depths 8-10, 67-91 at 12-15, 52-58 at 16-18. No easy or normal stop before 16,
-     * and no normal stop before 22: only an easy position stops in between.
+     * and no normal stop before 22: only an easy position stops in between. Standard chess and the
+     * orthodox wilds only; the losers search rarely reaches them.
      */
-    constexpr int EASY_DEPTH = 16;
-    constexpr int NORMAL_DEPTH = 22;
+    const int easy_depth = wild == 0 ? 16 : 0;
+    const int normal_depth = wild == 0 ? 22 : 0;
     int depth;
     for (depth = 1; depth <= game.max_depth; depth++) {
         attempted_depth = depth;
@@ -576,13 +577,13 @@ void search_t::iterative_deepening() {
                 // The next iteration cannot finish within the maximum, even at 1.8x this one
                 do_stop = true;
                 stop_reason = "no_time";
-            } else if (depth >= EASY_DEPTH && elapsed > min_time / 2 && depth - jump_depth >= 3
+            } else if (depth >= easy_depth && elapsed > min_time / 2 && depth - jump_depth >= 3
                     && (won_on_board || root.is_easy())) {
 
                 // Easy position or a win already on the board, with a settled score: half time control
                 do_stop = true;
                 stop_reason = "easy";
-            } else if (depth >= NORMAL_DEPTH && elapsed > min_time && !score_jump && !is_complex) {
+            } else if (depth >= normal_depth && elapsed > min_time && !score_jump && !is_complex) {
 
                 // Neutral position, normal time control; a drawn score or proven win is never complex
                 do_stop = true;
@@ -600,7 +601,7 @@ void search_t::iterative_deepening() {
             iteration_start = elapsed;
 
             // A drawn score is settled: the next iteration may run to the minimum, not the maximum.
-            drawn = is_draw_score(score) && !score_jump && depth >= EASY_DEPTH && min_time < max_time;
+            drawn = is_draw_score(score) && !score_jump && depth >= easy_depth && min_time < max_time;
             game.tm.set_max(drawn ? min_time : max_time);
         } else if (depth >= 15 && game.target_score && score >= game.target_score &&
                 game.target_move.piece && game.target_move.equals(&stack->best_move)) {
