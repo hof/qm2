@@ -49,12 +49,12 @@ private:
     };
     static_assert(sizeof(feature_column_t) == 256 * sizeof(int16_t));
 
-    std::array<int16_t, 256> _biases{};
+    alignas(64) std::array<int16_t, 256> _biases{};
     std::vector<feature_column_t> _features;
-    std::array<int32_t, 32> _hidden1_biases{}, _hidden2_biases{};
-    std::array<int8_t, 512 * 32> _hidden1_weights{};
-    std::array<int8_t, 32 * 32> _hidden2_weights{};
-    std::array<int8_t, 32> _output_weights{};
+    alignas(64) std::array<int32_t, 32> _hidden1_biases{}, _hidden2_biases{};
+    alignas(64) std::array<int8_t, 512 * 32> _hidden1_weights{};
+    alignas(64) std::array<int8_t, 32 * 32> _hidden2_weights{};
+    alignas(64) std::array<int8_t, 32> _output_weights{};
     int32_t _output_bias = 0;
     U64 _fingerprint = 0;
     bool _hidden1_pair_sums_safe = false, _hidden2_pair_sums_safe = false;

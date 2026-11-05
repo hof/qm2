@@ -379,6 +379,7 @@ the serialized lane order. Full AVX2 refresh builds addresses once per perspecti
 128-value tiles in eight vector registers, storing each tile after all features.
 Feature order and int16 wrapping arithmetic are preserved. Refresh scratch
 addresses skip default initialization; only the explicitly written prefix is read.
+Feature biases, dense biases and dense weight arrays start on 64-byte boundaries.
 Dense weights are packed at load time into four-input blocks across outputs,
 so AVX2 inference broadcasts each input block and accumulates eight outputs per
 vector without horizontal reductions. The loader bounds positive and negative
