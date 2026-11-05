@@ -522,10 +522,12 @@ void search_t::iterative_deepening() {
     bool won_on_board = true;  // +8 or more from depth 1 on: the win is on the board, many moves keep it
     int jump_depth = 0;  // the last iteration whose score jumped; an easy stop needs three calm ones after it
 
-    // Depth milestones. Elo per extra ply, measured to depth 18 and fitted beyond: 160-190 at
-    // depths 8-10, 67-91 at 12-15, 52-58 at 16-18, then about half every five plies. So no easy or
-    // normal stop before depth 16, and the time above the minimum halves at each later milestone
-    // (21, 26, 31, ...).
+    /*
+     * Depth milestones. Elo per extra ply, measured to depth 18 and fitted beyond: 160-190 at
+     * depths 8-10, 67-91 at 12-15, 52-58 at 16-18, then about half every five plies. So no easy or
+     * normal stop before depth 16, and the time above the minimum halves at each later milestone
+     * (21, 26, 31, ...).
+     */
     constexpr int MILESTONE_DEPTH = 16;
     constexpr int MILESTONE_STEP = 5;
     const int stop_extra = MAX(0, max_time / 2 - min_time);  // above the minimum, between iterations
@@ -602,8 +604,10 @@ void search_t::iterative_deepening() {
             ponder_stop = do_stop;
             iteration_start = elapsed;
 
-            // A drawn score is settled: the next iteration may run to the minimum, not the maximum.
-            // Otherwise its extra time halves with depth like the stop limit.
+            /*
+             * A drawn score is settled: the next iteration may run to the minimum, not the maximum.
+             * Otherwise its extra time halves with depth like the stop limit.
+             */
             drawn = is_draw_score(score) && !score_jump && depth >= MILESTONE_DEPTH && min_time < max_time;
             const int next_milestones = MAX(0, depth + 1 - MILESTONE_DEPTH) / MILESTONE_STEP;
             game.tm.set_max(drawn ? min_time : max_time - deadline_extra + (deadline_extra >> next_milestones));
