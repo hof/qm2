@@ -223,6 +223,24 @@ void network_t::update(const board_t & board, accumulator_t & accumulator,
 #ifdef __AVX2__
     // One child: reuse its feature addresses across both tiles.
     if (first == ancestors.size()) {
+        if (accumulator.change_count == 1 && accumulator.changes[0].from >= 0
+                && accumulator.changes[0].to >= 0) {
+            const auto & change = accumulator.changes[0];
+            const auto * removed = reinterpret_cast<const __m256i *>(
+                _features[feature_index(color, king, change.piece, change.from)].values.data());
+            const auto * added = reinterpret_cast<const __m256i *>(
+                _features[feature_index(color, king, change.piece, change.to)].values.data());
+            const auto * input = reinterpret_cast<const __m256i *>(base.values[color].data());
+            auto * output = reinterpret_cast<__m256i *>(accumulator.values[color].data());
+            for (size_t i = 0; i < 16; ++i) {
+                const auto previous = _mm256_loadu_si256(input + i);
+                const auto difference = _mm256_sub_epi16(previous, _mm256_loadu_si256(removed + i));
+                const auto result = _mm256_add_epi16(difference, _mm256_loadu_si256(added + i));
+                _mm256_storeu_si256(output + i, result);
+            }
+            accumulator.ready[color] = true;
+            return;
+        }
         std::array<const int16_t *, 3> removed{}, added{};
         for (int c = 0; c < accumulator.change_count; ++c) {
             const auto & change = accumulator.changes[c];

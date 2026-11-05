@@ -368,8 +368,10 @@ search and ply, updated lazily from the nearest ready ancestor; a king move
 refreshes its perspective, null moves swap perspectives. One AVX2 pass per
 128-value tile applies the whole chain in registers and stores every
 intermediate state, so later siblings start one step away. When the immediate parent
-is ready, feature-column addresses are prepared once per perspective and reused
-across both tiles; longer chains retain the general update path. The loader checks
+is ready, a single piece relocation applies its removed and added columns directly
+to each vector. Other immediate-parent updates prepare feature-column addresses
+once per perspective and reuse them across both tiles; longer chains retain the
+general update path. The loader checks
 size, version and architecture hashes. AVX2 feature accumulation, activation
 packing and byte dot products (`vpmaddubsw`/`vpmaddwd`) have scalar fallbacks.
 Feature weights use 64-byte-aligned, 512-byte columns owned by a vector, preserving
