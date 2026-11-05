@@ -519,15 +519,17 @@ void search_t::iterative_deepening() {
     bool timed_search = game.white_time || game.black_time;
     int iteration_start = 0;
     bool drawn = false;  // the last iteration scored the draw value, so the deadline is the minimum
-    const char * deadline_reason = "cap";  // the stop reason when the iteration deadline cuts a search
     bool won_on_board = true;  // +8 or more from depth 1 on: the win is on the board, many moves keep it
     int jump_depth = 0;  // the last iteration whose score jumped; an easy stop needs three calm ones after it
 
-    // Measured Elo per ply: 67-91 at depths 12-15, 52-58 at 16-18, then halving about every
-    // five plies. No easy or normal stop below 16; past it the time above the minimum halves
-    // every five plies.
-    constexpr int DEPTH_FLOOR = 16;
-    constexpr int HALVING_PLIES = 5;
+    // Depth milestones. Elo per extra ply, measured to depth 18 and fitted beyond: 160-190 at
+    // depths 8-10, 67-91 at 12-15, 52-58 at 16-18, then about half every five plies. So no easy or
+    // normal stop before depth 16, and the time above the minimum halves at each later milestone
+    // (21, 26, 31, ...).
+    constexpr int MILESTONE_DEPTH = 16;
+    constexpr int MILESTONE_STEP = 5;
+    const int stop_extra = MAX(0, max_time / 2 - min_time);  // above the minimum, between iterations
+    const int deadline_extra = MAX(0, max_time - min_time);  // above the minimum, within an iteration
     int depth;
     for (depth = 1; depth <= game.max_depth; depth++) {
         attempted_depth = depth;
@@ -535,7 +537,7 @@ void search_t::iterative_deepening() {
         if (abort(true)) {
             interrupted = true;
             if (std::string_view(stop_reason) == "none") {
-                stop_reason = game.tm.time_is_up() ? deadline_reason : "external";
+                stop_reason = game.tm.time_is_up() ? (drawn ? "draw" : "cap") : "external";
             }
             break;
         }
@@ -557,9 +559,8 @@ void search_t::iterative_deepening() {
                 jump_depth = depth;
             }
             int elapsed = game.tm.elapsed();
-            const int halvings = MAX(0, depth - DEPTH_FLOOR) / HALVING_PLIES;
-            const int stop_limit = max_time / 2 > min_time ? min_time + ((max_time / 2 - min_time) >> halvings)
-                : max_time / 2;
+            const int milestones = MAX(0, depth - MILESTONE_DEPTH) / MILESTONE_STEP;
+            const int stop_limit = max_time / 2 - stop_extra + (stop_extra >> milestones);
             bool do_stop = false;
             stop_reason = "none";
             stop_jump = score_jump;
@@ -572,19 +573,19 @@ void search_t::iterative_deepening() {
 
                 // Complex position, maximum (emergency) time control, less extra time at depth
                 do_stop = true;
-                stop_reason = halvings == 0 ? "half_max" : "deep";
+                stop_reason = milestones == 0 ? "half_max" : "deep";
             } else if (elapsed + (elapsed - iteration_start) * 9 / 5 > max_time) {
 
                 // The next iteration cannot finish within the maximum, even at 1.8x this one
                 do_stop = true;
                 stop_reason = "no_time";
-            } else if (depth >= DEPTH_FLOOR && elapsed > min_time / 2 && depth - jump_depth >= 3
+            } else if (depth >= MILESTONE_DEPTH && elapsed > min_time / 2 && depth - jump_depth >= 3
                     && (won_on_board || root.is_easy())) {
 
                 // Easy position or a win already on the board, with a settled score: half time control
                 do_stop = true;
                 stop_reason = "easy";
-            } else if (depth >= DEPTH_FLOOR && elapsed > min_time && !score_jump && !is_complex) {
+            } else if (depth >= MILESTONE_DEPTH && elapsed > min_time && !score_jump && !is_complex) {
 
                 // Neutral position, normal time control; a drawn score or proven win is never complex
                 do_stop = true;
@@ -602,12 +603,10 @@ void search_t::iterative_deepening() {
             iteration_start = elapsed;
 
             // A drawn score is settled: the next iteration may run to the minimum, not the maximum.
-            // Past the floor the next iteration's deadline shrinks with depth like the stop limit.
-            drawn = is_draw_score(score) && !score_jump && depth >= DEPTH_FLOOR && min_time < max_time;
-            const int next_halvings = MAX(0, depth + 1 - DEPTH_FLOOR) / HALVING_PLIES;
-            deadline_reason = drawn ? "draw" : next_halvings > 0 ? "deep" : "cap";
-            game.tm.set_max(drawn ? min_time : next_halvings == 0 || min_time >= max_time ? max_time
-                : min_time + ((max_time - min_time) >> next_halvings));
+            // Otherwise its extra time halves with depth like the stop limit.
+            drawn = is_draw_score(score) && !score_jump && depth >= MILESTONE_DEPTH && min_time < max_time;
+            const int next_milestones = MAX(0, depth + 1 - MILESTONE_DEPTH) / MILESTONE_STEP;
+            game.tm.set_max(drawn ? min_time : max_time - deadline_extra + (deadline_extra >> next_milestones));
         } else if (depth >= 15 && game.target_score && score >= game.target_score &&
                 game.target_move.piece && game.target_move.equals(&stack->best_move)) {
             break;
