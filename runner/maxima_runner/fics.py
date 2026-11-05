@@ -784,18 +784,10 @@ class engine_player:
         command = words[0]
         if command == "seek-pool":
             try:
-                pool = parse_seek_pool(" ".join(words[1:]))
-                if any("losers" in spec.split() for spec in pool) and self.session is not None:
-                    self.session.variant_settings(royal_losers_board())
+                pool = await self.set_seek_pool(" ".join(words[1:]))
             except ValueError as error:
                 await self.send(f"tell {name} Invalid seek pool: {error}")
                 return
-            if any("losers" in spec.split() for spec in pool):
-                self.policy.losers = True
-                await self.send("set f3 losers")
-            self.policy.seek_pool = pool
-            if self.game is None:
-                await self.seek()
             await self.send(f"tell {name} Seek pool set: {', '.join(pool)}. Used after every game.")
             return
         if len(words) != 1:
@@ -821,6 +813,19 @@ class engine_player:
             await self.send(f"tell {name} No game to {command[1:]}.")
         else:
             await self.send(command[1:])
+
+    async def set_seek_pool(self, text):
+        """Replace the seek pool, from a tell or the console; a losers entry also accepts losers games."""
+        pool = parse_seek_pool(text)
+        if any("losers" in spec.split() for spec in pool):
+            if self.session is not None:
+                self.session.variant_settings(royal_losers_board())
+            self.policy.losers = True
+            await self.send("set f3 losers")
+        self.policy.seek_pool = pool
+        if self.game is None:
+            await self.seek()
+        return pool
 
     async def explain(self, text):
         """A move's explanation to observers (whisper) and to followers (tell)."""
@@ -1390,9 +1395,15 @@ async def serve(connection, commands, on_line, probe_interval=300, probe_timeout
                     await player.stop()
                 elif word == "reseek" and player is not None:
                     await player.seek()
+                elif word.split()[:1] == ["seek-pool"] and player is not None:
+                    try:
+                        pool = await player.set_seek_pool(text.strip()[len("seek-pool"):])
+                        on_line(f"-- seek pool set: {', '.join(pool)}; used after every game")
+                    except ValueError as error:
+                        on_line(f"-- invalid seek pool: {error} (e.g. seek-pool 3 0, 5 3, 3 0 losers)")
                 elif word == "help":
-                    on_line("-- console: quit (after the game, again to leave now), softquit, softrestart, reseek, help; "
-                            "anything else goes to FICS (help <topic> for its help)")
+                    on_line("-- console: quit (after the game, again to leave now), softquit, softrestart, reseek, "
+                            "seek-pool <3 0, 5 3 losers, ...>, help; anything else goes to FICS (help <topic> for its help)")
                 else:
                     await connection.send(text)
                 command = asyncio.ensure_future(commands.get())

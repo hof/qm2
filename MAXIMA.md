@@ -1772,7 +1772,8 @@ and reseeks after five minutes without a game (`reseek_minutes: 5`).
 Operators can refresh immediately with `tell <bot> reseek` (a configured owner)
 or `tell <bot> <key> reseek`. This withdraws the current ads and draws the pool
 again. During a game it reports that seeking resumes after the game, without
-interrupting play. Typing `reseek` in the local console also refreshes idle ads.
+interrupting play. Typing `reseek` in the local console also refreshes idle ads. Typing `seek-pool 3 0, 5 3, 3 0 w3, 3 1 losers` there
+replaces the pool, as the remote `seek-pool` tell does.
 Older `losers_seeks`, `losers_seeks_at_once`, and their CLI flags remain accepted
 for compatibility; a single mixed `seeks` pool is sufficient. `--no-seek`
 suppresses all advertisements while retaining challenge support.
@@ -1986,7 +1987,7 @@ depth, score, time and PV, or the book layers behind a book move. Style 12
 board lines are left out of the terminal; `--debug` transcripts keep them.
 
 Lines typed at the terminal go to the server verbatim, except the console's own
-`help`, `quit`, `softquit`, `softrestart` and `reseek`; `help <topic>` still reaches the
+`help`, `quit`, `softquit`, `softrestart`, `reseek` and `seek-pool`; `help <topic>` still reaches the
 server. When the bot plays, `quit` stops after the game and a second `quit`
 leaves at once; without a player it logs off.
 Handles are validated before connecting (3–17 letters, or `guest`); the

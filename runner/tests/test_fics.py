@@ -326,12 +326,16 @@ class session_tests(unittest.IsolatedAsyncioTestCase):
             async def lift_rests(self):
                 pass
 
+            async def set_seek_pool(self, text):
+                self.pool = fics.parse_seek_pool(text)
+                return self.pool
+
             async def stop(self):
                 self.stopping = self.finished = True
                 await self.connection.send("unseek")
 
         lines, commands, player = [], asyncio.Queue(), idle_player()
-        for command in ("help", "finger", "softrestart"):
+        for command in ("help", "seek-pool 3 0 losers", "seek-pool 0 0", "finger", "softrestart"):
             commands.put_nowait(command)
         async with fake_server(script) as server:
             connection = await fics.ics_connection.open("127.0.0.1", server.port)
@@ -343,6 +347,8 @@ class session_tests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await connection.close()
         self.assertTrue(player.restart)
+        self.assertEqual(player.pool, ["3 0 losers"])
+        self.assertTrue(any(line.startswith("-- invalid seek pool") for line in lines))
         self.assertTrue(any(line.startswith("-- console:") for line in lines))
         self.assertFalse(any("<12>" in line for line in lines))
 
