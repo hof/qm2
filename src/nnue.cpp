@@ -219,6 +219,50 @@ void network_t::update(const board_t & board, accumulator_t & accumulator,
         --first;
     }
     const accumulator_t & base = ancestors[first - 1];
+
+#ifdef __AVX2__
+    // One child: reuse its feature addresses across both tiles.
+    if (first == ancestors.size()) {
+        std::array<const int16_t *, 3> removed{}, added{};
+        for (int c = 0; c < accumulator.change_count; ++c) {
+            const auto & change = accumulator.changes[c];
+            if (change.from >= 0) {
+                removed[c] = _features[feature_index(color, king, change.piece, change.from)].values.data();
+            }
+            if (change.to >= 0) {
+                added[c] = _features[feature_index(color, king, change.piece, change.to)].values.data();
+            }
+        }
+        for (size_t offset = 0; offset < 256; offset += 128) {
+            __m256i sums[8];
+            const auto * input = reinterpret_cast<const __m256i *>(base.values[color].data() + offset);
+            for (size_t i = 0; i < 8; ++i) {
+                sums[i] = _mm256_loadu_si256(input + i);
+            }
+            for (int c = 0; c < accumulator.change_count; ++c) {
+                if (removed[c]) {
+                    const auto * weights = reinterpret_cast<const __m256i *>(removed[c] + offset);
+                    for (size_t i = 0; i < 8; ++i) {
+                        sums[i] = _mm256_sub_epi16(sums[i], _mm256_loadu_si256(weights + i));
+                    }
+                }
+                if (added[c]) {
+                    const auto * weights = reinterpret_cast<const __m256i *>(added[c] + offset);
+                    for (size_t i = 0; i < 8; ++i) {
+                        sums[i] = _mm256_add_epi16(sums[i], _mm256_loadu_si256(weights + i));
+                    }
+                }
+            }
+            auto * output = reinterpret_cast<__m256i *>(accumulator.values[color].data() + offset);
+            for (size_t i = 0; i < 8; ++i) {
+                _mm256_storeu_si256(output + i, sums[i]);
+            }
+        }
+        accumulator.ready[color] = true;
+        return;
+    }
+#endif
+
     auto state_at = [&](size_t index) -> accumulator_t & {
         return index < ancestors.size() ? ancestors[index] : accumulator;
     };

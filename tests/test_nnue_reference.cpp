@@ -106,6 +106,7 @@ int main(int argc, char ** argv) {
     bool success = true;
     const char * start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     for (const char * fen : {start,
+            "r1bq1rk1/pppnppbp/6p1/8/3PB3/5N2/PPP2PPP/R1BQR1K1 b - - 0 1",
             "r3k2r/ppp2ppp/2n5/3pp3/3PP3/2N5/PPP2PPP/R3K2R w KQkq - 0 1",
             "r3k2r/ppp2ppp/2n5/3pp3/3PP3/2N5/PPP2PPP/R3K2R b KQkq - 0 1",
             "7k/8/8/3pP3/8/8/8/K7 w - d6 0 1",
