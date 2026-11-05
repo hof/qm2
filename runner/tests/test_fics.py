@@ -323,6 +323,9 @@ class session_tests(unittest.IsolatedAsyncioTestCase):
             async def reseek_when_idle(self):
                 pass
 
+            async def lift_rests(self):
+                pass
+
             async def stop(self):
                 self.stopping = self.finished = True
                 await self.connection.send("unseek")

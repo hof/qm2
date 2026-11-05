@@ -666,6 +666,7 @@ class engine_player:
         self.opponent_ready.set()
         self.opponent_aborted = False
         self.aborts, self.rests = {}, {}  # lowercase name: aborts in a row; lowercase name: (rest until, rests so far)
+        self.noplayed = set()  # resting names on our FICS noplay list
         self.streak = self.played = 0
         self.stopping = self.finished = self.restart = False
         self.seeked = time.monotonic()
@@ -754,6 +755,8 @@ class engine_player:
         self.announced_mood = None
         if self.policy.losers:
             await self.send("set f3 losers")
+        for name in self.noplayed:  # a new guest login starts with empty lists
+            await self.send(f"+noplay {name}")
         await self.announce()
         await self.seek()
 
@@ -885,6 +888,7 @@ class engine_player:
         """Stop seeking; quit now when idle, or after the current game."""
         self.stopping = True
         await self.send("unseek")
+        await self.lift_rests(True)
         action = "restarting" if self.restart else "stopping"
         if self.game is None:
             self.finished = True
@@ -982,7 +986,9 @@ class engine_player:
             await self.session.stop_pondering()
         self.on_line(f"-- game {self.game} over: {end['reason']} {end['result']}")
         opponent = end["black"] if self.name and end["white"].lower() == self.name.lower() else end["white"]
-        self.count_abort(opponent, end["result"])
+        if self.count_abort(opponent, end["result"]):
+            self.noplayed.add(opponent)
+            await self.send(f"+noplay {opponent}")
         game = self.finished_game(end)
         self.save(game)
         self.emit("game_end", game=self.game, result=end["result"], reason=end["reason"],
@@ -1008,27 +1014,35 @@ class engine_player:
         rest = self.rests.get(name.lower())
         return rest is not None and rest[0] > time.time()
 
+    async def lift_rests(self, everyone=False):
+        """Take finished rests, or all of them when leaving, off the noplay list."""
+        for name in [name for name in self.noplayed if everyone or not self.resting(name)]:
+            self.noplayed.discard(name)
+            await self.send(f"-noplay {name}")
+
     def count_abort(self, opponent, result):
-        """Count a registered opponent's aborts on move one in a row; a played game clears the count and the rests."""
+        """Count a registered opponent's aborts on move one in a row; a played game clears the count and the rests.
+        True when a rest starts."""
         aborted, self.opponent_aborted = self.opponent_aborted, False
         key = opponent.lower()
         if not aborted:
             if result != "*":
                 self.aborts.pop(key, None)
                 self.rests.pop(key, None)
-            return
+            return False
         created = self.created or {}
         side = "white" if created.get("white", "").lower() == key else "black"
         if created.get(f"{side}_rating") == "++++" or self.resting(opponent):
-            return
+            return False
         self.aborts[key] = self.aborts.get(key, 0) + 1
         if self.aborts[key] < aborts_before_rest:
-            return
+            return False
         rests = self.rests[key][1] + 1 if key in self.rests else 1
         seconds = abort_rests[min(rests, len(abort_rests)) - 1]
         self.rests[key] = (time.time() + seconds, rests)
         self.aborts[key] = 0
-        self.on_line(f"-- {opponent} aborted on move one {aborts_before_rest} times in a row; not playing them for {seconds // 3600}h")
+        self.on_line(f"-- {opponent} aborted on move one {aborts_before_rest} times in a row; noplay for {seconds // 3600}h")
+        return True
 
     def save_interrupted(self):
         if self.game is None or self.history is None or self.record is None or self.latest_position is None:
@@ -1386,6 +1400,7 @@ async def serve(connection, commands, on_line, probe_interval=300, probe_timeout
                 await connection.send("quit")
                 return "quit"
             if player is not None:
+                await player.lift_rests()
                 await player.reseek_when_idle()
             now = time.monotonic()
             if probe_sent is not None and connection.received > probe_sent:

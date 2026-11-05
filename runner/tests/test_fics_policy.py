@@ -91,11 +91,15 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
                 await subject.handle(board_as_black.replace("GuestOPPO", name))
                 await subject.handle("Your opponent has aborted the game on move one.")
                 await subject.handle(f"{{Game 7 ({name} vs. GuestTEST) Game aborted on move 1}} *")
+            self.assertEqual(f"+noplay {name}" in subject.connection.sent, name == "Kobasa")
             await subject.handle(f"Challenge: {name} ({rating}) GuestTEST (++++) unrated blitz 3 0.")
             self.assertEqual(subject.connection.sent[-1], ("decline " if name == "Kobasa" else "accept ") + name)
         subject.connection.sent.clear()
         await subject.handle(creating.replace("GuestOPPO (++++)", "Kobasa (1474)"))
         self.assertEqual(subject.connection.sent, ["abort"])
+        subject.rests["kobasa"] = (0, 1)
+        await subject.lift_rests()
+        self.assertEqual(subject.connection.sent[-1], "-noplay Kobasa")
 
     async def test_challenges_are_filtered_by_variant_and_state(self):
         subject = player()
