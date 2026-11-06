@@ -188,7 +188,12 @@ move_t * move_picker_t::next(search_t * s, int depth, bool quiets_pruned) {
             if (list->current != list->last) {
                 for (move_t * move = list->current; move != list->last; move++) {
                     if (s->wild == 17) {
-                        move->score = s->brd.is_attacked(move->tsq, move->capture <= WKING);
+
+                        // Queens first: taking one, or giving ours to a recapture, prunes the widest trees.
+                        const bool defended = s->brd.is_attacked(move->tsq, move->capture <= WKING);
+                        const bool queen_off = move->capture == WQUEEN || move->capture == BQUEEN
+                            || ((move->piece == WQUEEN || move->piece == BQUEEN) && defended);
+                        move->score = 2 * queen_off + defended;
                     } else {
                         move->score = brd->mvvlva(move);
                     }
