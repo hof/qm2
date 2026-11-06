@@ -535,11 +535,11 @@ void search_t::iterative_deepening() {
     /*
      * Depth milestones, in order of urgency: 8, 16, 22. Elo per extra ply, measured to depth 18:
      * 160-190 at depths 8-10, 67-91 at 12-15, 52-58 at 16-18. No easy or normal stop before 16,
-     * and no normal stop before 22: only an easy position stops in between. Standard chess and the
-     * orthodox wilds only; the losers search rarely reaches them.
+     * and no normal stop before 22: only an easy position stops in between. Standard chess only;
+     * the losers search rarely reaches them.
      */
-    const int easy_depth = wild != 17 ? 16 : 0;
-    const int normal_depth = wild != 17 ? 22 : 0;
+    const int easy_depth = wild == 0 ? 16 : 0;
+    const int normal_depth = wild == 0 ? 22 : 0;
     int depth;
     for (depth = 1; depth <= game.max_depth; depth++) {
         attempted_depth = depth;
