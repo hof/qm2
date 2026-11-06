@@ -598,9 +598,9 @@ void search_t::iterative_deepening() {
                 // Neutral position, normal time control; a drawn score or proven win is never complex
                 do_stop = true;
                 stop_reason = "normal";
-            } else if (score::mate_in_ply(score) && depth > score::mate_in_ply(score)) {
+            } else if (score::mate_in_ply(score) && (depth > score::mate_in_ply(score) || wild == 17)) {
 
-                // Mate in N and search depth > N
+                // Mate in N and search depth > N; a losers streak proof already holds every reply
                 do_stop = true;
                 stop_reason = "mate";
             }
