@@ -538,8 +538,8 @@ void search_t::iterative_deepening() {
      * and no normal stop before 22: only an easy position stops in between. Standard chess and the
      * orthodox wilds only; the losers search rarely reaches them.
      */
-    const int easy_depth = wild == 0 ? 16 : 0;
-    const int normal_depth = wild == 0 ? 22 : 0;
+    const int easy_depth = wild != 17 ? 16 : 0;
+    const int normal_depth = wild != 17 ? 22 : 0;
     int depth;
     for (depth = 1; depth <= game.max_depth; depth++) {
         attempted_depth = depth;
