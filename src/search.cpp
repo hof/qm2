@@ -523,7 +523,7 @@ void search_t::iterative_deepening() {
      * clock search may spend up to half the clock to finish it. The first completed iteration
      * restores the normal cap.
      */
-    if (wild != 0 && timed_search && !pondering()) {
+    if (wild == 17 && timed_search && !pondering()) {
         const int rescue = game.time(brd.us()) / 2 - options::get_value("Move Overhead");
         game.tm.set_max(std::max(max_time, rescue));
     }
@@ -674,11 +674,11 @@ bool search_t::poll() {
         /*
          * One ponder snapshot throughout the poll: a ponderhit can arrive at any time. Standard
          * chess finishes its first root move first; a losers proof under that move can take
-         * minutes, so a variant stops on time regardless and plays the fallback root move.
+         * minutes, so losers stops on time regardless and plays the fallback root move.
          */
         const bool ponder = pondering();
         result = ((ponder_stop && !ponder) || game.tm.handle_abort(ponder, next_poll))
-            && (root_stack->best_move.piece > 0 || wild != 0);
+            && (root_stack->best_move.piece > 0 || wild == 17);
         if (game.max_nodes > 0) {
             next_poll = int(std::min<U64>(next_poll, game.max_nodes - nodes));
         }
