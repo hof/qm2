@@ -1334,6 +1334,11 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
                 ++stack->lmr_alpha_raises;
                 alpha = best;
             }
+
+            // Losers: a proven win is enough; a shorter one is not worth searching the other moves
+            if (wild == 17 && best >= score::MATE - MAX_PLY) {
+                return best;
+            }
         }
     }
     return best;
