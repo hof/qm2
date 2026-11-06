@@ -517,6 +517,16 @@ void search_t::iterative_deepening() {
     // A ponder search gets a quarter more: the opponent's time pays part of it.
     const int min_time = game.tm.reserved_min() * (game.ponder ? 5 : 4) / 4;
     bool timed_search = game.white_time || game.black_time;
+
+    /*
+     * Losers: depth 1 holds the streak proofs that keep us out of the opponent's traps, so a
+     * clock search may spend up to half the clock to finish it. The first completed iteration
+     * restores the normal cap.
+     */
+    if (wild != 0 && timed_search && !pondering()) {
+        const int rescue = game.time(brd.us()) / 2 - options::get_value("Move Overhead");
+        game.tm.set_max(std::max(max_time, rescue));
+    }
     int iteration_start = 0;
     bool drawn = false;  // the last iteration scored the draw value, so the deadline is the minimum
     bool won_on_board = true;  // +8 or more from depth 1 on: the win is on the board, many moves keep it
