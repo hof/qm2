@@ -82,7 +82,7 @@ bool test_terminals() {
         for (int depth : {0, 1, 3}) {
             auto search = std::make_unique<w17_search_t>(positions[i]);
             success &= check("king-only terminals precede static evaluation and draws",
-                search->w17_pvs(-score::INF, score::INF, -1, depth) == (i < 2 ? score::MATE : -score::MATE));
+                search->w17_pvs(-score::INF, score::INF, depth) == (i < 2 ? score::MATE : -score::MATE));
         }
     }
     return success;

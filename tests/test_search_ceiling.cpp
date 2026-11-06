@@ -24,7 +24,7 @@ void place_at_ply(search_t & search, int ply) {
     search.draw_contempt = 0;
 }
 
-bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
+bool run_case(const ceiling_case_t & test, int clock, bool losers,
         int depth, int alpha, int table_state) {
     const std::string fen = std::string(test.position) + " " + std::to_string(clock) + " 1";
     std::unique_ptr<search_t> storage;
@@ -46,7 +46,7 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
         : clock >= 100 ? 0 : losers ? w17_evaluate(static_cast<w17_search_t *>(&search)) : evaluate(&search);
     trans_table::clear();
     if (table_state == 1) {
-        const U64 tt_key = losers ? static_cast<w17_search_t &>(search).w17_tt_key(mode) : context;
+        const U64 tt_key = losers ? static_cast<w17_search_t &>(search).w17_tt_key() : context;
         // A stale cached evaluation must not hide the ceiling's terminal result.
         trans_table::store(tt_key, 0, ply, 6, 1234, 0, score::EXACT);
     }
@@ -54,7 +54,7 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
         trans_table::disable();
     }
     const int beta = alpha == -score::INF ? score::INF : alpha + 1;
-    const int actual = losers ? static_cast<w17_search_t &>(search).w17_pvs(alpha, beta, mode, depth)
+    const int actual = losers ? static_cast<w17_search_t &>(search).w17_pvs(alpha, beta, depth)
         : depth <= 0 ? search.qsearch(alpha, beta, depth) : search.pvs(alpha, beta, depth);
     trans_table::enable();
     const bool success = actual == expected && !search.stop_all && search.nodes == 0
@@ -65,7 +65,7 @@ bool run_case(const ceiling_case_t & test, int clock, bool losers, int mode,
         && position_key(search.brd) == context
         && search.stack->repetition_start == history_start && search.is_repetition() == repeated;
     if (!success) {
-        std::cerr << "ceiling: " << fen << " losers=" << losers << " mode=" << mode
+        std::cerr << "ceiling: " << fen << " losers=" << losers
             << " depth=" << depth << " alpha=" << alpha << " TT=" << table_state
             << " expected=" << expected << " actual=" << actual << "\n";
     }
@@ -197,10 +197,8 @@ int main() {
             for (int table_state : {0, 1, 2}) {
                 for (int alpha : {-score::INF, -10000, -1, 0, 10000}) {
                     for (int depth : {-2, 0, 1, 3}) {
-                        success &= run_case(test, clock, false, -1, depth, alpha, table_state);
-                        for (int mode : {-1, 0, 1}) {
-                            success &= run_case(test, clock, true, mode, depth, alpha, table_state);
-                        }
+                        success &= run_case(test, clock, false, depth, alpha, table_state);
+                        success &= run_case(test, clock, true, depth, alpha, table_state);
                     }
                 }
             }

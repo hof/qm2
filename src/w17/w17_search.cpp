@@ -20,6 +20,8 @@
  */
 
 #include "w17_search.h"
+#include <array>
+#include <cmath>
 #include <limits>
 #include "w17_eval.h"
 #include "uci_console.h"
@@ -30,10 +32,6 @@
  * b) repetition
  * @return true if it's an official draw
  */
-
-namespace {
-    const bool DO_EXTEND = false;
-}
 
 bool w17_search_t::w17_is_draw() {
     const bool fifty_move = brd.stack->fifty_count >= 100;
@@ -60,52 +58,58 @@ bool w17_search_t::w17_is_draw() {
     return false;
 }
 
-U64 w17_search_t::w17_tt_key(int in_mate_search) const {
-    assert(in_mate_search >= -1 && in_mate_search <= 1);
-    constexpr U64 mode_salts[] = {
-        0x243f6a8885a308d3ULL, 0x13198a2e03707344ULL, 0xa4093822299f31d0ULL,
-    };
-    return position_key(brd) ^ mode_salts[in_mate_search + 1];
+
+U64 w17_search_t::w17_tt_key() const {
+    return position_key(brd);
 }
 
 int w17_search_t::pvs(int alpha, int beta, int depth, bool) {
-    return w17_pvs(alpha, beta, -1, depth);
+    return w17_pvs(alpha, beta, depth);
 }
 
-int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
+/*
+ * Losers search: one plain tree for both sides. Captures are compulsory,
+ * also past the horizon: the evaluation comes at the first node without one. Capture nodes are
+ * narrow, so depth comes cheap; a winning streak is found once the depth covers it. Streak moves,
+ * quiet moves that force the opponent to capture, come first; quiet moves outside the first are
+ * searched shallower, free ones most.
+ */
+int w17_search_t::w17_pvs(int alpha, int beta, int depth) {
+    static const auto lmr = [] {
+        std::array<std::array<int8_t, 64>, 64> table{};
+        for (int d = 1; d < 64; d++) {
+            for (int m = 1; m < 64; m++) {
+                table[d][m] = int8_t(std::log(d) * std::log(m) / 2);
+            }
+        }
+        return table;
+    }();
 
     stack->pv_count = 0;
 
-    //win by having no more pieces
-    const bool us = brd.us();
-    if (max_1(brd.all(us))) {
-        return score::MATE - brd.ply;
-    }
-
-    //loss by opponent having no more pieces
-    bool them = !us;
-    if (max_1(brd.all(them))) {
-        return -score::MATE + brd.ply;
-    }
-
-    //draw by repetition or fifty quiet moves
-    if (w17_is_draw()) {
-        return draw_score();
-    }
-
-    /*
-     * Stop conditions
-     */
-
-    //time 
+    // Every node counts toward a node limit, terminal ones included
     if (abort(false)) {
         return alpha;
     }
 
-    //ceiling
+    // A side left with only its king has won
+    const bool us = brd.us();
+    if (max_1(brd.all(us))) {
+        return score::MATE - brd.ply;
+    }
+    if (max_1(brd.all(!us))) {
+        return -score::MATE + brd.ply;
+    }
+
+    // Draw by repetition or fifty quiet moves
+    if (w17_is_draw()) {
+        return draw_score();
+    }
+
     if (brd.ply >= sel_depth) {
         sel_depth = brd.ply;
     }
+
     if (brd.ply >= MAX_PLY) {
         if (!has_legal_move(brd)) {
             return score::MATE - brd.ply;
@@ -113,127 +117,143 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
         return w17_evaluate(this);
     }
 
-    //mate distance pruning: if mate(d) in n don't search deeper
-    if ((score::MATE - brd.ply) < beta) {
-        beta = score::MATE - brd.ply;
-        if (alpha >= beta) {
-            return beta;
-        }
-    }
-    
-    int alpha1 = alpha;
-    if ((-score::MATE + brd.ply) > alpha) {
-        alpha = -score::MATE + brd.ply;
-        if (beta <= alpha) {
-            return alpha;
-        }
+    // Mate distance pruning
+    beta = MIN(beta, score::MATE - brd.ply);
+    alpha = MAX(alpha, -score::MATE + brd.ply);
+    if (alpha >= beta) {
+        return alpha;
     }
 
-    /*
-     * Transposition table lookup
-     */
-
-    // Key the incoming horizon semantics, before a quiet node changes mode
-    // or reduces depth. Descendants compute their own key from that mode.
-    stack->tt_key = w17_tt_key(in_mate_search);
+    // Transposition table
+    const int alpha1 = alpha;
+    stack->tt_key = w17_tt_key();
     tt_hit_t tt;
-    if (depth > 0 && trans_table::probe(stack->tt_key, brd.ply, brd.stack->fifty_count, tt)
-            && tt.bound && tt.depth >= depth && brd.stack->fifty_count < 90) {
-        const int tt_flag = tt.bound, tt_score = tt.score;
-        if ((tt_flag == score::LOWERBOUND && tt_score >= beta)
-                || (tt_flag == score::UPPERBOUND && tt_score <= alpha)
-                || tt_flag == score::EXACT) {
-            return tt_score;
+    const int decisive = score::MATE - MAX_PLY;
+    const int tt_depth = MAX(depth, 0);
+    if (trans_table::probe(stack->tt_key, brd.ply, brd.stack->fifty_count, tt)
+            && tt.bound && brd.stack->fifty_count < 90 && (tt.depth >= tt_depth
+
+                // A proven win or loss holds at any depth
+                || (tt.score >= decisive && tt.bound != score::UPPERBOUND)
+                || (tt.score <= -decisive && tt.bound != score::LOWERBOUND))) {
+        if ((tt.bound == score::LOWERBOUND && tt.score >= beta)
+                || (tt.bound == score::UPPERBOUND && tt.score <= alpha)
+                || tt.bound == score::EXACT) {
+            return tt.score;
         }
     }
-    const int tt_move = tt.move;
 
-    /*
-     * First move
-     * - if there is no first move, it's checkmate or stalemate and both cases
-     * are a win in losers chess
-     */
-
-    stack->tt_move.set_compact(&brd, tt_move);
-    move_t * move = move::first(this, 0);
+    // No legal move: checkmate or stalemate, both a win in losers chess
+    stack->tt_move.set_compact(&brd, tt.move);
+    move_t * move = move::first(this, MAX(depth, 0));
     if (!move) {
         return score::MATE - brd.ply;
     }
 
     /*
-     * Node pruning
-     * - special attention to those rare quiet positions: either stop the search 
-     *   altogether (horizon) or at least stop searching for a forced mate sequence 
-     *   by the opponent
-     * - if the horizon position is not quiet, return an "uncertain score"
+     * Past the horizon a capture or a check evasion is still forced. A node without one stands
+     * pat on the evaluation, unless its side is in the middle of a streak: its last quiet move
+     * was answered by forced moves only. Then it may go on with moves that leave the opponent a
+     * capture, new or pending, or with a check, but not two checks without a capture between
+     * them; a check counts as a check even with a capture pending, since the opponent must evade
+     * first. Only a proven win counts. New streaks start inside the nominal depth only.
      */
-
-    const bool quiet_pos = move->capture == 0 && stack->in_check == 0;
-    const bool pv = alpha + 1 < beta;
-    if (quiet_pos) {
-        if (depth <= 0) {
-            if (in_mate_search == (int) us) {
-
-                //unknown if we can finish the forced mating sequence
-                return 1000 + brd.ply;
-            }
-            return w17_evaluate(this);
-        } else if (in_mate_search == (int) them) {
-            return w17_evaluate(this);
-        } else if (in_mate_search == -1 && depth < brd.max_mate_depth_us()) {
-            in_mate_search = us;
-        } else if (in_mate_search == -1) {
-            depth -= 1;
-        }
-    }
-
-    /*
-     * Moves loop
-     */
-
+    const bool quiet_node = move->capture == 0 && stack->in_check == 0;
+    const bool horizon = depth <= 0 && move->capture == 0 && !stack->in_check;
     int best = -score::INF;
+    if (horizon) {
+        best = w17_evaluate(this);
+        int last_quiet = 1;
+        while (last_quiet <= brd.ply && ((stack - last_quiet)->current_move.capture
+                || (stack - last_quiet)->in_check)) {
+            last_quiet++;
+        }
+        if (best >= beta || last_quiet % 2 || last_quiet > brd.ply) {
+            return best;
+        }
+        alpha = MAX(alpha, best);
+    }
+    const int win = score::MATE - MAX_PLY;
+    const bool pv = alpha + 1 < beta;
     stack->best_move.clear();
     int searched_moves = 0;
-    int score_max = score::MATE - brd.ply - 1;
     do {
         assert(brd.valid(move) && brd.legal(move));
-        assert(stack->best_move.equals(move) == false);
+        const bool quiet = move->capture == 0 && move->promotion == 0;
+        const int gives_check = brd.gives_check(move);
 
         /*
-         * Go forward and search next node
+         * Every move costs a ply. Streak moves are never reduced; free quiet moves are cut: late
+         * ones are pruned near the horizon and reduced hard further up.
          */
+        bool forcing = false, new_capture = false;
+        if (quiet && quiet_node) {
+            if (stack->tt_move.equals(move)) {
+                forcing = brd.capture_replies(move, brd.hanging_pieces(), new_capture) > 0;
+            } else if (move->score > FORCING_MINIMUM) {
+                forcing = true;
+                new_capture = forcing_class(move->score) % 2 == 0;
+            }
+        }
+        const bool streak = forcing && new_capture;
+        if (horizon && (gives_check ? (stack - 1)->in_check && !(stack - 1)->current_move.capture
+                : !forcing)) {
+            continue;
+        }
 
-        int gives_check = brd.gives_check(move);
-        bool extend = DO_EXTEND && pv && move->capture > 0 && in_mate_search != -1;
+        // A streak move must not let the opponent end the streak with a capture we must take back
+        if (horizon && !gives_check && !brd.keeps_streak(move)) {
+            continue;
+        }
+        int reduce = 0;
+        if (quiet && quiet_node && !streak && !gives_check && depth > 0) {
+            if (depth <= 4 && searched_moves >= 2 + depth && best > -decisive) {
+                continue;
+            }
+            if (depth >= 2) {
+                reduce = MIN(depth - 1, 1 + !pv + lmr[MIN(depth, 63)][MIN(searched_moves + 1, 63)]);
+            }
+        }
         forward(move, gives_check);
+        const int new_depth = depth - 1;
         int score;
-        if (searched_moves == 0) {
-            score = -w17_pvs(-beta, -alpha, in_mate_search, depth - 1 + extend);
-        } else {
-            score = -w17_pvs(-alpha - 1, -alpha, in_mate_search, depth - 1 + extend);
-            if (!stop_all && pv && score > alpha) {
+        if (horizon) {
 
-                //full window research
-                score = -w17_pvs(-beta, -alpha, in_mate_search, depth - 1 + extend);
+            // Any proven win will do: looking for a shorter one only grows the proof
+            score = -w17_pvs(-win, -(win - 1), new_depth);
+            backward(move);
+            if (stop_all) {
+                return alpha;
+            }
+            if (score < win) {
+                continue;
+            }
+            stack->best_move.set(move);
+            update_pv(move);
+            trans_table::store(stack->tt_key, brd.root_ply, brd.ply, tt_depth, score, move->to_compact(), score::LOWERBOUND);
+            return score;
+        } else if (searched_moves == 0 && !reduce) {
+            score = -w17_pvs(-beta, -alpha, new_depth);
+        } else {
+            score = -w17_pvs(-alpha - 1, -alpha, new_depth - reduce);
+            if (!stop_all && reduce && score > alpha) {
+                score = -w17_pvs(-alpha - 1, -alpha, new_depth);
+            }
+            if (!stop_all && pv && score > alpha && score < beta) {
+                score = -w17_pvs(-beta, -alpha, new_depth);
             }
         }
         backward(move);
 
-        /*
-         * Handle results: update the best value / do a beta cutoff
-         */
-
         if (stop_all) {
             return alpha;
-        } else if (score > best) {
+        }
+        if (score > best) {
+            best = score;
             stack->best_move.set(move);
             if (score >= beta) {
-
-                if (depth > 0) {
-                    trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, score, move->to_compact(), score::LOWERBOUND);
-                }
-
-                if (depth > 0 && !move->capture && !move->promotion && !move->castle) {
+                trans_table::store(stack->tt_key, brd.root_ply, brd.ply, tt_depth, score, move->to_compact(), score::LOWERBOUND);
+                if (quiet && !move->castle) {
                     update_killers(move);
                     update_history(move);
 
@@ -248,30 +268,18 @@ int w17_search_t::w17_pvs(int alpha, int beta, int in_mate_search, int depth) {
                 }
                 return score;
             }
-            best = score;
-            if (best > alpha) {
+            if (score > alpha) {
                 update_pv(move);
-                alpha = best;
-            }
-            if (best >= score_max) {
-                break;
+                alpha = score;
             }
         }
         stack->searched[searched_moves++].set(move);
-    } while ((move = move::next(this, 0)));
-
-    /*
-     * Finalize
-     */
+    } while ((move = move::next(this, MAX(depth, 0))));
 
     assert(best > -score::INF && best < beta);
     assert(!stop_all);
-    assert(brd.valid(&stack->best_move) && brd.legal(&stack->best_move));
-
-    if (depth > 0) {
-        int flag = score::flags(best, alpha1, beta); 
-        trans_table::store(stack->tt_key, brd.root_ply, brd.ply, depth, best, stack->best_move.to_compact(), flag);
-    }
-
+    const int flag = score::flags(best, alpha1, beta);
+    trans_table::store(stack->tt_key, brd.root_ply, brd.ply, tt_depth, best,
+        stack->best_move.piece ? stack->best_move.to_compact() : 0, flag);
     return best;
 }

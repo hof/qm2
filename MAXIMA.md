@@ -110,6 +110,21 @@ worker-owned histories. Every selective rule below is a heuristic: none is a
 proven bound. Royal losers (`Wild=losers`) has its own search in `src/w17/` and
 shares only the root driver; the rules in this chapter apply to standard chess.
 
+The losers search is one PVS tree for both sides with a material evaluation.
+Every move costs a ply. Captures are compulsory past the horizon too, and in check
+every evasion is searched. A quiet node past the horizon stands pat, unless its
+side is in a streak: its last quiet move was answered by forced moves only. That
+side then has to prove the streak, a forced win, in a null window at the win
+bound: any proven win ends the proof. A streak goes on with quiet moves that leave
+the opponent a capture, or with a check, never two checks without a capture
+between them. A streak move is skipped when the opponent can end the streak: his
+captures come from one piece, one of them lands on a square we defend, and after
+our recapture he is left with no capture or check, while we attack nothing else.
+In the main tree, quiet moves that give the opponent a new capture are never
+reduced; other quiet moves are pruned near the horizon and reduced from depth 2.
+Quiet moves are ordered by the captures they leave the opponent, fewest first,
+new captures before pending ones.
+
 Search pruning, reductions, extensions, histories, ordering, correction and TT
 evaluation caching are fixed parts of the standard search. They have no UCI
 enable/disable switches. Operational controls include hash size, time overhead,
@@ -1066,7 +1081,7 @@ positions, board/hash restoration, and losers terminal root score signs.
 
 `test_search_ceiling` checks both colors' mate/stalemate and playable checked
 and quiet positions at the final stack slot, clocks 0/99/100/101, full/null
-windows, standard PVS/quiescence and every losers mode, cold/seeded/disabled TT,
+windows, standard PVS/quiescence and the losers search, cold/seeded/disabled TT,
 legal mate transitions, interrupted restarts, and board/hash/history restoration.
 Synthetic placement isolates the boundary without claiming reachable histories
 of that length; playable ceiling evaluations remain horizon approximations.
@@ -1120,10 +1135,9 @@ restoration. Deterministic comparisons use identical selective settings;
 they do not assert selective search equals exhaustive minimax. Verify the
 castling certificates with `python tests/data/search/generate_review.py --check`.
 
-`test_w17_tt_context` compares every royal-losers mate-search mode pair with
-cold and disabled tables, both colors, reversible clocks, and repetition history.
-It checks exact/lower/upper bounds, legal move hints, matching-mode reuse, and
-incoming-mode identity across local horizon transitions.
+`test_w17_tt_context` compares royal-losers searches with cold, warm and
+disabled tables, both colors, reversible clocks, and repetition history. It
+checks exact/lower/upper bounds and legal move hints.
 
 `test_w17_evaluation` checks active material-only scores, classifications and
 phase, both colors, cold/warm material caches, symmetry of the covered fixtures,

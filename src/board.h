@@ -375,6 +375,150 @@ public:
                 || (bb[BISHOP[us]] | bb[QUEEN[us]]) & magic::bishop_moves(sq, bb[ALLPIECES]);
     }
     
+    // All squares one side attacks, with the given occupancy
+    U64 attacked_squares(const bool side, const U64 occupied) {
+        U64 result = pawn_attacks(side) | KING_MOVES[get_sq(KING[side])];
+        for (U64 knights = bb[KNIGHT[side]]; knights;) {
+            result |= KNIGHT_MOVES[pop(knights)];
+        }
+        for (U64 diagonal = bb[BISHOP[side]] | bb[QUEEN[side]]; diagonal;) {
+            result |= magic::bishop_moves(pop(diagonal), occupied);
+        }
+        for (U64 straight = bb[ROOK[side]] | bb[QUEEN[side]]; straight;) {
+            result |= magic::rook_moves(pop(straight), occupied);
+        }
+        return result;
+    }
+
+    // Losers: our pieces, the king aside, the opponent can capture now
+    U64 hanging_pieces() {
+        return (bb[WPIECES + !stack->wtm] ^ bb[KING[stack->wtm]]) & attacked_squares(!stack->wtm, bb[ALLPIECES]);
+    }
+
+    /*
+     * Losers: can a quiet move that leaves the opponent a capture go on with a streak? A capture
+     * on a square we defend makes us take back and ends the streak, unless another
+     * opponent piece still has a capture, now or once the capturing piece has left, or we attack
+     * anything besides the capturing piece: a capture we cannot make yet, pinned or onto a
+     * defended square, may come free after the opponent's capture. A capture that gives check,
+     * directly or by discovery, does not force our recapture either, and a king cannot capture on
+     * a defended square. The moved piece attacks from its new square; pins are ignored.
+     */
+    bool keeps_streak(const move_t * move) {
+        const bool us = stack->wtm, them = !us;
+        const U64 from = BIT(move->ssq), to = BIT(move->tsq);
+        const U64 occupied = (bb[ALLPIECES] ^ from) | to;
+        bb[move->piece] ^= from | to;
+        const U64 attacks = attacked_squares(us, occupied);
+        bb[move->piece] ^= from | to;
+        const U64 own = bb[WPIECES + !us] ^ bb[KING[us]];
+        const U64 pieces = move->piece == KING[us] ? own : (own ^ from) | to;
+
+        // The opponent's capturing pieces: two or more keep the streak going
+        U64 hits = 0, capturer = 0;
+        int capturers = 0;
+        const auto add = [&](const int sq, const U64 piece_hits) {
+            if (piece_hits) {
+                hits = piece_hits;
+                capturer = BIT(sq);
+                capturers++;
+            }
+        };
+        add(get_sq(KING[them]), KING_MOVES[get_sq(KING[them])] & pieces);
+        for (U64 pawns = bb[PAWN[them]]; pawns && capturers < 2;) {
+            const int sq = pop(pawns);
+            add(sq, PAWN_CAPTURES[them][sq] & pieces);
+        }
+        for (U64 knights = bb[KNIGHT[them]]; knights && capturers < 2;) {
+            const int sq = pop(knights);
+            add(sq, KNIGHT_MOVES[sq] & pieces);
+        }
+        for (U64 sliders = bb[BISHOP[them]] | bb[ROOK[them]] | bb[QUEEN[them]]; sliders && capturers < 2;) {
+            const int sq = pop(sliders);
+            const U64 piece = BIT(sq);
+            U64 piece_attacks = 0;
+            if (piece & (bb[BISHOP[them]] | bb[QUEEN[them]])) {
+                piece_attacks |= magic::bishop_moves(sq, occupied);
+            }
+            if (piece & (bb[ROOK[them]] | bb[QUEEN[them]])) {
+                piece_attacks |= magic::rook_moves(sq, occupied);
+            }
+            add(sq, piece_attacks & pieces);
+        }
+        if (capturers != 1 || !(hits & attacks) || (attacks & bb[WPIECES + us] & ~capturer)
+                || (capturer & bb[KING[them]])) {
+            return true;
+        }
+
+        // A capture that checks, directly or by discovery, does not force our recapture
+        const U64 king = move->piece == KING[us] ? to : bb[KING[us]];
+        int type = PAWN[them];
+        while (!(bb[type] & capturer)) {
+            type++;
+        }
+        for (U64 defended = hits & attacks; defended;) {
+            const int sq = pop(defended);
+            const U64 after = (occupied ^ capturer) | BIT(sq);
+            U64 checks = 0;
+            switch (type) {
+                case WPAWN: case BPAWN: checks = PAWN_CAPTURES[them][sq]; break;
+                case WKNIGHT: case BKNIGHT: checks = KNIGHT_MOVES[sq]; break;
+                case WBISHOP: case BBISHOP: checks = magic::bishop_moves(sq, after); break;
+                case WROOK: case BROOK: checks = magic::rook_moves(sq, after); break;
+                default: checks = magic::bishop_moves(sq, after) | magic::rook_moves(sq, after); break;
+            }
+            if (checks & king) {
+                return true;
+            }
+        }
+
+        // Once the capturing piece has left, does another opponent piece get a capture or a check?
+        bb[type] ^= capturer;
+        const U64 discovered = attacked_squares(them, occupied ^ capturer);
+        bb[type] ^= capturer;
+        return discovered & (pieces | king);
+    }
+
+    /*
+     * Losers: how many captures does this quiet move leave the opponent, and is one of them new?
+     * Each attacker and target pair counts, a double pawn push next to an enemy pawn adds an en
+     * passant capture. A capture is new when the opponent did not attack that piece before the
+     * move, those given as hanging: the moved piece, or one on a discovered line. Pins are
+     * ignored: the search enforces legality.
+     */
+    int capture_replies(const move_t * move, const U64 hanging, bool & new_capture) {
+        const bool us = stack->wtm, them = !us;
+        const U64 from = BIT(move->ssq), to = BIT(move->tsq);
+        const U64 occupied = (bb[ALLPIECES] ^ from) | to;
+        const U64 pieces = bb[WPIECES + !us] ^ bb[KING[us]];
+        const U64 targets = move->piece == KING[us] ? pieces : (pieces ^ from) | to;
+        const U64 pawns = bb[PAWN[them]];
+        const U64 left = them == WHITE ? UPLEFT1(pawns) : DOWNLEFT1(pawns);
+        const U64 right = them == WHITE ? UPRIGHT1(pawns) : DOWNRIGHT1(pawns);
+        const U64 king = KING_MOVES[get_sq(KING[them])];
+        U64 attacked = (left | right | king) & targets;
+        int count = popcnt0(left & targets) + popcnt0(right & targets) + popcnt0(king & targets);
+        for (U64 knights = bb[KNIGHT[them]]; knights;) {
+            const U64 hits = KNIGHT_MOVES[pop(knights)] & targets;
+            count += popcnt0(hits);
+            attacked |= hits;
+        }
+        for (U64 diagonal = bb[BISHOP[them]] | bb[QUEEN[them]]; diagonal;) {
+            const U64 hits = magic::bishop_moves(pop(diagonal), occupied) & targets;
+            count += popcnt0(hits);
+            attacked |= hits;
+        }
+        for (U64 straight = bb[ROOK[them]] | bb[QUEEN[them]]; straight;) {
+            const U64 hits = magic::rook_moves(pop(straight), occupied) & targets;
+            count += popcnt0(hits);
+            attacked |= hits;
+        }
+        const bool en_passant = move->piece == PAWN[us] && (move->tsq ^ move->ssq) == 16
+            && (LEFT1(to) | RIGHT1(to)) & pawns;
+        new_capture = en_passant || (attacked & ~hanging);
+        return count + en_passant;
+    }
+
     /**
      * Return a bitboard with all attacks to a given square
      * @param sq the square to investigate

@@ -45,15 +45,30 @@ enum move_stage_t {
     quiet_init,
     good_quiets,
     bad_noisy,
-    bad_quiets
+    bad_quiets,
+    w17_quiets
 };
 
 // Quiescence searches noisy moves down to this static exchange value.
 constexpr int quiescence_see_threshold = -60;
 
+/*
+ * Losers: a quiet move after which the opponent must capture scores STREAK_SCORE less a step for
+ * each half reply, 2 * replies plus one if no capture is new, plus history below a step.
+ */
+constexpr int STREAK_SCORE = 1 << 28;
+constexpr int STREAK_STEP = 1 << 12;
+constexpr int FORCING_MINIMUM = STREAK_SCORE - 256 * STREAK_STEP;
+
+// The forcing class of a scored quiet move: 2 * replies, plus one if no capture is new
+inline int forcing_class(const int score) {
+    return (STREAK_SCORE - score + STREAK_STEP - 1) / STREAK_STEP;
+}
+
 class move_picker_t {
 private:
     move_t * pop(search_t * s, move::list_t * list);
+    move_t * pop_w17_quiet(search_t * s, move::list_t * list);
     move_t * pop_good_noisy(search_t * s, int see_threshold, bool defer_bad_noisy);
     move_t * pop_sorted(search_t * s, move_t *& cursor, move_t * end, int minimum);
     move_t * next_standard(search_t * s, int depth, bool quiets_pruned);

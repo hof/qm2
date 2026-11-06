@@ -39,6 +39,31 @@
  * @param list move list
  * @return best move on the list or null
  */
+/*
+ * Losers quiet moves: best score first, skipping only the hash move; killers are in this list.
+ */
+move_t * move_picker_t::pop_w17_quiet(search_t * s, move::list_t * list) {
+    while (list->first != list->last) {
+        move_t * best = list->first;
+        for (move_t * move = list->first + 1; move != list->last; move++) {
+            if (*move > *best) {
+                best = move;
+            }
+        }
+        move_t * result = list->best;
+        if (result != best) {
+            result->set(best);
+        }
+        if (best != --list->last) {
+            best->set(list->last);
+        }
+        if (!s->stack->tt_move.equals(result) && s->brd.legal(result)) {
+            return result;
+        }
+    }
+    return NULL;
+}
+
 move_t * move_picker_t::pop(search_t * s, move::list_t * list) {
     while (list->first != list->last) {
 
@@ -129,6 +154,9 @@ move_t * move_picker_t::next(search_t * s, int depth, bool quiets_pruned) {
     if (s->wild == 0) {
         return next_standard(s, depth, quiets_pruned);
     }
+    if (s->stack->move_list.stage == w17_quiets) {
+        return pop_w17_quiet(s, &s->stack->move_list);
+    }
 
     /*
      * 1. Pop the best move from the list. If a move is found, a just-in-time
@@ -182,6 +210,30 @@ move_t * move_picker_t::next(search_t * s, int depth, bool quiets_pruned) {
             }
             [[fallthrough]];
         case promotions:
+            if (s->wild == 17) {
+
+                /*
+                 * Losers without a capture: the quiet moves after which the opponent must capture
+                 * first, fewest captures first and a new capture before a pending one; then
+                 * killers, then history.
+                 */
+                move::gen_promotions(brd, list);
+                if (!s->stack->in_check) {
+                    move::gen_castles(brd, list);
+                }
+                move::gen_quiet_moves(brd, list);
+                const U64 hanging = brd->hanging_pieces();
+                for (move_t * move = list->current; move != list->last; move++) {
+                    const int history = s->history[move->piece][move->tsq];
+                    bool new_capture;
+                    const int replies = MIN(brd->capture_replies(move, hanging, new_capture), 127);
+                    move->score = replies ? STREAK_SCORE - STREAK_STEP * (2 * replies + !new_capture) + history
+                        : s->is_killer(move) ? STREAK_SCORE / 2 : history;
+                }
+                list->minimum_score = -move::INF;
+                list->stage = w17_quiets;
+                return pop_w17_quiet(s, list);
+            }
             move::gen_promotions(brd, list);
             if (list->current != list->last) {
                 for (move_t * move = list->current; move != list->last; move++) {

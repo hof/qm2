@@ -147,12 +147,13 @@ class search_lifecycle_tests(unittest.TestCase):
             self.assertGreater(int(result.split()[result.split().index("completed_depth") + 1]), 0, result)
 
     def test_reported_nps_uses_elapsed_milliseconds(self):
-        for variant in ("standard", "losers"):
+        # Losers proofs make its depth 2 cost seconds, so it searches a fixed time instead.
+        for variant, limit in (("standard", "depth 4"), ("losers", "movetime 500")):
             with self.subTest(variant=variant), running_engine() as engine:
                 engine.send("setoption name OwnBook value false")
                 engine.send(f"setoption name Wild value {variant}")
                 engine.send("position startpos")
-                engine.send("go depth 4")
+                engine.send(f"go {limit}")
                 engine.wait_for_bestmove()
                 reports = [line.split() for line in engine.transcript
                            if line.startswith("info depth ")]
