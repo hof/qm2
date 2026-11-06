@@ -211,6 +211,21 @@ class search_lifecycle_tests(unittest.TestCase):
             engine.send("quit")
             engine.wait_for_exit()
 
+    def test_losers_stops_on_time_inside_the_first_root_move(self):
+        # The proof under 1. c3 d5 Qa4+ outlasts the move time: the clock still decides.
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            engine.send("setoption name Wild value losers")
+            engine.send("position startpos moves c2c3 d7d5")
+            engine.send("isready")
+            engine.wait_for("readyok")
+            started = time.monotonic()
+            engine.send("go movetime 300")
+            engine.wait_for_bestmove()
+            self.assertLess(time.monotonic() - started, 2.0)
+            engine.send("quit")
+            engine.wait_for_exit()
+
     def test_losers_terminal_roots(self):
         positions = (
             "7k/7p/8/8/8/8/8/K7 w - - 0 1",  # king-only win

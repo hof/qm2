@@ -661,10 +661,14 @@ bool search_t::poll() {
         result = true;
     } else {
 
-        // One ponder snapshot throughout the poll: a ponderhit can arrive at any time.
+        /*
+         * One ponder snapshot throughout the poll: a ponderhit can arrive at any time. Standard
+         * chess finishes its first root move first; a losers proof under that move can take
+         * minutes, so a variant stops on time regardless and plays the fallback root move.
+         */
         const bool ponder = pondering();
         result = ((ponder_stop && !ponder) || game.tm.handle_abort(ponder, next_poll))
-            && root_stack->best_move.piece > 0;
+            && (root_stack->best_move.piece > 0 || wild != 0);
         if (game.max_nodes > 0) {
             next_poll = int(std::min<U64>(next_poll, game.max_nodes - nodes));
         }
