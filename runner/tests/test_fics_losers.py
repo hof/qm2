@@ -115,6 +115,25 @@ class losers_policy_tests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(subject.connection.sent[-1], 'e3d4')
 
 
+class losers_proof_book_tests(unittest.TestCase):
+    def test_proven_win_is_always_played_and_its_opening_moves_are_not_booked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source, book = Path(directory) / 'w17.pgn', Path(directory) / 'book_w17.bin'
+            source.write_text('[Event "1. a3 d6"]\n[Variant "Royal losers"]\n[Repertoire "white"]\n'
+                              '[Proof "mate 15"]\n[SetUp "1"]\n'
+                              '[FEN "rnbqkbnr/ppp1pppp/3p4/8/8/P7/1PPPPPPP/RNBQKBNR w KQkq - 0 2"]\n\n2. g4 *\n')
+            self.assertEqual(learning.build_repertoire(source, book), 1)
+            board = royal_losers_board()
+            for move in ('a2a3', 'd7d6'):
+                board.push_uci(move)
+            for seed in range(10):
+                opening = learning.opening_book([], book_path=book, variant='losers', rated=False,
+                                                random_source=__import__('random').Random(seed))
+                self.assertEqual(opening.choose_book(board), (chess.Move.from_uci('g2g4'), 'proof: a proven win'))
+            self.assertIsNone(learning.opening_book([], book_path=book, variant='losers').proven_move(
+                royal_losers_board()))
+
+
 class losers_storage_tests(unittest.TestCase):
     def test_pgn_roundtrip_monthly_archive_rebuild_and_cross_variant_rejection(self):
         game = losers_game()

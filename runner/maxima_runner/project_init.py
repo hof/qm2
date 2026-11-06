@@ -227,10 +227,10 @@ def draw_step(root, options):
 
 
 def repertoire_step(root, options):
-    """experiment.bin and the moods, the fun style books, are built from books/ in the checkout."""
+    """experiment.bin, the moods and the losers proof book book_w17.bin are built from books/ in the checkout."""
     from . import learning
     books = root / "books"
-    pairs = [(books / "experiment.pgn", options.data / "experiment.bin")]
+    pairs = [(books / "experiment.pgn", options.data / "experiment.bin"), (books / "w17.pgn", options.data / "book_w17.bin")]
     pairs += learning.mood_sources(books, options.data)
     stale = [(source, target) for source, target in pairs if source.is_file() and (
         not target.is_file() or target.stat().st_mtime < source.stat().st_mtime)]

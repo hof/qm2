@@ -1,0 +1,344 @@
+; Proven losers wins: each line starts after the opening moves and holds the winning move.
+; [Proof] is the mate distance the search proved. Build: ./maxima init (book_w17.bin).
+
+[Event "1. a3 d6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/3p4/8/8/P7/1PPPPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. g4 *
+
+[Event "1. a4 d6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/3p4/8/P7/8/1PPPPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. g4 *
+
+[Event "1. Na3 a5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 18"]
+[SetUp "1"]
+[FEN "rnbqkbnr/1ppppppp/8/p7/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+
+2. b4 *
+
+[Event "1. Na3 a6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 18"]
+[SetUp "1"]
+[FEN "rnbqkbnr/1ppppppp/p7/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+
+2. Nb5 *
+
+[Event "1. Na3 c5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkbnr/pp1ppppp/8/2p5/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+
+2. b4 *
+
+[Event "1. Na3 d5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/8/3p4/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+
+2. Nc4 *
+
+[Event "1. Nc3 a6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 18"]
+[SetUp "1"]
+[FEN "rnbqkbnr/1ppppppp/p7/8/8/2N5/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+
+2. Nb5 *
+
+[Event "1. Nc3 d6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/3p4/8/8/2N5/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+
+2. g4 *
+
+[Event "1. b3 h5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppppp1/8/7p/8/1P6/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. g4 *
+
+[Event "1. b4 a6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkbnr/1ppppppp/p7/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. b5 *
+
+[Event "1. b4 d6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 18"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/3p4/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. g4 *
+
+[Event "1. b4 e5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 18"]
+[SetUp "1"]
+[FEN "rnbqkbnr/pppp1ppp/8/4p3/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. h3 *
+
+[Event "1. b4 f5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppp1pp/8/5p2/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. e4 *
+
+[Event "1. b4 Nf6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkb1r/pppppppp/5n2/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 1 2"]
+
+2. e4 *
+
+[Event "1. b4 h5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppppp1/8/7p/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. g4 *
+
+[Event "1. c3 d5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 19"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/8/3p4/8/2P5/PP1PPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. Qa4+ *
+
+[Event "1. c4 d6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 18"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/3p4/8/2P5/8/PP1PPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. c5 *
+
+[Event "1. d3 a5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 18"]
+[SetUp "1"]
+[FEN "rnbqkbnr/1ppppppp/8/p7/8/3P4/PPP1PPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. Bh6 *
+
+[Event "1. d4 a5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 17"]
+[SetUp "1"]
+[FEN "rnbqkbnr/1ppppppp/8/p7/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. Bh6 *
+
+[Event "1. d4 f5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppp1pp/8/5p2/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. e4 *
+
+[Event "1. d4 f6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppp1pp/5p2/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. Bg5 *
+
+[Event "1. e4 Nc6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "r1bqkbnr/pppppppp/2n5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2"]
+
+2. e5 *
+
+[Event "1. e4 f6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppp1pp/5p2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"]
+
+2. Qh5+ *
+
+[Event "1. e4 Nf6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2"]
+
+2. b4 *
+
+[Event "1. f4 d5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/8/3p4/5P2/8/PPPPP1PP/RNBQKBNR w KQkq - 0 2"]
+
+2. e4 *
+
+[Event "1. f4 f5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 17"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppp1pp/8/5p2/5P2/8/PPPPP1PP/RNBQKBNR w KQkq - 0 2"]
+
+2. e4 *
+
+[Event "1. f4 Nf6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkb1r/pppppppp/5n2/8/5P2/8/PPPPP1PP/RNBQKBNR w KQkq - 1 2"]
+
+2. e4 *
+
+[Event "1. f4 h5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 17"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppppp1/8/7p/5P2/8/PPPPP1PP/RNBQKBNR w KQkq - 0 2"]
+
+2. g4 *
+
+[Event "1. Nf3 d5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 19"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/8/3p4/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 2"]
+
+2. e4 *
+
+[Event "1. Nh3 f5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppp1pp/8/5p2/8/7N/PPPPPPPP/RNBQKB1R w KQkq - 0 2"]
+
+2. g4 *
+
+[Event "1. Nh3 h5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppppp1/8/7p/8/7N/PPPPPPPP/RNBQKB1R w KQkq - 0 2"]
+
+2. g4 *
+
+[Event "1. g3 d5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/8/3p4/8/6P1/PPPPPP1P/RNBQKBNR w KQkq - 0 2"]
+
+2. e4 *
+
+[Event "1. g4 d5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/8/3p4/6P1/8/PPPPPP1P/RNBQKBNR w KQkq - 0 2"]
+
+2. e4 *
+
+[Event "1. g4 d6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppp1pppp/3p4/8/6P1/8/PPPPPP1P/RNBQKBNR w KQkq - 0 2"]
+
+2. a3 *
+
+[Event "1. h3 e5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[SetUp "1"]
+[FEN "rnbqkbnr/pppp1ppp/8/4p3/8/7P/PPPPPPP1/RNBQKBNR w KQkq - 0 2"]
+
+2. f4 *
+
+[Event "1. h3 f5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppp1pp/8/5p2/8/7P/PPPPPPP1/RNBQKBNR w KQkq - 0 2"]
+
+2. e4 *
+
+[Event "1. h4 f5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppp1pp/8/5p2/7P/8/PPPPPPP1/RNBQKBNR w KQkq - 0 2"]
+
+2. e4 *
+
+[Event "1. h4 h5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[SetUp "1"]
+[FEN "rnbqkbnr/ppppppp1/8/7p/7P/8/PPPPPPP1/RNBQKBNR w KQkq - 0 2"]
+
+2. g4 *

@@ -1674,7 +1674,7 @@ def run(options, parser):
         if policy.losers:
             losers_games = pgn_dir.parent / "losers" / pgn_dir.name
             losers_learner = learning.learner(data_root() / "experience" / "losers", losers_games,
-                                             variety=configured["variety"], mood="off", server=options.host,
+                                             data_root() / "book_w17.bin", variety=configured["variety"], mood="off", server=options.host,
                                              variant="losers", notify=show)
             show(f"-- losers experience: {len(losers_learner.records)} games")
 

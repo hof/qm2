@@ -1303,8 +1303,13 @@ FICS royal losers uses a separate store at `experience/losers`, with its own
 without modifying python-chess's global variant registry. Stores reject games
 of the other variant, snapshots identify their variant, and opening selection
 filters variant-tagged records. Standard records from older snapshots default
-to standard. Losers uses learned openings only: no standard Polyglot/style/mood
-books, standard online tablebases, or standard resignation thresholds. The W17
+to standard. Losers uses no standard Polyglot/style/mood books, standard online
+tablebases, or standard resignation thresholds. Its base book is `book_w17.bin`,
+built by `./maxima init` from `books/w17.pgn`: each line starts at a position
+(`FEN` header) and holds a move the losers search proved to win (`Proof "mate N"`).
+A proven move gets the full Polyglot weight and is always played, before the
+learned layers and the search share; the moves leading to that position are not
+booked. The W17
 material evaluator is unchanged; its scores and learning probabilities have not
 been calibrated by a new strength test.
 

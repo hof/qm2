@@ -16,7 +16,7 @@ import chess.polyglot
 
 from . import learning_store
 from .search_effort import analysis_rank, effort
-from .variants import board_variant, experience_variants, learning_variant
+from .variants import board_variant, experience_variants, learning_variant, read_pgn
 
 horizon_plies = 40
 # A game teaches only when it lasted 10 moves and Maxima searched enough moves to judge them: early
@@ -243,14 +243,18 @@ def polyglot_code(board, move):
             | chess.square_rank(move.from_square) << 9 | promotion << 12)
 
 
+proof_weight = 0xffff  # a proven win: always played, never mixed with the other layers
+
+
 def build_repertoire(pgn_path, book_path, plies=30):
     """A Polyglot book of our side's moves: each repertoire line adds weight 100 to its moves.
 
-    Games carry [Repertoire "white"] or [Repertoire "black"]; opponent moves are only the path."""
+    Games carry [Repertoire "white"] or [Repertoire "black"]; opponent moves are only the path. A line
+    with a [Proof] header is a proven win: its moves get the proof weight."""
     weights = {}
     with open(pgn_path, encoding="utf-8-sig") as stream:
         while True:
-            game = chess.pgn.read_game(stream)
+            game = read_pgn(stream)
             if game is None:
                 break
             side = game.headers.get("Repertoire")
@@ -261,7 +265,7 @@ def build_repertoire(pgn_path, book_path, plies=30):
             for node in list(game.mainline())[:plies]:
                 if board.turn == ours:
                     entry = (chess.polyglot.zobrist_hash(board), polyglot_code(board, node.move))
-                    weights[entry] = weights.get(entry, 0) + 100
+                    weights[entry] = proof_weight if "Proof" in game.headers else weights.get(entry, 0) + 100
                 board.push(node.move)
     return write_book(weights, book_path)
 
@@ -507,6 +511,18 @@ class opening_book:
         total = sum(weights.values())
         return {move: weight / total for move, weight in weights.items()} if total else {}
 
+    def proven_move(self, board):
+        """The base book's proven winning move in board, or None."""
+        if not self.book_path:
+            return None
+        try:
+            with chess.polyglot.open_reader(str(self.book_path)) as reader:
+                entry = max(reader.find_all(board, minimum_weight=proof_weight), key=lambda entry: entry.weight,
+                            default=None)
+        except (OSError, ValueError, IndexError, TypeError):
+            return None
+        return entry.move if entry is not None and board.is_legal(entry.move) else None
+
     def sample(self, rate, games):
         strength = (games + self.prior) / self.variety
         return self.random.betavariate(max(rate * strength, 1e-3), max((1 - rate) * strength, 1e-3))
@@ -699,6 +715,10 @@ class opening_book:
         self.choice_results = {}
         if not self.book_applies(board):
             return None
+        proven = self.proven_move(board)
+        if proven is not None:
+            self.why = ("proof", 1.0, {"book": 1.0}, "book")
+            return proven, "proof: a proven win"
         if self.search_ply is not None and board.ply() >= self.search_ply:
             self.search_ply = None
             self.deliberate = True

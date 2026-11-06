@@ -42,6 +42,7 @@
 __pycache__/
 
 /book.bin
+/book_w17.bin
 /.env
 /.fics.json
 /.lichess.json
