@@ -1309,7 +1309,9 @@ built by `./maxima init` from `books/w17.pgn`: each line starts at a position
 (`FEN` header) and holds a move the losers search proved to win (`Proof "mate N"`).
 A proven move gets the full Polyglot weight and is always played, before the
 learned layers and the search share; the moves leading to that position are not
-booked. The W17
+booked. After each losers game the learner adds every move of ours in the first
+20 moves that the engine scored as a mate for us to `book_w17.bin`, as a proven
+move. A rebuild by `./maxima init` keeps only the `books/w17.pgn` lines. The W17
 material evaluator is unchanged; its scores and learning probabilities have not
 been calibrated by a new strength test.
 

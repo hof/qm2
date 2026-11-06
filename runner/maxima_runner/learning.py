@@ -270,6 +270,29 @@ def build_repertoire(pgn_path, book_path, plies=30):
     return write_book(weights, book_path)
 
 
+def book_proven_wins(game, our_color, book_path):
+    """Add our moves of the first horizon_plies that the engine scored as a mate for us to the proof book.
+
+    A losers mate score is a streak proof over every reply, so the move is a proven win; returns how many
+    entries were new."""
+    found, board = {}, game.board()
+    for node in list(game.mainline())[:horizon_plies]:
+        evaluation = node.eval()
+        if board.turn == our_color and evaluation is not None and (evaluation.pov(our_color).mate() or 0) > 0:
+            found[(chess.polyglot.zobrist_hash(board), polyglot_code(board, node.move))] = proof_weight
+        board.push(node.move)
+    if not found:
+        return 0
+    weights = {}
+    if Path(book_path).exists():
+        with chess.polyglot.open_reader(book_path) as reader:
+            weights = {(entry.key, entry.raw_move): entry.weight for entry in reader}
+    new = sum(weights.get(entry) != proof_weight for entry in found)
+    if new:
+        write_book({**weights, **found}, book_path)
+    return new
+
+
 def mood_sources(books_dir, output_dir):
     """(books/moods/<name>.pgn, <data>/moods/<name>.bin) for every mood repertoire."""
     return [(source, output_dir / "moods" / f"{source.stem}.bin")
@@ -796,6 +819,8 @@ class learner:
     def add(self, game):
         record = self.store.add(game)
         self.records = self.store.load()
+        if self.variant == "losers" and self.book_path and record and record.get("color") in ("white", "black"):
+            book_proven_wins(game, record["color"] == "white", self.book_path)
         return record
 
     def refresh(self):

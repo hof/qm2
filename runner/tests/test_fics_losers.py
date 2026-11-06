@@ -134,6 +134,23 @@ class losers_proof_book_tests(unittest.TestCase):
                 royal_losers_board()))
 
 
+    def test_a_mate_our_engine_found_in_a_game_becomes_a_proven_book_move(self):
+        game = losers_game()
+        nodes = list(game.mainline())
+        nodes[2].set_eval(chess.engine.PovScore(chess.engine.Mate(15), chess.WHITE), 9)
+        nodes[3].set_eval(chess.engine.PovScore(chess.engine.Mate(14), chess.BLACK), 9)
+        with tempfile.TemporaryDirectory() as directory:
+            book = Path(directory) / 'book_w17.bin'
+            self.assertEqual(learning.book_proven_wins(game, chess.WHITE, book), 1)
+            self.assertEqual(learning.book_proven_wins(game, chess.WHITE, book), 0)
+            board = royal_losers_board()
+            for move in ('g1f3', 'g8f6'):
+                board.push_uci(move)
+            opening = learning.opening_book([], book_path=book, variant='losers')
+            self.assertEqual(opening.proven_move(board), chess.Move.from_uci('f3g1'))
+            board.push_uci('f3g1')
+            self.assertIsNone(opening.proven_move(board))
+
 class losers_storage_tests(unittest.TestCase):
     def test_pgn_roundtrip_monthly_archive_rebuild_and_cross_variant_rejection(self):
         game = losers_game()
