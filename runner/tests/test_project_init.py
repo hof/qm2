@@ -99,6 +99,17 @@ class init_tests(unittest.TestCase):
         self.assertTrue((self.root / "moods/parham.bin").is_file())
         self.assertEqual(project_init.repertoire_step(self.root, options(data=self.root))[0], "ok")
 
+    def test_a_changed_source_rebuilds_its_book_whatever_the_file_times(self):
+        (self.root / "books").mkdir()
+        source = self.root / "books/experiment.pgn"
+        source.write_text('[Event "Polish"]\n[Repertoire "white"]\n\n1. b4 *\n')
+        self.assertEqual(project_init.repertoire_step(self.root, options(data=self.root))[0], "done")
+        source.write_text('[Event "Polish"]\n[Repertoire "white"]\n\n1. b4 e5 2. Bb2 *\n')
+        os.utime(source, (0, 0))
+        self.assertEqual(project_init.repertoire_step(self.root, options(data=self.root)),
+                         ("done", "experiment.bin"))
+        self.assertEqual(project_init.repertoire_step(self.root, options(data=self.root))[0], "ok")
+
     def test_losers_rebuild_merges_searched_openings_and_keeps_learned_proofs(self):
         (self.root / "books").mkdir()
         (self.root / "books/w17.pgn").write_text(

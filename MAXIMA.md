@@ -1323,9 +1323,10 @@ as both colours, every legal opponent reply expanded and transpositions merged.
 Each position gets at least `--seconds` (default 60) of search on `--workers`
 engines; the search never stops before depth 1 is complete and books the move
 of its last completed depth. A proven mate stops it and is booked as a proof; a
-single legal move is booked without a search. `--first a3,h3,c4,f4` books white's
-first moves side by side with equal weight instead of one searched move, so the
-learned layers find out which works best. The file streams one line per
+single legal move is booked without a search. `--first a3,b4,f4:130,Na3:70` books
+white's first moves side by side instead of one searched move, each with weight
+100 or its own (a `[Weight]` header in the PGN), so the learned layers find out
+which works best. The file streams one line per
 position, so a stopped run resumes. Searched moves get the normal book weight,
 so the client plays them without searching while the learned layers can still
 reweight them. `./maxima init` builds `book_w17.bin` from `books/w17.pgn` and
@@ -1635,7 +1636,10 @@ ready, so it is safe to rerun and suits CI. In order:
 - Syzygy tables up to `--syzygy N` pieces (default 5, about 940 MiB; 0 skips),
   skipped offline when the manifest lists the complete set
 
-- `experiment.bin` and the mood books, built from `books/*.pgn` when stale
+- `experiment.bin`, the mood books and `book_w17.bin`, built from `books/*.pgn` when
+  missing or when their source PGNs changed: a SHA-256 of the sources beside each
+  book (`<book>.sources`) decides, not file times, so a checkout, an image or a
+  volume rebuilds exactly when the sources differ
 
 `--check` changes nothing, reports each item, and exits 1 when something is
 missing. `--no-build` and `--no-debug` skip builds; `--no-books` skips all

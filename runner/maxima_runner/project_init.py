@@ -226,6 +226,21 @@ def draw_step(root, options):
     return ("done", "draw.bin") if status == 0 else ("failed", "./maxima books:draw")
 
 
+def sources_checksum(sources):
+    """One SHA-256 over the names and contents of a book's source PGNs."""
+    digest = hashlib.sha256()
+    for source in sources:
+        digest.update(source.name.encode() + b"\0" + source.read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+def book_stale(sources, target):
+    """A book is stale when it is missing or its sources changed since it was built. The checksum beside the
+    book decides, not file times: a checkout, an image or a volume gives no reliable order of those."""
+    stamp = target.with_name(target.name + ".sources")
+    return not target.is_file() or not stamp.is_file() or stamp.read_text().strip() != sources_checksum(sources)
+
+
 def repertoire_step(root, options):
     """experiment.bin, the moods and the losers book book_w17.bin (proofs and searched openings) are built
     from books/ in the checkout."""
@@ -235,8 +250,7 @@ def repertoire_step(root, options):
              ((books / "w17.pgn", books / "w17_search.pgn"), options.data / "book_w17.bin")]
     pairs += [((source,), target) for source, target in learning.mood_sources(books, options.data)]
     pairs = [([source for source in sources if source.is_file()], target) for sources, target in pairs]
-    stale = [(sources, target) for sources, target in pairs if sources and (
-        not target.is_file() or target.stat().st_mtime < max(source.stat().st_mtime for source in sources))]
+    stale = [(sources, target) for sources, target in pairs if sources and book_stale(sources, target)]
     if not any(sources for sources, _ in pairs):
         return "skipped", "no repertoire PGNs in books/"
     if not stale:
@@ -253,6 +267,7 @@ def repertoire_step(root, options):
         learning.build_repertoire(sources, target)
         if learned:
             learning.write_book({**learning.proven_entries(target, every=True), **learned}, target)
+        target.with_name(target.name + ".sources").write_text(sources_checksum(sources) + "\n")
     return "done", ", ".join(target.name for _, target in stale)
 
 

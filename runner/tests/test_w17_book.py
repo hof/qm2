@@ -61,13 +61,13 @@ class w17_book_tests(unittest.TestCase):
             move, _ = opening.choose_book(board)
             self.assertEqual(move, sorted(board.legal_moves, key=chess.Move.uci)[0])
 
-    def test_white_first_moves_side_by_side_share_the_book(self):
+    def test_white_first_moves_side_by_side_share_the_book_by_weight(self):
         self.assertEqual(w17_book.build(self.output, 1, 0, 2, self.engine, 16, log=lambda line: None,
-                                        first=["a3", "h3"]), 22)
+                                        first=["a3", "h3:300"]), 22)
         book = self.root / "book_w17.bin"
         learning.build_repertoire([self.output], book)
         shares = learning.opening_book.read_book(book, royal_losers_board())
-        self.assertEqual(shares, {chess.Move.from_uci("a2a3"): 0.5, chess.Move.from_uci("h2h3"): 0.5})
+        self.assertEqual(shares, {chess.Move.from_uci("a2a3"): 0.25, chess.Move.from_uci("h2h3"): 0.75})
 
     def test_a_proven_mate_stops_the_search_at_once_and_is_booked_as_a_proof(self):
         os.environ["FAKE_SCORE"] = "mate 3"

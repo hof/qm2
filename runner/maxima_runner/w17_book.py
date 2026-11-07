@@ -84,7 +84,7 @@ def load(path):
     return done
 
 
-def entry(board, line, colour, move, found, kind="forced"):
+def entry(board, line, colour, move, found, kind="forced", weight=None):
     """One PGN line: the position as FEN, our move, and the search that chose it (else kind: forced, choice)."""
     game = variant_game()
     for name in ("Site", "Date", "Round", "White", "Black", "Result"):
@@ -98,6 +98,8 @@ def entry(board, line, colour, move, found, kind="forced"):
         game.headers["Proof"] = found[2]
     else:
         game.headers["Search"] = f"depth {found[1]} {found[2]}"
+    if weight is not None:
+        game.headers["Weight"] = str(weight)
     game.setup(board)
     node = game.add_variation(chess.Move.from_uci(move))
     if found is not None:
@@ -120,21 +122,23 @@ def replies(positions):
 def build(output, our_moves, seconds, workers, engine_path, hash_mb, log=print, first=()):
     """Book our first our_moves moves as both colours; returns the number of new entries.
 
-    first: white's first moves to book side by side instead of a searched one, so play can learn between them."""
+    first: white's first moves to book side by side instead of a searched one, so play can learn between them;
+    "f4:130" gives a move its own book weight (default 100)."""
     done, lock, written = load(output), threading.Lock(), 0
 
-    def record(board, line, colour, move, found, kind="forced"):
+    def record(board, line, colour, move, found, kind="forced", weight=None):
         nonlocal written
         with lock, open(output, "a", encoding="utf-8") as stream:
-            stream.write(entry(board, line, colour, move, found, kind))
+            stream.write(entry(board, line, colour, move, found, kind, weight))
             written += 1
 
     start = royal_losers_board()
-    for move in first:
+    for choice in first:
+        move, _, weight = choice.partition(":")
         uci = start.parse_san(move).uci()
         if uci not in done.setdefault(chess.polyglot.zobrist_hash(start), []):
             done[chess.polyglot.zobrist_hash(start)].append(uci)
-            record(start, [], "white", uci, None, "choice")
+            record(start, [], "white", uci, None, "choice", int(weight) if weight else None)
 
     def book(colour, number, level):
         """Our move in every position of level: [(board after it, line)]."""
@@ -234,7 +238,7 @@ def main(argv=None):
     parser.add_argument("--workers", type=int, default=4, help="engines searching side by side (default 4)")
     parser.add_argument("--hash", type=int, default=256, help="hash per engine in MB (default 256)")
     parser.add_argument("--engine", type=Path, default=None, help="engine binary (default: the release build)")
-    parser.add_argument("--first", default="", help="white's first moves to book side by side, e.g. a3,h3,c4,f4")
+    parser.add_argument("--first", default="", help="white's first moves to book side by side, e.g. a3,b4,f4:130 (book weight, default 100)")
     parser.add_argument("--export-proofs", action="store_true",
                         help="only add the proven wins of the saved games to books/w17.pgn, without searching")
     parser.add_argument("--output", type=Path, default=project.project_root() / "books/w17_search.pgn")

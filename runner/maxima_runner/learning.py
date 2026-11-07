@@ -248,7 +248,7 @@ proof_weight = 0xffff  # a proven win: always played, never mixed with the other
 
 def build_repertoire(pgn_paths, book_path, plies=30):
     """A Polyglot book of our side's moves from one PGN or several: each repertoire line adds weight 100 to
-    its moves.
+    its moves, or its [Weight] header.
 
     Games carry [Repertoire "white"] or [Repertoire "black"]; opponent moves are only the path. A line
     with a [Proof] header is a proven win: its moves get the proof weight."""
@@ -273,7 +273,7 @@ def add_repertoire(pgn_path, weights, plies):
                 if board.turn == ours:
                     entry = (chess.polyglot.zobrist_hash(board), polyglot_code(board, node.move))
                     weights[entry] = proof_weight if "Proof" in game.headers or weights.get(entry) == proof_weight \
-                        else weights.get(entry, 0) + 100
+                        else weights.get(entry, 0) + int(game.headers.get("Weight", 100))
                 board.push(node.move)
 
 
