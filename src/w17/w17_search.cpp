@@ -201,15 +201,15 @@ dfpn_result_t w17_search_t::dfpn(const uint32_t thpn, const uint32_t thdn, const
         if (pn == 0 || dn == 0 || pn >= thpn || dn >= thdn) {
             int length = 0;
             if (pn == 0) {
+
+                // The shortest proof for us, the longest defence for them
                 for (int i = 0; i < count; i++) {
-                    if (or_node && children[i].pn == 0 && children[i].length < children[best].length) {
+                    if (or_node ? children[i].pn == 0 && children[i].length < children[best].length
+                            : children[i].length > children[best].length) {
                         best = i;
                     }
-                    if (!or_node) {
-                        length = std::max(length, children[i].length);
-                    }
                 }
-                length = 1 + (or_node ? children[best].length : length);
+                length = 1 + children[best].length;
             }
             if (key) {
                 dfpn_table[key & (DFPN_SIZE - 1)] = {key, pn, dn, length};
@@ -364,6 +364,30 @@ int w17_search_t::w17_pvs(int alpha, int beta, int depth) {
             stack->best_move.set(&proof_move);
             stack->pv_moves[0].set(&proof_move);
             stack->pv_count = 1;
+
+            // On the principal variation, the line of the proof: df-pn has most of it in its table
+            if (alpha1 + 1 < beta) {
+                move_t line[MAX_PLY];
+                int count = 0;
+                line[count++].set(&proof_move);
+                forward(&line[0], brd.gives_check(&line[0]));
+                for (bool or_node = false; brd.ply < MAX_PLY - 2; or_node = !or_node) {
+                    dfpn_result_t next = dfpn(DFPN_INF, DFPN_INF, or_node);
+                    if (stop_all || next.pn || !next.move.piece) {
+                        break;
+                    }
+                    line[count].set(&next.move);
+                    forward(&line[count], brd.gives_check(&line[count]));
+                    count++;
+                }
+                for (int i = count - 1; i >= 0; i--) {
+                    backward(&line[i]);
+                }
+                for (int i = 0; i < count; i++) {
+                    stack->pv_moves[i].set(&line[i]);
+                }
+                stack->pv_count = count;
+            }
             trans_table::store(stack->tt_key, brd.root_ply, brd.ply, tt_depth, score, proof_move.to_compact(), score::LOWERBOUND);
             return score;
         }
