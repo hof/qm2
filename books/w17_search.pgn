@@ -2188,22 +2188,7 @@
 [Variant "Royal losers"]
 [Repertoire "white"]
 [Search "choice"]
-[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
-
-1. h3 *
-
-[Event "start"]
-[Variant "Royal losers"]
-[Repertoire "white"]
-[Search "choice"]
-[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
-
-1. c4 *
-
-[Event "start"]
-[Variant "Royal losers"]
-[Repertoire "white"]
-[Search "choice"]
+[Weight "130"]
 [FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
 
 1. f4 *
@@ -2747,4 +2732,381 @@
 [SetUp "1"]
 
 2. g4 { g2g4 b8a6 g4g5 h7h5 g5h6 g7h6 b2b3 c7c5 } *
+
+[Event "start"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "choice"]
+[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
+
+1. b4 *
+
+[Event "start"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "choice"]
+[Weight "70"]
+[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
+
+1. Na3 *
+
+[Event "1. b4 c5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "forced"]
+[FEN "rnbqkbnr/pp1ppppp/8/2p5/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. bxc5 *
+
+[Event "1. b4 a5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "forced"]
+[FEN "rnbqkbnr/1ppppppp/8/p7/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. bxa5 *
+
+[Event "1. Na3 b5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "forced"]
+[FEN "rnbqkbnr/p1pppppp/8/1p6/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. Nxb5 *
+
+[Event "1. b4 Nf6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[FEN "rnbqkb1r/pppppppp/5n2/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 1 2"]
+[SetUp "1"]
+
+2. e4 { e2e4 f6e4 d1g4 e4d2 g4g7 f8g7 b1d2 g7a1 } *
+
+[Event "1. b4 Nh6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 13 cp 61"]
+[FEN "rnbqkb1r/pppppppp/7n/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 1 2"]
+[SetUp "1"]
+
+2. g4 { g2g4 h6g4 h2h3 g4f2 e1f2 h7h6 c2c4 f7f6 } *
+
+[Event "1. b4 Nc6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 16 cp 161"]
+[FEN "r1bqkbnr/pppppppp/2n5/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 1 2"]
+[SetUp "1"]
+
+2. c3 { c2c3 c6b4 c3b4 h7h6 g2g4 f7f5 g4f5 b7b5 } *
+
+[Event "1. b4 Na6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 15 cp 162"]
+[FEN "r1bqkbnr/pppppppp/n7/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 1 2"]
+[SetUp "1"]
+
+2. c3 { c2c3 a6b4 c3b4 h7h6 h2h3 b7b6 b4b5 a8b8 } *
+
+[Event "1. b4 h6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 13 cp 0"]
+[FEN "rnbqkbnr/ppppppp1/7p/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. a3 { a2a3 g7g5 c2c4 g5g4 h2h4 g4h3 g2h3 h6h5 } *
+
+[Event "1. b4 d6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[FEN "rnbqkbnr/ppp1pppp/3p4/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. g4 { g2g4 c8g4 f1g2 g4e2 g2b7 e2d1 b7a8 d1c2 } *
+
+[Event "1. b4 g6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 14 cp 0"]
+[FEN "rnbqkbnr/pppppp1p/6p1/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. a3 { a2a3 g6g5 c2c3 f7f6 b4b5 a7a5 b5a6 b7a6 } *
+
+[Event "1. b4 f6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 12 cp 0"]
+[FEN "rnbqkbnr/ppppp1pp/5p2/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. a3 { a2a3 f6f5 b4b5 a7a5 b5a6 b8a6 a3a4 f5f4 } *
+
+[Event "1. b4 e6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 15 cp 162"]
+[FEN "rnbqkbnr/pppp1ppp/4p3/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. c3 { c2c3 f8b4 c3b4 e8e7 a2a3 h7h6 f2f4 b7b5 } *
+
+[Event "1. b4 a6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[FEN "rnbqkbnr/1ppppppp/p7/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. b5 { b4b5 a6b5 c2c4 a8a2 a1a2 b5c4 d1b3 c4b3 } *
+
+[Event "1. b4 c6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 14 cp 0"]
+[FEN "rnbqkbnr/pp1ppppp/2p5/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. h3 { h2h3 b7b5 g2g4 g7g6 g4g5 h7h6 g5h6 g8h6 } *
+
+[Event "1. b4 f5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[FEN "rnbqkbnr/ppppp1pp/8/5p2/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. e4 { e2e4 f5e4 f1a6 b7a6 b4b5 a6b5 c2c4 b5c4 } *
+
+[Event "1. b4 h5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[FEN "rnbqkbnr/ppppppp1/8/7p/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. g4 { g2g4 h5g4 e2e4 h8h2 d1g4 h2f2 g4g7 f8g7 } *
+
+[Event "1. b4 e5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[FEN "rnbqkbnr/pppp1ppp/8/4p3/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. h3 { h2h3 f8b4 f2f4 b4d2 b1d2 e5f4 g2g3 f4g3 } *
+
+[Event "1. b4 b6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 17 cp 0"]
+[FEN "rnbqkbnr/p1pppppp/1p6/8/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. a3 { a2a3 a7a5 b4a5 b6a5 a3a4 h7h6 c2c3 f7f6 } *
+
+[Event "1. b4 g5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 13 cp 0"]
+[FEN "rnbqkbnr/pppppp1p/8/6p1/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. f3 { f2f3 b7b5 h2h3 f7f6 c2c3 c7c6 c3c4 b5c4 } *
+
+[Event "1. b4 d5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 10 cp 209"]
+[FEN "rnbqkbnr/ppp1pppp/8/3p4/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. c4 { c2c4 d5c4 h2h3 d8d2 e1d2 c8h3 g2h3 a7a5 } *
+
+[Event "1. b4 b5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 13 cp 0"]
+[FEN "rnbqkbnr/p1pppppp/8/1p6/1P6/8/P1PPPPPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. h3 { h2h3 f7f6 a2a3 e8f7 c2c3 f6f5 a1a2 f5f4 } *
+
+[Event "1. Na3 Nh6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 13 cp 0"]
+[FEN "rnbqkb1r/pppppppp/7n/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 2 2"]
+[SetUp "1"]
+
+2. f3 { f2f3 h6g8 c2c4 a7a6 a3b5 a6b5 c4b5 a8a2 } *
+
+[Event "1. Na3 Nf6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 12 cp 0"]
+[FEN "rnbqkb1r/pppppppp/5n2/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 2 2"]
+[SetUp "1"]
+
+2. c4 { c2c4 f6g8 f2f3 a7a6 a3b5 a6b5 c4b5 a8a2 } *
+
+[Event "1. Na3 Nc6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 13 cp 0"]
+[FEN "r1bqkbnr/pppppppp/2n5/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 2 2"]
+[SetUp "1"]
+
+2. d4 { d2d4 c6d4 d1d4 f7f6 d4a7 a8a7 a3b1 a7a2 } *
+
+[Event "1. Na3 Na6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 13 cp 0"]
+[FEN "r1bqkbnr/pppppppp/n7/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 2 2"]
+[SetUp "1"]
+
+2. c4 { c2c4 a6b8 b2b3 a7a6 a3b5 a6b5 c4b5 a8a2 } *
+
+[Event "1. Na3 h6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 12 cp 0"]
+[FEN "rnbqkbnr/ppppppp1/7p/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. c4 { c2c4 b7b6 h2h3 g7g6 f2f4 e7e5 f4e5 f8a3 } *
+
+[Event "1. Na3 g6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 13 cp 0"]
+[FEN "rnbqkbnr/pppppp1p/6p1/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. Nb1 { a3b1 g6g5 b2b4 f7f6 a2a3 b7b6 b4b5 a7a6 } *
+
+[Event "1. Na3 f6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 13 cp 0"]
+[FEN "rnbqkbnr/ppppp1pp/5p2/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. c4 { c2c4 a7a6 a3b5 a6b5 c4b5 a8a2 a1a2 c7c6 } *
+
+[Event "1. Na3 e6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 16 cp 59"]
+[FEN "rnbqkbnr/pppp1ppp/4p3/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. b4 { b2b4 f8b4 a3b1 b4d2 b1d2 c7c5 h2h4 d8h4 } *
+
+[Event "1. Na3 a6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[FEN "rnbqkbnr/1ppppppp/p7/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. Nb5 { a3b5 a6b5 a1b1 a8a2 c2c4 b5c4 e2e4 a2b2 } *
+
+[Event "1. Na3 d6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 14 cp 162"]
+[FEN "rnbqkbnr/ppp1pppp/3p4/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. h3 { h2h3 c8h3 g2h3 h7h6 c2c4 b8d7 b2b3 d8c8 } *
+
+[Event "1. Na3 c6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 14 cp 0"]
+[FEN "rnbqkbnr/pp1ppppp/2p5/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. Nb1 { a3b1 a7a5 c2c4 a5a4 d1a4 a8a4 a2a3 a4a3 } *
+
+[Event "1. Na3 b6"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 12 cp 0"]
+[FEN "rnbqkbnr/p1pppppp/1p6/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. c4 { c2c4 h7h6 b2b4 c7c5 b4c5 b6c5 a3b1 a7a5 } *
+
+[Event "1. Na3 h5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 13 cp 60"]
+[FEN "rnbqkbnr/ppppppp1/8/7p/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. g4 { g2g4 h5g4 c2c4 h8h2 h1h2 g8h6 h2h6 g7h6 } *
+
+[Event "1. Na3 d5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 16"]
+[FEN "rnbqkbnr/ppp1pppp/8/3p4/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. e4 { e2e4 d5e4 f1a6 b8a6 d1g4 c8g4 b2b4 d8d2 } *
+
+[Event "1. Na3 c5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[FEN "rnbqkbnr/pp1ppppp/8/2p5/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. b4 { b2b4 c5b4 c1b2 b4a3 b2g7 f8g7 d1b1 g7a1 } *
+
+[Event "1. Na3 a5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Proof "mate 15"]
+[FEN "rnbqkbnr/1ppppppp/8/p7/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. b4 { b2b4 a5b4 a1b1 b4a3 b1b7 c8b7 c1a3 b7g2 } *
+
+[Event "1. Na3 g5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 14 cp 0"]
+[FEN "rnbqkbnr/pppppp1p/8/6p1/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. Nb1 { a3b1 g5g4 f2f4 g4f3 g2f3 a7a6 h2h4 h7h6 } *
+
+[Event "1. Na3 f5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 13 cp 205"]
+[FEN "rnbqkbnr/ppppp1pp/8/5p2/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. e4 { e2e4 f5e4 g1f3 e4f3 d1f3 b7b5 f1b5 g8f6 } *
+
+[Event "1. Na3 e5"]
+[Variant "Royal losers"]
+[Repertoire "white"]
+[Search "depth 17 cp 157"]
+[FEN "rnbqkbnr/pppp1ppp/8/4p3/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+2. d4 { d2d4 f8a3 b2a3 e5d4 d1d4 d8f6 d4a7 a8a7 } *
 
