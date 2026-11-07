@@ -227,22 +227,29 @@ def draw_step(root, options):
 
 
 def repertoire_step(root, options):
-    """experiment.bin, the moods and the losers proof book book_w17.bin are built from books/ in the checkout."""
+    """experiment.bin, the moods and the losers book book_w17.bin (proofs and searched openings) are built
+    from books/ in the checkout."""
     from . import learning
     books = root / "books"
-    pairs = [(books / "experiment.pgn", options.data / "experiment.bin"), (books / "w17.pgn", options.data / "book_w17.bin")]
-    pairs += learning.mood_sources(books, options.data)
-    stale = [(source, target) for source, target in pairs if source.is_file() and (
-        not target.is_file() or target.stat().st_mtime < source.stat().st_mtime)]
-    if not any(source.is_file() for source, _ in pairs):
+    pairs = [((books / "experiment.pgn",), options.data / "experiment.bin"),
+             ((books / "w17.pgn", books / "w17_search.pgn"), options.data / "book_w17.bin")]
+    pairs += [((source,), target) for source, target in learning.mood_sources(books, options.data)]
+    pairs = [([source for source in sources if source.is_file()], target) for sources, target in pairs]
+    stale = [(sources, target) for sources, target in pairs if sources and (
+        not target.is_file() or target.stat().st_mtime < max(source.stat().st_mtime for source in sources))]
+    if not any(sources for sources, _ in pairs):
         return "skipped", "no repertoire PGNs in books/"
     if not stale:
         return "ok", "up to date"
     if options.check:
         return "missing", f"./maxima init builds {', '.join(target.name for _, target in stale)}"
-    for source, target in stale:
+    for sources, target in stale:
         target.parent.mkdir(parents=True, exist_ok=True)
-        learning.build_repertoire(source, target)
+        # Proofs the losers games added stay: a proven win is a fact, not a repertoire choice.
+        learned = learning.proven_entries(target) if target.name == "book_w17.bin" else {}
+        learning.build_repertoire(sources, target)
+        if learned:
+            learning.write_book({**learning.proven_entries(target, every=True), **learned}, target)
     return "done", ", ".join(target.name for _, target in stale)
 
 

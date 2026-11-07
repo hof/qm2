@@ -246,12 +246,19 @@ def polyglot_code(board, move):
 proof_weight = 0xffff  # a proven win: always played, never mixed with the other layers
 
 
-def build_repertoire(pgn_path, book_path, plies=30):
-    """A Polyglot book of our side's moves: each repertoire line adds weight 100 to its moves.
+def build_repertoire(pgn_paths, book_path, plies=30):
+    """A Polyglot book of our side's moves from one PGN or several: each repertoire line adds weight 100 to
+    its moves.
 
     Games carry [Repertoire "white"] or [Repertoire "black"]; opponent moves are only the path. A line
     with a [Proof] header is a proven win: its moves get the proof weight."""
     weights = {}
+    for pgn_path in [pgn_paths] if isinstance(pgn_paths, (str, Path)) else pgn_paths:
+        add_repertoire(pgn_path, weights, plies)
+    return write_book(weights, book_path)
+
+
+def add_repertoire(pgn_path, weights, plies):
     with open(pgn_path, encoding="utf-8-sig") as stream:
         while True:
             game = read_pgn(stream)
@@ -265,9 +272,9 @@ def build_repertoire(pgn_path, book_path, plies=30):
             for node in list(game.mainline())[:plies]:
                 if board.turn == ours:
                     entry = (chess.polyglot.zobrist_hash(board), polyglot_code(board, node.move))
-                    weights[entry] = proof_weight if "Proof" in game.headers else weights.get(entry, 0) + 100
+                    weights[entry] = proof_weight if "Proof" in game.headers or weights.get(entry) == proof_weight \
+                        else weights.get(entry, 0) + 100
                 board.push(node.move)
-    return write_book(weights, book_path)
 
 
 def book_proven_wins(game, our_color, book_path):
@@ -283,14 +290,20 @@ def book_proven_wins(game, our_color, book_path):
         board.push(node.move)
     if not found:
         return 0
-    weights = {}
-    if Path(book_path).exists():
-        with chess.polyglot.open_reader(book_path) as reader:
-            weights = {(entry.key, entry.raw_move): entry.weight for entry in reader}
+    weights = proven_entries(book_path, every=True)
     new = sum(weights.get(entry) != proof_weight for entry in found)
     if new:
         write_book({**weights, **found}, book_path)
     return new
+
+
+def proven_entries(book_path, every=False):
+    """{(key, move code): weight} of the book's proven entries, or of all its entries; empty when absent."""
+    if not Path(book_path).is_file():
+        return {}
+    with chess.polyglot.open_reader(book_path) as reader:
+        return {(entry.key, entry.raw_move): entry.weight for entry in reader
+                if every or entry.weight == proof_weight}
 
 
 def mood_sources(books_dir, output_dir):

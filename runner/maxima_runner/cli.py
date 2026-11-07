@@ -32,6 +32,7 @@ command_groups = (
         ("books:repertoire", "Build experiment and mood books from PGNs"),
         ("books:draw", "Build draw.bin for safe, drawish openings"),
         ("books:fire", "Build fire.bin for sharp, decisive openings"),
+        ("books:w17", "Search the losers book against every reply"),
     )),
     ("Tablebases", (
         ("tablebases:syzygy:download", "Download selected Syzygy tablebases"),
@@ -178,7 +179,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="maxima", description=__doc__)
     parser.add_argument("command", nargs="?", help=(
         "init, uci, build, test, suite:run, match:run, "
-        "experience:sync|archive|build, books:repertoire|draw|fire, "
+        "experience:sync|archive|build, books:repertoire|draw|fire|w17, "
         "tablebases:syzygy:download, fics, lichess (no command: run engine)"))
     if not arguments and sys.stdin.isatty() and sys.stdout.isatty():
         arguments = ["--help"]
@@ -232,6 +233,9 @@ def main(argv=None):
         elif command == "books:fire":
             from . import master_books
             entrypoint = master_books.fire_main
+        elif command == "books:w17":
+            from . import w17_book
+            entrypoint = w17_book.main
         elif command == "tablebases:syzygy:download":
             from . import download_tablebases
             entrypoint = download_tablebases.main

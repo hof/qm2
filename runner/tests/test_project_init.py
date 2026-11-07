@@ -3,13 +3,14 @@ import argparse
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
 
-from maxima_runner import download_tablebases, project, project_init
+from maxima_runner import download_tablebases, learning, project, project_init
 
 
 def archive(member, data):
@@ -97,6 +98,22 @@ class init_tests(unittest.TestCase):
                          ("done", "experiment.bin, parham.bin"))
         self.assertTrue((self.root / "moods/parham.bin").is_file())
         self.assertEqual(project_init.repertoire_step(self.root, options(data=self.root))[0], "ok")
+
+    def test_losers_rebuild_merges_searched_openings_and_keeps_learned_proofs(self):
+        (self.root / "books").mkdir()
+        (self.root / "books/w17.pgn").write_text(
+            '[Event "1. a3 d6"]\n[Variant "Royal losers"]\n[Repertoire "white"]\n[Proof "mate 15"]\n[SetUp "1"]\n'
+            '[FEN "rnbqkbnr/ppp1pppp/3p4/8/8/P7/1PPPPPPP/RNBQKBNR w KQkq - 0 2"]\n\n2. g4 *\n')
+        (self.root / "books/w17_search.pgn").write_text(
+            '[Event "start"]\n[Variant "Royal losers"]\n[Repertoire "white"]\n[Search "depth 12 cp 0"]\n\n1. a3 *\n')
+        book = self.root / "book_w17.bin"
+        learned = {(1234, 99): learning.proof_weight}
+        learning.write_book(learned, book)
+        os.utime(book, (0, 0))
+        self.assertEqual(project_init.repertoire_step(self.root, options(data=self.root))[0], "done")
+        entries = learning.proven_entries(book, every=True)
+        self.assertEqual(len(entries), 3)
+        self.assertEqual(entries[(1234, 99)], learning.proof_weight)
 
     def test_network_precedes_builds_and_books_can_be_skipped(self):
         names = [name for name, _ in project_init.steps(options(build=True, books=False))]

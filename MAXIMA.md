@@ -1317,7 +1317,17 @@ A proven move gets the full Polyglot weight and is always played, before the
 learned layers and the search share; the moves leading to that position are not
 booked. After each losers game the learner adds every move of ours in the first
 20 moves that the engine scored as a mate for us to `book_w17.bin`, as a proven
-move. A rebuild by `./maxima init` keeps only the `books/w17.pgn` lines. The W17
+move. `./maxima books:w17` searches the losers opening book into
+`books/w17_search.pgn`: breadth-first over our first moves (`--moves`, default 2)
+as both colours, every legal opponent reply expanded and transpositions merged.
+Each position gets at least `--seconds` (default 60) of search on `--workers`
+engines; the search never stops before depth 1 is complete and books the move
+of its last completed depth. A proven mate stops it and is booked as a proof; a
+single legal move is booked without a search. The file streams one line per
+position, so a stopped run resumes. Searched moves get the normal book weight,
+so the client plays them without searching while the learned layers can still
+reweight them. `./maxima init` builds `book_w17.bin` from `books/w17.pgn` and
+`books/w17_search.pgn` and keeps the proofs the games added. The W17
 material evaluator is unchanged; its scores and learning probabilities have not
 been calibrated by a new strength test.
 
