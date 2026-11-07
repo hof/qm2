@@ -58,6 +58,7 @@ class w17_book_tests(unittest.TestCase):
             board = start.copy()
             board.push(reply)
             opening = learning.opening_book([], book_path=book, variant="losers", rated=False)
+            opening.search_ply = None  # no game that leaves the book at a random ply
             move, _ = opening.choose_book(board)
             self.assertEqual(move, sorted(board.legal_moves, key=chess.Move.uci)[0])
 
