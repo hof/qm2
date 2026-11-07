@@ -622,6 +622,33 @@ void search_t::iterative_deepening() {
     if (stack->pv_count > 0) {
         if (stack->pv_count > 1) {
             ponder_move.set(&stack->pv_moves[1]);
+        } else if (wild == 17) {
+
+            // A losers proof ends the line at our move: ponder on the stored reply, else a capture
+            move_t best = stack->pv_moves[0], reply;
+            reply.clear();
+            brd.forward(&best);
+            tt_hit_t tt;
+            if (trans_table::probe(position_key(brd, draw_salt), brd.ply, brd.stack->fifty_count, tt) && tt.move) {
+                reply.set_compact(&brd, tt.move);
+                if (!reply.piece || !brd.valid(&reply) || !brd.legal(&reply)) {
+                    reply.clear();
+                }
+            }
+            if (!reply.piece) {
+                move::list_t list;
+                move::gen_captures(&brd, &list);
+                for (move_t * move = list.current; move != list.last; move++) {
+                    if (brd.legal(move)) {
+                        reply.set(move);
+                        break;
+                    }
+                }
+            }
+            brd.backward(&best);
+            if (reply.piece) {
+                ponder_move.set(&reply);
+            }
         }
     }
 }
