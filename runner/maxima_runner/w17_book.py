@@ -211,7 +211,10 @@ def export_proofs(games_dir, proofs_path, known_paths, log=print):
         for key, moves in load(path).items():
             known.setdefault(key, set()).update(moves)
     written = 0
+    text = Path(proofs_path).read_text(encoding="utf-8") if Path(proofs_path).is_file() else ""
     with open(proofs_path, "a", encoding="utf-8") as stream:
+        if text and not text.endswith("\n\n"):
+            stream.write("\n" if text.endswith("\n") else "\n\n")  # a PGN game needs its blank line
         for board, move, mate in learning.games_proven_wins(games_dir):
             key = chess.polyglot.zobrist_hash(board)
             if move.uci() in known.get(key, ()):

@@ -165,6 +165,7 @@ class losers_proof_book_tests(unittest.TestCase):
             entry = (chess.polyglot.zobrist_hash(board), learning.polyglot_code(board, chess.Move.from_uci('f3g1')))
             self.assertEqual(learning.games_proof_entries(Path(directory) / 'games'), {entry: learning.proof_weight})
             proofs = Path(directory) / 'w17.pgn'
+            proofs.write_text('[Event "start"]\n[Variant "Royal losers"]\n[Repertoire "white"]\n\n1. a3 *\n')
             self.assertEqual(w17_book.export_proofs(Path(directory) / 'games', proofs, [proofs], log=lambda line: None), 1)
             self.assertEqual(w17_book.export_proofs(Path(directory) / 'games', proofs, [proofs], log=lambda line: None), 0)
             self.assertIn('[Proof "mate 15"]', proofs.read_text())
