@@ -106,13 +106,17 @@ class init_tests(unittest.TestCase):
             '[FEN "rnbqkbnr/ppp1pppp/3p4/8/8/P7/1PPPPPPP/RNBQKBNR w KQkq - 0 2"]\n\n2. g4 *\n')
         (self.root / "books/w17_search.pgn").write_text(
             '[Event "start"]\n[Variant "Royal losers"]\n[Repertoire "white"]\n[Search "depth 12 cp 0"]\n\n1. a3 *\n')
+        games = self.root / "experience/losers/games/fics"
+        games.mkdir(parents=True)
+        (games / "2026-11.pgn").write_text(
+            '[Variant "Royal losers"]\n[LearningColor "black"]\n\n1. a3 { [%eval 0.00,9] } 1... d6 { [%eval #-15,9] } *\n')
         book = self.root / "book_w17.bin"
         learned = {(1234, 99): learning.proof_weight}
         learning.write_book(learned, book)
         os.utime(book, (0, 0))
         self.assertEqual(project_init.repertoire_step(self.root, options(data=self.root))[0], "done")
         entries = learning.proven_entries(book, every=True)
-        self.assertEqual(len(entries), 3)
+        self.assertEqual(len(entries), 4)
         self.assertEqual(entries[(1234, 99)], learning.proof_weight)
 
     def test_network_precedes_builds_and_books_can_be_skipped(self):

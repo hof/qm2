@@ -8,8 +8,9 @@ from unittest.mock import AsyncMock, patch
 
 import chess
 import chess.engine
+import chess.polyglot
 
-from maxima_runner import fics, fics_game, learning, learning_store, monthly_pgn, online_tablebase
+from maxima_runner import fics, fics_game, learning, learning_store, monthly_pgn, online_tablebase, w17_book
 from maxima_runner.variants import royal_losers_board, variant_game, read_pgn
 from test_fics_policy import player
 
@@ -150,6 +151,28 @@ class losers_proof_book_tests(unittest.TestCase):
             self.assertEqual(opening.proven_move(board), chess.Move.from_uci('f3g1'))
             board.push_uci('f3g1')
             self.assertIsNone(opening.proven_move(board))
+
+    def test_saved_games_give_their_proofs_back_to_a_rebuild_and_to_the_proof_pgn(self):
+        game = losers_game()
+        list(game.mainline())[2].set_eval(chess.engine.PovScore(chess.engine.Mate(15), chess.WHITE), 9)
+        with tempfile.TemporaryDirectory() as directory:
+            games = Path(directory) / 'games/fics'
+            games.mkdir(parents=True)
+            (games / '2026-11.pgn').write_text(str(game) + '\n\n')
+            board = royal_losers_board()
+            for move in ('g1f3', 'g8f6'):
+                board.push_uci(move)
+            entry = (chess.polyglot.zobrist_hash(board), learning.polyglot_code(board, chess.Move.from_uci('f3g1')))
+            self.assertEqual(learning.games_proof_entries(Path(directory) / 'games'), {entry: learning.proof_weight})
+            proofs = Path(directory) / 'w17.pgn'
+            self.assertEqual(w17_book.export_proofs(Path(directory) / 'games', proofs, [proofs], log=lambda line: None), 1)
+            self.assertEqual(w17_book.export_proofs(Path(directory) / 'games', proofs, [proofs], log=lambda line: None), 0)
+            self.assertIn('[Proof "mate 15"]', proofs.read_text())
+            book = Path(directory) / 'book_w17.bin'
+            learning.build_repertoire(proofs, book)
+            self.assertEqual(learning.opening_book([], book_path=book, variant='losers').proven_move(board),
+                             chess.Move.from_uci('f3g1'))
+
 
 class losers_storage_tests(unittest.TestCase):
     def test_pgn_roundtrip_monthly_archive_rebuild_and_cross_variant_rejection(self):

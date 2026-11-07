@@ -1329,7 +1329,11 @@ learned layers find out which works best. The file streams one line per
 position, so a stopped run resumes. Searched moves get the normal book weight,
 so the client plays them without searching while the learned layers can still
 reweight them. `./maxima init` builds `book_w17.bin` from `books/w17.pgn` and
-`books/w17_search.pgn` and keeps the proofs the games added. The W17
+`books/w17_search.pgn`, keeps the proofs the games added, and finds the proofs
+of the saved losers games (`experience/losers/games`) again, so a fresh checkout
+with the experience store gets them back. `./maxima books:w17 --export-proofs`
+appends those game proofs that no book PGN holds yet to `books/w17.pgn`, to
+commit them. The W17
 material evaluator is unchanged; its scores and learning probabilities have not
 been calibrated by a new strength test.
 

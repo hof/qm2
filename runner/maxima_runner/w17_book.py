@@ -18,7 +18,7 @@ import chess
 import chess.pgn
 import chess.polyglot
 
-from . import project
+from . import learning, project
 from .variants import read_pgn, royal_losers_board, variant_game
 
 
@@ -159,6 +159,8 @@ def build(output, our_moves, seconds, workers, engine_path, hash_mb, log=print, 
             finally:
                 send(engine, "quit")
                 engine.wait()
+                engine.stdin.close()
+                engine.stdout.close()
 
         def search_all(engine):
             while True:
@@ -202,6 +204,26 @@ def build(output, our_moves, seconds, workers, engine_path, hash_mb, log=print, 
     return written
 
 
+def export_proofs(games_dir, proofs_path, known_paths, log=print):
+    """Append the proven wins of the saved games that no book PGN holds yet to proofs_path; returns how many."""
+    known = {}
+    for path in known_paths:
+        for key, moves in load(path).items():
+            known.setdefault(key, set()).update(moves)
+    written = 0
+    with open(proofs_path, "a", encoding="utf-8") as stream:
+        for board, move, mate in learning.games_proven_wins(games_dir):
+            key = chess.polyglot.zobrist_hash(board)
+            if move.uci() in known.get(key, ()):
+                continue
+            known.setdefault(key, set()).add(move.uci())
+            colour = "white" if board.turn else "black"
+            stream.write(entry(board, board.move_stack, colour, move.uci(), (move.uci(), 0, f"mate {mate}", [])))
+            written += 1
+            log(f"{royal_losers_board().variation_san(board.move_stack)} {board.san(move)}: mate {mate}")
+    return written
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="maxima books:w17", description=__doc__)
     parser.add_argument("--moves", type=int, default=2, help="our first moves to book per colour (default 2)")
@@ -210,8 +232,16 @@ def main(argv=None):
     parser.add_argument("--hash", type=int, default=256, help="hash per engine in MB (default 256)")
     parser.add_argument("--engine", type=Path, default=None, help="engine binary (default: the release build)")
     parser.add_argument("--first", default="", help="white's first moves to book side by side, e.g. a3,h3,c4,f4")
+    parser.add_argument("--export-proofs", action="store_true",
+                        help="only add the proven wins of the saved games to books/w17.pgn, without searching")
     parser.add_argument("--output", type=Path, default=project.project_root() / "books/w17_search.pgn")
     options = parser.parse_args(argv)
+    if options.export_proofs:
+        proofs = project.project_root() / "books/w17.pgn"
+        written = export_proofs(project.data_root() / "experience/losers/games", proofs, [proofs, options.output],
+                                log=lambda line: print(line, flush=True))
+        print(f"-- {written} proven wins added to {proofs}", flush=True)
+        return 0
     engine = options.engine or project.engine_path()
     if not engine.is_file():
         raise ValueError(f"no engine at {engine}: ./maxima build")

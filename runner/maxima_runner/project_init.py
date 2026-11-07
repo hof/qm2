@@ -245,8 +245,11 @@ def repertoire_step(root, options):
         return "missing", f"./maxima init builds {', '.join(target.name for _, target in stale)}"
     for sources, target in stale:
         target.parent.mkdir(parents=True, exist_ok=True)
-        # Proofs the losers games added stay: a proven win is a fact, not a repertoire choice.
-        learned = learning.proven_entries(target) if target.name == "book_w17.bin" else {}
+        # Proofs the losers games added stay, found again in the saved games: a proven win is a fact.
+        learned = {}
+        if target.name == "book_w17.bin":
+            learned = learning.proven_entries(target)
+            learned.update(learning.games_proof_entries(options.data / "experience/losers/games"))
         learning.build_repertoire(sources, target)
         if learned:
             learning.write_book({**learning.proven_entries(target, every=True), **learned}, target)

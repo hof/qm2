@@ -277,17 +277,38 @@ def add_repertoire(pgn_path, weights, plies):
                 board.push(node.move)
 
 
-def book_proven_wins(game, our_color, book_path):
-    """Add our moves of the first horizon_plies that the engine scored as a mate for us to the proof book.
-
-    A losers mate score is a streak proof over every reply, so the move is a proven win; returns how many
-    entries were new."""
-    found, board = {}, game.board()
+def proven_wins(game, our_color):
+    """(board, move, mate distance) of our moves in the first horizon_plies that the engine scored as a mate for
+    us: a losers mate score is a streak proof over every reply, so the move is a proven win."""
+    board = game.board()
     for node in list(game.mainline())[:horizon_plies]:
         evaluation = node.eval()
-        if board.turn == our_color and evaluation is not None and (evaluation.pov(our_color).mate() or 0) > 0:
-            found[(chess.polyglot.zobrist_hash(board), polyglot_code(board, node.move))] = proof_weight
+        mate = evaluation.pov(our_color).mate() if evaluation is not None and board.turn == our_color else None
+        if mate and mate > 0:
+            yield board.copy(), node.move, mate
         board.push(node.move)
+
+
+def games_proven_wins(games_dir):
+    """Every proven win in the saved losers games below games_dir, as (board, move, mate distance)."""
+    for path in sorted(Path(games_dir).rglob("*.pgn")) if Path(games_dir).is_dir() else ():
+        with open(path, encoding="utf-8-sig") as stream:
+            while (game := read_pgn(stream)) is not None:
+                colour = game.headers.get("LearningColor")
+                if game.headers.get("Variant") == "Royal losers" and colour in ("white", "black"):
+                    yield from proven_wins(game, colour == "white")
+
+
+def games_proof_entries(games_dir):
+    """{(key, move code): proof weight} of every proven win in the saved losers games below games_dir."""
+    return {(chess.polyglot.zobrist_hash(board), polyglot_code(board, move)): proof_weight
+            for board, move, _ in games_proven_wins(games_dir)}
+
+
+def book_proven_wins(game, our_color, book_path):
+    """Add our proven wins of the game to the proof book; returns how many entries were new."""
+    found = {(chess.polyglot.zobrist_hash(board), polyglot_code(board, move)): proof_weight
+             for board, move, _ in proven_wins(game, our_color)}
     if not found:
         return 0
     weights = proven_entries(book_path, every=True)
