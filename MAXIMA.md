@@ -114,8 +114,14 @@ The losers search is one PVS tree for both sides with a material evaluation.
 Every move costs a ply. Captures are compulsory past the horizon too, and in check
 every evasion is searched. A quiet node past the horizon stands pat, unless its
 side is in a streak: its last quiet move was answered by forced moves only. That
-side then has to prove the streak, a forced win, in a null window at the win
-bound: any proven win ends the proof. A streak goes on with quiet moves that leave
+side then has to prove the streak, a forced win; any proven win ends the proof.
+The proof is a depth-first proof-number search (df-pn): our streak tries are OR
+nodes, the defender's forced replies AND nodes, and it always works on the try
+that is cheapest to prove or refute, counted in open replies, instead of finishing
+one try at a time. A try starts at its number of capture replies; a defender
+capture onto a square we defend starts as the likeliest escape. Its own table keeps
+proof numbers and proof lengths, keyed by position and whether the last move was
+a check without a capture, for every losers search of the process. A streak goes on with quiet moves that leave
 the opponent a capture, or with a check, never two checks without a capture
 between them. A streak move is skipped when the opponent can end the streak: his
 captures come from one piece, one of them lands on a square we defend, and after

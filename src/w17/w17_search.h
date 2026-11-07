@@ -26,6 +26,31 @@
 
 #include "search.h"
 #include "hashcodes.h"
+#include <vector>
+
+/*
+ * Losers df-pn: proof and disproof numbers of a streak position, the proof length once proven,
+ * and how a df-pn call ends.
+ */
+struct dfpn_entry_t {
+    U64 key;
+    uint32_t pn, dn;
+    int length;
+};
+
+struct dfpn_child_t {
+    move_t move;
+    U64 key; // 0: not in the table
+    uint32_t pn, dn;
+    int length;
+    bool check;
+};
+
+struct dfpn_result_t {
+    uint32_t pn, dn;
+    int length;
+    move_t move;
+};
 
 class w17_search_t : public search_t {
 public:
@@ -49,6 +74,10 @@ public:
     }
     
     int w17_pvs(int alpha, int beta, int depth);
+    bool streak_try(const move_t * move, int gives_check);
+    dfpn_result_t dfpn(uint32_t thpn, uint32_t thdn, bool or_node);
+    int streak_children(dfpn_child_t * children, bool or_node, bool & proven);
+    static inline std::vector<dfpn_entry_t> dfpn_table; // Shared by the searches of one process: proofs stay facts
     U64 w17_tt_key() const;
     
 };

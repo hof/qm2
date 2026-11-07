@@ -63,6 +63,180 @@ U64 w17_search_t::w17_tt_key() const {
     return position_key(brd);
 }
 
+/*
+ * At a horizon node in our streak, with moves scored by the move picker: may we go on with the move? A quiet move must leave the
+ * opponent a capture and must not let it end the streak with a capture we must take back; a check
+ * is fine, but not two checks without a capture between them.
+ */
+bool w17_search_t::streak_try(const move_t * move, const int gives_check) {
+    if (gives_check) {
+        return !((stack - 1)->in_check && !(stack - 1)->current_move.capture);
+    }
+    return !move->capture && !move->promotion && move->score > FORCING_MINIMUM && brd.keeps_streak(move);
+}
+
+namespace {
+    constexpr uint32_t DFPN_INF = 1u << 30;
+    constexpr U64 DFPN_CHECK_SALT = 0x9e3779b97f4a7c15ULL;
+    constexpr size_t DFPN_SIZE = size_t(1) << 20;
+
+    uint32_t dfpn_add(const uint32_t a, const uint32_t b) {
+        return uint32_t(std::min<U64>(U64(a) + b, DFPN_INF - 1));
+    }
+
+    // A child's threshold may pass its sibling's number by a quarter, so df-pn switches less often
+    uint32_t dfpn_beyond(const uint32_t second) {
+        return second >= DFPN_INF - 1 ? DFPN_INF : uint32_t(std::min<U64>(U64(second) + 1 + second / 4, DFPN_INF));
+    }
+}
+
+/*
+ * The moves of a streak node by the rules of the horizon proof in w17_pvs: our quiet nodes go on
+ * only with streak moves, capture and check nodes are forced, a defender without a capture or
+ * check escapes. Returns the number of moves, or -1 when the node is decided already, with
+ * proven telling who won: a side left with its king only or without a legal move has won, a
+ * draw or the ply limit is no proof.
+ */
+int w17_search_t::streak_children(dfpn_child_t * children, const bool or_node, bool & proven) {
+    const bool us = brd.us();
+    if (max_1(brd.all(us)) || max_1(brd.all(!us))) {
+        proven = max_1(brd.all(us)) == or_node;
+        return -1;
+    }
+    proven = false;
+    if (w17_is_draw() || brd.ply >= MAX_PLY - 1) {
+        return -1;
+    }
+    stack->tt_move.clear();
+    move_t * move = move::first(this, 0);
+    if (!move) {
+        proven = or_node;
+        return -1;
+    }
+    const bool quiet_node = move->capture == 0 && !stack->in_check;
+    if (quiet_node && !or_node) {
+        return -1;
+    }
+    int count = 0;
+    do {
+        const int gives_check = brd.gives_check(move);
+        if (quiet_node && !streak_try(move, gives_check)) {
+            continue;
+        }
+        dfpn_child_t & child = children[count++];
+        child.move.set(move);
+        child.check = gives_check;
+
+        /*
+         * Only a position right after a capture or pawn move goes into the table: nothing after it
+         * can repeat what came before, so its result does not depend on the path to it.
+         */
+        brd.forward(move);
+        child.key = brd.stack->fifty_count ? 0
+            : position_key(brd) ^ (stack->in_check && !move->capture ? DFPN_CHECK_SALT : 0);
+        brd.backward(move);
+
+        // Fewer capture replies, easier to prove; a capture we must take back, likelier to escape
+        child.pn = or_node && quiet_node && !gives_check ? std::max(1, forcing_class(move->score) / 2) : 1;
+        child.dn = !or_node && move->capture ? 2 - (move->score & 1) : 1;
+        child.length = 0;
+    } while ((move = move::next(this, 0)));
+    if (count == 0) {
+        return -1;
+    }
+    return count;
+}
+
+/*
+ * Depth-first proof-number search of a streak, from the streaking side (OR) against the
+ * defender (AND). It always works on the try that is cheapest to prove or refute, counted in open
+ * defender replies, instead of finishing one try at a time.
+ */
+dfpn_result_t w17_search_t::dfpn(const uint32_t thpn, const uint32_t thdn, const bool or_node) {
+    if (abort(false)) {
+        return {1, 1, 0, {}};
+    }
+    if (brd.ply >= sel_depth) {
+        sel_depth = brd.ply;
+    }
+    dfpn_child_t children[move::MAX_MOVES];
+    bool won;
+    const int count = streak_children(children, or_node, won);
+    if (count < 0) {
+        return won ? dfpn_result_t{0, DFPN_INF, 0, {}} : dfpn_result_t{DFPN_INF, 0, 0, {}};
+    }
+    for (int i = 0; i < count; i++) {
+        const dfpn_entry_t & entry = dfpn_table[children[i].key & (DFPN_SIZE - 1)];
+        if (children[i].key && entry.key == children[i].key) {
+            children[i].pn = entry.pn;
+            children[i].dn = entry.dn;
+            children[i].length = entry.length;
+        }
+    }
+    const U64 key = brd.stack->fifty_count ? 0
+        : position_key(brd) ^ ((stack - 1)->in_check && !(stack - 1)->current_move.capture ? DFPN_CHECK_SALT : 0);
+    while (true) {
+        uint32_t pn = or_node ? DFPN_INF : 0, dn = or_node ? 0 : DFPN_INF, second = DFPN_INF;
+        int best = 0;
+        for (int i = 0; i < count; i++) {
+            const uint32_t own = or_node ? children[i].pn : children[i].dn;
+            const uint32_t other = or_node ? children[i].dn : children[i].pn;
+            uint32_t & small = or_node ? pn : dn;
+            uint32_t & sum = or_node ? dn : pn;
+            sum = dfpn_add(sum, other);
+            if (own < small) {
+                second = small;
+                small = own;
+                best = i;
+            } else if (own < second) {
+                second = own;
+            }
+        }
+        if (or_node && pn == 0) {
+            dn = DFPN_INF;
+        }
+        if (!or_node && dn == 0) {
+            pn = DFPN_INF;
+        }
+        if (pn == 0 || dn == 0 || pn >= thpn || dn >= thdn) {
+            int length = 0;
+            if (pn == 0) {
+                for (int i = 0; i < count; i++) {
+                    if (or_node && children[i].pn == 0 && children[i].length < children[best].length) {
+                        best = i;
+                    }
+                    if (!or_node) {
+                        length = std::max(length, children[i].length);
+                    }
+                }
+                length = 1 + (or_node ? children[best].length : length);
+            }
+            if (key) {
+                dfpn_table[key & (DFPN_SIZE - 1)] = {key, pn, dn, length};
+            }
+            return {pn, dn, length, children[best].move};
+        }
+        dfpn_child_t & child = children[best];
+        uint32_t child_pn, child_dn;
+        if (or_node) {
+            child_pn = std::min(thpn, dfpn_beyond(second));
+            child_dn = thdn >= DFPN_INF ? DFPN_INF : uint32_t(std::min<U64>(U64(thdn) - dn + child.dn, DFPN_INF));
+        } else {
+            child_dn = std::min(thdn, dfpn_beyond(second));
+            child_pn = thpn >= DFPN_INF ? DFPN_INF : uint32_t(std::min<U64>(U64(thpn) - pn + child.pn, DFPN_INF));
+        }
+        forward(&child.move, child.check);
+        const dfpn_result_t result = dfpn(child_pn, child_dn, !or_node);
+        backward(&child.move);
+        if (stop_all) {
+            return {pn, dn, 0, {}};
+        }
+        child.pn = result.pn;
+        child.dn = result.dn;
+        child.length = result.length;
+    }
+}
+
 int w17_search_t::pvs(int alpha, int beta, int depth, bool) {
     return w17_pvs(alpha, beta, depth);
 }
@@ -172,8 +346,30 @@ int w17_search_t::w17_pvs(int alpha, int beta, int depth) {
             return best;
         }
         alpha = MAX(alpha, best);
+
+        /*
+         * The streak itself goes to df-pn: only a proven win counts, and any proven win will do,
+         * so df-pn works on the cheapest try instead of finishing one try at a time.
+         */
+        if (dfpn_table.empty()) {
+            dfpn_table.resize(DFPN_SIZE);
+        }
+        const dfpn_result_t result = dfpn(DFPN_INF, DFPN_INF, true);
+        if (stop_all) {
+            return alpha;
+        }
+        if (result.pn == 0) {
+            const int score = score::MATE - (brd.ply + result.length);
+            move_t proof_move = result.move;
+            stack->best_move.set(&proof_move);
+            stack->pv_moves[0].set(&proof_move);
+            stack->pv_count = 1;
+            trans_table::store(stack->tt_key, brd.root_ply, brd.ply, tt_depth, score, proof_move.to_compact(), score::LOWERBOUND);
+            return score;
+        }
+        trans_table::store(stack->tt_key, brd.root_ply, brd.ply, tt_depth, best, 0, score::flags(best, alpha1, beta));
+        return best;
     }
-    const int win = score::MATE - MAX_PLY;
     const bool pv = alpha + 1 < beta;
     stack->best_move.clear();
     int searched_moves = 0;
@@ -196,15 +392,6 @@ int w17_search_t::w17_pvs(int alpha, int beta, int depth) {
             }
         }
         const bool streak = forcing && new_capture;
-        if (horizon && (gives_check ? (stack - 1)->in_check && !(stack - 1)->current_move.capture
-                : !forcing)) {
-            continue;
-        }
-
-        // A streak move must not let the opponent end the streak with a capture we must take back
-        if (horizon && !gives_check && !brd.keeps_streak(move)) {
-            continue;
-        }
         int reduce = 0;
         if (quiet && quiet_node && !streak && !gives_check && depth > 0) {
             if (depth <= 4 && searched_moves >= 2 + depth && best > -decisive) {
@@ -217,22 +404,7 @@ int w17_search_t::w17_pvs(int alpha, int beta, int depth) {
         forward(move, gives_check);
         const int new_depth = depth - 1;
         int score;
-        if (horizon) {
-
-            // Any proven win will do: looking for a shorter one only grows the proof
-            score = -w17_pvs(-win, -(win - 1), new_depth);
-            backward(move);
-            if (stop_all) {
-                return alpha;
-            }
-            if (score < win) {
-                continue;
-            }
-            stack->best_move.set(move);
-            update_pv(move);
-            trans_table::store(stack->tt_key, brd.root_ply, brd.ply, tt_depth, score, move->to_compact(), score::LOWERBOUND);
-            return score;
-        } else if (searched_moves == 0 && !reduce) {
+        if (searched_moves == 0 && !reduce) {
             score = -w17_pvs(-beta, -alpha, new_depth);
         } else {
             score = -w17_pvs(-alpha - 1, -alpha, new_depth - reduce);

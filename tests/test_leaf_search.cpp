@@ -277,6 +277,21 @@ bool test_losers_root_scores() {
     return success;
 }
 
+// A streak win past the horizon of depth 1: df-pn proves it and leaves the board as it was
+bool test_losers_streak_proof() {
+    game_t game;
+    game.max_depth = 1;
+    w17_search_t search("8/4K3/2k2P2/7P/1PP5/7P/8/2r5 w - - 0 1", &game);
+    const auto fen = search.brd.to_string();
+    search.go();
+    const bool proven = search.result_score >= score::MATE - MAX_PLY && search.stack->best_move.piece
+        && search.brd.to_string() == fen && search.brd.ply == 0 && search.stack == search.root_stack;
+    if (!proven) {
+        std::cerr << "losers streak proof: score " << search.result_score << "\n";
+    }
+    return proven;
+}
+
 bool test_material_draws() {
     struct material_case_t {
         const char * name;
@@ -557,6 +572,7 @@ int main() {
     success &= test_recursive_stalemate();
     success &= test_quiet_playable();
     success &= test_losers_root_scores();
+    success &= test_losers_streak_proof();
     success &= test_recapture();
     success &= test_material_draws();
     success &= test_fifty_move_boundary();
