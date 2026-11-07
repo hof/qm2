@@ -159,10 +159,13 @@ class engine_session:
         configurable = {name: value for name, value in applied.items()
                         if not self.protocol.options[name].is_managed()}
         await asyncio.wait_for(self.protocol.configure(configurable), self.timeout)
-        # The engine initialises at its first isready (network, hash): do that now, not on a game clock.
-        await asyncio.wait_for(self.protocol.ping(), self.timeout)
         return {name: str(value).lower() if isinstance(value, bool) else str(value)
                 for name, value in applied.items()}
+
+    async def ready(self):
+        """The engine initialises at its first isready (network, hash): a client does that before any
+        game, not on the clock of its first search."""
+        await asyncio.wait_for(self.protocol.ping(), self.timeout)
 
     def variant_settings(self, board):
         if not board.is_valid():
