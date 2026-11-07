@@ -152,6 +152,21 @@ class losers_proof_book_tests(unittest.TestCase):
             board.push_uci('f3g1')
             self.assertIsNone(opening.proven_move(board))
 
+    def test_a_game_too_short_to_learn_from_still_books_its_proofs(self):
+        board = royal_losers_board()
+        for move in ('g1f3', 'g8f6', 'f3g1'):
+            board.push_uci(move)
+        game = variant_game.from_board(board)
+        game.headers.update(losers_game().headers)
+        list(game.mainline())[2].set_eval(chess.engine.PovScore(chess.engine.Mate(15), chess.WHITE), 9)
+        with tempfile.TemporaryDirectory() as directory:
+            book = Path(directory) / 'book_w17.bin'
+            subject = learning.learner(Path(directory) / 'losers', variant='losers', mood='off', book_path=book)
+            self.assertIsNone(subject.add(game))
+            board.pop()
+            self.assertEqual(learning.opening_book([], book_path=book, variant='losers').proven_move(board),
+                             chess.Move.from_uci('f3g1'))
+
     def test_saved_games_give_their_proofs_back_to_a_rebuild_and_to_the_proof_pgn(self):
         game = losers_game()
         list(game.mainline())[2].set_eval(chess.engine.PovScore(chess.engine.Mate(15), chess.WHITE), 9)

@@ -853,8 +853,10 @@ class learner:
     def add(self, game):
         record = self.store.add(game)
         self.records = self.store.load()
-        if self.variant == "losers" and self.book_path and record and record.get("color") in ("white", "black"):
-            book_proven_wins(game, record["color"] == "white", self.book_path)
+        # A proven win is a fact, so even a game too short to learn from books its proofs.
+        colour = game.headers.get("LearningColor")
+        if self.variant == "losers" and self.book_path and colour in ("white", "black"):
+            book_proven_wins(game, colour == "white", self.book_path)
         return record
 
     def refresh(self):

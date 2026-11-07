@@ -1315,9 +1315,9 @@ built by `./maxima init` from `books/w17.pgn`: each line starts at a position
 (`FEN` header) and holds a move the losers search proved to win (`Proof "mate N"`).
 A proven move gets the full Polyglot weight and is always played, before the
 learned layers and the search share; the moves leading to that position are not
-booked. After each losers game the learner adds every move of ours in the first
-20 moves that the engine scored as a mate for us to `book_w17.bin`, as a proven
-move. `./maxima books:w17` searches the losers opening book into
+booked. After each losers game, even one too short to learn from, the learner
+adds every move of ours in the first 20 moves that the engine scored as a mate
+for us to `book_w17.bin`, as a proven move. `./maxima books:w17` searches the losers opening book into
 `books/w17_search.pgn`: breadth-first over our first moves (`--moves`, default 2)
 as both colours, every legal opponent reply expanded and transpositions merged.
 Each position gets at least `--seconds` (default 60) of search on `--workers`
