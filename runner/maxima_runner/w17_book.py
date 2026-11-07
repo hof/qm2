@@ -72,19 +72,20 @@ def search(engine, fen, seconds):
 
 
 def load(path):
-    """{zobrist key: move uci} of the positions already booked in path."""
+    """{zobrist key: [move uci]} of the positions already booked in path."""
     done = {}
     if Path(path).is_file():
         with open(path, encoding="utf-8") as stream:
             while (game := read_pgn(stream)) is not None:
                 moves = list(game.mainline_moves())
-                if moves:
-                    done[chess.polyglot.zobrist_hash(game.board())] = moves[0].uci()
+                booked = done.setdefault(chess.polyglot.zobrist_hash(game.board()), [])
+                if moves and moves[0].uci() not in booked:
+                    booked.append(moves[0].uci())
     return done
 
 
-def entry(board, line, colour, move, found):
-    """One PGN line: the position as FEN, our move, and the search that chose it."""
+def entry(board, line, colour, move, found, kind="forced"):
+    """One PGN line: the position as FEN, our move, and the search that chose it (else kind: forced, choice)."""
     game = variant_game()
     for name in ("Site", "Date", "Round", "White", "Black", "Result"):
         del game.headers[name]
@@ -92,7 +93,7 @@ def entry(board, line, colour, move, found):
     game.headers["Variant"] = "Royal losers"
     game.headers["Repertoire"] = colour
     if found is None:
-        game.headers["Search"] = "forced"
+        game.headers["Search"] = kind
     elif found[2].startswith("mate ") and int(found[2].split()[1]) > 0:
         game.headers["Proof"] = found[2]
     else:
@@ -116,25 +117,34 @@ def replies(positions):
     return level
 
 
-def build(output, our_moves, seconds, workers, engine_path, hash_mb, log=print):
-    """Book our first our_moves moves as both colours; returns the number of new entries."""
+def build(output, our_moves, seconds, workers, engine_path, hash_mb, log=print, first=()):
+    """Book our first our_moves moves as both colours; returns the number of new entries.
+
+    first: white's first moves to book side by side instead of a searched one, so play can learn between them."""
     done, lock, written = load(output), threading.Lock(), 0
 
-    def record(board, line, colour, move, found):
+    def record(board, line, colour, move, found, kind="forced"):
         nonlocal written
         with lock, open(output, "a", encoding="utf-8") as stream:
-            stream.write(entry(board, line, colour, move, found))
+            stream.write(entry(board, line, colour, move, found, kind))
             written += 1
+
+    start = royal_losers_board()
+    for move in first:
+        uci = start.parse_san(move).uci()
+        if uci not in done.setdefault(chess.polyglot.zobrist_hash(start), []):
+            done[chess.polyglot.zobrist_hash(start)].append(uci)
+            record(start, [], "white", uci, None, "choice")
 
     def book(colour, number, level):
         """Our move in every position of level: [(board after it, line)]."""
         tasks, moves = queue.Queue(), {}
         for key, (board, line) in level.items():
-            if key in done:
+            if done.get(key):
                 moves[key] = done[key]
             elif board.legal_moves.count() == 1:
-                moves[key] = next(iter(board.legal_moves)).uci()
-                record(board, line, colour, moves[key], None)
+                moves[key] = [next(iter(board.legal_moves)).uci()]
+                record(board, line, colour, moves[key][0], None)
             else:
                 tasks.put(key)
         total, searched, failures = tasks.qsize(), [0], []
@@ -158,7 +168,7 @@ def build(output, our_moves, seconds, workers, engine_path, hash_mb, log=print):
                     return
                 board, line = level[key]
                 found = search(engine, board.fen(), seconds)
-                moves[key] = found[0]
+                moves[key] = [found[0]]
                 record(board, line, colour, found[0], found)
                 with lock:
                     searched[0] += 1
@@ -174,11 +184,11 @@ def build(output, our_moves, seconds, workers, engine_path, hash_mb, log=print):
             raise RuntimeError(f"a book worker failed: {failures[0]!r}") from failures[0]
         after = []
         for key, (board, line) in level.items():
-            move = chess.Move.from_uci(moves[key])
-            child = board.copy()
-            child.push(move)
-            if not child.is_game_over():
-                after.append((child, line + [move]))
+            for move in map(chess.Move.from_uci, moves[key]):
+                child = board.copy()
+                child.push(move)
+                if not child.is_game_over():
+                    after.append((child, line + [move]))
         return after
 
     for colour in ("white", "black"):
@@ -199,12 +209,13 @@ def main(argv=None):
     parser.add_argument("--workers", type=int, default=4, help="engines searching side by side (default 4)")
     parser.add_argument("--hash", type=int, default=256, help="hash per engine in MB (default 256)")
     parser.add_argument("--engine", type=Path, default=None, help="engine binary (default: the release build)")
+    parser.add_argument("--first", default="", help="white's first moves to book side by side, e.g. a3,h3,c4,f4")
     parser.add_argument("--output", type=Path, default=project.project_root() / "books/w17_search.pgn")
     options = parser.parse_args(argv)
     engine = options.engine or project.engine_path()
     if not engine.is_file():
         raise ValueError(f"no engine at {engine}: ./maxima build")
     written = build(options.output, options.moves, options.seconds, options.workers, engine, options.hash,
-                    log=lambda line: print(line, flush=True))
+                    log=lambda line: print(line, flush=True), first=[move for move in options.first.split(",") if move])
     print(f"-- {written} new entries in {options.output}; ./maxima init builds book_w17.bin", flush=True)
     return 0
