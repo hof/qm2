@@ -75,6 +75,12 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(played.move.uci(), "a7a6")
             await asyncio.wait(pondering)
 
+    async def test_configure_waits_until_the_engine_is_ready_before_any_game(self):
+        lines = []
+        async with open_engine(self.command, self.directory.name, 2, log=lines.append) as session:
+            await session.configure({})
+            self.assertEqual(lines[-2:], ["> isready", "< readyok"])
+
     async def test_every_engine_line_reaches_the_log(self):
         lines = []
         async with open_engine(self.command, self.directory.name, 2, log=lines.append) as session:
