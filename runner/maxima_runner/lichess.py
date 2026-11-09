@@ -1069,7 +1069,8 @@ class lichess_game:
         theirs = "b" if ours == "w" else "w"
         self.pace.record(board.ply(), state[f"{theirs}time"] / 1000, state[f"{theirs}inc"] / 1000)
         self.hunt_flag(move_choice.flag_chance(clock, state[f"{theirs}time"] / 1000, state[f"{theirs}inc"] / 1000,
-                                               self.player(not self.color).get("title") == "BOT", self.pace))
+                                               self.player(not self.color).get("title") == "BOT", self.pace,
+                                               self.flag_hunt))
         try:
             move, info, kind = await move_choice.choose_move(
                 bot.session, board, limit, opening=self.opening,

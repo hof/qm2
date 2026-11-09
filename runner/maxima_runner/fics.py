@@ -1266,7 +1266,8 @@ class engine_player:
         theirs = (position.black_ms if board.turn == chess.WHITE else position.white_ms) / 1000
         self.pace.record(board.ply(), theirs, position.increment_seconds)
         chance = not self.is_losers and move_choice.flag_chance(
-            clock, theirs, position.increment_seconds, bool(self.opponent and self.opponent.is_engine), self.pace)
+            clock, theirs, position.increment_seconds, bool(self.opponent and self.opponent.is_engine), self.pace,
+            self.flag_hunt)
         if chance != self.flag_hunt:
             self.on_line("-- time-strategy: avoiding quick draws because opponent might lose on time" if chance
                          else "-- time-strategy: no longer avoiding quick draws")

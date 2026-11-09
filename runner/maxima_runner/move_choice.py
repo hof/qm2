@@ -16,6 +16,7 @@ draw_offer_first, draw_offer_repeat = 4, 11  # our moves at the draw score; Lich
 time_win_lead, time_win_moves = 1.5, 40  # our time over theirs, each with the increments of that many moves
 time_win_bot_increment, time_win_human_increment = 1, 3  # seconds from which the opponent will not flag
 flag_pace_moves, flag_pace_window = 30, 10  # a flag is a real chance when their recent pace leaves fewer moves
+flag_keep_lead, flag_keep_moves = 1.25, 40  # once hunting, it lasts until clearly over: no flipping each move
 flag_draw_offset = -50  # ShortDrawOffset while it is: play on past quick draws; the engine floors them at -10 cp
 draw_accept_lost = -150  # cp from our side: even while ahead on time, a lost position takes an offered draw
 
@@ -151,13 +152,13 @@ def accept_draw(board, info, contempt=None, ahead=False):
     return ours <= (engine_draw_value if contempt is None else contempt)
 
 
-def winning_on_time(ours, theirs, increment, bot):
+def winning_on_time(ours, theirs, increment, bot, lead=time_win_lead):
     """Whether the game may still end on their flag: our clock, in seconds, far enough ahead of theirs, with an
     increment too small to save them. Bots live on any increment, humans on a few seconds."""
     if increment >= (time_win_bot_increment if bot else time_win_human_increment):
         return False
     extra = time_win_moves * increment
-    return ours + extra > time_win_lead * (theirs + extra)
+    return ours + extra > lead * (theirs + extra)
 
 
 class opponent_pace:
@@ -182,14 +183,16 @@ class opponent_pace:
         return theirs / pace if pace > 0 else None
 
 
-def flag_chance(ours, theirs, increment, bot, pace):
+def flag_chance(ours, theirs, increment, bot, pace, hunting=False):
     """Whether their flag is a real chance: no increment, our clock far enough ahead (winning_on_time), and at
     their own recent pace fewer than flag_pace_moves moves left. A bot that moves in a tenth of a second has
-    fifty moves in five seconds, so a small clock alone is not enough."""
-    if increment or not winning_on_time(ours, theirs, increment, bot):
+    fifty moves in five seconds, so a small clock alone is not enough. While hunting, a smaller lead and more
+    moves left keep it going, so a pace or clock near the line does not switch it every move."""
+    lead, moves = (flag_keep_lead, flag_keep_moves) if hunting else (time_win_lead, flag_pace_moves)
+    if increment or not winning_on_time(ours, theirs, increment, bot, lead):
         return False
     left = pace.moves_left(theirs)
-    return left is not None and left < flag_pace_moves
+    return left is not None and left < moves
 
 
 class draw_offers:

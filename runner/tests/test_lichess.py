@@ -472,6 +472,12 @@ class flag_chance_tests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(move_choice.flag_chance(200, fast_left, 0, True, fast))  # fifty moves in five seconds
         self.assertFalse(move_choice.flag_chance(200, slow_left, 1, True, slow))
 
+    def test_a_hunt_near_the_line_keeps_going(self):
+        pace, left = self.pace(1.5, 60)  # a lead of 1.4x: short of 1.5 to start, past 1.25 to keep going
+        self.assertFalse(move_choice.flag_chance(left * 1.4, left, 0, True, pace))
+        self.assertTrue(move_choice.flag_chance(left * 1.4, left, 0, True, pace, hunting=True))
+        self.assertFalse(move_choice.flag_chance(left * 1.1, left, 0, True, pace, hunting=True))
+
     def test_a_lost_position_still_takes_the_draw_ahead_on_time(self):
         board = chess.Board()
         lost = {"score": chess.engine.PovScore(chess.engine.Cp(-200), chess.WHITE), "depth": 20}
