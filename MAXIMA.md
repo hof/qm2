@@ -2175,7 +2175,11 @@ PGN and learns from them. Rated and casual challenges are both welcome; a clock
 over `max_clock` minutes per side (default 60, `--max-clock`, counted as limit +
 40 x increment) is declined as too slow, and one under `min_clock` seconds (default
 90, `--min-clock`) as too fast: Lichess charges about 0.25 seconds per move, which a
-1+0 clock never gets back. The move choice is the same as on FICS
+1+0 clock never gets back. The client measures that lag every move: what the clock lost minus
+the time from the state that started our turn to sending our move, skipping each side's
+first move, takebacks, clock changes and reconnects. The mean of the last 10 moves
+(300 ms until measured, kept within 100–1500 ms) goes to the engine as `Server Lag`
+before each search, except on a ponderhit, and the game-over line reports it. The move choice is the same as on FICS
 (`runner/maxima_runner/move_choice.py`): the multi-layer book and experience
 (9.2), then the engine while the online tablebase is asked (11.4), with draw
 contempt from the rating gap.

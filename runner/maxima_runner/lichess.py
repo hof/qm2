@@ -1,7 +1,7 @@
 """MaximaEngine on Lichess: accept challenges and play them through the Bot API, with MaxDrone's book,
 learning, online tablebase and connectors (MAXIMA.md 10.3)."""
 import asyncio
-from collections import Counter
+from collections import Counter, deque
 from contextlib import asynccontextmanager
 from datetime import datetime
 import http.client
@@ -37,6 +37,8 @@ move_timeout = 2  # seconds for an answer to a move: on the clock, and sending i
 move_retry_wait = 0.5  # seconds between attempts to send a move
 final_state_wait = 2  # seconds for the game stream's last move after the event stream reports the end
 rate_limit_pause = 60  # Lichess asks clients to wait a full minute after HTTP 429
+lag_default = 300  # ms of server lag per move until measured: the median over 452 moves on 2026-11-09 was 334
+lag_window = 10  # moves in the rolling mean: one 700-800 ms spike moves it, a single odd sample does not
 owner_commands = ("softquit", "softrestart", "resign", "abort", "draw", "challenge", "nochallenge")
 console_commands = ("help", "quit", "team", "tournament", "leave") + owner_commands
 public_commands = ("help", "name", "eval", "stats", "book")
@@ -434,6 +436,22 @@ class matchmaker:
                           speed if reason in speed_declines else None)
 
 
+class lag_estimate:
+    """Lichess charges a move its think time plus the network and server delay: the clock our turn started
+    with, plus the increment, minus the clock after our move, minus the time from the state that started our
+    turn to sending the move. The engine takes the mean of the last moves off every increment (Server Lag)."""
+
+    def __init__(self, window=lag_window):
+        self.samples = deque(maxlen=window)
+
+    def add(self, charged_ms, think_ms):
+        self.samples.append(min(max(charged_ms - think_ms, 0), 2000))
+
+    def ms(self):
+        mean = sum(self.samples) / len(self.samples) if self.samples else lag_default
+        return int(min(max(mean, 100), 1500))
+
+
 class lichess_bot:
     """Accept challenges one game at a time and play them; owners steer it from the game chat."""
 
@@ -448,6 +466,7 @@ class lichess_bot:
         self.learner, self.pgn_dir, self.events = learner, pgn_dir, events
         self.tablebase = move_choice.tablebase_lookups(online_tablebase, on_line, local_pieces)
         self.contempt_window, self.unknown_contempt, self.margin = contempt_window, unknown_contempt, margin
+        self.lag = lag_estimate()
         self.pv_plies, self.teams, self.min_clock, self.max_clock = pv_plies, tuple(teams), min_clock, max_clock
         self.context = self.session = None
         self.id = self.name = None
@@ -796,6 +815,7 @@ class lichess_game:
         self.state_received_at = None
         self.opponent_line = None
         self.reply_clock = None
+        self.lag_turn = None  # [our clock ms, increment ms, turn started, move sent] for the lag of our next move
         self.bot, self.id = bot, game_id
         self.initial = self.board = self.record = self.color = self.opponent = None
         self.full = self.opening = self.contempt = self.draw_score = None
@@ -869,7 +889,7 @@ class lichess_game:
             self.state = None
             if self.bot.session is not None and hasattr(self.bot.session, "stop_pondering"):
                 await self.bot.session.stop_pondering()
-            self.reply_clock = None
+            self.reply_clock = self.lag_turn = None
             failures += 1
             if failures > 8:
                 await self.finish("unknownFinish", None)
@@ -944,7 +964,7 @@ class lichess_game:
             side = "b" if self.color == chess.WHITE else "w"
             if any(previous_state.get(f"{side}{field}") != state.get(f"{side}{field}") for field in ("time", "inc")):
                 # A donation/clock adjustment without a move invalidates timing.
-                self.reply_clock = None
+                self.reply_clock = self.lag_turn = None
         common = next((index for index, (a, b) in enumerate(zip(old, new)) if a != b), min(len(old), len(new)))
         if common < len(old):
             self.loss.reset()
@@ -954,7 +974,7 @@ class lichess_game:
             if self.searching is not None:
                 self.searching.cancel()
             self.searched = None
-            self.reply_clock = None
+            self.reply_clock = self.lag_turn = None
             self.board = replay
             if self.bot.session is not None and hasattr(self.bot.session, "stop_pondering"):
                 await self.bot.session.stop_pondering()
@@ -974,11 +994,16 @@ class lichess_game:
                             elapsed = (prior - now + inc) / 1000
                     self.loss.on_reply(before, move, elapsed)
                     self.reply_clock = None
+                    # Our clock runs from this state; Lichess starts it only after each side's first move.
+                    ours = "w" if self.color == chess.WHITE else "b"
+                    self.lag_turn = [state.get(f"{ours}time"), state.get(f"{ours}inc"), self.state_received_at, None] \
+                        if added == 1 and self.board.ply() >= 2 else None
                 elif added == 1:
                     side = "b" if self.color == chess.WHITE else "w"
                     self.reply_clock = (state.get(f"{side}time"), state.get(f"{side}inc"))
+                    self.measure_lag(state)
                 else:
-                    self.reply_clock = None
+                    self.reply_clock = self.lag_turn = None
                 self.on_move(before, move, state, clock_ms)
         if state.get("status") not in ("created", "started"):
             self.stop_waiting()
@@ -993,6 +1018,14 @@ class lichess_game:
             self.searched = key
             self.searching = asyncio.ensure_future(self.play(self.board.copy(), state))
             self.searching.add_done_callback(self.report)
+
+    def measure_lag(self, state):
+        turn, self.lag_turn = self.lag_turn, None
+        ours = "w" if self.color == chess.WHITE else "b"
+        after, increment = state.get(f"{ours}time"), state.get(f"{ours}inc")
+        if turn is None or turn[3] is None or None in (turn[0], after) or increment != turn[1]:
+            return
+        self.bot.lag.add(turn[0] + increment - after, (turn[3] - turn[2]) * 1000)
 
     def on_move(self, before, move, state, clock_ms):
         mover = "white" if before.turn == chess.WHITE else "black"
@@ -1088,6 +1121,8 @@ class lichess_game:
         self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.draw_score)
         # Keep sending until Lichess answers: a move it never got loses on time, as the stream stays silent on our turn.
         path = self.path(f"move/{move.uci()}" + ("?offeringDraw=true" if offering else ""))
+        if self.lag_turn is not None and self.lag_turn[3] is None:
+            self.lag_turn[3] = time.monotonic()
         while not await bot.api.post(path, timeout=move_timeout):
             status = bot.api.status
             refused = status and status != 429 and status < 500  # trying again cannot change that
@@ -1129,7 +1164,8 @@ class lichess_game:
 
     def search_options(self):
         return {"DrawContempt": self.draw_score,
-                "ShortDrawOffset": move_choice.flag_draw_offset if self.flag_hunt else 0}
+                "ShortDrawOffset": move_choice.flag_draw_offset if self.flag_hunt else 0,
+                "Server Lag": self.bot.lag.ms()}
 
     def hunt_flag(self, chance):
         """Play on past quick draws while their flag is a real chance; say so when that starts or ends."""
@@ -1237,7 +1273,7 @@ class lichess_game:
         else:
             result = "1/2-1/2"
         reason = reasons.get(status, status)
-        bot.on_line(f"-- game {self.id} over: {reason} {result}")
+        bot.on_line(f"-- game {self.id} over: {reason} {result} | server lag {bot.lag.ms()} ms")
         if status not in ("aborted", "noStart"):
             self.chat("player", random.choice(player_farewells))
             self.chat("spectator", "Thanks for watching!")

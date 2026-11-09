@@ -232,6 +232,7 @@ class engine_session:
         if self.pondering and board.fen() == self.ponder_fen:
             # python-chess drops a ponder search when any option changes: the hit is worth more.
             settings.pop("TimeFactor", None)
+            settings.pop("Server Lag", None)
 
         async def play_search():
             self.protocol.on_search_started = on_search_started

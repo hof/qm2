@@ -314,6 +314,42 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 game.stop_waiting()
 
 
+class lag_tests(unittest.IsolatedAsyncioTestCase):
+    def test_estimate_starts_at_the_default_and_follows_the_mean_within_bounds(self):
+        lag = lichess.lag_estimate()
+        self.assertEqual(lag.ms(), lichess.lag_default)
+        lag.add(1400, 1000)
+        lag.add(1600, 1000)
+        self.assertEqual(lag.ms(), 500)
+        lag.add(0, 9000)
+        self.assertGreaterEqual(lichess.lag_estimate().ms(), 100)
+
+    async def test_clock_lost_beyond_our_answer_time_becomes_the_server_lag(self):
+        api = stub_api()
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot.id, bot.session = "maximaengine", stub_session()
+        game = lichess.lichess_game(bot, "g1")
+        full = game_full()
+        game.setup(full)
+        state = full["state"]
+
+        async def their_reply(clock):  # our clock after our move; it stays still on their turn
+            replay = game.board.copy()
+            replay.push(chess.Move.from_uci(api.posts[-1][0].rsplit("/", 1)[-1]))
+            await game.on_state(dict(state, moves=" ".join(move.uci() for move in replay.move_stack), wtime=clock))
+            replay.push(next(iter(replay.legal_moves)))
+            await game.on_state(dict(state, moves=" ".join(move.uci() for move in replay.move_stack), wtime=clock))
+            await game.searching
+
+        await game.on_state(state)
+        await game.searching
+        await their_reply(170000)
+        self.assertEqual(game.search_options()["Server Lag"], lichess.lag_default)  # first moves are free
+        await their_reply(170000 + 2000 - 900)  # Lichess charged 900 ms for an answer of a few ms
+        self.assertGreater(bot.lag.ms(), 800)
+        self.assertLessEqual(bot.lag.ms(), 900)
+
+
 class draw_tests(unittest.IsolatedAsyncioTestCase):
     async def test_stalled_opening_requests_abort_once_and_cancels_on_reply(self):
         api = stub_api()
