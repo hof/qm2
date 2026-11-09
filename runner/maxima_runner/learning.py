@@ -14,14 +14,16 @@ import chess
 import chess.pgn
 import chess.polyglot
 
-from . import learning_store
+from . import learning_store, online_tablebase
 from .search_effort import analysis_rank, effort
 from .variants import board_variant, experience_variants, learning_variant, read_pgn
 
-horizon_plies = 40
+search_plies = 40  # the search layer leaves the book at a random ply of the first 20 moves
 # A game teaches only when it lasted 10 moves and Maxima searched enough moves to judge them: early
 # resignations, aborts, disconnects, and book-only games carry no eval, only a result.
 minimum_plies = 20
+# Learning ends, past the opening's decided_plies, at our first eval this far from level: the game is won or lost.
+decided_cp, decided_plies = 500, 40
 eval_window = 4
 drawn_evals = 3  # of those evals at the draw score: a drawn line, judged as a draw rather than a poor eval
 result_share = 0.2
@@ -119,6 +121,7 @@ def digest(game):
     contempt = game_contempt(headers, our_color)
     board = game.board()
     moves, evals, analyses = [], [], []
+    horizon = None
     for ply, node in enumerate(game.mainline()):
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         mover = board.turn
@@ -128,13 +131,14 @@ def digest(game):
             relative = evaluation.pov(mover)
             centipawns = relative.score(mate_score=2000)
             drawn_score = centipawns == contempt
+            if horizon is None and ply >= decided_plies and abs(centipawns) >= decided_cp:
+                horizon = ply + 1
             # The draw score is our contempt, not a judgement of the position: it counts as level.
             evals.append((ply, expected_score(0 if drawn_score else centipawns), drawn_score))
-            if ply < horizon_plies:
-                nodes, nps, seconds = effort(node)
-                analyses.append([key, node.move.uci(), depth, centipawns, int(relative.is_mate()),
-                                 round(seconds * 1000) if seconds is not None else None,
-                                 board.halfmove_clock, nodes, nps])
+            nodes, nps, seconds = effort(node)
+            analyses.append([key, node.move.uci(), depth, centipawns, int(relative.is_mate()),
+                             round(seconds * 1000) if seconds is not None else None,
+                             board.halfmove_clock, nodes, nps])
         board.push(node.move)
     if len(moves) < minimum_plies or len(evals) < eval_window and headers.get("LearningResults") != "true":
         return None
@@ -145,7 +149,7 @@ def digest(game):
     outcome = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(headers.get("Result"))
     score = None if outcome is None else (outcome if our_color == chess.WHITE else 1 - outcome)
     values, draws = [], []
-    for ply, (key, move, our_move) in enumerate(moves[:horizon_plies]):
+    for ply, (key, move, our_move) in enumerate(moves[:horizon]):
         after = [entry for entry in evals if entry[0] >= ply][:eval_window]
         drawn = sum(entry[2] for entry in after) >= drawn_evals
         # A line we keep scoring below level is a bad one; otherwise only our first eval counts, so an
@@ -176,7 +180,7 @@ def digest(game):
         "type": game_type(headers.get("Event", "")),
         "time_control": headers.get("TimeControl", ""),
         "score": score,
-        "moves": [move[:2] for move in moves[:horizon_plies]],
+        "moves": [move[:2] for move in moves[:horizon]],
         "values": values, "draws": draws, "analyses": analyses, "contempt": contempt,
     }
 
@@ -278,10 +282,10 @@ def add_repertoire(pgn_path, weights, plies):
 
 
 def proven_wins(game, our_color):
-    """(board, move, mate distance) of our moves in the first horizon_plies that the engine scored as a mate for
+    """(board, move, mate distance) of our moves that the engine scored as a mate for
     us: a losers mate score is a streak proof over every reply, so the move is a proven win."""
     board = game.board()
-    for node in list(game.mainline())[:horizon_plies]:
+    for node in game.mainline():
         evaluation = node.eval()
         mate = evaluation.pov(our_color).mate() if evaluation is not None and board.turn == our_color else None
         if mate and mate > 0:
@@ -430,7 +434,7 @@ class opening_book:
         self.search_ply = None
         self.deliberate = False  # this search was chosen to find new moves
         if self.random.random() * 100 < self.weights.get("search", 0):
-            self.search_ply = self.random.randrange(horizon_plies)
+            self.search_ply = self.random.randrange(search_plies)
         # JDrone's draw factor, tied to DrawContempt, for the result part: a draw is worth up to 0.95
         # against much stronger opponents and down to 0.05 against much weaker ones.
         self.draw_value = 0.5 if contempt is None else 0.5 + 0.45 * max(-1.0, min(1.0, contempt / 100))
@@ -785,7 +789,8 @@ class opening_book:
         return not nodes or not nps or nodes >= recall_margin * nps * seconds * real_spend
 
     def book_applies(self, board):
-        return (learning_variant(board_variant(board)) == self.variant and board.ply() < horizon_plies
+        # Tablebase positions belong to the tablebases.
+        return (learning_variant(board_variant(board)) == self.variant and not online_tablebase.covers(board)
                 and board.halfmove_clock < 90 and not board.is_repetition(2))
 
     def choose_book(self, board):

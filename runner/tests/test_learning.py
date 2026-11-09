@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import unittest.mock
 
 import chess
 import chess.engine
@@ -81,6 +82,13 @@ class digest_tests(unittest.TestCase):
         played = learning.digest(make_game([0] * 4, result="1-0"))
         self.assertEqual({(evaluated, result) for _, move, evaluated, result in played["values"]
                           if line.index(move) % 2 == 0 and line.index(move) >= 8}, {(None, 1.0)})
+
+    def test_learning_ends_where_the_game_is_decided(self):
+        decided = -learning.decided_cp
+        with unittest.mock.patch.object(learning, "decided_plies", 4):
+            record = learning.digest(make_game([0, decided, decided, 0, 0, 0], result="0-1"))
+        self.assertEqual([value[1] for value in record["values"]], line[:5])
+        self.assertEqual(len(record["analyses"]), 6)
 
     def test_short_and_thoughtless_games_are_ignored(self):
         self.assertIsNone(learning.digest(make_game([0] * 10, plies=19)))
@@ -422,7 +430,7 @@ class selection_tests(unittest.TestCase):
             return {name: dict(weights, search=search) for name, weights in learning.layer_profiles.items()}
         always = [learning.opening_book([], random_source=__import__("random").Random(seed),
                                         profiles=profiles(100)).search_ply for seed in range(20)]
-        self.assertTrue(all(ply is not None and 0 <= ply < learning.horizon_plies for ply in always))
+        self.assertTrue(all(ply is not None and 0 <= ply < learning.search_plies for ply in always))
         never = [learning.opening_book([], random_source=__import__("random").Random(seed),
                                        profiles=profiles(0)).search_ply for seed in range(20)]
         self.assertEqual(set(never), {None})

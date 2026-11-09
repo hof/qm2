@@ -1329,7 +1329,7 @@ built by `./maxima init` from `books/w17.pgn`: each line starts at a position
 A proven move gets the full Polyglot weight and is always played, before the
 learned layers and the search share; the moves leading to that position are not
 booked. After each losers game, even one too short to learn from, the learner
-adds every move of ours in the first 20 moves that the engine scored as a mate
+adds every move of ours that the engine scored as a mate
 for us to `book_w17.bin`, as a proven move. `./maxima books:w17` searches the losers opening book into
 `books/w17_search.pgn`: breadth-first over our first moves (`--moves`, default 2)
 as both colours, every legal opponent reply expanded and transpositions merged.
@@ -1437,8 +1437,9 @@ versioned derived index rebuilds from archived PGNs without adding duplicate
 result observations.
 
 **Learning signal (Maxima's eval).** Maxima's own `[%eval]` is the source of
-truth; an eval can miss something, but not for long. Every opening move (both
-sides, first 40 plies) gets two values from the mover's point of view:
+truth; an eval can miss something, but not for long. Every move (both
+sides: the first 40 plies, then up to and including our first eval of ±5.00 or beyond, when the game is
+decided) gets two values from the mover's point of view:
 
 - *eval*: the expected score (`1 / (1 + 10^(-cp/400))`: +1.00 ≈ 64%,
   +3.00 ≈ 85%) of our first searched eval from that move on, or the mean of our
@@ -1611,8 +1612,8 @@ downloaded books.
 Moves are labelled in the terminal and PGN comment with the label, the move's
 probability, and each layer's share of it, e.g. `learned 65%: fire 45%, global
 13%, humans 13%, John 29%`; `book` when the books gave most, `learned` when the
-learned layers did. These shares are logged for tuning the profiles. The horizon
-is 40 plies. `--no-learning` (or `--no-pgn`) leaves the
+learned layers did. These shares are logged for tuning the profiles. The book has no
+move limit; tablebase positions are left to the tablebases. `--no-learning` (or `--no-pgn`) leaves the
 book to the engine.
 
 The decision is built per game at `Creating:` (opponent, group, game type, and
