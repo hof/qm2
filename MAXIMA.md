@@ -1438,8 +1438,8 @@ result observations.
 
 **Learning signal (Maxima's eval).** Maxima's own `[%eval]` is the source of
 truth; an eval can miss something, but not for long. Every move (both
-sides: the first 40 plies, then up to and including our first eval of ±5.00 or beyond, when the game is
-decided) gets two values from the mover's point of view:
+sides, up to and including our first mate score, before the first tablebase position, and past the first
+40 plies up to and including our first eval of ±5.00 or beyond, when the game is decided) gets two values from the mover's point of view:
 
 - *eval*: the expected score (`1 / (1 + 10^(-cp/400))`: +1.00 ≈ 64%,
   +3.00 ≈ 85%) of our first searched eval from that move on, or the mean of our

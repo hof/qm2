@@ -22,7 +22,8 @@ search_plies = 40  # the search layer leaves the book at a random ply of the fir
 # A game teaches only when it lasted 10 moves and Maxima searched enough moves to judge them: early
 # resignations, aborts, disconnects, and book-only games carry no eval, only a result.
 minimum_plies = 20
-# Learning ends, past the opening's decided_plies, at our first eval this far from level: the game is won or lost.
+# Learning ends at our first mate score, at the first tablebase position, and past the opening's decided_plies at
+# our first eval this far from level: the game is won or lost, and the search or the tablebases take it from there.
 decided_cp, decided_plies = 500, 40
 eval_window = 4
 drawn_evals = 3  # of those evals at the draw score: a drawn line, judged as a draw rather than a poor eval
@@ -125,20 +126,24 @@ def digest(game):
     for ply, node in enumerate(game.mainline()):
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         mover = board.turn
+        in_tables = online_tablebase.covers(board)
+        if horizon is None and in_tables:
+            horizon = ply
         moves.append([key, node.move.uci(), mover == our_color])
         evaluation, depth = node.eval(), node.eval_depth()
         if mover == our_color and evaluation is not None and depth:
             relative = evaluation.pov(mover)
             centipawns = relative.score(mate_score=2000)
             drawn_score = centipawns == contempt
-            if horizon is None and ply >= decided_plies and abs(centipawns) >= decided_cp:
+            if horizon is None and (relative.is_mate() or ply >= decided_plies and abs(centipawns) >= decided_cp):
                 horizon = ply + 1
             # The draw score is our contempt, not a judgement of the position: it counts as level.
             evals.append((ply, expected_score(0 if drawn_score else centipawns), drawn_score))
-            nodes, nps, seconds = effort(node)
-            analyses.append([key, node.move.uci(), depth, centipawns, int(relative.is_mate()),
-                             round(seconds * 1000) if seconds is not None else None,
-                             board.halfmove_clock, nodes, nps])
+            if not in_tables:
+                nodes, nps, seconds = effort(node)
+                analyses.append([key, node.move.uci(), depth, centipawns, int(relative.is_mate()),
+                                 round(seconds * 1000) if seconds is not None else None,
+                                 board.halfmove_clock, nodes, nps])
         board.push(node.move)
     if len(moves) < minimum_plies or len(evals) < eval_window and headers.get("LearningResults") != "true":
         return None

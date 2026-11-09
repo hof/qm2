@@ -89,6 +89,9 @@ class digest_tests(unittest.TestCase):
             record = learning.digest(make_game([0, decided, decided, 0, 0, 0], result="0-1"))
         self.assertEqual([value[1] for value in record["values"]], line[:5])
         self.assertEqual(len(record["analyses"]), 6)
+        mated = make_game([0, 0, 0, 0, 0, 0], result="1-0")
+        list(mated.mainline())[4].set_eval(chess.engine.PovScore(chess.engine.Mate(9), chess.WHITE), 12)
+        self.assertEqual([value[1] for value in learning.digest(mated)["values"]], line[:5])
 
     def test_short_and_thoughtless_games_are_ignored(self):
         self.assertIsNone(learning.digest(make_game([0] * 10, plies=19)))
