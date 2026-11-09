@@ -452,6 +452,8 @@ class opening_book:
         self.analyses = {}  # key -> strongest earlier search: [move, depth, cp, mate, ms, halfmove clock, nodes, nps]
         self.live_nps = None  # the engine session's latest search speed
         self.speeds = collections.deque(maxlen=recent_speeds)  # earlier games' speeds, for a fresh session
+        self.book_seen = False
+        self.book_exit_searches = []  # first three played search positions; retries keep their stage
         self.long_think = False  # the position is known: search it longer, for a stronger record next time
         self.signatures = {}  # (key, move) -> convincing wins in a row against this opponent with our move
         self.revenge = {}  # colour -> {(key, move)}: the opponent's line from their last win, until we win with it

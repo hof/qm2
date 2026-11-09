@@ -452,6 +452,13 @@ logging; `bestmove` then flushes the log, and a new game resets it after stoppin
 the prior worker. Per-line file opens/flushes are avoided. Timed UCI searches
 start their monotonic budget when `go` enters the command handler, before
 logging, parsing, prior-worker joining, allocation, and search setup.
+The shared FICS/Lichess move chooser gives the first three played searches after a book move
+1.5×, 1.25× and 1.125× the normal time target, once per game. Later book returns do not
+restart the allowance. The hard cap stays unchanged; a larger `TimeFactor` takes precedence
+without compounding. `BookExitMove` (0–3, default 0) passes the stage to the engine; automatic
+tracking belongs to the runner's multilayer book, not native `OwnBook`. Fixed search limits
+retain their limits.
+
 Standard chess on a sudden-death clock (with or without increment) budgets by the expected number of moves
 left, measured from 302 Lichess bot games: 50 − 2/5 of the move number, at least 18 (50 early, 34 at move 40,
 26 at move 60, 18 from move 80). The previous search's score adjusts it: over three pawns the game ends sooner

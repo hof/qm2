@@ -79,6 +79,7 @@ async def tablebase_first(lookup, search):
 async def choose_move(session, board, limit, *, opening=None, tablebase=None, ceiling=None, **search):
     """(move, info, kind) with kind "book", "tablebase" or "engine"; book and tablebase info carry "source".
     Engine failures propagate; search are engine_session.play keywords."""
+    book_exit_move = 0
     if opening is not None:
         clock = limit.white_clock if board.turn else limit.black_clock
         increment = (limit.white_inc if board.turn else limit.black_inc) or 0
@@ -86,10 +87,18 @@ async def choose_move(session, board, limit, *, opening=None, tablebase=None, ce
         found = opening.choose(board, None if clock is None else clock / 30 + increment)
         if found is not None:
             move, reason = found
+            opening.book_seen = True
             if hasattr(session, "stop_pondering"):
                 await session.stop_pondering()
             return move, {"source": reason}, "book"
-        search["options"] = dict(search.get("options") or {},
+        timed = (limit.time is None and limit.depth is None and limit.nodes is None
+                 and clock is not None)
+        if timed and getattr(opening, "book_seen", False):
+            positions = getattr(opening, "book_exit_searches", [])
+            fen = board.fen()
+            book_exit_move = (positions.index(fen) + 1 if fen in positions
+                              else len(positions) + 1 if len(positions) < 3 else 0)
+        search["options"] = dict(search.get("options") or {}, BookExitMove=book_exit_move,
                                  TimeFactor=long_think_percent if opening.long_think else None)
     lookup = tablebase.ask(board) if tablebase is not None else None
     if ceiling is not None:
@@ -114,6 +123,11 @@ async def choose_move(session, board, limit, *, opening=None, tablebase=None, ce
         if hasattr(session, "stop_pondering"):
             await session.stop_pondering()
         return drawing["move"], {"source": tablebase_reason(drawing), "tablebase": drawing}, "tablebase"
+    if book_exit_move and result.move is not None:
+        positions = getattr(opening, "book_exit_searches", [])
+        if board.fen() not in positions:
+            positions.append(board.fen())
+        opening.book_exit_searches = positions
     return result.move, result.info, "engine"
 
 

@@ -37,6 +37,7 @@ namespace options {
         { "Wild", STRING, 0, "type combo default standard var standard var losers", true },
         { "DrawContempt", INT, -10, "type spin default -10 min -100 max 100", true },
         { "ShortDrawOffset", INT, 0, "type spin default 0 min -50 max 50" },
+        { "BookExitMove", INT, 0, "type spin default 0 min 0 max 3" },
         { "TimeFactor", INT, 100, "type spin default 100 min 100 max 200" },
         { "TimeMoves", INT, 16, "type spin default 16 min 4 max 64" },
         { "SyzygyPath", STRING, 0, "type string default <empty>" },
@@ -120,7 +121,7 @@ void game_t::init_tm(bool us, std::chrono::steady_clock::time_point started, int
             ? time_man::horizon(move_number, last_score) * options::get_value("TimeMoves") / time_man::M : 0;
         tm.set(time(us), time(!us), increment(us), increment(!us), moves_left,
             options::get_value("Move Overhead"), options::get_value("TimeFactor"),
-            options::get_value("TimeMoves"), options::get_value("Server Lag"), horizon);
+            options::get_value("TimeMoves"), options::get_value("Server Lag"), horizon, options::get_value("BookExitMove"));
     } else {
         tm.set_min(time_man::INFINITE_TIME);
         tm.set_max(time_man::INFINITE_TIME);
