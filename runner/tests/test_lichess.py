@@ -322,7 +322,7 @@ class lag_tests(unittest.IsolatedAsyncioTestCase):
         lag.add(1600, 1000)
         self.assertEqual(lag.ms(), 500)
         lag.add(0, 9000)
-        self.assertGreaterEqual(lichess.lag_estimate().ms(), 100)
+        self.assertGreaterEqual(lag.ms(), 100)
 
     async def test_clock_lost_beyond_our_answer_time_becomes_the_server_lag(self):
         api = stub_api()
