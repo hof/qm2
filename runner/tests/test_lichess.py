@@ -466,14 +466,18 @@ class flag_chance_tests(unittest.IsolatedAsyncioTestCase):
         return pace, clock + seconds_per_move
 
     def test_only_a_slow_opponent_without_increment_can_flag(self):
-        slow, slow_left = self.pace(3, 60)
+        slow, slow_left = self.pace(3, 40)
         fast, fast_left = self.pace(0.1, 6)
         self.assertTrue(move_choice.flag_chance(200, slow_left, 0, True, slow))
         self.assertFalse(move_choice.flag_chance(200, fast_left, 0, True, fast))  # fifty moves in five seconds
         self.assertFalse(move_choice.flag_chance(200, slow_left, 1, True, slow))
 
+    def test_an_engine_pace_with_minutes_left_is_no_flag(self):
+        engine, engine_left = self.pace(7, 240)  # 25 moves left at its pace, but nearly three minutes
+        self.assertFalse(move_choice.flag_chance(300, engine_left, 0, True, engine))
+
     def test_a_hunt_near_the_line_keeps_going(self):
-        pace, left = self.pace(1.5, 60)  # a lead of 1.4x: short of 1.5 to start, past 1.25 to keep going
+        pace, left = self.pace(1.5, 40)  # a lead of 1.4x: short of 1.5 to start, past 1.25 to keep going
         self.assertFalse(move_choice.flag_chance(left * 1.4, left, 0, True, pace))
         self.assertTrue(move_choice.flag_chance(left * 1.4, left, 0, True, pace, hunting=True))
         self.assertFalse(move_choice.flag_chance(left * 1.1, left, 0, True, pace, hunting=True))
@@ -497,7 +501,7 @@ class flag_chance_tests(unittest.IsolatedAsyncioTestCase):
         game = lichess.lichess_game(bot, "g1")
         game.setup(game_full())
         game.pace, _ = self.pace(3, 60)
-        await game.on_state(dict(game_full()["state"], wtime=200000, btime=30000, winc=0, binc=0))
+        await game.on_state(dict(game_full()["state"], wtime=200000, btime=20000, winc=0, binc=0))
         await game.searching
         self.assertEqual(searched[-1]["ShortDrawOffset"], move_choice.flag_draw_offset)
 

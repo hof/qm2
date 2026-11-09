@@ -17,6 +17,7 @@ time_win_lead, time_win_moves = 1.5, 40  # our time over theirs, each with the i
 time_win_bot_increment, time_win_human_increment = 1, 3  # seconds from which the opponent will not flag
 flag_pace_moves, flag_pace_window = 30, 10  # a flag is a real chance when their recent pace leaves fewer moves
 flag_keep_lead, flag_keep_moves = 1.25, 40  # once hunting, it lasts until clearly over: no flipping each move
+flag_clock, flag_keep_clock = 30, 45  # their seconds below which a flag can be near; an engine's pace looks short at any clock
 flag_draw_offset = -50  # ShortDrawOffset while it is: play on past quick draws; the engine floors them at -10 cp
 draw_accept_lost = -150  # cp from our side: even while ahead on time, a lost position takes an offered draw
 
@@ -202,10 +203,13 @@ class opponent_pace:
 def flag_chance(ours, theirs, increment, bot, pace, hunting=False):
     """Whether their flag is a real chance: no increment, our clock far enough ahead (winning_on_time), and at
     their own recent pace fewer than flag_pace_moves moves left. A bot that moves in a tenth of a second has
-    fifty moves in five seconds, so a small clock alone is not enough. While hunting, a smaller lead and more
-    moves left keep it going, so a pace or clock near the line does not switch it every move."""
-    lead, moves = (flag_keep_lead, flag_keep_moves) if hunting else (time_win_lead, flag_pace_moves)
-    if increment or not winning_on_time(ours, theirs, increment, bot, lead):
+    fifty moves in five seconds, so a small clock alone is not enough. An engine spends a share of its clock on
+    each move, so its pace leaves some 25 moves at any clock: their clock must also be below flag_clock. While
+    hunting, a smaller lead, more moves left and a higher clock keep it going, so a pace or clock near the line
+    does not switch it every move."""
+    lead, moves, floor = ((flag_keep_lead, flag_keep_moves, flag_keep_clock) if hunting
+                          else (time_win_lead, flag_pace_moves, flag_clock))
+    if increment or theirs >= floor or not winning_on_time(ours, theirs, increment, bot, lead):
         return False
     left = pace.moves_left(theirs)
     return left is not None and left < moves
