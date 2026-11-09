@@ -462,6 +462,11 @@ less, with twice that as its maximum.
 The UCI `Move Overhead` option reserves 50 ms by default (range 0–5000 ms)
 from each allocated clock budget for interface and transport delays. Adjust it
 in the GUI engine options; for example, `setoption name Move Overhead value 100`.
+The UCI `Server Lag` option (ms, 0–5000, default 0) is the network and server
+delay every move pays on top of its think time, as on Lichess; the Lichess client
+measures it and sets it before each search. Only increment − lag comes back each
+move, so the budget gains increment − lag and the maximum twice that; a lag above
+the increment comes off both. FICS needs none: timeseal charges think time only.
 The floor holds when the reserve exceeds the allocation. Explicit
 `go movetime` limits retain their requested duration. When UCI supplies
 `movestogo 1`, clock-based searches also cap both budgets to leave 5% of the

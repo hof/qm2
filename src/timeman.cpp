@@ -24,7 +24,7 @@
 #include "timeman.h"
 
 void time_manager_t::set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left,
-        const int move_overhead, const int time_factor, const int m) {
+        const int move_overhead, const int time_factor, const int m, const int lag) {
 
     //determine M, the guessed amount of moves left
     double M_MAX, M_MIN;
@@ -65,11 +65,18 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         tot_max -= MIN(-delta / 16, tot_max / 2);
     }
 
-    // A normal move spends what comes back; M more increments before the game is decided give the cap 2*inc.
-    // The increment never takes a move past half the clock.
-    if (my_inc > 0) {
-        tot_min += MIN(my_inc, MAX(0, my_time / 2 - tot_min));
-        tot_max += MIN(2 * my_inc, MAX(0, my_time / 2 - tot_max));
+    /*
+     * A normal move spends what comes back; M more increments before the game is decided give the cap 2*inc.
+     * The increment never takes a move past half the clock. Every move also pays the server lag on top of
+     * its think time, so only inc - lag comes back; a lag above the increment comes off every budget.
+     */
+    const int net_inc = my_inc - lag;
+    if (net_inc > 0) {
+        tot_min += MIN(net_inc, MAX(0, my_time / 2 - tot_min));
+        tot_max += MIN(2 * net_inc, MAX(0, my_time / 2 - tot_max));
+    } else {
+        tot_min += net_inc;
+        tot_max += net_inc;
     }
 
     // A longer think on request, never past half the clock unless already allotted.

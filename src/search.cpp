@@ -524,7 +524,8 @@ void search_t::iterative_deepening() {
      * restores the normal cap.
      */
     if (wild == 17 && timed_search && !pondering()) {
-        const int rescue = game.time(brd.us()) / 2 - options::get_value("Move Overhead");
+        const int rescue = game.time(brd.us()) / 2 - options::get_value("Move Overhead")
+            - options::get_value("Server Lag");
         game.tm.set_max(std::max(max_time, rescue));
     }
     int iteration_start = 0;

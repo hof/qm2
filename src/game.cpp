@@ -29,6 +29,7 @@ namespace options {
         { "Revision", STRING, 1, "type string default " MAXIMA_REVISION },
         { "Hash", INT, 256, "type spin default 256 min 0 max 1024"},
         { "Move Overhead", INT, 50, "type spin default 50 min 0 max 5000" },
+        { "Server Lag", INT, 0, "type spin default 0 min 0 max 5000" },
         { "Ponder", BOOL, 1, "type check default true"},
         { "OwnBook", BOOL, 1, "type check default true" },
         { "UCI_AnalyseMode", BOOL, 0, "type check default false" },
@@ -111,7 +112,7 @@ void game_t::init_tm(bool us, std::chrono::steady_clock::time_point started) {
     } else if (clock_limit || white_time || black_time) {
         tm.set(time(us), time(!us), increment(us), increment(!us), moves_left,
             options::get_value("Move Overhead"), options::get_value("TimeFactor"),
-            options::get_value("TimeMoves"));
+            options::get_value("TimeMoves"), options::get_value("Server Lag"));
     } else {
         tm.set_min(time_man::INFINITE_TIME);
         tm.set_max(time_man::INFINITE_TIME);

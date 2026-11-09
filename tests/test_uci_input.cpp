@@ -133,6 +133,17 @@ int main() {
             low_clock.reserved_max() <= 100 && low_clock.reserved_min() <= low_clock.reserved_max());
     }
     uci::in("setoption name Move Overhead value 50");
+    success &= check("server lag defaults to 0 ms", options::get_value("Server Lag") == 0);
+    {
+        time_manager_t no_lag, lagged, slow_increment;
+        no_lag.set(60000, 60000, 2000, 2000, 0, 0);
+        lagged.set(60000, 60000, 2000, 2000, 0, 0, 100, 16, 300);
+        success &= check("server lag comes off what the increment gives back",
+            lagged.reserved_min() < no_lag.reserved_min() && lagged.reserved_max() < no_lag.reserved_max());
+        slow_increment.set(10000, 10000, 100, 100, 0, 0, 100, 16, 300);
+        success &= check("a lag above the increment still leaves a real search inside half the clock",
+            slow_increment.reserved_min() >= time_man::MIN_SEARCH_TIME && slow_increment.reserved_max() <= 5000);
+    }
     {
         time_manager_t period_timer;
         for (int remaining : {0, 1, 100, 999, 1000, 3999, 4000, 7338, 21363}) {
