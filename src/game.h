@@ -64,6 +64,7 @@ public:
     int black_increment;
     int moves_left;
     int last_score;  // our previous search's score: sets the expected game length
+    bool last_scored;  // last_score comes from a search, not from a book move or a new game
     bool ponder;
     bool infinite;
     bool clock_limit;

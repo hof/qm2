@@ -137,6 +137,20 @@ class search_lifecycle_tests(unittest.TestCase):
             result = next(line for line in engine.transcript if line.startswith("info string search_result "))
             self.assertRegex(result, r" stop (one_move|half_max|no_time|easy|normal|mate|cap|draw) jump [01] min \d+ max \d+ horizon \d+$")
 
+    def test_a_score_fallen_since_our_last_move_keeps_searching(self):
+        # The previous search was a queen up; the level start position then counts as a fall, every iteration.
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            engine.send("position fen 4k3/8/8/8/8/8/8/3QK3 w - - 0 1")
+            engine.send("go depth 8")
+            engine.wait_for_bestmove()
+            engine.transcript.clear()
+            engine.send("position startpos")
+            engine.send("go wtime 3000 btime 3000")
+            engine.wait_for_bestmove()
+            result = next(line for line in engine.transcript if line.startswith("info string search_result "))
+            self.assertIn(" jump 1 ", result)
+
     def test_losers_plays_a_proven_mate_at_once(self):
         # The streak proof holds every reply, so the clock search needs no depth beyond the mate.
         with running_engine() as engine:

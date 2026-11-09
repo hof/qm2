@@ -77,6 +77,7 @@ void game_t::clear() {
     black_increment = 0;
     moves_left = 0;
     last_score = 0;
+    last_scored = false;
     max_nodes = 0;
     ponder = false;
     infinite = false;
@@ -96,6 +97,7 @@ void game_t::copy(game_t* game) {
     black_increment = game->black_increment;
     moves_left = game->moves_left;
     last_score = game->last_score;
+    last_scored = game->last_scored;
     max_nodes = game->max_nodes;
     ponder = game->ponder;
     infinite = game->infinite;

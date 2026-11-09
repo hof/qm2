@@ -93,6 +93,7 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
         std::lock_guard<std::mutex> lock(_result_mutex);
         const bool searched = _result.move.piece && _result.source != result_source_t::book;
         _game.last_score = searched ? _result.score : 0;
+        _game.last_scored = searched;
     }
     try {
         std::unique_ptr<search_t> next_search;

@@ -561,10 +561,16 @@ void search_t::iterative_deepening() {
             pv_to_string().c_str(), result_flag, tablebase_hits);
         store_pv();
         if (timed_search) {
-            // A swing that keeps the search going: the further from level, the more the score moves anyway.
+            /*
+             * A swing that keeps the search going: the further from level, the more the score moves anyway.
+             * A fall since our previous move counts too: the iterations of this search may all agree on a
+             * score that dropped while the opponent moved, and that is no easy or neutral position.
+             */
             const int score_change = score - last_score;
+            const bool fell_since_last_move = game.last_scored
+                && game.last_score - score > 20 + ABS(game.last_score) / 20;
             bool score_jump = depth >= 6 && (score_change > 20 + ABS(last_score) / 10
-                || -score_change > 20 + ABS(last_score) / 20);
+                || -score_change > 20 + ABS(last_score) / 20 || fell_since_last_move);
             const bool is_complex = !is_draw_score(score) && score < score::WIN && root.is_complex();
             won_on_board = won_on_board && score >= 800;
             if (score_jump) {
