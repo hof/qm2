@@ -536,21 +536,21 @@ void search_t::iterative_deepening() {
 
     /*
      * Depth milestones, in order of urgency: 8, 16, 22. Elo per extra ply, measured to depth 18:
-     * 160-190 at depths 8-10, 67-91 at 12-15, 52-58 at 16-18. No easy or normal stop before 16,
-     * and no normal stop before 22 while 22 is in reach: each depth costs about 1.8 times the one
-     * before, and the search ends at half the maximum. Standard chess only; the losers search
-     * rarely reaches them.
+     * 160-190 at depths 8-10, 67-91 at 12-15, 52-58 at 16-18. The normal stop waits for the next
+     * milestone while it is in reach: each depth costs about 1.8 times the one before, and the search
+     * ends at half the maximum. Time spent on a milestone out of reach is taken from later moves.
+     * No easy stop before 16. Standard chess only; the losers search rarely reaches them.
      */
     const int easy_depth = wild == 0 ? 16 : 0;
-    const int normal_depth = wild == 0 ? 22 : 0;
-    auto normal_depth_done = [&](int depth, int64_t elapsed) {
-        if (depth >= normal_depth) {
+    auto next_milestone_out_of_reach = [&](int depth, int64_t elapsed) {
+        const int milestone = depth < 8 ? 8 : depth < 16 ? 16 : 22;
+        if (wild != 0 || depth >= milestone) {
             return true;
         }
-        for (; depth < normal_depth; depth++) {
+        for (; depth < milestone; depth++) {
             elapsed = elapsed * 9 / 5;
             if (elapsed > max_time / 2) {
-                return true;  // out of reach
+                return true;
             }
         }
         return false;
@@ -614,8 +614,8 @@ void search_t::iterative_deepening() {
                 // Easy position or a win already on the board, with a settled score: half time control
                 do_stop = true;
                 stop_reason = "easy";
-            } else if (depth >= easy_depth && elapsed > min_time && !score_jump && !is_complex
-                    && normal_depth_done(depth, elapsed)) {
+            } else if (elapsed > min_time && !score_jump && !is_complex
+                    && next_milestone_out_of_reach(depth, elapsed)) {
 
                 // Neutral position, normal time control; a drawn score or proven win is never complex
                 do_stop = true;
