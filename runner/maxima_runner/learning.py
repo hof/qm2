@@ -420,6 +420,7 @@ class opening_book:
         self.paths = {"book": book_path}
         # Deep book learning's moves (deep.bin beside book.bin) stand in where book.bin has none.
         self.deep_path = Path(book_path).with_name("deep.bin") if book_path and self.variant == "standard" else None
+        self.deep_enough = True  # set per move by choose: deep.bin's weakest search beats our own
         self.paths.update({name: path for name, path in (style_books or {}).items()
                            if name in style_names + ("mood",) and self.weights.get(name) and path
                            and Path(path).is_file()})
@@ -600,7 +601,7 @@ class opening_book:
         and the chance to search instead: book.bin is the know-all base, so where it has no move, its
         percentage goes to the engine rather than to the other layers."""
         books = {name: self.read_book(path, board) for name, path in self.paths.items()}
-        if self.deep_path is not None and not books.get("book") and self.deep_path.is_file():
+        if self.deep_path is not None and self.deep_enough and not books.get("book") and self.deep_path.is_file():
             books["book"] = self.read_book(self.deep_path, board)
         drawn = self.draws.get(key) if self.weights.get("draw") else None
         if drawn:
@@ -765,10 +766,23 @@ class opening_book:
     def choose(self, board, seconds=None):
         """choose_book, then an earlier search of this position; seconds is clock/30 + increment."""
         self.long_think = self.deliberate = False
+        self.deep_enough = self.deeper_than_search(seconds)
         found = self.choose_book(board)
         if found is None and not self.deliberate and self.book_applies(board):
             return self.remembered(board, seconds)
         return found
+
+    def deeper_than_search(self, seconds):
+        """Whether deep.bin's weakest search (deep.json) clearly beats what we would search now: a faster
+        machine or a slower clock, as in correspondence chess, outgrows it."""
+        if self.deep_path is None or seconds is None:
+            return True
+        try:
+            nodes = json.loads(self.deep_path.with_name("deep.json").read_text(encoding="utf-8")).get("nodes")
+        except (OSError, ValueError):
+            nodes = None
+        nps = self.live_nps or (statistics.median(self.speeds) if self.speeds else None)
+        return not nodes or not nps or nodes >= recall_margin * nps * seconds * real_spend
 
     def book_applies(self, board):
         return (learning_variant(board_variant(board)) == self.variant and board.ply() < horizon_plies

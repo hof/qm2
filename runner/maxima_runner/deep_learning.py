@@ -2,10 +2,13 @@
 
 A position gets up to three moves: the best, then the best of the rest (UCI searchmoves without the moves
 found), while each stays within the margin of the best. A singular move is booked alone. The moves go to
-deep.bin beside book.bin, which the opening book reads where book.bin has no move."""
+deep.bin beside book.bin, which the opening book reads where book.bin has no move. deep.json beside it
+says how deep the book is: its weakest search in nodes and depth, so a runner on faster hardware or a
+slower clock can tell whether the book still beats its own search."""
 import argparse
 import asyncio
 import collections
+import json
 import time
 from pathlib import Path
 
@@ -22,6 +25,29 @@ most_moves = 3
 
 def deep_path(book_path):
     return Path(book_path).with_name("deep.bin")
+
+
+def meta_path(book_path):
+    return Path(book_path).with_name("deep.json")
+
+
+def read_meta(book_path):
+    try:
+        return json.loads(meta_path(book_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def note_depth(book_path, searches, seconds, engine_name):
+    """Keep the book's weakest search in deep.json: [(nodes, depth)] of one position's searches."""
+    meta = read_meta(book_path)
+    nodes, depth = min(entry[0] for entry in searches), min(entry[1] for entry in searches)
+    meta.update(nodes=min(meta.get("nodes", nodes), nodes), depth=min(meta.get("depth", depth), depth),
+                seconds=min(meta.get("seconds", seconds), seconds), engine=engine_name,
+                positions=meta.get("positions", 0) + 1)
+    temporary = meta_path(book_path).with_suffix(".tmp")
+    temporary.write_text(json.dumps(meta, indent=1) + "\n", encoding="utf-8")
+    temporary.replace(meta_path(book_path))
 
 
 def known_keys(path):
@@ -61,8 +87,9 @@ def queue(records, known=()):
     return [boards[key] for key in sorted(counts, key=lambda key: (-counts[key], scores[key]))]
 
 
-async def good_moves(engine, board, seconds=classical_seconds, margin=margin_cp, most=most_moves):
-    """[(move, centipawns)] best first: each further move is the best of the rest, kept within margin."""
+async def good_moves(engine, board, seconds=classical_seconds, margin=margin_cp, most=most_moves, efforts=None):
+    """[(move, centipawns)] best first: each further move is the best of the rest, kept within margin.
+    efforts, when given, collects (nodes, depth) of each search."""
     found, legal = [], list(board.legal_moves)
     while len(found) < most:
         rest = [move for move in legal if move not in [move for move, _ in found]]
@@ -72,6 +99,8 @@ async def good_moves(engine, board, seconds=classical_seconds, margin=margin_cp,
         if not info.get("pv") or "score" not in info:
             break
         move, score = info["pv"][0], info["score"].relative.score(mate_score=100000)
+        if efforts is not None:
+            efforts.append((info.get("nodes", 0), info.get("depth", 0)))
         if found and score < found[0][1] - margin:
             break
         found.append((move, score))
@@ -107,9 +136,11 @@ async def learn(engine_path, book_path, records, minutes=None, positions=None, s
         for board in todo:
             if deadline is not None and time.monotonic() + most_moves * seconds > deadline:
                 break
-            moves = await good_moves(engine, board, seconds, margin)
+            efforts = []
+            moves = await good_moves(engine, board, seconds, margin, efforts=efforts)
             if moves:
                 book_moves(path, board, moves, margin)
+                note_depth(book_path, efforts, seconds, engine.id.get("name", "?"))
                 learned += 1
                 report(f"deep book: {board.fen()} -> " + ", ".join(
                     f"{board.san(move)} {score / 100:+.2f}" for move, score in moves))

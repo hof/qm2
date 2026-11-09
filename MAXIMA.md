@@ -1503,6 +1503,10 @@ searched positions from the experience, the most frequent first, at a classical 
 best, then with UCI `searchmoves` the best of the rest, kept while within `--margin` (30 cp) of
 the best; a singular move is booked alone. The moves go to `deep.bin` beside `book.bin`, the best
 at weight 100 and a move at the margin at 10. `--minutes` and `--positions` bound a run.
+`deep.json` beside it says how deep the book is (its weakest search: nodes, depth, seconds, engine).
+The book plays `deep.bin` only while that search clearly beats our own for the move (the same
+rule as a remembered search: 1.5 × our speed × the move's time × 2/3), so a faster machine or a
+slower clock, as in correspondence chess, searches instead of trusting a shallower book.
 
 **Moods.** Like a human who is "in a Dutch mood lately", Maxima plays one theme
 repertoire at a time: `books/moods/<name>.pgn` (traxler, dutch, dragon, kings_indian,
