@@ -2501,7 +2501,13 @@ DTZ-optimal so the fifty-move rule is respected) when it arrives before the
 engine's move; the search is then stopped. A lookup takes about 0.75 s and gives
 up after 1 s, so it never costs clock time: in a hurry the engine simply moves
 first. Unknown positions leave the move to the engine; an error (offline, rate
-limited, timeout) also pauses lookups for a minute. The move is logged, whispered and sent to the live feed as
+limited, timeout) also pauses lookups for a minute.
+
+With eight pieces, MaxDrone asks for the position after each capture instead
+(four at a time). If a capture leaves the opponent lost, it plays the one with
+the shortest DTZ as soon as the answers arrive. If a capture only draws, MaxDrone
+keeps it in reserve and plays it only when the search's score for its own move
+is below the draw score (`DrawContempt`, cp from our side). The move is logged, whispered and sent to the live feed as
 `"search": {"tablebase": {"category", "dtz", "dtm"}}` (category `win`, `draw`,
 `loss`, `cursed-win`, `blessed-loss`, ...), and the PGN comment reads e.g.
 `tablebase: win DTM 27`. It is on by default; `--no-online-tablebase` (or

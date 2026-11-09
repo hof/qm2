@@ -46,12 +46,14 @@ class tablebase_lookups:
         self.pause = 0.0
 
     def ask(self, board):
-        """Start a lookup with seven or fewer pieces; None when it does not apply."""
-        if (not self.enabled or time.monotonic() < self.pause or not online_tablebase.covers(board)
-                or chess.popcount(board.occupied) <= self.local_pieces):
+        """Start a lookup with seven or fewer pieces, or of the captures with eight; None when it does not apply."""
+        pieces = chess.popcount(board.occupied)
+        if (not self.enabled or time.monotonic() < self.pause or type(board) is not chess.Board
+                or board.castling_rights or pieces > online_tablebase.max_pieces + 1
+                or min(pieces, online_tablebase.max_pieces) <= self.local_pieces):
             return None
-        lookup = asyncio.get_running_loop().run_in_executor(None, online_tablebase.probe, board.copy(),
-                                                            tablebase_wait)
+        probe = online_tablebase.probe if pieces <= online_tablebase.max_pieces else online_tablebase.capture_probe
+        lookup = asyncio.get_running_loop().run_in_executor(None, probe, board.copy(), tablebase_wait)
         lookup.add_done_callback(self.failed)
         return lookup
 
@@ -94,6 +96,9 @@ async def choose_move(session, board, limit, *, opening=None, tablebase=None, ce
     searching = asyncio.ensure_future(session.play(board, limit, **search))
     try:
         answer = await tablebase_first(lookup, searching)
+        drawing = None
+        if answer is not None and answer.get("capture") and answer["category"] != "win":
+            drawing, answer = answer, None  # a drawing capture only replaces a search scoring below the draw
         if answer is not None:
             searching.cancel()
             await asyncio.wait({searching})
@@ -104,7 +109,18 @@ async def choose_move(session, board, limit, *, opening=None, tablebase=None, ce
     except asyncio.CancelledError:
         searching.cancel()
         raise
+    if drawing is not None and below_draw(board, result.info, (search.get("options") or {}).get("DrawContempt")):
+        if hasattr(session, "stop_pondering"):
+            await session.stop_pondering()
+        return drawing["move"], {"source": tablebase_reason(drawing), "tablebase": drawing}, "tablebase"
     return result.move, result.info, "engine"
+
+
+def below_draw(board, info, contempt):
+    """The search scores our move below a draw, which the engine values at its DrawContempt (cp from our side)."""
+    score = info.get("score")
+    return score is not None and (score.pov(board.turn).score(mate_score=100000)
+                                  < (engine_draw_value if contempt is None else contempt))
 
 
 async def ponder_after_book(session, board, move, limit, opening, position, on_line, **search):

@@ -2,6 +2,7 @@
 
 A game source asks before searching; any failure (offline, slow, unknown position) means the
 engine searches as usual. See MAXIMA.md 11.4."""
+import concurrent.futures
 import json
 import os
 from pathlib import Path
@@ -52,3 +53,31 @@ def probe(board, timeout=2.0):
     if move not in board.legal_moves:
         return None
     return {"move": move, "category": answer["category"], "dtz": answer.get("dtz"), "dtm": answer.get("dtm")}
+
+
+our_category = {"loss": "win", "blessed-loss": "cursed-win", "cursed-win": "blessed-loss", "draw": "draw"}
+
+
+def capture_probe(board, timeout=2.0):
+    """With one piece more than the tables hold: the capture into a won ending (shortest DTZ), else the best
+    capture into a drawn one, categories from our side and marked "capture"; None when no capture reaches either."""
+    if type(board) is not chess.Board or chess.popcount(board.occupied) != max_pieces + 1 or board.castling_rights:
+        return None
+    captures = [move for move in board.legal_moves if board.is_capture(move)]
+    if not captures:
+        return None
+    positions = []
+    for move in captures:
+        after = board.copy(stack=False)
+        after.push(move)
+        positions.append(after)
+    with concurrent.futures.ThreadPoolExecutor(min(4, len(captures))) as pool:
+        answers = list(pool.map(lambda after: probe(after, timeout), positions))
+    found = [{"move": move, "category": our_category[answer["category"]], "dtz": answer.get("dtz"),
+              "dtm": answer.get("dtm"), "capture": True}
+             for move, answer in zip(captures, answers) if answer and answer["category"] in our_category]
+    wins = [found_move for found_move in found if found_move["category"] == "win"]
+    if wins:
+        return min(wins, key=lambda win: abs(win["dtz"] or 0))
+    order = ("cursed-win", "draw", "blessed-loss")
+    return min(found, key=lambda draw: order.index(draw["category"]), default=None)

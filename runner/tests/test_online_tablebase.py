@@ -38,6 +38,50 @@ class online_tablebase_tests(unittest.TestCase):
             self.assertIsNone(online_tablebase.probe(rook_ending))
 
 
+eight_pieces = chess.Board("4k3/1p6/8/3p4/2P1P3/8/6P1/4K2R w - - 0 1")  # captures c4d5 and e4d5
+
+
+def capture_answers(categories):
+    """probe answering per capture: the category for the side to move after it."""
+    def probe(after, timeout):
+        category = categories[after.peek().uci()]
+        return {"move": None, "category": category, "dtz": 9, "dtm": None}
+    return patch.object(online_tablebase, "probe", side_effect=probe)
+
+
+class capture_tests(unittest.TestCase):
+    def test_eight_pieces_take_a_capture_into_a_won_ending_or_else_keep_a_draw(self):
+        with capture_answers({"c4d5": "draw", "e4d5": "loss"}):
+            found = online_tablebase.capture_probe(eight_pieces)
+        self.assertEqual((found["move"].uci(), found["category"]), ("e4d5", "win"))
+        with capture_answers({"c4d5": "draw", "e4d5": "win"}):
+            found = online_tablebase.capture_probe(eight_pieces)
+        self.assertEqual((found["move"].uci(), found["category"]), ("c4d5", "draw"))
+
+    def test_a_drawing_capture_replaces_only_a_search_below_the_draw(self):
+        import asyncio
+        from types import SimpleNamespace
+        from maxima_runner import move_choice
+        engine_move = chess.Move.from_uci("h1h8")
+
+        class session:
+            def __init__(self, cp):
+                self.cp = cp
+
+            async def play(self, board, limit, **search):
+                await asyncio.sleep(0.05)
+                return SimpleNamespace(move=engine_move, info={"score": chess.engine.PovScore(
+                    chess.engine.Cp(self.cp), chess.WHITE)})
+
+        def choose(cp):
+            lookups = move_choice.tablebase_lookups(True, lambda line: None)
+            with capture_answers({"c4d5": "draw", "e4d5": "win"}):
+                return asyncio.run(move_choice.choose_move(session(cp), eight_pieces, chess.engine.Limit(),
+                                                           tablebase=lookups, options={"DrawContempt": 20}))[0]
+        self.assertEqual(choose(-50).uci(), "c4d5")
+        self.assertEqual(choose(50), engine_move)
+
+
 if __name__ == "__main__":
     unittest.main()
 
