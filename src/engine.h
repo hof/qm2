@@ -108,6 +108,8 @@ struct search_result_t {
 class engine_t : public threads_t {
 private:
     game_t _game;
+    int _played_score = 0;  // the score of the last search whose move was played, not a ponder miss
+    bool _played_scored = false;
     std::string _root_fen;
     std::vector<U64> _position_history;
     search_control_t _control;

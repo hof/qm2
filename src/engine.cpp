@@ -87,13 +87,12 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
     _control.stop_requested.store(false);
     _control.ponder.store(_game.ponder);
 
-    // Capture the position, limits, and search options before starting the worker. The last search's
-    // score sets the expected game length; a new game has none.
+    // Capture the position, limits, and search options before starting the worker. The score of our
+    // last played move sets the expected game length; a new game has none.
     {
         std::lock_guard<std::mutex> lock(_result_mutex);
-        const bool searched = _result.move.piece && _result.source != result_source_t::book;
-        _game.last_score = searched ? _result.score : 0;
-        _game.last_scored = searched;
+        _game.last_score = _played_scored ? _played_score : 0;
+        _game.last_scored = _played_scored;
     }
     try {
         std::unique_ptr<search_t> next_search;
@@ -140,6 +139,10 @@ void engine_t::new_game(std::string fen) {
         std::lock_guard<std::mutex> lock(_result_mutex);
         _result = search_result_t();
     }
+    {
+        std::lock_guard<std::mutex> lock(_result_mutex);
+        _played_scored = false;
+    }
     trans_table::clear();
     set_position(fen);
 }
@@ -163,6 +166,12 @@ void engine_t::copy_results(search_t * s) {
     result.source = s->result_source;
     std::lock_guard<std::mutex> lock(_result_mutex);
     _result = result;
+
+    // A ponder search stopped before its ponderhit searched a move the opponent did not play.
+    if (!(s->game.ponder && _control.ponder.load())) {
+        _played_scored = result.move.piece && result.source != result_source_t::book;
+        _played_score = result.score;
+    }
 }
 
 /**
