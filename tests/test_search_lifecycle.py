@@ -151,6 +151,24 @@ class search_lifecycle_tests(unittest.TestCase):
             result = next(line for line in engine.transcript if line.startswith("info string search_result "))
             self.assertIn(" jump 1 ", result)
 
+    def test_a_calm_search_stops_when_depth_22_is_out_of_reach(self):
+        # A quiet Ruy Lopez: once a depth from 16 completes past the minimum, depth 22 is out of reach by half the
+        # maximum, so the search stops there. Each build reaches its own depths; the rule holds for all of them.
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            engine.send("position startpos moves e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 g8f6 e1g1 f8e7")
+            engine.send("go wtime 60000 btime 60000")
+            engine.wait_for_bestmove()
+            result = next(line for line in engine.transcript if line.startswith("info string search_result ")).split()
+            field = lambda words, name: int(words[words.index(name) + 1])
+            low, half = field(result, "min"), field(result, "max") // 2
+            completed = {field(words, "depth"): field(words, "time") for words in
+                         (line.split() for line in engine.transcript if line.startswith("info depth "))
+                         if "lowerbound" not in words and "upperbound" not in words and "time" in words}
+            calm = [depth for depth, ms in sorted(completed.items()) if depth >= 16 and low < ms <= half]
+            if calm and field(result, "jump") == 0:
+                self.assertEqual(field(result, "completed_depth"), calm[0], " ".join(result))
+
     def test_losers_plays_a_proven_mate_at_once(self):
         # The streak proof holds every reply, so the clock search needs no depth beyond the mate.
         with running_engine() as engine:
