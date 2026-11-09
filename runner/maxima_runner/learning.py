@@ -450,10 +450,15 @@ class opening_book:
             if learning_variant(record.get("variant", "standard")) != self.variant:
                 continue
             weight = 1.0 if record["type"] == game_type else 0.5
+            # Our expected score from the rating gap in the game's contempt (4 Elo per cp). A clearly weaker
+            # opponent's mistakes flatter our moves, so those games teach the shared layers less.
+            contempt = record.get("contempt", 0)
+            expected = 1 / (1 + 10 ** (contempt / 100))
+            shared = weight * 2 / (1 + 10 ** (-min(0, contempt - fire_contempt) / 100))
             registered = record["group"] is not None
-            layers = [(0, weight if registered else weight / 2)]
+            layers = [(0, shared if registered else shared / 2)]
             if registered and group is not None and record["group"] == group:
-                layers.append((1, weight))
+                layers.append((1, shared))
             first = 0 if record.get("color") == "white" else 1
             own_moves = ({tuple(played) for played in record.get("moves", [])[first::2]}
                          if record.get("color") in ("white", "black") else set())
@@ -475,7 +480,7 @@ class opening_book:
                 if (key, move) in ours:
                     convincing = result == 1.0 and (evaluated is None or evaluated >= signature_eval)
                     self.signatures[(key, move)] = self.signatures.get((key, move), 0) + 1 if convincing else 0
-                value = self.value(evaluated, result)
+                value = self.value(evaluated, result, expected)
                 for layer, layer_weight in layers:
                     entry = self.layers[layer].setdefault((key, move), [0.0, 0.0])
                     entry[0] += layer_weight * value
@@ -525,10 +530,14 @@ class opening_book:
             if known is None or rank > analysis_rank(*known[1:5], known[6]):
                 self.analyses[key] = [move, depth, centipawns, mate, think_ms, clock, nodes, nps]
 
-    def value(self, evaluated, result):
-        """Maxima's eval is the main signal; the result adds what evals miss, such as time trouble."""
+    def value(self, evaluated, result, expected=0.5):
+        """Maxima's eval is the main signal; the result adds what evals miss, such as time trouble. A result
+        counts against the expected score: a win over a much weaker opponent says little, a draw with a
+        much stronger one a lot."""
         if result == 0.5:
             result = self.draw_value
+        if result is not None:
+            result = max(0.0, min(1.0, result + 0.5 - expected))
         if evaluated is None:
             return result
         if result is None:
@@ -784,7 +793,9 @@ class opening_book:
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         moves, in_book, search = self.distribution(board, key)
         if moves:
-            ordered = sorted(moves, key=chess.Move.uci)
+            # A move under a tenth of the likeliest is never picked, as in the base book.
+            top = max(probability for probability, _ in moves.values())
+            ordered = sorted((move for move in moves if moves[move][0] >= top / 10), key=chess.Move.uci)
             move = self.random.choices(ordered + [None], [moves[move][0] for move in ordered] + [search])[0]
             if move is None:
                 self.why = ("left book",)

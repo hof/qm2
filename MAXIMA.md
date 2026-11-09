@@ -1513,7 +1513,13 @@ MaxDrone config). In each position:
    ≈×0.5 at 40%). Rates are Thompson samples, so untried moves keep a chance
    and `variety` (setting or `--variety`) widens (2) or narrows (0.5) them.
    Moves only experience knows (an opponent's good move, an engine novelty) get
-   a base share that grows with their games.
+   a base share that grows with their games. A game's result counts against our
+   expected score from its rating gap (the game's contempt, 4 Elo per cp): a win
+   over a much weaker opponent adds little, a draw with a much stronger one a lot.
+   Games against a clearly weaker opponent (contempt below −25, over 100 Elo)
+   also count less in the overall and group layers: ×0.72 at −50, ×0.3 at −100,
+   since their mistakes flatter our evals too. The opponent's own layer keeps
+   full weight.
 3. A learned layer counts at its percentage × `n / (n + 8)`, n = its games in
    the position; weight a layer cannot use goes proportionally to the others,
    except book.bin's: book.bin is the know-all base, so where it has no move
@@ -1528,7 +1534,8 @@ MaxDrone config). In each position:
    best move here that scored above 50% (a draw counts its draw value) gets at
    least the profile's `repeat` chance, so a good line is walked again. The mood
    is exempt: it keeps its percentage, a damped move gives way to the mood's other
-   lines at that position and stays when the mood has none.
+   lines at that position and stays when the mood has none. A move whose final
+   share is under a tenth of the likeliest move's is never picked.
 
    Comfort plays the openings Maxima understands. The first searched eval of a
    game, against anyone, judges the book line before it: our last book move gets
