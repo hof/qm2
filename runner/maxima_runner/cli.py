@@ -33,6 +33,7 @@ command_groups = (
         ("books:draw", "Build draw.bin for safe, drawish openings"),
         ("books:fire", "Build fire.bin for sharp, decisive openings"),
         ("books:w17", "Search the losers book against every reply"),
+        ("books:deep", "Search out-of-book positions deeply into deep.bin"),
     )),
     ("Tablebases", (
         ("tablebases:syzygy:download", "Download selected Syzygy tablebases"),
@@ -233,6 +234,9 @@ def main(argv=None):
         elif command == "books:fire":
             from . import master_books
             entrypoint = master_books.fire_main
+        elif command == "books:deep":
+            from . import deep_learning
+            entrypoint = deep_learning.main
         elif command == "books:w17":
             from . import w17_book
             entrypoint = w17_book.main

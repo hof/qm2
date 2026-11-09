@@ -418,6 +418,8 @@ class opening_book:
         self.random = random_source or random.Random()
         self.weights = game_profile(contempt, rated, profiles, group == "engines")
         self.paths = {"book": book_path}
+        # Deep book learning's moves (deep.bin beside book.bin) stand in where book.bin has none.
+        self.deep_path = Path(book_path).with_name("deep.bin") if book_path and self.variant == "standard" else None
         self.paths.update({name: path for name, path in (style_books or {}).items()
                            if name in style_names + ("mood",) and self.weights.get(name) and path
                            and Path(path).is_file()})
@@ -598,6 +600,8 @@ class opening_book:
         and the chance to search instead: book.bin is the know-all base, so where it has no move, its
         percentage goes to the engine rather than to the other layers."""
         books = {name: self.read_book(path, board) for name, path in self.paths.items()}
+        if self.deep_path is not None and not books.get("book") and self.deep_path.is_file():
+            books["book"] = self.read_book(self.deep_path, board)
         drawn = self.draws.get(key) if self.weights.get("draw") else None
         if drawn:
             # Our own drawn lines join the draw book, trusted with their games where it knows the position.

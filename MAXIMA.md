@@ -1497,6 +1497,13 @@ them, each of those moves gets at least the profile's `revenge` probability wher
 legal, labelled `revenge` in the log. A win
 with that colour serves the revenge; a newer loss replaces the line.
 
+**Deep book learning.** `./maxima books:deep` (and the Lichess bot when idle) searches our first
+searched positions from the experience, the most frequent first, at a classical move's time
+(180 s: 120 minutes for 40 moves). Without MultiPV it finds up to three moves by exclusion: the
+best, then with UCI `searchmoves` the best of the rest, kept while within `--margin` (30 cp) of
+the best; a singular move is booked alone. The moves go to `deep.bin` beside `book.bin`, the best
+at weight 100 and a move at the margin at 10. `--minutes` and `--positions` bound a run.
+
 **Moods.** Like a human who is "in a Dutch mood lately", Maxima plays one theme
 repertoire at a time: `books/moods/<name>.pgn` (traxler, dutch, dragon, kings_indian,
 scandinavian, parham: 1.e4 e5 2.Qh5!?) built into `<data>/moods/<name>.bin`. With
@@ -1507,7 +1514,8 @@ only plays where its book knows the position; elsewhere the other layers decide.
 MaxDrone config). In each position:
 
 1. Book layers give each book's move shares; moves under a tenth of a book's
-   heaviest weight are dropped within that book.
+   heaviest weight are dropped within that book. Where book.bin has no move,
+   `deep.bin` beside it stands in as the base book.
 2. Each learned layer reweights the books' mix by its sampled rate, with the
    engine's experience factor `0.1 + 0.9 × (2·rate)^4` (×1 at 50%, ≈×2.6 at 65%,
    ≈×0.5 at 40%). Rates are Thompson samples, so untried moves keep a chance
@@ -2240,6 +2248,10 @@ any of this. A configured arena is entered again after a restart, one entered by
 command is not. Swiss and team-battle events are not supported.
 
 Bots cannot seek, so MaximaEngine plays challenges, its own and others'.
+After `deep_learning_idle` minutes without a game (default 10, 0 turns it off; needs learning) the bot
+learns one position deeply (see deep book learning below): it sends no challenges and declines incoming
+ones (`later`) meanwhile, a soft quit stops it, and the idle time then restarts, so challenges come first.
+
 Seconds after startup, and `challenge_idle` minutes after a game (default 2, `--challenge-idle`;
 0 or `--no-challenge` turns it off) it challenges one online bot to a rated
 game: a speed by share (bullet 30, blitz 50, rapid 20, among the configured

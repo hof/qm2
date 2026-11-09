@@ -25,6 +25,7 @@ from .fics import book_layers, book_whisper, chess_titles, config_path, console_
     learning_report, numbered_move, read_commands, restart_status, style_books
 from .move_choice import describe, search_summary, variation
 from .project import data_root, engine_path, env_value, log_line
+from . import deep_learning
 from .uci import open_engine
 
 server_url = "https://lichess.org"
@@ -75,7 +76,7 @@ default_settings = {
     "engine": None, "options": {}, "speeds": ["bullet", "blitz", "rapid"], "accept": True, "games": None,
     "pgn_dir": None, "learning": True, "variety": 1.0, "contempt_window": 100, "unknown_contempt": -10, "layer_profiles": {},
     "style_books": {}, "mood": "auto", "live_feed": None, "pgn_post": None, "online_tablebase": True,
-    "challenge_idle": 2, "challenge_window": 300, "challenge_skip": ("leela", "odds"), "min_clock": 90, "max_clock": 60, "teams": [], "tournament": None,
+    "challenge_idle": 2, "deep_learning_idle": 10, "challenge_window": 300, "challenge_skip": ("leela", "odds"), "min_clock": 90, "max_clock": 60, "teams": [], "tournament": None,
 }
 
 
@@ -390,7 +391,8 @@ class matchmaker:
                 self.on_line(f"-- no answer from {opponent}; challenge cancelled")
                 await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
             return
-        if not self.due(now) or bot.game is not None or bot.stopping or bot.in_tournament or bot.accepted[0]:
+        if (not self.due(now) or bot.game is not None or bot.stopping or bot.in_tournament or bot.accepted[0]
+                or bot.deep_task is not None):
             return
         if self.retry is not None:
             retry, self.retry = self.retry, None
@@ -457,7 +459,8 @@ class lichess_bot:
 
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
-                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, challenge_skip=(), blacklist_file=None, min_clock=90, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None):
+                 margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, challenge_skip=(), blacklist_file=None, min_clock=90, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None,
+                 deep_idle=0, deep_learn=None):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
@@ -476,6 +479,8 @@ class lichess_bot:
         self.stopping = self.restart = False
         self.matchmaker = matchmaker(challenge_idle, challenge_window, self.speeds, on_line, skip=challenge_skip,
                                      blacklist_file=blacklist_file)
+        # Deep book learning after deep_idle minutes without a game: one position at a time, no challenges meanwhile.
+        self.deep_idle, self.deep_learn, self.deep_task = deep_idle, deep_learn, None
         self.tournament, self.tournament_password = tournament, None
         self.tournament_joined = False
         self.tournament_ends = time.monotonic() + tournament_limit
@@ -683,6 +688,7 @@ class lichess_bot:
                         await self.matchmaker.tick(self)
                     except OSError as error:
                         self.on_line(f"-- could not look for an opponent: {error}")
+                await self.deep_tick()
                 if command in done:
                     if await self.console(command.result()):
                         break
@@ -691,7 +697,9 @@ class lichess_bot:
         finally:
             events.cancel()
             command.cancel()
-            await asyncio.gather(events, command, return_exceptions=True)
+            if self.deep_task is not None:
+                self.deep_task.cancel()
+            await asyncio.gather(events, command, *([self.deep_task] if self.deep_task else []), return_exceptions=True)
             if self.stopping and self.matchmaker.pending is not None:
                 try:
                     await asyncio.wait_for(self.cancel_challenge(), 2)
@@ -702,6 +710,29 @@ class lichess_bot:
                     await asyncio.wait_for(self.leave_tournament(), 2)
                 except asyncio.TimeoutError:
                     self.on_line("-- tournament withdrawal timed out")
+
+    async def deep_tick(self):
+        """Learn one position when idle long enough; afterwards the idle time restarts, so challenges come first."""
+        if self.deep_task is not None:
+            if self.stopping and not self.deep_task.done():
+                self.deep_task.cancel()
+            if not self.deep_task.done():
+                return
+            task, self.deep_task = self.deep_task, None
+            try:
+                learned = task.result()
+                self.on_line("-- deep book learning: done" if learned else "-- deep book learning: nothing left to learn")
+            except asyncio.CancelledError:
+                self.on_line("-- deep book learning stopped")
+            except Exception as error:
+                self.on_line(f"-- deep book learning failed: {error}")
+            self.matchmaker.busy()
+            return
+        if (self.deep_idle and self.deep_learn is not None and not self.stopping and self.game is None
+                and self.matchmaker.pending is None and self.accepted[0] is None and not self.in_tournament
+                and time.monotonic() - self.matchmaker.idle_since >= self.deep_idle * 60):
+            self.on_line(f"-- idle {self.deep_idle} min: deep book learning one position")
+            self.deep_task = asyncio.ensure_future(self.deep_learn())
 
     async def cancel_challenge(self):
         pending = self.matchmaker.pending
@@ -772,7 +803,8 @@ class lichess_bot:
         if "limit" in clock and estimate < self.min_clock:
             return "tooFast"  # the 0.25s Lichess charges per move eats a clock without increment
         accepted, when = self.accepted
-        if not self.accept or self.stopping or self.game is not None or accepted and time.monotonic() - when < 20:
+        if (not self.accept or self.stopping or self.game is not None or self.deep_task is not None
+                or accepted and time.monotonic() - when < 20):
             return "later"
         if self.games is not None and self.played >= self.games:
             return "later"
@@ -1372,7 +1404,7 @@ def load_settings(path):
     types = {"engine": str, "options": dict, "speeds": list, "accept": bool, "games": int, "pgn_dir": str,
              "learning": bool, "variety": (int, float), "contempt_window": int, "unknown_contempt": int, "layer_profiles": dict,
              "style_books": dict, "mood": str, "live_feed": str, "pgn_post": str, "online_tablebase": bool,
-             "challenge_idle": int, "challenge_window": int, "challenge_skip": list, "min_clock": int, "max_clock": int, "teams": list, "tournament": str}
+             "challenge_idle": int, "deep_learning_idle": int, "challenge_window": int, "challenge_skip": list, "min_clock": int, "max_clock": int, "teams": list, "tournament": str}
     types["resignation"] = dict
     types["shutdown_grace"] = (int, float)
     types["pv_plies"] = int
@@ -1495,7 +1527,11 @@ def run(options, parser):
                           blacklist_file=data_root() / "experience" / "lichess" / "challenge_blacklist.json", min_clock=configured["min_clock"], max_clock=configured["max_clock"],
                           resignation_settings=configured["resignation"], pv_plies=configured["pv_plies"],
                           teams=configured["teams"] or (), tournament=configured["tournament"],
-                          local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")))
+                          local_pieces=online_tablebase.local_pieces(settings.get("SyzygyPath")),
+                          deep_idle=configured["deep_learning_idle"] if learner is not None else 0,
+                          deep_learn=lambda: deep_learning.learn(configured["engine"] or engine_path(),
+                                                                 data_root() / "book.bin", learner.records,
+                                                                 positions=1, report=show))
         state["bot"] = bot
         if controller.requested:
             bot.soft_quit()
