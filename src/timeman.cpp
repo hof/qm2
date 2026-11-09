@@ -24,9 +24,14 @@
 #include "timeman.h"
 
 void time_manager_t::set(const int my_time, const int opp_time, const int my_inc, const int opp_inc, const int moves_left,
-        const int move_overhead, const int time_factor, const int m, const int lag) {
+        const int move_overhead, const int time_factor, const int m, const int lag, const int horizon) {
 
-    //determine M, the guessed amount of moves left
+    /*
+     * Determine M, the guessed amount of moves left. A horizon (expected moves remaining, standard chess on a
+     * sudden-death clock) replaces 2M directly: the budget is clock/horizon and the cap four budgets.
+     */
+    horizon_moves = horizon;
+    const double m_clock = horizon > 0 ? horizon / 2.0 : m;
     double M_MAX, M_MIN;
     if (moves_left > 0) {
 
@@ -39,13 +44,13 @@ void time_manager_t::set(const int my_time, const int opp_time, const int my_inc
         // Slide towards the low time divisors as the clock runs down, so no single move changes the budget much.
         // From clock/2M and clock/(M/2) at two minutes to clock/4M and clock/1.5M at an empty clock.
         const double left = 1.0 * my_time / time_man::LOW_TIME;
-        M_MIN = m * (4 - 2 * left);
-        M_MAX = m * (1.5 - left);
+        M_MIN = m_clock * (4 - 2 * left);
+        M_MAX = m_clock * (1.5 - left);
     } else {
 
-        // An increment comes back every move, so the clock it leaves need not last as long: spend it
-        // as if the game were decided in two thirds of the moves.
-        const double moves = my_inc > 0 ? m * 2.0 / 3 : m;
+        // An increment comes back every move, so the clock it leaves need not last as long: without a
+        // horizon, spend it as if the game were decided in two thirds of the moves.
+        const double moves = horizon > 0 ? m_clock : my_inc > 0 ? m * 2.0 / 3 : m;
         M_MIN = 2 * moves;
         M_MAX = moves / 2;
     }
@@ -116,6 +121,7 @@ void time_manager_t::clear() {
     max = start;
     tot_min = 0;
     tot_max = 0;
+    horizon_moves = 0;
 }
 
 // The budget runs from the go command: time pondered counts, and a ponderhit

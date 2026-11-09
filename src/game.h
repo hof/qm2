@@ -63,6 +63,7 @@ public:
     int white_increment;
     int black_increment;
     int moves_left;
+    int last_score;  // our previous search's score: sets the expected game length
     bool ponder;
     bool infinite;
     bool clock_limit;
@@ -72,7 +73,8 @@ public:
     void clear();
     void copy(game_t * game);
     void test_for(move_t * move, int score, int max_nodes, int max_time = 0);
-    void init_tm(bool white, std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now());
+    void init_tm(bool white, std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now(),
+        int move_number = 1);
 
     game_t() {
         clear();

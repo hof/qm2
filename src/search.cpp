@@ -233,7 +233,7 @@ void search_t::init(const char * fen, const game_t * g, const search_control_t *
         _position_history.erase(_position_history.begin(),
             _position_history.end() - brd.stack->fifty_count);
     }
-    game.init_tm(brd.us(), started);
+    game.init_tm(brd.us(), started, brd.root_ply / 2);
     wild = variant;
     book_name = book::path();
     _own_book = options::get_value("OwnBook") && !options::get_value("UCI_AnalyseMode");
@@ -415,7 +415,8 @@ void search_t::go() {
         + " interrupted " + std::to_string(interrupted)
         + " stop " + stop_reason + " jump " + std::to_string(stop_jump)
         + " min " + std::to_string(game.tm.reserved_min())
-        + " max " + std::to_string(game.tm.reserved_max()));
+        + " max " + std::to_string(game.tm.reserved_max())
+        + " horizon " + std::to_string(game.tm.horizon()));
     uci::send_pv(result_score, result_depth, sel_depth, nodes, game.tm.elapsed(),
         pv_to_string().c_str(), result_flag, tablebase_hits);
 

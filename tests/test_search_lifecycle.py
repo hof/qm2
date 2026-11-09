@@ -135,7 +135,7 @@ class search_lifecycle_tests(unittest.TestCase):
             engine.send("go wtime 2000 btime 2000")
             engine.wait_for_bestmove()
             result = next(line for line in engine.transcript if line.startswith("info string search_result "))
-            self.assertRegex(result, r" stop (one_move|half_max|no_time|easy|normal|mate|cap|draw) jump [01] min \d+ max \d+$")
+            self.assertRegex(result, r" stop (one_move|half_max|no_time|easy|normal|mate|cap|draw) jump [01] min \d+ max \d+ horizon \d+$")
 
     def test_losers_plays_a_proven_mate_at_once(self):
         # The streak proof holds every reply, so the clock search needs no depth beyond the mate.

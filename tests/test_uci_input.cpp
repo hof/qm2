@@ -135,6 +135,27 @@ int main() {
     uci::in("setoption name Move Overhead value 50");
     success &= check("server lag defaults to 0 ms", options::get_value("Server Lag") == 0);
     {
+        success &= check("the expected game length shrinks as the game goes on",
+            time_man::horizon(10, 0) > time_man::horizon(40, 0) && time_man::horizon(40, 0) > time_man::horizon(80, 0));
+        success &= check("a decided score shortens the game, a pressing one lengthens it",
+            time_man::horizon(40, 400) < time_man::horizon(40, 0) && time_man::horizon(40, -150) > time_man::horizon(40, 0));
+        bool bounded = true;
+        for (int move_number : {1, 30, 90, 300}) {
+            for (int score : {0, 100, -1000, 30000}) {
+                const int moves = time_man::horizon(move_number, score);
+                bounded &= moves >= 16 && moves <= 50;
+            }
+        }
+        success &= check("the expected game length stays within 16 to 50 moves", bounded);
+        game_t early, late;
+        early.clock_limit = late.clock_limit = true;
+        early.white_time = early.black_time = late.white_time = late.black_time = 60000;
+        early.init_tm(true, std::chrono::steady_clock::now(), 10);
+        late.init_tm(true, std::chrono::steady_clock::now(), 80);
+        success &= check("a sudden-death clock spends more per move late in the game",
+            late.tm.reserved_min() > early.tm.reserved_min() && late.tm.horizon() < early.tm.horizon());
+    }
+    {
         time_manager_t no_lag, lagged, slow_increment;
         no_lag.set(60000, 60000, 2000, 2000, 0, 0);
         lagged.set(60000, 60000, 2000, 2000, 0, 0, 100, 16, 300);

@@ -452,12 +452,20 @@ logging; `bestmove` then flushes the log, and a new game resets it after stoppin
 the prior worker. Per-line file opens/flushes are avoided. Timed UCI searches
 start their monotonic budget when `go` enters the command handler, before
 logging, parsing, prior-worker joining, allocation, and search setup.
-The time manager assumes the game is decided M moves from now (UCI `TimeMoves`, default 16, range 4–64):
+Standard chess on a sudden-death clock (with or without increment) budgets by the expected number of moves
+left, measured from 302 Lichess bot games: 50 − 2/5 of the move number, at least 18 (50 early, 34 at move 40,
+26 at move 60, 18 from move 80). The previous search's score adjusts it: over three pawns the game ends sooner
+(×3/5), between half a pawn and three it lasts longer (×6/5); the result stays within 16–50 moves, and
+`TimeMoves` scales it (16 keeps it). The budget is clock/horizon plus the increment, the maximum four budgets
+plus twice the increment, so the clock shrinks by about one horizon-th per move instead of draining early.
+The `search_result` line reports the horizon (0 where it does not apply). Otherwise
+the time manager assumes the game is decided M moves from now (UCI `TimeMoves`, default 16, range 4–64):
 without increment the budget is clock/2M with a maximum of clock/(M/2), so clock/32 and clock/8 by default;
 with an increment the clock is shared as if the game were decided in two thirds of M (clock/21 and
 clock/5.3 by default), since the increment keeps coming back, and the budget gains the whole increment
 and the maximum twice the increment (M more increments shared over M/2 moves), never past half the clock. Below two minutes without increment the
-budget shrinks gradually, from clock/2M and clock/(M/2) at two minutes to clock/4M and clock/1.5M at an empty clock. With `movestogo` the budget is clock/min(2M, moves to go + M/2): as in sudden death until M + M/2 moves to go, then the same for every move, with M/2 budgets left at the control; the maximum is four budgets, at most the clock shared over the moves to go. With more clock than the opponent and at least their increment, the budget gains a sixteenth of the lead and the maximum an eighth; behind on the clock with at most their increment, both lose half as much, never more than half. Every timed search gets at least 50 ms, or 1/16 of the clock when that is
+budget shrinks gradually, from clock/2M and clock/(M/2) at two minutes to clock/4M and clock/1.5M at an empty clock
+(with a horizon, M is half of it). These M rules remain for the losers variant and for `movestogo`. With `movestogo` the budget is clock/min(2M, moves to go + M/2): as in sudden death until M + M/2 moves to go, then the same for every move, with M/2 budgets left at the control; the maximum is four budgets, at most the clock shared over the moves to go. With more clock than the opponent and at least their increment, the budget gains a sixteenth of the lead and the maximum an eighth; behind on the clock with at most their increment, both lose half as much, never more than half. Every timed search gets at least 50 ms, or 1/16 of the clock when that is
 less, with twice that as its maximum.
 The UCI `Move Overhead` option reserves 50 ms by default (range 0–5000 ms)
 from each allocated clock budget for interface and transport delays. Adjust it

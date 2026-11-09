@@ -87,7 +87,13 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
     _control.stop_requested.store(false);
     _control.ponder.store(_game.ponder);
 
-    // Capture the position, limits, and search options before starting the worker.
+    // Capture the position, limits, and search options before starting the worker. The last search's
+    // score sets the expected game length; a new game has none.
+    {
+        std::lock_guard<std::mutex> lock(_result_mutex);
+        const bool searched = _result.move.piece && _result.source != result_source_t::book;
+        _game.last_score = searched ? _result.score : 0;
+    }
     try {
         std::unique_ptr<search_t> next_search;
         if (options::get_value("Wild") == 17) {

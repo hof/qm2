@@ -76,6 +76,7 @@ void game_t::clear() {
     white_increment = 0;
     black_increment = 0;
     moves_left = 0;
+    last_score = 0;
     max_nodes = 0;
     ponder = false;
     infinite = false;
@@ -94,6 +95,7 @@ void game_t::copy(game_t* game) {
     white_increment = game->white_increment;
     black_increment = game->black_increment;
     moves_left = game->moves_left;
+    last_score = game->last_score;
     max_nodes = game->max_nodes;
     ponder = game->ponder;
     infinite = game->infinite;
@@ -104,15 +106,19 @@ void game_t::copy(game_t* game) {
     go_started = game->go_started;
 }
 
-void game_t::init_tm(bool us, std::chrono::steady_clock::time_point started) {
+void game_t::init_tm(bool us, std::chrono::steady_clock::time_point started, int move_number) {
     tm.set_start(go_started == std::chrono::steady_clock::time_point{} ? started : go_started);
     if (movetime_limit || max_time_per_move) {
         tm.set_min(max_time_per_move);
         tm.set_max(max_time_per_move);
     } else if (clock_limit || white_time || black_time) {
+
+        // Standard chess on a sudden-death clock: TimeMoves scales the measured game length, 16 keeps it.
+        const int horizon = moves_left == 0 && options::get_value("Wild") == 0
+            ? time_man::horizon(move_number, last_score) * options::get_value("TimeMoves") / time_man::M : 0;
         tm.set(time(us), time(!us), increment(us), increment(!us), moves_left,
             options::get_value("Move Overhead"), options::get_value("TimeFactor"),
-            options::get_value("TimeMoves"), options::get_value("Server Lag"));
+            options::get_value("TimeMoves"), options::get_value("Server Lag"), horizon);
     } else {
         tm.set_min(time_man::INFINITE_TIME);
         tm.set_max(time_man::INFINITE_TIME);
