@@ -46,6 +46,8 @@ runner package requires Python 3.8+ and python-chess (install with `pip install 
 Use `./maxima test` for engine and runner checks; `BUILD_TESTING=OFF` builds without Python.
 See MAXIMA.md chapters 6.1 and 10 for setup and ownership boundaries.
 Running the engine does not require Python.
+Do not waste tokens: when the scope of a change is known, run only the relevant
+tests, not the full suite, and keep tool calls and output lean.
 Run checks appropriate to the change, including search lifecycle tests for
 engine changes and sanitizer/race checks where relevant. Tests must return
 nonzero on failure. Report measured results and remaining limitations honestly.
