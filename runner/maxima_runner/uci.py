@@ -241,8 +241,10 @@ class engine_session:
         settings = self.play_settings(board, options)
         if self.pondering and board.fen() == self.ponder_fen:
             # python-chess drops a ponder search when any option changes: the hit is worth more.
-            settings.pop("TimeFactor", None)
-            settings.pop("Server Lag", None)
+            # Keep the values it pondered with; a dropped option would fall back to its default.
+            for name in ("TimeFactor", "Server Lag"):
+                if name in settings and name in self.protocol.config:
+                    settings[name] = self.protocol.config[name]
 
         async def play_search():
             self.protocol.on_search_started = on_search_started

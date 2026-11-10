@@ -311,6 +311,23 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(hit.info['_ponder_hit'])
                 self.assertEqual(log.read_text().splitlines().count('ponderhit'), 1)
 
+    async def test_new_server_lag_preserves_ponder_hits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script, log = Path(directory) / 'engine.py', Path(directory) / 'commands'
+            script.write_text(ponder_engine.replace(
+                "print('option name Ponder type check default false')",
+                "print('option name Ponder type check default false')\n"
+                "        print('option name Server Lag type spin default 0 min 0 max 5000')"))
+            async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
+                board, game = chess.Board(), object()
+                limit = chess.engine.Limit(white_clock=60, black_clock=60)
+                first = await session.play(board, limit, game=game, options={'Server Lag': 300})
+                board.push(first.move)
+                board.push(first.ponder)
+                hit = await session.play(board, limit, game=game, options={'Server Lag': 350})
+                self.assertTrue(hit.info['_ponder_hit'])
+                self.assertEqual(log.read_text().splitlines().count('ponderhit'), 1)
+
     async def test_completed_ponder_keeps_score_and_miss_discards_it(self):
         with tempfile.TemporaryDirectory() as directory:
             script, log = Path(directory) / 'engine.py', Path(directory) / 'commands'
