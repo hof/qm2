@@ -145,18 +145,16 @@ def digest(game):
                                  round(seconds * 1000) if seconds is not None else None,
                                  board.halfmove_clock, nodes, nps])
         board.push(node.move)
-    if len(moves) < minimum_plies or len(evals) < eval_window and headers.get("LearningResults") != "true":
-        return None
-    if len(evals) < eval_window:
-        if headers.get("Result", "*") == "*":
-            return None
-        evals, analyses = [], []
     outcome = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(headers.get("Result"))
+    # Any real result and any searched eval is learning material.
+    if len(moves) < minimum_plies or outcome is None and not evals:
+        return None
     score = None if outcome is None else (outcome if our_color == chess.WHITE else 1 - outcome)
     values, draws = [], []
     for ply, (key, move, our_move) in enumerate(moves[:horizon]):
         after = [entry for entry in evals if entry[0] >= ply][:eval_window]
-        drawn = sum(entry[2] for entry in after) >= drawn_evals
+        # A draw reached with too few searches to judge it is a drawing book line.
+        drawn = sum(entry[2] for entry in after) >= drawn_evals or score == 0.5 and len(evals) < eval_window
         # A line we keep scoring below level is a bad one; otherwise only our first eval counts, so an
         # opponent's later blunder does not make the line look good.
         negative = sum(entry[1] < 0.5 for entry in after) >= min(drawn_evals, len(after))

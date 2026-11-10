@@ -589,7 +589,7 @@ def learning_report(game, record, records):
     """Plain lines for the owner after a game: what Maxima keeps from it, and the score against this
     opponent; a loss also files their opening as a revenge line."""
     if record is None:
-        return ["not learned: under ten moves or too few searches"]
+        return ["not learned: under ten moves, or no result and no searches"]
     opponent = record["opponent"]
     plies = sum(1 for _ in record["values"])
     played = [other["score"] for other in records if other["opponent"].lower() == opponent.lower()

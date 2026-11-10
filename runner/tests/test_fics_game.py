@@ -319,7 +319,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
 
     def test_learning_report_says_what_was_kept(self):
         self.assertEqual(fics.learning_report(None, None, []),
-                         ["not learned: under ten moves or too few searches"])
+                         ["not learned: under ten moves, or no result and no searches"])
         game = chess.pgn.Game.from_board(chess.Board())
         for uci in ("e2e4", "e7e5", "f2f4"):
             game.end().add_main_variation(chess.Move.from_uci(uci))

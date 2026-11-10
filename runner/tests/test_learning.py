@@ -93,9 +93,17 @@ class digest_tests(unittest.TestCase):
         list(mated.mainline())[4].set_eval(chess.engine.PovScore(chess.engine.Mate(9), chess.WHITE), 12)
         self.assertEqual([value[1] for value in learning.digest(mated)["values"]], line[:5])
 
-    def test_short_and_thoughtless_games_are_ignored(self):
+    def test_short_games_are_ignored_and_book_games_keep_their_result(self):
         self.assertIsNone(learning.digest(make_game([0] * 10, plies=19)))
-        self.assertIsNone(learning.digest(make_game([None] * 7 + [0] * 3)))
+        self.assertIsNone(learning.digest(make_game([None] * 10, result="*")))
+        unfinished = learning.digest(make_game([None] * 7 + [0] * 3, result="*"))
+        self.assertEqual(len(unfinished["analyses"]), 3)
+        booked = learning.digest(make_game([None] * 7 + [0] * 3, result="1-0"))
+        self.assertEqual(len(booked["analyses"]), 3)
+        self.assertEqual(booked["score"], 1.0)
+        self.assertEqual(booked["draws"], [])
+        drawn = learning.digest(make_game([None] * 7 + [0] * 3, result="1/2-1/2"))
+        self.assertEqual([move for _, move in drawn["draws"]], line[::2])
         self.assertIsNotNone(learning.digest(make_game([None] * 6 + [0] * 4, plies=20)))
 
     def test_groups_and_unknown_games(self):
