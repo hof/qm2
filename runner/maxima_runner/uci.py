@@ -71,13 +71,17 @@ class online_protocol(chess.engine.UciProtocol):
                 if evidence is not None and ("depth" in report or "score" in report):
                     evidence.clear()
                     evidence.update(report)
+        super().line_received(line)
+
+    def _line_received(self, line):
         # Setup notes (NNUE loaded, Syzygy pieces) arrive outside a search: the log keeps them,
         # python-chess would warn about them. Failures still warn.
         setup = self.command is None or type(self.command).__name__ in (
             "UciInitializeCommand", "UciPingCommand", "UciConfigureCommand")
         if setup and line.startswith("info string ") and "ERROR" not in line and "failed" not in line:
+            self.line_received(line)
             return
-        super().line_received(line)
+        super()._line_received(line)
 
     async def communicate(self, command_factory):
         # A newer command replaces a queued one, but python-chess asserts on doing that: an old ponder queued
