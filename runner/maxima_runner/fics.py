@@ -586,16 +586,34 @@ def book_whisper(san, why, opening, *, compact=False):
 
 
 def learning_report(game, record, records):
-    """Plain lines for the owner after a game: what Maxima keeps from it, and the score against this
-    opponent; a loss also files their opening as a revenge line."""
+    """Plain lines for the owner after a game: what Maxima learned from it, what it skipped and why, and
+    the score against this opponent; a loss also files their opening as a revenge line."""
+    plies = game.end().ply()
     if record is None:
-        return ["not learned: under ten moves, or no result and no searches"]
-    opponent = record["opponent"]
-    plies = sum(1 for _ in record["values"])
-    played = [other["score"] for other in records if other["opponent"].lower() == opponent.lower()
-              and other.get("server") == record.get("server")]
-    wins, draws, losses = played.count(1.0), played.count(0.5), played.count(0.0)
-    lines = [f"learned: {plies} plies | vs {opponent} +{wins} ={draws} -{losses}"]
+        if plies < learning.minimum_plies:
+            return [f"not learned: under ten moves ({plies} plies)"]
+        if game.headers.get("Result", "*") == "*":
+            return ["not learned: unfinished and no searched moves"]
+        return ["not learned: not one of our games, or an incomplete record"]
+    opponent, learned = record["opponent"], len(record["values"])
+    lines = [f"learned: {learned} plies of the line" + (f" (stops at ply {learned}: decided or tablebase)"
+                                                         if learned < plies else "")]
+    if record["score"] is None:
+        lines.append("result skipped: unfinished game")
+    else:
+        played = [other["score"] for other in records if other["opponent"].lower() == opponent.lower()
+                  and other.get("server") == record.get("server")]
+        wins, draws, losses = played.count(1.0), played.count(0.5), played.count(0.0)
+        result = {1.0: "win", 0.5: "draw", 0.0: "loss"}[record["score"]]
+        if record["group"] is None:
+            lines.append(f"{result} -> learn at half weight; group and opponent skipped: unregistered")
+        else:
+            group = {"engines": "bots"}.get(record["group"], record["group"])
+            lines.append(f"{result} -> learn, {group}, vs {opponent} +{wins} ={draws} -{losses}")
+    searched = len(record["analyses"])
+    lines.append(f"evals: {searched} searched moves" if searched else "evals skipped: no searched moves")
+    if record["draws"]:
+        lines.append(f"draw book: {len(record['draws'])} of our moves into a drawn line")
     if record["score"] == 0.0:
         board, line = game.board(), list(game.mainline_moves())[:learning.revenge_plies // 2]
         lines.append(f"revenge filed: {board.variation_san(line)}")

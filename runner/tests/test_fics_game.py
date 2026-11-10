@@ -318,15 +318,15 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(player.connection.sent[-1], "tell hof OK, I restart after this game.")
 
     def test_learning_report_says_what_was_kept(self):
-        self.assertEqual(fics.learning_report(None, None, []),
-                         ["not learned: under ten moves, or no result and no searches"])
         game = chess.pgn.Game.from_board(chess.Board())
         for uci in ("e2e4", "e7e5", "f2f4"):
             game.end().add_main_variation(chess.Move.from_uci(uci))
-        record = {"opponent": "John", "values": [1, 2, 3], "score": 0.0}
+        self.assertEqual(fics.learning_report(game, None, []), ["not learned: under ten moves (3 plies)"])
+        record = {"opponent": "John", "values": [1, 2, 3], "score": 0.0, "group": "engines",
+                  "analyses": [], "draws": []}
         lines = fics.learning_report(game, record, [record, dict(record, score=1.0)])
-        self.assertEqual(lines, ["learned: 3 plies | vs John +1 =0 -1",
-                                 "revenge filed: 1. e4 e5 2. f4"])
+        self.assertEqual(lines, ["learned: 3 plies of the line", "loss -> learn, bots, vs John +1 =0 -1",
+                                 "evals skipped: no searched moves", "revenge filed: 1. e4 e5 2. f4"])
 
     def test_compact_search_limits_replies_and_preserves_board(self):
         board = chess.Board()
