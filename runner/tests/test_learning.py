@@ -15,6 +15,9 @@ line = ("e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 g8f6 e1g1 f8e7 f1e1 b7b5 a4b3 d7d6 c
         "d2d4").split()
 
 
+trusted = {"LearningResults": "true"}  # an imported result: no eval needs to back it
+
+
 def make_game(our_scores, ours="white", result="1-0", opponent_headers=None, plies=len(line)):
     """A game where our searched moves carry the given centipawn scores (our point of view)."""
     game = chess.pgn.Game()
@@ -93,8 +96,12 @@ class digest_tests(unittest.TestCase):
         list(mated.mainline())[4].set_eval(chess.engine.PovScore(chess.engine.Mate(9), chess.WHITE), 12)
         self.assertEqual([value[1] for value in learning.digest(mated)["values"]], line[:5])
 
-    def test_short_games_are_ignored_and_book_games_keep_their_result(self):
-        self.assertIsNone(learning.digest(make_game([0] * 10, plies=19)))
+    def test_unbacked_results_stay_out_of_shared_layers(self):
+        self.assertTrue(learning.digest(make_game([0] * 3, plies=6, result="0-1"))["suspect"])
+        self.assertFalse(learning.digest(make_game([0, 0, 300], plies=6, result="1-0"))["suspect"])
+        self.assertFalse(learning.digest(make_game([0] * 3, plies=6, result="1/2-1/2"))["suspect"])
+
+    def test_book_games_keep_their_result(self):
         self.assertIsNone(learning.digest(make_game([None] * 10, result="*")))
         unfinished = learning.digest(make_game([None] * 7 + [0] * 3, result="*"))
         self.assertEqual(len(unfinished["analyses"]), 3)
@@ -191,7 +198,7 @@ class selection_tests(unittest.TestCase):
         self.assertEqual(book.choice_results, {})
 
     def test_displayed_results_only_count_moves_played_by_maxima(self):
-        records = [learning.digest(make_game([0] * 10, ours=color, result=result))
+        records = [learning.digest(make_game([0] * 10, ours=color, result=result, opponent_headers=trusted))
                    for color in ("white", "black") for result in ("1-0", "1/2-1/2", "0-1")]
         for item in records:
             item["opponent"] = "John"

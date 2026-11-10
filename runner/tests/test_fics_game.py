@@ -321,7 +321,7 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         game = chess.pgn.Game.from_board(chess.Board())
         for uci in ("e2e4", "e7e5", "f2f4"):
             game.end().add_main_variation(chess.Move.from_uci(uci))
-        self.assertEqual(fics.learning_report(game, None, []), ["not learned: under ten moves (3 plies)"])
+        self.assertEqual(fics.learning_report(game, None, []), ["not learned: unfinished and no searched moves"])
         record = {"opponent": "John", "values": [1, 2, 3], "score": 0.0, "group": "engines",
                   "analyses": [], "draws": []}
         lines = fics.learning_report(game, record, [record, dict(record, score=1.0)])
@@ -445,7 +445,8 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
 
         for colour, win, loss in (("white", "1-0", "0-1"), ("black", "0-1", "1-0")):
             records = [learning.digest(make_game([0] * 10, ours=colour, result=result,
-                       opponent_headers={"LearningGroup": "engines", "LearningServer": "fics"}))
+                       opponent_headers={"LearningGroup": "engines", "LearningServer": "fics",
+                                         "LearningResults": "true"}))
                        for result in (win, win, loss)]
             for record in records:
                 record["opponent"] = "Kapablanca"

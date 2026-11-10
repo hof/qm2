@@ -15,11 +15,11 @@ import chess.engine
 import chess.pgn
 
 from maxima_runner import learning, learning_store
-from test_learning import make_game
+from test_learning import make_game, trusted
 
 
 def game_for(source='fics', group='bots', identity='one', result='1-0', annotated=True):
-    game = make_game([0] * 10 if annotated else [], result=result)
+    game = make_game([0] * 10 if annotated else [], result=result, opponent_headers=trusted)
     game.headers.update(GameId=identity, LearningSource=source, LearningGroup='engines' if group == 'bots' else group)
     if source == 'lichess':
         game.headers['Event'] = 'Lichess rated blitz game'

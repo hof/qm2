@@ -152,7 +152,7 @@ class losers_proof_book_tests(unittest.TestCase):
             board.push_uci('f3g1')
             self.assertIsNone(opening.proven_move(board))
 
-    def test_a_game_too_short_to_learn_from_still_books_its_proofs(self):
+    def test_a_short_game_books_its_proofs(self):
         board = royal_losers_board()
         for move in ('g1f3', 'g8f6', 'f3g1'):
             board.push_uci(move)
@@ -162,7 +162,7 @@ class losers_proof_book_tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             book = Path(directory) / 'book_w17.bin'
             subject = learning.learner(Path(directory) / 'losers', variant='losers', mood='off', book_path=book)
-            self.assertIsNone(subject.add(game))
+            subject.add(game)
             board.pop()
             self.assertEqual(learning.opening_book([], book_path=book, variant='losers').proven_move(board),
                              chess.Move.from_uci('f3g1'))

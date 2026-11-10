@@ -590,8 +590,6 @@ def learning_report(game, record, records):
     the score against this opponent; a loss also files their opening as a revenge line."""
     plies = game.end().ply()
     if record is None:
-        if plies < learning.minimum_plies:
-            return [f"not learned: under ten moves ({plies} plies)"]
         if game.headers.get("Result", "*") == "*":
             return ["not learned: unfinished and no searched moves"]
         return ["not learned: not one of our games, or an incomplete record"]
@@ -610,6 +608,9 @@ def learning_report(game, record, records):
         else:
             group = {"engines": "bots"}.get(record["group"], record["group"])
             lines.append(f"{result} -> learn, {group}, vs {opponent} +{wins} ={draws} -{losses}")
+        if record.get("suspect"):
+            lines[-1] = f"{result} -> vs {opponent} +{wins} ={draws} -{losses}; learn and group skipped: " \
+                        "result against our eval, no mate"
     searched = len(record["analyses"])
     lines.append(f"evals: {searched} searched moves" if searched else "evals skipped: no searched moves")
     if record["draws"]:

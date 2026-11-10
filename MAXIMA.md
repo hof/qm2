@@ -1335,7 +1335,7 @@ built by `./maxima init` from `books/w17.pgn`: each line starts at a position
 (`FEN` header) and holds a move the losers search proved to win (`Proof "mate N"`).
 A proven move gets the full Polyglot weight and is always played, before the
 learned layers and the search share; the moves leading to that position are not
-booked. After each losers game, even one too short to learn from, the learner
+booked. After each losers game, the learner
 adds every move of ours that the engine scored as a mate
 for us to `book_w17.bin`, as a proven move. `./maxima books:w17` searches the losers opening book into
 `books/w17_search.pgn`: breadth-first over our first moves (`--moves`, default 2)
@@ -1420,9 +1420,14 @@ legacy games identical in all those fields cannot be distinguished automatically
 Malformed games, unsupported variants, and conflicting identities fail ingestion.
 Conflicting final results require explicit `--replace`; replaying an unfinished or
 less-annotated copy cannot erase a final result or stronger recorded analysis.
-Unannotated uploaded games of at least ten moves can contribute result-only
-evidence; this never invents evaluation or search-quality evidence. Unfinished
-uploads without sufficient evaluations teach nothing.
+Any game length counts: a real result and every searched eval are learned, and
+a game teaches nothing only when it has neither. Unannotated uploaded games
+contribute result-only evidence; this never invents evaluation or search-quality
+evidence. A drawn game with fewer than four searched moves marks our moves as a
+draw line. A decisive played result the board does not back (no game end and our
+last eval not leaning 1.00 its way: a rage resign, an abandon, a flag) counts
+against that opponent only, never in the shared or group layers; uploaded result
+archives are trusted.
 
 `experience:build` reconstructs learning exclusively from PGNs: `index/` and
 `players/` can be deleted and rebuilt completely. Keep **all PGNs**, including

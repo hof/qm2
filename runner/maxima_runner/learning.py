@@ -21,7 +21,7 @@ from .variants import board_variant, experience_variants, learning_variant, read
 search_plies = 40  # the search layer leaves the book at a random ply of the first 20 moves
 # A game teaches only when it lasted 10 moves and Maxima searched enough moves to judge them: early
 # resignations, aborts, disconnects, and book-only games carry no eval, only a result.
-minimum_plies = 20
+against_cp = 100  # a decisive result is backed by the board when our last eval leans its way by this much
 # Learning ends at our first mate score, at the first tablebase position, and past the opening's decided_plies at
 # our first eval this far from level: the game is won or lost, and the search or the tablebases take it from there.
 decided_cp, decided_plies = 500, 40
@@ -122,7 +122,7 @@ def digest(game):
     contempt = game_contempt(headers, our_color)
     board = game.board()
     moves, evals, analyses = [], [], []
-    horizon = None
+    horizon, last_cp = None, 0
     for ply, node in enumerate(game.mainline()):
         key = f"{chess.polyglot.zobrist_hash(board):016x}"
         mover = board.turn
@@ -135,6 +135,7 @@ def digest(game):
             relative = evaluation.pov(mover)
             centipawns = relative.score(mate_score=2000)
             drawn_score = centipawns == contempt
+            last_cp = centipawns
             if horizon is None and (relative.is_mate() or ply >= decided_plies and abs(centipawns) >= decided_cp):
                 horizon = ply + 1
             # The draw score is our contempt, not a judgement of the position: it counts as level.
@@ -147,9 +148,14 @@ def digest(game):
         board.push(node.move)
     outcome = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(headers.get("Result"))
     # Any real result and any searched eval is learning material.
-    if len(moves) < minimum_plies or outcome is None and not evals:
+    if not moves or outcome is None and not evals:
         return None
     score = None if outcome is None else (outcome if our_color == chess.WHITE else 1 - outcome)
+    # A decisive result the board does not back (no game end, our last eval not leaning its way: a rage
+    # resign, an abandon, a flag) still counts against this opponent, but must not steer everyone's book.
+    # Imported result archives are trusted.
+    suspect = (score in (0.0, 1.0) and headers.get("LearningResults") != "true" and not board.is_game_over()
+               and (2 * score - 1) * last_cp < against_cp)
     values, draws = [], []
     for ply, (key, move, our_move) in enumerate(moves[:horizon]):
         after = [entry for entry in evals if entry[0] >= ply][:eval_window]
@@ -184,7 +190,7 @@ def digest(game):
         "time_control": headers.get("TimeControl", ""),
         "score": score,
         "moves": [move[:2] for move in moves[:horizon]],
-        "values": values, "draws": draws, "analyses": analyses, "contempt": contempt,
+        "values": values, "draws": draws, "analyses": analyses, "contempt": contempt, "suspect": suspect,
     }
 
 
@@ -468,8 +474,8 @@ class opening_book:
             expected = 1 / (1 + 10 ** (contempt / 100))
             shared = weight * 2 / (1 + 10 ** (-min(0, contempt - fire_contempt) / 100))
             registered = record["group"] is not None
-            layers = [(0, shared if registered else shared / 2)]
-            if registered and group is not None and record["group"] == group:
+            layers = [] if record.get("suspect") else [(0, shared if registered else shared / 2)]
+            if registered and group is not None and record["group"] == group and not record.get("suspect"):
                 layers.append((1, shared))
             first = 0 if record.get("color") == "white" else 1
             own_moves = ({tuple(played) for played in record.get("moves", [])[first::2]}
@@ -892,7 +898,7 @@ class learner:
     def add(self, game):
         record = self.store.add(game)
         self.records = self.store.load()
-        # A proven win is a fact, so even a game too short to learn from books its proofs.
+        # A proven win is a fact: every game books its proofs.
         colour = game.headers.get("LearningColor")
         if self.variant == "losers" and self.book_path and colour in ("white", "black"):
             book_proven_wins(game, colour == "white", self.book_path)
