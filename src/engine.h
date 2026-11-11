@@ -31,64 +31,8 @@
 #include "movepicker.h"
 #include "book.h"
 
-/*
- * Search threads
- */
+#include "worker_pool.h"
 
-#include <pthread.h>
-
-#define MAX_THREADS 256
-
-class threads_t {
-public:
-
-    threads_t() {
-        _count = 0;
-    }
-
-    ~threads_t() {
-        stop_all();
-    }
-
-    int create(void* function_ptr(void *ptr), void* params) {
-        if (_count < MAX_THREADS) {
-            pthread_t thread;
-            if (pthread_create(&thread, NULL, function_ptr, params) == 0) {
-                _threads[_count++] = thread;
-            } else {
-                return 0;
-            }
-        }
-        return _count;
-    }
-
-    void wait_for(int ix) {
-        pthread_t thread = get(ix);
-        if (thread && ix < _count) {
-            pthread_join(thread, NULL);
-        }
-    }
-
-    void stop_all() {
-        for (int i = 0; i < _count; i++) {
-            this->stop(i);
-        }
-        _count = 0;
-    }
-
-    void stop(int ix) {
-        wait_for(ix);
-    }
-
-private:
-    int _count;
-    pthread_t _threads[MAX_THREADS];
-
-    inline pthread_t get(int index) {
-        return (index >= 0 && index < MAX_THREADS) ? _threads[index] : 0;
-    }
-
-};
 #include "uci_console.h"
 #include "timeman.h"
 
@@ -105,14 +49,24 @@ struct search_result_t {
     bool target_found = false;
 };
 
-class engine_t : public threads_t {
+// One immutable request snapshot plus atomics used by all workers of that request.
+// Jobs retain this session until completion; later requests get fresh controls.
+struct search_session_t {
+    game_t settings;
+    std::string root_fen;
+    std::vector<U64> position_history;
+    search_control_t control;
+};
+
+class engine_t {
 private:
     game_t _game;
     int _played_score = 0;  // the score of the last search whose move was played, not a ponder miss
     bool _played_scored = false;
     std::string _root_fen;
     std::vector<U64> _position_history;
-    search_control_t _control;
+    worker_pool_t _workers;
+    std::shared_ptr<search_session_t> _session = std::make_shared<search_session_t>();
     std::unique_ptr<search_t> _search;
     mutable std::mutex _result_mutex;
     search_result_t _result;
@@ -148,20 +102,22 @@ public:
     }
 
     void set_ponder(bool do_ponder) {
-        _control.ponder.store(do_ponder);
+        _session->control.ponder.store(do_ponder);
     }
 
+    void stop_all();
+
     void stop() {
-        _control.stop_requested.store(true);
+        _session->control.stop_requested.store(true);
         this->stop_all();
     }
 
     bool stop_requested() const {
-        return _control.stop_requested.load();
+        return _session->control.stop_requested.load();
     }
 
     bool is_pondering() const {
-        return _control.ponder.load();
+        return _session->control.ponder.load();
     }
 
     void set_position(std::string fen, const std::vector<U64> & position_history = {}) {

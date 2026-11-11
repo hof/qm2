@@ -137,7 +137,7 @@ enable/disable switches. Operational controls include hash size, time overhead,
 pondering, opening book, evaluation file, variant, tablebases, `TimeFactor`
 (percent of the clock budget, 100–200, default 100, capped at half the clock), `TimeMoves` and
 `DrawContempt` (default -10 cp) and `ShortDrawOffset` (cp, -50 to 50, default 0). Changes affecting
-score compatibility stop and join the worker and clear the TT; unchanged or rejected values keep the cache.
+score compatibility stop and wait for active search jobs and clear the TT; unchanged or rejected values keep the cache.
 
 Draws come in two kinds. Long draws (fifty moves, tablebase draws) keep the game going and score
 `DrawContempt`. Short draws (repetition, stalemate, dead material) end it at once and score
@@ -447,7 +447,14 @@ and preserve options and the position/history. `go mate` limits are unsupported:
 the whole request reports `info string Unsupported go limit: mate`, including
 when the limit follows `searchmoves`. Rejected requests preserve the previous
 search settings and do not start a replacement search. As with other `go` and
-`setoption` commands, an active search is stopped and joined first.
+`setoption` commands, an active search is stopped and awaited first.
+
+Search jobs run on a persistent worker pool. Each request owns a fresh session
+containing its captured position, repetition history, limits and atomic stop/ponder
+controls. Completion releases job captures before the owner can replace search
+state. Stop waits for active jobs; shutdown then joins the idle workers. The
+pool can grow transactionally and retain existing workers across resizes, but
+playing search currently dispatches one worker for both standard and royal losers.
 
 UCI output serializes complete lines from the command and search threads, so
 readiness responses and search reports cannot merge into a malformed line.
@@ -455,7 +462,7 @@ Protocol logging is buffered and synchronized. Output reaches stdout before
 logging; `bestmove` then flushes the log, and a new game resets it after stopping
 the prior worker. Per-line file opens/flushes are avoided. Timed UCI searches
 start their monotonic budget when `go` enters the command handler, before
-logging, parsing, prior-worker joining, allocation, and search setup.
+logging, parsing, waiting for the prior search job, allocation, and search setup.
 The shared FICS/Lichess move chooser gives the first three played searches after a book move
 1.5×, 1.25× and 1.125× the normal time target, once per game. Later book returns do not
 restart the allowance. The hard cap stays unchanged; a larger `TimeFactor` takes precedence

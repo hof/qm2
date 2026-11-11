@@ -1,3 +1,4 @@
+#include <barrier>
 #include "engine.h"
 #include <thread>
 
@@ -168,12 +169,70 @@ bool test_result_publication() {
     return check(coherent, "concurrent readers must never see mixed search results");
 }
 
+bool test_persistent_pool() {
+    worker_pool_t pool;
+    pool.resize(2);
+    std::thread::id first[2], second[2];
+    std::barrier both(2);
+    auto capture = std::make_shared<int>(42);
+    std::weak_ptr<int> lifetime = capture;
+    for (size_t i = 0; i < 2; ++i) {
+        pool.run(i, [&, i, capture] {
+            first[i] = std::this_thread::get_id();
+            both.arrive_and_wait();
+        });
+    }
+    capture.reset();
+    pool.wait();
+    bool success = check(lifetime.expired(), "waiting must release job/session captures");
+    for (size_t i = 0; i < 2; ++i) {
+        pool.run(i, [&, i] { second[i] = std::this_thread::get_id(); });
+    }
+    pool.wait();
+    success &= check(first[0] != first[1] && first[0] == second[0] && first[1] == second[1],
+        "pool jobs must run concurrently and reuse their workers");
+    for (size_t invalid : {size_t(0), worker_pool_t::max_workers + 1}) {
+        bool rejected = false;
+        try {
+            pool.resize(invalid);
+        } catch (const std::invalid_argument &) {
+            rejected = true;
+        }
+        success &= check(rejected && pool.size() == 2, "invalid resize must preserve the pool");
+    }
+    pool.resize(3);
+    pool.resize(1);
+    pool.run(0, [&] { second[0] = std::this_thread::get_id(); });
+    pool.wait();
+    success &= check(second[0] == first[0], "resize must preserve retained workers");
+    pool.run(0, [] { throw std::runtime_error("worker failure"); });
+    bool reported = false;
+    try {
+        pool.wait();
+    } catch (const std::runtime_error &) {
+        reported = true;
+    }
+    bool recovered = false;
+    pool.run(0, [&] { recovered = true; });
+    pool.wait();
+    success &= check(reported && recovered, "failed jobs must be reported without killing the worker");
+    bool finished = false;
+    {
+        worker_pool_t closing;
+        closing.resize(1);
+        closing.run(0, [&] { finished = true; });
+    }
+    success &= check(finished, "pool destruction must finish and join pending jobs");
+    return success;
+}
+
 }
 
 int main() {
     magic::init();
     uci::silent(true);
-    bool success = test_configuration_snapshot();
+    bool success = test_persistent_pool();
+    success &= test_configuration_snapshot();
     success &= test_elapsed_timer();
     success &= test_independent_cancellation();
     success &= test_result_snapshot();

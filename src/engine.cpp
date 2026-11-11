@@ -78,14 +78,22 @@ namespace engine {
 /**
  * Construct engine thread
  */
-engine_t::engine_t() : threads_t() {
+engine_t::engine_t() {
     _game.clear();
+}
+
+void engine_t::stop_all() {
+    try {
+        _workers.wait();
+    } catch (const std::exception & error) {
+        uci::out(std::string("info string ERROR: search worker failed: ") + error.what());
+    } catch (...) {
+        uci::out("info string ERROR: search worker failed");
+    }
 }
 
 bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
     stop();
-    _control.stop_requested.store(false);
-    _control.ponder.store(_game.ponder);
 
     // Capture the position, limits, and search options before starting the worker. The score of our
     // last played move sets the expected game length; a new game has none.
@@ -95,19 +103,30 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
         _game.last_scored = _played_scored;
     }
     try {
+        auto session = std::make_shared<search_session_t>();
+        session->settings = _game;
+        session->root_fen = _root_fen;
+        session->position_history = _position_history;
+        session->control.ponder.store(session->settings.ponder);
         std::unique_ptr<search_t> next_search;
         if (options::get_value("Wild") == 17) {
-            next_search.reset(new w17_search_t(_root_fen.c_str(), &_game, &_control, _position_history));
+            next_search.reset(new w17_search_t(session->root_fen.c_str(), &session->settings,
+                &session->control, session->position_history));
         } else {
-            next_search.reset(new search_t(_root_fen.c_str(), &_game, &_control, _position_history));
+            next_search.reset(new search_t(session->root_fen.c_str(), &session->settings,
+                &session->control, session->position_history));
             if (_search && _search->wild == 0) {
 
-                // stop() joined the old worker before ownership transfer.
+                // stop() completed the old job before ownership transfer.
                 next_search->take_history(*_search);
             }
         }
+        if (_workers.size() == 0) {
+            _workers.resize(1);
+        }
         _search = std::move(next_search);
-    } catch (const std::runtime_error & error) {
+        _session = std::move(session);
+    } catch (const std::exception & error) {
         uci::out(std::string("info string ERROR: ") + error.what());
         return false;
     }
@@ -119,9 +138,13 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
         std::lock_guard<std::mutex> lock(_result_mutex);
         _result = search_result_t();
     }
-    if (!create(function, this)) {
-        uci::out("info string ERROR: could not create search worker");
-        _control.stop_requested.store(true);
+    try {
+        _workers.run(0, [this, function, session = _session] {
+            function(this);
+        });
+    } catch (const std::exception & error) {
+        uci::out(std::string("info string ERROR: could not dispatch search worker: ") + error.what());
+        _session->control.stop_requested.store(true);
         _search.reset();
         return false;
     }
@@ -168,7 +191,7 @@ void engine_t::copy_results(search_t * s) {
     _result = result;
 
     // A ponder search stopped before its ponderhit searched a move the opponent did not play.
-    if (!(s->game.ponder && _control.ponder.load())) {
+    if (!(s->game.ponder && _session->control.ponder.load())) {
         _played_scored = result.move.piece && result.source != result_source_t::book;
         _played_score = result.score;
     }
@@ -191,7 +214,6 @@ void * engine_t::_think(void * engine_p) {
     // Publish results; the owner releases search state after joining the worker.
     engine->copy_results(s);
     uci::send_bestmove(s->stack->best_move, s->ponder_move);
-    pthread_exit(NULL);
     return NULL;
 }
 
@@ -239,6 +261,5 @@ void * engine_t::_book_calc(void * engine_p) {
 
     // Publish results; the owner releases search state after joining the worker.
     engine->copy_results(s);
-    pthread_exit(NULL);
     return NULL;
 }
