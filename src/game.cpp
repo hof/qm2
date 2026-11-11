@@ -27,6 +27,7 @@ namespace options {
     option_t PARAM[length+1] = {
         { "", INT, 0, ""}, //dummy value
         { "Revision", STRING, 1, "type string default " MAXIMA_REVISION },
+        { "Threads", INT, 1, "type spin default 1 min 1 max 256" },
         { "Hash", INT, 256, "type spin default 256 min 0 max 1024"},
         { "Move Overhead", INT, 50, "type spin default 50 min 0 max 5000" },
         { "Server Lag", INT, 0, "type spin default 0 min 0 max 5000" },

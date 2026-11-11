@@ -225,6 +225,12 @@ int search_t::neural_static_score(const tt_hit_t * tt, int * deferred_raw_eval) 
 void search_t::init(const char * fen, const game_t * g, const search_control_t * control,
         const std::vector<U64> & position_history, int variant) {
     const auto started = std::chrono::steady_clock::now();
+    team = nullptr;
+    worker_id = 0;
+    node_tickets = 0;
+    completed_search = {};
+    start_helpers = {};
+    finish_helpers = {};
     brd.init(fen);
     game = g ? *g : game_t();
     _control = control;
@@ -383,7 +389,20 @@ void search_t::go() {
     } else if (init_root_moves() > 0) {
         solved = tablebase_lookup();
         if (!solved) {
-            iterative_deepening();
+            if (start_helpers) {
+                start_helpers();
+            }
+            try {
+                iterative_deepening();
+            } catch (...) {
+                if (finish_helpers) {
+                    finish_helpers();
+                }
+                throw;
+            }
+            if (finish_helpers) {
+                finish_helpers();
+            }
         }
 
         // A tiny node budget or early stop can interrupt the first root move.
@@ -417,8 +436,8 @@ void search_t::go() {
         + " min " + std::to_string(game.tm.reserved_min())
         + " max " + std::to_string(game.tm.reserved_max())
         + " horizon " + std::to_string(game.tm.horizon()));
-    uci::send_pv(result_score, result_depth, sel_depth, nodes, game.tm.elapsed(),
-        pv_to_string().c_str(), result_flag, tablebase_hits);
+    uci::send_pv(result_score, result_depth, sel_depth, reported_nodes(), game.tm.elapsed(),
+        pv_to_string().c_str(), result_flag, reported_tablebase_hits());
 
     // Work limits may finish a search, but only protocol control releases its result.
     // Do not use abort(): it includes exhausted node/time budgets and stop_all.
@@ -570,9 +589,22 @@ void search_t::iterative_deepening() {
         result_score = score;
         result_flag = score::EXACT;
         result_source = result_source_t::complete;
-        uci::send_pv(result_score, depth, sel_depth, nodes, game.tm.elapsed(),
-            pv_to_string().c_str(), result_flag, tablebase_hits);
+        if (team) {
+            completed_search.score = score;
+            completed_search.depth = depth;
+            completed_search.sel_depth = sel_depth;
+            completed_search.pv_count = stack->pv_count;
+            std::copy_n(stack->pv_moves, stack->pv_count, completed_search.pv.begin());
+        }
+        if (!is_helper()) {
+            uci::send_pv(result_score, depth, sel_depth, reported_nodes(), game.tm.elapsed(),
+                pv_to_string().c_str(), result_flag, reported_tablebase_hits());
+        }
         store_pv();
+        if (is_helper()) {
+            last_score = score;
+            continue;
+        }
         if (timed_search) {
             /*
              * A swing that keeps the search going: the further from level, the more the score moves anyway.
@@ -635,6 +667,7 @@ void search_t::iterative_deepening() {
             // A drawn score is settled: the next iteration may run to the minimum, not the maximum.
             drawn = is_draw_score(score) && !score_jump && depth >= easy_depth && min_time < max_time;
             game.tm.set_max(drawn ? min_time : max_time);
+            publish_deadline();
         } else if (depth >= 15 && game.target_score && score >= game.target_score &&
                 game.target_move.piece && game.target_move.equals(&stack->best_move)) {
             break;
@@ -709,15 +742,26 @@ int search_t::aspiration(int depth, int last_score) {
     }
 }
 
-// Checks every stop condition and rearms the poll interval. A node budget
-// shortens the interval: each counted node is followed by an abort check, so
-// the search still stops at the first check that reaches the budget.
+/* Checks cancellation and deadlines at the polling interval. Single-worker
+ * node budgets shorten it; SMP admits counted nodes using reserved tickets.
+ * Only the main worker applies soft time-management decisions. */
 bool search_t::poll() {
     bool result = false;
-    if (game.max_nodes > 0 && nodes >= game.max_nodes) {
+    if (team) {
+        publish_counters();
+        if (team->stopped.load(std::memory_order_relaxed)) {
+            stop_all = true;
+        }
+    }
+    if (!team && game.max_nodes > 0 && nodes >= game.max_nodes) {
         result = true;
     } else if (stop_all || (_control && _control->stop_requested.load())) {
         result = true;
+    } else if (is_helper()) {
+        next_poll = 5000;
+        const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        result = !pondering() && now >= team->deadline_ns.load(std::memory_order_relaxed);
     } else {
 
         /*
@@ -728,12 +772,95 @@ bool search_t::poll() {
         const bool ponder = pondering();
         result = ((ponder_stop && !ponder) || game.tm.handle_abort(ponder, next_poll))
             && (root_stack->best_move.piece > 0 || wild == 17);
-        if (game.max_nodes > 0) {
+        if (!team && game.max_nodes > 0) {
             next_poll = int(std::min<U64>(next_poll, game.max_nodes - nodes));
         }
     }
     stop_all = result;
     return result;
+}
+
+void search_t::publish_counters() {
+    if (team) {
+        team->counters[worker_id].nodes.store(nodes, std::memory_order_relaxed);
+        team->counters[worker_id].tablebase_hits.store(tablebase_hits, std::memory_order_relaxed);
+    }
+}
+
+U64 search_t::reported_nodes() {
+    if (!team) {
+        return nodes;
+    }
+    publish_counters();
+    U64 total = 0;
+    for (size_t i = 0; i < team->count; ++i) {
+        total += team->counters[i].nodes.load(std::memory_order_relaxed);
+    }
+    return total;
+}
+
+U64 search_t::reported_tablebase_hits() {
+    if (!team) {
+        return tablebase_hits;
+    }
+    publish_counters();
+    U64 total = 0;
+    for (size_t i = 0; i < team->count; ++i) {
+        total += team->counters[i].tablebase_hits.load(std::memory_order_relaxed);
+    }
+    return total;
+}
+
+void search_t::publish_deadline() {
+    if (team && !is_helper() && (game.clock_limit || game.movetime_limit
+            || game.white_time || game.black_time || game.max_time_per_move)) {
+        team->deadline_ns.store(game.tm.deadline_ns(), std::memory_order_relaxed);
+    }
+}
+
+/* Reserving small batches avoids a shared atomic operation on every node.
+ * Reservations never exceed the request budget. On exhaustion the team may
+ * leave unused tickets, but never reports more counted nodes than requested. */
+void search_t::count_node() {
+    if (team && team->node_limit) {
+        if (!node_tickets) {
+            U64 available = team->remaining.load(std::memory_order_relaxed);
+            while (available) {
+                const U64 batch = std::min<U64>(64, available);
+                if (team->remaining.compare_exchange_weak(available, available - batch,
+                        std::memory_order_relaxed)) {
+                    node_tickets = batch;
+                    break;
+                }
+            }
+            if (!node_tickets) {
+                stop_all = true;
+                team->stopped.store(true, std::memory_order_relaxed);
+                return;
+            }
+        }
+        --node_tickets;
+    }
+    ++nodes;
+    if (team && (nodes & 1023) == 0) {
+        publish_counters();
+    }
+}
+
+void search_t::restore_completed(const completed_search_t & result) {
+    if (!result.depth || !result.pv_count) {
+        return;
+    }
+    std::copy_n(result.pv.begin(), result.pv_count, stack->pv_moves);
+    stack->pv_count = result.pv_count;
+    stack->best_move = result.pv[0];
+    ponder_move = result.pv_count > 1 ? result.pv[1] : move_t{};
+    result_score = result.score;
+    result_depth = completed_depth = result.depth;
+    attempted_depth = std::max(attempted_depth, result.depth);
+    sel_depth = result.sel_depth;
+    result_flag = score::EXACT;
+    result_source = result_source_t::complete;
 }
 
 // Makes a null move.
@@ -765,9 +892,10 @@ void search_t::backward() {
 // Makes a move, one ply deeper.
 void search_t::forward(move_t * move, bool gives_check) {
 
-    // Count one node per move made; null moves and re-searches of an
-    // already made move are not new nodes.
-    ++nodes;
+    /* Count admitted moves, excluding null moves and re-searches. If the team
+     * budget is exhausted, count_node marks this worker stopped. The transition
+     * still pairs with backward(), but the child aborts before doing search work. */
+    count_node();
     (stack + 1)->multiple_extensions = stack->multiple_extensions;
     stack->current_move.set(move);
     (stack + 1)->repetition_start = stack->repetition_start;
@@ -1371,8 +1499,10 @@ int search_t::pvs_root(int alpha, int beta, int depth) {
             if (exact || !move->equals(&stack->pv_moves[0])) {
                 update_pv(&rmove->move);
             }
-            uci::send_pv(best, report_depth, sel_depth, nodes, game.tm.elapsed(),
-                    pv_to_string().c_str(), result_flag, tablebase_hits);
+            if (!is_helper()) {
+                uci::send_pv(best, report_depth, sel_depth, reported_nodes(), game.tm.elapsed(),
+                    pv_to_string().c_str(), result_flag, reported_tablebase_hits());
+            }
 
             // A fail-high bounds the root immediately. A fail-low requires
             // searching every alternative before widening the root window.

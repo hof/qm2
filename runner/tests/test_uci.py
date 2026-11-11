@@ -328,6 +328,30 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(hit.info['_ponder_hit'])
                 self.assertEqual(log.read_text().splitlines().count('ponderhit'), 1)
 
+    async def test_book_exit_progression_preserves_ponder_hits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script, log = Path(directory) / 'engine.py', Path(directory) / 'commands'
+            script.write_text(ponder_engine.replace(
+                "print('option name Ponder type check default false')",
+                "print('option name Ponder type check default false')\n"
+                "        print('option name BookExitMove type spin default 0 min 0 max 3')"))
+            async with open_engine([sys.executable, str(script), str(log)], directory, 2) as session:
+                board, game = chess.Board(), object()
+                limit = chess.engine.Limit(white_clock=60, black_clock=60)
+                result = await session.play(board, limit, game=game, options={'BookExitMove': 1})
+                for allowance in (2, 3, 0):
+                    board.push(result.move)
+                    board.push(result.ponder)
+                    result = await session.play(board, limit, game=game,
+                                                options={'BookExitMove': allowance})
+                    self.assertTrue(result.info['_ponder_hit'])
+                self.assertEqual(log.read_text().splitlines().count('ponderhit'), 3)
+                board.push(result.move)
+                board.push(next(move for move in board.legal_moves if move != result.ponder))
+                miss = await session.play(board, limit, game=game, options={'BookExitMove': 0})
+                self.assertFalse(miss.info['_ponder_hit'])
+                self.assertEqual(session.protocol.config['BookExitMove'], 0)
+
     async def test_completed_ponder_keeps_score_and_miss_discards_it(self):
         with tempfile.TemporaryDirectory() as directory:
             script, log = Path(directory) / 'engine.py', Path(directory) / 'commands'

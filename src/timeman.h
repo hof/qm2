@@ -81,6 +81,10 @@ public:
         max = start + std::chrono::milliseconds(ms);
     }
 
+    int64_t deadline_ns() const {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(max.time_since_epoch()).count();
+    }
+
     bool time_is_up() const {
         return std::chrono::steady_clock::now() >= max;
     }

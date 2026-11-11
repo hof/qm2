@@ -453,8 +453,31 @@ Search jobs run on a persistent worker pool. Each request owns a fresh session
 containing its captured position, repetition history, limits and atomic stop/ponder
 controls. Completion releases job captures before the owner can replace search
 state. Stop waits for active jobs; shutdown then joins the idle workers. The
-pool can grow transactionally and retain existing workers across resizes, but
-playing search currently dispatches one worker for both standard and royal losers.
+pool grows transactionally and retains existing workers across resizes. UCI
+`Threads` (1–256, default 1) selects the standard search worker count; the main
+worker is included. Royal losers and book calculation currently use one worker.
+Very small node limits use fewer workers to avoid spending their budget on setup.
+`info string search_workers N` reports the request's effective search capacity.
+
+Standard search uses Lazy SMP: independent iterative deepening, boards, stacks,
+NNUE accumulators and histories cooperate through the shared TT. Hash is one
+process-wide allocation, not one copy per worker. Only the main worker applies
+soft time decisions and emits UCI reports. Helpers obey its shared hard deadline,
+external stop/ponder state and an internal team-stop flag. Internal completion
+never releases a ponder/infinite result before the protocol permits it.
+
+Node limits cover the whole team. Workers reserve at most 64 node tickets per
+batch; exhaustion can leave unused tickets but never exceeds the requested
+count. Periodic atomic counters supply aggregate NPS/TB reports; final counts
+include every worker after helpers are idle. Null moves and re-searches retain
+their existing counting convention.
+
+Final SMP selection votes by root move from completed exact iterations, weighted
+by depth and score relative to the weakest eligible result. Proven wins override
+ordinary votes; all decisive losses prefer longest survival. Ties use depth,
+score and worker index. Unfinished iterations never vote. Without a completed
+iteration, the main search retains its partial-result/legal-fallback rules. The
+selected move, PV and score publish together, followed by one `bestmove`.
 
 UCI output serializes complete lines from the command and search threads, so
 readiness responses and search reports cannot merge into a malformed line.
@@ -2122,6 +2145,10 @@ and plays the move. Game tokens,
 position history and option changes prevent reuse across incompatible searches.
 The runner parses configured UCI values to their advertised types before storing
 them, so text settings such as `OwnBook=false` or `Hash=256` preserve ponder reuse.
+On a matching prediction, `TimeFactor`, `Server Lag` and `BookExitMove` retain
+the active search's values so timing updates do not cancel the hit. A fresh
+search applies the currently requested values; book-exit stages still count
+actual returned searched moves.
 The ordinary allocation and casual thinking ceiling apply after the actual reply.
 A completed ponder search retains its evaluation and PV for an instant hit;
 missed predictions discard those reports. Resignation still requires a score

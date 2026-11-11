@@ -34,12 +34,31 @@
 #include "game.h"
 #include <random>
 #include <atomic>
+#include <functional>
+#include <limits>
 
 // The owner keeps this alive until its search worker has been joined.
 struct search_control_t {
     std::atomic<bool> stop_requested{false};
     std::atomic<bool> ponder{false};
 };
+// Shared limits are immutable; concurrently accessed mutable state is atomic.
+struct search_team_t {
+    struct alignas(64) counters_t {
+        std::atomic<U64> nodes{0};
+        std::atomic<U64> tablebase_hits{0};
+    };
+    const size_t count;
+    const U64 node_limit;
+    std::unique_ptr<counters_t[]> counters;
+    std::atomic<U64> remaining;
+    std::atomic<bool> stopped{false};
+    std::atomic<int64_t> deadline_ns{std::numeric_limits<int64_t>::max()};
+
+    search_team_t(size_t workers, U64 limit) : count(workers), node_limit(limit),
+        counters(std::make_unique<counters_t[]>(workers)), remaining(limit) {}
+};
+
 #include "nnue.h"
 #include <array>
 #include <algorithm>
@@ -274,6 +293,15 @@ struct search_stack_t {
 
 enum class result_source_t { none, partial, complete, fallback, book, terminal, tablebase };
 
+// Worker-owned exact iteration; the coordinator reads it only after completion.
+struct completed_search_t {
+    std::array<move_t, MAX_PLY + 1> pv{};
+    int pv_count = 0;
+    int score = 0;
+    int depth = 0;
+    int sel_depth = 0;
+};
+
 class search_t {
 private:
     const search_control_t * _control;
@@ -309,6 +337,19 @@ public:
     root_t root;
     search_stack_t * stack;
     search_stack_t * root_stack;
+    search_team_t * team = nullptr;
+    size_t worker_id = 0;
+    U64 node_tickets = 0;
+    completed_search_t completed_search;
+    std::function<void()> start_helpers;
+    std::function<void()> finish_helpers;
+    bool is_helper() const { return worker_id != 0; }
+    void publish_counters();
+    U64 reported_nodes();
+    U64 reported_tablebase_hits();
+    void count_node();
+    void publish_deadline();
+    void restore_completed(const completed_search_t & result);
     U64 nodes;
     U64 tablebase_hits;
     int tablebase_limit;

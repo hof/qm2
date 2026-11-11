@@ -490,6 +490,10 @@ namespace uci {
                                 return true;
                             }
                         }
+                        if (name == "Threads" && candidate != opt->value
+                                && !engine::instance()->set_threads(candidate)) {
+                            return true;
+                        }
                         if (name == "EvalFile") {
                             std::string error;
                             const std::string path = value == "<empty>" ? "" : value;

@@ -242,7 +242,7 @@ class engine_session:
         if self.pondering and board.fen() == self.ponder_fen:
             # python-chess drops a ponder search when any option changes: the hit is worth more.
             # Keep the values it pondered with; a dropped option would fall back to its default.
-            for name in ("TimeFactor", "Server Lag"):
+            for name in ("TimeFactor", "Server Lag", "BookExitMove"):
                 if name in settings and name in self.protocol.config:
                     settings[name] = self.protocol.config[name]
 

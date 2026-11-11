@@ -40,6 +40,7 @@ struct search_result_t {
     move_t move{};
     int score = 0;
     U64 nodes = 0;
+    std::vector<U64> worker_nodes; // Final contributions; workers retain local counters.
     int score_flag = 0;
     int depth = 0;
     int completed_depth = 0;
@@ -56,6 +57,7 @@ struct search_session_t {
     std::string root_fen;
     std::vector<U64> position_history;
     search_control_t control;
+    std::unique_ptr<search_team_t> team;
 };
 
 class engine_t {
@@ -68,6 +70,9 @@ private:
     worker_pool_t _workers;
     std::shared_ptr<search_session_t> _session = std::make_shared<search_session_t>();
     std::unique_ptr<search_t> _search;
+    std::vector<std::unique_ptr<search_t>> _helpers;
+    void start_helpers();
+    void finish_helpers();
     mutable std::mutex _result_mutex;
     search_result_t _result;
 
@@ -106,6 +111,7 @@ public:
     }
 
     void stop_all();
+    bool set_threads(int count);
 
     void stop() {
         _session->control.stop_requested.store(true);
@@ -148,6 +154,9 @@ public:
     }
 
 };
+
+// Read only after every worker has completed; incomplete iterations never vote.
+size_t select_search_worker(std::span<search_t * const> workers);
 
 namespace engine {
     void stop();

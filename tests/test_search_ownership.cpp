@@ -226,6 +226,62 @@ bool test_persistent_pool() {
     return success;
 }
 
+bool test_smp_search() {
+    auto * threads = options::get_option("Threads");
+    const int previous = threads->value;
+    auto * own_book = options::get_option("OwnBook");
+    const int previous_book = own_book->value;
+    own_book->value = 0;
+    threads->value = 2;
+    engine_t engine;
+    engine.new_game("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    engine.settings()->max_nodes = 100000;
+    bool success = check(engine.think(), "SMP search must start");
+    engine.stop_all();
+    auto result = engine.get_result();
+    success &= check(result.worker_nodes.size() == 2 && result.worker_nodes[0] > 0
+        && result.worker_nodes[1] > 0 && result.nodes <= 100000
+        && result.nodes == result.worker_nodes[0] + result.worker_nodes[1],
+        "both SMP workers must contribute within one aggregate node budget");
+    success &= check(result.move.piece && result.completed_depth > 0,
+        "SMP must publish a searched legal-root result");
+    success &= check(!engine.set_threads(0) && !engine.set_threads(257),
+        "invalid worker counts must be rejected");
+    threads->value = previous;
+    own_book->value = previous_book;
+    return success;
+}
+
+bool test_worker_voting() {
+    auto first = std::make_unique<search_t>(fen);
+    auto second = std::make_unique<search_t>(fen);
+    auto third = std::make_unique<search_t>(fen);
+    search_t * workers[] = {first.get(), second.get(), third.get()};
+    auto result = [&](search_t & search, const char * move, int value, int depth) {
+        auto & complete = search.completed_search;
+        complete.pv[0].set(&search.brd, move);
+        complete.pv_count = 1;
+        complete.score = value;
+        complete.depth = depth;
+    };
+    result(*first, "d1d5", 10, 10);
+    result(*second, "d1d2", 12, 12);
+    result(*third, "d1d5", 11, 12);
+    bool success = check(select_search_worker(workers) == 2,
+        "votes for the same move must combine, with deterministic depth/score ties");
+    result(*second, "d1d2", score::MATE - 3, 4);
+    success &= check(select_search_worker(workers) == 1, "a completed proven win must beat ordinary votes");
+    third->completed_search.depth = 0;
+    third->result_score = score::MATE - 1;
+    success &= check(select_search_worker(workers) == 1, "an incomplete mate must never vote");
+    result(*first, "d1d5", -score::MATE + 5, 10);
+    result(*second, "d1d2", -score::MATE + 9, 9);
+    success &= check(select_search_worker(workers) == 1, "all proven losses must prefer longest survival");
+    result(*first, "d1d5", -1000, 5);
+    success &= check(select_search_worker(workers) == 0, "an ordinary result must beat a proven loss");
+    return success;
+}
+
 }
 
 int main() {
@@ -238,5 +294,7 @@ int main() {
     success &= test_result_snapshot();
     success &= test_worker_snapshot();
     success &= test_result_publication();
+    success &= test_worker_voting();
+    success &= test_smp_search();
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

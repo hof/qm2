@@ -1,4 +1,5 @@
 import contextlib
+import os
 from pathlib import Path
 import shutil
 import signal
@@ -26,6 +27,9 @@ class engine_session:
         self.transcript = []
         self.reader = threading.Thread(target=self.read_output, daemon=True)
         self.reader.start()
+        # An explicit override exercises the same lifecycle contracts with SMP.
+        if os.environ.get("MAXIMA_TEST_THREADS"):
+            self.send("setoption name Threads value " + os.environ["MAXIMA_TEST_THREADS"])
         # Default network setup belongs to readiness, before any chess clock.
         self.send("isready")
         self.wait_for("readyok")
@@ -65,6 +69,7 @@ class engine_session:
         line = self.wait_for("bestmove ")
         if line.split()[1] == "0000":
             raise AssertionError("A searched starting position must return a move")
+        return line
 
     def wait_for_exit(self):
         result = self.process.wait(timeout=timeout_seconds)
@@ -88,6 +93,40 @@ def running_engine():
 
 
 class search_lifecycle_tests(unittest.TestCase):
+    def test_smp_resize_limits_and_variants(self):
+        with running_engine() as engine:
+            engine.send("setoption name OwnBook value false")
+            for workers in (2, 4, 1, 2):
+                start = len(engine.transcript)
+                engine.send(f"setoption name Threads value {workers}")
+                engine.send("position startpos")
+                engine.send("go nodes 10000 searchmoves e2e4 d2d4")
+                best = engine.wait_for_bestmove()
+                self.assertIn(best.split()[1], ("e2e4", "d2d4"))
+                engine.send("stop")
+                engine.send("isready")
+                engine.wait_for("readyok")
+                lines = engine.transcript[start:]
+                self.assertEqual(sum(line.startswith("bestmove ") for line in lines), 1, lines)
+                self.assertIn(f"info string search_workers {workers}", lines)
+                nodes = [int(line.split()[line.split().index("nodes") + 1])
+                         for line in lines if line.startswith("info depth ")]
+                self.assertTrue(nodes)
+                self.assertEqual(nodes, sorted(nodes), lines)
+                self.assertLessEqual(max(nodes), 10000, lines)
+            engine.send("setoption name Wild value losers")
+            engine.send("position startpos")
+            start = len(engine.transcript)
+            engine.send("go nodes 1000")
+            engine.wait_for_bestmove()
+            self.assertIn("info string search_workers 1", engine.transcript[start:])
+            engine.send("setoption name Wild value standard")
+            engine.send("position startpos")
+            start = len(engine.transcript)
+            engine.send("go depth 4 searchmoves g1f3")
+            self.assertEqual(engine.wait_for_bestmove().split()[1], "g1f3")
+            self.assertIn("info string search_workers 2", engine.transcript[start:])
+
     def test_search_result_provenance(self):
         for variant in ("standard", "losers"):
             for limit in (1, 2, 30, 1000):

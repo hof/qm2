@@ -23,6 +23,8 @@
 #include "w17/w17_search.h"
 #include "w17/w17_eval.h"
 #include <stdexcept>
+#include <unordered_map>
+#include <tuple>
 
 using namespace std;
 
@@ -82,6 +84,17 @@ engine_t::engine_t() {
     _game.clear();
 }
 
+bool engine_t::set_threads(int count) {
+    stop();
+    try {
+        _workers.resize(count);
+        return true;
+    } catch (const std::exception & error) {
+        uci::out(std::string("info string ERROR: could not resize search workers: ") + error.what());
+        return false;
+    }
+}
+
 void engine_t::stop_all() {
     try {
         _workers.wait();
@@ -95,8 +108,9 @@ void engine_t::stop_all() {
 bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
     stop();
 
-    // Capture the position, limits, and search options before starting the worker. The score of our
-    // last played move sets the expected game length; a new game has none.
+    /* Capture the request before any worker starts. The previous played score
+     * informs time allocation; every worker receives the same game history.
+     * New search state is prepared while all old jobs are idle. */
     {
         std::lock_guard<std::mutex> lock(_result_mutex);
         _game.last_score = _played_scored ? _played_score : 0;
@@ -108,23 +122,45 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
         session->root_fen = _root_fen;
         session->position_history = _position_history;
         session->control.ponder.store(session->settings.ponder);
+        const int variant = options::get_value("Wild");
+        size_t count = calculate_book || variant == 17 ? 1 : options::get_value("Threads");
+        if (session->settings.max_nodes) {
+            count = std::min<U64>(count, std::max<U64>(1, session->settings.max_nodes / 64));
+        }
+        std::vector<std::unique_ptr<search_t>> helpers;
         std::unique_ptr<search_t> next_search;
-        if (options::get_value("Wild") == 17) {
+        if (variant == 17) {
             next_search.reset(new w17_search_t(session->root_fen.c_str(), &session->settings,
                 &session->control, session->position_history));
         } else {
             next_search.reset(new search_t(session->root_fen.c_str(), &session->settings,
                 &session->control, session->position_history));
-            if (_search && _search->wild == 0) {
-
-                // stop() completed the old job before ownership transfer.
-                next_search->take_history(*_search);
+            for (size_t i = 1; i < count; ++i) {
+                helpers.push_back(std::make_unique<search_t>(session->root_fen.c_str(),
+                    &session->settings, &session->control, session->position_history));
             }
         }
-        if (_workers.size() == 0) {
-            _workers.resize(1);
+        if (_workers.size() < count) {
+            _workers.resize(count);
+        }
+        if (variant == 0 && _search && _search->wild == 0) {
+            next_search->take_history(*_search);
+            for (size_t i = 0; i < std::min(helpers.size(), _helpers.size()); ++i) {
+                helpers[i]->take_history(*_helpers[i]);
+            }
+        }
+        if (count > 1) {
+            session->team = std::make_unique<search_team_t>(count, session->settings.max_nodes);
+            next_search->team = session->team.get();
+            for (size_t i = 0; i < helpers.size(); ++i) {
+                helpers[i]->team = session->team.get();
+                helpers[i]->worker_id = i + 1;
+            }
+            next_search->start_helpers = [this] { start_helpers(); };
+            next_search->finish_helpers = [this] { finish_helpers(); };
         }
         _search = std::move(next_search);
+        _helpers = std::move(helpers);
         _session = std::move(session);
     } catch (const std::exception & error) {
         uci::out(std::string("info string ERROR: ") + error.what());
@@ -151,6 +187,109 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
     return true;
 }
 
+void engine_t::start_helpers() {
+    _search->publish_deadline();
+    size_t launched = 0;
+    try {
+        for (size_t i = 0; i < _helpers.size(); ++i) {
+            auto * helper = _helpers[i].get();
+            _workers.run(i + 1, [helper, session = _session] {
+                try {
+                    if (helper->init_root_moves() > 0) {
+                        helper->iterative_deepening();
+                    }
+                } catch (...) {
+                    session->team->stopped.store(true, std::memory_order_relaxed);
+                    helper->publish_counters();
+                    throw;
+                }
+                helper->publish_counters();
+            });
+            ++launched;
+        }
+    } catch (...) {
+        _session->team->stopped.store(true, std::memory_order_relaxed);
+        for (size_t i = 1; i <= launched; ++i) {
+            try {
+                _workers.wait_for(i);
+            } catch (...) {
+                // Preserve the dispatch failure after every launched job is idle.
+            }
+        }
+        throw;
+    }
+}
+
+/* Completed exact iterations vote together by root move, weighted by depth
+ * and score relative to the weakest eligible result. Proven wins take priority;
+ * when every result loses decisively, prefer the longest survival. Partial
+ * aspiration bounds and unfinished iterations never enter the vote. */
+size_t select_search_worker(std::span<search_t * const> workers) {
+    int minimum = score::INF;
+    for (auto * worker : workers) {
+        if (worker->completed_search.depth && worker->completed_search.pv_count) {
+            minimum = std::min(minimum, worker->completed_search.score);
+        }
+    }
+    std::unordered_map<int, int64_t> votes;
+    for (auto * worker : workers) {
+        const auto & result = worker->completed_search;
+        if (result.depth && result.pv_count) {
+            votes[result.pv[0].to_compact()] += int64_t(result.score - minimum + 9) * result.depth;
+        }
+    }
+    size_t selected = 0;
+    bool eligible = false;
+    const int decisive = score::TABLEBASE - MAX_PLY;
+    for (size_t i = 0; i < workers.size(); ++i) {
+        const auto & candidate = workers[i]->completed_search;
+        if (!candidate.depth || !candidate.pv_count) {
+            continue;
+        }
+        const auto & best = workers[selected]->completed_search;
+        bool choose = !eligible;
+        if (eligible) {
+            if (candidate.score >= decisive || best.score >= decisive) {
+                choose = candidate.score > best.score;
+            } else if (candidate.score <= -decisive || best.score <= -decisive) {
+                choose = candidate.score > best.score;
+            } else {
+                choose = std::tuple(votes[candidate.pv[0].to_compact()], candidate.depth, candidate.score)
+                    > std::tuple(votes[best.pv[0].to_compact()], best.depth, best.score);
+            }
+        }
+        if (choose) {
+            selected = i;
+            eligible = true;
+        }
+    }
+    return selected;
+}
+
+/* Internal search completion stops helpers without releasing a ponder/infinite
+ * result. External protocol control remains separate. Wait for every helper
+ * before reading its completed snapshot or replacing any search workspace. */
+void engine_t::finish_helpers() {
+    _session->team->stopped.store(true, std::memory_order_relaxed);
+    for (size_t i = 1; i <= _helpers.size(); ++i) {
+        try {
+            _workers.wait_for(i);
+        } catch (const std::exception & error) {
+            uci::out(std::string("info string ERROR: helper search failed: ") + error.what());
+        } catch (...) {
+            uci::out("info string ERROR: helper search failed");
+        }
+    }
+    std::vector<search_t *> workers{_search.get()};
+    for (auto & helper : _helpers) {
+        workers.push_back(helper.get());
+    }
+    const auto * winner = workers[select_search_worker(workers)];
+    _search->restore_completed(winner->completed_search);
+    _search->attempted_depth = std::max(_search->attempted_depth, winner->attempted_depth);
+    _search->interrupted = _search->interrupted || winner->interrupted;
+}
+
 /**
  * Initialize the engine for starting a new game
  * @param fen position represented by a FEN string
@@ -158,6 +297,7 @@ bool engine_t::start_search(void * (*function)(void *), bool calculate_book) {
 void engine_t::new_game(std::string fen) {
     stop();
     _search.reset();
+    _helpers.clear();
     {
         std::lock_guard<std::mutex> lock(_result_mutex);
         _result = search_result_t();
@@ -180,7 +320,14 @@ void engine_t::copy_results(search_t * s) {
         && s->stack->best_move.equals(&s->game.target_move);
     result.move = s->stack->best_move;
     result.score = s->result_score;
-    result.nodes = s->nodes;
+    result.nodes = s->reported_nodes();
+    if (s->team) {
+        for (size_t i = 0; i < s->team->count; ++i) {
+            result.worker_nodes.push_back(s->team->counters[i].nodes.load(std::memory_order_relaxed));
+        }
+    } else {
+        result.worker_nodes.push_back(s->nodes);
+    }
     result.score_flag = s->result_flag;
     result.depth = s->result_depth;
     result.completed_depth = s->completed_depth;
@@ -208,7 +355,7 @@ void * engine_t::_think(void * engine_p) {
     engine_t * engine = (engine_t*) engine_p;
     search_t * s = engine->_search.get();
 
-    //think
+    uci::out("info string search_workers " + std::to_string(1 + engine->_helpers.size()));
     s->go();
 
     // Publish results; the owner releases search state after joining the worker.

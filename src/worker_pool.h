@@ -10,8 +10,9 @@
 #include <thread>
 #include <vector>
 
-// The owner serializes dispatch/resize. Jobs own their search state; pool locks
-// cover job handoff only, never search work. Resizing first waits for every job.
+/* The owner serializes dispatch/resize. Jobs own their search state; pool locks
+ * cover job handoff only, never search work. Resizing first waits for every job.
+ * A main search job may wait for helper slots, never for its own slot. */
 class worker_pool_t {
     struct worker_t {
         std::mutex mutex;
@@ -47,8 +48,7 @@ class worker_pool_t {
                 } catch (...) {
                     error = std::current_exception();
                 }
-                // Release captures before publishing completion: the owner may
-                // now replace the session or destroy its search workspace.
+                // Release captures before completion permits workspace replacement.
                 task = {};
                 lock.lock();
                 failure = error;
@@ -88,6 +88,15 @@ public:
             }
         }
         if (error) {
+            std::rethrow_exception(error);
+        }
+    }
+
+    void wait_for(size_t index) {
+        if (index >= workers.size()) {
+            throw std::out_of_range("invalid search worker index");
+        }
+        if (auto error = workers[index]->wait()) {
             std::rethrow_exception(error);
         }
     }
