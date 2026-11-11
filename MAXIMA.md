@@ -336,9 +336,13 @@ size keeps 16384.
 
 ### 4.8 Transposition table
 
-Search and qsearch share one table of 32-byte clusters holding three 10-byte
-entries: a 16-bit key tag, depth, a 5-bit age with TT-PV flag and bound, a
-compact move, the score and the raw static evaluation. The key is the position
+Search and qsearch share one table of aligned 64-byte clusters holding four
+16-byte entries. Each entry has an atomic 64-bit payload containing depth, a
+5-bit age with TT-PV flag and bound, compact move, score and raw static evaluation,
+and an atomic full-key XOR verifier. Probes check publication before using the
+payload; concurrent replacement may discard cache updates. Stores reselect from
+atomic snapshots rather than trusting a previous probe slot. Clear and resize
+require all search workers to be idle. The key is the position
 hash mixed with a halfmove-clock bucket (clocks 0–13 share one bucket, then
 buckets of eight), so scores never cross buckets. Mate and tablebase scores
 whose distance exceeds the remaining fifty-move budget are cut back to the

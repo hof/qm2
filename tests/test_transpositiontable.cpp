@@ -1,3 +1,5 @@
+#include <thread>
+#include <barrier>
 /**
  * Maxima, a chess playing program. 
  * Copyright (C) 1996-2026 Erik van het Hof and Hermen Reitsma 
@@ -91,6 +93,37 @@ bool test_tt() {
     return true;
 }
 
+// Force all keys into one cluster and exercise readers racing replacement.
+bool test_concurrent_publication() {
+    trans_table_t table(1);
+    std::atomic<bool> valid{true};
+    std::barrier ready(8);
+    std::vector<std::thread> workers;
+    for (int id = 0; id < 8; ++id) {
+        workers.emplace_back([&, id] {
+            ready.arrive_and_wait();
+            for (int i = 0; i < 20000; ++i) {
+                const int value = 1 + i % 2048;
+                table.store(U64(id + 1), 0, 0, 12, value, id + 1,
+                    score::EXACT, -value, false);
+                tt_hit_t hit;
+                if (table.probe(U64(id + 1), 0, 0, hit)
+                        && (hit.move != id + 1 || hit.score != -hit.eval
+                            || hit.depth != 12 || hit.bound != score::EXACT)) {
+                    valid.store(false);
+                }
+            }
+        });
+    }
+    for (auto & worker : workers) {
+        worker.join();
+    }
+    if (!valid.load()) {
+        std::cerr << "Concurrent TT probe accepted unrelated or mixed payload fields\n";
+    }
+    return valid.load();
+}
+
 int main() {
     magic::init();
     std::cout << "%SUITE_STARTING% test_transpositiontable" << std::endl;
@@ -98,6 +131,7 @@ int main() {
 
     std::cout << "%TEST_STARTED% test_tt (test_transpositiontable)\n" << std::endl;
     bool success = test_tt();
+    success &= test_concurrent_publication();
     std::cout << "%TEST_FINISHED% time=0 test_tt (test_transpositiontable)" << std::endl;
 
     std::cout << "%SUITE_FINISHED% time=0" << std::endl;

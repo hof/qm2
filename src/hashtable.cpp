@@ -44,7 +44,7 @@ void trans_table_t::set_size(int size_in_MB) {
     // Huge pages spare the page walk that random cluster accesses otherwise need.
     madvise(table, sizeof(cluster_t) * cluster_count, MADV_HUGEPAGE);
     size_in_mb = size_in_MB;
-    clear();
+    std::uninitialized_value_construct_n(table, cluster_count);
 }
 
 int trans_table_t::make_score(int score, int ply) {
@@ -70,31 +70,51 @@ int trans_table_t::unmake_score(int score, int ply, int clock) {
     return score;
 }
 
+trans_table_t::entry_t trans_table_t::load(const atomic_entry_t & entry) {
+    const U64 before = entry.verifier.load(std::memory_order_acquire);
+    const U64 data = entry.payload.load(std::memory_order_relaxed);
+    const U64 after = entry.verifier.load(std::memory_order_acquire);
+    if (before != after) {
+        return {};
+    }
+    return {before ^ data, uint8_t(data), uint8_t(data >> 8), uint16_t(data >> 16),
+        int16_t(uint16_t(data >> 32)), int16_t(uint16_t(data >> 48))};
+}
+
+void trans_table_t::publish(atomic_entry_t & destination, const entry_t & entry) {
+    const U64 data = U64(entry.depth) | (U64(entry.meta) << 8) | (U64(entry.move) << 16)
+        | (U64(uint16_t(entry.score)) << 32) | (U64(uint16_t(entry.eval)) << 48);
+    destination.payload.store(data, std::memory_order_relaxed);
+    destination.verifier.store(entry.tag ^ data, std::memory_order_release);
+}
+
 void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int move, int bound, int eval, bool pv, void * found) {
     assert(depth >= 0 && depth < 255);
     assert(bound >= 0 && bound <= 3);
     const int current_age = age % AGES;
-    const uint16_t key_tag = tag(key);
+    const U64 key_tag = tag(key);
     const auto age_distance = [current_age](const entry_t & entry) {
         return (AGES + current_age - trans_table_t::age(entry)) % AGES;
     };
 
     // Prefer the same position or an empty slot, else the shallowest, oldest entry.
-    // A probed entry that still holds this key is that slot: empty slots only follow used ones.
-    entry_t * slot = static_cast<entry_t *>(found);
-    if (!slot || slot->depth == 0 || slot->tag != key_tag) {
-        auto & entries = cluster(key).entries;
-        slot = &entries[0];
-        if (!(slot->depth == 0 || slot->tag == key_tag)) {
-            for (int i = 1; i < BUCKETS; ++i) {
-                entry_t & entry = entries[i];
-                if (entry.depth == 0 || entry.tag == key_tag) {
-                    slot = &entry;
-                    break;
-                }
-                if (slot->depth - 4 * age_distance(*slot) > entry.depth - 4 * age_distance(entry)) {
-                    slot = &entry;
-                }
+    // Snapshot selection permits lost concurrent updates, never ordinary shared writes.
+    (void)found; // A previous probe cannot reserve a concurrently replaceable slot.
+    auto & destination = cluster(key);
+    entry_t entries[BUCKETS];
+    for (int i = 0; i < BUCKETS; ++i) {
+        entries[i] = load(destination.entries[i]);
+    }
+    entry_t * slot = &entries[0];
+    if (!(slot->depth == 0 || slot->tag == key_tag)) {
+        for (int i = 1; i < BUCKETS; ++i) {
+            entry_t & entry = entries[i];
+            if (entry.depth == 0 || entry.tag == key_tag) {
+                slot = &entry;
+                break;
+            }
+            if (slot->depth - 4 * age_distance(*slot) > entry.depth - 4 * age_distance(entry)) {
+                slot = &entry;
             }
         }
     }
@@ -123,6 +143,7 @@ void trans_table_t::store(U64 key, int age, int ply, int depth, int score, int m
         slot->move = uint16_t(move);
         slot->eval = int16_t(eval);
     }
+    publish(destination.entries[slot - entries], *slot);
 }
 
 bool trans_table_t::probe(U64 key, int ply, int clock, tt_hit_t & hit) {
@@ -130,10 +151,11 @@ bool trans_table_t::probe(U64 key, int ply, int clock, tt_hit_t & hit) {
     if (!enabled) {
         return false;
     }
-    const uint16_t key_tag = tag(key);
-    for (auto & entry : cluster(key).entries) {
+    const U64 key_tag = tag(key);
+    for (auto & storage : cluster(key).entries) {
+        const auto entry = load(storage);
         if (entry.depth != 0 && entry.tag == key_tag) {
-            hit.slot = &entry;
+            hit.slot = &storage;
             hit.move = entry.move;
             hit.depth = entry.depth - 1;
             hit.bound = entry.meta & 3;

@@ -28,6 +28,8 @@
 #include "score.h"
 #include "game.h"
 #include <new>
+#include <atomic>
+#include <memory>
 
 // A probed entry. Scores are relative to the probing node; eval is the raw
 // static evaluation stored with the entry, or score::INVALID.
@@ -44,28 +46,34 @@ struct tt_hit_t {
 class trans_table_t {
 private:
 
-    // Ten bytes: key tag, depth (+1, zero marks an empty slot), age/pv/bound,
+    // Decoded snapshot: full key, depth (+1, zero marks an empty slot), age/pv/bound,
     // move, score and static evaluation.
     struct entry_t {
-        uint16_t tag;
+        U64 tag;
         uint8_t depth;
         uint8_t meta;
         uint16_t move;
         int16_t score;
         int16_t eval;
     };
-    static_assert(sizeof(entry_t) == 10);
+    struct atomic_entry_t {
+        std::atomic<U64> payload{0};
+        std::atomic<U64> verifier{0};
+    };
+    static_assert(sizeof(atomic_entry_t) == 16);
+    static_assert(std::atomic<U64>::is_always_lock_free);
+    static entry_t load(const atomic_entry_t & entry);
+    static void publish(atomic_entry_t & destination, const entry_t & entry);
 
-    static const int BUCKETS = 3;
+    static const int BUCKETS = 4;
     static constexpr size_t TABLE_ALIGNMENT = 2 * 1024 * 1024;
     static const int AGES = 32;
 
-    // Three entries fill one aligned 32-byte cluster.
-    struct alignas(32) cluster_t {
-        entry_t entries[BUCKETS];
-        uint16_t padding;
+    // Four independently published entries fill a cache line.
+    struct alignas(64) cluster_t {
+        atomic_entry_t entries[BUCKETS];
     };
-    static_assert(sizeof(cluster_t) == 32);
+    static_assert(sizeof(cluster_t) == 64);
 
     int size_in_mb;
     size_t cluster_count;
@@ -75,8 +83,8 @@ private:
         return table[size_t((static_cast<__uint128_t>(key) * cluster_count) >> 64)];
     }
 
-    static uint16_t tag(U64 key) {
-        return uint16_t(key);
+    static U64 tag(U64 key) {
+        return key;
     }
 
     static int age(const entry_t & entry) {
@@ -106,7 +114,12 @@ public:
     }
 
     void clear() {
-        memset(static_cast<void *>(table), 0, sizeof(cluster_t) * cluster_count);
+        for (size_t i = 0; i < cluster_count; ++i) {
+            for (auto & entry : table[i].entries) {
+                entry.payload.store(0, std::memory_order_relaxed);
+                entry.verifier.store(0, std::memory_order_relaxed);
+            }
+        }
     }
 };
 

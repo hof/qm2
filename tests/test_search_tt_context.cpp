@@ -183,15 +183,16 @@ bool test_replacement() {
     table.store(key, 0, 0, 0, 0, 0, 0, 33, false);
     success &= check("an evaluation-only store must keep the score and attach the evaluation",
         table.probe(key, 0, 0, hit) && hit.bound == score::EXACT && hit.eval == 33);
-    // Three tags share one cluster; a fourth evicts the shallowest entry.
+    // Fill the four-way cluster; a fifth entry evicts the shallowest.
     trans_table_t small(1);
-    for (int i = 1; i <= 3; ++i) {
+    for (int i = 1; i <= 4; ++i) {
         small.store(0x1000 + i, 0, 0, i * 4, i, 0, score::EXACT, score::INVALID, false);
     }
-    small.store(0x1004, 0, 0, 20, 4, 0, score::EXACT, score::INVALID, false);
+    small.store(0x1005, 0, 0, 20, 4, 0, score::EXACT, score::INVALID, false);
     success &= check("replacement must evict the shallowest entry",
         !small.probe(0x1001, 0, 0, hit) && small.probe(0x1002, 0, 0, hit)
-        && small.probe(0x1003, 0, 0, hit) && small.probe(0x1004, 0, 0, hit));
+        && small.probe(0x1003, 0, 0, hit) && small.probe(0x1004, 0, 0, hit)
+        && small.probe(0x1005, 0, 0, hit));
     return success;
 }
 
