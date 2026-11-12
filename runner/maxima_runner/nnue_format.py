@@ -1,4 +1,4 @@
-"""Legacy HalfKP feature mapping, export and scalar integer checks (no torch)."""
+"""HalfKP/HalfKAv2_hm feature mapping, export and scalar checks (no torch)."""
 from array import array
 import struct
 import sys
@@ -13,10 +13,26 @@ transformer_start = 189
 network_start = transformer_start + 4 + 512 + 2 * 256 * feature_count
 
 
-def features(board, color):
+def feature_count_for(architecture):
+    if architecture == "halfkp":
+        return 41024
+    if architecture == "halfkav2_hm":
+        return 22528
+    raise ValueError("unsupported NNUE architecture")
+
+
+def features(board, color, architecture="halfkp"):
     king = board.king(color)
     if king is None or not board.is_valid() or len(board.piece_map()) > 32:
-        raise ValueError("HalfKP requires a valid standard board with at most 32 pieces")
+        raise ValueError("NNUE requires a valid standard board with at most 32 pieces")
+    feature_count_for(architecture)
+    if architecture == "halfkav2_hm":
+        orientation = (0 if color else 56) ^ (7 if chess.square_file(king) < 4 else 0)
+        oriented = king ^ orientation
+        bucket = chess.square_rank(oriented) * 4 + chess.square_file(oriented) - 4
+        return [bucket * 704 + 64 * (10 if piece.piece_type == chess.KING
+                else 2 * (piece.piece_type - 1) + int(piece.color != color)) + (square ^ orientation)
+                for square, piece in sorted(board.piece_map().items())]
     orientation = 0 if color else 63
     return [(square ^ orientation) + 1
             + 64 * (2 * (piece.piece_type - 1) + int(piece.color != color))
@@ -35,17 +51,20 @@ def integer_array(kind, values):
     return result.tobytes()
 
 
-def serialize(weights):
+def serialize(weights, architecture="halfkp"):
     """Pad the compact model into the existing 256x2 -> 32 -> 32 -> 1 loader."""
     width = len(weights["ft_bias"])
     hidden = len(weights["h1_bias"])
     if not 1 <= width <= 256 or not 1 <= hidden <= 32:
         raise ValueError("unsupported prototype dimensions")
-    description = b"Maxima own CPU training prototype; compact HalfKP padded to legacy dimensions"
-    data = bytearray(struct.pack("<III", 0x7af32f16, 0x3e5aa6ee, 177) + description.ljust(177, b" "))
-    data.extend(struct.pack("<I", 0x5d69d7b8))
+    count = feature_count_for(architecture)
+    modern = architecture == "halfkav2_hm"
+    description = f"Maxima own CPU model; {architecture}; 256x2-32-32-1 integer inference".encode("ascii")
+    data = bytearray(struct.pack("<III", 0x4d584e31 if modern else 0x7af32f16,
+                                0x484b4132 if modern else 0x3e5aa6ee, 177) + description.ljust(177, b" "))
+    data.extend(struct.pack("<I", 0x484d3031 if modern else 0x5d69d7b8))
     data.extend(integer_array("h", weights["ft_bias"] + [0] * (256 - width)))
-    if len(weights["ft_weight"]) != feature_count:
+    if len(weights["ft_weight"]) != count:
         raise ValueError("invalid feature count")
     for column in weights["ft_weight"]:
         if len(column) != width:
@@ -70,7 +89,7 @@ def serialize(weights):
         raise ValueError("invalid output dimensions")
     data.extend(struct.pack("<i", weights["out_bias"]))
     data.extend(integer_array("b", weights["out_weight"] + [0] * (32 - hidden)))
-    if len(data) != network_size:
+    if len(data) != network_size + (count - feature_count) * 512:
         raise ValueError("invalid serialized network size")
     return data
 
@@ -79,15 +98,21 @@ class integer_network:
     """Independent scalar evaluation of serialized bytes, including unused lanes."""
 
     def __init__(self, data):
-        if (len(data) != network_size or struct.unpack_from("<III", data) != (0x7af32f16, 0x3e5aa6ee, 177)
-                or struct.unpack_from("<I", data, transformer_start)[0] != 0x5d69d7b8
-                or struct.unpack_from("<I", data, network_start)[0] != 0x63337156):
-            raise ValueError("invalid legacy HalfKP bytes")
+        self.architecture = "halfkp" if len(data) == network_size else "halfkav2_hm"
+        count = feature_count_for(self.architecture)
+        modern = self.architecture == "halfkav2_hm"
+        start = transformer_start + 4 + 512 + 512 * count
+        if (len(data) != network_size + (count - feature_count) * 512
+                or struct.unpack_from("<III", data) != (0x4d584e31 if modern else 0x7af32f16,
+                                                       0x484b4132 if modern else 0x3e5aa6ee, 177)
+                or struct.unpack_from("<I", data, transformer_start)[0] != (0x484d3031 if modern else 0x5d69d7b8)
+                or struct.unpack_from("<I", data, start)[0] != 0x63337156):
+            raise ValueError("invalid or unsupported NNUE bytes")
         self.ft = array("h")
-        self.ft.frombytes(data[transformer_start + 4:network_start])
+        self.ft.frombytes(data[transformer_start + 4:start])
         if sys.byteorder != "little":
             self.ft.byteswap()
-        offset = network_start + 4
+        offset = start + 4
         self.layers = []
         for size in [512, 32]:
             biases = struct.unpack_from("<32i", data, offset)
@@ -105,7 +130,7 @@ class integer_network:
         activations = []
         for color in [board.turn, not board.turn]:
             values = list(self.ft[:256])
-            for index in features(board, color):
+            for index in features(board, color, self.architecture):
                 offset = 256 + index * 256
                 for lane in range(256):
                     value = values[lane] + self.ft[offset + lane]

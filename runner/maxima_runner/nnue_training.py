@@ -1,4 +1,4 @@
-"""Optional CPU training and export verification for MaxDrone's small HalfKP model."""
+"""Optional CPU training and export verification for MaxDrone's small NNUE models."""
 import argparse
 import copy
 import hashlib
@@ -21,13 +21,13 @@ def training_libraries():
     return torch, halfkp_model
 
 
-def batch(torch, rows):
+def batch(torch, rows, architecture="halfkp"):
     indices, offsets = [], []
     for row in rows:
         board = chess.Board(row["fen"])
         for color in [board.turn, not board.turn]:
             offsets.append(len(indices))
-            indices.extend(nnue_format.features(board, color))
+            indices.extend(nnue_format.features(board, color, architecture))
     return (torch.tensor(indices, dtype=torch.long), torch.tensor(offsets, dtype=torch.long))
 
 
@@ -40,7 +40,7 @@ def metrics(torch, model, rows):
     if not rows:
         return None
     with torch.no_grad():
-        inputs = batch(torch, rows)
+        inputs = batch(torch, rows, model.architecture)
         labels = torch.tensor([row["score_cp"] for row in rows], dtype=torch.float64)
         scores = model(*inputs)
         floating = model(*inputs, quantized=False)
@@ -57,6 +57,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--width", type=int, default=8)
     parser.add_argument("--hidden", type=int, default=8)
+    parser.add_argument("--architecture", choices=("halfkp", "halfkav2_hm"), default="halfkp")
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--learning-rate", type=float, default=0.003)
     args = parser.parse_args()
@@ -74,7 +75,7 @@ def main():
     torch.set_num_threads(1)
     torch.manual_seed(args.seed)
     torch.use_deterministic_algorithms(True)
-    model = model_type(args.width, args.hidden).double()
+    model = model_type(args.width, args.hidden, args.architecture).double()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     initial = {"train": metrics(torch, model, train), "validation": metrics(torch, model, validation)}
     history, best_state, best_epoch, best_loss = [], None, 0, math.inf
@@ -84,7 +85,7 @@ def main():
             selected = [train[i] for i in order[start:start + args.batch_size]]
             labels = torch.tensor([row["score_cp"] for row in selected], dtype=torch.float64)
             optimizer.zero_grad(set_to_none=True)
-            objective = loss(torch, model(*batch(torch, selected)), labels)
+            objective = loss(torch, model(*batch(torch, selected, model.architecture)), labels)
             if not torch.isfinite(objective):
                 raise ValueError("nonfinite training loss")
             objective.backward()
@@ -98,16 +99,16 @@ def main():
             best_epoch, best_state = epoch + 1, copy.deepcopy(model.state_dict())
         print(f"Epoch {epoch + 1}: train {scores['train']['loss']:.6f}; "
               f"validation {scores['validation']['loss']:.6f}", flush=True)
-    config = {"format": "maxima.nnue.prototype", "version": 1, "architecture": "halfkp",
+    config = {"format": "maxima.nnue.prototype", "version": 1, "architecture": args.architecture,
               "width": args.width, "hidden": args.hidden, "seed": args.seed,
               "dataset_sha256": nnue_data.file_hash(args.dataset), "torch": str(torch.__version__),
               "epochs": args.epochs, "batch_size": args.batch_size, "learning_rate": args.learning_rate,
               "teacher": header, "initial": initial, "history": history, "exported_epoch": best_epoch}
     model.load_state_dict(best_state)
-    serialized = nnue_format.serialize(model.integer_weights())
+    serialized = nnue_format.serialize(model.integer_weights(), model.architecture)
     integer = nnue_format.integer_network(serialized)
     with torch.no_grad():
-        predictions = model(*batch(torch, rows)).tolist()
+        predictions = model(*batch(torch, rows, model.architecture)).tolist()
     for row, predicted in zip(rows, predictions):
         if integer.evaluate(chess.Board(row["fen"]))[1] != predicted:
             raise ValueError(f"quantized model/export mismatch for {row['fen']}")
@@ -130,6 +131,8 @@ verification_fens = [
     "7k/8/8/8/3Pp3/8/8/K7 b - d3 0 1",
     "7k/P7/8/8/8/8/8/K7 w - - 0 1",
     "7k/8/8/8/8/8/p7/7K b - - 0 1",
+    "7k/8/8/8/8/8/P7/3K4 w - - 0 1",
+    "3k4/7p/8/8/8/8/8/K7 b - - 0 1",
 ]
 
 

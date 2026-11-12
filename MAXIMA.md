@@ -371,6 +371,23 @@ Weights are CC0: `nn-62ef826d1a6d.nnue`, SHA-256
 https://github.com/official-stockfish/networks. `python3 tools/download_nnue.py`
 fetches and verifies it into `networks/`.
 
+The loader also accepts Maxima-native HalfKAv2_hm models: 22,528 inputs per
+perspective, including both king pieces, with 256-wide accumulators and the
+same 512->32->32->1 integer layers and score units. Each perspective flips
+Black vertically, then mirrors files when its king is on a..d. The resulting
+king on e..h selects one of 32 buckets; each has 11 piece buckets of 64 squares,
+with both king colors sharing bucket 10. A perspective king move refreshes its
+accumulator; the opposite accumulator incrementally updates the moved king's
+feature. Other move, capture, promotion and castling changes remain incremental.
+
+The native v1 file is 11,552,745 bytes. It retains the 177-byte description and
+dense payload layout, with version `0x4d584e31`, architecture `0x484b4132` and
+transformer `0x484d3031` identifiers. Its 22,528 transformer columns replace the
+legacy 41,024 columns; both formats validate size and identifiers before loading.
+Native models are selected explicitly through `EvalFile`; the default playing
+model is not replaced by training or export. Runtime evaluation scaling remains
+as described below for both formats.
+
 The static evaluation applies the network's own NNUE-path scaling:
 `raw * (641 + material / 32 - 4 * clock) / 1024 + 28`, then
 `* (100 - clock) / 100`, in network units (208 per pawn), converted to
@@ -1870,7 +1887,7 @@ validate runs and board state, reconstruct standard FEN for training/inference,
 and still accept version-1 datasets with ordinary `fen` fields. This encoding
 is internal to training data; PGNs and engine UCI positions retain standard FEN.
 
-`nnue:train` trains a small CPU HalfKP model using optional PyTorch. Install it
+`nnue:train` trains a small CPU NNUE model using optional PyTorch. Install it
 in a separate environment (Python 3.11+ for the pinned training dependencies):
 
 ```bash
@@ -1886,7 +1903,9 @@ use `.tools/runner/bin/python -m pip --python .tools/training/bin/python install
 for the same installation commands. Ordinary ops and the native engine do not
 require PyTorch. `nnue:train --help` also works without it.
 
-The prototype uses shared HalfKP features, two perspectives, clipped activations
+`--architecture halfkp` (default) uses the legacy inputs;
+`--architecture halfkav2_hm` trains the actual mirrored king-inclusive feature set
+and exports the Maxima-native format. Both use two perspectives, clipped activations
 and two hidden layers; defaults are eight feature lanes and eight hidden units.
 It uses straight-through quantization and integer-domain activations, constrains
 weights to exportable ranges, and minimizes squared error between sigmoid

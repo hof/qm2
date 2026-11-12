@@ -16,21 +16,11 @@
 namespace nnue {
 namespace {
 constexpr size_t network_size = 21022697;
+constexpr size_t halfkav2_size = network_size - (41024 - 22528) * 512;
 constexpr size_t transformer_start = 189;
-constexpr size_t network_start = transformer_start + 4 + 512 + 2 * 256 * 41024;
 std::mutex configuration_mutex;
 std::shared_ptr<const network_t> configured_network;
 std::string configured_path;
-
-size_t feature_index(bool color, int king, int piece, int square) {
-    const int orientation = color == WHITE ? 0 : 63;
-    const int type = (piece - 1) % 6;
-    assert(type < 5 && square >= 0 && square < 64 && king >= 0 && king < 64);
-    const int relative_color = (piece <= WKING) == color ? 0 : 1;
-    const size_t index = (square ^ orientation) + 1 + 64 * (2 * type + relative_color)
-        + 641 * (king ^ orientation);
-    return index;
-}
 
 uint32_t read_u32(const std::vector<uint8_t> & bytes, size_t offset) {
     return uint32_t(bytes[offset]) | (uint32_t(bytes[offset + 1]) << 8)
@@ -38,24 +28,51 @@ uint32_t read_u32(const std::vector<uint8_t> & bytes, size_t offset) {
 }
 }
 
+size_t network_t::feature_index(bool color, int king, int piece, int square) const {
+    const int type = (piece - 1) % 6;
+    const int relative_color = (piece <= WKING) == color ? 0 : 1;
+    if (_halfkav2_hm) {
+        int orientation = color == WHITE ? 0 : 56;
+        if (FILE(king) < 4) {
+            orientation ^= 7;
+        }
+        const int oriented_king = king ^ orientation;
+        const int bucket = RANK(oriented_king) * 4 + FILE(oriented_king) - 4;
+        const int piece_bucket = type == 5 ? 10 : 2 * type + relative_color;
+        return bucket * 704 + piece_bucket * 64 + (square ^ orientation);
+    }
+    const int orientation = color == WHITE ? 0 : 63;
+    assert(type < 5 && square >= 0 && square < 64 && king >= 0 && king < 64);
+    const size_t index = (square ^ orientation) + 1 + 64 * (2 * type + relative_color)
+        + 641 * (king ^ orientation);
+    return index;
+}
+
 std::shared_ptr<const network_t> network_t::load(const std::string & path, std::string & error) {
     error.clear();
     std::ifstream stream(path, std::ios::binary | std::ios::ate);
-    if (!stream || stream.tellg() != static_cast<std::streamoff>(network_size)) {
-        error = "expected a 21022697-byte legacy HalfKP network";
+    if (!stream || (stream.tellg() != static_cast<std::streamoff>(network_size)
+            && stream.tellg() != static_cast<std::streamoff>(halfkav2_size))) {
+        error = "expected a supported HalfKP or Maxima HalfKAv2_hm network";
         return nullptr;
     }
-    std::vector<uint8_t> bytes(network_size);
+    const bool halfkav2_hm = stream.tellg() == static_cast<std::streamoff>(halfkav2_size);
+    const size_t feature_count = halfkav2_hm ? 22528 : 41024;
+    const size_t network_start = transformer_start + 4 + 512 + 512 * feature_count;
+    std::vector<uint8_t> bytes(halfkav2_hm ? halfkav2_size : network_size);
     stream.seekg(0);
     if (!stream.read(reinterpret_cast<char *>(bytes.data()), bytes.size())
             || stream.peek() != std::char_traits<char>::eof()
-            || read_u32(bytes, 0) != 0x7af32f16 || read_u32(bytes, 4) != 0x3e5aa6ee
-            || read_u32(bytes, 8) != 177 || read_u32(bytes, transformer_start) != 0x5d69d7b8
+            || read_u32(bytes, 0) != (halfkav2_hm ? 0x4d584e31 : 0x7af32f16)
+            || read_u32(bytes, 4) != (halfkav2_hm ? 0x484b4132 : 0x3e5aa6ee)
+            || read_u32(bytes, 8) != 177
+            || read_u32(bytes, transformer_start) != (halfkav2_hm ? 0x484d3031 : 0x5d69d7b8)
             || read_u32(bytes, network_start) != 0x63337156) {
-        error = "invalid or unsupported HalfKP network format";
+        error = "invalid or unsupported NNUE network format";
         return nullptr;
     }
     auto network = std::make_shared<network_t>();
+    network->_halfkav2_hm = halfkav2_hm;
     U64 fingerprint = 14695981039346656037ULL;
     for (uint8_t byte : bytes) fingerprint = (fingerprint ^ byte) * 1099511628211ULL;
     network->_fingerprint = fingerprint;
@@ -74,7 +91,7 @@ std::shared_ptr<const network_t> network_t::load(const std::string & path, std::
         for (auto & weight : weights) weight = std::bit_cast<int8_t>(bytes[offset++]);
     };
     for (auto & bias : network->_biases) bias = read_i16();
-    network->_features.resize(41024);
+    network->_features.resize(feature_count);
     for (auto & column : network->_features) {
         for (auto & weight : column.values) {
             weight = read_i16();
@@ -123,7 +140,8 @@ void network_t::refresh(const board_t & board, accumulator_t & accumulator, bool
     // Walking the occupancy avoids an unpredictable test per square.
     [[indeterminate]] const int16_t * features[32];
     size_t count = 0;
-    for (U64 pieces = board.bb[ALLPIECES] & ~(board.bb[WKING] | board.bb[BKING]); pieces;) {
+    for (U64 pieces = _halfkav2_hm ? board.bb[ALLPIECES]
+            : board.bb[ALLPIECES] & ~(board.bb[WKING] | board.bb[BKING]); pieces;) {
         const int square = pop(pieces);
         const size_t index = feature_index(color, accumulator.kings[color], board.matrix[square], square);
         features[count++] = _features[index].values.data();
@@ -153,7 +171,7 @@ void network_t::refresh(const board_t & board, accumulator_t & accumulator, bool
     accumulator.values[color] = _biases;
     for (int square = 0; square < 64; ++square) {
         const int piece = board.matrix[square];
-        if (piece && piece != WKING && piece != BKING) {
+        if (piece && (_halfkav2_hm || (piece != WKING && piece != BKING))) {
             add_feature(accumulator.values[color], color, accumulator.kings[color], piece, square, false);
         }
     }
@@ -169,7 +187,7 @@ void network_t::prepare(const board_t & board, const move_t * move, accumulator_
         return; // Null move: unchanged features, exchanged perspectives.
     }
     auto add = [&](int piece, int from, int to) {
-        if (piece && piece != WKING && piece != BKING) {
+        if (piece && (_halfkav2_hm || (piece != WKING && piece != BKING))) {
             accumulator.changes[accumulator.change_count++] = {piece, from, to};
         }
     };
@@ -204,7 +222,7 @@ void network_t::update(const board_t & board, accumulator_t & accumulator,
 
     // Walk back to the nearest ready state with this king while the
     // incremental work stays below a refresh.
-    const int refresh_cost = popcnt0(board.bb[ALLPIECES]) - 2;
+    const int refresh_cost = popcnt0(board.bb[ALLPIECES]) - (_halfkav2_hm ? 0 : 2);
     int cost = change_cost(accumulator);
     size_t first = ancestors.size();
     while (true) {

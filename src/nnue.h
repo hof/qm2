@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-// Legacy HalfKP integer inference, GPL-3.0-or-later, like the rest of Maxima.
+// HalfKP and HalfKAv2_hm integer inference, GPL-3.0-or-later.
 // Format/arithmetic reference: third_party/nnue_reference/README.md.
 namespace nnue {
 
@@ -58,7 +58,9 @@ private:
     int32_t _output_bias = 0;
     U64 _fingerprint = 0;
     bool _hidden1_pair_sums_safe = false, _hidden2_pair_sums_safe = false;
+    bool _halfkav2_hm = false;
 
+    size_t feature_index(bool color, int king, int piece, int square) const;
     void refresh(const board_t & board, accumulator_t & accumulator, bool color) const;
     void update(const board_t & board, accumulator_t & accumulator,
         std::span<accumulator_t> ancestors, bool color) const;

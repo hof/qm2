@@ -1,9 +1,9 @@
-"""Small CPU HalfKP plumbing model; PyTorch is imported only by training."""
+"""Small CPU NNUE model; PyTorch is imported only by training."""
 import torch
 from torch import nn
 from torch.nn import functional as functional
 
-from .nnue_format import feature_count, output_scale
+from .nnue_format import feature_count_for, output_scale
 
 
 def rounded(value):
@@ -15,9 +15,10 @@ def truncated(value):
 
 
 class halfkp_model(nn.Module):
-    def __init__(self, width=8, hidden=8):
+    def __init__(self, width=8, hidden=8, architecture="halfkp"):
         super().__init__()
-        self.ft_weight = nn.Parameter(torch.empty(feature_count, width))
+        self.architecture = architecture
+        self.ft_weight = nn.Parameter(torch.empty(feature_count_for(architecture), width))
         self.ft_bias = nn.Parameter(torch.full((width,), 0.3))
         self.h1 = nn.Linear(width * 2, hidden)
         self.h2 = nn.Linear(hidden, hidden)
