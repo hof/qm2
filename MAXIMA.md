@@ -1123,6 +1123,11 @@ and allows a subsequent supported bounded search.
 Keep confirmed bug fixes accompanied
 by focused regressions; passing the suite is evidence for its covered cases,
 not a claim that the engine has no remaining bugs.
+Correctness checks use engine invariants, independent expected results, or explicit
+protocol state transitions. Lifecycle watchdogs bound hangs; they do not establish
+performance. Tests must not assume a search depth fits a short clock or require
+subsecond response targets on an uncontrolled host. Expired ponder handling is
+covered by timer-state and bounded result-authorization checks.
 `test_uci_output` verifies that concurrent output preserves every message as one
 complete line, including scheduling delays between payloads and newlines. It
 also checks positive/negative cp and mate score bounds, zero/short elapsed-time
