@@ -22,6 +22,14 @@ class cli_tests(unittest.TestCase):
                     cli.main([command, "--help"])
                 self.assertEqual(result.exception.code, 0)
 
+    def test_warm_start_rejects_compact_geometry_before_loading_files_or_torch(self):
+        with (patch.dict(sys.modules, {"torch": None}),
+              contextlib.redirect_stderr(io.StringIO())):
+            with self.assertRaises(SystemExit) as result:
+                cli.main(["nnue:train", "missing.mxdata", "--output", "unused-run",
+                          "--warm-start", "missing.nnue"])
+            self.assertEqual(result.exception.code, 2)
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

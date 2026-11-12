@@ -99,10 +99,17 @@ def main():
     parser.add_argument("--hidden", type=int, default=8)
     parser.add_argument("--architecture", choices=("halfkp", "halfkav2_hm"), default="halfkp")
     parser.add_argument("--seed", type=int, default=2026)
-    parser.add_argument("--learning-rate", type=float, default=0.003)
+    parser.add_argument("--learning-rate", type=float,
+                        help="Adam learning rate (default .003, or .0001 with --warm-start)")
+    parser.add_argument("--warm-start", type=Path,
+                        help="approximate initialization from legacy HalfKP; requires full HalfKAv2_hm")
     parser.add_argument("--search-weight", type=float, default=0.7,
                         help="search-score share of the target; remaining share is final game result")
     args = parser.parse_args()
+    if args.learning_rate is None:
+        args.learning_rate = 0.0001 if args.warm_start else 0.003
+    if args.warm_start and (args.architecture != "halfkav2_hm" or args.width != 256 or args.hidden != 32):
+        parser.error("--warm-start requires --architecture halfkav2_hm --width 256 --hidden 32")
     if (min(args.epochs, args.batch_size) <= 0 or not 1 <= args.width <= 256
             or not 1 <= args.hidden <= 32 or not math.isfinite(args.learning_rate) or args.learning_rate <= 0
             or not math.isfinite(args.search_weight) or not 0 <= args.search_weight <= 1):
@@ -119,6 +126,10 @@ def main():
     torch.manual_seed(args.seed)
     torch.use_deterministic_algorithms(True)
     model = model_type(args.width, args.hidden, args.architecture).double()
+    warm_start = None
+    if args.warm_start:
+        from .nnue_warm_start import initialize_from_halfkp
+        warm_start = initialize_from_halfkp(torch, model, args.warm_start.read_bytes())
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     baselines = constant_baselines(torch, train, validation, args.search_weight)
     print(f"Constant baselines: validation zero cp {baselines['zero_cp']['validation']['loss']:.6f}; "
@@ -126,6 +137,9 @@ def main():
     initial = {"train": metrics(torch, model, train, args.search_weight),
                "validation": metrics(torch, model, validation, args.search_weight)}
     history, best_state, best_epoch, best_loss = [], None, 0, math.inf
+    if warm_start:
+        best_state = copy.deepcopy(model.state_dict())
+        best_loss = initial["validation"]["loss"]
     for epoch in range(args.epochs):
         order = torch.randperm(len(train)).tolist()
         for start in range(0, len(train), args.batch_size):
@@ -152,6 +166,7 @@ def main():
               "dataset_sha256": nnue_data.file_hash(args.dataset), "torch": str(torch.__version__),
               "epochs": args.epochs, "batch_size": args.batch_size, "learning_rate": args.learning_rate,
               "search_weight": args.search_weight, "teacher": header,
+              "warm_start": warm_start, "ft_bound": model.ft_bound,
               "initial": initial, "history": history, "exported_epoch": best_epoch,
               "constant_baselines": baselines}
     model.load_state_dict(best_state)

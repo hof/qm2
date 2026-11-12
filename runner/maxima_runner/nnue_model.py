@@ -18,6 +18,7 @@ class halfkp_model(nn.Module):
     def __init__(self, width=8, hidden=8, architecture="halfkp"):
         super().__init__()
         self.architecture = architecture
+        self.ft_bound = 1
         self.ft_weight = nn.Parameter(torch.empty(feature_count_for(architecture), width))
         self.ft_bias = nn.Parameter(torch.full((width,), 0.3))
         self.h1 = nn.Linear(width * 2, hidden)
@@ -49,8 +50,8 @@ class halfkp_model(nn.Module):
 
     def constrain(self):
         with torch.no_grad():
-            self.ft_weight.clamp_(-1, 1)
-            self.ft_bias.clamp_(-1, 1)
+            self.ft_weight.clamp_(-self.ft_bound, self.ft_bound)
+            self.ft_bias.clamp_(-self.ft_bound, self.ft_bound)
             for layer in [self.h1, self.h2]:
                 layer.weight.clamp_(-2, 127 / 64)
                 layer.bias.clamp_(-16, 16)

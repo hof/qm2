@@ -1960,6 +1960,31 @@ bytes and must match quantized model scores for every dataset position before
 the artifacts are saved. This establishes export consistency, not playing strength.
 Models remain in the requested directory and are never activated automatically.
 
+Full-size HalfKAv2_hm students can optionally start from a supported legacy HalfKP
+file instead of random weights:
+
+```bash
+.tools/training/bin/maxima nnue:train training.mxdata --output .context/training/warm-01 \
+    --architecture halfkav2_hm --width 256 --hidden 32 --warm-start eval.nnue \
+    --epochs 3 --batch-size 128
+```
+
+`--warm-start` copies the dense layers and transformer bias, averages horizontally
+reflected HalfKP piece columns for each canonical king bucket (nearest integer,
+ties to even), and initializes the new king columns to zero. This is an approximate
+initialization, not an equivalent network conversion. All student weights then
+train normally. The default learning rate becomes .0001; an explicit
+`--learning-rate` overrides it. Random-start defaults remain unchanged.
+Warm starts require the full 256/32/32/1 geometry and use transformer weight/bias
+bounds of +/-508 integer units instead of +/-127. Even with 32 active pieces,
+these bounds keep transformer sums inside signed16 range. Incompatible formats,
+dimensions or source values beyond the supported bounds fail before changing the
+student. Checkpoint/report metadata includes the initialization method, source
+hash and `ft_bound`. Importing a checkpoint for further training must restore
+`ft_bound` as well as its parameters; the CLI does not yet resume checkpoints.
+The initial warm-start model is eligible for validation selection as epoch0, so
+fine tuning cannot force export of an epoch worse than that initialization.
+
 For comparison with Maxima's actual loader and fresh/incremental inference:
 
 ```bash
