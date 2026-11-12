@@ -15,6 +15,13 @@ from maxima_runner import cli
 
 
 class cli_tests(unittest.TestCase):
+    def test_training_help_does_not_require_torch(self):
+        with patch.dict(sys.modules, {"torch": None}), contextlib.redirect_stdout(io.StringIO()):
+            for command in ["nnue:train", "nnue:verify"]:
+                with self.assertRaises(SystemExit) as result:
+                    cli.main([command, "--help"])
+                self.assertEqual(result.exception.code, 0)
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

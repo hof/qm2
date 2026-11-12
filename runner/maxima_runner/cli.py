@@ -21,6 +21,8 @@ command_groups = (
         ("suite:run", "Evaluate a position suite"),
         ("match:run", "Run offline paired-opening matches"),
         ("nnue:data", "Label PGN positions for NNUE training"),
+        ("nnue:train", "Train and export a small CPU NNUE model"),
+        ("nnue:verify", "Check exported NNUE inference against Maxima"),
     )),
     ("Online learning (FICS / Lichess)", (
         ("experience:sync", "Upload PGNs into shared online learning"),
@@ -220,6 +222,12 @@ def main(argv=None):
         elif command == "nnue:data":
             from . import nnue_data
             entrypoint = nnue_data.main
+        elif command == "nnue:train":
+            from . import nnue_training
+            entrypoint = nnue_training.main
+        elif command == "nnue:verify":
+            from . import nnue_training
+            entrypoint = nnue_training.verify_main
         elif command == "experience:sync":
             from . import learning
             entrypoint = learning.sync_main

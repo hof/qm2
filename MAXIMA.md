@@ -1796,7 +1796,7 @@ orchestration, automation, and PGN capture follow the transport. ICC, legacy
 database migration, remote control, and notifications are deferred. Learning
 and online book selection stay in Python; native Polyglot probing stays in Maxima.
 
-#### NNUE training data
+#### NNUE training tooling
 
 `maxima nnue:data games.pgn --output training.jsonl --positions 256 --nodes 2000`
 replays standard PGNs and freshly labels sampled positions with one engine worker,
@@ -1817,6 +1817,54 @@ overwritten; a completed dataset is published atomically. The command needs
 only the ordinary runner dependencies and does not change online learning,
 books or the active model. Dataset creation is bounded by `--positions` and
 per-position `--nodes`; large input PGNs still require replay work.
+
+`nnue:train` trains a small CPU HalfKP model using optional PyTorch. Install it
+in a separate environment (Python 3.11+ for the pinned training dependencies):
+
+```bash
+python3 -m venv .tools/training
+.tools/training/bin/python -m pip install --index-url https://download.pytorch.org/whl/cpu \
+    -r runner/requirements-training.txt
+.tools/training/bin/python -m pip install -e ./runner
+.tools/training/bin/maxima nnue:train training.jsonl --output .context/training/run-01
+```
+
+On hosts without `ensurepip`, create the environment with `--without-pip` and
+use `.tools/runner/bin/python -m pip --python .tools/training/bin/python install`
+for the same installation commands. Ordinary ops and the native engine do not
+require PyTorch. `nnue:train --help` also works without it.
+
+The prototype uses shared HalfKP features, two perspectives, clipped activations
+and two hidden layers; defaults are eight feature lanes and eight hidden units.
+It uses straight-through quantization and integer-domain activations, constrains
+weights to exportable ranges, and minimizes squared error between sigmoid
+centipawn scores (`sigmoid(cp * ln(10) / 400)`). Reported game results are not used
+in this first objective. Training runs on one CPU thread, with seeded initialization
+and batch order. Training/validation loss, centipawn error and float/quantized
+differences are recorded each epoch. Validation selects the exported epoch;
+it is not an independent final test set. The dataset is loaded into memory;
+this command is for bounded prototypes, not large-scale training yet.
+
+Each new output directory contains a versioned PyTorch state checkpoint,
+`network.nnue`, and a JSON report with dataset/teacher/network hashes, training
+settings and metrics. The compact model is padded into the currently supported
+256x2 -> 32 -> 32 -> 1 format. A scalar evaluator reads the actual serialized
+bytes and must match quantized model scores for every dataset position before
+the artifacts are saved. This establishes export consistency, not playing strength.
+Models remain in the requested directory and are never activated automatically.
+
+For comparison with Maxima's actual loader and fresh/incremental inference:
+
+```bash
+cmake --build --preset cpp26_release --parallel 2 --target nnue_probe
+./maxima nnue:verify .context/training/run-01/network.nnue \
+    --probe build/cpp26/release/tests/nnue_probe --dataset training.jsonl
+```
+
+The test-only probe compares raw and centipawn outputs for sampled roots and all
+legal children, plus explicit both-color castling, en passant and promotion
+fixtures. Every incremental accumulator must equal a fresh accumulator. This
+check needs no PyTorch and adds no engine protocol command.
 
 ### 10.1 Documentation and CLI interface
 
