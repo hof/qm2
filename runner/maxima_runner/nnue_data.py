@@ -41,6 +41,25 @@ def game_split(source):
     return "validation" if int.from_bytes(digest[:8], "big") % 10 == 0 else "train"
 
 
+def completed_label(infos):
+    """Use an exact completed iteration, never an interrupted root's bound."""
+    exact, completed, nodes = {}, None, 0
+    for info in infos:
+        nodes = max(nodes, info.get("nodes", 0))
+        text = info.get("string", "")
+        if text.startswith("search_result ") and "completed_depth " in text:
+            fields = text.split()
+            completed = int(fields[fields.index("completed_depth") + 1])
+        if ("score" in info and "depth" in info and not info.get("lowerbound")
+                and not info.get("upperbound")):
+            exact[info["depth"]] = info["score"].relative.score()
+    depth = completed if completed is not None else max(exact, default=0)
+    score = exact.get(depth)
+    if depth <= 0 or score is None or abs(score) >= 10000:
+        return None
+    return {"score_cp": score, "depth": depth, "nodes": nodes}
+
+
 def candidates(paths, limit, stride=8, min_ply=16, split_method="game"):
     """Replay complete games; sample outside check, never reuse PGN eval labels."""
     found, seen = [], set()
@@ -216,6 +235,7 @@ def main():
         raise ValueError("no eligible standard-chess positions")
     header = {"format": data_format, "version": 2, "variant": "standard",
               "position_encoding": "shortfen", "split_method": "game",
+              "label_source": "completed_exact_iteration",
               "score_pov": "side_to_move", "engine_sha256": file_hash(args.engine),
               "network_sha256": file_hash(args.network), "requested_nodes": args.nodes,
               "stride": args.stride, "min_ply": args.min_ply}
@@ -226,11 +246,10 @@ def main():
                           "ShortDrawOffset": 0})
         header["engine"] = engine.id
         for row in rows:
-            info = engine.analyse(chess.Board(row["fen"]), chess.engine.Limit(nodes=args.nodes), game=object())
-            score = info["score"].relative.score()
-            if score is None or abs(score) >= 10000:
-                continue  # Never teach mate/tablebase scores as ordinary centipawns.
-            labeled.append(dict(row, score_cp=score, depth=info.get("depth", 0), nodes=info.get("nodes", 0)))
+            with engine.analysis(chess.Board(row["fen"]), chess.engine.Limit(nodes=args.nodes), game=object()) as analysis:
+                label = completed_label(analysis)
+            if label is not None:
+                labeled.append(dict(row, **label))
     if not labeled:
         raise ValueError("no ordinary centipawn labels produced")
     header["positions"] = len(labeled)

@@ -1806,6 +1806,10 @@ default; even strides alternate one-ply offsets to cover both sides to move.
 Checked and terminal/claimable-draw positions are excluded. Input games
 are legally replayed before their positions are used. Mate and tablebase scores
 are excluded from the ordinary centipawn labels.
+Labels use the exact score from the last completed iteration; node-limited
+searches can also report an unfinished root or a bound, which is not used as a
+training target. Recorded nodes include total search effort, while depth names
+the completed iteration used for the label.
 
 The versioned dataset records positions, side-to-move centipawns, actual depth/nodes,
 reported game result from that side (unknown for unfinished games), PGN hash and

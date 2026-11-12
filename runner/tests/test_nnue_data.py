@@ -5,11 +5,24 @@ import tempfile
 import unittest
 
 import chess
+import chess.engine
 
 from maxima_runner import nnue_data, shortfen
 
 
 class nnue_data_tests(unittest.TestCase):
+    def test_labels_use_completed_exact_iteration_and_total_effort(self):
+        exact = {"depth": 7, "nodes": 6000, "score": chess.engine.PovScore(chess.engine.Cp(-30), True)}
+        interrupted = {"depth": 8, "nodes": 10000, "lowerbound": True,
+                       "score": chess.engine.PovScore(chess.engine.Cp(80), True)}
+        provenance = {"string": "search_result partial completed_depth 7 attempted_depth 8"}
+        self.assertEqual(nnue_data.completed_label([exact, provenance, interrupted]),
+                         {"score_cp": -30, "depth": 7, "nodes": 10000})
+        # An unfinished iteration can even have an unbounded partial-root report.
+        self.assertEqual(nnue_data.completed_label([exact, provenance, dict(interrupted, lowerbound=False)])["depth"], 7)
+        mate = {"depth": 8, "score": chess.engine.PovScore(chess.engine.Mate(2), True)}
+        self.assertIsNone(nnue_data.completed_label([exact, mate]))
+        self.assertIsNone(nnue_data.completed_label([interrupted]))
     def test_even_stride_samples_both_sides_and_game_split_is_consistent(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "game.pgn"
