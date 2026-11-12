@@ -1,6 +1,6 @@
 # Maxima runner
 
-Optional NNUE development commands are `nnue:data`, `nnue:convert`, `nnue:train`
+Optional NNUE development commands are `nnue:selfplay`, `nnue:data`, `nnue:convert`, `nnue:train`
 and `nnue:verify`. Datasets default to binary; shortfen JSONL remains available
 for inspection. Training alone uses PyTorch in a separate environment; ordinary
 ops and dataset/export verification retain the lightweight dependencies. See

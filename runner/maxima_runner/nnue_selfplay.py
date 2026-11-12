@@ -1,0 +1,233 @@
+"""Resumable standard self-play with searched labels, final results and quiet filtering."""
+import argparse
+import asyncio
+import collections
+import hashlib
+import json
+import os
+from pathlib import Path
+import random
+import shutil
+import tempfile
+
+import chess
+import chess.engine
+import chess.pgn
+import chess.polyglot
+
+from . import nnue_data
+from .learning_store import writer_lock
+from .project import data_root, engine_path, network_path, project_root
+from .uci import open_engine
+
+
+def usable_position(board, move, label, *, min_ply, score_limit, seen):
+    if board.ply() < min_ply:
+        return "opening"
+    if board.is_check():
+        return "check"
+    if board.is_capture(move) or move.promotion:
+        return "tactical"
+    if label is None:
+        return "no_exact_cp"
+    if abs(label["score_cp"]) > score_limit:
+        return "decided"
+    if nnue_data.position_key(board) in seen:
+        return "duplicate"
+    return None
+
+
+def opening_moves(seed, index, plies, book=None):
+    generator = random.Random(f"{seed}:{index}")
+    board, moves = chess.Board(), []
+    for _ in range(plies):
+        if board.is_game_over(claim_draw=True):
+            break
+        entries = list(book.find_all(board)) if book is not None else []
+        if entries:
+            moves_and_weights = [(entry.move, entry.weight) for entry in entries
+                                 if entry.weight > 0 and entry.move in board.legal_moves]
+        else:
+            moves_and_weights = []
+        move = (generator.choices([item[0] for item in moves_and_weights],
+                                  [item[1] for item in moves_and_weights])[0]
+                if moves_and_weights else generator.choice(list(board.legal_moves)))
+        board.push(move)
+        moves.append(move)
+    return moves
+
+
+async def play_game(engine, config, index, seen, book=None):
+    board, game, rows, local_seen = chess.Board(), chess.pgn.Game(), [], set()
+    counters = collections.Counter()
+    game_id = f"maxima-selfplay-{config['seed']}-{index}"
+    game.headers.update(Event="Maxima NNUE self-play", Site="local", Round=str(index),
+                        White="Maxima teacher", Black="Maxima teacher", GameId=game_id,
+                        Variant="Standard", NodesPerMove=str(config["nodes"]),
+                        EvalFileSHA256=config["network_sha256"])
+    node = game
+    for move in opening_moves(config["seed"], index, config["random_plies"], book):
+        board.push(move)
+        node = node.add_variation(move)
+        node.comment = "opening diversity"
+        counters["opening"] += 1
+    while not board.is_game_over(claim_draw=True) and board.ply() < config["max_plies"]:
+        infos = []
+        best, _ = await engine.search(board, chess.engine.Limit(nodes=config["nodes"]), game=game_id,
+                                      on_info=lambda info, elapsed: infos.append(info))
+        move = best.move
+        if move is None or move not in board.legal_moves:
+            raise RuntimeError("self-play engine returned no legal move")
+        label = nnue_data.completed_label(infos)
+        if label is not None and label["nodes"] > config["nodes"]:
+            raise RuntimeError("self-play engine exceeded its node budget")
+        reason = usable_position(board, move, label, min_ply=config["min_ply"],
+                                 score_limit=config["score_limit"], seen=seen)
+        if reason is None and nnue_data.position_key(board) in local_seen:
+            reason = "duplicate"
+        if reason is None:
+            # Also filter the best move of the completed iteration used for the label.
+            exact = [info for info in infos if info.get("depth") == label["depth"] and "score" in info
+                     and not info.get("lowerbound") and not info.get("upperbound")]
+            pv = exact[-1].get("pv", []) if exact else []
+            if not pv or board.is_capture(pv[0]) or pv[0].promotion:
+                reason = "tactical_label"
+        if reason is None:
+            rows.append(dict(label, fen=board.fen(en_passant="fen"), ply=board.ply()))
+            local_seen.add(nnue_data.position_key(board))
+            counters["usable"] += 1
+        else:
+            counters[reason] += 1
+        mover = board.turn
+        board.push(move)
+        node = node.add_variation(move)
+        if label is not None:
+            node.set_eval(chess.engine.PovScore(chess.engine.Cp(label["score_cp"]), mover), label["depth"])
+            node.comment += f" [%nodes {label['nodes']}]"
+    outcome = board.outcome(claim_draw=True)
+    game.headers["Result"] = outcome.result() if outcome is not None else "*"
+    game.headers["Termination"] = outcome.termination.name if outcome is not None else "ply limit"
+    text = str(game) + "\n\n"
+    source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if outcome is None:
+        counters["unfinished_samples_discarded"] = len(rows)
+        rows = []
+    else:
+        result = 0.5 if outcome.winner is None else float(outcome.winner)
+        for row in rows:
+            color = chess.Board(row["fen"]).turn
+            row["result_stm"] = result if color else 1 - result
+            row["source"] = {"sha256": source_hash, "game": index, "ply": row.pop("ply")}
+            row["split"] = nnue_data.game_split(row["source"])
+    return text, rows, dict(counters), board.ply()
+
+
+def load_run(directory, config):
+    rows, seen, games = [], set(), []
+    for path in sorted(directory.glob("game-[0-9]*")):
+        report = json.loads((path / "report.json").read_text())
+        if report["game"] != len(games) + 1 or report["config"] != config:
+            raise ValueError("inconsistent self-play game sequence or teacher configuration")
+        if nnue_data.file_hash(path / "game.pgn") != report["pgn_sha256"]:
+            raise ValueError("self-play PGN hash mismatch")
+        if nnue_data.file_hash(path / "positions.mxdata") != report["data_sha256"]:
+            raise ValueError("self-play shard hash mismatch")
+        if report["positions"]:
+            _, saved = nnue_data.read_dataset(path / "positions.mxdata")
+            if len(saved) != report["positions"]:
+                raise ValueError("self-play shard count mismatch")
+            for row in saved:
+                key = nnue_data.position_key(chess.Board(row["fen"]))
+                if key in seen:
+                    raise ValueError("duplicate position across self-play shards")
+                seen.add(key)
+            rows.extend(saved)
+        games.append(report)
+    return rows, seen, games
+
+
+async def generate(args, config, rows, seen, games):
+    book = chess.polyglot.open_reader(args.book) if args.book else None
+    try:
+        with tempfile.TemporaryDirectory() as working:
+            async with open_engine(str(args.engine.resolve()), working, timeout=30) as engine:
+                await engine.configure({"Threads": 1, "Hash": 32, "OwnBook": False,
+                                        "Ponder": False, "UCI_AnalyseMode": True,
+                                        "DrawContempt": 0, "ShortDrawOffset": 0,
+                                        "SyzygyPath": "<empty>", "EvalFile": str(args.network.resolve())})
+                await engine.ready()
+                for _ in range(args.games_per_run):
+                    if len(rows) >= args.positions:
+                        break
+                    index = len(games) + 1
+                    text, produced, counters, plies = await play_game(engine, config, index, seen, book)
+                    staging = Path(tempfile.mkdtemp(prefix=".pending-", dir=args.output))
+                    try:
+                        (staging / "game.pgn").write_text(text, encoding="utf-8")
+                        header = dict(config, variant="standard", score_pov="side_to_move", split_method="game",
+                                      label_source="completed_exact_iteration", engine=engine.protocol.id)
+                        nnue_data.save_dataset(staging / "positions.mxdata", header, produced)
+                        report = {"game": index, "config": config, "positions": len(produced), "plies": plies,
+                                  "filters": counters, "pgn_sha256": nnue_data.file_hash(staging / "game.pgn"),
+                                  "data_sha256": nnue_data.file_hash(staging / "positions.mxdata")}
+                        (staging / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+                        os.rename(staging, args.output / f"game-{index:06d}")
+                    finally:
+                        if staging.exists():
+                            shutil.rmtree(staging)
+                    rows.extend(produced)
+                    seen.update(nnue_data.position_key(chess.Board(row["fen"])) for row in produced)
+                    games.append(report)
+                    print(f"Game {index}: {plies} plies, {len(produced)} usable; total {len(rows)}/{args.positions}", flush=True)
+    finally:
+        if book is not None:
+            book.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="maxima nnue:selfplay", description=__doc__)
+    parser.add_argument("--output", required=True, type=Path, help="new or matching resumable run directory")
+    parser.add_argument("--positions", type=int, default=10000)
+    parser.add_argument("--nodes", type=int, default=10000)
+    parser.add_argument("--games-per-run", type=int, default=5)
+    parser.add_argument("--max-plies", type=int, default=512)
+    parser.add_argument("--random-plies", type=int, default=8)
+    parser.add_argument("--min-ply", type=int, default=16)
+    parser.add_argument("--score-limit", type=int, default=1000)
+    parser.add_argument("--seed", type=int, default=2026)
+    parser.add_argument("--engine", type=Path, default=engine_path())
+    parser.add_argument("--network", type=Path, default=network_path(project_root()))
+    parser.add_argument("--book", type=Path, default=(data_root() / "book.bin") if (data_root() / "book.bin").is_file() else None)
+    args = parser.parse_args()
+    if (min(args.positions, args.nodes, args.games_per_run, args.score_limit) <= 0
+            or not 0 <= args.random_plies <= args.min_ply < args.max_plies <= 65535):
+        parser.error("invalid generation bounds")
+    config = {"format": "maxima.nnue.selfplay", "version": 1, "nodes": args.nodes,
+              "generator_sha256": nnue_data.file_hash(__file__),
+              "seed": args.seed, "random_plies": args.random_plies, "min_ply": args.min_ply,
+              "max_plies": args.max_plies, "score_limit": args.score_limit,
+              "engine_sha256": nnue_data.file_hash(args.engine), "network_sha256": nnue_data.file_hash(args.network),
+              "book_sha256": nnue_data.file_hash(args.book) if args.book else None}
+    args.output.mkdir(parents=True, exist_ok=True)
+    with writer_lock(args.output / ".lock"):
+        settings = args.output / "settings.json"
+        if settings.exists():
+            if json.loads(settings.read_text()) != config:
+                raise ValueError("self-play resume settings differ from the saved run")
+        else:
+            if any(args.output.glob("game-*")):
+                raise ValueError("self-play games exist without run settings")
+            nnue_data.publish_jsonl(settings, config, [])
+        rows, seen, games = load_run(args.output, config)
+        if len(rows) < args.positions:
+            asyncio.run(generate(args, config, rows, seen, games))
+        if len(rows) >= args.positions:
+            path = args.output / f"dataset-{args.positions}.mxdata"
+            if not path.exists():
+                nnue_data.save_dataset(path, dict(config, variant="standard", score_pov="side_to_move",
+                                                  split_method="game", label_source="completed_exact_iteration"),
+                                       rows[:args.positions])
+            print(f"Ready: {path}")
+        else:
+            print(f"Checkpoint: {len(games)} games, {len(rows)} positions; repeat the command to resume")
+    return 0

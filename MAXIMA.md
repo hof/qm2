@@ -1815,6 +1815,33 @@ and online book selection stay in Python; native Polyglot probing stays in Maxim
 
 #### NNUE training tooling
 
+`maxima nnue:selfplay --output RUN --positions 10000 --nodes 10000` generates
+fresh standard games using the selected engine and network (the existing model
+by default). One engine plays both sides with one worker, Hash32, no pondering,
+native book or tablebases, and zero draw contempt. The first eight plies use
+seeded weighted base-book choices, falling back to seeded random legal moves;
+the selected engine searches every later move. `--book` selects the opening
+book; its hash, teacher hashes, generator hash and settings must match on resume.
+
+Samples start at ply16 and exclude checked positions, captures/promotions by
+either the played move or the completed iteration's best move, missing exact
+centipawn labels, scores beyond `--score-limit` (default1000cp), and duplicate
+positions ignoring clocks. Only completed games supply training samples; final
+win/draw/loss is attached from the side-to-move perspective. Games reaching
+`--max-plies` (default512) remain unfinished PGNs and supply no training rows.
+There is no score-based win adjudication. Whole-game splits and global position
+deduplication cover the saved run. Each game directory atomically publishes its
+PGN, binary shard and hash report. Completed-game hashes are checked on resume;
+an interrupted in-progress game is replayed rather than assigned a result.
+
+Each invocation plays at most `--games-per-run` games (default5); repeat the same
+command to continue. At the position target it publishes `dataset-N.mxdata`,
+containing exactly the first N usable positions from complete games. Game shards
+remain available for later targets. This bounded generator currently loads its
+saved rows and deduplication keys into memory; it is intended for initial
+experiments, with large-corpus indexing still separate work. It never publishes
+to online experience or replaces the playing network.
+
 `maxima nnue:data games.pgn --output training.mxdata --positions 256 --nodes 2000`
 replays standard PGNs and freshly labels sampled positions with one engine worker,
 Hash32, native book disabled, analysis mode and zero draw contempt. PGN eval
