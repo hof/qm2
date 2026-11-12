@@ -31,12 +31,21 @@ def batch(torch, rows, architecture="halfkp"):
     return (torch.tensor(indices, dtype=torch.long), torch.tensor(offsets, dtype=torch.long))
 
 
-def loss(torch, scores, labels):
+def result_tensor(torch, rows):
+    return torch.tensor([row.get("result_stm") if row.get("result_stm") is not None else math.nan
+                         for row in rows], dtype=torch.float64)
+
+
+def loss(torch, scores, labels, results=None, search_weight=1.0):
     scale = math.log(10) / 400
-    return (torch.sigmoid(scores * scale) - torch.sigmoid(labels * scale)).square().mean()
+    target = torch.sigmoid(labels * scale)
+    if results is not None:
+        target = torch.where(torch.isfinite(results),
+                             search_weight * target + (1 - search_weight) * torch.nan_to_num(results), target)
+    return (torch.sigmoid(scores * scale) - target).square().mean()
 
 
-def metrics(torch, model, rows):
+def metrics(torch, model, rows, search_weight=1.0):
     if not rows:
         return None
     with torch.no_grad():
@@ -44,7 +53,9 @@ def metrics(torch, model, rows):
         labels = torch.tensor([row["score_cp"] for row in rows], dtype=torch.float64)
         scores = model(*inputs)
         floating = model(*inputs, quantized=False)
-        return {"positions": len(rows), "loss": loss(torch, scores, labels).item(),
+        return {"positions": len(rows),
+                "loss": loss(torch, scores, labels, result_tensor(torch, rows), search_weight).item(),
+                "search_loss": loss(torch, scores, labels).item(),
                 "mae_cp": (scores - labels).abs().mean().item(),
                 "quantization_mae_cp": (scores - floating).abs().mean().item()}
 
@@ -60,9 +71,12 @@ def main():
     parser.add_argument("--architecture", choices=("halfkp", "halfkav2_hm"), default="halfkp")
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--learning-rate", type=float, default=0.003)
+    parser.add_argument("--search-weight", type=float, default=0.7,
+                        help="search-score share of the target; remaining share is final game result")
     args = parser.parse_args()
     if (min(args.epochs, args.batch_size) <= 0 or not 1 <= args.width <= 256
-            or not 1 <= args.hidden <= 32 or not math.isfinite(args.learning_rate) or args.learning_rate <= 0):
+            or not 1 <= args.hidden <= 32 or not math.isfinite(args.learning_rate) or args.learning_rate <= 0
+            or not math.isfinite(args.search_weight) or not 0 <= args.search_weight <= 1):
         parser.error("invalid dimensions, epoch/batch count or learning rate")
     if args.output.exists():
         raise ValueError(f"output already exists: {args.output}")
@@ -77,7 +91,8 @@ def main():
     torch.use_deterministic_algorithms(True)
     model = model_type(args.width, args.hidden, args.architecture).double()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
-    initial = {"train": metrics(torch, model, train), "validation": metrics(torch, model, validation)}
+    initial = {"train": metrics(torch, model, train, args.search_weight),
+               "validation": metrics(torch, model, validation, args.search_weight)}
     history, best_state, best_epoch, best_loss = [], None, 0, math.inf
     for epoch in range(args.epochs):
         order = torch.randperm(len(train)).tolist()
@@ -85,14 +100,15 @@ def main():
             selected = [train[i] for i in order[start:start + args.batch_size]]
             labels = torch.tensor([row["score_cp"] for row in selected], dtype=torch.float64)
             optimizer.zero_grad(set_to_none=True)
-            objective = loss(torch, model(*batch(torch, selected, model.architecture)), labels)
+            objective = loss(torch, model(*batch(torch, selected, model.architecture)), labels,
+                             result_tensor(torch, selected), args.search_weight)
             if not torch.isfinite(objective):
                 raise ValueError("nonfinite training loss")
             objective.backward()
             optimizer.step()
             model.constrain()
-        scores = {"epoch": epoch + 1, "train": metrics(torch, model, train),
-                  "validation": metrics(torch, model, validation)}
+        scores = {"epoch": epoch + 1, "train": metrics(torch, model, train, args.search_weight),
+                  "validation": metrics(torch, model, validation, args.search_weight)}
         history.append(scores)
         if scores["validation"]["loss"] < best_loss:
             best_loss = scores["validation"]["loss"]
@@ -103,15 +119,18 @@ def main():
               "width": args.width, "hidden": args.hidden, "seed": args.seed,
               "dataset_sha256": nnue_data.file_hash(args.dataset), "torch": str(torch.__version__),
               "epochs": args.epochs, "batch_size": args.batch_size, "learning_rate": args.learning_rate,
-              "teacher": header, "initial": initial, "history": history, "exported_epoch": best_epoch}
+              "search_weight": args.search_weight, "teacher": header,
+              "initial": initial, "history": history, "exported_epoch": best_epoch}
     model.load_state_dict(best_state)
     serialized = nnue_format.serialize(model.integer_weights(), model.architecture)
     integer = nnue_format.integer_network(serialized)
     with torch.no_grad():
         predictions = model(*batch(torch, rows, model.architecture)).tolist()
-    for row, predicted in zip(rows, predictions):
+    for checked, (row, predicted) in enumerate(zip(rows, predictions), 1):
         if integer.evaluate(chess.Board(row["fen"]))[1] != predicted:
             raise ValueError(f"quantized model/export mismatch for {row['fen']}")
+        if checked % 1000 == 0:
+            print(f"Export checked: {checked}/{len(rows)} positions", flush=True)
     config["export_checked_positions"] = len(rows)
     config["network_sha256"] = hashlib.sha256(serialized).hexdigest()
     # Artifacts are experiments: never overwrite a run or activate its network.
@@ -133,6 +152,8 @@ verification_fens = [
     "7k/8/8/8/8/8/p7/7K b - - 0 1",
     "7k/8/8/8/8/8/P7/3K4 w - - 0 1",
     "3k4/7p/8/8/8/8/8/K7 b - - 0 1",
+    "7K/8/8/8/8/8/8/k7 w - - 0 1",
+    "7K/8/8/8/8/8/8/k7 b - - 0 1",
 ]
 
 

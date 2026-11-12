@@ -1937,9 +1937,11 @@ require PyTorch. `nnue:train --help` also works without it.
 and exports the Maxima-native format. Both use two perspectives, clipped activations
 and two hidden layers; defaults are eight feature lanes and eight hidden units.
 It uses straight-through quantization and integer-domain activations, constrains
-weights to exportable ranges, and minimizes squared error between sigmoid
-centipawn scores (`sigmoid(cp * ln(10) / 400)`). Reported game results are not used
-in this first objective. Training runs on one CPU thread, with seeded initialization
+weights to exportable ranges, and minimizes squared error against a blend of
+sigmoid centipawn scores (`sigmoid(cp * ln(10) / 400)`) and final game results.
+`--search-weight` defaults to0.7 (70%search/30%result); unknown results use the
+search target alone. Both blended loss and pure search-score loss are recorded.
+Training runs on one CPU thread, with seeded initialization
 and batch order. Training/validation loss, centipawn error and float/quantized
 differences are recorded each epoch. Validation selects the exported epoch;
 it is not an independent final test set. The dataset is loaded into memory;

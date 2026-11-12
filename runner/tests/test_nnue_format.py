@@ -23,7 +23,9 @@ class nnue_format_tests(unittest.TestCase):
         cases = [("7k/8/8/8/8/8/P7/K7 w - - 0 1", 79),
                  ("7k/8/8/8/8/8/P7/K7 b - - 0 1", 67),
                  ("7k/8/8/8/8/8/P7/1K6 w - - 0 1", 75),
-                 ("7k/8/8/8/8/8/P7/1K6 b - - 0 1", 68)]
+                 ("7k/8/8/8/8/8/P7/1K6 b - - 0 1", 68),
+                 ("7K/8/8/8/8/8/8/k7 w - - 0 1", 126),
+                 ("7K/8/8/8/8/8/8/k7 b - - 0 1", 126)]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "halfkav2.nnue"
             path.write_bytes(nnue_format.serialize(weights, "halfkav2_hm"))
@@ -42,6 +44,8 @@ class nnue_format_tests(unittest.TestCase):
             self.assertEqual(sorted(nnue_format.features(board, color, "halfkav2_hm")),
                              sorted(nnue_format.features(reflected, color, "halfkav2_hm")))
         self.assertEqual(nnue_format.feature_count_for("halfkav2_hm"), 22528)
+        corner = chess.Board("7K/8/8/8/8/8/8/k7 w - - 0 1")
+        self.assertEqual(nnue_format.features(corner, True, "halfkav2_hm"), [22464, 22527])
 
     def test_both_perspectives_have_known_feature_indices(self):
         white = chess.Board("7k/8/8/8/8/8/P7/K7 w - - 0 1")
