@@ -27,7 +27,7 @@ class fools_mate_engine:
 class nnue_selfplay_tests(unittest.TestCase):
     def config(self, max_plies=20):
         return {"seed": 1, "nodes": 10000, "random_plies": 0, "max_plies": max_plies,
-                "min_ply": 0, "score_limit": 1000, "network_sha256": "test"}
+                "book_plies": 0, "min_ply": 0, "score_limit": 1000, "network_sha256": "test"}
 
     def test_completed_game_labels_have_correct_root_and_final_result_perspective(self):
         text, rows, filters, plies = asyncio.run(nnue_selfplay.play_game(
@@ -94,3 +94,19 @@ class nnue_selfplay_tests(unittest.TestCase):
             self.assertIn(move, board.legal_moves)
             board.push(move)
         self.assertEqual(len(first), 8)
+
+    def test_book_guidance_leaves_actual_random_exploration(self):
+        class forced_book:
+            def __init__(self):
+                self.calls = 0
+
+            def find_all(self, board):
+                self.calls += 1
+                return [SimpleNamespace(move=next(iter(board.legal_moves)), weight=1)]
+
+        book = forced_book()
+        first = nnue_selfplay.opening_moves(2026, 1, 8, book, book_plies=4)
+        self.assertEqual(book.calls, 4)
+        second = nnue_selfplay.opening_moves(2026, 2, 8, forced_book(), book_plies=4)
+        self.assertEqual(first[:4], second[:4])
+        self.assertNotEqual(first[4:], second[4:])

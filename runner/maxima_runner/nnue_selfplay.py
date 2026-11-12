@@ -37,13 +37,13 @@ def usable_position(board, move, label, *, min_ply, score_limit, seen):
     return None
 
 
-def opening_moves(seed, index, plies, book=None):
+def opening_moves(seed, index, plies, book=None, book_plies=4):
     generator = random.Random(f"{seed}:{index}")
     board, moves = chess.Board(), []
-    for _ in range(plies):
+    for ply in range(plies):
         if board.is_game_over(claim_draw=True):
             break
-        entries = list(book.find_all(board)) if book is not None else []
+        entries = list(book.find_all(board)) if book is not None and ply < book_plies else []
         if entries:
             moves_and_weights = [(entry.move, entry.weight) for entry in entries
                                  if entry.weight > 0 and entry.move in board.legal_moves]
@@ -66,7 +66,7 @@ async def play_game(engine, config, index, seen, book=None):
                         Variant="Standard", NodesPerMove=str(config["nodes"]),
                         EvalFileSHA256=config["network_sha256"])
     node = game
-    for move in opening_moves(config["seed"], index, config["random_plies"], book):
+    for move in opening_moves(config["seed"], index, config["random_plies"], book, config["book_plies"]):
         board.push(move)
         node = node.add_variation(move)
         node.comment = "opening diversity"
@@ -192,6 +192,8 @@ def main():
     parser.add_argument("--games-per-run", type=int, default=5)
     parser.add_argument("--max-plies", type=int, default=512)
     parser.add_argument("--random-plies", type=int, default=8)
+    parser.add_argument("--book-plies", type=int, default=4,
+                        help="book-guided prefix within the opening plies; the remainder are random")
     parser.add_argument("--min-ply", type=int, default=16)
     parser.add_argument("--score-limit", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=2026)
@@ -200,11 +202,12 @@ def main():
     parser.add_argument("--book", type=Path, default=(data_root() / "book.bin") if (data_root() / "book.bin").is_file() else None)
     args = parser.parse_args()
     if (min(args.positions, args.nodes, args.games_per_run, args.score_limit) <= 0
-            or not 0 <= args.random_plies <= args.min_ply < args.max_plies <= 65535):
+            or not 0 <= args.book_plies <= args.random_plies <= args.min_ply < args.max_plies <= 65535):
         parser.error("invalid generation bounds")
     config = {"format": "maxima.nnue.selfplay", "version": 1, "nodes": args.nodes,
               "generator_sha256": nnue_data.file_hash(__file__),
               "seed": args.seed, "random_plies": args.random_plies, "min_ply": args.min_ply,
+              "book_plies": args.book_plies,
               "max_plies": args.max_plies, "score_limit": args.score_limit,
               "engine_sha256": nnue_data.file_hash(args.engine), "network_sha256": nnue_data.file_hash(args.network),
               "book_sha256": nnue_data.file_hash(args.book) if args.book else None}

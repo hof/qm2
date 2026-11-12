@@ -1818,9 +1818,11 @@ and online book selection stay in Python; native Polyglot probing stays in Maxim
 `maxima nnue:selfplay --output RUN --positions 10000 --nodes 10000` generates
 fresh standard games using the selected engine and network (the existing model
 by default). One engine plays both sides with one worker, Hash32, no pondering,
-native book or tablebases, and zero draw contempt. The first eight plies use
-seeded weighted base-book choices, falling back to seeded random legal moves;
-the selected engine searches every later move. `--book` selects the opening
+native book or tablebases, and zero draw contempt. Opening diversity defaults to
+eight plies: the first four are seeded weighted base-book choices (random legal
+moves where the book is absent), and the remainder are random legal moves.
+`--book-plies` controls that prefix within `--random-plies`; the selected engine
+searches every later move. `--book` selects the opening
 book; its hash, teacher hashes, generator hash and settings must match on resume.
 
 Samples start at ply16 and exclude checked positions, captures/promotions by
