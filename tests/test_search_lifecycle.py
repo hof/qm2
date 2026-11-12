@@ -288,7 +288,6 @@ class search_lifecycle_tests(unittest.TestCase):
                     info = engine.wait_for("info depth 0 ")
                     self.assertIn(" score mate 0 ", info)
                     if finish:
-                        time.sleep(0.05)
                         engine.send("isready")
                         engine.wait_for("readyok")
                         self.assertFalse(any(line.startswith("bestmove ")
@@ -328,9 +327,12 @@ class search_lifecycle_tests(unittest.TestCase):
         if expected_move != "0000":
             commands += (("go searchmoves " + expected_move + " depth 1 ponder", "ponderhit"),)
         for command, finish in commands:
-            with self.subTest(position=position, command=command):
+            try:
                 engine.transcript.clear()
                 engine.send(position)
+                searching = (expected_move != "0000" and not info_prefix and not tablebase_result
+                    and (command == "go" or ("ponder" in command
+                        and "depth" not in command and "nodes" not in command)))
                 if restrict_move:
                     command += " searchmoves " + expected_move
                 engine.send(command)
@@ -339,8 +341,12 @@ class search_lifecycle_tests(unittest.TestCase):
                     self.assertIn("tbhits 1", info)
                 elif info_prefix:
                     engine.wait_for(info_prefix)
-                # Give the worker time to finish bounded work and enter its wait.
-                time.sleep(0.05)
+                # Observe completed work before checking that authorization is withheld.
+                # An unrestricted go is still searching, so observe an iteration instead.
+                if searching:
+                    engine.wait_for("info depth 1 ")
+                elif not any(line.startswith("info string search_result ") for line in engine.transcript):
+                    engine.wait_for("info string search_result ")
                 if "infinite" in command:
                     engine.send("ponderhit")
                 engine.send("isready")
@@ -357,6 +363,9 @@ class search_lifecycle_tests(unittest.TestCase):
                     self.assertTrue(all(int(line.split()[2]) <= 1
                                         for line in engine.transcript
                                         if line.startswith("info depth ")))
+            except AssertionError as error:
+                # A failed round leaves protocol state unknown; do not reuse it.
+                self.fail(f"{position}; {command}: {error}")
         # Ordinary bounded requests must still publish without authorization.
         bounded_commands = ("go depth 1", "go nodes 1", "go movetime 0")
         if expected_move == "0000" or info_prefix or tablebase_result:

@@ -1128,6 +1128,7 @@ protocol state transitions. Lifecycle watchdogs bound hangs; they do not establi
 performance. Tests must not assume a search depth fits a short clock or require
 subsecond response targets on an uncontrolled host. Expired ponder handling is
 covered by timer-state and bounded result-authorization checks.
+Authorization checks synchronize on search reports instead of fixed worker delays.
 `test_uci_output` verifies that concurrent output preserves every message as one
 complete line, including scheduling delays between payloads and newlines. It
 also checks positive/negative cp and mate score bounds, zero/short elapsed-time
