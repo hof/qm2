@@ -30,6 +30,22 @@ class cli_tests(unittest.TestCase):
                           "--warm-start", "missing.nnue"])
             self.assertEqual(result.exception.code, 2)
 
+    def test_training_rejects_reserved_evaluation_data_without_torch(self):
+        import chess
+        from maxima_runner import nnue_data
+        dataset = self.root / "reserved.mxdata"
+        board = chess.Board()
+        row = {"fen": board.fen(), "score_cp": 0, "result_stm": 0.5, "nodes": 1, "depth": 1,
+               "split": nnue_data.position_split(board), "source": {"sha256": "a" * 64, "game": 1, "ply": 0}}
+        nnue_data.save_dataset(dataset, {"variant": "standard", "score_pov": "side_to_move",
+                                         "purpose": "heldout_evaluation"}, [row])
+        with (patch.dict(sys.modules, {"torch": None}),
+              contextlib.redirect_stderr(io.StringIO()) as errors):
+            result = cli.main(["nnue:train", str(dataset), "--output", str(self.root / "unused")])
+        self.assertEqual(result, 1)
+        self.assertIn("reserved evaluation datasets", errors.getvalue())
+        self.assertFalse((self.root / "unused").exists())
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

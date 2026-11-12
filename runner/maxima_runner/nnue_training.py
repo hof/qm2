@@ -117,6 +117,8 @@ def main():
     if args.output.exists():
         raise ValueError(f"output already exists: {args.output}")
     header, rows = nnue_data.read_dataset(args.dataset)
+    if header.get("purpose") == "heldout_evaluation":
+        raise ValueError("reserved evaluation datasets cannot be used for training")
     train = [row for row in rows if row["split"] == "train"]
     validation = [row for row in rows if row["split"] == "validation"]
     if not train or not validation:

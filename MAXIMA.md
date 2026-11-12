@@ -1984,6 +1984,9 @@ hash and `ft_bound`. Importing a checkpoint for further training must restore
 `ft_bound` as well as its parameters; the CLI does not yet resume checkpoints.
 The initial warm-start model is eligible for validation selection as epoch0, so
 fine tuning cannot force export of an epoch worse than that initialization.
+Datasets reserved for a separate inference-only evaluation may carry metadata
+`purpose: heldout_evaluation`; `nnue:train` rejects these files before loading
+PyTorch or creating artifacts. Their rows never enter epoch selection or fitting.
 
 For comparison with Maxima's actual loader and fresh/incremental inference:
 
