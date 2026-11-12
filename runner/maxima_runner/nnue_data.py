@@ -11,6 +11,7 @@ import chess.engine
 import chess.pgn
 
 from .project import engine_path, network_path, project_root
+from . import shortfen
 
 
 data_format = "maxima.nnue.data"
@@ -95,13 +96,20 @@ def publish_jsonl(path, header, rows):
 def read_dataset(path):
     with Path(path).open(encoding="utf-8") as source:
         header = json.loads(next(source, "{}"))
-        if (header.get("format") != data_format or header.get("version") != 1
+        if (header.get("format") != data_format or header.get("version") not in (1, 2)
                 or header.get("variant") != "standard" or header.get("score_pov") != "side_to_move"):
             raise ValueError("unsupported NNUE dataset format, variant or score perspective")
+        compact = header["version"] == 2
+        if compact and header.get("position_encoding") != "shortfen":
+            raise ValueError("unsupported NNUE position encoding")
         rows, seen = [], set()
         for line in source:
             row = json.loads(line)
-            board = chess.Board(row["fen"])
+            if compact:
+                board = shortfen.decode(row["position"])
+                row = dict(row, fen=board.fen(en_passant="fen"))
+            else:
+                board = chess.Board(row["fen"])
             key = position_key(board)
             score = row.get("score_cp")
             if (not board.is_valid() or len(board.piece_map()) > 32 or key in seen
@@ -133,7 +141,8 @@ def main():
     rows = candidates(args.pgn, args.positions, args.stride, args.min_ply)
     if not rows:
         raise ValueError("no eligible standard-chess positions")
-    header = {"format": data_format, "version": 1, "variant": "standard",
+    header = {"format": data_format, "version": 2, "variant": "standard",
+              "position_encoding": "shortfen",
               "score_pov": "side_to_move", "engine_sha256": file_hash(args.engine),
               "network_sha256": file_hash(args.network), "requested_nodes": args.nodes,
               "stride": args.stride, "min_ply": args.min_ply}
@@ -152,7 +161,12 @@ def main():
     if not labeled:
         raise ValueError("no ordinary centipawn labels produced")
     header["positions"] = len(labeled)
-    publish_jsonl(args.output, header, labeled)
+    stored = []
+    for row in labeled:
+        item = dict(row)
+        item["position"] = shortfen.encode(chess.Board(item.pop("fen")))
+        stored.append(item)
+    publish_jsonl(args.output, header, stored)
     print(f"Saved {len(labeled)} positions to {args.output}; "
           f"{sum(row['split'] == 'validation' for row in labeled)} held out")
     return 0

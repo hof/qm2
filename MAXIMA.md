@@ -1806,7 +1806,7 @@ default; checked and terminal/claimable-draw positions are excluded. Input games
 are legally replayed before their positions are used. Mate and tablebase scores
 are excluded from the ordinary centipawn labels.
 
-The versioned JSONL file records FEN, side-to-move centipawns, actual depth/nodes,
+The versioned JSONL file records position text, side-to-move centipawns, actual depth/nodes,
 reported game result from that side (unknown for unfinished games), PGN hash and
 game/ply provenance, engine/network hashes and labeling settings. Game results
 are metadata, not independently verified training labels. Duplicate positions
@@ -1817,6 +1817,16 @@ overwritten; a completed dataset is published atomically. The command needs
 only the ordinary runner dependencies and does not change online learning,
 books or the active model. Dataset creation is bounded by `--positions` and
 per-position `--nodes`; large input PGNs still require replay work.
+
+Dataset version 2 stores `position` using `shortfen`: scan a8 through h1,
+write ordinary piece letters, count empty runs across rank boundaries, and omit
+the final empty run. The remaining five FEN fields are unchanged. For example,
+the initial board is `rnbqkbnrpppppppp32PPPPPPPPRNBQKBNR w KQkq - 0 1`;
+`28k27R3K w - - 0 1` leaves the final three squares implicitly empty. Readers
+also accept `1K1k5P38r9R w - - 0 1`, with five implicit trailing empties. They
+validate runs and board state, reconstruct standard FEN for training/inference,
+and still accept version-1 datasets with ordinary `fen` fields. This encoding
+is internal to training data; PGNs and engine UCI positions retain standard FEN.
 
 `nnue:train` trains a small CPU HalfKP model using optional PyTorch. Install it
 in a separate environment (Python 3.11+ for the pinned training dependencies):

@@ -6,10 +6,23 @@ import unittest
 
 import chess
 
-from maxima_runner import nnue_data
+from maxima_runner import nnue_data, shortfen
 
 
 class nnue_data_tests(unittest.TestCase):
+    def test_compact_dataset_restores_fen_without_changing_labels_or_split(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "compact.jsonl"
+            board = chess.Board()
+            row = {"position": shortfen.encode(board), "score_cp": 25,
+                   "split": nnue_data.position_split(board)}
+            header = {"format": nnue_data.data_format, "version": 2, "variant": "standard",
+                      "score_pov": "side_to_move", "positions": 1, "position_encoding": "shortfen"}
+            nnue_data.publish_jsonl(path, header, [row])
+            _, rows = nnue_data.read_dataset(path)
+            self.assertEqual(rows[0]["fen"], chess.STARTING_FEN)
+            self.assertEqual(rows[0]["score_cp"], 25)
+            self.assertEqual(rows[0]["split"], nnue_data.position_split(board))
     def test_replay_deduplicates_transpositions_and_preserves_result_perspective(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "games.pgn"
