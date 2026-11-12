@@ -2414,9 +2414,12 @@ anyway, so an offer withdrawn meanwhile does not leave our clock running. FICS
 offers are read from `<name> offers you a draw.`, Lichess offers from the game
 state.
 
-We offer a draw ourselves, as a courtesy, when four of our searches in a row score
-exactly the draw value (`move_choice.draw_offers`): a score other than that, or a
-move without a search, starts the count over. Refused offers repeat every eleven
+We offer a draw ourselves, as a courtesy, when four of our moves in a row score
+exactly the draw value or have a tablebase draw (`move_choice.draw_offers`).
+Online draw, cursed-win and blessed-loss results count, as do local tablebase
+hits scoring 0.00 with seven pieces or fewer, including direct root returns
+without search depth. Other scores, decisive tablebase results and book moves
+start the count over. Refused offers repeat every eleven
 such moves on both servers, because Lichess silently drops a repeat within 20
 plies of our last offer. While we can still win on time (`move_choice.winning_on_time`:
 our clock above 1.5 times theirs, each with forty increments added, and an increment

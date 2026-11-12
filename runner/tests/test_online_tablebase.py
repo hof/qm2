@@ -100,6 +100,27 @@ class draw_offer_tests(unittest.TestCase):
         self.assertFalse(any([offers.due(info(12), 12) for _ in range(3)] + [offers.due({"source": "book"}, 12)]))
         self.assertFalse(any([offers.due(info(12), 12) for _ in range(3)] + [offers.due(info(13), 12)]))
 
+    def test_tablebase_draws_count_with_searches_and_keep_offer_limits(self):
+        from maxima_runner.move_choice import draw_offers
+        import chess.engine
+
+        searched = {"score": chess.engine.PovScore(chess.engine.Cp(-12), chess.WHITE), "depth": 30}
+        local = {"score": chess.engine.PovScore(chess.engine.Cp(0), chess.WHITE), "tbhits": 1}
+        for info in ({"tablebase": {"category": category}} for category in ("draw", "cursed-win", "blessed-loss")):
+            offers = draw_offers()
+            self.assertFalse(offers.due(searched, -12))
+            self.assertFalse(offers.due(info, -12))
+            self.assertFalse(offers.due(local, -12, board=rook_ending))
+            self.assertFalse(offers.due(info, -12, holding=True))
+            self.assertTrue(offers.due(info, -12))
+            self.assertEqual([n for n in range(1, 23) if offers.due(info, -12)], [11, 22])
+            for category in ("win", "loss"):
+                self.assertFalse(offers.due({"tablebase": {"category": category}}, -12))
+                self.assertEqual(offers.streak, 0)
+        offers = draw_offers()
+        self.assertFalse(any(offers.due(local, -12, board=chess.Board()) for _ in range(4)))
+        self.assertEqual([n for n in range(1, 5) if offers.due(local, -12, board=rook_ending)], [4])
+
     def test_a_due_offer_waits_while_we_are_winning_on_time(self):
         from maxima_runner.move_choice import draw_offers, winning_on_time
         import chess.engine

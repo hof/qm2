@@ -1144,7 +1144,7 @@ class lichess_game:
         ahead = move_choice.winning_on_time(ours_left, theirs_left, increment,
                                             self.player(not self.color).get("title") == "BOT")
         accepting = self.draw_offered and move_choice.accept_draw(board, info, self.draw_score, ahead)
-        offering = self.draw_offers.due(info, self.draw_score, ahead) and not accepting
+        offering = self.draw_offers.due(info, self.draw_score, ahead, board=board) and not accepting
         if accepting:
             # Accept, and move too: a withdrawn offer must not leave our clock running.
             bot.on_line(f"-- game {self.id}: accepting the draw offer")

@@ -230,7 +230,7 @@ def flag_chance(ours, theirs, increment, bot, pace, hunting=False):
 
 
 class draw_offers:
-    """Courtesy draw offers for one game, due once our searches keep scoring exactly the draw value."""
+    """Courtesy draw offers for one game, counting draw scores and tablebase draws."""
 
     def __init__(self):
         self.reset()
@@ -238,11 +238,17 @@ class draw_offers:
     def reset(self):
         self.streak = self.made = 0
 
-    def due(self, info, contempt=None, holding=False):
-        """Count our move's search; True when it completes the gap before the next offer, which holding delays."""
+    def due(self, info, contempt=None, holding=False, board=None):
+        """Count a drawn move; True at the next offer interval, unless holding delays it."""
         score = info.get("score")
         ours = None if score is None or score.is_mate() or not info.get("depth") else score.relative.score()
-        if ours != (engine_draw_value if contempt is None else contempt):
+        tablebase = info.get("tablebase")
+        drawn = (tablebase["category"] in draw_categories if tablebase is not None else
+                 (ours == (engine_draw_value if contempt is None else contempt)
+                  or (board is not None and info.get("tbhits") and score is not None
+                      and not score.is_mate() and score.relative.score() == 0
+                      and chess.popcount(board.occupied) <= online_tablebase.max_pieces)))
+        if not drawn:
             self.reset()
             return False
         self.streak += 1
