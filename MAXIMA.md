@@ -1798,7 +1798,7 @@ and online book selection stay in Python; native Polyglot probing stays in Maxim
 
 #### NNUE training tooling
 
-`maxima nnue:data games.pgn --output training.jsonl --positions 256 --nodes 2000`
+`maxima nnue:data games.pgn --output training.mxdata --positions 256 --nodes 2000`
 replays standard PGNs and freshly labels sampled positions with one engine worker,
 Hash32, native book disabled, analysis mode and zero draw contempt. PGN eval
 annotations are not reused. Sampling starts at ply 16, every eight plies by
@@ -1806,7 +1806,7 @@ default; checked and terminal/claimable-draw positions are excluded. Input games
 are legally replayed before their positions are used. Mate and tablebase scores
 are excluded from the ordinary centipawn labels.
 
-The versioned JSONL file records position text, side-to-move centipawns, actual depth/nodes,
+The versioned dataset records positions, side-to-move centipawns, actual depth/nodes,
 reported game result from that side (unknown for unfinished games), PGN hash and
 game/ply provenance, engine/network hashes and labeling settings. Game results
 are metadata, not independently verified training labels. Duplicate positions
@@ -1818,7 +1818,41 @@ only the ordinary runner dependencies and does not change online learning,
 books or the active model. Dataset creation is bounded by `--positions` and
 per-position `--nodes`; large input PGNs still require replay work.
 
-Dataset version 2 stores `position` using `shortfen`: scan a8 through h1,
+Binary is the default output; `--format shortfen` selects readable JSONL.
+`maxima nnue:convert INPUT --output OUTPUT --format binary|shortfen` converts
+existing standard datasets without relabeling. All readers auto-detect the
+binary signature and retain compatibility with both text versions.
+
+Binary version 1 has an explicit little-endian 24-byte prefix (`MXNNUEB\0`,
+uint32 version, uint32 JSON-metadata length, uint64 record count), followed by
+metadata and fixed-size records. Source/game provenance is indexed once in the
+metadata. The default record is 64 bytes:
+
+| Field | Bytes |
+|---|---:|
+| Board: 4 bits per square, a1..h8, low nibble first | 32 |
+| Castling rights as a bitboard of eligible rook squares | 8 |
+| Halfmove clock and fullmove number, uint16 each | 4 |
+| Side-to-move score, int16 | 2 |
+| Result (loss/draw/win/unknown), flags (turn/split/Chess960), en passant, depth | 4 |
+| Searched nodes, uint64 | 8 |
+| Source/game table index, uint32; source ply, uint16 | 6 |
+
+Piece codes are 0 empty, 1..6 white pawn through king, 7..12 black pawn through
+king; 13..15 are reserved. Storage permits 64 occupied squares, without imposing
+standard-chess legality or king counts. Variant identity belongs in the metadata.
+An optional promoted-origin uint64 mask and a fixed-width opaque variant-state
+extension increase record size explicitly. Extra state requires a schema name;
+callers supply generic boards and separately encoded variant state. Storage does
+not implement those variants' rules. Unsupported versions, invalid codes/flags,
+truncated files and size/count inconsistencies fail. Values outside field ranges
+are rejected rather than truncated. Metadata is limited to 64 MiB per shard.
+The writer spools records before atomic no-overwrite publication, and
+`nnue_binary.binary_dataset` provides memory-mapped indexed access. Current
+`nnue:train` still loads its prototype dataset into memory and rejects other
+variants, Chess960, extra variant state and boards beyond its standard limits.
+
+Text dataset version 2 stores `position` using `shortfen`: scan a8 through h1,
 write ordinary piece letters, count empty runs across rank boundaries, and omit
 the final empty run. The remaining five FEN fields are unchanged. For example,
 the initial board is `rnbqkbnrpppppppp32PPPPPPPPRNBQKBNR w KQkq - 0 1`;
@@ -1836,7 +1870,7 @@ python3 -m venv .tools/training
 .tools/training/bin/python -m pip install --index-url https://download.pytorch.org/whl/cpu \
     -r runner/requirements-training.txt
 .tools/training/bin/python -m pip install -e ./runner
-.tools/training/bin/maxima nnue:train training.jsonl --output .context/training/run-01
+.tools/training/bin/maxima nnue:train training.mxdata --output .context/training/run-01
 ```
 
 On hosts without `ensurepip`, create the environment with `--without-pip` and
@@ -1868,7 +1902,7 @@ For comparison with Maxima's actual loader and fresh/incremental inference:
 ```bash
 cmake --build --preset cpp26_release --parallel 2 --target nnue_probe
 ./maxima nnue:verify .context/training/run-01/network.nnue \
-    --probe build/cpp26/release/tests/nnue_probe --dataset training.jsonl
+    --probe build/cpp26/release/tests/nnue_probe --dataset training.mxdata
 ```
 
 The test-only probe compares raw and centipawn outputs for sampled roots and all

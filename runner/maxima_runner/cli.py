@@ -21,6 +21,7 @@ command_groups = (
         ("suite:run", "Evaluate a position suite"),
         ("match:run", "Run offline paired-opening matches"),
         ("nnue:data", "Label PGN positions for NNUE training"),
+        ("nnue:convert", "Convert binary and shortfen training datasets"),
         ("nnue:train", "Train and export a small CPU NNUE model"),
         ("nnue:verify", "Check exported NNUE inference against Maxima"),
     )),
@@ -222,6 +223,9 @@ def main(argv=None):
         elif command == "nnue:data":
             from . import nnue_data
             entrypoint = nnue_data.main
+        elif command == "nnue:convert":
+            from . import nnue_data
+            entrypoint = nnue_data.convert_main
         elif command == "nnue:train":
             from . import nnue_training
             entrypoint = nnue_training.main

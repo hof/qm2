@@ -11,7 +11,7 @@ import chess.engine
 import chess.pgn
 
 from .project import engine_path, network_path, project_root
-from . import shortfen
+from . import nnue_binary, shortfen
 
 
 data_format = "maxima.nnue.data"
@@ -93,7 +93,7 @@ def publish_jsonl(path, header, rows):
             temporary.unlink(missing_ok=True)
 
 
-def read_dataset(path):
+def read_text_dataset(path):
     with Path(path).open(encoding="utf-8") as source:
         header = json.loads(next(source, "{}"))
         if (header.get("format") != data_format or header.get("version") not in (1, 2)
@@ -102,7 +102,7 @@ def read_dataset(path):
         compact = header["version"] == 2
         if compact and header.get("position_encoding") != "shortfen":
             raise ValueError("unsupported NNUE position encoding")
-        rows, seen = [], set()
+        rows = []
         for line in source:
             row = json.loads(line)
             if compact:
@@ -110,23 +110,82 @@ def read_dataset(path):
                 row = dict(row, fen=board.fen(en_passant="fen"))
             else:
                 board = chess.Board(row["fen"])
-            key = position_key(board)
-            score = row.get("score_cp")
-            if (not board.is_valid() or len(board.piece_map()) > 32 or key in seen
-                    or isinstance(score, bool) or not isinstance(score, int) or abs(score) >= 10000
-                    or row.get("split") != position_split(board)):
-                raise ValueError("invalid or duplicate NNUE dataset position/label/split")
-            seen.add(key)
             rows.append(row)
+    return header, rows
+
+
+def read_dataset(path):
+    with Path(path).open("rb") as stream:
+        binary = stream.read(len(nnue_binary.magic)) == nnue_binary.magic
+    if binary:
+        with nnue_binary.binary_dataset(path) as data:
+            header = data.header
+            if header["variant"] != "standard" or header["variant_state_size"]:
+                raise ValueError("the current trainer requires standard chess without extra variant state")
+            rows = []
+            for stored in data:
+                board = stored.pop("board")
+                if board.chess960 or not board.is_valid() or len(board.piece_map()) > 32:
+                    raise ValueError("invalid or unsupported board for the current standard trainer")
+                stored.pop("variant_state")
+                rows.append(dict(stored, fen=board.fen(en_passant="fen", promoted=True)))
+    else:
+        header, rows = read_text_dataset(path)
+    seen = set()
+    for row in rows:
+        board = chess.Board(row["fen"])
+        key, score = position_key(board), row.get("score_cp")
+        if (not board.is_valid() or len(board.piece_map()) > 32 or key in seen
+                or isinstance(score, bool) or not isinstance(score, int) or abs(score) >= 10000
+                or row.get("split") != position_split(board)):
+            raise ValueError("invalid or duplicate NNUE dataset position/label/split")
+        seen.add(key)
     if not rows or len(rows) != header.get("positions"):
         raise ValueError("empty or incomplete NNUE dataset")
     return header, rows
+
+
+def save_dataset(path, header, rows, encoding="binary"):
+    metadata = {key: value for key, value in header.items() if key not in (
+        "format", "version", "position_encoding", "board_encoding", "sources", "record_size",
+        "store_promoted", "variant_state_size", "variant_state_schema")}
+    metadata["positions"] = len(rows)
+    if encoding == "binary":
+        promoted = any(chess.Board(row["fen"]).promoted for row in rows)
+        nnue_binary.write_dataset(path, metadata, rows, store_promoted=promoted)
+    elif encoding == "shortfen":
+        stored = []
+        for row in rows:
+            item = dict(row)
+            board = chess.Board(item.pop("fen"))
+            if board.promoted:
+                raise ValueError("shortfen export does not encode promoted-origin markers")
+            item["position"] = shortfen.encode(board)
+            stored.append(item)
+        publish_jsonl(path, dict(metadata, format=data_format, version=2, position_encoding="shortfen"), stored)
+    else:
+        raise ValueError("unsupported NNUE dataset output encoding")
+
+
+def convert_main():
+    parser = argparse.ArgumentParser(prog="maxima nnue:convert", description="Convert a standard NNUE dataset.")
+    parser.add_argument("dataset", type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--format", choices=("binary", "shortfen"), default="binary")
+    args = parser.parse_args()
+    if args.output.exists():
+        raise ValueError(f"output already exists: {args.output}")
+    header, rows = read_dataset(args.dataset)
+    save_dataset(args.output, header, rows, args.format)
+    print(f"Saved {len(rows)} positions as {args.format} to {args.output}")
+    return 0
 
 
 def main():
     parser = argparse.ArgumentParser(prog="maxima nnue:data", description=__doc__)
     parser.add_argument("pgn", nargs="+", type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--format", choices=("binary", "shortfen"), default="binary")
     parser.add_argument("--positions", type=int, default=256)
     parser.add_argument("--nodes", type=int, default=2000)
     parser.add_argument("--stride", type=int, default=8)
@@ -161,12 +220,7 @@ def main():
     if not labeled:
         raise ValueError("no ordinary centipawn labels produced")
     header["positions"] = len(labeled)
-    stored = []
-    for row in labeled:
-        item = dict(row)
-        item["position"] = shortfen.encode(chess.Board(item.pop("fen")))
-        stored.append(item)
-    publish_jsonl(args.output, header, stored)
+    save_dataset(args.output, header, labeled, args.format)
     print(f"Saved {len(labeled)} positions to {args.output}; "
           f"{sum(row['split'] == 'validation' for row in labeled)} held out")
     return 0
