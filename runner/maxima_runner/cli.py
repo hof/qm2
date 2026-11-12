@@ -20,6 +20,7 @@ command_groups = (
         ("test", "Run engine and runner checks"),
         ("suite:run", "Evaluate a position suite"),
         ("match:run", "Run offline paired-opening matches"),
+        ("nnue:data", "Label PGN positions for NNUE training"),
     )),
     ("Online learning (FICS / Lichess)", (
         ("experience:sync", "Upload PGNs into shared online learning"),
@@ -216,6 +217,9 @@ def main(argv=None):
         elif command == "match:run":
             from . import matches
             entrypoint = matches.main
+        elif command == "nnue:data":
+            from . import nnue_data
+            entrypoint = nnue_data.main
         elif command == "experience:sync":
             from . import learning
             entrypoint = learning.sync_main

@@ -1796,6 +1796,28 @@ orchestration, automation, and PGN capture follow the transport. ICC, legacy
 database migration, remote control, and notifications are deferred. Learning
 and online book selection stay in Python; native Polyglot probing stays in Maxima.
 
+#### NNUE training data
+
+`maxima nnue:data games.pgn --output training.jsonl --positions 256 --nodes 2000`
+replays standard PGNs and freshly labels sampled positions with one engine worker,
+Hash32, native book disabled, analysis mode and zero draw contempt. PGN eval
+annotations are not reused. Sampling starts at ply 16, every eight plies by
+default; checked and terminal/claimable-draw positions are excluded. Input games
+are legally replayed before their positions are used. Mate and tablebase scores
+are excluded from the ordinary centipawn labels.
+
+The versioned JSONL file records FEN, side-to-move centipawns, actual depth/nodes,
+reported game result from that side (unknown for unfinished games), PGN hash and
+game/ply provenance, engine/network hashes and labeling settings. Game results
+are metadata, not independently verified training labels. Duplicate positions
+are removed ignoring clocks. A deterministic position hash assigns about 10%
+to validation; transpositions cannot cross that boundary. This split does not
+isolate related positions from the same game. Existing output files are never
+overwritten; a completed dataset is published atomically. The command needs
+only the ordinary runner dependencies and does not change online learning,
+books or the active model. Dataset creation is bounded by `--positions` and
+per-position `--nodes`; large input PGNs still require replay work.
+
 ### 10.1 Documentation and CLI interface
 
 Update this document in the same change whenever implemented behavior, public
