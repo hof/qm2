@@ -1801,8 +1801,9 @@ and online book selection stay in Python; native Polyglot probing stays in Maxim
 `maxima nnue:data games.pgn --output training.mxdata --positions 256 --nodes 2000`
 replays standard PGNs and freshly labels sampled positions with one engine worker,
 Hash32, native book disabled, analysis mode and zero draw contempt. PGN eval
-annotations are not reused. Sampling starts at ply 16, every eight plies by
-default; checked and terminal/claimable-draw positions are excluded. Input games
+annotations are not reused. Sampling starts at ply 16, about every eight plies by
+default; even strides alternate one-ply offsets to cover both sides to move.
+Checked and terminal/claimable-draw positions are excluded. Input games
 are legally replayed before their positions are used. Mate and tablebase scores
 are excluded from the ordinary centipawn labels.
 
@@ -1810,9 +1811,12 @@ The versioned dataset records positions, side-to-move centipawns, actual depth/n
 reported game result from that side (unknown for unfinished games), PGN hash and
 game/ply provenance, engine/network hashes and labeling settings. Game results
 are metadata, not independently verified training labels. Duplicate positions
-are removed ignoring clocks. A deterministic position hash assigns about 10%
-to validation; transpositions cannot cross that boundary. This split does not
-isolate related positions from the same game. Existing output files are never
+are removed ignoring clocks. A deterministic source/game hash assigns about 10%
+of games to validation, keeping each game's samples together; global position
+deduplication also prevents transpositions crossing that boundary within a file.
+Older datasets without `split_method` retain their original position-hash split.
+Deduplication and split checks apply within each dataset, not across separate files.
+Existing output files are never
 overwritten; a completed dataset is published atomically. The command needs
 only the ordinary runner dependencies and does not change online learning,
 books or the active model. Dataset creation is bounded by `--positions` and

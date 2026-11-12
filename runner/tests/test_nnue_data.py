@@ -10,6 +10,21 @@ from maxima_runner import nnue_data, shortfen
 
 
 class nnue_data_tests(unittest.TestCase):
+    def test_even_stride_samples_both_sides_and_game_split_is_consistent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "game.pgn"
+            path.write_text('[Result "*"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 '
+                            '4. d3 Bc5 5. c3 d6 6. O-O O-O 7. Re1 a6 8. Bb3 Ba7 '
+                            '9. Nbd2 h6 10. Nf1 Be6 11. Bc2 Qd7 12. Ng3 Rfe8 *\n')
+            rows = nnue_data.candidates([path], 10, stride=8, min_ply=4)
+            self.assertEqual([row["source"]["ply"] for row in rows], [4, 13, 20])
+            self.assertEqual([chess.Board(row["fen"]).turn for row in rows], [True, False, True])
+            self.assertEqual(len({row["split"] for row in rows}), 1)
+            labeled = [dict(row, score_cp=0) for row in rows]
+            output = Path(directory) / "data.mxdata"
+            header = {"variant": "standard", "score_pov": "side_to_move", "split_method": "game"}
+            nnue_data.save_dataset(output, header, labeled)
+            self.assertEqual(len(nnue_data.read_dataset(output)[1]), 3)
     def test_compact_dataset_restores_fen_without_changing_labels_or_split(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "compact.jsonl"

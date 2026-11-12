@@ -35,7 +35,13 @@ def position_split(board):
     return "validation" if int.from_bytes(digest[:8], "big") % 10 == 0 else "train"
 
 
-def candidates(paths, limit, stride=8, min_ply=16):
+def game_split(source):
+    identity = f"{source['sha256']}:{source['game']}"
+    digest = hashlib.sha256(identity.encode("ascii")).digest()
+    return "validation" if int.from_bytes(digest[:8], "big") % 10 == 0 else "train"
+
+
+def candidates(paths, limit, stride=8, min_ply=16, split_method="game"):
     """Replay complete games; sample outside check, never reuse PGN eval labels."""
     found, seen = [], set()
     for path in paths:
@@ -58,7 +64,9 @@ def candidates(paths, limit, stride=8, min_ply=16):
                     if move not in board.legal_moves:
                         raise ValueError(f"illegal PGN move in {path}, game {game_number}, ply {ply}")
                     board.push(move)
-                    if (ply < min_ply or (ply - min_ply) % stride or board.is_check()
+                    # Alternating one-ply offsets avoid sampling only White with even strides.
+                    offset = (ply - min_ply) // stride % 2 if stride % 2 == 0 else 0
+                    if (ply < min_ply or (ply - min_ply) % stride != offset or board.is_check()
                             or board.is_game_over(claim_draw=True)):
                         continue
                     key = position_key(board)
@@ -66,10 +74,12 @@ def candidates(paths, limit, stride=8, min_ply=16):
                         continue
                     seen.add(key)
                     white_result = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(result)
-                    game_rows.append({"fen": board.fen(), "split": position_split(board),
+                    source_info = {"sha256": digest, "game": game_number, "ply": ply}
+                    game_rows.append({"fen": board.fen(), "split": game_split(source_info)
+                                      if split_method == "game" else position_split(board),
                                       "result_stm": (white_result if board.turn else 1 - white_result)
                                       if white_result is not None else None,
-                                      "source": {"sha256": digest, "game": game_number, "ply": ply}})
+                                      "source": source_info})
                 found.extend(game_rows[:limit - len(found)])
                 if len(found) == limit:
                     return found
@@ -131,13 +141,17 @@ def read_dataset(path):
                 rows.append(dict(stored, fen=board.fen(en_passant="fen", promoted=True)))
     else:
         header, rows = read_text_dataset(path)
+    method = header.get("split_method", "position")
+    if method not in ("position", "game"):
+        raise ValueError("unsupported NNUE dataset split method")
     seen = set()
     for row in rows:
         board = chess.Board(row["fen"])
         key, score = position_key(board), row.get("score_cp")
+        expected_split = game_split(row["source"]) if method == "game" else position_split(board)
         if (not board.is_valid() or len(board.piece_map()) > 32 or key in seen
                 or isinstance(score, bool) or not isinstance(score, int) or abs(score) >= 10000
-                or row.get("split") != position_split(board)):
+                or row.get("split") != expected_split):
             raise ValueError("invalid or duplicate NNUE dataset position/label/split")
         seen.add(key)
     if not rows or len(rows) != header.get("positions"):
@@ -201,7 +215,7 @@ def main():
     if not rows:
         raise ValueError("no eligible standard-chess positions")
     header = {"format": data_format, "version": 2, "variant": "standard",
-              "position_encoding": "shortfen",
+              "position_encoding": "shortfen", "split_method": "game",
               "score_pov": "side_to_move", "engine_sha256": file_hash(args.engine),
               "network_sha256": file_hash(args.network), "requested_nodes": args.nodes,
               "stride": args.stride, "min_ply": args.min_ply}
