@@ -36,13 +36,42 @@ def result_tensor(torch, rows):
                          for row in rows], dtype=torch.float64)
 
 
-def loss(torch, scores, labels, results=None, search_weight=1.0):
+def target_probability(torch, labels, results=None, search_weight=1.0):
     scale = math.log(10) / 400
     target = torch.sigmoid(labels * scale)
     if results is not None:
         target = torch.where(torch.isfinite(results),
                              search_weight * target + (1 - search_weight) * torch.nan_to_num(results), target)
-    return (torch.sigmoid(scores * scale) - target).square().mean()
+    return target
+
+
+def loss(torch, scores, labels, results=None, search_weight=1.0):
+    target = target_probability(torch, labels, results, search_weight)
+    return (torch.sigmoid(scores * (math.log(10) / 400)) - target).square().mean()
+
+
+def constant_baselines(torch, train, validation, search_weight):
+    """Fit a constant on training targets only, then measure both splits."""
+    labels = torch.tensor([row["score_cp"] for row in train], dtype=torch.float64)
+    mean = target_probability(torch, labels, result_tensor(torch, train), search_weight).mean()
+    epsilon = torch.finfo(torch.float64).eps
+    mean = mean.clamp(epsilon, 1 - epsilon).item()
+    fitted_cp = math.log(mean / (1 - mean)) * 400 / math.log(10)
+    baselines = {}
+    for name, cp in [("zero_cp", 0.0), ("train_mean", fitted_cp)]:
+        entry = {"score_cp": cp}
+        for split, rows in [("train", train), ("validation", validation)]:
+            if not rows:
+                entry[split] = None
+                continue
+            labels = torch.tensor([row["score_cp"] for row in rows], dtype=torch.float64)
+            predictions = torch.full_like(labels, cp)
+            entry[split] = {"positions": len(rows),
+                            "loss": loss(torch, predictions, labels, result_tensor(torch, rows),
+                                         search_weight).item(),
+                            "mae_cp": (predictions - labels).abs().mean().item()}
+        baselines[name] = entry
+    return baselines
 
 
 def metrics(torch, model, rows, search_weight=1.0):
@@ -91,6 +120,9 @@ def main():
     torch.use_deterministic_algorithms(True)
     model = model_type(args.width, args.hidden, args.architecture).double()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    baselines = constant_baselines(torch, train, validation, args.search_weight)
+    print(f"Constant baselines: validation zero cp {baselines['zero_cp']['validation']['loss']:.6f}; "
+          f"training mean {baselines['train_mean']['validation']['loss']:.6f}", flush=True)
     initial = {"train": metrics(torch, model, train, args.search_weight),
                "validation": metrics(torch, model, validation, args.search_weight)}
     history, best_state, best_epoch, best_loss = [], None, 0, math.inf
@@ -120,8 +152,13 @@ def main():
               "dataset_sha256": nnue_data.file_hash(args.dataset), "torch": str(torch.__version__),
               "epochs": args.epochs, "batch_size": args.batch_size, "learning_rate": args.learning_rate,
               "search_weight": args.search_weight, "teacher": header,
-              "initial": initial, "history": history, "exported_epoch": best_epoch}
+              "initial": initial, "history": history, "exported_epoch": best_epoch,
+              "constant_baselines": baselines}
     model.load_state_dict(best_state)
+    baseline_loss = min(entry["validation"]["loss"] for entry in baselines.values())
+    config["beats_constant_baselines"] = best_loss < baseline_loss
+    if not config["beats_constant_baselines"]:
+        print("Selected model does not beat the constant validation baselines.", flush=True)
     serialized = nnue_format.serialize(model.integer_weights(), model.architecture)
     integer = nnue_format.integer_network(serialized)
     with torch.no_grad():

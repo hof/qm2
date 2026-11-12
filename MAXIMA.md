@@ -1946,6 +1946,11 @@ and batch order. Training/validation loss, centipawn error and float/quantized
 differences are recorded each epoch. Validation selects the exported epoch;
 it is not an independent final test set. The dataset is loaded into memory;
 this command is for bounded prototypes, not large-scale training yet.
+The report also compares the selected model with zero-centipawn and constant
+training-mean target predictions on the same splits. The latter is fitted only
+on training targets. `beats_constant_baselines` records whether the selected
+validation loss beats both; failure is printed while retaining the experimental
+artifacts for diagnosis. This comparison does not establish playing strength.
 
 Each new output directory contains a versioned PyTorch state checkpoint,
 `network.nnue`, and a JSON report with dataset/teacher/network hashes, training
