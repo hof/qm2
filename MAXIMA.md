@@ -1983,12 +1983,32 @@ these bounds keep transformer sums inside signed16 range. Incompatible formats,
 dimensions or source values beyond the supported bounds fail before changing the
 student. Checkpoint/report metadata includes the initialization method, source
 hash and `ft_bound`. Importing a checkpoint for further training must restore
-`ft_bound` as well as its parameters; the CLI does not yet resume checkpoints.
+`ft_bound` as well as its parameters. The CLI restores this bound when resuming.
 The initial warm-start model is eligible for validation selection as epoch0, so
 fine tuning cannot force export of an epoch worse than that initialization.
 Datasets reserved for a separate inference-only evaluation may carry metadata
 `purpose: heldout_evaluation`; `nnue:train` rejects these files before loading
 PyTorch or creating artifacts. Their rows never enter epoch selection or fitting.
+
+Training writes an atomic `training.pt` recovery checkpoint before optimization,
+at epoch boundaries, and every `--checkpoint-every` batches (default100). It saves
+parameters, transformer bounds, Adam state, Torch random state, shuffled order,
+epoch/batch cursor, validation history and the selected best model. To resume,
+repeat the original command with `--resume` and the same output directory. Input
+contents, warm-start contents, training settings, Torch version and training source
+hashes must match; changed inputs fail without overwriting the checkpoint. Recovery
+checkpoints are separate from the selected `model.pt` used for inference/export.
+
+`--max-batches N` pauses cleanly after at most N optimization/export batches in
+one invocation, retaining a resumable checkpoint. It prints `Paused` and returns
+success; final `report.json` appears only after complete export verification.
+Metric evaluation, initialization and serialization are outside that batch budget;
+use an external process-group timeout for a wall-clock limit. Abrupt termination
+loses only work since the latest saved checkpoint. Export verification saves its
+position cursor and selected network hash, so it also resumes in bounded batches.
+The final model, network and report are each written through atomic replacement;
+these files belong exclusively to the requested experiment directory. Use only
+one writer for a run. Existing output directories require explicit `--resume`.
 
 For comparison with Maxima's actual loader and fresh/incremental inference:
 
