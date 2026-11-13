@@ -22,6 +22,7 @@ command_groups = (
         ("match:run", "Run offline paired-opening matches"),
         ("nnue:data", "Label PGN positions for NNUE training"),
         ("nnue:selfplay", "Generate resumable self-play training data"),
+        ("nnue:shards", "Ingest immutable training shards with global disk deduplication"),
         ("nnue:convert", "Convert binary and shortfen training datasets"),
         ("nnue:train", "Train and export a small CPU NNUE model"),
         ("nnue:verify", "Check exported NNUE inference against Maxima"),
@@ -227,6 +228,9 @@ def main(argv=None):
         elif command == "nnue:selfplay":
             from . import nnue_selfplay
             entrypoint = nnue_selfplay.main
+        elif command == "nnue:shards":
+            from . import nnue_shards
+            entrypoint = nnue_shards.main
         elif command == "nnue:convert":
             from . import nnue_data
             entrypoint = nnue_data.convert_main

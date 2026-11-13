@@ -1951,6 +1951,31 @@ validate runs and board state, reconstruct standard FEN for training/inference,
 and still accept version-1 datasets with ordinary `fen` fields. This encoding
 is internal to training data; PGNs and engine UCI positions retain standard FEN.
 
+`nnue:shards` ingests bounded binary producer chunks into a shared campaign
+store. SQLite keeps global position keys on disk across blocks and teacher
+versions. Install all reserved benchmark exclusions before ingesting any data:
+
+```bash
+./maxima nnue:shards --store /data/campaign --block block-001 \
+  --exclude benchmark.mxdata worker-001/positions.mxdata
+./maxima nnue:shards --store /data/campaign --block block-001 \
+  worker-002/positions.mxdata --seal
+```
+
+The default block target is100M accepted positions; shards contain at most1M
+records. Repeat ingestion with more producer chunks until the target is reached.
+Inputs must contain standard positions, valid splits and completed game results.
+Each input is transactional and content-hash deduplicated; cross-worker and
+cross-block transpositions are removed. Shards retain source teacher/config
+metadata and are immutable, checksummed files. A sealed JSON manifest lists only
+committed shards. A failed input rolls back its index entries; unreferenced shard
+files may remain and can be reused on retry. Producer chunks must fit the block
+remainder; oversized chunks roll back without losing their tail. Use a smaller
+chunk at the boundary. `--seal --partial` explicitly publishes the accepted
+portion after a stop. Sealed blocks cannot accept new inputs. Use local POSIX
+storage, one shared store for all campaign ingestion, and retain the SQLite index.
+This command does not launch producers or allocate cloud resources.
+
 `nnue:train` trains a small CPU NNUE model using optional PyTorch. Install it
 in a separate environment (Python 3.11+ for the pinned training dependencies):
 
