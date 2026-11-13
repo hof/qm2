@@ -51,11 +51,11 @@ def parser():
     parser.add_argument("--no-engine", action="store_true", help="connect without playing games")
     parser.add_argument("--seek", action="append", metavar="SPEC",
                         help='seek pool entry, repeatable (e.g. "3 0", "3 0 losers", "3 0 w3"; default pool 3 0, 3 1, 5 0)')
-    parser.add_argument("--seeks-at-once", type=int, help="seeks posted at a time, drawn from the pool (default: 2)")
+    parser.add_argument("--seeks-at-once", type=int, help="total seeks posted at a time, at most 3 (default: 2)")
     parser.add_argument("--losers", action="store_true", default=None, help="also accept FICS royal-losers challenges")
     parser.add_argument("--losers-seek", action="append", metavar="SPEC",
-                        help='enable losers and add a time control to its separate pool, e.g. "3 0 u"')
-    parser.add_argument("--losers-seeks-at-once", type=int, help="losers seeks posted alongside standard seeks (default: 1)")
+                        help='enable losers and add a time control to the shared pool, e.g. "3 0 u"')
+    parser.add_argument("--losers-seeks-at-once", type=int, help="legacy option accepted for compatibility; seeks-at-once controls the total")
     parser.add_argument("--no-seek", action="store_true", help="do not seek; only accept challenges")
     parser.add_argument("--whisper", action="store_true",
                         help="whisper each move's reason to observers: book layer and mix, or depth, score, "

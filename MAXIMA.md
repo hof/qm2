@@ -2168,8 +2168,10 @@ or `tell <bot> <key> reseek`. This withdraws the current ads and draws the pool
 again. During a game it reports that seeking resumes after the game, without
 interrupting play. Typing `reseek` in the local console also refreshes idle ads. Typing `seek-pool 3 0, 5 3, 3 0 w3, 3 1 losers` there
 replaces the pool, as the remote `seek-pool` tell does.
-Older `losers_seeks`, `losers_seeks_at_once`, and their CLI flags remain accepted
-for compatibility; a single mixed `seeks` pool is sufficient. `--no-seek`
+Older `losers_seeks` entries join this same weighted pool; their percentages remain
+local sampling weights. `losers_seeks_at_once` and its CLI flag remain accepted
+for compatibility but do not reserve extra slots. The total, including operator
+pools and legacy losers entries, never exceeds three. `--no-seek`
 suppresses all advertisements while retaining challenge support.
 
 On login, enabled losers support sends `set f3 losers`, required for computer

@@ -50,19 +50,35 @@ class losers_policy_tests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ValueError):
                     fics.load_settings(path)
 
-    async def test_two_standard_and_one_losers_seek_and_challenge(self):
+    async def test_legacy_losers_join_shared_seek_pool_and_challenge(self):
         subject = player(seeks=['3 0', '3 1', '5 0', '5 1'], seeks_at_once=2,
                          losers_seeks=['3 0 u', '3 1 u', '5 0 u', '5 1 u'], guest=False)
         await subject.on_login('Alpha')
         self.assertEqual(subject.connection.sent[0], 'set f3 losers')
         seeks = [line for line in subject.connection.sent if line.startswith('seek ')]
-        self.assertEqual(len(seeks), 3)
-        self.assertEqual(sum('losers' in line for line in seeks), 1)
+        self.assertEqual(len(seeks), 2)
+        self.assertEqual(len(set(seeks)), 2)
         await subject.handle('Challenge: Beta (1500) Alpha (1500) unrated losers 3 0.')
         self.assertEqual(subject.connection.sent[-1], 'accept Beta')
         standard = player()
         await standard.handle('Challenge: Beta (1500) Alpha (1500) unrated losers 3 0.')
         self.assertEqual(standard.connection.sent[-1], 'decline Beta')
+
+    def test_shared_limit_includes_legacy_losers_and_operator_pool(self):
+        for count in (0, 1, 2, 3, 6):
+            subject = fics.play_policy(seeks=['3 0', '3 0 w2', '3 0 w4'], seeks_at_once=count,
+                                       losers_seeks=['5 1', '3 1'], losers_seeks_at_once=6)
+            for pool in (None, ['3 0', '3 0 w2', '3 0 w4', '5 1 losers']):
+                subject.seek_pool = pool
+                with self.subTest(count=count, pool=pool):
+                    commands = subject.seek_commands()
+                    self.assertEqual(len(commands), min(count, 3))
+                    self.assertEqual(len(set(commands)), len(commands))
+
+    def test_legacy_losers_percentage_stays_trailing_in_shared_pool(self):
+        subject = fics.play_policy(seeks=['3 0 0%'], seeks_at_once=3,
+                                   losers_seeks=['5 1 100%'])
+        self.assertEqual(subject.seek_commands(), ['seek 5 1 losers u'])
 
     async def test_losers_only_pool_reseeks(self):
         subject = player(losers_seeks=['5 1'])

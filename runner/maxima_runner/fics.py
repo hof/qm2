@@ -361,6 +361,16 @@ def sample_seeks(entries, count):
     return chosen
 
 
+def combined_seeks(seeks, losers_seeks):
+    """Legacy losers entries join the same weighted pool as every other variant."""
+    pool = list(seeks)
+    for entry in losers_seeks:
+        spec, weight = seek_entry(entry)
+        suffix = f" {weight}%" if weight is not None else ""
+        pool.append(f"{spec} losers{suffix}")
+    return pool
+
+
 def parse_seek_pool(text):
     """Validate the complete replacement before changing the running policy."""
     pool = []
@@ -422,11 +432,8 @@ class play_policy:
 
     def seek_commands(self):
         """A random draw from the pool; guests can only play unrated."""
-        chosen = sample_seeks(self.seeks, self.seeks_at_once)
-        chosen += [f"{spec} losers" for spec in sample_seeks(self.losers_seeks, self.losers_seeks_at_once)]
-        if self.seek_pool is not None:
-            count = max(self.seeks_at_once, self.losers_seeks_at_once, 1)
-            chosen = sample_seeks(self.seek_pool, count)
+        pool = self.seek_pool if self.seek_pool is not None else combined_seeks(self.seeks, self.losers_seeks)
+        chosen = sample_seeks(pool, min(self.seeks_at_once, 3))
         commands = []
         for spec in chosen:
             if self.guest:
@@ -1635,8 +1642,8 @@ def run(options, parser):
             parser.error(f"{name} must be a nonnegative integer")
     supported_wild = {kind.replace("wild/", "w") for kind in wild_types}
     try:
+        seek_weights(combined_seeks(configured["seeks"], configured["losers_seeks"]))
         for pool in ("seeks", "losers_seeks"):
-            seek_weights(configured[pool])
             for entry in configured[pool]:
                 spec, _ = seek_entry(entry)
                 variants = [word for word in spec.split()[2:]

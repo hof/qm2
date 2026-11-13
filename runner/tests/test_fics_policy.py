@@ -214,7 +214,7 @@ class settings_tests(unittest.TestCase):
         path.write_text(json.dumps(value))
         return str(path)
 
-    def test_wild_config_reaches_startup_and_posts_each_variant(self):
+    def test_wild_config_accepts_each_variant_and_caps_posted_seeks(self):
         from maxima_runner.fics_cli import parser
         specs = ['3 0 ' + kind for kind in ('w2', 'w3', 'w4', 'w5', 'w8', 'losers')]
         arguments = parser()
@@ -239,8 +239,10 @@ class settings_tests(unittest.TestCase):
                 patch.object(fics, 'data_root', return_value=Path(root.name)), \
                 patch.object(fics.asyncio, 'run', side_effect=without_connecting), patch('builtins.print'):
             self.assertEqual(fics.run(options, arguments), 0)
-        self.assertCountEqual(policies[0].seek_commands(),
-                              ['seek ' + spec + ' u' for spec in specs])
+        self.assertCountEqual(policies[0].seeks, specs)
+        commands = policies[0].seek_commands()
+        self.assertEqual(len(commands), 3)
+        self.assertTrue(set(commands) <= {'seek ' + spec + ' u' for spec in specs})
         self.assertTrue(policies[0].losers)
         self.assertTrue(policies[0].guest)
         self.assertEqual(options.guest_name, "GuestFLAG")
