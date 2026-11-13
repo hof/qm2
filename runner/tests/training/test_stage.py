@@ -1,6 +1,7 @@
 """Bounded stage loading, interruption, parent Adam continuity and frozen export."""
 import contextlib
 import io
+import json
 from pathlib import Path
 import random
 import tempfile
@@ -129,6 +130,16 @@ class stage_tests(unittest.TestCase):
                     '--dataset', str(self.root / 'data-0'), '--positions', '16']
             with patch('sys.argv', argv), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(nnue_training.verify_main(), 0)
+
+    def test_parent_rejects_another_global_dedup_store(self):
+        self.train('parent')
+        manifest = json.loads(self.manifests[1].read_text())
+        manifest['store_id'] = 'b' * 32
+        other = self.manifests[1].with_name('other-store.json')
+        other.write_text(json.dumps(manifest))
+        self.manifests[1] = other
+        with self.assertRaisesRegex(ValueError, 'store_id'):
+            self.train('other', 1, '--parent', str(self.root / 'parent/training.pt'))
 
     def test_parent_restores_ft_bound_and_continues_latest_instead_of_selected(self):
         with patch.object(nnue_stage, 'evaluate', side_effect=[dict(loss=0.0), dict(loss=1.0), dict(loss=2.0)]):

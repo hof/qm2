@@ -1952,7 +1952,8 @@ and still accept version-1 datasets with ordinary `fen` fields. This encoding
 is internal to training data; PGNs and engine UCI positions retain standard FEN.
 
 `nnue:shards` ingests bounded binary producer chunks into a shared campaign
-store. SQLite keeps global position keys on disk across blocks and teacher
+store. Manifests record the global store identity and reserved dataset hashes.
+SQLite keeps global position keys on disk across blocks and teacher
 versions. Install all reserved benchmark exclusions before ingesting any data:
 
 ```bash
@@ -1969,12 +1970,56 @@ Each input is transactional and content-hash deduplicated; cross-worker and
 cross-block transpositions are removed. Shards retain source teacher/config
 metadata and are immutable, checksummed files. A sealed JSON manifest lists only
 committed shards. A failed input rolls back its index entries; unreferenced shard
-files may remain and can be reused on retry. Producer chunks must fit the block
-remainder; oversized chunks roll back without losing their tail. Use a smaller
-chunk at the boundary. `--seal --partial` explicitly publishes the accepted
+files may remain and can be reused on retry. At a block boundary a persistent input-record cursor preserves the unconsumed
+tail. Ingest the same input into the next block to continue; committed prefixes
+are never recounted. `--seal --partial` explicitly publishes the accepted
 portion after a stop. Sealed blocks cannot accept new inputs. Use local POSIX
 storage, one shared store for all campaign ingestion, and retain the SQLite index.
 This command does not launch producers or allocate cloud resources.
+
+`nnue:produce` runs bounded independent one-thread self-play jobs and ingests
+completed-game chunks into that store. Each pool has an immutable recipe; campaign
+name and job index determine unique seeds. Each job pins teacher/engine/book hashes;
+resuming it with changed inputs fails. New job IDs may use a promoted teacher.
+
+```bash
+maxima nnue:produce --output /data/producers --store /data/campaign \
+  --campaign halfka-01 --block block-001 --engine /data/maxima \
+  --network /data/teacher.nnue --book /data/book.bin \
+  --exclude benchmark.mxdata --workers 32 --start-job 0 --jobs 32 \
+  --max-seconds 7200
+```
+
+This explicit invocation schedules only the selected job range, with at most
+`--workers` child processes (default2), each generating at most
+`--positions-per-job` positions (default100k, maximum1M, plus a final complete
+game) and `--games-per-job` games per invocation (default1000). Repeat unfinished
+job IDs to resume, then assign fresh IDs. Raw PGNs and label chunks remain in the
+pool; completed inputs are skipped by indexed hash lookup. Overshoot beyond an
+exact block boundary remains available for the next block, including games that
+finish while workers drain. The pool automatically seals a full block.
+`--max-seconds` stops scheduling after the deadline; current games finish, so it
+is not a hard process wall timeout. Touch `/data/campaign/STOP` (or `--stop-file`)
+to stop new jobs and games after target strength or a budget decision. Completed
+partial data remains available; seal it explicitly with `nnue:shards --seal --partial`.
+On a worker failure, other workers drain and the command returns nonzero. A later
+explicit invocation retries the selected IDs. Use one pool directory per
+campaign/job namespace; do not reuse IDs for different games.
+
+The book is explicit for producer pools: `--book` uses the four-ply book prefix
+within eight opening plies; omission uses eight random plies. Selfplay also
+accepts `--no-book` to suppress automatic lookup, repeated `--stop-file` paths,
+and an absolute Unix `--stop-at` scheduling deadline. Operational stop flags do
+not alter immutable teacher settings. Ingestion verifies PGN/data hashes and
+retains existing exact-score/quiet/completed-result filters; it does not rescore
+games or claim an independent PGN audit.
+
+Run the next block's producer invocation concurrently with `nnue:stage` and
+candidate export/native/playing tests. Keep at most one additional block ready or
+in flight. The CLIs deliberately do not schedule another block automatically,
+manage cloud billing, interpret SPRT decisions, or change the champion. The
+controller must enforce the shared budget, backlog and promotion policy; a stop
+file saves current complete games without forcing the next100M to finish.
 
 `nnue:stage` is the bounded sharded trainer. It accepts a sealed manifest from
 `nnue:shards` and supports CPU or explicitly requested CUDA with optional PyTorch.
@@ -2007,8 +2052,8 @@ FT bounds, RNG, constant learning rate, global optimizer step, presentations,
 accepted training-position count, epoch/window/row cursor and lineage hashes.
 `--parent` requires a completed stage, matching implementation/optimizer recipe,
 and fresh shard hashes. It restores the latest experimental state, independently
-of the validation-selected candidate. All blocks must use the same global ingest
-store to exclude repeated positions. No implicit replay or LR restart occurs.
+of the validation-selected candidate. Parent continuation requires the same global ingest-store identity, preserving
+global position deduplication across blocks. No implicit replay or LR restart occurs.
 `--resume` requires identical inputs and settings, including original parent or
 warm-start arguments. `--max-batches` and `--checkpoint-every` bound optimization
 work/checkpoint intervals; validation and initialization are outside that budget.

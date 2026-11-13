@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sqlite3
 import tempfile
+import uuid
 
 import chess
 
@@ -34,14 +35,18 @@ def connect(root):
     db = sqlite3.connect(root / 'index.sqlite3', timeout=60)
     db.execute('PRAGMA foreign_keys=ON')
     db.executescript('''
+        CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS positions (key TEXT PRIMARY KEY) WITHOUT ROWID;
         CREATE TABLE IF NOT EXISTS blocks (name TEXT PRIMARY KEY, target INTEGER NOT NULL,
             positions INTEGER NOT NULL DEFAULT 0, sealed INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS inputs (digest TEXT PRIMARY KEY, block TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS cursors (digest TEXT PRIMARY KEY, next_record INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS shards (block TEXT NOT NULL, path TEXT NOT NULL UNIQUE,
             sha256 TEXT NOT NULL, positions INTEGER NOT NULL, train INTEGER NOT NULL,
             validation INTEGER NOT NULL);
     ''')
+    db.execute('INSERT OR IGNORE INTO settings VALUES (?,?)', ('store_id', uuid.uuid4().hex))
+    db.commit()
     return db
 
 
@@ -79,8 +84,10 @@ def ingest(root, block, inputs, *, target=100_000_000, shard_size=1_000_000, exc
             digest = nnue_data.file_hash(path)
             if db.execute('SELECT 1 FROM inputs WHERE digest=?', (digest,)).fetchone():
                 continue
-            if sealed or (root / f'{block}.json').exists() or count >= target:
+            if sealed or (root / f'{block}.json').exists():
                 raise ValueError('block is full or sealed; preserve remaining input for the next block')
+            if count >= target:
+                break
             with nnue_binary.binary_dataset(path) as data, db:
                 pending = []
 
@@ -108,13 +115,16 @@ def ingest(root, block, inputs, *, target=100_000_000, shard_size=1_000_000, exc
                     pending.clear()
 
                 accepted = 0
-                for row in data:
+                saved_cursor = db.execute('SELECT next_record FROM cursors WHERE digest=?', (digest,)).fetchone()
+                cursor = saved_cursor[0] if saved_cursor else 0
+                for index in range(cursor, len(data)):
+                    if count + accepted >= target:
+                        break
+                    row = data[index]
                     key = validate_row(row, data.header)
                     inserted = db.execute('INSERT OR IGNORE INTO positions VALUES (?)', (key,)).rowcount
+                    cursor = index + 1
                     if inserted:
-                        if count + accepted >= target:
-                            # Roll back the entire input; never lose its tail on retry.
-                            raise ValueError('input exceeds block remainder; use smaller producer chunks')
                         pending.append(row)
                         accepted += 1
                         if len(pending) >= shard_size:
@@ -122,7 +132,11 @@ def ingest(root, block, inputs, *, target=100_000_000, shard_size=1_000_000, exc
                 flush()
                 if nnue_data.file_hash(path) != digest:
                     raise ValueError('input changed during ingestion')
-                db.execute('INSERT INTO inputs VALUES (?,?)', (digest, block))
+                if cursor == len(data):
+                    db.execute('INSERT INTO inputs VALUES (?,?)', (digest, block))
+                    db.execute('DELETE FROM cursors WHERE digest=?', (digest,))
+                else:
+                    db.execute('INSERT OR REPLACE INTO cursors VALUES (?,?)', (digest, cursor))
                 db.execute('UPDATE blocks SET positions=positions+? WHERE name=?', (accepted, block))
             count += accepted
         return count
@@ -137,7 +151,11 @@ def seal(root, block, *, partial=False):
         shards = [dict(zip(('path', 'sha256', 'positions', 'train', 'validation'), row)) for row in
                   db.execute('SELECT path,sha256,positions,train,validation FROM shards WHERE block=? ORDER BY rowid',
                              (block,))]
-        manifest = dict(format='maxima.nnue.shards', version=1, block=block, target=entry[0],
+        store_id = db.execute("SELECT value FROM settings WHERE key='store_id'").fetchone()[0]
+        exclusions = [row[0][len('excluded:'):] for row in
+                      db.execute("SELECT digest FROM inputs WHERE digest LIKE 'excluded:%' ORDER BY digest")]
+        manifest = dict(format='maxima.nnue.shards', version=1, store_id=store_id,
+                        excluded_dataset_sha256=exclusions, block=block, target=entry[0],
                         positions=entry[1], partial=entry[0] != entry[1], shards=shards)
         path = root / f'{block}.json'
         if path.exists():
@@ -155,6 +173,8 @@ def read_manifest(path):
     value = json.loads(path.read_text())
     if value.get('format') != 'maxima.nnue.shards' or value.get('version') != 1 or not value.get('shards'):
         raise ValueError('unsupported or empty shard manifest')
+    if not isinstance(value.get('store_id'), str) or len(value['store_id']) != 32:
+        raise ValueError('missing global store identity')
     total = 0
     paths = set()
     for shard in value['shards']:

@@ -49,8 +49,8 @@ class shard_tests(unittest.TestCase):
             nnue_shards.read_manifest(manifest)
 
     def test_failed_input_rolls_back_index_and_can_retry(self):
-        source = self.dataset('source', self.rows)
-        with self.assertRaisesRegex(ValueError, 'remainder'):
+        source = self.dataset('source', [*self.rows[:7], dict(self.rows[7], result_stm=None)])
+        with self.assertRaisesRegex(ValueError, 'completed result'):
             nnue_shards.ingest(self.store, 'one', [source], target=8, shard_size=2)
         with closing(sqlite3.connect(self.store / 'index.sqlite3')) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM positions').fetchone()[0], 0)
@@ -58,6 +58,14 @@ class shard_tests(unittest.TestCase):
         smaller = self.dataset('smaller', self.rows[:8])
         self.assertEqual(nnue_shards.ingest(self.store, 'one', [smaller], target=8, shard_size=2), 8)
         self.assertEqual(nnue_shards.read_manifest(nnue_shards.seal(self.store, 'one'))['positions'], 8)
+
+    def test_block_boundary_preserves_input_tail_for_next_block(self):
+        source = self.dataset('source', self.rows)
+        self.assertEqual(nnue_shards.ingest(self.store, 'one', [source], target=5), 5)
+        nnue_shards.seal(self.store, 'one')
+        self.assertEqual(nnue_shards.ingest(self.store, 'two', [source], target=7), 7)
+        nnue_shards.seal(self.store, 'two')
+        self.assertEqual(nnue_shards.ingest(self.store, 'three', [source], target=7), 0)
 
     def test_reserved_positions_and_explicit_partial_stop(self):
         excluded = self.dataset('reserved', self.rows[:3], purpose='heldout_evaluation')

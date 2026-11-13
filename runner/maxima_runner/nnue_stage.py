@@ -127,6 +127,7 @@ def stage_contract(args, torch, manifest):
                'search_weight', 'width', 'hidden', 'device')}
     result.update(format='maxima.nnue.stage.contract', version=1, architecture='halfkav2_hm',
                   dtype='float64', torch=str(torch.__version__), implementation=implementation(),
+                  store_id=manifest['store_id'],
                   manifest_sha256=nnue_data.file_hash(args.manifest),
                   shard_sha256=[item['sha256'] for item in manifest['shards']],
                   parent_sha256=nnue_data.file_hash(args.parent) if args.parent else None,
@@ -182,7 +183,7 @@ def run(args):
             if (parent.get('format') != 'maxima.nnue.stage' or parent.get('version') != 1
                     or parent['phase'] != 'complete'):
                 raise ValueError('parent must be a completed stage recovery checkpoint')
-            for key in ('architecture', 'dtype', 'torch', 'implementation', 'width', 'hidden',
+            for key in ('architecture', 'dtype', 'torch', 'implementation', 'store_id', 'width', 'hidden',
                         'batch_size', 'shuffle_size', 'learning_rate', 'search_weight', 'device'):
                 if parent['contract'][key] != contract[key]:
                     raise ValueError(f'parent training recipe mismatch: {key}')

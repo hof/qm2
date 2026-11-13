@@ -4,11 +4,13 @@ import asyncio
 import collections
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import random
 import shutil
 import tempfile
+import time
 
 import chess
 import chess.engine
@@ -155,6 +157,11 @@ def load_run(directory, config, excluded=()):
     return rows, seen, games
 
 
+def generation_stopped(args):
+    return (any(path.exists() for path in getattr(args, 'stop_file', []))
+            or (getattr(args, 'stop_at', None) is not None and time.time() >= args.stop_at))
+
+
 async def generate(args, config, rows, seen, games):
     book = chess.polyglot.open_reader(args.book) if args.book else None
     try:
@@ -166,7 +173,7 @@ async def generate(args, config, rows, seen, games):
                                         "SyzygyPath": "<empty>", "EvalFile": str(args.network.resolve())})
                 await engine.ready()
                 for _ in range(args.games_per_run):
-                    if len(rows) >= args.positions:
+                    if len(rows) >= args.positions or generation_stopped(args):
                         break
                     index = len(games) + 1
                     text, produced, counters, plies = await play_game(engine, config, index, seen, book)
@@ -198,6 +205,9 @@ def main():
     parser.add_argument("--output", required=True, type=Path, help="new or matching resumable run directory")
     parser.add_argument("--exclude-dataset", action="append", type=Path, default=[],
                         help="exclude every position in this dataset from both splits; repeatable")
+    parser.add_argument("--stop-file", type=Path, action="append", default=[],
+                        help="finish the current game then stop when any named file exists")
+    parser.add_argument("--stop-at", type=float, help="Unix deadline: stop scheduling games after this time")
     parser.add_argument("--positions", type=int, default=10000)
     parser.add_argument("--nodes", type=int, default=10000)
     parser.add_argument("--games-per-run", type=int, default=5)
@@ -212,8 +222,12 @@ def main():
     parser.add_argument("--engine", type=Path, default=engine_path())
     parser.add_argument("--network", type=Path, default=network_path(project_root()))
     parser.add_argument("--book", type=Path, default=(data_root() / "book.bin") if (data_root() / "book.bin").is_file() else None)
+    parser.add_argument("--no-book", action="store_true", help="disable automatic opening-book lookup")
     args = parser.parse_args()
-    if (min(args.positions, args.nodes, args.games_per_run) <= 0
+    if args.no_book:
+        args.book = None
+    if ((args.stop_at is not None and not math.isfinite(args.stop_at))
+            or min(args.positions, args.nodes, args.games_per_run) <= 0
             or (args.score_limit is not None and args.score_limit <= 0)
             or not 0 <= args.book_plies <= args.random_plies <= args.min_ply < args.max_plies <= 65535):
         parser.error("invalid generation bounds")
@@ -238,7 +252,7 @@ def main():
                 raise ValueError("self-play games exist without run settings")
             nnue_data.publish_jsonl(settings, config, [])
         rows, seen, games = load_run(args.output, config, excluded)
-        if len(rows) < args.positions:
+        if len(rows) < args.positions and not generation_stopped(args):
             asyncio.run(generate(args, config, rows, seen, games))
         if len(rows) >= args.positions:
             path = args.output / f"dataset-{args.positions}.mxdata"
