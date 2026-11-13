@@ -1976,6 +1976,54 @@ portion after a stop. Sealed blocks cannot accept new inputs. Use local POSIX
 storage, one shared store for all campaign ingestion, and retain the SQLite index.
 This command does not launch producers or allocate cloud resources.
 
+`nnue:stage` is the bounded sharded trainer. It accepts a sealed manifest from
+`nnue:shards` and supports CPU or explicitly requested CUDA with optional PyTorch.
+The default geometry is full HalfKAv2_hm256/32/32/1. Install a CUDA-capable Torch
+build on the GPU host; the CPU wheel above cannot execute CUDA. CUDA requests
+fail if unavailable. This path uses float64, deterministic Torch operations and
+one CPU Torch thread; unsupported deterministic GPU kernels fail explicitly.
+CUDA throughput and parity require validation on the target hardware.
+
+```bash
+maxima nnue:stage /data/campaign/block-001.json --output /data/stage-001 \
+  --warm-start /data/teacher.nnue --device cuda --epochs 1 --batch-size 1024
+maxima nnue:stage /data/campaign/block-002.json --output /data/stage-002 \
+  --parent /data/stage-001/training.pt --device cuda --epochs 1 --batch-size 1024
+maxima nnue:export /data/stage-001/candidate.pt \
+  --manifest /data/campaign/block-001.json --output /data/candidate-001
+```
+
+Training maps at most two shards, retaining compact split indices, and shuffles
+windows of at most `--shuffle-size` positions (default65536, maximum1M) in seeded
+window and row order. This bounded shuffle is a declared block-local sampling
+recipe, not a full corpus permutation. `--epochs` counts passes over the current
+block only. Validation selects a candidate using at most `--metrics-positions`
+rows (default8192), sampled deterministically across this block's validation
+split. It is a monitoring sample, not an untouched strength test. Corpus checksums
+are verified on stage entry; no previous blocks are rescanned during continuation.
+
+Recovery `training.pt` keeps the latest student paired with its Adam moments,
+FT bounds, RNG, constant learning rate, global optimizer step, presentations,
+accepted training-position count, epoch/window/row cursor and lineage hashes.
+`--parent` requires a completed stage, matching implementation/optimizer recipe,
+and fresh shard hashes. It restores the latest experimental state, independently
+of the validation-selected candidate. All blocks must use the same global ingest
+store to exclude repeated positions. No implicit replay or LR restart occurs.
+`--resume` requires identical inputs and settings, including original parent or
+warm-start arguments. `--max-batches` and `--checkpoint-every` bound optimization
+work/checkpoint intervals; validation and initialization are outside that budget.
+A process lock serializes writers. CPU/CUDA device is part of the immutable recipe.
+
+A completed stage freezes `candidate.pt`; it never replaces the active playing
+network. Export runs separately on CPU, comparing serialized integer inference
+against the model on at most `--positions` sampled rows (default4096), plus edge
+fixtures. The JSON report explicitly records sampled verification and the remaining
+native-check requirement. Unlike the prototype, this does not check every corpus
+row. Run `nnue:verify` with the native probe before playing tests. Export failure
+publishes no network. Training can continue from `training.pt` while an earlier
+candidate is exported and tested, and producers can fill the next block in parallel.
+These CLIs do not rent resources, schedule producers, run matches, or promote models.
+
 `nnue:train` trains a small CPU NNUE model using optional PyTorch. Install it
 in a separate environment (Python 3.11+ for the pinned training dependencies):
 
