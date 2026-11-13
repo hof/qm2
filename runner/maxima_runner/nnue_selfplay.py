@@ -122,8 +122,17 @@ async def play_game(engine, config, index, seen, book=None):
     return text, rows, dict(counters), board.ply()
 
 
-def load_run(directory, config):
-    rows, seen, games = [], set(), []
+def dataset_exclusions(paths):
+    seen, hashes = set(), set()
+    for path in paths:
+        _, rows = nnue_data.read_dataset(path)
+        hashes.add(nnue_data.file_hash(path))
+        seen.update(nnue_data.position_key(chess.Board(row["fen"])) for row in rows)
+    return seen, sorted(hashes)
+
+
+def load_run(directory, config, excluded=()):
+    rows, seen, games = [], set(excluded), []
     for path in sorted(directory.glob("game-[0-9]*")):
         report = json.loads((path / "report.json").read_text())
         if report["game"] != len(games) + 1 or report["config"] != config:
@@ -139,7 +148,7 @@ def load_run(directory, config):
             for row in saved:
                 key = nnue_data.position_key(chess.Board(row["fen"]))
                 if key in seen:
-                    raise ValueError("duplicate position across self-play shards")
+                    raise ValueError("duplicate or excluded position in self-play shards")
                 seen.add(key)
             rows.extend(saved)
         games.append(report)
@@ -187,6 +196,8 @@ async def generate(args, config, rows, seen, games):
 def main():
     parser = argparse.ArgumentParser(prog="maxima nnue:selfplay", description=__doc__)
     parser.add_argument("--output", required=True, type=Path, help="new or matching resumable run directory")
+    parser.add_argument("--exclude-dataset", action="append", type=Path, default=[],
+                        help="exclude every position in this dataset from both splits; repeatable")
     parser.add_argument("--positions", type=int, default=10000)
     parser.add_argument("--nodes", type=int, default=10000)
     parser.add_argument("--games-per-run", type=int, default=5)
@@ -211,6 +222,9 @@ def main():
               "max_plies": args.max_plies, "score_limit": args.score_limit,
               "engine_sha256": nnue_data.file_hash(args.engine), "network_sha256": nnue_data.file_hash(args.network),
               "book_sha256": nnue_data.file_hash(args.book) if args.book else None}
+    excluded, exclusion_hashes = dataset_exclusions(args.exclude_dataset)
+    if exclusion_hashes:
+        config["excluded_dataset_sha256"] = exclusion_hashes
     args.output.mkdir(parents=True, exist_ok=True)
     with writer_lock(args.output / ".lock"):
         settings = args.output / "settings.json"
@@ -221,7 +235,7 @@ def main():
             if any(args.output.glob("game-*")):
                 raise ValueError("self-play games exist without run settings")
             nnue_data.publish_jsonl(settings, config, [])
-        rows, seen, games = load_run(args.output, config)
+        rows, seen, games = load_run(args.output, config, excluded)
         if len(rows) < args.positions:
             asyncio.run(generate(args, config, rows, seen, games))
         if len(rows) >= args.positions:

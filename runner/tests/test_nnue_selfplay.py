@@ -41,6 +41,26 @@ class nnue_selfplay_tests(unittest.TestCase):
         self.assertEqual(filters["no_exact_cp"], 1)
         self.assertEqual(len({row["split"] for row in rows}), 1)
 
+    def test_excluded_position_is_removed_before_either_split_is_published(self):
+        config = self.config()
+        # Position identity ignores clocks, including for reserved evaluation rows.
+        reserved = chess.Board()
+        reserved.fullmove_number = 42
+        row = {"fen": reserved.fen(), "score_cp": 0, "result_stm": 0.5,
+               "split": nnue_data.position_split(reserved),
+               "source": {"sha256": "b" * 64, "game": 1, "ply": 0}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reserved.mxdata"
+            nnue_data.save_dataset(path, {"variant": "standard", "score_pov": "side_to_move",
+                                          "purpose": "heldout_evaluation"}, [row])
+            excluded, hashes = nnue_selfplay.dataset_exclusions([path, path])
+            self.assertEqual(hashes, [nnue_data.file_hash(path)])
+            _, rows, filters, _ = asyncio.run(nnue_selfplay.play_game(
+                fools_mate_engine(), config, 1, excluded))
+        self.assertEqual([row["source"]["ply"] for row in rows], [1, 2])
+        self.assertEqual(filters["duplicate"], 1)
+        self.assertTrue(all(nnue_data.position_key(chess.Board(row["fen"])) not in excluded for row in rows))
+
     def test_unfinished_game_does_not_invent_wdl_samples(self):
         text, rows, filters, _ = asyncio.run(nnue_selfplay.play_game(
             fools_mate_engine(), self.config(max_plies=3), 1, set()))
@@ -82,6 +102,8 @@ class nnue_selfplay_tests(unittest.TestCase):
             self.assertEqual(len(restored), 3)
             self.assertEqual(len(seen), 3)
             self.assertEqual(len(games), 1)
+            with self.assertRaisesRegex(ValueError, "excluded position"):
+                nnue_selfplay.load_run(run, config, {nnue_data.position_key(chess.Board(rows[0]["fen"]))})
             (game / "game.pgn").write_text("damaged")
             with self.assertRaises(ValueError):
                 nnue_selfplay.load_run(run, config)

@@ -1844,6 +1844,12 @@ saved rows and deduplication keys into memory; it is intended for initial
 experiments, with large-corpus indexing still separate work. It never publishes
 to online experience or replaces the playing network.
 
+`nnue:selfplay --exclude-dataset reserved.mxdata` removes every position in a
+reserved dataset from both generated splits, using position identity without
+clocks. Repeat the option to exclude multiple datasets, for example an earlier
+training corpus that will be reused. Excluded dataset content hashes become
+immutable resume settings; saved shards are also checked against these keys.
+
 `maxima nnue:data games.pgn --output training.mxdata --positions 256 --nodes 2000`
 replays standard PGNs and freshly labels sampled positions with one engine worker,
 Hash32, native book disabled, analysis mode and zero draw contempt. PGN eval
