@@ -1827,8 +1827,15 @@ book; its hash, teacher hashes, generator hash and settings must match on resume
 
 Samples start at ply16 and exclude checked positions, captures/promotions by
 either the played move or the completed iteration's best move, missing exact
-centipawn labels, scores beyond `--score-limit` (default1000cp), and duplicate
-positions ignoring clocks. Only completed games supply training samples; final
+centipawn labels, and duplicate positions ignoring clocks. There is no score-based
+sampling limit by default: quiet positions in clear wins/losses remain eligible
+through conversion. `--score-limit CP` optionally restores an absolute-score filter
+for a deliberately restricted experiment. Ordinary finite labels are retained
+through the dataset reader too; there is no separate +/-10000cp sampling cutoff.
+The current record stores signed16 centipawns (-32768..32767); scores outside that
+representation fail explicitly instead of being clipped or silently discarded.
+Mate scores stay in PGN/search annotations and are not fabricated CP labels.
+Only completed games supply training samples; final
 win/draw/loss is attached from the side-to-move perspective. Games reaching
 `--max-plies` (default512) remain unfinished PGNs and supply no training rows.
 There is no score-based win adjudication. Whole-game splits and global position
@@ -1844,11 +1851,33 @@ saved rows and deduplication keys into memory; it is intended for initial
 experiments, with large-corpus indexing still separate work. It never publishes
 to online experience or replaces the playing network.
 
+Sampling settings and generator content are fixed for a resumable run. Use a new
+output directory when changing a previous score-limited experiment to uncapped
+generation; existing datasets, settings and checkpoints are not rewritten.
+
 `nnue:selfplay --exclude-dataset reserved.mxdata` removes every position in a
 reserved dataset from both generated splits, using position identity without
 clocks. Repeat the option to exclude multiple datasets, for example an earlier
 training corpus that will be reused. Excluded dataset content hashes become
 immutable resume settings; saved shards are also checked against these keys.
+
+The teacher/student workflow has separate CLI stages, usable from a terminal:
+
+| Stage | Command | Responsibility |
+|---|---|---|
+| Teacher data | `./maxima nnue:selfplay` | Select `--engine`/`--network`, play games and save searched labels/results |
+| PGN labeling | `./maxima nnue:data` | Search selected PGN positions with the chosen teacher |
+| Student training/export | `.tools/training/bin/maxima nnue:train` | Optional supported HalfKP warm start, validation selection, recovery and verified export |
+| Native verification | `./maxima nnue:verify` | Compare exported inference with the built native probe |
+| Playing comparison | `./maxima match:run` | Select explicit models for each engine and record paired games |
+
+Use `--help` on each stage for its arguments. Training uses the optional PyTorch
+environment described below; generation and native verification do not need it.
+These commands do not require an interactive assistant. There is currently no
+single named-run command coordinating every stage, dataset merging, experiment
+audits and benchmark reporting, or automatically promoting the student to teacher
+or to the playing model. Training currently supports CPU execution; the existing
+in-memory row loading and run-level indexing are not a billion-position pipeline.
 
 `maxima nnue:data games.pgn --output training.mxdata --positions 256 --nodes 2000`
 replays standard PGNs and freshly labels sampled positions with one engine worker,

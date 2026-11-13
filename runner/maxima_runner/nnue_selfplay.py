@@ -30,7 +30,7 @@ def usable_position(board, move, label, *, min_ply, score_limit, seen):
         return "tactical"
     if label is None:
         return "no_exact_cp"
-    if abs(label["score_cp"]) > score_limit:
+    if score_limit is not None and abs(label["score_cp"]) > score_limit:
         return "decided"
     if nnue_data.position_key(board) in seen:
         return "duplicate"
@@ -206,13 +206,15 @@ def main():
     parser.add_argument("--book-plies", type=int, default=4,
                         help="book-guided prefix within the opening plies; the remainder are random")
     parser.add_argument("--min-ply", type=int, default=16)
-    parser.add_argument("--score-limit", type=int, default=1000)
+    parser.add_argument("--score-limit", type=int,
+                        help="optional absolute centipawn sampling limit; default: no score filter")
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--engine", type=Path, default=engine_path())
     parser.add_argument("--network", type=Path, default=network_path(project_root()))
     parser.add_argument("--book", type=Path, default=(data_root() / "book.bin") if (data_root() / "book.bin").is_file() else None)
     args = parser.parse_args()
-    if (min(args.positions, args.nodes, args.games_per_run, args.score_limit) <= 0
+    if (min(args.positions, args.nodes, args.games_per_run) <= 0
+            or (args.score_limit is not None and args.score_limit <= 0)
             or not 0 <= args.book_plies <= args.random_plies <= args.min_ply < args.max_plies <= 65535):
         parser.error("invalid generation bounds")
     config = {"format": "maxima.nnue.selfplay", "version": 1, "nodes": args.nodes,

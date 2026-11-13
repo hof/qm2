@@ -55,8 +55,10 @@ def completed_label(infos):
             exact[info["depth"]] = info["score"].relative.score()
     depth = completed if completed is not None else max(exact, default=0)
     score = exact.get(depth)
-    if depth <= 0 or score is None or abs(score) >= 10000:
+    if depth <= 0 or score is None:
         return None
+    if isinstance(score, bool) or not isinstance(score, int) or not -32768 <= score <= 32767:
+        raise ValueError("exact centipawn label does not fit signed16 dataset storage")
     return {"score_cp": score, "depth": depth, "nodes": nodes}
 
 
@@ -170,7 +172,7 @@ def read_dataset(path):
         expected_split = game_split(row["source"]) if method == "game" else position_split(board)
         result = row.get("result_stm")
         if (not board.is_valid() or len(board.piece_map()) > 32 or key in seen
-                or isinstance(score, bool) or not isinstance(score, int) or abs(score) >= 10000
+                or isinstance(score, bool) or not isinstance(score, int) or not -32768 <= score <= 32767
                 or isinstance(result, bool) or result not in (None, 0, 0.5, 1)
                 or row.get("split") != expected_split):
             raise ValueError("invalid or duplicate NNUE dataset position/label/split")

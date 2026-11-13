@@ -11,6 +11,15 @@ from maxima_runner import nnue_data, shortfen
 
 
 class nnue_data_tests(unittest.TestCase):
+    def test_labels_preserve_finite_scores_and_reject_storage_overflow(self):
+        for cp in [-32768, -20000, 20000, 32767]:
+            info = {"depth": 7, "nodes": 6000, "score": chess.engine.PovScore(chess.engine.Cp(cp), True)}
+            self.assertEqual(nnue_data.completed_label([info])["score_cp"], cp)
+        for cp in [-32769, 32768]:
+            info = {"depth": 7, "score": chess.engine.PovScore(chess.engine.Cp(cp), True)}
+            with self.assertRaisesRegex(ValueError, "signed16"):
+                nnue_data.completed_label([info])
+
     def test_labels_use_completed_exact_iteration_and_total_effort(self):
         exact = {"depth": 7, "nodes": 6000, "score": chess.engine.PovScore(chess.engine.Cp(-30), True)}
         interrupted = {"depth": 8, "nodes": 10000, "lowerbound": True,
