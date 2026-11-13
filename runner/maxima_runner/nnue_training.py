@@ -74,19 +74,37 @@ def constant_baselines(torch, train, validation, search_weight):
     return baselines
 
 
-def metrics(torch, model, rows, search_weight=1.0):
+def metrics(torch, model, rows, search_weight=1.0, batch_size=256):
     if not rows:
         return None
+    totals = dict.fromkeys(("loss", "search_loss", "mae_cp", "quantization_mae_cp"), 0.0)
     with torch.no_grad():
-        inputs = batch(torch, rows, model.architecture)
-        labels = torch.tensor([row["score_cp"] for row in rows], dtype=torch.float64)
-        scores = model(*inputs)
-        floating = model(*inputs, quantized=False)
-        return {"positions": len(rows),
-                "loss": loss(torch, scores, labels, result_tensor(torch, rows), search_weight).item(),
-                "search_loss": loss(torch, scores, labels).item(),
-                "mae_cp": (scores - labels).abs().mean().item(),
-                "quantization_mae_cp": (scores - floating).abs().mean().item()}
+        for start in range(0, len(rows), batch_size):
+            selected = rows[start:start + batch_size]
+            inputs = batch(torch, selected, model.architecture)
+            labels = torch.tensor([row["score_cp"] for row in selected], dtype=torch.float64)
+            scores = model(*inputs)
+            floating = model(*inputs, quantized=False)
+            values = {"loss": loss(torch, scores, labels, result_tensor(torch, selected), search_weight),
+                      "search_loss": loss(torch, scores, labels),
+                      "mae_cp": (scores - labels).abs().mean(),
+                      "quantization_mae_cp": (scores - floating).abs().mean()}
+            for name, value in values.items():
+                totals[name] += value.item() * len(selected)
+    return dict(positions=len(rows), **{name: value / len(rows) for name, value in totals.items()})
+
+
+def verify_export(torch, model, rows, serialized, batch_size=256):
+    integer = nnue_format.integer_network(serialized)
+    with torch.no_grad():
+        for start in range(0, len(rows), batch_size):
+            selected = rows[start:start + batch_size]
+            predictions = model(*batch(torch, selected, model.architecture)).tolist()
+            for row, predicted in zip(selected, predictions):
+                if integer.evaluate(chess.Board(row["fen"]))[1] != predicted:
+                    raise ValueError(f"quantized model/export mismatch for {row['fen']}")
+            checked = start + len(selected)
+            print(f"Export checked: {checked}/{len(rows)} positions", flush=True)
 
 
 def main():
@@ -95,6 +113,7 @@ def main():
     parser.add_argument("--output", required=True, type=Path, help="new artifact directory")
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--metrics-batch-size", type=int, default=256)
     parser.add_argument("--width", type=int, default=8)
     parser.add_argument("--hidden", type=int, default=8)
     parser.add_argument("--architecture", choices=("halfkp", "halfkav2_hm"), default="halfkp")
@@ -110,7 +129,7 @@ def main():
         args.learning_rate = 0.0001 if args.warm_start else 0.003
     if args.warm_start and (args.architecture != "halfkav2_hm" or args.width != 256 or args.hidden != 32):
         parser.error("--warm-start requires --architecture halfkav2_hm --width 256 --hidden 32")
-    if (min(args.epochs, args.batch_size) <= 0 or not 1 <= args.width <= 256
+    if (min(args.epochs, args.batch_size, args.metrics_batch_size) <= 0 or not 1 <= args.width <= 256
             or not 1 <= args.hidden <= 32 or not math.isfinite(args.learning_rate) or args.learning_rate <= 0
             or not math.isfinite(args.search_weight) or not 0 <= args.search_weight <= 1):
         parser.error("invalid dimensions, epoch/batch count or learning rate")
@@ -136,8 +155,8 @@ def main():
     baselines = constant_baselines(torch, train, validation, args.search_weight)
     print(f"Constant baselines: validation zero cp {baselines['zero_cp']['validation']['loss']:.6f}; "
           f"training mean {baselines['train_mean']['validation']['loss']:.6f}", flush=True)
-    initial = {"train": metrics(torch, model, train, args.search_weight),
-               "validation": metrics(torch, model, validation, args.search_weight)}
+    initial = {"train": metrics(torch, model, train, args.search_weight, args.metrics_batch_size),
+               "validation": metrics(torch, model, validation, args.search_weight, args.metrics_batch_size)}
     history, best_state, best_epoch, best_loss = [], None, 0, math.inf
     if warm_start:
         best_state = copy.deepcopy(model.state_dict())
@@ -155,8 +174,8 @@ def main():
             objective.backward()
             optimizer.step()
             model.constrain()
-        scores = {"epoch": epoch + 1, "train": metrics(torch, model, train, args.search_weight),
-                  "validation": metrics(torch, model, validation, args.search_weight)}
+        scores = {"epoch": epoch + 1, "train": metrics(torch, model, train, args.search_weight, args.metrics_batch_size),
+                  "validation": metrics(torch, model, validation, args.search_weight, args.metrics_batch_size)}
         history.append(scores)
         if scores["validation"]["loss"] < best_loss:
             best_loss = scores["validation"]["loss"]
@@ -166,7 +185,8 @@ def main():
     config = {"format": "maxima.nnue.prototype", "version": 1, "architecture": args.architecture,
               "width": args.width, "hidden": args.hidden, "seed": args.seed,
               "dataset_sha256": nnue_data.file_hash(args.dataset), "torch": str(torch.__version__),
-              "epochs": args.epochs, "batch_size": args.batch_size, "learning_rate": args.learning_rate,
+              "epochs": args.epochs, "batch_size": args.batch_size,
+              "metrics_batch_size": args.metrics_batch_size, "learning_rate": args.learning_rate,
               "search_weight": args.search_weight, "teacher": header,
               "warm_start": warm_start, "ft_bound": model.ft_bound,
               "initial": initial, "history": history, "exported_epoch": best_epoch,
@@ -177,14 +197,7 @@ def main():
     if not config["beats_constant_baselines"]:
         print("Selected model does not beat the constant validation baselines.", flush=True)
     serialized = nnue_format.serialize(model.integer_weights(), model.architecture)
-    integer = nnue_format.integer_network(serialized)
-    with torch.no_grad():
-        predictions = model(*batch(torch, rows, model.architecture)).tolist()
-    for checked, (row, predicted) in enumerate(zip(rows, predictions), 1):
-        if integer.evaluate(chess.Board(row["fen"]))[1] != predicted:
-            raise ValueError(f"quantized model/export mismatch for {row['fen']}")
-        if checked % 1000 == 0:
-            print(f"Export checked: {checked}/{len(rows)} positions", flush=True)
+    verify_export(torch, model, rows, serialized, args.metrics_batch_size)
     config["export_checked_positions"] = len(rows)
     config["network_sha256"] = hashlib.sha256(serialized).hexdigest()
     # Artifacts are experiments: never overwrite a run or activate its network.

@@ -1944,7 +1944,9 @@ search target alone. Both blended loss and pure search-score loss are recorded.
 Training runs on one CPU thread, with seeded initialization
 and batch order. Training/validation loss, centipawn error and float/quantized
 differences are recorded each epoch. Validation selects the exported epoch;
-it is not an independent final test set. The dataset is loaded into memory;
+it is not an independent final test set. Metrics and export inference use bounded
+`--metrics-batch-size` batches (default256), with position-weighted aggregates.
+The dataset rows are still loaded into memory;
 this command is for bounded prototypes, not large-scale training yet.
 The report also compares the selected model with zero-centipawn and constant
 training-mean target predictions on the same splits. The latter is fitted only

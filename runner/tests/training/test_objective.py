@@ -4,10 +4,36 @@ import unittest
 
 import torch
 
-from maxima_runner.nnue_training import constant_baselines, loss, result_tensor
+from maxima_runner.nnue_training import constant_baselines, loss, metrics, result_tensor
 
 
 class objective_tests(unittest.TestCase):
+    def test_batched_metrics_weight_partial_batch_and_limit_forward_size(self):
+        from unittest.mock import patch
+
+        class known_model:
+            architecture = "halfkp"
+
+            def __call__(self, labels, quantized=True):
+                self_test.assertLessEqual(len(labels), 2)
+                return labels + (0 if quantized else 10)
+
+        self_test = self
+        rows = [{"score_cp": cp, "result_stm": result}
+                for cp, result in [(0, 1), (400, 0), (-400, None), (200, 0.5), (0, 0)]]
+        labels = torch.tensor([row["score_cp"] for row in rows], dtype=torch.float64)
+        expected = loss(torch, labels, labels, result_tensor(torch, rows), 0.7).item()
+        with patch("maxima_runner.nnue_training.batch",
+                   side_effect=lambda torch, selected, architecture: (
+                       torch.tensor([row["score_cp"] for row in selected], dtype=torch.float64),)):
+            actual = metrics(torch, known_model(), rows, 0.7, batch_size=2)
+        self.assertEqual(actual["positions"], 5)
+        self.assertAlmostEqual(actual["loss"], expected, places=14)
+        self.assertEqual(actual["search_loss"], 0)
+        self.assertEqual(actual["mae_cp"], 0)
+        self.assertEqual(actual["quantization_mae_cp"], 10)
+        self.assertIsNone(metrics(torch, known_model(), []))
+
     def test_known_draw_eval_and_win_result_blend(self):
         scores = torch.tensor([0.0], dtype=torch.float64, requires_grad=True)
         labels = torch.tensor([0.0], dtype=torch.float64)
