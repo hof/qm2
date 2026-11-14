@@ -314,6 +314,17 @@ for line in sys.stdin:
         self.assertFalse(pgn.exists())
         self.assertFalse(report.exists())
 
+    async def test_stop_signal_prevents_starting_another_game(self):
+        stop_file = Path(self.directory.name) / 'STOP'
+        stop_file.touch()
+        args = SimpleNamespace(seed=17, pairs=1, stop_file=[stop_file], stop_at=None)
+        report = {'games': []}
+        with patch('maxima_runner.uci.open_engine') as start:
+            await run_match([['a'], ['b']], [('fixture', chess.Board())], args, report, io.StringIO())
+        start.assert_not_called()
+        self.assertEqual(report['games'], [])
+        self.assertEqual(report['stop_reason'], 'scheduling_stop')
+
     async def test_selection_is_repeatable_and_records_survive_engine_failure(self):
         openings = self.openings('standard', [
             {'id': str(i), 'fen': '7k/8/8/8/8/8/8/K7 w - - 0 1'} for i in range(5)])

@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import random
+import time
 
 import chess
 
@@ -135,7 +136,24 @@ def stage_contract(args, torch, manifest):
     return result
 
 
+
+def publish_completion(args, state):
+    from . import nnue_campaign
+    receipt = dict(format='maxima.nnue.stage.complete', version=1, contract=state['contract'],
+                   presentations=state['presentations'], global_step=state['global_step'],
+                   unique_positions=state['unique_positions'], selected_epoch=state['best_epoch'],
+                   validation_loss=state['best_loss'], history=state['history'],
+                   checkpoint_sha256=nnue_data.file_hash(args.output / 'training.pt'),
+                   candidate_sha256=nnue_data.file_hash(args.output / 'candidate.pt'))
+    nnue_campaign.atomic_json(args.output / 'complete.json', receipt)
+    if (args.manifest.parent / 'campaign.json').exists():
+        manifest = json.loads(args.manifest.read_text())
+        nnue_campaign.finish_training(args.manifest.parent, manifest['block'], args.output, receipt)
+
+
 def run(args):
+    invocation_started = time.monotonic()
+    invocation_id = str(time.time_ns())
     if args.parent and args.warm_start:
         raise ValueError('parent continuation and warm start are mutually exclusive')
     if (min(args.epochs, args.batch_size, args.shuffle_size, args.metrics_positions,
@@ -151,6 +169,25 @@ def run(args):
     manifest = nnue_shards.read_manifest(args.manifest)
     if args.output.exists() and not args.resume:
         raise ValueError('output already exists')
+    campaign_root = args.manifest.parent
+    campaign_deadline = None
+    if (campaign_root / 'campaign.json').exists():
+        from . import nnue_campaign
+        campaign_state = nnue_campaign.status(campaign_root)
+        tracked = campaign_state['blocks'][manifest['block']]
+        completed_here = (tracked['phase'] == 'trained' and args.resume
+                          and tracked['stage']['path'] == str(args.output.resolve()))
+        if nnue_data.file_hash(args.manifest) != tracked['manifest_sha256']:
+            raise ValueError('campaign manifest changed after readiness validation')
+        if not completed_here:
+            expected_parent = campaign_state.get('latest_checkpoint_sha256')
+            if expected_parent:
+                if not args.parent or nnue_data.file_hash(args.parent) != expected_parent:
+                    raise ValueError('campaign must continue its latest experimental checkpoint')
+            elif not args.warm_start or nnue_data.file_hash(args.warm_start) != campaign_state['original_teacher']:
+                raise ValueError('first campaign stage requires the pinned original teacher warm start')
+            category = 'gpu' if args.device == 'cuda' else 'cpu'
+            campaign_deadline = nnue_campaign.allocation(campaign_root, args.lease, category, manifest['block'])['deadline']
     if args.device == 'cuda':
         os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
     torch, model_type = nnue_training.training_libraries()
@@ -174,6 +211,7 @@ def run(args):
         if state.get('format') != 'maxima.nnue.stage' or state.get('version') != 1 or state['contract'] != contract:
             raise ValueError('stage input/config/implementation mismatch')
         if state['phase'] == 'complete':
+            publish_completion(args, state)
             print(f'Stage already complete: {args.output}')
             return 0
     else:
@@ -209,6 +247,8 @@ def run(args):
         torch.set_rng_state(state['rng'])
         if args.device == 'cuda':
             torch.cuda.set_rng_state_all(state['cuda_rng'])
+    if campaign_deadline is not None:
+        nnue_campaign.start_training(campaign_root, manifest['block'], args.lease, category)
     train = shard_rows(args.manifest, manifest, 'train')
     validation = shard_rows(args.manifest, manifest, 'validation')
     try:
@@ -221,11 +261,22 @@ def run(args):
             state['initial'] = initial
             args.output.mkdir(parents=True, exist_ok=False)
 
+        initial_presentations = state['presentations']
+
         def save():
             state.update(model=cpu_copy(torch, model.state_dict()),
                          optimizer=cpu_copy(torch, optimizer.state_dict()), rng=torch.get_rng_state(),
                          cuda_rng=torch.cuda.get_rng_state_all() if args.device == 'cuda' else [])
             nnue_training.atomic_write(checkpoint, lambda stream: torch.save(state, stream))
+            from . import nnue_campaign
+            directory = args.output / 'invocations'
+            directory.mkdir(exist_ok=True)
+            elapsed = time.monotonic() - invocation_started
+            presented = state['presentations'] - initial_presentations
+            nnue_campaign.atomic_json(directory / f'{invocation_id}.json', dict(
+                format='maxima.nnue.stage.invocation', version=1, elapsed_seconds=elapsed,
+                presentations=presented, presentations_per_second=presented / elapsed,
+                global_step=state['global_step'], epoch=state['epoch'], phase=state['phase'], device=args.device))
 
         save()
         batches = 0
@@ -234,6 +285,11 @@ def run(args):
             while state['chunk'] < len(chunks):
                 order = chunk_order(len(train), args.shuffle_size, args.seed, state['epoch'], chunks[state['chunk']])
                 for start in range(state['cursor'], len(order), args.batch_size):
+                    if campaign_deadline is not None and ((campaign_root / 'STOP').exists() or time.time() >= campaign_deadline):
+                        save()
+                        nnue_campaign.status(campaign_root)
+                        print('Campaign scheduling stopped; training checkpoint saved')
+                        return 0
                     selected = [train[i] for i in order[start:start + args.batch_size]]
                     cp, results = labels(torch, model, selected)
                     optimizer.zero_grad(set_to_none=True)
@@ -272,6 +328,7 @@ def run(args):
         nnue_training.atomic_write(args.output / 'candidate.pt', lambda stream: torch.save(candidate, stream))
         state['phase'] = 'complete'
         save()
+        publish_completion(args, state)
         print(f'Stage complete; frozen candidate: {args.output / "candidate.pt"}')
         return 0
     finally:
@@ -283,6 +340,7 @@ def main():
     parser = argparse.ArgumentParser(prog='maxima nnue:stage', description=__doc__)
     parser.add_argument('manifest', type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--lease', help='required allocation ID for campaign stores')
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--parent', type=Path, help='completed prior stage training.pt; retains Adam and latest student')
     parser.add_argument('--warm-start', type=Path)

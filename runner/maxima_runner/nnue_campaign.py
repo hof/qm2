@@ -88,9 +88,10 @@ def initialize(root, teacher, *, expiry=None, credit_evidence=None, now=None):
         state = dict(format='maxima.nnue.campaign', version=1, store_id=store_id,
                      original_teacher=champion, champion=champion, created_at=now,
                      credit_expiry=expiry, credit_evidence=credit_evidence,
-                     stop=None, blocks={}, allocations={}, candidates={}, tests={}, active_test=None,
+                     stop=None, events=[], blocks={}, allocations={}, candidates={}, tests={}, active_test=None,
                      budget_cents=budget_cents, committed_cents=dict(online=2000),
                      spent_cents={key: 0 for key in budget_cents})
+        state['events'].append(dict(sequence=1, at=now, action='initialized', champion=champion))
         atomic_json(root / 'campaign.json', state)
         return state
 
@@ -118,17 +119,33 @@ def refresh(root, state, now):
         stop(root, state, 'allocation_deadline: settle costs and release compute')
 
 
-def transact(root, operation, now=None):
+def persist(root, state, previous, action, stamp):
+    if state == previous:
+        return
+    changes = {}
+    for key in state:
+        if key == 'events' or state[key] == previous.get(key):
+            continue
+        if isinstance(state[key], dict):
+            changes[key] = {name: value for name, value in state[key].items()
+                            if value != previous.get(key, {}).get(name)}
+        else:
+            changes[key] = state[key]
+    state['events'].append(dict(sequence=len(state['events']) + 1, at=stamp, action=action, changes=changes))
+    atomic_json(root / 'campaign.json', state)
+
+
+def transact(root, operation, now=None, event='updated'):
     root = Path(root)
     now = time.time() if now is None else now
     with writer_lock(root / '.campaign.lock'):
         state = load(root)
         original = copy.deepcopy(state)
         refresh(root, state, now)
-        if state != original:
-            atomic_json(root / 'campaign.json', state)
+        persist(root, state, original, 'safety_check', now)
+        before = copy.deepcopy(state)
         result = operation(state, now)
-        atomic_json(root / 'campaign.json', state)
+        persist(root, state, before, event, now)
         return result
 
 
@@ -158,7 +175,7 @@ def admit_block(root, name, now=None):
         state['blocks'][name] = block
         return block
 
-    return transact(root, operation, now)
+    return transact(root, operation, now, event='block_admitted')
 
 
 def mark_ready(root, name, now=None):
@@ -180,7 +197,7 @@ def mark_ready(root, name, now=None):
         block.update(phase='ready', manifest_sha256=digest, ready_at=stamp)
         return block
 
-    return transact(root, operation, now)
+    return transact(root, operation, now, event='block_ready')
 
 
 def reserve(root, lease_id, category, work, maximum_cents, seconds, now=None):
@@ -199,7 +216,8 @@ def reserve(root, lease_id, category, work, maximum_cents, seconds, now=None):
             raise ValueError('allocation crosses the 48-hour credit safety deadline')
         if category in ('cpu', 'gpu'):
             expected = 'generating' if category == 'cpu' else 'ready'
-            if work not in state['blocks'] or state['blocks'][work]['phase'] != expected:
+            phases = ('generating', 'ready') if category == 'cpu' else ('ready',)
+            if work not in state['blocks'] or state['blocks'][work]['phase'] not in phases:
                 raise ValueError(f'allocation needs a {expected} block')
         if lease_id in state['allocations']:
             raise ValueError('allocation ID already exists')
@@ -213,7 +231,7 @@ def reserve(root, lease_id, category, work, maximum_cents, seconds, now=None):
         state['allocations'][lease_id] = lease
         return lease
 
-    return transact(root, operation, now)
+    return transact(root, operation, now, event='allocation_reserved')
 
 
 def check_allocation(state, lease_id, category, work, stamp):
@@ -240,7 +258,31 @@ def start_training(root, name, lease_id, category='gpu', now=None):
         block.update(phase='training', training_allocation=lease_id)
         return block
 
-    return transact(root, operation, now)
+    return transact(root, operation, now, event='training_started')
+
+
+
+def finish_training(root, name, output, receipt, now=None):
+    output = Path(output).resolve()
+    if (receipt.get('format') != 'maxima.nnue.stage.complete'
+            or receipt.get('version') != 1
+            or nnue_data.file_hash(output / 'training.pt') != receipt['checkpoint_sha256']
+            or nnue_data.file_hash(output / 'candidate.pt') != receipt['candidate_sha256']):
+        raise ValueError('completed training artifacts do not match their receipt')
+
+    def operation(state, stamp):
+        block = state['blocks'][name]
+        if receipt['contract']['manifest_sha256'] != block['manifest_sha256']:
+            raise ValueError('completed stage used another block')
+        if block['phase'] == 'trained' and block['stage']['checkpoint_sha256'] == receipt['checkpoint_sha256']:
+            return block
+        if block['phase'] != 'training':
+            raise ValueError('block has no active training stage')
+        block.update(phase='trained', stage=dict(receipt, path=str(output)))
+        state['latest_checkpoint_sha256'] = receipt['checkpoint_sha256']
+        return block
+
+    return transact(root, operation, now, event='training_completed')
 
 
 def settle(root, lease_id, actual_cents, now=None):
@@ -258,7 +300,7 @@ def settle(root, lease_id, actual_cents, now=None):
             stop(Path(root), state, 'allocation_overrun')
         return lease
 
-    return transact(root, operation, now)
+    return transact(root, operation, now, event='allocation_settled')
 
 
 def status(root, now=None):
@@ -270,6 +312,27 @@ def status(root, now=None):
                                      (state['stop'] or stamp >= item['deadline'])]
         return result
     return transact(root, operation, now)
+
+
+
+def review(root, name):
+    state = status(root)
+    block = state['blocks'][name]
+    selected = {key: entry for key, entry in state['candidates'].items() if entry.get('block') == name}
+    receipts = []
+    if 'stage' in block:
+        for path in sorted((Path(block['stage']['path']) / 'invocations').glob('*.json')):
+            receipts.append(json.loads(path.read_text()))
+    return dict(block=block, candidates=selected,
+                tests={key: entry for key, entry in state['tests'].items() if entry['candidate'] in selected},
+                allocations={key: entry for key, entry in state['allocations'].items()
+                             if entry['work'] == name or entry['work'] in selected},
+                training_invocations=receipts, stop=state['stop'],
+                missing_evidence=[key for key, present in (
+                    ('complete_block', block['phase'] != 'generating'),
+                    ('training_receipt', 'stage' in block), ('native_checked_candidate', bool(selected)),
+                    ('completed_playing_test', any(entry['candidate'] in selected and entry['phase'] == 'complete'
+                                                  for entry in state['tests'].values()))) if not present])
 
 
 def expiry_timestamp(text):
@@ -291,6 +354,8 @@ def main():
     init.add_argument('--credit-expiry', type=expiry_timestamp)
     init.add_argument('--credit-evidence', help='record of verified promotional eligibility and exact expiry')
     commands.add_parser('status')
+    audit = commands.add_parser('review')
+    audit.add_argument('--block', required=True)
     block = commands.add_parser('block')
     block.add_argument('name')
     ready = commands.add_parser('ready')
@@ -311,6 +376,8 @@ def main():
         result = initialize(args.store, args.teacher, expiry=args.credit_expiry, credit_evidence=args.credit_evidence)
     elif args.action == 'status':
         result = status(args.store)
+    elif args.action == 'review':
+        result = review(args.store, args.block)
     elif args.action == 'block':
         result = admit_block(args.store, args.name)
     elif args.action == 'ready':

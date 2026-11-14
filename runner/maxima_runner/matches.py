@@ -10,6 +10,7 @@ from pathlib import Path
 import random
 import sys
 import tempfile
+import time
 import uuid
 
 from .match_options import (engine_profile, file_identity, option_assignment,
@@ -321,6 +322,10 @@ async def run_match(commands, openings, args, report, pgn_stream):
     report['selected_openings'] = [identifier for identifier, _ in selected]
     for pair, (identifier, position) in enumerate(selected):
         for a_white in (True, False):
+            if (any(path.exists() for path in getattr(args, 'stop_file', []))
+                    or (getattr(args, 'stop_at', None) is not None and time.time() >= args.stop_at)):
+                report['stop_reason'] = 'scheduling_stop'
+                return
             async with AsyncExitStack() as stack:
                 engines = []
                 for command in commands:
@@ -436,6 +441,8 @@ def main():
                         help='check significance every N pairs with a 95%% joint Bonferroni bound')
     parser.add_argument('--sprt-alpha', type=float, default=0.05, help='SPRT false-positive target')
     parser.add_argument('--sprt-beta', type=float, default=0.05, help='SPRT false-negative target')
+    parser.add_argument('--stop-file', type=Path, action='append', default=[])
+    parser.add_argument('--stop-at', type=float, help='Unix deadline; finish current game then stop')
     parser.add_argument('--seed', type=int, default=2026)
     parser.add_argument('--seconds', type=positive_float, default=10)
     parser.add_argument('--increment', type=nonnegative_float, default=0.1)
@@ -455,6 +462,8 @@ def main():
     args = parser.parse_args()
     report = None
     try:
+        if args.stop_at is not None and not math.isfinite(args.stop_at):
+            raise ValueError('stop deadline must be finite')
         if args.syzygy_path is not None:
             args.syzygy_path = args.syzygy_path.resolve()
             if args.variant != 'standard':
@@ -528,6 +537,8 @@ def main():
                 report['summary']['sprt']['decision'] = 'inconclusive'
             if report['summary'].get('minimum_gain') is not None:
                 report['summary']['minimum_gain']['decision'] = 'inconclusive'
+        if 'summary' not in report:
+            report['summary'] = match_summary(report['games'], args)
         args.json.write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report['summary'], indent=2))
         return 0 if report['complete'] else 1

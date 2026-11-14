@@ -75,6 +75,26 @@ class campaign_tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'stopped'):
             nnue_produce.generation_gate(args)
 
+    def test_completion_receipt_preserves_latest_checkpoint_and_rejects_corruption(self):
+        self.ready('one')
+        campaign.reserve(self.store, 'gpu', 'gpu', 'one', 100, 3600, self.now)
+        campaign.start_training(self.store, 'one', 'gpu', now=self.now)
+        campaign.transact(self.store, lambda state, stamp: state['blocks']['one'].update(manifest_sha256='manifest'), self.now)
+        stage = self.root / 'stage'
+        stage.mkdir()
+        (stage / 'training.pt').write_bytes(b'latest experimental checkpoint')
+        (stage / 'candidate.pt').write_bytes(b'selected candidate')
+        from maxima_runner.nnue_data import file_hash
+        receipt = dict(format='maxima.nnue.stage.complete', version=1,
+                       contract=dict(manifest_sha256='manifest'), checkpoint_sha256=file_hash(stage / 'training.pt'),
+                       candidate_sha256=file_hash(stage / 'candidate.pt'))
+        block = campaign.finish_training(self.store, 'one', stage, receipt, self.now)
+        self.assertEqual(block['phase'], 'trained')
+        self.assertEqual(campaign.status(self.store, self.now)['latest_checkpoint_sha256'], receipt['checkpoint_sha256'])
+        (stage / 'candidate.pt').write_bytes(b'changed')
+        with self.assertRaisesRegex(ValueError, 'receipt'):
+            campaign.finish_training(self.store, 'one', stage, receipt, self.now)
+
     def test_credit_expiry_and_unknown_eligibility_block_new_spend(self):
         store = self.root / 'unverified'
         campaign.initialize(store, self.teacher, now=self.now)

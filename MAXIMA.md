@@ -2005,6 +2005,38 @@ games and settling actual costs remain possible. No cloud instances are provisio
 or destroyed by this ledger: callers must release the compute it identifies.
 Standalone stores without campaign.json retain the independent CLI workflows.
 
+Campaign stages require `nnue:stage --lease ID`. The first stage must warm-start
+from the original teacher; later stages must continue the latest experimental
+checkpoint. Completion writes `complete.json` with checkpoint/candidate hashes,
+validation history and global counters, then marks the block trained. Each
+invocation records wall time and presentation throughput under `invocations/`;
+these metrics stay outside deterministic recovery checkpoints. STOP/deadline saves
+training state at a batch boundary. GPU availability remains separately validated.
+
+`nnue:candidates --store STORE recipe` freezes the engine, opening file, pair cap,
+clock and explicit `--sprt ELO0 ELO1` hypotheses before tests. No production gate
+is chosen implicitly. `register --block NAME --export DIR --probe EXE` matches the
+export to its completed stage and runs native fresh/incremental checks on frozen
+network bytes. `prepare --candidate SHA --test ID --lease ID` reserves the sole
+active comparison against the current champion and records its exact command.
+`run --test ID` executes it; `finish --test ID` imports a separately executed
+saved command. Reports must match pinned inputs, clocks, options and opening order.
+PGNs are replayed and SPRT is recomputed, including the first stopping boundary.
+Changed, flagged or nonterminal completed games cannot authorize promotion.
+Rejection/inconclusive keeps the champion. A passing result against the original
+teacher updates only the campaign registry and persists STOP, preserving the
+partial next block. Active bot configuration is never changed. `abandon --test ID`
+closes an interrupted/invalid comparison without promoting. Settle/release test
+compute separately; command execution does not manage provider resources.
+
+Campaign state contains a sequenced audit of mutations and safety stops; read-only
+checks do not create events or rewrite state. `nnue:campaign review --block NAME`
+collects the stage, allocations, candidates, test decisions and invocation metrics,
+and explicitly lists missing evidence. Retain producer PGNs, filters and logs,
+export reports, native output and match JSON/PGN for the first-block review.
+Match `--stop-file` and `--stop-at` checks prevent scheduling another game while
+allowing the current one to finish; incomplete pairs cannot promote a candidate.
+
 `nnue:produce` runs bounded independent one-thread self-play jobs and ingests
 completed-game chunks into that store. Each pool has an immutable recipe; campaign
 name and job index determine unique seeds. Each job pins teacher/engine/book hashes;
