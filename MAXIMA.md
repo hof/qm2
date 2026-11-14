@@ -1977,6 +1977,34 @@ portion after a stop. Sealed blocks cannot accept new inputs. Use local POSIX
 storage, one shared store for all campaign ingestion, and retain the SQLite index.
 This command does not launch producers or allocate cloud resources.
 
+`nnue:campaign --store /data/campaign` manages persistent campaign admission
+and an allocation ledger. `init --teacher teacher.nnue` pins independent immutable
+teacher bytes; no network is activated. Billable allocation requires explicit
+`--credit-expiry` (ISO8601 with timezone) and `--credit-evidence` recording verified
+eligibility. Omit both for preparation without spend authorization. The ledger
+uses integer cents and preserves the $250 envelopes: online20, CPU170, GPU25,
+storage18, tests10, margin7. The existing $20 online allocation is committed;
+the deposited $5 is excluded. This records budget decisions, not provider billing.
+
+`block NAME` admits one generating/ready block behind active training. Starting
+training opens that slot immediately, independently of candidate testing.
+`ready NAME` validates the full100M manifest and shared store identity. Allocation
+`reserve ID --category cpu --work NAME --maximum-cents 100 --seconds 3600`
+requires sufficient category funds and an admitted task. GPU allocations require
+ready data and only one may remain reserved. Allocations must end at least48h
+before verified credit expiry. `settle ID --actual-cents N` records actual cost,
+including overruns; overruns persist a campaign stop. `status` reports remaining
+funds and reserved compute requiring release. `stop --reason TEXT` saves a stop
+and touches the store's STOP file. Stops remain persistent after restart.
+
+Campaign stores require `nnue:produce --lease ID`; admission is checked before
+new jobs and between games, and the allocation deadline limits scheduling. New
+jobs must use the registered champion; already pinned jobs retain their original
+teacher. Expired allocations or the credit safety deadline persist STOP. Finishing
+games and settling actual costs remain possible. No cloud instances are provisioned
+or destroyed by this ledger: callers must release the compute it identifies.
+Standalone stores without campaign.json retain the independent CLI workflows.
+
 `nnue:produce` runs bounded independent one-thread self-play jobs and ingests
 completed-game chunks into that store. Each pool has an immutable recipe; campaign
 name and job index determine unique seeds. Each job pins teacher/engine/book hashes;

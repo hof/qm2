@@ -158,8 +158,15 @@ def load_run(directory, config, excluded=()):
 
 
 def generation_stopped(args):
-    return (any(path.exists() for path in getattr(args, 'stop_file', []))
+    stopped = (any(path.exists() for path in getattr(args, 'stop_file', []))
             or (getattr(args, 'stop_at', None) is not None and time.time() >= args.stop_at))
+    if not stopped and getattr(args, 'control_store', None) is not None:
+        from . import nnue_campaign
+        try:
+            nnue_campaign.allocation(args.control_store, args.control_lease, 'cpu', args.control_block)
+        except ValueError:
+            return True
+    return stopped
 
 
 async def generate(args, config, rows, seen, games):
@@ -205,6 +212,9 @@ def main():
     parser.add_argument("--output", required=True, type=Path, help="new or matching resumable run directory")
     parser.add_argument("--exclude-dataset", action="append", type=Path, default=[],
                         help="exclude every position in this dataset from both splits; repeatable")
+    parser.add_argument("--control-store", type=Path, help="campaign store for per-game allocation checks")
+    parser.add_argument("--control-lease")
+    parser.add_argument("--control-block")
     parser.add_argument("--stop-file", type=Path, action="append", default=[],
                         help="finish the current game then stop when any named file exists")
     parser.add_argument("--stop-at", type=float, help="Unix deadline: stop scheduling games after this time")

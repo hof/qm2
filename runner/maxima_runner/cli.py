@@ -22,6 +22,7 @@ command_groups = (
         ("match:run", "Run offline paired-opening matches"),
         ("nnue:data", "Label PGN positions for NNUE training"),
         ("nnue:selfplay", "Generate resumable self-play training data"),
+        ("nnue:campaign", "Track campaign backlog, allocations and stops"),
         ("nnue:produce", "Run bounded parallel self-play producers"),
         ("nnue:stage", "Stream CPU/CUDA stages and retain Adam state"),
         ("nnue:export", "Export a frozen training-stage candidate"),
@@ -231,6 +232,9 @@ def main(argv=None):
         elif command == "nnue:selfplay":
             from . import nnue_selfplay
             entrypoint = nnue_selfplay.main
+        elif command == "nnue:campaign":
+            from . import nnue_campaign
+            entrypoint = nnue_campaign.main
         elif command == "nnue:produce":
             from . import nnue_produce
             entrypoint = nnue_produce.main

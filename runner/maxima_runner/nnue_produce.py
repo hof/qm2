@@ -15,6 +15,17 @@ from . import nnue_data, nnue_selfplay, nnue_shards
 from .learning_store import writer_lock
 
 
+def generation_gate(args):
+    if not (args.store / 'campaign.json').exists():
+        return float('inf')
+    from . import nnue_campaign
+    state = nnue_campaign.status(args.store)
+    block = state['blocks'].get(args.block)
+    if block is None or block['phase'] != 'generating' or args.target != block['target']:
+        raise ValueError('producer block is not admitted for campaign generation')
+    return nnue_campaign.allocation(args.store, getattr(args, 'lease', None), 'cpu', args.block)['deadline']
+
+
 def run_job(args, index, deadline, block_stop):
     if args.stop_file.exists() or block_stop.exists() or time.time() >= deadline:
         return None
@@ -31,12 +42,20 @@ def run_job(args, index, deadline, block_stop):
         if json.loads(path.read_text()) != job:
             raise ValueError('job teacher/engine/book changed; resume with pinned inputs or assign new job IDs')
     else:
+        if (args.store / 'campaign.json').exists():
+            from . import nnue_campaign
+            state = nnue_campaign.status(args.store)
+            if job['network_sha256'] != state['champion']:
+                raise ValueError('new producer jobs must use the registered champion')
         nnue_shards.publish_json(path, job)
     command = [sys.executable, '-m', 'maxima_runner', 'nnue:selfplay', '--output', str(directory),
                '--engine', str(args.engine.resolve()), '--network', str(args.network.resolve()),
                '--positions', str(args.positions_per_job), '--games-per-run', str(args.games_per_job),
                '--nodes', str(args.nodes), '--seed', str(seed), '--stop-at', str(deadline),
                '--stop-file', str(args.stop_file.resolve()), '--stop-file', str(block_stop.resolve())]
+    if (args.store / 'campaign.json').exists():
+        command.extend(['--control-store', str(args.store.resolve()), '--control-block', args.block,
+                        '--control-lease', args.lease, '--stop-file', str((args.store / 'STOP').resolve())])
     # Explicitly suppress the ordinary CLI's automatic book lookup unless chosen.
     command.extend(['--book', str(args.book.resolve())] if args.book else ['--book-plies', '0'])
     if args.book is None:
@@ -108,7 +127,7 @@ def produce(args):
         if (args.store / f'{args.block}.json').exists():
             raise ValueError('block was sealed partial; choose a new block for further generation')
         block_stop.unlink(missing_ok=True)
-        deadline = time.time() + args.max_seconds
+        deadline = min(time.time() + args.max_seconds, generation_gate(args))
         indices = iter(range(args.start_job, args.start_job + args.jobs))
         futures = set()
         error = None
@@ -116,6 +135,7 @@ def produce(args):
             def schedule():
                 if args.stop_file.exists() or block_stop.exists() or time.time() >= deadline:
                     return
+                generation_gate(args)
                 index = next(indices, None)
                 if index is not None:
                     futures.add(pool.submit(run_job, args, index, deadline, block_stop))
@@ -156,6 +176,7 @@ def main():
     parser.add_argument('--network', type=Path, required=True)
     parser.add_argument('--book', type=Path)
     parser.add_argument('--exclude', type=Path, action='append', default=[])
+    parser.add_argument('--lease', help='required CPU allocation ID when the store has a campaign')
     parser.add_argument('--workers', type=int, default=2)
     parser.add_argument('--start-job', type=int, default=0)
     parser.add_argument('--jobs', type=int, required=True, help='bounded job range; reuse unfinished IDs to resume')
