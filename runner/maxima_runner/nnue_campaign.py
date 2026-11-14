@@ -323,7 +323,13 @@ def review(root, name):
     if 'stage' in block:
         for path in sorted((Path(block['stage']['path']) / 'invocations').glob('*.json')):
             receipts.append(json.loads(path.read_text()))
-    return dict(block=block, candidates=selected,
+    producers = []
+    for pool in block.get('producer_pools', []):
+        for path in sorted(Path(pool).glob('job-*/metrics/*.json')):
+            metric = json.loads(path.read_text())
+            if metric.get('block') == name:
+                producers.append(metric)
+    return dict(block=block, candidates=selected, producer_invocations=producers,
                 tests={key: entry for key, entry in state['tests'].items() if entry['candidate'] in selected},
                 allocations={key: entry for key, entry in state['allocations'].items()
                              if entry['work'] == name or entry['work'] in selected},
@@ -331,7 +337,7 @@ def review(root, name):
                 missing_evidence=[key for key, present in (
                     ('complete_block', block['phase'] != 'generating'),
                     ('training_receipt', 'stage' in block), ('native_checked_candidate', bool(selected)),
-                    ('completed_playing_test', any(entry['candidate'] in selected and entry['phase'] == 'complete'
+                    ('completed_playing_test', any(entry['candidate'] in selected and entry['phase'] == 'complete' and entry.get('report_sha256')
                                                   for entry in state['tests'].values()))) if not present])
 
 

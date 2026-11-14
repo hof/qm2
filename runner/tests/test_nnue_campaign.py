@@ -95,6 +95,17 @@ class campaign_tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'receipt'):
             campaign.finish_training(self.store, 'one', stage, receipt, self.now)
 
+    def test_audit_records_changes_but_read_only_status_does_not_grow_log(self):
+        campaign.admit_block(self.store, 'one', self.now)
+        campaign.reserve(self.store, 'cpu', 'cpu', 'one', 100, 3600, self.now)
+        state = campaign.status(self.store, self.now)
+        self.assertEqual([event['action'] for event in state['events']],
+                         ['initialized', 'block_admitted', 'allocation_reserved'])
+        before = (self.store / 'campaign.json').read_bytes()
+        campaign.status(self.store, self.now)
+        self.assertEqual(before, (self.store / 'campaign.json').read_bytes())
+        self.assertIn('completed_playing_test', campaign.review(self.store, 'one')['missing_evidence'])
+
     def test_credit_expiry_and_unknown_eligibility_block_new_spend(self):
         store = self.root / 'unverified'
         campaign.initialize(store, self.teacher, now=self.now)

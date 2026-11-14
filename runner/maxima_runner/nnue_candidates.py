@@ -12,8 +12,15 @@ import chess.pgn
 from . import matches, nnue_campaign as campaign, nnue_data, sprt
 
 
-def configure(root, engine, openings, pairs, seconds, increment, elo0, elo1, alpha, beta, seed=2026):
+def configure(root, engine, openings, pairs, seconds, increment, elo0, elo1, alpha, beta, seed=2026, futility_alpha=0.01):
     campaign.positive_integer(pairs)
+    from .strength import validate_min_elo
+    if elo0 < 0 or elo1 <= 0:
+        raise ValueError('promotion SPRT must test a positive gain against a nonnegative null')
+    if futility_alpha:
+        validate_min_elo(0, pairs, futility_alpha)
+    if not 0 <= futility_alpha < beta:
+        raise ValueError('futility error allocation must be nonnegative and below total rejection beta')
     sprt.validate_sprt(elo0, elo1, alpha, beta)
     matches.positive_float(str(seconds))
     matches.nonnegative_float(str(increment))
@@ -22,7 +29,8 @@ def configure(root, engine, openings, pairs, seconds, increment, elo0, elo1, alp
     recipe = dict(engine=str(engine.resolve()), engine_sha256=nnue_data.file_hash(engine),
                   openings=str(openings.resolve()), openings_sha256=nnue_data.file_hash(openings),
                   pairs=pairs, seconds=seconds, increment=increment, seed=seed,
-                  elo0=elo0, elo1=elo1, alpha=alpha, beta=beta)
+                  elo0=elo0, elo1=elo1, alpha=alpha, beta=beta,
+                  futility_alpha=futility_alpha or None, sprt_beta=beta - futility_alpha)
 
     def operation(state, stamp):
         campaign.require_running(state)
@@ -100,9 +108,11 @@ def prepare(root, candidate, test_id, lease):
                    '--openings', recipe['openings'], '--pairs', str(recipe['pairs']),
                    '--seconds', str(recipe['seconds']), '--increment', str(recipe['increment']),
                    '--seed', str(recipe['seed']), '--sprt', str(recipe['elo0']), str(recipe['elo1']),
-                   '--sprt-alpha', str(recipe['alpha']), '--sprt-beta', str(recipe['beta']),
+                   '--sprt-alpha', str(recipe['alpha']), '--sprt-beta', str(recipe['sprt_beta']),
                    '--pgn', str(prefix.with_suffix('.pgn')), '--json', str(prefix.with_suffix('.json')),
                    '--stop-file', str(root / 'STOP'), '--stop-at', str(state['allocations'][lease]['deadline'])]
+        if recipe['futility_alpha'] is not None:
+            command.extend(['--futility-alpha', str(recipe['futility_alpha'])])
         record = dict(candidate=candidate, champion=opponent, recipe=recipe, command=command,
                       lease=lease, phase='prepared', report=str(prefix.with_suffix('.json')),
                       pgn=str(prefix.with_suffix('.pgn')))
@@ -118,7 +128,10 @@ def validate_report(record, report):
     for key in ('pairs', 'seconds', 'increment', 'seed', 'openings_sha256'):
         if report.get(key) != recipe[key]:
             raise ValueError(f'test recipe mismatch: {key}')
-    expected_sprt = {key: recipe[key] for key in ('elo0', 'elo1', 'alpha', 'beta')}
+    expected_sprt = {key: recipe[key] for key in ('elo0', 'elo1', 'alpha')}
+    expected_sprt['beta'] = recipe['sprt_beta']
+    if report.get('futility_alpha') != recipe['futility_alpha']:
+        raise ValueError('early rejection policy changed')
     if report.get('max_plies') != 600 or report.get('timeout') != 30:
         raise ValueError('test search limits changed')
     if (report.get('variant') != 'standard' or report.get('stopping_mode') != 'sprt'
@@ -185,13 +198,19 @@ def validate_report(record, report):
     if not report.get('complete'):
         return 'inconclusive'
     counts = [0] * 5
+    futile = False
     scores = {'1-0': 2, '1/2-1/2': 1, '0-1': 0}
     for offset in range(0, len(games) - 1, 2):
         counts[scores[games[offset]['result']] + 2 - scores[games[offset + 1]['result']]] += 1
         llr = sprt.logistic_llr(recipe['elo0'], recipe['elo1'], counts)
-        if ((llr >= computed['upper_bound'] or llr <= computed['lower_bound'])
+        if recipe['futility_alpha'] is not None:
+            from .strength import futility_summary
+            futile = futility_summary(games[:offset + 2], recipe['pairs'], recipe['futility_alpha'])['decision'] == 'futility_rejection'
+        if ((llr >= computed['upper_bound'] or llr <= computed['lower_bound'] or futile)
                 and offset + 2 != len(games)):
             raise ValueError('match continued after its first SPRT decision')
+    if futile:
+        return 'futility_rejection'
     if computed['decision'] == 'continue':
         if len(games) != recipe['pairs'] * 2:
             raise ValueError('test ended without a statistical or pair-budget stopping boundary')
@@ -275,7 +294,8 @@ def main():
     recipe.add_argument('--increment', type=float, required=True)
     recipe.add_argument('--sprt', type=float, nargs=2, required=True)
     recipe.add_argument('--alpha', type=float, default=0.05)
-    recipe.add_argument('--beta', type=float, default=0.05)
+    recipe.add_argument('--beta', type=float, default=0.05, help='total rejection allowance, shared by SPRT and futility')
+    recipe.add_argument('--futility-alpha', type=float, default=0.01)
     add = commands.add_parser('register')
     add.add_argument('--block', required=True)
     add.add_argument('--export', type=Path, required=True)
@@ -293,7 +313,7 @@ def main():
     args = parser.parse_args()
     if args.action == 'recipe':
         result = configure(args.store, args.engine, args.openings, args.pairs, args.seconds, args.increment,
-                           *args.sprt, args.alpha, args.beta)
+                           *args.sprt, args.alpha, args.beta, futility_alpha=args.futility_alpha)
     elif args.action == 'register':
         result = register(args.store, args.block, args.export, args.probe)
     elif args.action == 'prepare':

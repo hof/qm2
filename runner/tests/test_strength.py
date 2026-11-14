@@ -18,6 +18,18 @@ from test_sprt import pair_records
 
 
 class strength_tests(unittest.TestCase):
+    def test_clear_inferiority_stops_before_narrow_sprt_without_weakening_promotion(self):
+        from maxima_runner.strength import futility_summary
+        losses = pair_records([(0, 0)] * 28)
+        args = SimpleNamespace(sprt=(0, 5), min_elo=None, pairs=5000,
+                               sprt_alpha=.05, sprt_beta=.04, futility_alpha=.01)
+        summary = match_summary(losses, args)
+        self.assertEqual(summary['futility']['decision'], 'futility_rejection')
+        self.assertEqual(summary['sprt']['decision'], 'continue')
+        for outcomes in ([(1, 1)] * 100, [(2, 2)] * 100):
+            self.assertEqual(futility_summary(pair_records(outcomes), 5000, .01)['decision'], 'continue')
+        self.assertFalse(futility_summary(losses[:-1], 5000, .01)['decision_eligible'])
+
     def test_reference_bound_and_repeated_look_budget(self):
         # Independently computed: 50 pairs, mean .95, two-sided alpha .05,
         # union bound over all 200 planned looks gives lower .6502134623.

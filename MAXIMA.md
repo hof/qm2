@@ -2023,6 +2023,18 @@ active comparison against the current champion and records its exact command.
 saved command. Reports must match pinned inputs, clocks, options and opening order.
 PGNs are replayed and SPRT is recomputed, including the first stopping boundary.
 Changed, flagged or nonterminal completed games cannot authorize promotion.
+Campaign recipes enable an early inferiority rejection check by default. It uses
+the existing simultaneous opening-pair Hoeffding bound at zero Elo and can only
+reject, never promote. `--beta` is the total rejection allowance: default0.05 is
+split into0.04 for SPRT and `--futility-alpha`0.01 for the inferiority check.
+Hypotheses remain explicit and nonnegative for promotion. Setting futility alpha
+to0 disables this check. Thresholds are frozen before results. At a5000-pair cap,
+28all-loss pairs trigger early rejection in the synthetic rule check; actual
+stopping time depends on results. Near parity, the ordinary SPRT and pair/cost
+caps still apply. Standalone `match:run --futility-alpha` adds a separate rejection
+allowance; use an appropriately reduced `--sprt-beta` to preserve a total budget.
+The report records both components and `futility_rejection` explicitly.
+
 Rejection/inconclusive keeps the champion. A passing result against the original
 teacher updates only the campaign registry and persists STOP, preserving the
 partial next block. Active bot configuration is never changed. `abandon --test ID`
@@ -2032,7 +2044,10 @@ compute separately; command execution does not manage provider resources.
 Campaign state contains a sequenced audit of mutations and safety stops; read-only
 checks do not create events or rewrite state. `nnue:campaign review --block NAME`
 collects the stage, allocations, candidates, test decisions and invocation metrics,
-and explicitly lists missing evidence. Retain producer PGNs, filters and logs,
+and explicitly lists missing evidence. Producer invocation metrics record completed-game yield, elapsed time, teacher
+identity, exit status and cumulative filter counts. Raw yield includes any deferred
+block tail; it is not the globally accepted rate. The block review includes these
+metrics. Retain producer PGNs, filters and logs,
 export reports, native output and match JSON/PGN for the first-block review.
 Match `--stop-file` and `--stop-at` checks prevent scheduling another game while
 allowing the current one to finish; incomplete pairs cannot promote a candidate.

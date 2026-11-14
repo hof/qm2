@@ -81,6 +81,10 @@ class stage_tests(unittest.TestCase):
             if paused['phase'] == 'complete':
                 break
         self.assert_equal(full, paused)
+        metrics = [json.loads(path.read_text()) for path in (self.root / 'paused/invocations').glob('*.json')]
+        self.assertEqual(sum(item['presentations'] for item in metrics), paused['presentations'])
+        self.assertTrue(all(item['elapsed_seconds'] > 0 for item in metrics))
+        self.assertTrue((self.root / 'paused/complete.json').is_file())
         self.assert_equal(torch.load(self.root / 'full/candidate.pt', weights_only=True),
                           torch.load(self.root / 'paused/candidate.pt', weights_only=True))
 

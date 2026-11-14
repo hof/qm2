@@ -38,7 +38,8 @@ class candidate_tests(unittest.TestCase):
         recipe = self.record['recipe']
         self.report = {key: recipe[key] for key in ('pairs', 'seconds', 'increment', 'seed', 'openings_sha256')}
         self.report.update(max_plies=600, timeout=30, variant='standard', stopping_mode='sprt', complete=True,
-                           sprt={key: recipe[key] for key in ('elo0', 'elo1', 'alpha', 'beta')},
+                           sprt=dict(elo0=recipe['elo0'], elo1=recipe['elo1'], alpha=recipe['alpha'], beta=recipe['sprt_beta']),
+                           futility_alpha=recipe['futility_alpha'],
                            selected_openings=['fixture'], games=[], engines=[])
         for digest in (self.digest, self.record['champion']):
             path = str((self.store / 'models' / f'{digest}.nnue').resolve())

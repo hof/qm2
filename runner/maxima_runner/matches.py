@@ -99,6 +99,9 @@ def match_summary(games, args):
         summary = paired_summary(games, args.pairs)
         summary.update(confidence=None, score_interval=None, interval_method=None,
                        sprt=sprt_summary(games, *bounds, args.sprt_alpha, args.sprt_beta))
+        if getattr(args, 'futility_alpha', None) is not None:
+            from .strength import futility_summary
+            summary['futility'] = futility_summary(games, args.pairs, args.futility_alpha)
         return summary
     cadence = getattr(args, 'sequential_check_pairs', None)
     if cadence is None:
@@ -395,13 +398,17 @@ async def run_match(commands, openings, args, report, pgn_stream):
                 if sprt is not None and sprt['decision'] != 'continue':
                     report['stop_reason'] = sprt['decision']
                     report['stopped_early'] = pair + 1 < args.pairs
+                futility = report['summary'].get('futility')
+                if futility is not None and futility['decision'] == 'futility_rejection':
+                    report['stop_reason'] = 'futility_rejection'
+                    report['stopped_early'] = pair + 1 < args.pairs
                 args.json.write_text(json.dumps(report, indent=2) + '\n')
                 if record['error'] is not None:
                     raise RuntimeError(record['error'])
                 print(f"Pair {pair + 1} A={'White' if a_white else 'Black'} "
                       f"{record['result']} ({record['termination']})", flush=True)
                 if report.get('stop_reason') in ('a_stronger', 'b_stronger', 'accept_h0', 'accept_h1',
-                                               'minimum_gain_established', 'below_minimum_gain'):
+                                               'minimum_gain_established', 'below_minimum_gain', 'futility_rejection'):
                     return
 
 
@@ -439,6 +446,7 @@ def main():
                           help='stop when simultaneous 95%% bounds establish A above or below this minimum gain')
     stopping.add_argument('--sequential-check-pairs', type=positive_int, metavar='N',
                         help='check significance every N pairs with a 95%% joint Bonferroni bound')
+    parser.add_argument('--futility-alpha', type=float, help='extra rejection error budget for early inferiority checks; requires SPRT')
     parser.add_argument('--sprt-alpha', type=float, default=0.05, help='SPRT false-positive target')
     parser.add_argument('--sprt-beta', type=float, default=0.05, help='SPRT false-negative target')
     parser.add_argument('--stop-file', type=Path, action='append', default=[])
@@ -476,6 +484,11 @@ def main():
             win_adjudicator(args.adjudicate_win_cp, args.adjudicate_win_plies, args.adjudicate_min_move)
         elif args.adjudicate_win_plies != 6 or args.adjudicate_min_move != 20:
             raise ValueError('win adjudication settings require --adjudicate-win-cp')
+        if args.futility_alpha is not None:
+            from .strength import validate_min_elo
+            if args.sprt is None:
+                raise ValueError('futility checks require SPRT')
+            validate_min_elo(0, args.pairs, args.futility_alpha)
         if args.sprt is not None:
             from .sprt import validate_sprt
             validate_sprt(*args.sprt, args.sprt_alpha, args.sprt_beta)
@@ -519,6 +532,7 @@ def main():
                   'stopping_mode': 'minimum_gain' if args.min_elo is not None else
                                    'sprt' if args.sprt is not None else
                                    'sequential_checkpoints' if args.sequential_check_pairs else 'fixed_sample',
+                  'futility_alpha': args.futility_alpha,
                   'sprt': {'elo0': args.sprt[0], 'elo1': args.sprt[1],
                            'alpha': args.sprt_alpha, 'beta': args.sprt_beta,
                            'elo_model': 'logistic', 'upstream': 'Disservin/fast-chess',

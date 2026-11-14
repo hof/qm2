@@ -61,12 +61,30 @@ def run_job(args, index, deadline, block_stop):
     if args.book is None:
         # Selfplay's optional default book is resolved in its own process.
         command.extend(['--no-book'])
+    before = [json.loads((game / 'report.json').read_text()) for game in directory.glob('game-[0-9]*')]
+    started, start_stamp = time.monotonic(), time.time()
     with (directory / 'producer.log').open('ab') as log:
         result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT)
+    from . import nnue_campaign
+    metrics_path = directory / 'metrics' / f'{time.time_ns()}.json'
+    metrics_path.parent.mkdir(exist_ok=True)
+    elapsed = time.monotonic() - started
+    metrics = dict(format='maxima.nnue.producer.invocation', version=1, job=identity, block=args.block,
+                   started_at=start_stamp, elapsed_seconds=elapsed, exit_code=result.returncode,
+                   teacher_sha256=job['network_sha256'], engine_sha256=job['engine_sha256'])
+    nnue_campaign.atomic_json(metrics_path, metrics)
     if result.returncode:
         raise ValueError(f'producer job {index} failed ({result.returncode}); see {directory / "producer.log"}')
     config = json.loads((directory / 'settings.json').read_text())
-    rows, _, _ = nnue_selfplay.load_run(directory, config)
+    rows, _, games = nnue_selfplay.load_run(directory, config)
+    produced = len(rows) - sum(item['positions'] for item in before)
+    counters = {}
+    for game in games:
+        for key, value in game['filters'].items():
+            counters[key] = counters.get(key, 0) + value
+    metrics.update(games_completed=len(games) - len(before), raw_usable_positions=produced,
+                   usable_positions_per_second=produced / elapsed, total_filter_counts=counters)
+    nnue_campaign.atomic_json(metrics_path, metrics)
     if rows:
         chunks = args.output / 'chunks'
         chunks.mkdir(exist_ok=True)
@@ -128,6 +146,13 @@ def produce(args):
             raise ValueError('block was sealed partial; choose a new block for further generation')
         block_stop.unlink(missing_ok=True)
         deadline = min(time.time() + args.max_seconds, generation_gate(args))
+        if (args.store / 'campaign.json').exists():
+            from . import nnue_campaign
+            def note_pool(state, stamp):
+                pools = state['blocks'][args.block].setdefault('producer_pools', [])
+                if str(args.output.resolve()) not in pools:
+                    pools.append(str(args.output.resolve()))
+            nnue_campaign.transact(args.store, note_pool, event='producer_pool_started')
         indices = iter(range(args.start_job, args.start_job + args.jobs))
         futures = set()
         error = None
