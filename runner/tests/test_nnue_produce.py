@@ -54,6 +54,7 @@ class produce_tests(unittest.TestCase):
 
     def test_job_rejects_teacher_change_and_passes_stop_bounds(self):
         self.args.output.mkdir()
+        self.args.diversity = True
         commands = []
 
         def process(command, **kwargs):
@@ -67,6 +68,7 @@ class produce_tests(unittest.TestCase):
         self.assertIn('--stop-file', commands[0])
         self.assertIn('--stop-at', commands[0])
         self.assertIn('--no-book', commands[0])
+        self.assertIn('--diversity', commands[0])
         self.network.write_bytes(b'changed teacher')
         with self.assertRaisesRegex(ValueError, 'pinned inputs'):
             nnue_produce.run_job(self.args, 0, time.time() + 10, self.root / 'block.stop')

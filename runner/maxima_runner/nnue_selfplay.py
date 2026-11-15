@@ -23,6 +23,11 @@ from .project import data_root, engine_path, network_path, project_root
 from .uci import open_engine
 
 
+diversity_recipe = dict(version=1, opening_min_plies=8, opening_max_plies=12,
+                        book_weight_power=0.5, explore_rate=0.02, explore_max_attempts=3,
+                        explore_max_loss_cp=80, explore_max_ply=160)
+
+
 def usable_position(board, move, label, *, min_ply, score_limit, seen):
     if board.ply() < min_ply:
         return "opening"
@@ -39,7 +44,7 @@ def usable_position(board, move, label, *, min_ply, score_limit, seen):
     return None
 
 
-def opening_moves(seed, index, plies, book=None, book_plies=4):
+def opening_moves(seed, index, plies, book=None, book_plies=4, weight_power=1):
     generator = random.Random(f"{seed}:{index}")
     board, moves = chess.Board(), []
     for ply in range(plies):
@@ -52,11 +57,31 @@ def opening_moves(seed, index, plies, book=None, book_plies=4):
         else:
             moves_and_weights = []
         move = (generator.choices([item[0] for item in moves_and_weights],
-                                  [item[1] for item in moves_and_weights])[0]
+                                  [item[1] ** weight_power for item in moves_and_weights])[0]
                 if moves_and_weights else generator.choice(list(board.legal_moves)))
         board.push(move)
         moves.append(move)
     return moves
+
+
+async def alternative_move(engine, board, move, label, config, game_id):
+    """Probe the best alternative without replacing the unrestricted root label."""
+    candidates = [candidate for candidate in board.legal_moves if candidate != move]
+    if not candidates:
+        return None
+    infos = []
+    best, _ = await engine.search(board, chess.engine.Limit(nodes=config['nodes']), game=game_id,
+                                  root_moves=candidates, on_info=lambda info, elapsed: infos.append(info))
+    other = nnue_data.completed_label(infos)
+    if other is not None and other['nodes'] > config['nodes']:
+        raise RuntimeError('exploration search exceeded its node budget')
+    exact = [info for info in infos if other is not None and info.get('depth') == other['depth']
+             and 'score' in info and not info.get('lowerbound') and not info.get('upperbound')]
+    pv = exact[-1].get('pv', []) if exact else []
+    if (other is None or best.move not in candidates or not pv or pv[0] != best.move
+            or abs(label['score_cp'] - other['score_cp']) > config['diversity']['explore_max_loss_cp']):
+        return None
+    return best.move, other
 
 
 async def play_game(engine, config, index, seen, book=None):
@@ -68,11 +93,19 @@ async def play_game(engine, config, index, seen, book=None):
                         Variant="Standard", NodesPerMove=str(config["nodes"]),
                         EvalFileSHA256=config["network_sha256"])
     node = game
-    for move in opening_moves(config["seed"], index, config["random_plies"], book, config["book_plies"]):
+    diversity = config.get('diversity')
+    if diversity:
+        game.headers['DiversityRecipe'] = f"bounded-v{diversity['version']}"
+    generator = random.Random(f"{config['seed']}:{index}:diversity")
+    plies = (generator.randint(diversity['opening_min_plies'], diversity['opening_max_plies'])
+             if diversity else config['random_plies'])
+    for move in opening_moves(config["seed"], index, plies, book, config["book_plies"],
+                              diversity['book_weight_power'] if diversity else 1):
         board.push(move)
         node = node.add_variation(move)
         node.comment = "opening diversity"
         counters["opening"] += 1
+    attempts = 0
     while not board.is_game_over(claim_draw=True) and board.ply() < config["max_plies"]:
         infos = []
         best, _ = await engine.search(board, chess.engine.Limit(nodes=config["nodes"]), game=game_id,
@@ -83,10 +116,23 @@ async def play_game(engine, config, index, seen, book=None):
         label = nnue_data.completed_label(infos)
         if label is not None and label["nodes"] > config["nodes"]:
             raise RuntimeError("self-play engine exceeded its node budget")
+        explored = None
+        if (diversity and label is not None and not board.is_check()
+                and board.ply() <= diversity['explore_max_ply']
+                and attempts < diversity['explore_max_attempts']
+                and generator.random() < diversity['explore_rate']):
+            attempts += 1
+            counters['exploration_attempts'] += 1
+            explored = await alternative_move(engine, board, move, label, config, game_id)
+            if explored is not None:
+                move = explored[0]
+                counters['exploration_accepted'] += 1
         reason = usable_position(board, move, label, min_ply=config["min_ply"],
                                  score_limit=config["score_limit"], seen=seen)
         if reason is None and nnue_data.position_key(board) in local_seen:
             reason = "duplicate"
+        if explored is not None:
+            reason = 'exploration'
         if reason is None:
             # Also filter the best move of the completed iteration used for the label.
             exact = [info for info in infos if info.get("depth") == label["depth"] and "score" in info
@@ -106,6 +152,8 @@ async def play_game(engine, config, index, seen, book=None):
         if label is not None:
             node.set_eval(chess.engine.PovScore(chess.engine.Cp(label["score_cp"]), mover), label["depth"])
             node.comment += f" [%nodes {label['nodes']}]"
+        if explored is not None:
+            node.comment += f" [%explore_cp {explored[1]['score_cp']}] [%explore_nodes {explored[1]['nodes']}]"
     outcome = board.outcome(claim_draw=True)
     game.headers["Result"] = outcome.result() if outcome is not None else "*"
     game.headers["Termination"] = outcome.termination.name if outcome is not None else "ply limit"
@@ -223,6 +271,8 @@ def main():
     parser.add_argument("--games-per-run", type=int, default=5)
     parser.add_argument("--max-plies", type=int, default=512)
     parser.add_argument("--random-plies", type=int, default=8)
+    parser.add_argument("--diversity", action="store_true",
+                        help="bounded-v1: 8-12 opening plies, flatter book weights, bounded alternative moves")
     parser.add_argument("--book-plies", type=int, default=4,
                         help="book-guided prefix within the opening plies; the remainder are random")
     parser.add_argument("--min-ply", type=int, default=16)
@@ -234,6 +284,8 @@ def main():
     parser.add_argument("--book", type=Path, default=(data_root() / "book.bin") if (data_root() / "book.bin").is_file() else None)
     parser.add_argument("--no-book", action="store_true", help="disable automatic opening-book lookup")
     args = parser.parse_args()
+    if args.diversity:
+        args.random_plies = diversity_recipe['opening_max_plies']
     if args.no_book:
         args.book = None
     if ((args.stop_at is not None and not math.isfinite(args.stop_at))
@@ -248,6 +300,8 @@ def main():
               "max_plies": args.max_plies, "score_limit": args.score_limit,
               "engine_sha256": nnue_data.file_hash(args.engine), "network_sha256": nnue_data.file_hash(args.network),
               "book_sha256": nnue_data.file_hash(args.book) if args.book else None}
+    if args.diversity:
+        config['diversity'] = dict(diversity_recipe)
     excluded, exclusion_hashes = dataset_exclusions(args.exclude_dataset)
     if exclusion_hashes:
         config["excluded_dataset_sha256"] = exclusion_hashes

@@ -171,6 +171,34 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('position startpos moves g1f3 g8f6 f3g1 f6g8', lines)
         self.assertEqual(lines.count('ucinewgame'), 2)
 
+    async def test_restricted_search_forwards_legal_moves_and_rejects_invalid_input(self):
+        lines = []
+        async with open_engine(self.command, self.directory.name, 2, log=lines.append) as engine:
+            board = chess.Board()
+            for moves in ([], [chess.Move.from_uci('e2e5')]):
+                with self.assertRaises(ValueError):
+                    await engine.search(board, chess.engine.Limit(nodes=8), root_moves=moves)
+            self.assertFalse(any(line.startswith('> go ') for line in lines))
+            best, _ = await engine.search(board, chess.engine.Limit(nodes=8),
+                                         root_moves=[chess.Move.from_uci('e2e4')])
+        self.assertEqual(best.move.uci(), 'e2e4')
+        self.assertTrue(any(line.startswith('> go ') and 'searchmoves e2e4' in line for line in lines))
+
+    async def test_native_restricted_analysis_stays_inside_root_subset(self):
+        import os
+        engine_path = os.environ.get('MAXIMA_ENGINE')
+        if not engine_path:
+            self.skipTest('MAXIMA_ENGINE is unset')
+        move = chess.Move.from_uci('a2a3')
+        infos = []
+        async with open_engine([engine_path], None, 10) as engine:
+            await engine.configure({'OwnBook': False, 'UseExperience': False, 'Threads': 1})
+            best, _ = await engine.search(chess.Board(), chess.engine.Limit(nodes=10000),
+                root_moves=[move], on_info=lambda info, elapsed: infos.append(info))
+        self.assertEqual(best.move, move)
+        self.assertTrue(any(info.get('pv') for info in infos))
+        self.assertTrue(all(info['pv'][0] == move for info in infos if info.get('pv')))
+
 
 class variant_session_tests(unittest.IsolatedAsyncioTestCase):
     async def test_reject_unsupported_variant_before_analysis(self):

@@ -1825,6 +1825,15 @@ moves where the book is absent), and the remainder are random legal moves.
 searches every later move. `--book` selects the opening
 book; its hash, teacher hashes, generator hash and settings must match on resume.
 
+`--diversity` selects the opt-in bounded-v1 recipe: 8–12 opening plies, square-root
+book weights, and a 2% alternative-move probe probability through ply160. At most
+three probes per game each use the ordinary node budget, searching legal root
+moves other than the teacher's first choice. An alternative is played only with
+a completed exact score within 80cp of the unrestricted score and matching PV.
+Exploration roots are not training samples; later positions retain unrestricted
+teacher labels and the actual completed-game result. The full recipe is pinned
+in settings. Use new jobs/pools for changed recipes; existing data is preserved.
+
 Samples start at ply16 and exclude checked positions, captures/promotions by
 either the played move or the completed iteration's best move, missing exact
 centipawn labels, and duplicate positions ignoring clocks. There is no score-based
@@ -2056,6 +2065,8 @@ allowing the current one to finish; incomplete pairs cannot promote a candidate.
 completed-game chunks into that store. Each pool has an immutable recipe; campaign
 name and job index determine unique seeds. Each job pins teacher/engine/book hashes;
 resuming it with changed inputs fails. New job IDs may use a promoted teacher.
+`nnue:produce --diversity` passes the opt-in recipe to jobs and pins it in pool
+and job metadata. The default generation recipe remains unchanged.
 
 ```bash
 maxima nnue:produce --output /data/producers --store /data/campaign \

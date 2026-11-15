@@ -28,6 +28,65 @@ class fools_mate_engine:
 
 
 class nnue_selfplay_tests(unittest.TestCase):
+    def test_flatter_book_weights_reduce_dominant_line_without_illegal_moves(self):
+        class weighted_book:
+            def find_all(self, board):
+                return [SimpleNamespace(move=chess.Move.from_uci('e2e4'), weight=9),
+                        SimpleNamespace(move=chess.Move.from_uci('d2d4'), weight=1)]
+
+        counts = []
+        for power in (1, 0.5):
+            moves = [nnue_selfplay.opening_moves(17, i, 1, weighted_book(), 1, power)[0]
+                     for i in range(200)]
+            self.assertTrue(all(move in chess.Board().legal_moves for move in moves))
+            counts.append(sum(move.uci() == 'e2e4' for move in moves))
+        self.assertLess(counts[1], counts[0] - 10)
+
+    def test_diversity_uses_bounded_alternative_and_preserves_terminal_labels(self):
+        class exploring_engine:
+            async def search(self, board, limit, *, game, on_info, root_moves=None):
+                moves = ['f2f3', 'e7e5', 'f2f3', 'd8h4']
+                move = chess.Move.from_uci('g2g4' if root_moves is not None else moves[board.ply()])
+                if root_moves is not None:
+                    self_test.assertIn(move, root_moves)
+                    self_test.assertNotIn(chess.Move.from_uci('f2f3'), root_moves)
+                score = chess.engine.Mate(1) if board.ply() == 3 else chess.engine.Cp(-20 if root_moves else 10)
+                on_info(dict(depth=3, nodes=10000, pv=[move],
+                             score=chess.engine.PovScore(score, board.turn)), 0)
+                return chess.engine.BestMove(move, None), 0
+
+        self_test = self
+        config = self.config()
+        config['diversity'] = dict(nnue_selfplay.diversity_recipe, opening_min_plies=0,
+                                  opening_max_plies=0, explore_rate=1, explore_max_attempts=1)
+        text, rows, counters, plies = asyncio.run(nnue_selfplay.play_game(
+            exploring_engine(), config, 1, set()))
+        self.assertEqual(plies, 4)
+        self.assertIn('[Result "0-1"]', text)
+        self.assertIn('[%explore_cp -20]', text)
+        self.assertEqual(counters['exploration_attempts'], 1)
+        self.assertEqual(counters['exploration_accepted'], 1)
+        self.assertEqual([row['source']['ply'] for row in rows], [1, 2])
+        self.assertEqual([row['score_cp'] for row in rows], [10, 10])
+        self.assertEqual([row['result_stm'] for row in rows], [1, 0])
+
+    def test_alternative_rejects_large_loss_bounds_mate_and_partial_pv(self):
+        class alternative_engine:
+            async def search(self, board, limit, *, game, on_info, root_moves):
+                on_info(info, 0)
+                return chess.engine.BestMove(chess.Move.from_uci('d2d4'), None), 0
+
+        config = self.config()
+        config['diversity'] = dict(nnue_selfplay.diversity_recipe)
+        board = chess.Board()
+        for score, extra in [(chess.engine.Cp(-200), {}), (chess.engine.Cp(0), {'lowerbound': True}),
+                             (chess.engine.Mate(1), {}), (chess.engine.Cp(0), {'pv': [chess.Move.from_uci('c2c4')]})]:
+            info = dict(depth=3, nodes=10000, pv=[chess.Move.from_uci('d2d4')],
+                        score=chess.engine.PovScore(score, board.turn))
+            info.update(extra)
+            self.assertIsNone(asyncio.run(nnue_selfplay.alternative_move(alternative_engine(), board,
+                chess.Move.from_uci('e2e4'), dict(score_cp=10), config, 'test')))
+
     def config(self, max_plies=20):
         return {"seed": 1, "nodes": 10000, "random_plies": 0, "max_plies": max_plies,
                 "book_plies": 0, "min_ply": 0, "score_limit": 1000, "network_sha256": "test"}

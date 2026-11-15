@@ -37,6 +37,8 @@ def run_job(args, index, deadline, block_stop):
     job = dict(identity=identity, seed=seed, engine_sha256=nnue_data.file_hash(args.engine),
                network_sha256=nnue_data.file_hash(args.network),
                book_sha256=nnue_data.file_hash(args.book) if args.book else None)
+    if getattr(args, 'diversity', False):
+        job['diversity'] = dict(nnue_selfplay.diversity_recipe)
     path = directory / 'job.json'
     if path.exists():
         if json.loads(path.read_text()) != job:
@@ -58,6 +60,8 @@ def run_job(args, index, deadline, block_stop):
                         '--control-lease', args.lease, '--stop-file', str((args.store / 'STOP').resolve())])
     # Explicitly suppress the ordinary CLI's automatic book lookup unless chosen.
     command.extend(['--book', str(args.book.resolve())] if args.book else ['--book-plies', '0'])
+    if getattr(args, 'diversity', False):
+        command.append('--diversity')
     if args.book is None:
         # Selfplay's optional default book is resolved in its own process.
         command.extend(['--no-book'])
@@ -129,6 +133,8 @@ def produce(args):
     recipe = dict(format='maxima.nnue.producers', version=1, campaign=args.campaign,
                   positions_per_job=args.positions_per_job, games_per_job=args.games_per_job, nodes=args.nodes,
                   generator_sha256=nnue_data.file_hash(nnue_selfplay.__file__))
+    if getattr(args, 'diversity', False):
+        recipe['diversity'] = dict(nnue_selfplay.diversity_recipe)
     with writer_lock(args.output / '.pool.lock'):
         path = args.output / 'pool.json'
         if path.exists():
@@ -208,6 +214,7 @@ def main():
     parser.add_argument('--positions-per-job', type=int, default=100000)
     parser.add_argument('--games-per-job', type=int, default=1000, help='per invocation, per job')
     parser.add_argument('--nodes', type=int, default=10000)
+    parser.add_argument('--diversity', action='store_true', help='use the bounded-v1 diversity recipe for new jobs')
     parser.add_argument('--target', type=int, default=100_000_000)
     parser.add_argument('--max-seconds', type=float, default=3600, help='stop scheduling; current games finish')
     parser.add_argument('--stop-file', type=Path, help='campaign stop signal, checked between games')

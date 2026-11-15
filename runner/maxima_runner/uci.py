@@ -299,14 +299,20 @@ class engine_session:
             self.pondering = False
             await asyncio.wait_for(self.protocol.ping(), self.timeout)
 
-    async def search(self, board, limit, *, game=None, on_info=None):
+    async def search(self, board, limit, *, game=None, on_info=None, root_moves=None):
         settings = self.variant_settings(board)
+        arguments = {}
+        if root_moves is not None:
+            moves = list(root_moves)
+            if not moves or any(move not in board.legal_moves for move in moves):
+                raise ValueError("search root moves must be a nonempty legal subset")
+            arguments['root_moves'] = moves
         started = time.monotonic()
         analysis = None
 
         async def consume():
             nonlocal analysis
-            analysis = await self.protocol.analysis(board, limit, game=game, options=settings)
+            analysis = await self.protocol.analysis(board, limit, game=game, options=settings, **arguments)
             async for info in analysis:
                 if info.get("multipv", 1) == 1 and on_info is not None:
                     on_info(info, (time.monotonic() - started) * 1000)
