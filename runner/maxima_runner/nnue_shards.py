@@ -2,6 +2,7 @@
 import argparse
 from contextlib import closing
 import json
+import os
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -197,6 +198,73 @@ def read_manifest(path):
     return value
 
 
+def freeze_range(root, block, output, *, positions, start=0):
+    """Freeze accepted rows without sealing or changing the generating block.
+
+    Whole shards share storage through hard links. Only boundary shards are
+    rewritten; the output must reside on the same filesystem as the store.
+    """
+    root, output = Path(root).resolve(), Path(output).resolve()
+    if type(positions) is not int or positions <= 0 or type(start) is not int or start < 0:
+        raise ValueError('invalid snapshot range')
+    if output.exists():
+        raise ValueError('snapshot output already exists')
+    with closing(sqlite3.connect((root / 'index.sqlite3').as_uri() + '?mode=ro', uri=True)) as db:
+        db.execute('BEGIN')
+        entry = db.execute('SELECT positions FROM blocks WHERE name=?', (block,)).fetchone()
+        if entry is None or start + positions > entry[0]:
+            raise ValueError('snapshot range exceeds committed positions')
+        shards = list(db.execute(
+            'SELECT path,sha256,positions,train,validation FROM shards WHERE block=? ORDER BY rowid', (block,)))
+        store_id = db.execute("SELECT value FROM settings WHERE key='store_id'").fetchone()[0]
+        exclusions = [row[0][len('excluded:'):] for row in
+                      db.execute("SELECT digest FROM inputs WHERE digest LIKE 'excluded:%' ORDER BY digest")]
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=output.parent) as directory:
+        staging = Path(directory) / 'snapshot'
+        (staging / 'shards').mkdir(parents=True)
+        selected, offset = [], 0
+        for name, digest, count, train, validation in shards:
+            left, right = max(0, start - offset), min(count, start + positions - offset)
+            offset += count
+            if right <= left:
+                continue
+            source = root / name
+            if source.resolve().parent != (root / 'shards').resolve() or nnue_data.file_hash(source) != digest:
+                raise ValueError('invalid source shard path or checksum')
+            if left == 0 and right == count:
+                os.link(source, staging / name)
+            else:
+                with nnue_binary.binary_dataset(source) as data:
+                    train = 0
+
+                    def rows():
+                        nonlocal train
+                        for index in range(left, right):
+                            row = data[index]
+                            train += row['split'] == 'train'
+                            yield row
+
+                    temporary = staging / 'boundary.mxdata'
+                    nnue_binary.write_dataset(temporary, data.header, rows(), store_promoted=True)
+                digest = nnue_data.file_hash(temporary)
+                name = f'shards/{digest}.mxdata'
+                temporary.rename(staging / name)
+                count = right - left
+                validation = count - train
+            selected.append(dict(path=name, sha256=digest, positions=count, train=train, validation=validation))
+            if offset >= start + positions:
+                break
+        manifest = dict(format='maxima.nnue.shards', version=1, store_id=store_id,
+                        excluded_dataset_sha256=exclusions, block=output.name, target=positions,
+                        positions=positions, partial=False, source_block=block, source_start=start,
+                        shards=selected)
+        publish_json(staging / 'manifest.json', manifest)
+        read_manifest(staging / 'manifest.json')
+        staging.rename(output)
+    return output / 'manifest.json'
+
+
 def main():
     parser = argparse.ArgumentParser(prog='maxima nnue:shards', description=__doc__)
     parser.add_argument('--store', type=Path, required=True)
@@ -206,8 +274,18 @@ def main():
     parser.add_argument('--exclude', type=Path, action='append', default=[])
     parser.add_argument('--seal', action='store_true')
     parser.add_argument('--partial', action='store_true')
+    parser.add_argument('--snapshot', type=Path)
+    parser.add_argument('--snapshot-start', type=int, default=0)
+    parser.add_argument('--snapshot-positions', type=int)
     parser.add_argument('inputs', type=Path, nargs='*')
     args = parser.parse_args()
+    if args.snapshot:
+        if args.inputs or args.seal or args.partial or args.exclude or args.snapshot_positions is None:
+            parser.error('--snapshot requires --snapshot-positions and no ingest/seal options')
+        print(f'Manifest: {freeze_range(args.store, args.block, args.snapshot, positions=args.snapshot_positions, start=args.snapshot_start)}')
+        return 0
+    if args.snapshot_positions is not None or args.snapshot_start:
+        parser.error('snapshot range options require --snapshot')
     if args.partial and not args.seal:
         parser.error('--partial requires --seal')
     count = ingest(args.store, args.block, args.inputs, target=args.target,

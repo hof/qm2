@@ -1986,6 +1986,17 @@ portion after a stop. Sealed blocks cannot accept new inputs. Use local POSIX
 storage, one shared store for all campaign ingestion, and retain the SQLite index.
 This command does not launch producers or allocate cloud resources.
 
+Freeze an accepted row range while ingestion continues with
+`nnue:shards --store /data/campaign --block block-001
+--snapshot /data/checkpoints/first --snapshot-positions 25000000`.
+`--snapshot-start` selects a zero-based offset, allowing disjoint training batches.
+The output is a new directory containing `manifest.json` and immutable shards;
+whole shards use hard links on the same filesystem, and boundary shards are
+streamed into new files. This reads committed index entries without sealing or
+changing the source block. Store identity, exclusions, teacher metadata and split
+assignments are retained. Snapshot creation does not admit training or allocate
+budget; campaign readiness and GPU admission remain separate requirements.
+
 `nnue:campaign --store /data/campaign` manages persistent campaign admission
 and an allocation ledger. `init --teacher teacher.nnue` pins independent immutable
 teacher bytes; no network is activated. Billable allocation requires explicit

@@ -9,7 +9,7 @@ import unittest
 
 import chess
 
-from maxima_runner import nnue_data, nnue_shards
+from maxima_runner import nnue_binary, nnue_data, nnue_shards
 
 
 class shard_tests(unittest.TestCase):
@@ -78,6 +78,38 @@ class shard_tests(unittest.TestCase):
         later = self.dataset('later', self.rows[4:6], purpose='heldout_evaluation')
         with self.assertRaisesRegex(ValueError, 'before ingesting'):
             nnue_shards.ingest(self.store, 'two', [], exclude=[later])
+
+    def test_snapshots_partition_rows_without_sealing_live_block(self):
+        source = self.dataset('source', self.rows[:8])
+        nnue_shards.ingest(self.store, 'one', [source], target=12, shard_size=3)
+        first = nnue_shards.freeze_range(self.store, 'one', self.root / 'first', positions=5)
+        tail = self.dataset('tail', self.rows[8:])
+        nnue_shards.ingest(self.store, 'one', [tail], target=12, shard_size=3)
+        second = nnue_shards.freeze_range(self.store, 'one', self.root / 'second', start=5, positions=7)
+        recovered = []
+        for path in (first, second):
+            manifest = nnue_shards.read_manifest(path)
+            for shard in manifest['shards']:
+                with nnue_binary.binary_dataset(path.parent / shard['path']) as data:
+                    recovered.extend(data[i]['score_cp'] for i in range(len(data)))
+        self.assertEqual(recovered, [row['score_cp'] for row in self.rows])
+        with closing(sqlite3.connect(self.store / 'index.sqlite3')) as db:
+            self.assertEqual(db.execute('SELECT positions,sealed FROM blocks').fetchone(), (12, 0))
+        original = self.store / nnue_shards.read_manifest(first)['shards'][0]['path']
+        linked = first.parent / nnue_shards.read_manifest(first)['shards'][0]['path']
+        self.assertEqual(original.stat().st_ino, linked.stat().st_ino)
+
+    def test_snapshot_failures_leave_generation_and_output_intact(self):
+        source = self.dataset('source', self.rows)
+        nnue_shards.ingest(self.store, 'one', [source], target=12, shard_size=3)
+        destination = self.root / 'snapshot'
+        with self.assertRaisesRegex(ValueError, 'exceeds committed'):
+            nnue_shards.freeze_range(self.store, 'one', destination, positions=13)
+        self.assertFalse(destination.exists())
+        nnue_shards.freeze_range(self.store, 'one', destination, positions=4)
+        with self.assertRaisesRegex(ValueError, 'already exists'):
+            nnue_shards.freeze_range(self.store, 'one', destination, positions=5)
+        self.assertEqual(nnue_shards.read_manifest(destination / 'manifest.json')['positions'], 4)
 
     def test_missing_completed_result_and_heldout_input_rejected(self):
         rows = [dict(self.rows[0], result_stm=None)]
