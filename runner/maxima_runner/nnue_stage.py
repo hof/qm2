@@ -19,7 +19,7 @@ from .learning_store import writer_lock
 
 
 class shard_rows:
-    """Random access with at most eight mapped shards and compact split indices."""
+    """Random access with at most sixteen mapped shards and compact split indices."""
     def __init__(self, path, manifest, split):
         self.root, self.shards, self.split = path.parent, manifest['shards'], split
         self.ends, total = [], 0
@@ -32,11 +32,16 @@ class shard_rows:
         return self.ends[-1]
 
     def __getitem__(self, index):
+        row = self.board_row(index)
+        board = row.pop('board')
+        return dict(row, fen=board.fen(en_passant='fen', promoted=True))
+
+    def board_row(self, index):
         if not 0 <= index < len(self):
             raise IndexError(index)
         number = bisect_right(self.ends, index)
         if number not in self.cache:
-            if len(self.cache) == 8:
+            if len(self.cache) == 16:
                 _, (old, _) = self.cache.popitem(last=False)
                 old.close()
             data = nnue_binary.binary_dataset(self.root / self.shards[number]['path'])
@@ -55,9 +60,8 @@ class shard_rows:
         self.cache.move_to_end(number)
         data, indices = self.cache[number]
         row = data[indices[index - (self.ends[number - 1] if number else 0)]]
-        board = row.pop('board')
         row.pop('variant_state')
-        return dict(row, fen=board.fen(en_passant='fen', promoted=True))
+        return row
 
     def close(self):
         for data, _ in self.cache.values():
@@ -290,7 +294,7 @@ def run(args):
                         nnue_campaign.status(campaign_root)
                         print('Campaign scheduling stopped; training checkpoint saved')
                         return 0
-                    selected = [train[i] for i in order[start:start + args.batch_size]]
+                    selected = [train.board_row(i) for i in order[start:start + args.batch_size]]
                     cp, results = labels(torch, model, selected)
                     optimizer.zero_grad(set_to_none=True)
                     objective = nnue_training.loss(torch, model(*inputs(torch, model, selected)), cp,

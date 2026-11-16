@@ -26,7 +26,9 @@ def training_libraries():
 def batch(torch, rows, architecture="halfkp"):
     indices, offsets = [], []
     for row in rows:
-        board = chess.Board(row["fen"])
+        board = row.get('board')
+        if board is None:
+            board = chess.Board(row["fen"])
         for color in [board.turn, not board.turn]:
             offsets.append(len(indices))
             indices.extend(nnue_format.features(board, color, architecture))

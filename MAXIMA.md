@@ -2142,10 +2142,12 @@ maxima nnue:export /data/stage-001/candidate.pt \
   --manifest /data/campaign/block-001.json --output /data/candidate-001
 ```
 
-Training maps at most eight shards, retaining compact split indices, and shuffles
+Training maps at most sixteen shards, retaining compact split indices, and shuffles
 windows of at most `--shuffle-size` positions (default65536, maximum1M) in seeded
 window and row order. This bounded shuffle is a declared block-local sampling
-recipe, not a full corpus permutation. `--epochs` counts passes over the current
+recipe, not a full corpus permutation. Training batches use decoded binary boards
+directly, avoiding FEN serialization and reparsing; FEN-based callers and export
+checks retain their existing interface. `--epochs` counts passes over the current
 block only. Validation selects a candidate using at most `--metrics-positions`
 rows (default8192), sampled deterministically across this block's validation
 split. It is a monitoring sample, not an untouched strength test. Corpus checksums

@@ -67,7 +67,7 @@ class stage_tests(unittest.TestCase):
                 self.assertEqual(len(rows), len(expected))
                 for i in reversed(range(len(rows))):
                     self.assertEqual(rows[i]['fen'], expected[i]['fen'])
-                    self.assertLessEqual(len(rows.cache), 8)
+                    self.assertLessEqual(len(rows.cache), 16)
             finally:
                 rows.close()
 
@@ -83,6 +83,21 @@ class stage_tests(unittest.TestCase):
                     for index in indices:
                         rows[index]
                 self.assertEqual(opened.call_count, len(indices))
+        finally:
+            rows.close()
+
+    def test_binary_board_batch_matches_fen_batch_exactly(self):
+        from maxima_runner import nnue_training
+        manifest = nnue_shards.read_manifest(self.manifests[0])
+        rows = nnue_stage.shard_rows(self.manifests[0], manifest, 'train')
+        try:
+            fast = [rows.board_row(i) for i in range(len(rows))]
+            ordinary = [rows[i] for i in range(len(rows))]
+            for architecture in ('halfkp', 'halfkav2_hm'):
+                self.assert_equal(nnue_training.batch(torch, fast, architecture),
+                                  nnue_training.batch(torch, ordinary, architecture))
+            self.assertEqual([r['score_cp'] for r in fast], [r['score_cp'] for r in ordinary])
+            self.assertEqual([r['result_stm'] for r in fast], [r['result_stm'] for r in ordinary])
         finally:
             rows.close()
 
