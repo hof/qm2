@@ -203,6 +203,21 @@ class stage_tests(unittest.TestCase):
         self.assertEqual(child['seen_ranges'], [dict(block='block-0', start=0, stop=20),
                                                dict(block='block-0', start=20, stop=40)])
 
+    def test_cross_block_stage_tracks_all_ranges_and_rejects_second_block_replay(self):
+        store = self.root / 'store'
+        first = nnue_shards.freeze_range(store, 'block-0', self.root / 'first', positions=20)
+        combined = nnue_shards.freeze_ranges(store, [dict(block='block-0', start=20, stop=45),
+            dict(block='block-1', start=0, stop=15)], self.root / 'combined')
+        overlap = nnue_shards.freeze_range(store, 'block-1', self.root / 'overlap', start=14, positions=16)
+        self.manifests = [first, combined, overlap]
+        self.train('parent')
+        child = self.train('child', 1, '--parent', str(self.root / 'parent/training.pt'))
+        self.assertEqual(child['seen_ranges'], [dict(block='block-0', start=0, stop=20),
+            dict(block='block-0', start=20, stop=45), dict(block='block-1', start=0, stop=15)])
+        self.assertEqual(len(child['contract']['source_ranges']), 2)
+        with self.assertRaisesRegex(ValueError, 'overlaps previously trained source rows'):
+            self.train('replay', 2, '--parent', str(self.root / 'child/training.pt'))
+
     def test_legacy_parent_requires_manifest_and_explicit_safe_reader_transition(self):
         parent = self.train('parent')
         parent.pop('seen_ranges')

@@ -111,6 +111,39 @@ class shard_tests(unittest.TestCase):
             nnue_shards.freeze_range(self.store, 'one', destination, positions=5)
         self.assertEqual(nnue_shards.read_manifest(destination / 'manifest.json')['positions'], 4)
 
+    def test_snapshot_spans_sealed_and_generating_blocks_without_losing_rows(self):
+        source = self.dataset('source', self.rows)
+        nnue_shards.ingest(self.store, 'one', [source], target=6, shard_size=3)
+        nnue_shards.seal(self.store, 'one')
+        nnue_shards.ingest(self.store, 'two', [source], target=8, shard_size=3)
+        ranges = [dict(block='one', start=4, stop=6), dict(block='two', start=0, stop=5)]
+        path = nnue_shards.freeze_ranges(self.store, ranges, self.root / 'combined')
+        manifest = nnue_shards.read_manifest(path)
+        self.assertEqual(nnue_shards.source_ranges(manifest), ranges)
+        recovered = []
+        for shard in manifest['shards']:
+            with nnue_binary.binary_dataset(path.parent / shard['path']) as data:
+                recovered.extend(data[i]['score_cp'] for i in range(len(data)))
+        self.assertEqual(recovered, [row['score_cp'] for row in self.rows[4:11]])
+        with closing(sqlite3.connect(self.store / 'index.sqlite3')) as db:
+            self.assertEqual(db.execute('SELECT name,positions,sealed FROM blocks ORDER BY name').fetchall(),
+                             [('one', 6, 1), ('two', 6, 0)])
+        teacher = self.root / 'teacher.nnue'
+        teacher.write_bytes(b'teacher')
+        state = nnue_campaign.initialize_training_snapshot(path.parent, teacher, maximum_cents=100,
+            deadline=1800000060, funding_evidence='test', now=1800000000)
+        self.assertEqual(state['blocks']['combined']['source_ranges'], ranges)
+
+    def test_multiblock_snapshot_rejects_overlap_and_incomplete_ranges_atomically(self):
+        source = self.dataset('source', self.rows)
+        nnue_shards.ingest(self.store, 'one', [source], target=6)
+        for ranges in ([dict(block='one', start=0, stop=4), dict(block='one', start=3, stop=6)],
+                       [dict(block='one', start=4, stop=6), dict(block='missing', start=0, stop=3)]):
+            output = self.root / 'rejected'
+            with self.assertRaises(ValueError):
+                nnue_shards.freeze_ranges(self.store, ranges, output)
+            self.assertFalse(output.exists())
+
     def test_prepaid_snapshot_trial_limits_do_not_stop_source_generation(self):
         source = self.dataset('source', self.rows)
         nnue_shards.ingest(self.store, 'one', [source], target=12, shard_size=3)

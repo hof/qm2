@@ -2000,6 +2000,13 @@ Freeze an accepted row range while ingestion continues with
 `nnue:shards --store /data/campaign --block block-001
 --snapshot /data/checkpoints/first --snapshot-positions 25000000`.
 `--snapshot-start` selects a zero-based offset, allowing disjoint training batches.
+For a batch crossing physical blocks, repeat `--snapshot-range BLOCK:START:COUNT`
+instead of the single-block options. For example, `--snapshot-range
+block-001:75000000:25000000 --snapshot-range block-002:0:25000000` freezes the
+next 50M positions after cumulative 75M. All ranges are read from one consistent
+index transaction, must be committed and nonoverlapping, and retain their source
+block identities in the manifest, training checkpoints and continuation admission.
+Freezing neither seals nor stops the generating blocks.
 The output is a new directory containing `manifest.json` and immutable shards;
 whole shards use hard links on the same filesystem, and boundary shards are
 streamed into new files. This reads committed index entries without sealing or

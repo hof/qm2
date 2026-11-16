@@ -133,13 +133,14 @@ def stage_contract(args, torch, manifest):
     result.update(format='maxima.nnue.stage.contract', version=1, architecture='halfkav2_hm',
                   dtype='float64', torch=str(torch.__version__), implementation=implementation(),
                   store_id=manifest['store_id'],
-                  source_range=nnue_shards.source_range(manifest),
                   manifest_sha256=nnue_data.file_hash(args.manifest),
                   shard_sha256=[item['sha256'] for item in manifest['shards']],
                   parent_sha256=nnue_data.file_hash(args.parent) if args.parent else None,
                   parent_manifest_sha256=nnue_data.file_hash(args.parent_manifest) if args.parent_manifest else None,
                   parent_reader_update=args.allow_parent_reader_update,
                   warm_start_sha256=nnue_data.file_hash(args.warm_start) if args.warm_start else None)
+    ranges = nnue_shards.source_ranges(manifest)
+    result.update({'source_range': ranges[0]} if len(ranges) == 1 else {'source_ranges': ranges})
     return result
 
 
@@ -247,9 +248,9 @@ def run(args):
                         or changed - {'nnue_stage.py', 'nnue_shards.py'}):
                     raise ValueError('parent training recipe mismatch: implementation; only explicit reader/control updates are supported')
             seen_ranges = parent_ranges(parent, args.parent_manifest)
-            current = contract['source_range']
             if any(old['block'] == current['block'] and old['start'] < current['stop']
-                   and current['start'] < old['stop'] for old in seen_ranges):
+                   and current['start'] < old['stop'] for old in seen_ranges
+                   for current in nnue_shards.source_ranges(manifest)):
                 raise ValueError('new stage overlaps previously trained source rows')
             if set(contract['shard_sha256']) & set(parent['seen_shards']):
                 raise ValueError('new stage repeats previously trained shards; replay must be explicit')
@@ -266,7 +267,7 @@ def run(args):
                      presentations=parent['presentations'] if parent else 0,
                      unique_positions=(parent['unique_positions'] if parent else 0) + sum(s['train'] for s in manifest['shards']),
                      seen_shards=(parent['seen_shards'] if parent else []) + contract['shard_sha256'])
-        state['seen_ranges'] = seen_ranges + [contract['source_range']]
+        state['seen_ranges'] = seen_ranges + nnue_shards.source_ranges(manifest)
     if args.resume:
         model.ft_bound = state['ft_bound']
         model.load_state_dict(state['model'])

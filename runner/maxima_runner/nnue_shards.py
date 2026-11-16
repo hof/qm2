@@ -171,6 +171,8 @@ def seal(root, block, *, partial=False):
 
 def source_range(manifest):
     """Identify canonical rows independently of rewritten boundary shard hashes."""
+    if 'source_ranges' in manifest:
+        raise ValueError('snapshot has multiple source ranges; use source_ranges')
     if ('source_start' in manifest) != ('source_block' in manifest):
         raise ValueError('incomplete snapshot source range')
     block = manifest.get('source_block', manifest.get('block'))
@@ -179,6 +181,30 @@ def source_range(manifest):
             or type(start) is not int or start < 0 or type(count) is not int or count <= 0):
         raise ValueError('invalid snapshot source range')
     return dict(block=block, start=start, stop=start + count)
+
+
+def source_ranges(manifest):
+    if 'source_ranges' not in manifest:
+        return [source_range(manifest)]
+    ranges = manifest['source_ranges']
+    if ('source_block' in manifest or 'source_start' in manifest
+            or not isinstance(ranges, list) or not ranges):
+        raise ValueError('invalid snapshot source ranges')
+    total = 0
+    for index, entry in enumerate(ranges):
+        if not isinstance(entry, dict) or set(entry) != {'block', 'start', 'stop'}:
+            raise ValueError('invalid snapshot source ranges')
+        if type(entry['start']) is not int or type(entry['stop']) is not int:
+            raise ValueError('invalid snapshot source ranges')
+        source_range(dict(block=entry['block'], source_start=entry['start'],
+                          source_block=entry['block'], positions=entry['stop'] - entry['start']))
+        if any(old['block'] == entry['block'] and old['start'] < entry['stop']
+               and entry['start'] < old['stop'] for old in ranges[:index]):
+            raise ValueError('overlapping snapshot source ranges')
+        total += entry['stop'] - entry['start']
+    if type(manifest.get('positions')) is not int or total != manifest['positions']:
+        raise ValueError('snapshot source range count mismatch')
+    return ranges
 
 
 def verified_parent_ranges(contract, saved=None, manifest_path=None):
@@ -190,12 +216,12 @@ def verified_parent_ranges(contract, saved=None, manifest_path=None):
         manifest = json.loads(Path(manifest_path).read_text())
         if manifest.get('store_id') != contract['store_id']:
             raise ValueError('parent manifest store mismatch')
-        proven = source_range(manifest)
+        proven = source_ranges(manifest)
     if saved is None:
         if proven is None or contract.get('parent_sha256') is not None:
             raise ValueError('legacy parent needs verified source-range history; supply its first-stage --parent-manifest')
-        saved = [proven]
-    if proven is not None and proven not in saved:
+        saved = proven
+    if proven is not None and any(entry not in saved for entry in proven):
         raise ValueError('parent manifest is absent from recorded source ranges')
     if not isinstance(saved, list) or not saved:
         raise ValueError('missing parent source-range history')
@@ -215,7 +241,7 @@ def read_manifest(path):
         raise ValueError('unsupported or empty shard manifest')
     if not isinstance(value.get('store_id'), str) or len(value['store_id']) != 32:
         raise ValueError('missing global store identity')
-    source_range(value)
+    source_ranges(value)
     total = 0
     paths = set()
     for shard in value['shards']:
@@ -239,23 +265,41 @@ def read_manifest(path):
 
 
 def freeze_range(root, block, output, *, positions, start=0):
+    if type(positions) is not int or type(start) is not int:
+        raise ValueError('invalid snapshot range')
+    return freeze_ranges(root, [dict(block=block, start=start, stop=start + positions)], output)
+
+
+def freeze_ranges(root, ranges, output):
     """Freeze accepted rows without sealing or changing the generating block.
 
     Whole shards share storage through hard links. Only boundary shards are
     rewritten; the output must reside on the same filesystem as the store.
     """
     root, output = Path(root).resolve(), Path(output).resolve()
-    if type(positions) is not int or positions <= 0 or type(start) is not int or start < 0:
-        raise ValueError('invalid snapshot range')
+    try:
+        positions = sum(entry['stop'] - entry['start'] for entry in ranges)
+    except (TypeError, KeyError):
+        raise ValueError('invalid snapshot source ranges') from None
+    source_ranges(dict(source_ranges=ranges, positions=positions))
     if output.exists():
         raise ValueError('snapshot output already exists')
-    with closing(sqlite3.connect((root / 'index.sqlite3').as_uri() + '?mode=ro', uri=True)) as db:
+    with closing(sqlite3.connect((root / 'index.sqlite3').as_uri() + '?mode=ro', uri=True, timeout=60)) as db:
         db.execute('BEGIN')
-        entry = db.execute('SELECT positions FROM blocks WHERE name=?', (block,)).fetchone()
-        if entry is None or start + positions > entry[0]:
-            raise ValueError('snapshot range exceeds committed positions')
-        shards = list(db.execute(
-            'SELECT path,sha256,positions,train,validation FROM shards WHERE block=? ORDER BY rowid', (block,)))
+        segments = []
+        for source_range_entry in ranges:
+            block, start, stop = (source_range_entry[key] for key in ('block', 'start', 'stop'))
+            entry = db.execute('SELECT positions FROM blocks WHERE name=?', (block,)).fetchone()
+            if entry is None or stop > entry[0]:
+                raise ValueError('snapshot range exceeds committed positions')
+            offset = 0
+            for shard in db.execute(
+                    'SELECT path,sha256,positions,train,validation FROM shards WHERE block=? ORDER BY rowid', (block,)):
+                count = shard[2]
+                left, right = max(0, start - offset), min(count, stop - offset)
+                offset += count
+                if right > left:
+                    segments.append((shard, left, right))
         store_id = db.execute("SELECT value FROM settings WHERE key='store_id'").fetchone()[0]
         exclusions = [row[0][len('excluded:'):] for row in
                       db.execute("SELECT digest FROM inputs WHERE digest LIKE 'excluded:%' ORDER BY digest")]
@@ -263,12 +307,8 @@ def freeze_range(root, block, output, *, positions, start=0):
     with tempfile.TemporaryDirectory(dir=output.parent) as directory:
         staging = Path(directory) / 'snapshot'
         (staging / 'shards').mkdir(parents=True)
-        selected, offset = [], 0
-        for name, digest, count, train, validation in shards:
-            left, right = max(0, start - offset), min(count, start + positions - offset)
-            offset += count
-            if right <= left:
-                continue
+        selected = []
+        for (name, digest, count, train, validation), left, right in segments:
             source = root / name
             if source.resolve().parent != (root / 'shards').resolve() or nnue_data.file_hash(source) != digest:
                 raise ValueError('invalid source shard path or checksum')
@@ -293,22 +333,33 @@ def freeze_range(root, block, output, *, positions, start=0):
                 count = right - left
                 validation = count - train
             selected.append(dict(path=name, sha256=digest, positions=count, train=train, validation=validation))
-            if offset >= start + positions:
-                break
         manifest = dict(format='maxima.nnue.shards', version=1, store_id=store_id,
                         excluded_dataset_sha256=exclusions, block=output.name, target=positions,
-                        positions=positions, partial=False, source_block=block, source_start=start,
-                        shards=selected)
+                        positions=positions, partial=False, shards=selected)
+        if len(ranges) == 1:
+            manifest.update(source_block=ranges[0]['block'], source_start=ranges[0]['start'])
+        else:
+            manifest['source_ranges'] = ranges
         publish_json(staging / 'manifest.json', manifest)
         read_manifest(staging / 'manifest.json')
         staging.rename(output)
     return output / 'manifest.json'
 
 
+def parse_snapshot_range(text):
+    try:
+        block, start, count = text.split(':')
+        start, count = int(start), int(count)
+        source_range(dict(block=block, positions=count, source_block=block, source_start=start))
+        return dict(block=block, start=start, stop=start + count)
+    except (ValueError, TypeError):
+        raise argparse.ArgumentTypeError('expected BLOCK:START:COUNT with nonnegative start and positive count') from None
+
+
 def main():
     parser = argparse.ArgumentParser(prog='maxima nnue:shards', description=__doc__)
     parser.add_argument('--store', type=Path, required=True)
-    parser.add_argument('--block', required=True)
+    parser.add_argument('--block')
     parser.add_argument('--target', type=int, default=100_000_000)
     parser.add_argument('--shard-size', type=int, default=1_000_000)
     parser.add_argument('--exclude', type=Path, action='append', default=[])
@@ -317,15 +368,28 @@ def main():
     parser.add_argument('--snapshot', type=Path)
     parser.add_argument('--snapshot-start', type=int, default=0)
     parser.add_argument('--snapshot-positions', type=int)
+    parser.add_argument('--snapshot-range', type=parse_snapshot_range, action='append', default=[],
+                        help='repeat BLOCK:START:COUNT to freeze a batch across physical blocks')
     parser.add_argument('inputs', type=Path, nargs='*')
     args = parser.parse_args()
     if args.snapshot:
-        if args.inputs or args.seal or args.partial or args.exclude or args.snapshot_positions is None:
-            parser.error('--snapshot requires --snapshot-positions and no ingest/seal options')
-        print(f'Manifest: {freeze_range(args.store, args.block, args.snapshot, positions=args.snapshot_positions, start=args.snapshot_start)}')
+        if args.inputs or args.seal or args.partial or args.exclude:
+            parser.error('--snapshot does not accept ingest/seal options')
+        if args.snapshot_range:
+            if args.block or args.snapshot_positions is not None or args.snapshot_start:
+                parser.error('--snapshot-range cannot be mixed with single-block range options')
+            path = freeze_ranges(args.store, args.snapshot_range, args.snapshot)
+        else:
+            if args.block is None or args.snapshot_positions is None:
+                parser.error('--snapshot requires --block and --snapshot-positions or --snapshot-range')
+            path = freeze_range(args.store, args.block, args.snapshot,
+                                positions=args.snapshot_positions, start=args.snapshot_start)
+        print(f'Manifest: {path}')
         return 0
-    if args.snapshot_positions is not None or args.snapshot_start:
+    if args.snapshot_positions is not None or args.snapshot_start or args.snapshot_range:
         parser.error('snapshot range options require --snapshot')
+    if args.block is None:
+        parser.error('--block is required for ingestion/sealing')
     if args.partial and not args.seal:
         parser.error('--partial requires --seal')
     count = ingest(args.store, args.block, args.inputs, target=args.target,

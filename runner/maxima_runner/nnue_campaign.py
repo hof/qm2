@@ -117,7 +117,8 @@ def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, fund
     manifest_path = root / 'manifest.json'
     manifest = nnue_shards.read_manifest(manifest_path)
     name = identifier(manifest['block'])
-    if manifest.get('partial') or manifest['positions'] != manifest['target'] or 'source_start' not in manifest:
+    if (manifest.get('partial') or manifest['positions'] != manifest['target']
+            or not ('source_start' in manifest or 'source_ranges' in manifest)):
         raise ValueError('training trial requires a complete frozen snapshot')
     if (parent is None) != (parent_receipt is None):
         raise ValueError('parent checkpoint and completed receipt are both required')
@@ -132,9 +133,9 @@ def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, fund
                 or receipt.get('contract', {}).get('store_id') != manifest['store_id']):
             raise ValueError('parent completion receipt/checkpoint/store mismatch')
         ranges = nnue_shards.verified_parent_ranges(receipt['contract'], receipt.get('seen_ranges'), parent_manifest)
-        current = nnue_shards.source_range(manifest)
         if any(old['block'] == current['block'] and old['start'] < current['stop']
-               and current['start'] < old['stop'] for old in ranges):
+               and current['start'] < old['stop'] for old in ranges
+               for current in nnue_shards.source_ranges(manifest)):
             raise ValueError('new trial overlaps previously trained source rows')
     with writer_lock(root / '.campaign.lock'):
         if (root / 'campaign.json').exists() or (root / 'STOP').exists():
@@ -149,10 +150,12 @@ def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, fund
                      events=[dict(sequence=1, at=now, action='training_snapshot_initialized')],
                      blocks={name: dict(phase='ready', target=manifest['positions'], teacher=champion,
                                         manifest_sha256=nnue_data.file_hash(manifest_path),
-                                        source_block=manifest['source_block'], source_start=manifest['source_start'],
+                                        source_ranges=nnue_shards.source_ranges(manifest),
                                         ready_at=now)},
                      allocations={}, candidates={}, tests={}, active_test=None,
                      budget_cents=limits, committed_cents={}, spent_cents={key: 0 for key in limits})
+        if 'source_block' in manifest:
+            state['blocks'][name].update(source_block=manifest['source_block'], source_start=manifest['source_start'])
         if parent_digest is not None:
             state['latest_checkpoint_sha256'] = parent_digest
         atomic_json(root / 'campaign.json', state)
