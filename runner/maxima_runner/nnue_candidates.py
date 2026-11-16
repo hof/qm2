@@ -241,7 +241,10 @@ def finish(root, test_id):
                      pgn_sha256=nnue_data.file_hash(record['pgn']))
         state['active_test'] = None
         state['candidates'][record['candidate']]['phase'] = decision
-        if decision == 'accept_h1' and state['stop'] is None:
+        if decision == 'accept_h1' and state.get('promotion_hold'):
+            entry['promotion_held'] = state['promotion_hold']
+            state['candidates'][record['candidate']]['phase'] = 'awaiting_review'
+        elif decision == 'accept_h1' and state['stop'] is None:
             state['champion'] = record['candidate']
             if record['champion'] == state['original_teacher']:
                 campaign.stop(root, state, 'original_teacher_strength_target_reached')

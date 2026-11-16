@@ -84,6 +84,17 @@ class candidate_tests(unittest.TestCase):
         self.assertIsNone(state['stop'])
         self.assertIsNone(state['active_test'])
 
+    def test_phase_review_hold_blocks_promotion_even_after_statistical_pass(self):
+        campaign.transact(self.store, lambda state, stamp: state.update(promotion_hold='endgame review pending'))
+        self.write()
+        result = candidates.finish(self.store, 'comparison')
+        self.assertEqual(result['decision'], 'accept_h1')
+        self.assertEqual(result['promotion_held'], 'endgame review pending')
+        state = campaign.status(self.store)
+        self.assertEqual(state['champion'], state['original_teacher'])
+        self.assertIsNone(state['stop'])
+        self.assertEqual(state['candidates'][self.digest]['phase'], 'awaiting_review')
+
     def test_rejection_retains_champion(self):
         with Path(self.record['pgn']).open() as stream:
             first, second = chess.pgn.read_game(stream), chess.pgn.read_game(stream)

@@ -2056,6 +2056,9 @@ active comparison against the current champion and records its exact command.
 saved command. Reports must match pinned inputs, clocks, options and opening order.
 PGNs are replayed and SPRT is recomputed, including the first stopping boundary.
 Changed, flagged or nonterminal completed games cannot authorize promotion.
+A campaign `promotion_hold` records an outstanding review requirement, such as
+phase-specific regression checks. A statistical pass is still recorded, but the
+candidate waits for review and cannot replace the champion while that hold exists.
 Campaign recipes enable an early inferiority rejection check by default. It uses
 the existing simultaneous opening-pair Hoeffding bound at zero Elo and can only
 reject, never promote. `--beta` is the total rejection allowance: default0.05 is
