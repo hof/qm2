@@ -386,6 +386,45 @@ for line in sys.stdin:
             self.assertEqual(json.loads(args.json.read_text())['games'], report['games'])
             self.assertEqual(read_match_pgn(io.StringIO(stream.getvalue())).headers['Result'], '*')
 
+    async def test_uncapped_sprt_runs_past_book_size_until_statistical_boundary(self):
+        openings = self.openings('standard', [
+            {'id': 'draw', 'fen': '7k/8/8/8/8/8/8/K7 w - - 0 1'}])
+        args = SimpleNamespace(seed=17, pairs=None, until_decision=True,
+            sprt=(-100, 0), sprt_alpha=.05, sprt_beta=.05,
+            seconds=1, increment=0, max_plies=2, variant='standard',
+            timeout=1, hash_mb=1, json=Path(self.directory.name) / 'report.json')
+
+        class fake_session:
+            identity = ['name fixture']
+            protocol = SimpleNamespace(options={})
+
+            async def configure(self, settings):
+                return {}
+
+        @asynccontextmanager
+        async def fake_open(*args):
+            yield fake_session()
+
+        report = {'games': []}
+        with patch('maxima_runner.uci.open_engine', fake_open):
+            await run_match([['a'], ['b']], openings, args, report, io.StringIO())
+        self.assertEqual(report['stop_reason'], 'accept_h1')
+        self.assertGreater(report['summary']['completed_pairs'], len(openings))
+        self.assertEqual(len(report['games']), 2 * report['summary']['completed_pairs'])
+        self.assertEqual(len(report['selected_openings']), report['summary']['completed_pairs'])
+        self.assertGreaterEqual(report['summary']['sprt']['llr'],
+                                report['summary']['sprt']['upper_bound'])
+
+    def test_uncapped_mode_rejects_deadlines_and_other_stopping_rules(self):
+        arguments = ['match:run', '--engine-a', sys.executable, '--engine-b', sys.executable,
+                     '--openings', str(self.path), '--pgn', str(self.path.with_suffix('.pgn')),
+                     '--json', str(self.path.with_suffix('.report')), '--until-decision']
+        for extra in ([], ['--sprt', '-100', '0', '--stop-at', '2000000000'],
+                      ['--sprt', '-100', '0', '--futility-alpha', '.05']):
+            with patch.object(sys, 'argv', arguments + extra), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(main(), 1)
+
     async def test_repetition_history_claim_precedes_search(self):
         board = chess.Board()
         for move in ['g1f3', 'g8f6', 'f3g1', 'f6g8'] * 2:

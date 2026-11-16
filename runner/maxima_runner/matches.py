@@ -329,9 +329,14 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
 async def run_match(commands, openings, args, report, pgn_stream):
     from .uci import open_engine
     profiles = getattr(args, 'profiles', [engine_profile([], []), engine_profile([], [])])
-    selected = random.Random(args.seed).sample(openings, args.pairs)
-    report['selected_openings'] = [identifier for identifier, _ in selected]
+    rng = random.Random(args.seed)
+    until_decision = getattr(args, 'until_decision', False)
+    selected = (iter(lambda: rng.choice(openings), None) if until_decision
+                else rng.sample(openings, args.pairs))
+    report['selected_openings'] = [] if until_decision else [identifier for identifier, _ in selected]
     for pair, (identifier, position) in enumerate(selected):
+        if until_decision:
+            report['selected_openings'].append(identifier)
         for a_white in (True, False):
             if (any(path.exists() for path in getattr(args, 'stop_file', []))
                     or (getattr(args, 'stop_at', None) is not None and time.time() >= args.stop_at)):
@@ -397,19 +402,19 @@ async def run_match(commands, openings, args, report, pgn_stream):
                 if (getattr(args, 'sequential_check_pairs', None) is not None and
                         interval is not None and (interval[0] > 0.5 or interval[1] < 0.5)):
                     report['stop_reason'] = 'a_stronger' if interval[0] > 0.5 else 'b_stronger'
-                    report['stopped_early'] = pair + 1 < args.pairs
+                    report['stopped_early'] = until_decision or pair + 1 < args.pairs
                 sprt = report['summary'].get('sprt')
                 strength = report['summary'].get('minimum_gain')
                 if strength is not None and strength['decision'] != 'continue':
                     report['stop_reason'] = strength['decision']
-                    report['stopped_early'] = pair + 1 < args.pairs
+                    report['stopped_early'] = until_decision or pair + 1 < args.pairs
                 if sprt is not None and sprt['decision'] != 'continue':
                     report['stop_reason'] = sprt['decision']
-                    report['stopped_early'] = pair + 1 < args.pairs
+                    report['stopped_early'] = until_decision or pair + 1 < args.pairs
                 futility = report['summary'].get('futility')
                 if futility is not None and futility['decision'] == 'futility_rejection':
                     report['stop_reason'] = 'futility_rejection'
-                    report['stopped_early'] = pair + 1 < args.pairs
+                    report['stopped_early'] = until_decision or pair + 1 < args.pairs
                 args.json.write_text(json.dumps(report, indent=2) + '\n')
                 if record['error'] is not None:
                     raise RuntimeError(record['error'])
@@ -446,7 +451,11 @@ def main():
                             default=[], metavar='OPTION=PATH', help='set and hash an external model file')
     parser.add_argument('--variant', choices=('standard', 'losers'), default='standard')
     parser.add_argument('--openings', required=True, type=Path, help='variant-labeled JSON opening file')
-    parser.add_argument('--pairs', type=positive_int, default=10)
+    sampling = parser.add_mutually_exclusive_group()
+    sampling.add_argument('--pairs', type=positive_int,
+                          help='maximum distinct opening pairs (default 10 unless --until-decision)')
+    sampling.add_argument('--until-decision', action='store_true',
+                          help='SPRT without a time or pair cap; sample opening pairs with replacement')
     stopping = parser.add_mutually_exclusive_group()
     stopping.add_argument('--sprt', type=float, nargs=2, metavar=('ELO0', 'ELO1'),
                           help='paired logistic GSPRT bounds for engine A versus B')
@@ -478,6 +487,11 @@ def main():
     args = parser.parse_args()
     report = None
     try:
+        if args.until_decision:
+            if args.sprt is None or args.futility_alpha is not None or args.stop_at is not None:
+                raise ValueError('--until-decision requires plain SPRT without a deadline or futility rule')
+        elif args.pairs is None:
+            args.pairs = 10
         if args.stop_at is not None and not math.isfinite(args.stop_at):
             raise ValueError('stop deadline must be finite')
         if args.syzygy_path is not None:
@@ -508,7 +522,7 @@ def main():
         openings = read_openings(args.openings, args.variant)
         if args.sequential_check_pairs is not None and args.sequential_check_pairs > args.pairs:
             raise ValueError('sequential checkpoint cadence cannot exceed maximum pairs')
-        if args.pairs > len(openings):
+        if args.pairs is not None and args.pairs > len(openings):
             raise ValueError('pairs cannot exceed distinct openings (sampling without replacement)')
         args.profiles = [engine_profile(args.option_a, args.model_a),
                          engine_profile(args.option_b, args.model_b)]
@@ -522,6 +536,7 @@ def main():
         if args.pgn.exists() or args.json.exists():
             raise ValueError('output files already exist; choose new paths')
         report = {'variant': args.variant, 'seed': args.seed, 'pairs': args.pairs,
+                  'opening_sampling': 'with_replacement' if args.until_decision else 'without_replacement',
                   'syzygy_path': str(args.syzygy_path) if args.syzygy_path is not None else None,
                   'seconds': args.seconds, 'increment': args.increment,
                   'max_plies': args.max_plies, 'timeout': args.timeout,
@@ -553,7 +568,8 @@ def main():
             output.flush()
             asyncio.run(run_match(commands, openings, args, report, stream))
         report['complete'] = (all(game['result'] != '*' for game in report['games']) and
-                              (len(report['games']) == 2 * args.pairs or report['stopped_early']))
+                              (report['stopped_early'] or
+                               (args.pairs is not None and len(report['games']) == 2 * args.pairs)))
         if report['stop_reason'] is None and report['complete']:
             report['stop_reason'] = 'maximum_pairs'
             if report['summary'].get('sprt') is not None:

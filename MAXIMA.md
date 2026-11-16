@@ -1058,16 +1058,23 @@ For strength testing, use paired-result SPRT with bounds selected before play:
 
 ```bash
 ./maxima match:run --engine-a /path/to/candidate --engine-b /path/to/baseline \
-    --openings openings.json --pairs 1000 --sprt 0 5 \
+    --openings openings.json --until-decision --sprt 0 5 \
     --seconds 10 --increment 0.1 --pgn sprt.pgn --json sprt.json
 ```
 
 `--sprt ELO0 ELO1` uses logistic Elo for A relative to B, with nominal false-positive
 and false-negative targets of 0.05 each (`--sprt-alpha` and `--sprt-beta`). Bounds
 must be finite with `ELO0 < ELO1`; error targets must be
-positive with sum less than one. Declare all parameters and the maximum number
-of pairs before results. `--pairs` is a cap, and requires at least that many
-unique opening entries. Each completed color-swapped pair contributes to one
+positive with sum less than one. Declare all parameters before results.
+`--until-decision` runs plain SPRT without a time or game-count cutoff, drawing
+opening pairs uniformly with replacement from the supplied book. Reports retain
+the sampling mode and every selected opening; this measures performance on that
+book, and repeated entries are not evidence of broader opening coverage.
+This mode rejects deadlines, pair caps and extra futility rules. An explicit
+stop file can interrupt it without producing a statistical decision.
+For a deliberately bounded experiment, `--pairs` is a cap and requires at least
+that many unique opening entries, sampled without replacement.
+Each completed color-swapped pair contributes to one
 of five buckets: LL, LD/DL, DD/WL/LW, WD/DW, WW, from A's perspective. Incomplete
 pairs, engine failures and a lone first game cannot trigger a decision.
 
