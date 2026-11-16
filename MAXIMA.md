@@ -1110,6 +1110,15 @@ count cutoff. Start a new test when changing search budgets; do not combine its
 evidence with timed games. Node-limited results measure strength at that node
 budget; they do not measure time management or strength per second.
 
+For timed offline self-play that excludes interface and scheduling delays, add
+`--clock-source reported`. This explicitly trusts the current search's final UCI
+`info time` as elapsed seconds when charging the chess clock. Wire and total wall
+time remain recorded separately. Missing, negative or nonfinite reported time is
+an unfinished engine error; an engine that reports exhausting its chess clock
+still loses on time. PGN `ClockSource` and JSON `clock_timing` identify this policy
+so it cannot be confused with ordinary wire-timed results. The default remains
+`--clock-source wire`; neither option changes online bot clock accounting.
+
 The confidence rule uses pair scores in [0, 1] and radius
 `sqrt(log(2 * maximum_pairs / bound_alpha) / (2 * completed_pairs))`.
 Hoeffding plus Bonferroni controls all declared pair checkpoints, including

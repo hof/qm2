@@ -244,6 +244,49 @@ for line in sys.stdin:
         self.assertEqual(record['termination'], 'time forfeit')
         self.assertEqual(len(list(game.mainline_moves())), 0)
 
+    async def test_reported_clock_ignores_one_second_delivery_delay(self):
+        class delayed_reported_engine:
+            async def search(self, board, limit, **kwargs):
+                await asyncio.sleep(1.01)
+                kwargs['on_info']({'time': .005}, 1010)
+                return chess.engine.BestMove(chess.Move.from_uci('f7g7'), None), 1010
+
+        game, record = await self.play([delayed_reported_engine(), scripted_engine([])],
+            chess.Board('7k/5Q2/6K1/8/8/8/8/8 w - - 0 1'),
+            seconds=.01, increment=0, clock_source='reported')
+        self.assertEqual(record['result'], '1-0')
+        self.assertEqual(record['termination'], 'checkmate')
+        self.assertEqual(game.headers['ClockSource'], 'reported')
+        self.assertAlmostEqual(record['clocks']['white'], .005)
+        sample = record['search_samples'][0]
+        self.assertEqual(sample['clock_seconds'], .005)
+        self.assertGreaterEqual(sample['wire_seconds'], 1)
+
+    async def test_reported_clock_requires_valid_current_search_time(self):
+        class reported_engine:
+            async def search(self, board, limit, **kwargs):
+                if self.value is not None:
+                    kwargs['on_info']({'time': self.value}, 0)
+                return chess.engine.BestMove(chess.Move.from_uci('e2e4'), None), 0
+
+        for value in (None, -1, float('nan'), float('inf'), True):
+            engine = reported_engine()
+            engine.value = value
+            _, record = await self.play([engine, scripted_engine([])], clock_source='reported')
+            self.assertEqual(record['result'], '*')
+            self.assertIn('engine-reported search time', record['error'])
+
+    async def test_reported_clock_still_forfeits_when_engine_reports_exhausted_budget(self):
+        class over_budget_engine:
+            async def search(self, board, limit, **kwargs):
+                kwargs['on_info']({'time': 2}, 0)
+                return chess.engine.BestMove(chess.Move.from_uci('e2e4'), None), 0
+
+        _, record = await self.play([over_budget_engine(), scripted_engine([])],
+                                   seconds=1, clock_source='reported')
+        self.assertEqual(record['result'], '0-1')
+        self.assertEqual(record['termination'], 'time forfeit')
+
     async def test_fixed_nodes_has_no_clock_forfeits_and_keeps_wire_telemetry(self):
         board = chess.Board()
         for move in ['e2e4', 'f7f6', 'd2d4']:
@@ -283,7 +326,7 @@ for line in sys.stdin:
         arguments = ['match:run', '--engine-a', sys.executable, '--engine-b', sys.executable,
                      '--openings', str(self.path), '--pgn', str(self.path.with_suffix('.pgn')),
                      '--json', str(self.path.with_suffix('.report')), '--nodes', '10000']
-        for extra in (['--seconds', '1'], ['--increment', '.01']):
+        for extra in (['--seconds', '1'], ['--increment', '.01'], ['--clock-source', 'reported']):
             with patch.object(sys, 'argv', arguments + extra), \
                     contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(main(), 1)

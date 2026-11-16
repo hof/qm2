@@ -189,11 +189,14 @@ class win_adjudicator:
 
 async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
                     pair, opening, variant, adjudicate_win_cp=None,
-                    adjudicate_win_plies=6, adjudicate_min_move=20, nodes=None):
+                    adjudicate_win_plies=6, adjudicate_min_move=20, nodes=None,
+                    clock_source='wire'):
     import chess
     import chess.engine
     if nodes is not None and (type(nodes) is not int or nodes <= 0):
         raise ValueError('node limit must be a positive integer')
+    if clock_source not in ('wire', 'reported') or (nodes is not None and clock_source != 'wire'):
+        raise ValueError('invalid or conflicting clock source')
     adjudicator = None
     if adjudicate_win_cp is not None:
         if variant != 'standard':
@@ -212,6 +215,8 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
                         Opening=opening, TimeControl='-' if nodes is not None else f'{seconds:g}+{increment:g}')
     if nodes is not None:
         game.headers['NodeLimit'] = str(nodes)
+    else:
+        game.headers['ClockSource'] = clock_source
     if initial.fen() != chess.STARTING_FEN:
         game.headers.update(SetUp='1', FEN=initial.fen(en_passant='fen'))
     node = game
@@ -271,6 +276,13 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
             reason = 'engine failure'
             break
         clock_elapsed = wire_elapsed if nodes is None else 0.0
+        if nodes is None and clock_source == 'reported':
+            clock_elapsed = search_data.get('time')
+            if (type(clock_elapsed) not in (int, float) or not math.isfinite(clock_elapsed)
+                    or clock_elapsed < 0):
+                failure = 'invalid or missing engine-reported search time'
+                reason = 'engine failure'
+                break
         work = search_work[color]
         work['searches'] += 1
         work['wall_seconds'] += elapsed
@@ -328,6 +340,7 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
     record = {'pair': pair, 'opening': opening, 'a_color': 'white' if a_white else 'black',
                   'result': result, 'termination': reason, 'error': failure, 'plies': len(board.move_stack),
                   'clocks': {'white': clocks[chess.WHITE], 'black': clocks[chess.BLACK]}}
+    record['clock_source'] = 'none_fixed_nodes' if nodes is not None else clock_source
     record['search_work'] = {'white': search_work[chess.WHITE], 'black': search_work[chess.BLACK]}
     record['search_samples'] = search_samples
     if adjudicator:
@@ -391,6 +404,7 @@ async def run_match(commands, openings, args, report, pgn_stream):
                     engines, position.copy(), a_white=a_white, seconds=args.seconds,
                     increment=args.increment, max_plies=args.max_plies, pair=pair,
                     nodes=getattr(args, 'nodes', None),
+                    clock_source=getattr(args, 'clock_source', 'wire'),
                     opening=identifier, variant=args.variant,
                     adjudicate_win_cp=getattr(args, 'adjudicate_win_cp', None),
                     adjudicate_win_plies=getattr(args, 'adjudicate_win_plies', 6),
@@ -485,6 +499,8 @@ def main():
     parser.add_argument('--increment', type=nonnegative_float, help='clock increment seconds (default 0.1)')
     parser.add_argument('--nodes', type=positive_int,
                         help='equal nodes per move, without chess clocks; excludes --seconds/--increment')
+    parser.add_argument('--clock-source', choices=('wire', 'reported'), default='wire',
+                        help='charge UCI wire elapsed time or trust engine info time for offline self-play')
     parser.add_argument('--max-plies', type=positive_int, default=600)
     parser.add_argument('--adjudicate-win-cp', type=positive_int, metavar='CP',
                         help='enable early wins when both engines consistently agree at this cp threshold')
@@ -502,7 +518,7 @@ def main():
     report = None
     try:
         if args.nodes is not None:
-            if args.seconds is not None or args.increment is not None:
+            if args.seconds is not None or args.increment is not None or args.clock_source != 'wire':
                 raise ValueError('--nodes cannot be combined with clock settings')
         else:
             args.seconds = 10 if args.seconds is None else args.seconds
@@ -561,7 +577,9 @@ def main():
                   'seconds': args.seconds, 'increment': args.increment,
                   'nodes': args.nodes, 'hash_mb': args.hash_mb,
                   'max_plies': args.max_plies, 'timeout': args.timeout,
-                  'clock_timing': 'none_fixed_nodes' if args.nodes is not None else 'uci_go_to_bestmove_monotonic',
+                  'clock_timing': ('none_fixed_nodes' if args.nodes is not None else
+                                   'engine_reported_search_time' if args.clock_source == 'reported' else
+                                   'uci_go_to_bestmove_monotonic'),
                   'win_adjudication': {'threshold_cp': args.adjudicate_win_cp,
                                        'plies': args.adjudicate_win_plies,
                                        'min_move': args.adjudicate_min_move}
