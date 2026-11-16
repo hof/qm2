@@ -67,9 +67,24 @@ class stage_tests(unittest.TestCase):
                 self.assertEqual(len(rows), len(expected))
                 for i in reversed(range(len(rows))):
                     self.assertEqual(rows[i]['fen'], expected[i]['fen'])
-                    self.assertLessEqual(len(rows.cache), 2)
+                    self.assertLessEqual(len(rows.cache), 8)
             finally:
                 rows.close()
+
+    def test_shuffle_reuses_shards_instead_of_rebuilding_split_indices(self):
+        manifest = nnue_shards.read_manifest(self.manifests[0])
+        rows = nnue_stage.shard_rows(self.manifests[0], manifest, 'train')
+        indices = [sum(s['train'] for s in manifest['shards'][:i])
+                   for i, s in enumerate(manifest['shards']) if s['train']]
+        original = nnue_stage.nnue_binary.binary_dataset
+        try:
+            with patch.object(nnue_stage.nnue_binary, 'binary_dataset', wraps=original) as opened:
+                for _ in range(3):
+                    for index in indices:
+                        rows[index]
+                self.assertEqual(opened.call_count, len(indices))
+        finally:
+            rows.close()
 
     def test_mid_chunk_and_epoch_boundary_resume_matches_uninterrupted(self):
         full = self.train('full')

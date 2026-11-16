@@ -2142,7 +2142,7 @@ maxima nnue:export /data/stage-001/candidate.pt \
   --manifest /data/campaign/block-001.json --output /data/candidate-001
 ```
 
-Training maps at most two shards, retaining compact split indices, and shuffles
+Training maps at most eight shards, retaining compact split indices, and shuffles
 windows of at most `--shuffle-size` positions (default65536, maximum1M) in seeded
 window and row order. This bounded shuffle is a declared block-local sampling
 recipe, not a full corpus permutation. `--epochs` counts passes over the current

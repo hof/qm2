@@ -19,7 +19,7 @@ from .learning_store import writer_lock
 
 
 class shard_rows:
-    """Random access with at most two mapped shards and compact split indices."""
+    """Random access with at most eight mapped shards and compact split indices."""
     def __init__(self, path, manifest, split):
         self.root, self.shards, self.split = path.parent, manifest['shards'], split
         self.ends, total = [], 0
@@ -36,7 +36,7 @@ class shard_rows:
             raise IndexError(index)
         number = bisect_right(self.ends, index)
         if number not in self.cache:
-            if len(self.cache) == 2:
+            if len(self.cache) == 8:
                 _, (old, _) = self.cache.popitem(last=False)
                 old.close()
             data = nnue_binary.binary_dataset(self.root / self.shards[number]['path'])
