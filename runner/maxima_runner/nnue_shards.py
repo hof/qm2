@@ -181,6 +181,33 @@ def source_range(manifest):
     return dict(block=block, start=start, stop=start + count)
 
 
+def verified_parent_ranges(contract, saved=None, manifest_path=None):
+    """Recover legacy first-stage provenance only from its pinned manifest bytes."""
+    proven = None
+    if manifest_path is not None:
+        if nnue_data.file_hash(manifest_path) != contract['manifest_sha256']:
+            raise ValueError('parent manifest checksum mismatch')
+        manifest = json.loads(Path(manifest_path).read_text())
+        if manifest.get('store_id') != contract['store_id']:
+            raise ValueError('parent manifest store mismatch')
+        proven = source_range(manifest)
+    if saved is None:
+        if proven is None or contract.get('parent_sha256') is not None:
+            raise ValueError('legacy parent needs verified source-range history; supply its first-stage --parent-manifest')
+        saved = [proven]
+    if proven is not None and proven not in saved:
+        raise ValueError('parent manifest is absent from recorded source ranges')
+    if not isinstance(saved, list) or not saved:
+        raise ValueError('missing parent source-range history')
+    for entry in saved:
+        if type(entry['start']) is not int or type(entry['stop']) is not int:
+            raise ValueError('invalid parent source-range history')
+        source_range(dict(block=entry['block'], source_block=entry['block'],
+                          source_start=entry['start'], positions=entry['stop'] - entry['start']))
+    return saved
+
+
+
 def read_manifest(path):
     path = Path(path)
     value = json.loads(path.read_text())

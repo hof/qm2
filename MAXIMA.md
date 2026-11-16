@@ -2008,7 +2008,9 @@ campaign or changing its promotional budget. Retain the ledger and training
 checkpoints with the snapshot for subsequent review and continuation.
 Continuation admission takes both the parent checkpoint and its completed receipt;
 their checksum and global store identity must agree before the new ledger pins
-the latest experimental checkpoint.
+the latest experimental checkpoint. Prior source-range history must also prove
+that the new trial is disjoint before any allocation; a legacy first-stage receipt
+requires its checksum-pinned parent manifest.
 
 `nnue:campaign --store /data/campaign` manages persistent campaign admission
 and an allocation ledger. `init --teacher teacher.nnue` pins independent immutable

@@ -144,30 +144,7 @@ def stage_contract(args, torch, manifest):
 
 
 def parent_ranges(parent, manifest_path=None):
-    """Recover legacy first-stage provenance only from its pinned manifest bytes."""
-    saved = parent.get('seen_ranges')
-    proven = None
-    if manifest_path is not None:
-        if nnue_data.file_hash(manifest_path) != parent['contract']['manifest_sha256']:
-            raise ValueError('parent manifest checksum mismatch')
-        manifest = json.loads(Path(manifest_path).read_text())
-        if manifest.get('store_id') != parent['contract']['store_id']:
-            raise ValueError('parent manifest store mismatch')
-        proven = nnue_shards.source_range(manifest)
-    if saved is None:
-        if proven is None or parent['contract'].get('parent_sha256') is not None:
-            raise ValueError('legacy parent needs verified source-range history; supply its first-stage --parent-manifest')
-        saved = [proven]
-    if proven is not None and proven not in saved:
-        raise ValueError('parent manifest is absent from recorded source ranges')
-    if not isinstance(saved, list) or not saved:
-        raise ValueError('missing parent source-range history')
-    for entry in saved:
-        if type(entry['start']) is not int or type(entry['stop']) is not int:
-            raise ValueError('invalid parent source-range history')
-        nnue_shards.source_range(dict(block=entry['block'], source_block=entry['block'],
-                                     source_start=entry['start'], positions=entry['stop'] - entry['start']))
-    return saved
+    return nnue_shards.verified_parent_ranges(parent['contract'], parent.get('seen_ranges'), manifest_path)
 
 
 
@@ -176,7 +153,7 @@ def publish_completion(args, state):
     receipt = dict(format='maxima.nnue.stage.complete', version=1, contract=state['contract'],
                    presentations=state['presentations'], global_step=state['global_step'],
                    unique_positions=state['unique_positions'], selected_epoch=state['best_epoch'],
-                   validation_loss=state['best_loss'], history=state['history'],
+                   validation_loss=state['best_loss'], history=state['history'], seen_ranges=state['seen_ranges'],
                    checkpoint_sha256=nnue_data.file_hash(args.output / 'training.pt'),
                    candidate_sha256=nnue_data.file_hash(args.output / 'candidate.pt'))
     nnue_campaign.atomic_json(args.output / 'complete.json', receipt)

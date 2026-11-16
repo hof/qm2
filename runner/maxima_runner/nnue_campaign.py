@@ -104,7 +104,7 @@ def load(root):
 
 
 def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, funding_evidence,
-                                 parent=None, parent_receipt=None, now=None):
+                                 parent=None, parent_receipt=None, parent_manifest=None, now=None):
     """Give an immutable snapshot its own bounded prepaid training ledger.
 
     The generating campaign and its promotional allocations remain untouched.
@@ -121,6 +121,8 @@ def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, fund
         raise ValueError('training trial requires a complete frozen snapshot')
     if (parent is None) != (parent_receipt is None):
         raise ValueError('parent checkpoint and completed receipt are both required')
+    if parent_manifest is not None and parent is None:
+        raise ValueError('parent manifest requires a parent checkpoint')
     parent_digest = None
     if parent is not None:
         receipt = json.loads(Path(parent_receipt).read_text())
@@ -129,6 +131,11 @@ def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, fund
                 or receipt.get('checkpoint_sha256') != parent_digest
                 or receipt.get('contract', {}).get('store_id') != manifest['store_id']):
             raise ValueError('parent completion receipt/checkpoint/store mismatch')
+        ranges = nnue_shards.verified_parent_ranges(receipt['contract'], receipt.get('seen_ranges'), parent_manifest)
+        current = nnue_shards.source_range(manifest)
+        if any(old['block'] == current['block'] and old['start'] < current['stop']
+               and current['start'] < old['stop'] for old in ranges):
+            raise ValueError('new trial overlaps previously trained source rows')
     with writer_lock(root / '.campaign.lock'):
         if (root / 'campaign.json').exists() or (root / 'STOP').exists():
             raise ValueError('campaign already exists or store has a stop signal')

@@ -145,20 +145,25 @@ class shard_tests(unittest.TestCase):
     def test_prepaid_continuation_requires_matching_parent_receipt(self):
         source = self.dataset('source', self.rows)
         nnue_shards.ingest(self.store, 'one', [source], target=12, shard_size=3)
-        manifest = nnue_shards.freeze_range(self.store, 'one', self.root / 'trial', positions=5)
+        old_manifest = nnue_shards.freeze_range(self.store, 'one', self.root / 'old', positions=5)
+        manifest = nnue_shards.freeze_range(self.store, 'one', self.root / 'trial', start=5, positions=5)
         teacher, parent, receipt = (self.root / name for name in ('teacher', 'parent', 'complete.json'))
         teacher.write_bytes(b'teacher'); parent.write_bytes(b'checkpoint fixture')
         metadata = dict(format='maxima.nnue.stage.complete', version=1,
                         checkpoint_sha256=nnue_data.file_hash(parent),
-                        contract=dict(store_id='wrong'))
+                        contract=dict(store_id='wrong', manifest_sha256=nnue_data.file_hash(old_manifest), parent_sha256=None))
         receipt.write_text(json.dumps(metadata))
         options = dict(maximum_cents=300, deadline=1800003600, funding_evidence='test',
-                       parent=parent, parent_receipt=receipt, now=1800000000)
+                       parent=parent, parent_receipt=receipt, parent_manifest=old_manifest, now=1800000000)
         with self.assertRaisesRegex(ValueError, 'mismatch'):
             nnue_campaign.initialize_training_snapshot(manifest.parent, teacher, **options)
         self.assertFalse((manifest.parent / 'campaign.json').exists())
         metadata['contract']['store_id'] = nnue_shards.read_manifest(manifest)['store_id']
         receipt.write_text(json.dumps(metadata))
+        overlapping = nnue_shards.freeze_range(self.store, 'one', self.root / 'overlap', start=4, positions=5)
+        with self.assertRaisesRegex(ValueError, 'overlaps'):
+            nnue_campaign.initialize_training_snapshot(overlapping.parent, teacher, **options)
+        self.assertFalse((overlapping.parent / 'campaign.json').exists())
         state = nnue_campaign.initialize_training_snapshot(manifest.parent, teacher, **options)
         self.assertEqual(state['latest_checkpoint_sha256'], nnue_data.file_hash(parent))
 
