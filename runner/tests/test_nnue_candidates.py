@@ -36,7 +36,7 @@ class candidate_tests(unittest.TestCase):
         campaign.reserve(self.store, 'test-lease', 'tests', self.digest, 100, 3600)
         self.record = candidates.prepare(self.store, self.digest, 'comparison', 'test-lease')
         recipe = self.record['recipe']
-        self.report = {key: recipe[key] for key in ('pairs', 'seconds', 'increment', 'seed', 'openings_sha256')}
+        self.report = {key: recipe[key] for key in ('pairs', 'seconds', 'increment', 'seed', 'openings_sha256', 'clock_timing')}
         self.report.update(max_plies=600, timeout=30, variant='standard', stopping_mode='sprt', complete=True,
                            sprt=dict(elo0=recipe['elo0'], elo1=recipe['elo1'], alpha=recipe['alpha'], beta=recipe['sprt_beta']),
                            futility_alpha=recipe['futility_alpha'],
@@ -97,7 +97,7 @@ class candidate_tests(unittest.TestCase):
         self.assertIsNone(state['stop'])
 
     def test_changed_provenance_or_pair_records_rejected_without_state_change(self):
-        for change in ('engine', 'model', 'options', 'opening', 'color', 'clock'):
+        for change in ('engine', 'model', 'options', 'opening', 'color', 'clock', 'clock_timing'):
             report = copy.deepcopy(self.report)
             if change == 'engine':
                 report['engines'][0]['sha256'] = 'wrong'
@@ -109,6 +109,8 @@ class candidate_tests(unittest.TestCase):
                 report['games'][0]['opening'] = 'wrong'
             elif change == 'color':
                 report['games'][1]['a_color'] = 'white'
+            elif change == 'clock_timing':
+                report['clock_timing'] = 'request_wall_time'
             else:
                 report['seconds'] = 11
             before = (self.store / 'campaign.json').read_bytes()

@@ -1004,9 +1004,12 @@ Replay every PGN independently and inspect terminations, applied options and
 pair uncertainty before using the corrected binary to judge strength candidates.
 A completed small baseline match is not a strength promotion result.
 
-Clocks use seconds plus a per-move increment. Wall time from the search request
-through its response is charged, including readiness and runner overhead;
-initial process startup/configuration is excluded. A late move loses on time,
+Clocks use seconds plus a per-move increment. The charged time is measured on a
+monotonic clock from sending UCI `go` until receiving `bestmove`, including engine
+execution and transport delay. Readiness and Python position/history preparation
+are outside that clock. Reports retain both total request wall time and charged
+search time; engine-reported time is telemetry, never the clock authority.
+A late move loses on time,
 except when the opponent has insufficient material under the selected variant.
 Legal moves are verified before being pushed. Terminal outcomes and available
 threefold/fifty-move claims are adjudicated by the independent board. Optional

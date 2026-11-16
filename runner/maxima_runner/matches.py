@@ -216,7 +216,7 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
     clocks = {chess.WHITE: seconds, chess.BLACK: seconds}
     token = object()
     search_work = {color: {'nodes': 0, 'searches': 0, 'reported_searches': 0,
-                           'wall_seconds': 0.0} for color in (chess.WHITE, chess.BLACK)}
+                           'wall_seconds': 0.0, 'clock_seconds': 0.0} for color in (chess.WHITE, chess.BLACK)}
     search_samples = []
     result, reason = '*', 'ply limit'
     failure = None
@@ -248,7 +248,8 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
         limit = chess.engine.Limit(white_clock=clocks[chess.WHITE],
                                    black_clock=clocks[chess.BLACK],
                                    white_inc=increment, black_inc=increment)
-        # Charge protocol/readiness and runner overhead, not engine-reported time.
+        # The engine's clock runs from UCI go to bestmove receipt. Keep setup and
+        # Python board/history work in wall telemetry, outside its search clock.
         started = asyncio.get_running_loop().time()
         try:
             best, _ = await engine.search(board, limit, game=token, on_info=collect_info)
@@ -257,17 +258,24 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
             reason = 'engine failure'
             break
         elapsed = asyncio.get_running_loop().time() - started
+        clock_elapsed = getattr(engine, 'last_search_seconds', elapsed)
+        if (not isinstance(clock_elapsed, (int, float)) or not math.isfinite(clock_elapsed)
+                or clock_elapsed < 0 or clock_elapsed > elapsed + 0.001):
+            failure = 'invalid or missing UCI search timing'
+            reason = 'engine failure'
+            break
         work = search_work[color]
         work['searches'] += 1
         work['wall_seconds'] += elapsed
+        work['clock_seconds'] += clock_elapsed
         search_samples.append(dict(search_data, ply=len(board.move_stack) + 1,
                                    engine='A' if color == a_white else 'B',
                                    color='white' if color else 'black',
-                                   nodes=search_nodes, wall_seconds=elapsed))
+                                   nodes=search_nodes, wall_seconds=elapsed, clock_seconds=clock_elapsed))
         if search_nodes is not None:
             work['nodes'] += search_nodes
             work['reported_searches'] += 1
-        clocks[color] -= elapsed
+        clocks[color] -= clock_elapsed
         if clocks[color] <= 0:
             winner = not color
             result = ('1/2-1/2' if board.has_insufficient_material(winner)
@@ -517,6 +525,7 @@ def main():
                   'syzygy_path': str(args.syzygy_path) if args.syzygy_path is not None else None,
                   'seconds': args.seconds, 'increment': args.increment,
                   'max_plies': args.max_plies, 'timeout': args.timeout,
+                  'clock_timing': 'uci_go_to_bestmove_monotonic',
                   'win_adjudication': {'threshold_cp': args.adjudicate_win_cp,
                                        'plies': args.adjudicate_win_plies,
                                        'min_move': args.adjudicate_min_move}

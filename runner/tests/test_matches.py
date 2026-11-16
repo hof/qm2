@@ -244,6 +244,32 @@ for line in sys.stdin:
         self.assertEqual(record['termination'], 'time forfeit')
         self.assertEqual(len(list(game.mainline_moves())), 0)
 
+    async def test_clock_excludes_client_setup_but_keeps_wall_telemetry(self):
+        engine = scripted_engine(['e2e4'], 0.03)
+        engine.last_search_seconds = 0.001
+        game, record = await self.play([engine, scripted_engine([])], seconds=0.01,
+                                       increment=0, max_plies=1)
+        self.assertEqual(list(game.mainline_moves()), [chess.Move.from_uci('e2e4')])
+        self.assertAlmostEqual(record['clocks']['white'], 0.009)
+        sample = record['search_samples'][0]
+        self.assertGreaterEqual(sample['wall_seconds'], 0.03)
+        self.assertEqual(sample['clock_seconds'], 0.001)
+
+    async def test_wire_deadline_still_rejects_a_late_reply(self):
+        engine = scripted_engine(['e2e4'], 0.03)
+        engine.last_search_seconds = 0.02
+        game, record = await self.play([engine, scripted_engine([])], seconds=0.01)
+        self.assertEqual(record['termination'], 'time forfeit')
+        self.assertEqual(list(game.mainline_moves()), [])
+
+    async def test_missing_real_protocol_timing_is_an_error(self):
+        engine = scripted_engine(['e2e4'])
+        engine.last_search_seconds = None
+        game, record = await self.play([engine, scripted_engine([])])
+        self.assertEqual(record['termination'], 'engine failure')
+        self.assertIn('timing', record['error'])
+        self.assertEqual(list(game.mainline_moves()), [])
+
     async def test_illegal_move_is_not_pushed(self):
         board = chess.Board()
         game, record = await self.play([scripted_engine(['e2e5']), scripted_engine([])], board)

@@ -40,6 +40,7 @@ class online_protocol(chess.engine.UciProtocol):
         elif line.startswith("go ") or line == "ponderhit":
             self.collecting = True
             self.search_started = time.monotonic()
+            self.search_seconds = None
             self.ponder_seconds = (self.search_started - self.ponder_started
                                    if line == "ponderhit" and self.ponder_started is not None else None)
             self.hit_info = dict(self.ponder_info) if line == "ponderhit" else {}
@@ -156,6 +157,7 @@ class engine_session:
         self.pondering = False
         self.ponder_fen = None
         self.nps = None  # the latest search speed, kept across games
+        self.last_search_seconds = None
 
     @property
     def identity(self):
@@ -300,6 +302,7 @@ class engine_session:
             await asyncio.wait_for(self.protocol.ping(), self.timeout)
 
     async def search(self, board, limit, *, game=None, on_info=None, root_moves=None):
+        self.last_search_seconds = None
         settings = self.variant_settings(board)
         arguments = {}
         if root_moves is not None:
@@ -320,6 +323,7 @@ class engine_session:
 
         try:
             best = await asyncio.wait_for(consume(), self.timeout)
+            self.last_search_seconds = self.protocol.search_seconds
             return best, (time.monotonic() - started) * 1000
         finally:
             if analysis is not None:

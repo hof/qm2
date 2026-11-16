@@ -101,6 +101,14 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(protocol.returncode.done())
         self.assertEqual(protocol.returncode.result(), 0)
 
+    async def test_search_clock_starts_after_readiness(self):
+        self.script.write_text(fake_engine.replace("elif command == 'isready':", "elif command == 'isready':\n        time.sleep(0.2)"))
+        async with open_engine(self.command, self.directory.name, 2) as engine:
+            _, wall_ms = await engine.search(chess.Board(), chess.engine.Limit(nodes=8), game='clock-test')
+            self.assertGreaterEqual(wall_ms, 290)
+            self.assertGreaterEqual(engine.last_search_seconds, 0.09)
+            self.assertLess(engine.last_search_seconds, wall_ms / 1000 - 0.15)
+
     async def test_hung_search_is_stopped_and_reaped(self):
         self.script.write_text(fake_engine.replace('time.sleep(0.1)', 'time.sleep(30)'))
         with self.assertRaisesRegex(RuntimeError, 'timed out'):

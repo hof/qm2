@@ -29,6 +29,7 @@ def configure(root, engine, openings, pairs, seconds, increment, elo0, elo1, alp
     recipe = dict(engine=str(engine.resolve()), engine_sha256=nnue_data.file_hash(engine),
                   openings=str(openings.resolve()), openings_sha256=nnue_data.file_hash(openings),
                   pairs=pairs, seconds=seconds, increment=increment, seed=seed,
+                  clock_timing='uci_go_to_bestmove_monotonic',
                   elo0=elo0, elo1=elo1, alpha=alpha, beta=beta,
                   futility_alpha=futility_alpha or None, sprt_beta=beta - futility_alpha)
 
@@ -125,7 +126,7 @@ def prepare(root, candidate, test_id, lease):
 
 def validate_report(record, report):
     recipe = record['recipe']
-    for key in ('pairs', 'seconds', 'increment', 'seed', 'openings_sha256'):
+    for key in ('pairs', 'seconds', 'increment', 'seed', 'openings_sha256', 'clock_timing'):
         if report.get(key) != recipe[key]:
             raise ValueError(f'test recipe mismatch: {key}')
     expected_sprt = {key: recipe[key] for key in ('elo0', 'elo1', 'alpha')}
