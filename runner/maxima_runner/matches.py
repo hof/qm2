@@ -189,9 +189,11 @@ class win_adjudicator:
 
 async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
                     pair, opening, variant, adjudicate_win_cp=None,
-                    adjudicate_win_plies=6, adjudicate_min_move=20):
+                    adjudicate_win_plies=6, adjudicate_min_move=20, nodes=None):
     import chess
     import chess.engine
+    if nodes is not None and (type(nodes) is not int or nodes <= 0):
+        raise ValueError('node limit must be a positive integer')
     adjudicator = None
     if adjudicate_win_cp is not None:
         if variant != 'standard':
@@ -207,16 +209,19 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
                         GameId=uuid.uuid4().hex, LearningSource='local',
                         White='A' if a_white else 'B', Black='B' if a_white else 'A',
                         Variant='Royal losers' if variant == 'losers' else 'Standard',
-                        Opening=opening, TimeControl=f'{seconds:g}+{increment:g}')
+                        Opening=opening, TimeControl='-' if nodes is not None else f'{seconds:g}+{increment:g}')
+    if nodes is not None:
+        game.headers['NodeLimit'] = str(nodes)
     if initial.fen() != chess.STARTING_FEN:
         game.headers.update(SetUp='1', FEN=initial.fen(en_passant='fen'))
     node = game
     for move in board.move_stack:
         node = node.add_variation(move)
-    clocks = {chess.WHITE: seconds, chess.BLACK: seconds}
+    clocks = {color: seconds if nodes is None else None for color in (chess.WHITE, chess.BLACK)}
     token = object()
     search_work = {color: {'nodes': 0, 'searches': 0, 'reported_searches': 0,
-                           'wall_seconds': 0.0, 'clock_seconds': 0.0} for color in (chess.WHITE, chess.BLACK)}
+                           'wall_seconds': 0.0, 'wire_seconds': 0.0,
+                           'clock_seconds': 0.0} for color in (chess.WHITE, chess.BLACK)}
     search_samples = []
     result, reason = '*', 'ply limit'
     failure = None
@@ -245,9 +250,10 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
                 search_info.update(info)
 
         engine = engines[0 if color == a_white else 1]
-        limit = chess.engine.Limit(white_clock=clocks[chess.WHITE],
+        limit = (chess.engine.Limit(nodes=nodes) if nodes is not None else
+                 chess.engine.Limit(white_clock=clocks[chess.WHITE],
                                    black_clock=clocks[chess.BLACK],
-                                   white_inc=increment, black_inc=increment)
+                                   white_inc=increment, black_inc=increment))
         # The engine's clock runs from UCI go to bestmove receipt. Keep setup and
         # Python board/history work in wall telemetry, outside its search clock.
         started = asyncio.get_running_loop().time()
@@ -258,25 +264,29 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
             reason = 'engine failure'
             break
         elapsed = asyncio.get_running_loop().time() - started
-        clock_elapsed = getattr(engine, 'last_search_seconds', elapsed)
-        if (not isinstance(clock_elapsed, (int, float)) or not math.isfinite(clock_elapsed)
-                or clock_elapsed < 0 or clock_elapsed > elapsed + 0.001):
+        wire_elapsed = getattr(engine, 'last_search_seconds', elapsed)
+        if (not isinstance(wire_elapsed, (int, float)) or not math.isfinite(wire_elapsed)
+                or wire_elapsed < 0 or wire_elapsed > elapsed + 0.001):
             failure = 'invalid or missing UCI search timing'
             reason = 'engine failure'
             break
+        clock_elapsed = wire_elapsed if nodes is None else 0.0
         work = search_work[color]
         work['searches'] += 1
         work['wall_seconds'] += elapsed
+        work['wire_seconds'] += wire_elapsed
         work['clock_seconds'] += clock_elapsed
         search_samples.append(dict(search_data, ply=len(board.move_stack) + 1,
                                    engine='A' if color == a_white else 'B',
                                    color='white' if color else 'black',
-                                   nodes=search_nodes, wall_seconds=elapsed, clock_seconds=clock_elapsed))
+                                   nodes=search_nodes, wall_seconds=elapsed,
+                                   wire_seconds=wire_elapsed, clock_seconds=clock_elapsed))
         if search_nodes is not None:
             work['nodes'] += search_nodes
             work['reported_searches'] += 1
-        clocks[color] -= clock_elapsed
-        if clocks[color] <= 0:
+        if nodes is None:
+            clocks[color] -= clock_elapsed
+        if nodes is None and clocks[color] <= 0:
             winner = not color
             result = ('1/2-1/2' if board.has_insufficient_material(winner)
                       else '1-0' if winner else '0-1')
@@ -287,12 +297,13 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
             reason = 'engine failure'
             break
         board.push(best.move)
-        clocks[color] += increment
         node = node.add_variation(best.move)
-        remaining = clocks[color]
-        hours, rest = divmod(remaining, 3600)
-        minutes, rest = divmod(rest, 60)
-        node.comment = f'[%clk {int(hours)}:{int(minutes):02}:{rest:06.3f}]'
+        if nodes is None:
+            clocks[color] += increment
+            remaining = clocks[color]
+            hours, rest = divmod(remaining, 3600)
+            minutes, rest = divmod(rest, 60)
+            node.comment = f'[%clk {int(hours)}:{int(minutes):02}:{rest:06.3f}]'
         if search_nodes is not None:
             node.comment += f' [%nodes {search_nodes}]'
         if 'depth' in search_data:
@@ -379,6 +390,7 @@ async def run_match(commands, openings, args, report, pgn_stream):
                 game, record = await play_game(
                     engines, position.copy(), a_white=a_white, seconds=args.seconds,
                     increment=args.increment, max_plies=args.max_plies, pair=pair,
+                    nodes=getattr(args, 'nodes', None),
                     opening=identifier, variant=args.variant,
                     adjudicate_win_cp=getattr(args, 'adjudicate_win_cp', None),
                     adjudicate_win_plies=getattr(args, 'adjudicate_win_plies', 6),
@@ -469,8 +481,10 @@ def main():
     parser.add_argument('--stop-file', type=Path, action='append', default=[])
     parser.add_argument('--stop-at', type=float, help='Unix deadline; finish current game then stop')
     parser.add_argument('--seed', type=int, default=2026)
-    parser.add_argument('--seconds', type=positive_float, default=10)
-    parser.add_argument('--increment', type=nonnegative_float, default=0.1)
+    parser.add_argument('--seconds', type=positive_float, help='initial clock seconds (default 10)')
+    parser.add_argument('--increment', type=nonnegative_float, help='clock increment seconds (default 0.1)')
+    parser.add_argument('--nodes', type=positive_int,
+                        help='equal nodes per move, without chess clocks; excludes --seconds/--increment')
     parser.add_argument('--max-plies', type=positive_int, default=600)
     parser.add_argument('--adjudicate-win-cp', type=positive_int, metavar='CP',
                         help='enable early wins when both engines consistently agree at this cp threshold')
@@ -487,6 +501,12 @@ def main():
     args = parser.parse_args()
     report = None
     try:
+        if args.nodes is not None:
+            if args.seconds is not None or args.increment is not None:
+                raise ValueError('--nodes cannot be combined with clock settings')
+        else:
+            args.seconds = 10 if args.seconds is None else args.seconds
+            args.increment = 0.1 if args.increment is None else args.increment
         if args.until_decision:
             if args.sprt is None or args.futility_alpha is not None or args.stop_at is not None:
                 raise ValueError('--until-decision requires plain SPRT without a deadline or futility rule')
@@ -539,8 +559,9 @@ def main():
                   'opening_sampling': 'with_replacement' if args.until_decision else 'without_replacement',
                   'syzygy_path': str(args.syzygy_path) if args.syzygy_path is not None else None,
                   'seconds': args.seconds, 'increment': args.increment,
+                  'nodes': args.nodes, 'hash_mb': args.hash_mb,
                   'max_plies': args.max_plies, 'timeout': args.timeout,
-                  'clock_timing': 'uci_go_to_bestmove_monotonic',
+                  'clock_timing': 'none_fixed_nodes' if args.nodes is not None else 'uci_go_to_bestmove_monotonic',
                   'win_adjudication': {'threshold_cp': args.adjudicate_win_cp,
                                        'plies': args.adjudicate_win_plies,
                                        'min_move': args.adjudicate_min_move}

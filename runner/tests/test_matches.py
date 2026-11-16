@@ -244,6 +244,50 @@ for line in sys.stdin:
         self.assertEqual(record['termination'], 'time forfeit')
         self.assertEqual(len(list(game.mainline_moves())), 0)
 
+    async def test_fixed_nodes_has_no_clock_forfeits_and_keeps_wire_telemetry(self):
+        board = chess.Board()
+        for move in ['e2e4', 'f7f6', 'd2d4']:
+            board.push_uci(move)
+        engines = [scripted_engine(['g7g5'], .02), scripted_engine(['d1h5'], .02)]
+        game, record = await self.play(engines, board, a_white=False, seconds=.001,
+                                      increment=0, max_plies=2, nodes=10000)
+        self.assertEqual(record['result'], '1-0')
+        self.assertEqual(record['termination'], 'checkmate')
+        self.assertEqual(record['clocks'], {'white': None, 'black': None})
+        self.assertEqual(game.headers['TimeControl'], '-')
+        self.assertEqual(game.headers['NodeLimit'], '10000')
+        self.assertNotIn('[%clk', str(game))
+        for engine in engines:
+            self.assertEqual(engine.limits[0].nodes, 10000)
+            self.assertIsNone(engine.limits[0].white_clock)
+            self.assertIsNone(engine.limits[0].black_clock)
+        for sample in record['search_samples']:
+            self.assertEqual(sample['clock_seconds'], 0)
+            self.assertGreaterEqual(sample['wire_seconds'], .02)
+
+    async def test_fixed_nodes_still_rejects_illegal_moves_and_reports_timeouts_as_errors(self):
+        _, record = await self.play([scripted_engine(['e2e5']), scripted_engine([])], nodes=100)
+        self.assertEqual(record['result'], '*')
+        self.assertIn('no legal move', record['error'])
+
+        class stalled_engine:
+            async def search(self, *args, **kwargs):
+                raise asyncio.TimeoutError('watchdog')
+
+        _, record = await self.play([stalled_engine(), scripted_engine([])], nodes=100)
+        self.assertEqual(record['result'], '*')
+        self.assertEqual(record['termination'], 'engine failure')
+        self.assertEqual(record['error'], 'watchdog')
+
+    def test_cli_rejects_mixing_node_and_clock_limits(self):
+        arguments = ['match:run', '--engine-a', sys.executable, '--engine-b', sys.executable,
+                     '--openings', str(self.path), '--pgn', str(self.path.with_suffix('.pgn')),
+                     '--json', str(self.path.with_suffix('.report')), '--nodes', '10000']
+        for extra in (['--seconds', '1'], ['--increment', '.01']):
+            with patch.object(sys, 'argv', arguments + extra), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(main(), 1)
+
     async def test_clock_excludes_client_setup_but_keeps_wall_telemetry(self):
         engine = scripted_engine(['e2e4'], 0.03)
         engine.last_search_seconds = 0.001

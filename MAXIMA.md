@@ -1099,6 +1099,17 @@ to B; put the candidate in A. Reports identify the mode, target score, minimum
 Elo, allocated budgets, declared number of checks, bounds and stop reason.
 A cap without a crossing is inconclusive; incomplete/failing pairs cannot stop.
 
+For a network comparison at equal search budget, use `--nodes 10000` instead of
+`--seconds` and `--increment`. Each move sends only a UCI node limit, without
+chess clocks. Scheduling delays remain in wire/wall telemetry and cannot cause
+a time-forfeit result. PGNs declare `TimeControl "-"` and `NodeLimit`; JSON records
+the budget, null clocks and zero charged clock time. The engine-response watchdog
+still reports a stalled engine as an unfinished error, never an opponent win.
+This mode can use `--sprt ... --until-decision` without a match duration or game
+count cutoff. Start a new test when changing search budgets; do not combine its
+evidence with timed games. Node-limited results measure strength at that node
+budget; they do not measure time management or strength per second.
+
 The confidence rule uses pair scores in [0, 1] and radius
 `sqrt(log(2 * maximum_pairs / bound_alpha) / (2 * completed_pairs))`.
 Hoeffding plus Bonferroni controls all declared pair checkpoints, including
