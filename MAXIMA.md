@@ -1996,6 +1996,13 @@ streamed into new files. This reads committed index entries without sealing or
 changing the source block. Store identity, exclusions, teacher metadata and split
 assignments are retained. Snapshot creation does not admit training or allocate
 budget; campaign readiness and GPU admission remain separate requirements.
+For a prepaid GPU trial, `nnue_campaign.initialize_training_snapshot` creates an
+independent ledger beside a frozen `manifest.json`, preserving its global store
+identity and original teacher. Its explicit funding evidence, GPU-only cost cap
+and deadline of at most one hour are required before reserving a training lease.
+The trial's expiry stops that training ledger without signalling the generating
+campaign or changing its promotional budget. Retain the ledger and training
+checkpoints with the snapshot for subsequent review and continuation.
 
 `nnue:campaign --store /data/campaign` manages persistent campaign admission
 and an allocation ledger. `init --teacher teacher.nnue` pins independent immutable

@@ -9,7 +9,7 @@ import unittest
 
 import chess
 
-from maxima_runner import nnue_binary, nnue_data, nnue_shards
+from maxima_runner import nnue_binary, nnue_campaign, nnue_data, nnue_shards
 
 
 class shard_tests(unittest.TestCase):
@@ -110,6 +110,30 @@ class shard_tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'already exists'):
             nnue_shards.freeze_range(self.store, 'one', destination, positions=5)
         self.assertEqual(nnue_shards.read_manifest(destination / 'manifest.json')['positions'], 4)
+
+    def test_prepaid_snapshot_trial_limits_do_not_stop_source_generation(self):
+        source = self.dataset('source', self.rows)
+        nnue_shards.ingest(self.store, 'one', [source], target=12, shard_size=3)
+        manifest = nnue_shards.freeze_range(self.store, 'one', self.root / 'trial', positions=5)
+        teacher = self.root / 'teacher.nnue'
+        teacher.write_bytes(b'pinned test teacher')
+        now = 1800000000
+        nnue_campaign.initialize_training_snapshot(manifest.parent, teacher, maximum_cents=300,
+                                                  deadline=now + 3600, funding_evidence='test prepaid receipt', now=now)
+        state = nnue_campaign.status(manifest.parent, now)
+        self.assertEqual(state['store_id'], nnue_shards.read_manifest(manifest)['store_id'])
+        self.assertEqual(state['budget_cents']['gpu'], 300)
+        self.assertEqual(state['committed_cents'], {})
+        for category, cents, seconds in [('gpu', 301, 60), ('gpu', 300, 3601), ('cpu', 1, 60)]:
+            with self.assertRaises(ValueError):
+                nnue_campaign.reserve(manifest.parent, 'bad', category, 'trial', cents, seconds, now)
+        nnue_campaign.reserve(manifest.parent, 'gpu', 'gpu', 'trial', 300, 3600, now)
+        nnue_campaign.start_training(manifest.parent, 'trial', 'gpu', now=now)
+        with self.assertRaisesRegex(ValueError, 'stopped'):
+            nnue_campaign.allocation(manifest.parent, 'gpu', 'gpu', 'trial', now + 3600)
+        self.assertTrue((manifest.parent / 'STOP').exists())
+        self.assertFalse((self.store / 'STOP').exists())
+        self.assertFalse((self.store / 'campaign.json').exists())
 
     def test_missing_completed_result_and_heldout_input_rejected(self):
         rows = [dict(self.rows[0], result_stm=None)]

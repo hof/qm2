@@ -103,6 +103,42 @@ def load(root):
     return state
 
 
+def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, funding_evidence, now=None):
+    """Give an immutable snapshot its own bounded prepaid training ledger.
+
+    The generating campaign and its promotional allocations remain untouched.
+    """
+    root = Path(root)
+    now = time.time() if now is None else now
+    positive_integer(maximum_cents)
+    if not math.isfinite(deadline) or not now < deadline <= now + 3600 or not funding_evidence:
+        raise ValueError('prepaid trial requires funding evidence and a deadline within one hour')
+    manifest_path = root / 'manifest.json'
+    manifest = nnue_shards.read_manifest(manifest_path)
+    name = identifier(manifest['block'])
+    if manifest.get('partial') or manifest['positions'] != manifest['target'] or 'source_start' not in manifest:
+        raise ValueError('training trial requires a complete frozen snapshot')
+    with writer_lock(root / '.campaign.lock'):
+        if (root / 'campaign.json').exists() or (root / 'STOP').exists():
+            raise ValueError('campaign already exists or store has a stop signal')
+        champion = snapshot(root, teacher)
+        limits = {key: 0 for key in budget_cents}
+        limits['gpu'] = maximum_cents
+        state = dict(format='maxima.nnue.campaign', version=1, store_id=manifest['store_id'],
+                     original_teacher=champion, champion=champion, created_at=now,
+                     credit_expiry=None, credit_evidence=None, stop=None,
+                     funding=dict(kind='prepaid', evidence=funding_evidence, deadline=deadline),
+                     events=[dict(sequence=1, at=now, action='training_snapshot_initialized')],
+                     blocks={name: dict(phase='ready', target=manifest['positions'], teacher=champion,
+                                        manifest_sha256=nnue_data.file_hash(manifest_path),
+                                        source_block=manifest['source_block'], source_start=manifest['source_start'],
+                                        ready_at=now)},
+                     allocations={}, candidates={}, tests={}, active_test=None,
+                     budget_cents=limits, committed_cents={}, spent_cents={key: 0 for key in limits})
+        atomic_json(root / 'campaign.json', state)
+        return state
+
+
 def stop(root, state, reason):
     if state['stop'] is None:
         state['stop'] = reason
@@ -209,10 +245,13 @@ def reserve(root, lease_id, category, work, maximum_cents, seconds, now=None):
 
     def operation(state, stamp):
         require_running(state)
-        if state['credit_expiry'] is None:
+        prepaid = state.get('funding', {}).get('kind') == 'prepaid'
+        if state['credit_expiry'] is None and not prepaid:
             raise ValueError('record verified credit eligibility and exact expiry before allocation')
         deadline = stamp + seconds
-        if deadline > state['credit_expiry'] - 48 * 3600:
+        if prepaid and (category != 'gpu' or deadline > state['funding']['deadline']):
+            raise ValueError('allocation crosses prepaid training scope or deadline')
+        if not prepaid and deadline > state['credit_expiry'] - 48 * 3600:
             raise ValueError('allocation crosses the 48-hour credit safety deadline')
         if category in ('cpu', 'gpu'):
             expected = 'generating' if category == 'cpu' else 'ready'
