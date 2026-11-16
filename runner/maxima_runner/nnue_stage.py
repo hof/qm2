@@ -133,11 +133,41 @@ def stage_contract(args, torch, manifest):
     result.update(format='maxima.nnue.stage.contract', version=1, architecture='halfkav2_hm',
                   dtype='float64', torch=str(torch.__version__), implementation=implementation(),
                   store_id=manifest['store_id'],
+                  source_range=nnue_shards.source_range(manifest),
                   manifest_sha256=nnue_data.file_hash(args.manifest),
                   shard_sha256=[item['sha256'] for item in manifest['shards']],
                   parent_sha256=nnue_data.file_hash(args.parent) if args.parent else None,
+                  parent_manifest_sha256=nnue_data.file_hash(args.parent_manifest) if args.parent_manifest else None,
+                  parent_reader_update=args.allow_parent_reader_update,
                   warm_start_sha256=nnue_data.file_hash(args.warm_start) if args.warm_start else None)
     return result
+
+
+def parent_ranges(parent, manifest_path=None):
+    """Recover legacy first-stage provenance only from its pinned manifest bytes."""
+    saved = parent.get('seen_ranges')
+    proven = None
+    if manifest_path is not None:
+        if nnue_data.file_hash(manifest_path) != parent['contract']['manifest_sha256']:
+            raise ValueError('parent manifest checksum mismatch')
+        manifest = json.loads(Path(manifest_path).read_text())
+        if manifest.get('store_id') != parent['contract']['store_id']:
+            raise ValueError('parent manifest store mismatch')
+        proven = nnue_shards.source_range(manifest)
+    if saved is None:
+        if proven is None or parent['contract'].get('parent_sha256') is not None:
+            raise ValueError('legacy parent needs verified source-range history; supply its first-stage --parent-manifest')
+        saved = [proven]
+    if proven is not None and proven not in saved:
+        raise ValueError('parent manifest is absent from recorded source ranges')
+    if not isinstance(saved, list) or not saved:
+        raise ValueError('missing parent source-range history')
+    for entry in saved:
+        if type(entry['start']) is not int or type(entry['stop']) is not int:
+            raise ValueError('invalid parent source-range history')
+        nnue_shards.source_range(dict(block=entry['block'], source_block=entry['block'],
+                                     source_start=entry['start'], positions=entry['stop'] - entry['start']))
+    return saved
 
 
 
@@ -170,6 +200,8 @@ def run(args):
         raise ValueError('invalid stage settings')
     if args.warm_start and (args.width != 256 or args.hidden != 32):
         raise ValueError('warm start requires full 256/32 geometry')
+    if (args.parent_manifest or args.allow_parent_reader_update) and not args.parent:
+        raise ValueError('parent provenance options require --parent')
     manifest = nnue_shards.read_manifest(args.manifest)
     if args.output.exists() and not args.resume:
         raise ValueError('output already exists')
@@ -220,15 +252,28 @@ def run(args):
             return 0
     else:
         parent = None
+        seen_ranges = []
         if args.parent:
             parent = torch.load(args.parent, map_location='cpu', weights_only=True)
             if (parent.get('format') != 'maxima.nnue.stage' or parent.get('version') != 1
                     or parent['phase'] != 'complete'):
                 raise ValueError('parent must be a completed stage recovery checkpoint')
-            for key in ('architecture', 'dtype', 'torch', 'implementation', 'store_id', 'width', 'hidden',
+            for key in ('architecture', 'dtype', 'torch', 'store_id', 'width', 'hidden',
                         'batch_size', 'shuffle_size', 'learning_rate', 'search_weight', 'device'):
                 if parent['contract'][key] != contract[key]:
                     raise ValueError(f'parent training recipe mismatch: {key}')
+            if parent['contract']['implementation'] != contract['implementation']:
+                old = parent['contract']['implementation']
+                changed = {name for name in set(old) | set(contract['implementation'])
+                           if old.get(name) != contract['implementation'].get(name)}
+                if (not args.allow_parent_reader_update or not args.parent_manifest
+                        or changed - {'nnue_stage.py', 'nnue_shards.py'}):
+                    raise ValueError('parent training recipe mismatch: implementation; only explicit reader/control updates are supported')
+            seen_ranges = parent_ranges(parent, args.parent_manifest)
+            current = contract['source_range']
+            if any(old['block'] == current['block'] and old['start'] < current['stop']
+                   and current['start'] < old['stop'] for old in seen_ranges):
+                raise ValueError('new stage overlaps previously trained source rows')
             if set(contract['shard_sha256']) & set(parent['seen_shards']):
                 raise ValueError('new stage repeats previously trained shards; replay must be explicit')
             model.ft_bound = parent['ft_bound']
@@ -244,6 +289,7 @@ def run(args):
                      presentations=parent['presentations'] if parent else 0,
                      unique_positions=(parent['unique_positions'] if parent else 0) + sum(s['train'] for s in manifest['shards']),
                      seen_shards=(parent['seen_shards'] if parent else []) + contract['shard_sha256'])
+        state['seen_ranges'] = seen_ranges + [contract['source_range']]
     if args.resume:
         model.ft_bound = state['ft_bound']
         model.load_state_dict(state['model'])
@@ -347,6 +393,9 @@ def main():
     parser.add_argument('--lease', help='required allocation ID for campaign stores')
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--parent', type=Path, help='completed prior stage training.pt; retains Adam and latest student')
+    parser.add_argument('--parent-manifest', type=Path, help='checksum-pinned prior manifest; required for legacy first-stage range provenance')
+    parser.add_argument('--allow-parent-reader-update', action='store_true',
+                        help='explicitly allow stage/shard control changes between stages; model, objective and data encoding must match')
     parser.add_argument('--warm-start', type=Path)
     parser.add_argument('--device', choices=('cpu', 'cuda'), default='cpu')
     parser.add_argument('--epochs', type=int, default=1, help='local passes over this block, not global corpus epochs')

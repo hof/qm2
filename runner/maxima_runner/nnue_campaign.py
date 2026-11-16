@@ -103,7 +103,8 @@ def load(root):
     return state
 
 
-def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, funding_evidence, now=None):
+def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, funding_evidence,
+                                 parent=None, parent_receipt=None, now=None):
     """Give an immutable snapshot its own bounded prepaid training ledger.
 
     The generating campaign and its promotional allocations remain untouched.
@@ -118,6 +119,16 @@ def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, fund
     name = identifier(manifest['block'])
     if manifest.get('partial') or manifest['positions'] != manifest['target'] or 'source_start' not in manifest:
         raise ValueError('training trial requires a complete frozen snapshot')
+    if (parent is None) != (parent_receipt is None):
+        raise ValueError('parent checkpoint and completed receipt are both required')
+    parent_digest = None
+    if parent is not None:
+        receipt = json.loads(Path(parent_receipt).read_text())
+        parent_digest = nnue_data.file_hash(parent)
+        if (receipt.get('format') != 'maxima.nnue.stage.complete' or receipt.get('version') != 1
+                or receipt.get('checkpoint_sha256') != parent_digest
+                or receipt.get('contract', {}).get('store_id') != manifest['store_id']):
+            raise ValueError('parent completion receipt/checkpoint/store mismatch')
     with writer_lock(root / '.campaign.lock'):
         if (root / 'campaign.json').exists() or (root / 'STOP').exists():
             raise ValueError('campaign already exists or store has a stop signal')
@@ -135,6 +146,8 @@ def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, fund
                                         ready_at=now)},
                      allocations={}, candidates={}, tests={}, active_test=None,
                      budget_cents=limits, committed_cents={}, spent_cents={key: 0 for key in limits})
+        if parent_digest is not None:
+            state['latest_checkpoint_sha256'] = parent_digest
         atomic_json(root / 'campaign.json', state)
         return state
 

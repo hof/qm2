@@ -2006,6 +2006,9 @@ and deadline of at most one hour are required before reserving a training lease.
 The trial's expiry stops that training ledger without signalling the generating
 campaign or changing its promotional budget. Retain the ledger and training
 checkpoints with the snapshot for subsequent review and continuation.
+Continuation admission takes both the parent checkpoint and its completed receipt;
+their checksum and global store identity must agree before the new ledger pins
+the latest experimental checkpoint.
 
 `nnue:campaign --store /data/campaign` manages persistent campaign admission
 and an allocation ledger. `init --teacher teacher.nnue` pins independent immutable
@@ -2160,7 +2163,15 @@ Recovery `training.pt` keeps the latest student paired with its Adam moments,
 FT bounds, RNG, constant learning rate, global optimizer step, presentations,
 accepted training-position count, epoch/window/row cursor and lineage hashes.
 `--parent` requires a completed stage, matching implementation/optimizer recipe,
-and fresh shard hashes. It restores the latest experimental state, independently
+fresh shard hashes and disjoint canonical source-row ranges across all preceding
+stages. Rewriting a boundary shard cannot hide overlapping training rows.
+Legacy first-stage checkpoints require `--parent-manifest`; its bytes must match
+the checksum pinned in the checkpoint. Older multi-stage histories without range
+proof fail closed. `--allow-parent-reader-update`, together with that verified
+manifest, explicitly permits changes to stage/shard reader and control code between
+stages; neural model, objective, encoding and warm-start implementations must still
+match. Same-stage resume always requires identical implementation and settings.
+Parent continuation restores the latest experimental state, independently
 of the validation-selected candidate. Parent continuation requires the same global ingest-store identity, preserving
 global position deduplication across blocks. No implicit replay or LR restart occurs.
 `--resume` requires identical inputs and settings, including original parent or

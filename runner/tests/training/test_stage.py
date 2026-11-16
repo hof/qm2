@@ -137,7 +137,7 @@ class stage_tests(unittest.TestCase):
             self.assertTrue(torch.equal(actual, expected))
         self.assertEqual(child['global_step'], parent['global_step'] + 1)
         self.assertEqual(child['presentations'], parent['presentations'] + 5)
-        with self.assertRaisesRegex(ValueError, 'repeats'):
+        with self.assertRaisesRegex(ValueError, 'overlaps'):
             self.train('replay', 0, '--parent', str(self.root / 'parent/training.pt'))
         with self.assertRaisesRegex(ValueError, 'recipe mismatch'):
             self.train('bad-recipe', 1, '--parent', str(self.root / 'parent/training.pt'), '--learning-rate', '.01')
@@ -187,6 +187,41 @@ class stage_tests(unittest.TestCase):
         child = self.train('wide-child', 1, '--parent', str(self.root / 'wide/training.pt'), '--max-batches', '1')
         self.assertEqual(child['ft_bound'], 4)
         self.assertGreater(child['model']['ft_bias'].min().item(), 1)
+
+    def test_rewritten_boundaries_cannot_hide_overlapping_training_rows(self):
+        store = self.root / 'store'
+        first = nnue_shards.freeze_range(store, 'block-0', self.root / 'first', positions=20)
+        overlap = nnue_shards.freeze_range(store, 'block-0', self.root / 'overlap', start=19, positions=20)
+        following = nnue_shards.freeze_range(store, 'block-0', self.root / 'following', start=20, positions=20)
+        self.manifests = [first, overlap, following]
+        parent = self.train('parent')
+        old_hashes = set(parent['seen_shards'])
+        self.assertFalse(old_hashes & {s['sha256'] for s in nnue_shards.read_manifest(overlap)['shards']})
+        with self.assertRaisesRegex(ValueError, 'overlaps previously trained source rows'):
+            self.train('bad-child', 1, '--parent', str(self.root / 'parent/training.pt'))
+        child = self.train('good-child', 2, '--parent', str(self.root / 'parent/training.pt'))
+        self.assertEqual(child['seen_ranges'], [dict(block='block-0', start=0, stop=20),
+                                               dict(block='block-0', start=20, stop=40)])
+
+    def test_legacy_parent_requires_manifest_and_explicit_safe_reader_transition(self):
+        parent = self.train('parent')
+        parent.pop('seen_ranges')
+        parent['contract'].pop('source_range')
+        parent['contract']['implementation']['nnue_stage.py'] = 'prior-reader'
+        path = self.root / 'parent/training.pt'
+        torch.save(parent, path)
+        with self.assertRaisesRegex(ValueError, 'implementation'):
+            self.train('unapproved', 1, '--parent', str(path))
+        options = ['--parent', str(path), '--allow-parent-reader-update', '--parent-manifest', str(self.manifests[0])]
+        child = self.train('verified', 1, *options)
+        self.assertEqual(len(child['seen_ranges']), 2)
+        with self.assertRaisesRegex(ValueError, 'manifest checksum'):
+            self.train('wrong-manifest', 1, '--parent', str(path), '--allow-parent-reader-update',
+                       '--parent-manifest', str(self.manifests[1]))
+        parent['contract']['implementation']['nnue_model.py'] = 'different-neural-model'
+        torch.save(parent, path)
+        with self.assertRaisesRegex(ValueError, 'implementation'):
+            self.train('unsafe', 1, *options)
 
     @unittest.skipUnless(torch.cuda.is_available(), 'CUDA hardware unavailable')
     def test_cuda_forward_matches_integer_export_and_resume(self):

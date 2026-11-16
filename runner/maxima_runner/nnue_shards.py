@@ -169,6 +169,18 @@ def seal(root, block, *, partial=False):
         return path
 
 
+def source_range(manifest):
+    """Identify canonical rows independently of rewritten boundary shard hashes."""
+    if ('source_start' in manifest) != ('source_block' in manifest):
+        raise ValueError('incomplete snapshot source range')
+    block = manifest.get('source_block', manifest.get('block'))
+    start, count = manifest.get('source_start', 0), manifest.get('positions')
+    if (not isinstance(block, str) or not block or block in ('.', '..') or Path(block).name != block
+            or type(start) is not int or start < 0 or type(count) is not int or count <= 0):
+        raise ValueError('invalid snapshot source range')
+    return dict(block=block, start=start, stop=start + count)
+
+
 def read_manifest(path):
     path = Path(path)
     value = json.loads(path.read_text())
@@ -176,6 +188,7 @@ def read_manifest(path):
         raise ValueError('unsupported or empty shard manifest')
     if not isinstance(value.get('store_id'), str) or len(value['store_id']) != 32:
         raise ValueError('missing global store identity')
+    source_range(value)
     total = 0
     paths = set()
     for shard in value['shards']:
