@@ -168,6 +168,33 @@ class shard_tests(unittest.TestCase):
         self.assertFalse((self.store / 'STOP').exists())
         self.assertFalse((self.store / 'campaign.json').exists())
 
+    def test_prepaid_snapshot_explicit_duration_retains_deadline_and_cost_limits(self):
+        source = self.dataset('source', self.rows)
+        nnue_shards.ingest(self.store, 'one', [source], target=12, shard_size=3)
+        manifest = nnue_shards.freeze_range(self.store, 'one', self.root / 'longer', positions=5)
+        teacher = self.root / 'teacher.nnue'
+        teacher.write_bytes(b'pinned test teacher')
+        now = 1800000000
+        options = dict(maximum_cents=500, deadline=now + 7200,
+                       funding_evidence='funded continuation', now=now)
+        with self.assertRaises(ValueError):
+            nnue_campaign.initialize_training_snapshot(manifest.parent, teacher, **options)
+        for duration in (0, -1, True, 7200.5, 7199):
+            with self.assertRaises(ValueError):
+                nnue_campaign.initialize_training_snapshot(manifest.parent, teacher,
+                                                          maximum_seconds=duration, **options)
+        self.assertFalse((manifest.parent / 'campaign.json').exists())
+        state = nnue_campaign.initialize_training_snapshot(manifest.parent, teacher,
+                                                          maximum_seconds=7200, **options)
+        self.assertEqual(state['funding']['maximum_seconds'], 7200)
+        for cents, seconds in ((501, 7200), (500, 7201)):
+            with self.assertRaises(ValueError):
+                nnue_campaign.reserve(manifest.parent, 'bad', 'gpu', 'longer', cents, seconds, now)
+        nnue_campaign.reserve(manifest.parent, 'gpu', 'gpu', 'longer', 500, 7200, now)
+        with self.assertRaisesRegex(ValueError, 'stopped'):
+            nnue_campaign.allocation(manifest.parent, 'gpu', 'gpu', 'longer', now + 7200)
+        self.assertFalse((self.store / 'STOP').exists())
+
     def test_missing_completed_result_and_heldout_input_rejected(self):
         rows = [dict(self.rows[0], result_stm=None)]
         for name, values, header in [('unknown', rows, {}), ('heldout', self.rows, dict(purpose='heldout_evaluation'))]:

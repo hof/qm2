@@ -104,7 +104,8 @@ def load(root):
 
 
 def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, funding_evidence,
-                                 parent=None, parent_receipt=None, parent_manifest=None, now=None):
+                                 parent=None, parent_receipt=None, parent_manifest=None,
+                                 maximum_seconds=3600, now=None):
     """Give an immutable snapshot its own bounded prepaid training ledger.
 
     The generating campaign and its promotional allocations remain untouched.
@@ -112,8 +113,9 @@ def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, fund
     root = Path(root)
     now = time.time() if now is None else now
     positive_integer(maximum_cents)
-    if not math.isfinite(deadline) or not now < deadline <= now + 3600 or not funding_evidence:
-        raise ValueError('prepaid trial requires funding evidence and a deadline within one hour')
+    positive_integer(maximum_seconds)
+    if not math.isfinite(deadline) or not now < deadline <= now + maximum_seconds or not funding_evidence:
+        raise ValueError('prepaid trial requires funding evidence and a deadline within its explicit duration')
     manifest_path = root / 'manifest.json'
     manifest = nnue_shards.read_manifest(manifest_path)
     name = identifier(manifest['block'])
@@ -146,7 +148,8 @@ def initialize_training_snapshot(root, teacher, *, maximum_cents, deadline, fund
         state = dict(format='maxima.nnue.campaign', version=1, store_id=manifest['store_id'],
                      original_teacher=champion, champion=champion, created_at=now,
                      credit_expiry=None, credit_evidence=None, stop=None,
-                     funding=dict(kind='prepaid', evidence=funding_evidence, deadline=deadline),
+                     funding=dict(kind='prepaid', evidence=funding_evidence, deadline=deadline,
+                                  maximum_seconds=maximum_seconds),
                      events=[dict(sequence=1, at=now, action='training_snapshot_initialized')],
                      blocks={name: dict(phase='ready', target=manifest['positions'], teacher=champion,
                                         manifest_sha256=nnue_data.file_hash(manifest_path),
