@@ -8,7 +8,7 @@ import unittest
 import chess
 import chess.engine
 
-from maxima_runner.uci import open_engine
+from maxima_runner.uci import open_engine, root_pv_info
 
 
 fake_engine = '''
@@ -88,6 +88,34 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("> uci", lines)
         self.assertIn("< uciok", lines)
         self.assertIn("< bestmove e2e4", lines)
+
+    async def test_root_pv_mode_preserves_search_evidence_and_original_log(self):
+        from maxima_runner.nnue_data import completed_label
+
+        self.script.write_text(fake_engine.replace('pv e2e4', 'pv e2e4 e7e5 g1f3 b8c6'))
+        for root_only in (False, True):
+            infos, lines = [], []
+            async with open_engine(self.command, self.directory.name, 2, log=lines.append,
+                                   root_pv_only=root_only) as engine:
+                best, _ = await engine.search(chess.Board(), chess.engine.Limit(nodes=8),
+                                              on_info=lambda info, elapsed: infos.append(info))
+            self.assertEqual(best.move, chess.Move.from_uci('e2e4'))
+            self.assertEqual(completed_label(infos), dict(score_cp=12, depth=2, nodes=8))
+            report = next(info for info in infos if 'pv' in info)
+            self.assertEqual(len(report['pv']), 1 if root_only else 4)
+            self.assertIn('< info depth 2 score cp 12 nodes 8 pv e2e4 e7e5 g1f3 b8c6', lines)
+
+    def test_root_pv_keeps_bounds_statistics_and_non_pv_fields(self):
+        board = chess.Board()
+        for suffix in ('', ' nodes 10000 time 12', ' refutation d2d4 d7d5'):
+            line = 'info depth 5 score cp 13 lowerbound pv e2e4 e7e5 g1f3' + suffix
+            full = chess.engine._parse_uci_info(line[5:], board, chess.engine.INFO_ALL)
+            root = chess.engine._parse_uci_info(root_pv_info(line)[5:], board, chess.engine.INFO_ALL)
+            full['pv'] = full['pv'][:1]
+            self.assertEqual(root, full)
+        for line in ('info string search_result complete completed_depth 5 attempted_depth 6',
+                     'info string example pv e2e4 e7e5', 'bestmove e2e4 ponder e7e5'):
+            self.assertEqual(root_pv_info(line), line)
 
     async def test_search_leaves_event_loop_responsive(self):
         async with open_engine(self.command, self.directory.name, 2) as engine:

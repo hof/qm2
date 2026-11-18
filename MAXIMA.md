@@ -1854,6 +1854,11 @@ moves where the book is absent), and the remainder are random legal moves.
 `--book-plies` controls that prefix within `--random-plies`; the selected engine
 searches every later move. `--book` selects the opening
 book; its hash, teacher hashes, generator hash and settings must match on resume.
+Self-play decodes only the root move of each reported principal variation;
+continuation moves are unused by the label and tactical filters. Search limits,
+score bounds, completed-iteration reports and engine position history are retained.
+Other UCI sessions keep full principal variations, and wire logs retain the
+original engine output.
 
 `--diversity` selects the opt-in bounded-v1 recipe: 8–12 opening plies, square-root
 book weights, and a 2% alternative-move probe probability through ply160. At most

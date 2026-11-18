@@ -1,6 +1,7 @@
 """Asynchronous UCI sessions using python-chess, with bounded process cleanup."""
 import asyncio
 from contextlib import asynccontextmanager
+import re
 import time
 
 import chess.engine
@@ -9,6 +10,21 @@ from .variants import royal_losers_board, orthodox_wild_board
 
 
 guess_seconds = 0.2  # the quick search that guesses a reply outside the book, on the opponent's clock
+uci_move = re.compile(r"(?:[a-h][1-8]){2}[nbrq]?|0000")
+
+
+def root_pv_info(line):
+    """Keep the root move without decoding unused continuation moves in self-play."""
+    if not line.startswith("info ") or " pv " not in line:
+        return line
+    tokens = line.split()
+    pv = tokens.index("pv")
+    if "string" in tokens[:pv] or pv + 1 == len(tokens):
+        return line
+    end = pv + 2
+    while end < len(tokens) and uci_move.fullmatch(tokens[end]):
+        end += 1
+    return " ".join(tokens[:pv + 2] + tokens[end:])
 
 
 class online_protocol(chess.engine.UciProtocol):
@@ -28,6 +44,7 @@ class online_protocol(chess.engine.UciProtocol):
         self.search_started = None
         self.search_seconds = None
         self.log = None  # takes every line to and from the engine
+        self.root_pv_only = False
 
     def send_line(self, line):
         if self.log is not None:
@@ -56,8 +73,6 @@ class online_protocol(chess.engine.UciProtocol):
             self.on_search_started(line == "ponderhit")
 
     def line_received(self, line):
-        if self.log is not None:
-            self.log("< " + line)
         if line.startswith("bestmove ") and self.collecting and self.search_started is not None:
             self.search_seconds = time.monotonic() - self.search_started
         if line.startswith("info ") and (not self.collecting or self.evidence is not None):
@@ -75,6 +90,10 @@ class online_protocol(chess.engine.UciProtocol):
         super().line_received(line)
 
     def _line_received(self, line):
+        if self.log is not None:
+            self.log("< " + line)
+        if self.root_pv_only:
+            line = root_pv_info(line)
         # Setup notes (NNUE loaded, Syzygy pieces) arrive outside a search: the log keeps them,
         # python-chess would warn about them. Failures still warn.
         setup = self.command is None or type(self.command).__name__ in (
@@ -339,12 +358,13 @@ class engine_session:
 
 
 @asynccontextmanager
-async def open_engine(command, directory, timeout=30, log=None):
+async def open_engine(command, directory, timeout=30, log=None, *, root_pv_only=False):
     transport = protocol = None
     try:
         # Keep the transport before the handshake so every failure can reap it.
         transport, protocol = await online_protocol.popen(command, cwd=directory)
         protocol.log = log
+        protocol.root_pv_only = root_pv_only
         await asyncio.wait_for(protocol.initialize(), timeout)
         yield engine_session(protocol, timeout)
     except asyncio.TimeoutError as error:

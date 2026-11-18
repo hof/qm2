@@ -221,7 +221,7 @@ async def generate(args, config, rows, seen, games):
     book = chess.polyglot.open_reader(args.book) if args.book else None
     try:
         with tempfile.TemporaryDirectory() as working:
-            async with open_engine(str(args.engine.resolve()), working, timeout=30) as engine:
+            async with open_engine(str(args.engine.resolve()), working, timeout=30, root_pv_only=True) as engine:
                 await engine.configure({"Threads": 1, "Hash": 32, "OwnBook": False,
                                         "Ponder": False, "UCI_AnalyseMode": True,
                                         "DrawContempt": 0, "ShortDrawOffset": 0,
