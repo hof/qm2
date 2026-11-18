@@ -10,7 +10,10 @@ from .learning_store import writer_lock
 
 def block_counts(root):
     root = Path(root)
-    with closing(sqlite3.connect((root / 'index.sqlite3').resolve().as_uri() + '?mode=ro', uri=True)) as db:
+    # SQLite needs write access to recover a hot rollback journal after a crash.
+    # Existing database only; wait through producer/importer commits before reading.
+    with closing(sqlite3.connect((root / 'index.sqlite3').resolve().as_uri() + '?mode=rw',
+                                uri=True, timeout=60)) as db:
         rows = [dict(zip(('name', 'target', 'positions', 'sealed'), row)) for row in
                 db.execute('SELECT name,target,positions,sealed FROM blocks ORDER BY rowid')]
     for block in rows[:-1]:

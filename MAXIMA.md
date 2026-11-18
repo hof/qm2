@@ -1845,6 +1845,10 @@ and online book selection stay in Python; native Polyglot probing stays in Maxim
 
 #### NNUE training tooling
 
+Generation status reads wait through SQLite writer commits and permit SQLite's
+normal recovery of an interrupted transaction; they require an existing index
+and do not change its journal mode.
+
 `maxima nnue:selfplay --output RUN --positions 10000 --nodes 10000` generates
 fresh standard games using the selected engine and network (the existing model
 by default). One engine plays both sides with one worker, Hash32, no pondering,

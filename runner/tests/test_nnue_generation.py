@@ -3,12 +3,39 @@ from contextlib import closing
 import json
 from pathlib import Path
 import random
+import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 
 import chess
 
 from maxima_runner import nnue_campaign, nnue_data, nnue_generation, nnue_shards
+
+
+class block_counts_tests(unittest.TestCase):
+    def test_status_recovers_an_interrupted_transaction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / 'index.sqlite3'
+            with sqlite3.connect(database) as db:
+                db.executescript('CREATE TABLE blocks (name TEXT, target INTEGER, positions INTEGER, sealed INTEGER);'
+                                 "INSERT INTO blocks VALUES ('block-001', 100, 12, 0);"
+                                 'CREATE TABLE padding (data BLOB);')
+                db.executemany('INSERT INTO padding VALUES (?)', [(b'x' * 1024,)] * 1024)
+            subprocess.run([sys.executable, '-c', '''
+import os,sqlite3,sys
+db=sqlite3.connect(sys.argv[1])
+db.execute('PRAGMA cache_size=10')
+db.execute('BEGIN IMMEDIATE')
+db.execute('UPDATE blocks SET positions=99')
+db.execute('UPDATE padding SET data=zeroblob(1024)')
+os._exit(0)
+''', str(database)], check=True)
+            self.assertTrue(database.with_name('index.sqlite3-journal').exists())
+            self.assertEqual(nnue_generation.block_counts(root),
+                             [dict(name='block-001', target=100, positions=12, sealed=0)])
 
 
 class generation_tests(unittest.TestCase):
