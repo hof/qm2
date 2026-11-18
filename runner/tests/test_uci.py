@@ -91,18 +91,21 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_root_pv_mode_preserves_search_evidence_and_original_log(self):
         from maxima_runner.nnue_data import completed_label
+        from unittest.mock import patch
 
         self.script.write_text(fake_engine.replace('pv e2e4', 'pv e2e4 e7e5 g1f3 b8c6'))
-        for root_only in (False, True):
+        for root_only, setting, expected_plies in ((False, '1', 4), (True, '0', 1),
+                                                  (None, '1', 1), (None, '0', 4)):
             infos, lines = [], []
-            async with open_engine(self.command, self.directory.name, 2, log=lines.append,
+            with patch.dict('os.environ', MAXIMA_UCI_ROOT_PV_ONLY=setting):
+                async with open_engine(self.command, self.directory.name, 2, log=lines.append,
                                    root_pv_only=root_only) as engine:
-                best, _ = await engine.search(chess.Board(), chess.engine.Limit(nodes=8),
+                    best, _ = await engine.search(chess.Board(), chess.engine.Limit(nodes=8),
                                               on_info=lambda info, elapsed: infos.append(info))
             self.assertEqual(best.move, chess.Move.from_uci('e2e4'))
             self.assertEqual(completed_label(infos), dict(score_cp=12, depth=2, nodes=8))
             report = next(info for info in infos if 'pv' in info)
-            self.assertEqual(len(report['pv']), 1 if root_only else 4)
+            self.assertEqual(len(report['pv']), expected_plies)
             self.assertIn('< info depth 2 score cp 12 nodes 8 pv e2e4 e7e5 g1f3 b8c6', lines)
 
     def test_root_pv_keeps_bounds_statistics_and_non_pv_fields(self):

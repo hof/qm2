@@ -1,6 +1,7 @@
 """Asynchronous UCI sessions using python-chess, with bounded process cleanup."""
 import asyncio
 from contextlib import asynccontextmanager
+import os
 import re
 import time
 
@@ -358,7 +359,12 @@ class engine_session:
 
 
 @asynccontextmanager
-async def open_engine(command, directory, timeout=30, log=None, *, root_pv_only=False):
+async def open_engine(command, directory, timeout=30, log=None, *, root_pv_only=None):
+    if root_pv_only is None:
+        setting = os.environ.get("MAXIMA_UCI_ROOT_PV_ONLY", "0")
+        if setting not in ("0", "1"):
+            raise ValueError("MAXIMA_UCI_ROOT_PV_ONLY must be 0 or 1")
+        root_pv_only = setting == "1"
     transport = protocol = None
     try:
         # Keep the transport before the handshake so every failure can reap it.
