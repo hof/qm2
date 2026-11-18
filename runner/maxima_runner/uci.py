@@ -95,6 +95,34 @@ class online_protocol(chess.engine.UciProtocol):
             self.log("< " + line)
         if self.root_pv_only:
             line = root_pv_info(line)
+            analysis = getattr(self.command, "analysis", None)
+            if analysis is not None and line.startswith(("info ", "bestmove ")):
+                # The pinned generator trusts engine moves. Keep python-chess's
+                # command lifecycle, but skip its repeated board copies and legality checks.
+                self.line_received(line)
+                command = self.command
+                try:
+                    if line.startswith("info "):
+                        report = chess.engine._parse_uci_info(
+                            line[5:], self.board, chess.engine.INFO_BASIC | chess.engine.INFO_SCORE)
+                        if " pv " in line and "string" not in report:
+                            report["pv"] = [chess.Move.from_uci(line.split(" pv ", 1)[1].split()[0])]
+                        analysis.post(report)
+                    else:
+                        if not self.command.result.done():
+                            raise chess.engine.EngineError("bestmove before search readiness")
+                        tokens = line.split()
+                        move = None if tokens[1] in ("(none)", "NULL") else chess.Move.from_uci(tokens[1])
+                        ponder = chess.Move.from_uci(tokens[3]) if len(tokens) > 3 and tokens[2] == "ponder" else None
+                        command.set_finished()
+                        analysis.set_finished(chess.engine.BestMove(move, ponder))
+                except (ValueError, IndexError, chess.engine.EngineError) as error:
+                    failure = chess.engine.EngineError(str(error))
+                    analysis.set_exception(failure)
+                    if not command.result.done():
+                        command.result.set_exception(failure)
+                    command.set_finished()
+                return
         # Setup notes (NNUE loaded, Syzygy pieces) arrive outside a search: the log keeps them,
         # python-chess would warn about them. Failures still warn.
         setup = self.command is None or type(self.command).__name__ in (

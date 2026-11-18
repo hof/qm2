@@ -1859,6 +1859,10 @@ continuation moves are unused by the label and tactical filters. Search limits,
 score bounds, completed-iteration reports and engine position history are retained.
 Other UCI sessions keep full principal variations, and wire logs retain the
 original engine output.
+For generation analysis, the UCI adapter trusts the selected engine's move
+legality and decodes move syntax directly, without replaying reported PV or
+best moves on validation boards. It retains scalar search evidence and score
+bounds while python-chess still owns readiness, cancellation and process cleanup.
 Generation-only services using an older pinned self-play module can opt in with
 `MAXIMA_UCI_ROOT_PV_ONLY=1`; explicit session options override this environment
 setting. This retains the pinned generator identity while the helper-library

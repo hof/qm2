@@ -120,6 +120,36 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
                      'info string example pv e2e4 e7e5', 'bestmove e2e4 ponder e7e5'):
             self.assertEqual(root_pv_info(line), line)
 
+    async def test_generation_decodes_moves_without_legality_checks(self):
+        from unittest.mock import patch
+
+        async with open_engine(self.command, self.directory.name, 2, root_pv_only=True) as engine:
+            with patch.object(chess.Board, 'parse_uci', side_effect=AssertionError('redundant move validation')):
+                infos = []
+                best, _ = await engine.search(chess.Board(), chess.engine.Limit(nodes=8),
+                                              on_info=lambda info, elapsed: infos.append(info))
+            self.assertEqual(best.move, chess.Move.from_uci('e2e4'))
+            self.assertEqual(next(info['pv'] for info in infos if 'pv' in info), [best.move])
+
+    async def test_generation_cancellation_keeps_session_usable(self):
+        async with open_engine(self.command, self.directory.name, 2, root_pv_only=True) as engine:
+            task = asyncio.create_task(engine.search(chess.Board(), chess.engine.Limit(nodes=8), game='g'))
+            await asyncio.sleep(0.02)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            await engine.ready()
+            best, _ = await engine.search(chess.Board(), chess.engine.Limit(nodes=8), game='g')
+            self.assertEqual(best.move, chess.Move.from_uci('e2e4'))
+
+    async def test_generation_rejects_malformed_move_encoding_and_reaps(self):
+        self.script.write_text(fake_engine.replace('bestmove e2e4', 'bestmove malformed'))
+        with self.assertRaisesRegex(RuntimeError, 'uci'):
+            async with open_engine(self.command, self.directory.name, 2, root_pv_only=True) as engine:
+                protocol = engine.protocol
+                await engine.search(chess.Board(), chess.engine.Limit(nodes=8))
+        self.assertTrue(protocol.returncode.done())
+
     async def test_search_leaves_event_loop_responsive(self):
         async with open_engine(self.command, self.directory.name, 2) as engine:
             protocol = engine.protocol
