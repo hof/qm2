@@ -2066,6 +2066,32 @@ the deposited $5 is excluded. This records budget decisions, not provider billin
 
 `block NAME` admits one generating/ready block behind active training. Starting
 training opens that slot immediately, independently of candidate testing.
+For logical snapshot training across physical blocks, `nnue_generation` provides
+an explicit controller API. `register_completed` verifies the completed receipt,
+latest checkpoint, selected candidate, checksum-pinned manifest and contiguous
+canonical source-range history. Register the first stage before its descendants;
+each descendant must continue the latest registered experimental checkpoint.
+`configure_schedule` chooses the next cumulative checkpoint and subsequent step.
+Both must fit the permitted backlog. Recording training progress does not promote
+the student or change the generation teacher.
+
+After producers drain and the full physical block is sealed and marked ready,
+`advance` admits the next physical block and moves the same CPU allocation to it.
+The original allocation deadline, maximum cost and category remain unchanged.
+Accepted data is limited to one physical block beyond completed training, using
+an intra-block `generation_limit` when necessary. `ingest_current` serializes
+imports with campaign handoff and preserves the global deduplication index and
+unconsumed input cursors. Reaching the backlog limit pauses ingestion without
+sealing a partial block or setting the shared STOP signal. A later verified
+completed stage can open more backlog within the existing allocation.
+
+`prepare_snapshot` freezes the next disjoint logical batch once its accepted rows
+exist, including ranges crossing physical blocks. It records readiness and the
+latest parent checkpoint; it does not rent compute, admit paid training or remove
+any artifacts. These APIs require a caller that enforces worker ownership, disk
+guards and independent service lifecycle management. A training ledger or a
+conversation-bound watcher does not enforce provider compute shutdown or billing.
+
 `ready NAME` validates the full100M manifest and shared store identity. Allocation
 `reserve ID --category cpu --work NAME --maximum-cents 100 --seconds 3600`
 requires sufficient category funds and an admitted task. GPU allocations require
