@@ -51,7 +51,8 @@ def connect(root):
     return db
 
 
-def ingest(root, block, inputs, *, target=100_000_000, shard_size=1_000_000, exclude=()):
+def ingest(root, block, inputs, *, target=100_000_000, shard_size=1_000_000, exclude=(),
+           accepted_limit=None):
     """One transaction per input; retry after a crash cannot count rows twice.
 
     Published content-addressed files can outlive rolled-back transactions. They
@@ -61,6 +62,9 @@ def ingest(root, block, inputs, *, target=100_000_000, shard_size=1_000_000, exc
     root = Path(root)
     if target <= 0 or not 0 < shard_size <= 1_000_000 or not block or Path(block).name != block:
         raise ValueError('invalid block name, target or shard size')
+    if accepted_limit is not None and (type(accepted_limit) is not int or not 0 < accepted_limit <= target):
+        raise ValueError('accepted limit must be a positive integer within the block target')
+    ceiling = target if accepted_limit is None else accepted_limit
     root.mkdir(parents=True, exist_ok=True)
     (root / 'shards').mkdir(exist_ok=True)
     with writer_lock(root / '.lock'), closing(connect(root)) as db:
@@ -87,7 +91,7 @@ def ingest(root, block, inputs, *, target=100_000_000, shard_size=1_000_000, exc
                 continue
             if sealed or (root / f'{block}.json').exists():
                 raise ValueError('block is full or sealed; preserve remaining input for the next block')
-            if count >= target:
+            if count >= ceiling:
                 break
             with nnue_binary.binary_dataset(path) as data, db:
                 pending = []
@@ -119,7 +123,7 @@ def ingest(root, block, inputs, *, target=100_000_000, shard_size=1_000_000, exc
                 saved_cursor = db.execute('SELECT next_record FROM cursors WHERE digest=?', (digest,)).fetchone()
                 cursor = saved_cursor[0] if saved_cursor else 0
                 for index in range(cursor, len(data)):
-                    if count + accepted >= target:
+                    if count + accepted >= ceiling:
                         break
                     row = data[index]
                     key = validate_row(row, data.header)
@@ -361,6 +365,7 @@ def main():
     parser.add_argument('--store', type=Path, required=True)
     parser.add_argument('--block')
     parser.add_argument('--target', type=int, default=100_000_000)
+    parser.add_argument('--accepted-limit', type=int, help='pause ingestion within an unsealed physical block')
     parser.add_argument('--shard-size', type=int, default=1_000_000)
     parser.add_argument('--exclude', type=Path, action='append', default=[])
     parser.add_argument('--seal', action='store_true')
@@ -373,7 +378,7 @@ def main():
     parser.add_argument('inputs', type=Path, nargs='*')
     args = parser.parse_args()
     if args.snapshot:
-        if args.inputs or args.seal or args.partial or args.exclude:
+        if args.inputs or args.seal or args.partial or args.exclude or args.accepted_limit is not None:
             parser.error('--snapshot does not accept ingest/seal options')
         if args.snapshot_range:
             if args.block or args.snapshot_positions is not None or args.snapshot_start:
@@ -393,7 +398,7 @@ def main():
     if args.partial and not args.seal:
         parser.error('--partial requires --seal')
     count = ingest(args.store, args.block, args.inputs, target=args.target,
-                   shard_size=args.shard_size, exclude=args.exclude)
+                   shard_size=args.shard_size, exclude=args.exclude, accepted_limit=args.accepted_limit)
     print(f'Accepted block positions: {count}/{args.target}')
     if args.seal:
         print(f'Manifest: {seal(args.store, args.block, partial=args.partial)}')

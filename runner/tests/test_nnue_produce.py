@@ -52,6 +52,29 @@ class produce_tests(unittest.TestCase):
             nnue_produce.produce(self.args)
             mocked.assert_not_called()
 
+    def test_backlog_limit_drains_without_sealing_or_starting_jobs(self):
+        nnue_shards.ingest(self.args.store, self.args.block, [], target=self.args.target)
+        self.args.accepted_limit = 3
+        from contextlib import closing
+        with closing(nnue_shards.connect(self.args.store)) as db, db:
+            db.execute('UPDATE blocks SET positions=3')
+        with patch.object(nnue_produce, 'run_job') as worker:
+            self.assertEqual(nnue_produce.produce(self.args), 0)
+            worker.assert_not_called()
+        self.assertFalse((self.args.store / 'one.json').exists())
+        self.assertFalse((self.args.store / 'STOP').exists())
+
+    def test_campaign_limit_cannot_be_bypassed_by_cli_limit(self):
+        from maxima_runner import nnue_campaign
+        nnue_campaign.initialize(self.args.store, self.network)
+        nnue_campaign.admit_block(self.args.store, self.args.block)
+        nnue_campaign.transact(self.args.store, lambda state, stamp:
+            state['blocks'][self.args.block].update(generation_limit=4))
+        self.args.accepted_limit = self.args.target
+        self.assertEqual(nnue_produce.accepted_limit(self.args), 4)
+        self.args.accepted_limit = 2
+        self.assertEqual(nnue_produce.accepted_limit(self.args), 2)
+
     def test_job_rejects_teacher_change_and_passes_stop_bounds(self):
         self.args.output.mkdir()
         self.args.diversity = True

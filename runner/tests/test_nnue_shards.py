@@ -67,6 +67,30 @@ class shard_tests(unittest.TestCase):
         nnue_shards.seal(self.store, 'two')
         self.assertEqual(nnue_shards.ingest(self.store, 'three', [source], target=7), 0)
 
+    def test_accepted_limit_preserves_cursor_and_resumes_without_sealing(self):
+        source = self.dataset('source', self.rows)
+        for limit in (5, 9, 12):
+            self.assertEqual(nnue_shards.ingest(self.store, 'one', [source], target=12,
+                                               shard_size=3, accepted_limit=limit), limit)
+            with closing(sqlite3.connect(self.store / 'index.sqlite3')) as db:
+                self.assertEqual(db.execute('SELECT target,positions,sealed FROM blocks').fetchone(),
+                                 (12, limit, 0))
+                cursors = db.execute('SELECT next_record FROM cursors').fetchall()
+                self.assertEqual(cursors, [(limit,)] if limit < 12 else [])
+            self.assertFalse((self.store / 'one.json').exists())
+        manifest = nnue_shards.read_manifest(nnue_shards.seal(self.store, 'one'))
+        values = []
+        for shard in manifest['shards']:
+            with nnue_binary.binary_dataset(self.store / shard['path']) as data:
+                values.extend(data[i]['score_cp'] for i in range(len(data)))
+        self.assertEqual(values, [row['score_cp'] for row in self.rows])
+
+    def test_invalid_accepted_limits_do_not_create_a_store(self):
+        for limit in (0, -1, 13, True, 1.5):
+            with self.assertRaisesRegex(ValueError, 'accepted limit'):
+                nnue_shards.ingest(self.store, 'one', [], target=12, accepted_limit=limit)
+        self.assertFalse(self.store.exists())
+
     def test_reserved_positions_and_explicit_partial_stop(self):
         excluded = self.dataset('reserved', self.rows[:3], purpose='heldout_evaluation')
         source = self.dataset('source', self.rows)

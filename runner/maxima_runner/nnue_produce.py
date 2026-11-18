@@ -26,6 +26,19 @@ def generation_gate(args):
     return nnue_campaign.allocation(args.store, getattr(args, 'lease', None), 'cpu', args.block)['deadline']
 
 
+def accepted_limit(args):
+    limit = getattr(args, 'accepted_limit', None)
+    limit = args.target if limit is None else limit
+    if (args.store / 'campaign.json').exists():
+        from . import nnue_campaign
+        block = nnue_campaign.load(args.store)['blocks'][args.block]
+        saved = block.get('generation_limit', block['target'])
+        if type(saved) is not int or not 0 < saved <= args.target:
+            raise ValueError('invalid campaign generation limit')
+        limit = min(limit, saved)
+    return limit
+
+
 def run_job(args, index, deadline, block_stop):
     if args.stop_file.exists() or block_stop.exists() or time.time() >= deadline:
         return None
@@ -104,8 +117,10 @@ def run_job(args, index, deadline, block_stop):
 
 
 def ingest_jobs(args):
-    count = nnue_shards.ingest(args.store, args.block, [], target=args.target, exclude=args.exclude)
-    if count >= args.target:
+    limit = accepted_limit(args)
+    count = nnue_shards.ingest(args.store, args.block, [], target=args.target, exclude=args.exclude,
+                             accepted_limit=limit)
+    if count >= limit:
         return count
     # Chunk names are immutable content hashes. Completed inputs are skipped by
     # indexed lookup without rehashing/reloading previously accepted corpora.
@@ -115,8 +130,9 @@ def ingest_jobs(args):
                 continue
             if nnue_data.file_hash(path) != path.stem:
                 raise ValueError('producer chunk checksum mismatch')
-            count = nnue_shards.ingest(args.store, args.block, [path], target=args.target)
-            if count >= args.target:
+            count = nnue_shards.ingest(args.store, args.block, [path], target=args.target,
+                                      accepted_limit=limit)
+            if count >= limit:
                 return count
     return count
 
@@ -128,6 +144,9 @@ def produce(args):
             or args.jobs * args.positions_per_job > args.target
             or not 0 < args.max_seconds <= 7 * 86400):
         raise ValueError('invalid producer bounds; each invocation may schedule at most one block')
+    limit = getattr(args, 'accepted_limit', None)
+    if limit is not None and (type(limit) is not int or not 0 < limit <= args.target):
+        raise ValueError('accepted limit must be within the block target')
     args.output.mkdir(parents=True, exist_ok=True)
     args.store.mkdir(parents=True, exist_ok=True)
     recipe = dict(format='maxima.nnue.producers', version=1, campaign=args.campaign,
@@ -147,6 +166,10 @@ def produce(args):
         if count >= args.target:
             nnue_shards.seal(args.store, args.block)
             print(f'Block ready: {count}/{args.target}')
+            return 0
+        limit = accepted_limit(args)
+        if count >= limit:
+            print(f'Generation limit reached: {count}/{limit}; physical block remains unsealed')
             return 0
         if (args.store / f'{args.block}.json').exists():
             raise ValueError('block was sealed partial; choose a new block for further generation')
@@ -180,7 +203,7 @@ def produce(args):
                     try:
                         future.result()
                         count = ingest_jobs(args)
-                        if count >= args.target:
+                        if count >= limit:
                             block_stop.touch()
                     except Exception as failure:
                         error = failure
@@ -216,6 +239,7 @@ def main():
     parser.add_argument('--nodes', type=int, default=10000)
     parser.add_argument('--diversity', action='store_true', help='use the bounded-v1 diversity recipe for new jobs')
     parser.add_argument('--target', type=int, default=100_000_000)
+    parser.add_argument('--accepted-limit', type=int, help='pause at a campaign backlog limit without sealing')
     parser.add_argument('--max-seconds', type=float, default=3600, help='stop scheduling; current games finish')
     parser.add_argument('--stop-file', type=Path, help='campaign stop signal, checked between games')
     args = parser.parse_args()

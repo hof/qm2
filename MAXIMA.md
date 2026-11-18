@@ -2005,6 +2005,12 @@ versions. Install all reserved benchmark exclusions before ingesting any data:
 The default block target is100M accepted positions; shards contain at most1M
 records. Repeat ingestion with more producer chunks until the target is reached.
 Inputs must contain standard positions, valid splits and completed game results.
+An optional `--accepted-limit` pauses ingestion below the physical block target
+without sealing it. The unconsumed input cursor is preserved; raising the limit
+continues the same immutable input without recounting rows. Producers accept the
+same option, obey any lower campaign `generation_limit`, and drain completed
+games when the limit is reached. This bounds data backlog independently of the
+physical block size and leaves the shared campaign STOP signal unchanged.
 Each input is transactional and content-hash deduplicated; cross-worker and
 cross-block transpositions are removed. Shards retain source teacher/config
 metadata and are immutable, checksummed files. A sealed JSON manifest lists only
