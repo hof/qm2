@@ -1,7 +1,9 @@
 """Asynchronous UCI sessions using python-chess, with bounded process cleanup."""
 import asyncio
 from contextlib import asynccontextmanager
+import json
 import os
+from pathlib import Path
 import re
 import time
 
@@ -206,6 +208,28 @@ class engine_session:
         self.ponder_fen = None
         self.nps = None  # the latest search speed, kept across games
         self.last_search_seconds = None
+        self.idle_control = (os.environ.get("MAXIMA_GENERATION_IDLE_CONTROL")
+                             if getattr(protocol, "root_pv_only", False) else None)
+        self.idle_next_check = 0
+        self.idle_allowed = False
+
+    async def wait_for_generation_idle(self):
+        """Wait outside search timeouts; a stale/missing controller pauses generation."""
+        while self.idle_control:
+            now = time.monotonic()
+            if now >= self.idle_next_check:
+                self.idle_allowed = False
+                try:
+                    control = json.loads(Path(self.idle_control).read_text())
+                    if isinstance(control, dict):
+                        age = time.time() - control.get("updated_at", 0)
+                        self.idle_allowed = control.get("allowed") is True and -2 <= age <= 30
+                except (OSError, ValueError, TypeError):
+                    pass
+                self.idle_next_check = now + 0.5
+            if self.idle_allowed:
+                return
+            await asyncio.sleep(0.25)
 
     @property
     def identity(self):
@@ -350,6 +374,8 @@ class engine_session:
             await asyncio.wait_for(self.protocol.ping(), self.timeout)
 
     async def search(self, board, limit, *, game=None, on_info=None, root_moves=None):
+        if self.idle_control:
+            await self.wait_for_generation_idle()
         self.last_search_seconds = None
         settings = self.variant_settings(board)
         arguments = {}

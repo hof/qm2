@@ -1871,6 +1871,11 @@ Generation-only services using an older pinned self-play module can opt in with
 `MAXIMA_UCI_ROOT_PV_ONLY=1`; explicit session options override this environment
 setting. This retains the pinned generator identity while the helper-library
 revision is recorded separately in deployment evidence.
+Idle-controlled local generation can set `MAXIMA_GENERATION_IDLE_CONTROL` to an
+atomic JSON heartbeat containing `allowed` and Unix `updated_at`. Trusted generation
+waits between searches when disallowed or when the heartbeat is missing/stale
+(30 seconds). Waiting is outside search timeouts and preserves the current game;
+the control file is cached for 0.5 seconds. Normal playing sessions are unaffected.
 
 `--diversity` selects the opt-in bounded-v1 recipe: 8–12 opening plies, square-root
 book weights, and a 2% alternative-move probe probability through ply160. At most

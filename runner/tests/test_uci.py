@@ -150,6 +150,40 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
                 await engine.search(chess.Board(), chess.engine.Limit(nodes=8))
         self.assertTrue(protocol.returncode.done())
 
+    async def test_idle_pause_outlasts_search_timeout_and_resumes_same_session(self):
+        import json
+        import time
+        from unittest.mock import patch
+
+        control = Path(self.directory.name) / 'idle.json'
+        for allowed, age in ((False, 0), (True, 60)):
+            control.write_text(json.dumps(dict(allowed=allowed, updated_at=time.time()-age)))
+            lines = []
+            with patch.dict('os.environ', MAXIMA_GENERATION_IDLE_CONTROL=str(control)):
+                async with open_engine(self.command, self.directory.name, 0.3, log=lines.append,
+                                       root_pv_only=True) as engine:
+                    task = asyncio.create_task(engine.search(chess.Board(), chess.engine.Limit(nodes=8)))
+                    await asyncio.sleep(0.4)
+                    self.assertFalse(task.done())
+                    self.assertFalse(any(line.startswith('> go ') for line in lines))
+                    control.write_text(json.dumps(dict(allowed=True, updated_at=time.time())))
+                    best, _ = await asyncio.wait_for(task, 2)
+                    self.assertEqual(best.move, chess.Move.from_uci('e2e4'))
+
+    async def test_missing_idle_controller_pauses_and_cancellation_reaps(self):
+        from unittest.mock import patch
+
+        with patch.dict('os.environ', MAXIMA_GENERATION_IDLE_CONTROL=str(Path(self.directory.name)/'missing')):
+            async with open_engine(self.command, self.directory.name, 0.3, root_pv_only=True) as engine:
+                protocol = engine.protocol
+                task = asyncio.create_task(engine.search(chess.Board(), chess.engine.Limit(nodes=8)))
+                await asyncio.sleep(0.05)
+                self.assertFalse(task.done())
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+        self.assertTrue(protocol.returncode.done())
+
     async def test_search_leaves_event_loop_responsive(self):
         async with open_engine(self.command, self.directory.name, 2) as engine:
             protocol = engine.protocol
