@@ -103,11 +103,26 @@ def configure_schedule(root, next_checkpoint, step, *, now=None):
     return nnue_campaign.transact(root, operation, now, event='generation_schedule_configured')
 
 
+def configure_capacity_floor(root, positions, *, now=None):
+    """Explicitly allow generation ahead of the default completed-training buffer."""
+    nnue_campaign.positive_integer(positions)
+    def operation(state, stamp):
+        nnue_campaign.require_running(state)
+        total = sum(block['positions'] for block in block_counts(root))
+        if positions < total:
+            raise ValueError('generation capacity cannot discard already accepted positions')
+        state['generation_capacity_floor'] = positions
+        return positions
+
+    return nnue_campaign.transact(root, operation, now, event='generation_capacity_configured')
+
+
 def advance(root, lease_id, *, now=None):
     """Reuse one CPU allocation across sealed blocks without extending its scope in time/cost.
 
     The controller must drain the old producer invocation before a block handoff.
-    Accepted backlog remains at most one physical block beyond completed training.
+    Default backlog is one physical block beyond completed training. An explicit
+    capacity floor can admit more data without claiming additional training progress.
     """
     root = Path(root)
     blocks = block_counts(root)
@@ -124,7 +139,8 @@ def advance(root, lease_id, *, now=None):
         block = state['blocks'][name]
         row = indexed.get(name)
         total = sum(entry['positions'] for entry in blocks)
-        capacity = progress['through'] + blocks[0]['target']
+        capacity = max(progress['through'] + blocks[0]['target'],
+                       state.get('generation_capacity_floor', 0))
         full = row and row['positions'] == row['target'] and row['sealed']
         if full:
             if block['phase'] != 'ready':

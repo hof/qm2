@@ -133,6 +133,29 @@ class generation_tests(unittest.TestCase):
         self.assertEqual((current['block'], current['limit']), ('block-003', 2))
         self.assertEqual(nnue_generation.ingest_current(self.store, [self.source], now=self.now)['accepted_global'], 14)
 
+    def test_explicit_capacity_resumes_generation_without_claiming_training(self):
+        self.register()
+        nnue_generation.advance(self.store, 'cpu', now=self.now)
+        nnue_generation.ingest_current(self.store, [self.source], now=self.now)
+        before = nnue_campaign.load(self.store)
+        nnue_generation.configure_capacity_floor(self.store, 12, now=self.now)
+        self.assertEqual(nnue_generation.advance(self.store, 'cpu', now=self.now)['limit'], 6)
+        self.assertEqual(nnue_generation.ingest_current(self.store, [self.source], now=self.now)['accepted_global'], 12)
+        after = nnue_campaign.load(self.store)
+        for key in ('generation_learning', 'allocations', 'budget_cents', 'champion', 'original_teacher'):
+            self.assertEqual(after[key], before[key])
+
+    def test_capacity_configuration_rejects_invalid_values_and_stop(self):
+        self.register()
+        before = (self.store / 'campaign.json').read_bytes()
+        for positions in (0, -1, True, 5, 9.5):
+            with self.assertRaises(ValueError):
+                nnue_generation.configure_capacity_floor(self.store, positions, now=self.now)
+        self.assertEqual((self.store / 'campaign.json').read_bytes(), before)
+        (self.store / 'STOP').touch()
+        with self.assertRaisesRegex(ValueError, 'stopped'):
+            nnue_generation.configure_capacity_floor(self.store, 12, now=self.now)
+
     def test_no_snapshot_before_checkpoint_and_status_does_not_rewrite_state(self):
         self.register()
         before = (self.store / 'campaign.json').read_bytes()
@@ -175,6 +198,7 @@ class generation_tests(unittest.TestCase):
 
     def test_stop_and_allocation_deadline_prevent_handoff(self):
         self.register()
+        nnue_generation.configure_capacity_floor(self.store, 12, now=self.now)
         before = nnue_campaign.load(self.store)['allocations']['cpu'].copy()
         with self.assertRaisesRegex(ValueError, 'stopped'):
             nnue_generation.advance(self.store, 'cpu', now=self.now + 3600)

@@ -2100,8 +2100,11 @@ the student or change the generation teacher.
 After producers drain and the full physical block is sealed and marked ready,
 `advance` admits the next physical block and moves the same CPU allocation to it.
 The original allocation deadline, maximum cost and category remain unchanged.
-Accepted data is limited to one physical block beyond completed training, using
-an intra-block `generation_limit` when necessary. `ingest_current` serializes
+Accepted data defaults to one physical block beyond completed training, using
+an intra-block `generation_limit` when necessary. An explicit
+`configure_capacity_floor` can allow generation ahead to a chosen cumulative
+count without changing completed training, teacher, allocation costs or deadlines.
+`ingest_current` serializes
 imports with campaign handoff and preserves the global deduplication index and
 unconsumed input cursors. Reaching the backlog limit pauses ingestion without
 sealing a partial block or setting the shared STOP signal. A later verified
