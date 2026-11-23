@@ -117,6 +117,20 @@ def configure_capacity_floor(root, positions, *, now=None):
     return nnue_campaign.transact(root, operation, now, event='generation_capacity_configured')
 
 
+def configure_capacity_ceiling(root, positions, *, now=None):
+    """Bound accepted generation even when completed training opens more backlog."""
+    nnue_campaign.positive_integer(positions)
+
+    def operation(state, stamp):
+        nnue_campaign.require_running(state)
+        if positions < sum(block['positions'] for block in block_counts(root)):
+            raise ValueError('generation ceiling cannot discard already accepted positions')
+        state['generation_capacity_ceiling'] = positions
+        return positions
+
+    return nnue_campaign.transact(root, operation, now, event='generation_ceiling_configured')
+
+
 def advance(root, lease_id, *, now=None):
     """Reuse one CPU allocation across sealed blocks without extending its scope in time/cost.
 
@@ -141,6 +155,9 @@ def advance(root, lease_id, *, now=None):
         total = sum(entry['positions'] for entry in blocks)
         capacity = max(progress['through'] + blocks[0]['target'],
                        state.get('generation_capacity_floor', 0))
+        ceiling = state.get('generation_capacity_ceiling')
+        if ceiling is not None:
+            capacity = min(capacity, ceiling)
         full = row and row['positions'] == row['target'] and row['sealed']
         if full:
             if block['phase'] != 'ready':
@@ -182,6 +199,10 @@ def generation_state(root, *, state=None, now=None):
     block = state['blocks'].get(name, {})
     row = next((entry for entry in blocks if entry['name'] == name), None)
     limit = block.get('generation_limit', block.get('target', 0))
+    ceiling = state.get('generation_capacity_ceiling')
+    if ceiling is not None:
+        offset = sum(entry['positions'] for entry in blocks if entry['name'] != name)
+        limit = min(limit, max(0, ceiling - offset))
     count = row['positions'] if row else 0
     active = (not state['stop'] and name is not None and block['phase'] == 'generating'
               and count < limit and block['teacher'] == state['champion'])
@@ -213,6 +234,8 @@ def prepare_snapshot(root, directory, *, now=None):
         nnue_campaign.require_running(state)
         schedule, progress = state['generation_schedule'], state['generation_learning']
         start, stop = progress['through'], schedule['next_checkpoint']
+        if stop > state.get('generation_capacity_ceiling', stop):
+            return None
         blocks = block_counts(root)
         if sum(block['positions'] for block in blocks) < stop:
             return None

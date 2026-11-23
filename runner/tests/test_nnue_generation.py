@@ -156,6 +156,51 @@ class generation_tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'stopped'):
             nnue_generation.configure_capacity_floor(self.store, 12, now=self.now)
 
+    def test_ceiling_caps_live_ingest_before_next_advance_and_preserves_tail(self):
+        self.register()
+        nnue_generation.configure_capacity_floor(self.store, 18, now=self.now)
+        nnue_generation.advance(self.store, 'cpu', now=self.now)
+        before = nnue_campaign.load(self.store)
+        nnue_generation.configure_capacity_ceiling(self.store, 8, now=self.now)
+        current = nnue_generation.ingest_current(self.store, [self.source], now=self.now)
+        self.assertEqual((current['accepted_global'], current['limit'], current['active']), (8, 2, False))
+        self.assertTrue(nnue_generation.advance(self.store, 'cpu', now=self.now)['waiting'])
+        self.assertEqual(nnue_generation.ingest_current(self.store, [self.source], now=self.now), current)
+        with closing(nnue_shards.connect(self.store)) as db:
+            self.assertEqual(db.execute('SELECT next_record FROM cursors').fetchone(), (8,))
+        after = nnue_campaign.load(self.store)
+        for key in ('generation_learning', 'allocations', 'champion', 'budget_cents'):
+            self.assertEqual(after[key], before[key])
+        self.assertFalse((self.store / 'STOP').exists())
+
+    def test_final_boundary_blocks_rollover_even_after_completed_training(self):
+        self.register()
+        nnue_generation.configure_capacity_ceiling(self.store, 12, now=self.now)
+        nnue_generation.configure_capacity_floor(self.store, 18, now=self.now)
+        nnue_generation.advance(self.store, 'cpu', now=self.now)
+        nnue_generation.ingest_current(self.store, [self.source], now=self.now)
+        ranges = [dict(block='block-001', start=3, stop=6), dict(block='block-002', start=0, stop=6)]
+        third = self.stage('third', ranges, self.second[2], [self.first_range, self.second_range] + ranges)
+        nnue_generation.register_completed(self.store, third[0], third[1], now=self.now)
+        nnue_shards.seal(self.store, 'block-002')
+        nnue_campaign.mark_ready(self.store, 'block-002', self.now)
+        current = nnue_generation.advance(self.store, 'cpu', now=self.now)
+        self.assertEqual((current['block'], current['waiting'], current['accepted_global']), ('block-002', True, 12))
+        self.assertNotIn('block-003', nnue_campaign.load(self.store)['blocks'])
+        self.assertIsNone(nnue_generation.prepare_snapshot(self.store, self.root / 'snapshots', now=self.now))
+        self.assertFalse(nnue_generation.generation_state(self.store, now=self.now)['active'])
+
+    def test_ceiling_rejects_invalid_values_without_mutation(self):
+        self.register()
+        before = (self.store / 'campaign.json').read_bytes()
+        for positions in (0, -1, True, 5, 9.5):
+            with self.assertRaises(ValueError):
+                nnue_generation.configure_capacity_ceiling(self.store, positions, now=self.now)
+        self.assertEqual((self.store / 'campaign.json').read_bytes(), before)
+        (self.store / 'STOP').touch()
+        with self.assertRaisesRegex(ValueError, 'stopped'):
+            nnue_generation.configure_capacity_ceiling(self.store, 12, now=self.now)
+
     def test_no_snapshot_before_checkpoint_and_status_does_not_rewrite_state(self):
         self.register()
         before = (self.store / 'campaign.json').read_bytes()

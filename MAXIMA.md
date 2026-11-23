@@ -2106,6 +2106,10 @@ Accepted data defaults to one physical block beyond completed training, using
 an intra-block `generation_limit` when necessary. An explicit
 `configure_capacity_floor` can allow generation ahead to a chosen cumulative
 count without changing completed training, teacher, allocation costs or deadlines.
+`configure_capacity_ceiling` sets a persistent cumulative upper bound on accepted
+generation, taking precedence over that floor and later training progress. It
+cannot discard accepted rows. Ingestion respects it immediately; block handoff
+cannot admit another block at the boundary, and snapshots beyond it are disabled.
 `ingest_current` serializes
 imports with campaign handoff and preserves the global deduplication index and
 unconsumed input cursors. Reaching the backlog limit pauses ingestion without
