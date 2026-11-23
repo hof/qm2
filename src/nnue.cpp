@@ -29,23 +29,31 @@ uint32_t read_u32(const std::vector<uint8_t> & bytes, size_t offset) {
 }
 
 size_t network_t::feature_index(bool color, int king, int piece, int square) const {
+    if (_halfkav2_hm) {
+        static constexpr int piece_buckets[2][13] = {
+            {0, 1, 3, 5, 7, 9, 10, 0, 2, 4, 6, 8, 10},
+            {0, 0, 2, 4, 6, 8, 10, 1, 3, 5, 7, 9, 10}
+        };
+        static constexpr auto king_features = [] {
+            std::array<std::array<uint16_t, 64>, 2> entries{};
+            for (int perspective = 0; perspective < 2; ++perspective) {
+                for (int king_square = 0; king_square < 64; ++king_square) {
+                    const int orientation = (perspective == WHITE ? 0 : 56) ^ ((king_square & 4) ? 0 : 7);
+                    const int oriented = king_square ^ orientation;
+                    const int bucket = (oriented >> 3) * 4 + (oriented & 7) - 4;
+                    entries[perspective][king_square] = uint16_t(bucket * 704 + orientation);
+                }
+            }
+            return entries;
+        }();
+        const int entry = king_features[color][king];
+        return (entry & ~63) + piece_buckets[color][piece] * 64 + (square ^ (entry & 63));
+    }
     const int type = (piece - 1) % 6;
     const int relative_color = (piece <= WKING) == color ? 0 : 1;
-    if (_halfkav2_hm) {
-        int orientation = color == WHITE ? 0 : 56;
-        if (FILE(king) < 4) {
-            orientation ^= 7;
-        }
-        const int oriented_king = king ^ orientation;
-        const int bucket = RANK(oriented_king) * 4 + FILE(oriented_king) - 4;
-        const int piece_bucket = type == 5 ? 10 : 2 * type + relative_color;
-        return bucket * 704 + piece_bucket * 64 + (square ^ orientation);
-    }
     const int orientation = color == WHITE ? 0 : 63;
     assert(type < 5 && square >= 0 && square < 64 && king >= 0 && king < 64);
-    const size_t index = (square ^ orientation) + 1 + 64 * (2 * type + relative_color)
-        + 641 * (king ^ orientation);
-    return index;
+    return (square ^ orientation) + 1 + 64 * (2 * type + relative_color) + 641 * (king ^ orientation);
 }
 
 std::shared_ptr<const network_t> network_t::load(const std::string & path, std::string & error) {

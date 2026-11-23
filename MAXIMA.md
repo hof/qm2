@@ -376,7 +376,9 @@ perspective, including both king pieces, with 256-wide accumulators and the
 same 512->32->32->1 integer layers and score units. Each perspective flips
 Black vertically, then mirrors files when its king is on a..d. The resulting
 king on e..h selects one of 32 buckets; each has 11 piece buckets of 64 squares,
-with both king colors sharing bucket 10. A perspective king move refreshes its
+with both king colors sharing bucket 10. Feature indices use constant piece-bucket
+and king-orientation tables; the king entry combines its bucket offset and square
+orientation. A perspective king move refreshes its
 accumulator; the opposite accumulator incrementally updates the moved king's
 feature. Other move, capture, promotion and castling changes remain incremental.
 
