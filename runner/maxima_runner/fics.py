@@ -1015,6 +1015,9 @@ class engine_player:
                 self.opponent_unregistered = "U" in titles
                 self.fingered = True
                 self.opponent_ready.set()
+                if self.game is not None and self.record is not None:
+                    self.emit("opponent", game=self.game, game_started_at=self.record.started.isoformat(),
+                              opponent=self.opponent_details())
 
     async def on_creating(self, match):
         we_are_white = self.name is not None and match["white"].lower() == self.name.lower()
@@ -1278,10 +1281,17 @@ class engine_player:
         self.task = asyncio.ensure_future(self.play(position, board.copy()))
         self.task.add_done_callback(self.report)
 
+    def opponent_details(self):
+        if self.opponent is None or not self.fingered or self.opponent_unregistered:
+            return {}
+        return {"name": self.opponent.name, "title": self.opponent.title,
+                "rating": self.opponent.rating, "is_engine": self.opponent.is_engine}
+
     def emit_start(self, position):
         created = self.created if self.created and {self.created["white"], self.created["black"]} == {
             position.white, position.black} else {}
         self.emit("game_start", game=self.game, white=position.white, black=position.black,
+                  opponent=self.opponent_details(), game_started_at=self.record.started.isoformat(),
                   white_elo=rating_of(created.get("white_rating", "")) or None,
                   black_elo=rating_of(created.get("black_rating", "")) or None,
                   initial_seconds=position.initial_seconds, increment_seconds=position.increment_seconds,

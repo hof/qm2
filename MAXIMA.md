@@ -3034,9 +3034,14 @@ Lichess game id (a string such as `"pG3WSP96"`); colors are
 | type | when | fields |
 |---|---|---|
 | `game_start` | our game begins | `game`, `white`, `black`, `white_elo`, `black_elo` (null when unknown), `initial_seconds`, `increment_seconds`, `rated`, `variant` (FICS type or Lichess speed, e.g. `blitz`), `our_color`, `fen`, `clock_ms` |
+| `opponent` | FICS opponent details arrive after login or game creation | `game`, `game_started_at`, `opponent` |
 | `move` | after each move, ours or theirs | `game`, `ply` (after the move), `san`, `uci`, `fen` (after), `by` (`"us"`/`"them"`), `clock_ms`, `search` |
 | `position` | takeback or resync | `game`, `ply`, `fen`, `reason` (`"takeback"`/`"reset"`), `clock_ms`; drop moves after `ply` |
 | `game_end` | game over | `game`, `result` (`1-0`, `0-1`, `1/2-1/2`, `*`), `reason`, `headers`, `pgn` (null when aborted before both sides moved) |
+
+`game_start` can also carry `opponent` (`name`, `title`, `rating`, `is_engine`),
+`url` (Lichess), and `game_started_at` (FICS). The latter distinguishes games
+when FICS reuses a game number; an `opponent` event updates late title details.
 
 `search` is null for the opponent's moves. For our book moves it is
 `{"book": "<reason>"}`, for online tablebase moves `{"tablebase": {...}}` (11.4); for searched moves it is `{"depth", "seldepth", "nodes",
@@ -3163,7 +3168,9 @@ Normal transport reconnects do not constitute engine faults.
 Optional private reporting uses `MAXIMA_REPORTING_ENABLED=1`, Telegram bot/chat
 settings and Resend sender/recipient settings supplied through local environment
 configuration. Login, shutdown, recovery and daily game summaries go to Telegram;
-incidents also go to email. Reports use a durable outbox and delivery retries
+games against an FM, IM or GM also announce the opponent's title and name once
+per game (with a game link on Lichess).
+Incidents also go to email. Reports use a durable outbox and delivery retries
 outside move selection. `python -m maxima_runner.online_reporting --platform
 lichess` delivers pending reports without opening a chess connection; `--test`
 sends a clearly labelled delivery test. The same commands accept `--platform

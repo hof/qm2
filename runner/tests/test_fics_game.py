@@ -52,6 +52,29 @@ class style12_tests(unittest.TestCase):
         self.assertEqual((end["game"], end["reason"], end["result"]), ("15", "GuestVHRM resigns", "1-0"))
 
 
+class titled_opponent_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_finger_before_or_after_start_identifies_the_same_actual_game(self):
+        for early in (True, False):
+            with self.subTest(early=early):
+                events, seen = connectors.game_events(), []
+                events.subscribe(seen.append)
+                player = fics.engine_player(None, lambda text: None, events=events)
+                player.opponent = chess.engine.Opponent('guestNinja', None, 2300, False)
+                if early:
+                    await player.handle('Finger of guestNinja(IM):')
+                    self.assertEqual(seen, [])
+                position = fics_game.style12.parse(start)
+                player.game, player.our_color = position.game, chess.WHITE
+                player.record = fics_game.game_record({})
+                player.history = fics_game.game_history(position)
+                player.emit_start(position)
+                await player.handle('Finger of guestNinja(IM):')
+                details = seen[-1]
+                self.assertEqual(details['opponent'], dict(name='guestNinja', title='IM', rating=2300, is_engine=False))
+                self.assertEqual(details['game_started_at'], seen[0]['game_started_at'])
+                self.assertEqual(seen[0]['opponent'].get('title'), 'IM' if early else None)
+
+
 class history_tests(unittest.TestCase):
     def test_follows_recorded_moves_without_resync(self):
         boards = [fics_game.style12.parse(line) for line in observed if line.startswith("<12>")]

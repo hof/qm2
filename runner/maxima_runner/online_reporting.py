@@ -53,6 +53,12 @@ def event_text(event, detailed=False):
         text = '⛔ ' + label + ' is offline and awaiting review.'
     elif kind == 'daily_summary':
         text = '📊 ' + label + ' · ' + event.get('message', '')
+    elif kind == 'titled_opponent':
+        text = '♟ ' + label + ' · Playing ' + event['title'] + ' ' + event['name']
+        if event.get('rating') is not None:
+            text += ' (' + str(event['rating']) + ')'
+        if event.get('url'):
+            text += '\n' + event['url']
     else:
         text = '⚪ ' + label + ' · ' + event.get('message', 'Session ended')
     if detailed:
@@ -109,7 +115,7 @@ class online_reporter:
             if not path.exists():
                 atomic_text(path, json.dumps(values) + '\n')
             return
-        if kind not in ('login','shutdown','engine_incident','engine_recovered','recovery_failed','quarantined','daily_summary','notification_test','operator_notice'):
+        if kind not in ('login','shutdown','engine_incident','engine_recovered','recovery_failed','quarantined','daily_summary','notification_test','operator_notice','titled_opponent'):
             return
         channels = []
         if self.settings['TELEGRAM_BOT_TOKEN'] and self.settings['TELEGRAM_CHAT_ID']:
@@ -128,6 +134,15 @@ class online_reporter:
             self.event('login', message=event['message'], engine_details=event.get('engine_details'))
         elif event['type'] == 'game_end':
             self.event('game_end', **{k:v for k,v in event.items() if k not in ('type','v','pgn')})
+        elif event['type'] in ('game_start', 'opponent'):
+            opponent = event.get('opponent') or {}
+            if (opponent.get('title') not in ('FM', 'IM', 'GM') or not opponent.get('name')
+                    or opponent.get('is_engine') or event.get('game') is None):
+                return
+            key = json.dumps([self.platform, event['game'], event.get('game_started_at')])
+            self.event('titled_opponent', id=hashlib.sha256(key.encode()).hexdigest(),
+                       name=opponent['name'], title=opponent['title'], rating=opponent.get('rating'),
+                       game=event['game'], url=event.get('url'))
 
     def summary(self, day):
         wins = draws = losses = unresolved = 0

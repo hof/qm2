@@ -1025,6 +1025,9 @@ class lichess_game:
         bot.on_line(f"-- game {self.id}: {full['white'].get('name')} vs {full['black'].get('name')}, "
                     f"{full['speed']} {'rated' if full.get('rated') else 'casual'} {bot.api.server}/{self.id}")
         self.emit("game_start", white=full["white"].get("name"), black=full["black"].get("name"),
+                  opponent={"name": self.opponent.name, "title": self.opponent.title,
+                            "rating": self.opponent.rating, "is_engine": self.opponent.is_engine},
+                  url=bot.api.server + '/' + self.id,
                   white_elo=full["white"].get("rating"), black_elo=full["black"].get("rating"),
                   initial_seconds=clock.get("initial", 0) // 1000, increment_seconds=clock.get("increment", 0) // 1000,
                   rated=full.get("rated"), variant=full["speed"],

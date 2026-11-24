@@ -39,8 +39,45 @@ class reporting_tests(unittest.TestCase):
                 reporter.listen({'type':'game_end','result':result,'headers':{'LearningId':identity,'LearningColor':'white'}})
             self.assertIn('1-1-1 (tracked); aborted/unresolved: 1',reporter.summary(reporter.day))
 
+    def test_titled_opponents_notify_once_per_game_and_only_on_telegram(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reporter = self.reporter(directory)
+            for number, title in enumerate(('FM', 'IM', 'GM')):
+                event = dict(type='game_start', game=str(number),
+                             opponent=dict(name='Example', title=title, rating=2400, is_engine=False))
+                reporter.listen(event)
+                reporter.listen(event)
+                # A restarted reporter must not repeat an already queued notice.
+                self.reporter(directory).listen(event)
+            files = list((Path(directory)/'outbox').glob('*.json'))
+            self.assertEqual(len(files), 3)
+            self.assertTrue(all(json.loads(p.read_text())['channel'] == 'telegram' for p in files))
+
+    def test_untitled_and_computer_opponents_do_not_notify(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reporter = self.reporter(directory)
+            for title, computer in ((None, False), ('BOT', True), ('GM', True)):
+                reporter.listen(dict(type='game_start', game='fixture',
+                                     opponent=dict(name='Example', title=title, is_engine=computer)))
+            self.assertFalse((Path(directory)/'outbox').exists())
+
+    def test_late_fics_title_and_reused_game_numbers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reporter = self.reporter(directory)
+            for started in ('first', 'second'):
+                reporter.listen(dict(type='game_start', game=17, game_started_at=started))
+                for _ in range(2):
+                    reporter.listen(dict(type='opponent', game=17, game_started_at=started,
+                                         opponent=dict(name='Example', title='IM', is_engine=False)))
+            self.assertEqual(len(list((Path(directory)/'outbox').glob('*.json'))), 2)
+
 
 class message_tests(unittest.TestCase):
+    def test_titled_game_message_is_concise_and_includes_the_link(self):
+        message = event_text(dict(platform='lichess', kind='titled_opponent', title='GM',
+                                  name='Example', rating=2500, url='https://lichess.org/fixture'))
+        self.assertEqual(message, '♟ Lichess · Playing GM Example (2500)\nhttps://lichess.org/fixture')
+
     def test_login_shows_only_threads_and_hash(self):
         message = event_text(dict(platform='lichess', kind='login', engine_details={
             'engine': {'name': 'Maxima revision'},

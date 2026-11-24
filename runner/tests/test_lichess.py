@@ -77,6 +77,24 @@ class challenge_tests(unittest.TestCase):
 
 
 class command_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_start_event_identifies_the_titled_opponent_in_either_color(self):
+        for color in ('white', 'black'):
+            with self.subTest(color=color):
+                api, lines, bot, game = self.game()
+                bot.events = connectors.game_events()
+                seen = []
+                bot.events.subscribe(seen.append)
+                full = game_full()
+                if color == 'black':
+                    full['white'], full['black'] = full['black'], full['white']
+                them = full['black' if color == 'white' else 'white']
+                them['title'] = 'GM'
+                game.setup(full)
+                await asyncio.sleep(0)
+                event = next(e for e in seen if e['type'] == 'game_start')
+                self.assertEqual(event['opponent'], dict(name='Someone', title='GM', rating=1800, is_engine=False))
+                self.assertEqual(event['url'], 'https://lichess.org/g1')
+
     def game(self):
         api, lines = stub_api(), []
         bot = lichess.lichess_bot(api, None, lines.append, owners=["SirHajewiet"])
