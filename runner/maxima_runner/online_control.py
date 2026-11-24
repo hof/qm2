@@ -20,7 +20,7 @@ from .project import env_value
 read_commands = ('status', 'today', 'history', 'eval', 'book', 'stats', 'name')
 play_commands = ('pause', 'resume', 'softquit', 'softrestart', 'resign', 'abort', 'draw',
                  'challenge', 'nochallenge', 'reseek', 'seek-pool')
-help_text = ('Maxima commands:\n/maxima status\n/maxima today\n/maxima history\n'
+help_text = ('Maxima commands:\n/maxima status\n/maxima today\n/maxima history [runner]\n'
              '/maxima <runner|all> eval|book|stats|name\n'
              '/maxima <runner|all> status|today|history|pause|resume\n'
              '/maxima <runner|all> softquit|softrestart|resign|abort|draw\n'
@@ -438,7 +438,11 @@ class telegram_listener:
             target, action = 'all', words[0]
             arguments = ''
         elif len(words) >= 2:
-            target, action, *extra = words
+            first, second, *extra = words
+            if first.lstrip('!') in read_commands + play_commands and second in names + ['all']:
+                action, target = first, second
+            else:
+                target, action = first, second
             arguments = ' '.join(extra)
         else:
             return help_text

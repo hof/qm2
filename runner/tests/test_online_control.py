@@ -148,6 +148,19 @@ class control_tests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('Elo R Clock', text)
         self.assertIn('2450', text)
         self.assertIn('?', text)
+
+    async def test_history_accepts_command_first_and_target_first(self):
+        listener = self.listener()
+        listener.targets = {'fics': {}}
+        listener.route = AsyncMock(return_value={'games': []})
+        for text, expected in (('/maxima history', ['lichess','fics']),
+                               ('/maxima history lichess', ['lichess']),
+                               ('/maxima history fics', ['fics']),
+                               ('/maxima lichess history', ['lichess'])):
+            with self.subTest(text=text):
+                listener.route.reset_mock()
+                await listener.handle(self.update(text))
+                self.assertEqual([call.args[0] for call in listener.route.await_args_list], expected)
         self.assertIsNone(await listener.handle(self.update('/maxima@OtherBot all pause')))
         self.assertIsNone(await listener.handle(self.update('ordinary group conversation')))
 

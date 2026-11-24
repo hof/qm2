@@ -3188,7 +3188,8 @@ can still send notifications. `MAXIMA_RUNNER_ID` is a stable name (default:
 `/maxima history` displays the ten newest recorded games across those runners,
 with local date/time, opponent and recorded Elo, result from Maxima's perspective
 and clock. Unknown ratings display as `?`.
-Add a runner name to restrict the query. `eval`, `book`, `stats` and `name`
+`/maxima history lichess` and `/maxima history fics` restrict the query;
+the target-first form is also accepted. `eval`, `book`, `stats` and `name`
 provide game information; `eval` reports the latest completed move evaluation
 without starting another search. `softquit`, `softrestart`, `resign`, `abort`
 and `draw` use the online client's normal game controls. Lichess also supports
