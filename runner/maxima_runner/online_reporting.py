@@ -24,6 +24,38 @@ def service_notify(message):
             connection.sendto(message.encode(), address)
 
 
+def event_text(event, detailed=False):
+    label = 'Lichess' if event['platform'] == 'lichess' else 'FICS'
+    kind = event['kind']
+    if kind == 'login':
+        text = '🟢 ' + event.get('message', 'Logged in to ' + label)
+    elif kind == 'notification_test':
+        text = '✅ Maxima Monitor notification test. No engine failure has occurred.'
+    elif kind == 'engine_incident':
+        text = '🔴 ' + label + ' engine incident: ' + event.get('reason', 'unexpected engine failure')
+        text += '\nNew games blocked. Recovery is limited to the current game.'
+        if event.get('game') is not None:
+            text += '\nGame: ' + str(event['game'])
+    elif kind == 'engine_recovered':
+        text = '🟠 ' + label + ' engine recovered. Finishing the current game, then staying offline for review.'
+    elif kind == 'recovery_failed':
+        text = '🔴 ' + label + ' recovery failed. Ending play and staying offline for review.'
+    elif kind == 'quarantined':
+        text = '⛔ ' + label + ' is offline and awaiting review.'
+    elif kind == 'daily_summary':
+        text = '📊 ' + label + ' · ' + event.get('message', '')
+    else:
+        text = '⚪ ' + label + ' · ' + event.get('message', 'Session ended')
+    if detailed:
+        for key, title in [('id','Incident'),('error','Error type'),('fen','Position')]:
+            if event.get(key):
+                text += '\n' + title + ': ' + str(event[key])
+        engine = (event.get('engine_details') or {}).get('engine') or {}
+        if engine.get('name'):
+            text += '\nEngine: ' + engine['name']
+    return text
+
+
 class online_reporter:
     def __init__(self, platform, root, on_line=print):
         self.platform, self.root, self.on_line = platform, Path(root), on_line
@@ -105,7 +137,7 @@ class online_reporter:
                 wins += 1
             else:
                 losses += 1
-        return f'{day} tracked W-D-L: {wins}-{draws}-{losses}; aborted/unresolved: {unresolved}'
+        return f'{datetime.fromisoformat(day).strftime("%d/%m/%Y")} · W-D-L: {wins}-{draws}-{losses} (tracked); aborted/unresolved: {unresolved}'
 
     def deliver(self, path):
         with writer_lock(self.root / '.delivery.lock'):
@@ -116,7 +148,7 @@ class online_reporter:
         if row['sent'] or row['next_attempt'] > time.time():
             return
         event = row['event']
-        message = f"[{self.platform}] {event['kind']}\n" + json.dumps({k:v for k,v in event.items() if k not in ('platform','kind')},ensure_ascii=False,indent=2)
+        message = event_text(event, detailed=row['channel'] == 'email')
         headers = {'Content-Type':'application/json','User-Agent':'MaximaMonitor/1.0'}
         if row['channel'] == 'telegram':
             url = 'https://api.telegram.org/bot'+self.settings['TELEGRAM_BOT_TOKEN']+'/sendMessage'
@@ -127,7 +159,7 @@ class online_reporter:
                            **{'Idempotency-Key':hashlib.sha256(path.name.encode()).hexdigest()})
             payload = {'from':self.settings['MAXIMA_ALERT_FROM'],
                        'to':[v.strip() for v in self.settings['MAXIMA_ALERT_TO'].split(',') if v.strip()],
-                       'subject':f'Maxima {self.platform}: {event["kind"]}', 'text':message}
+                       'subject': 'Maxima Monitor — ' + ('notification test' if event['kind']=='notification_test' else self.platform+' incident'), 'text':message}
         try:
             request = urllib.request.Request(url,json.dumps(payload).encode(),headers,method='POST')
             with urllib.request.urlopen(request,timeout=3) as response:

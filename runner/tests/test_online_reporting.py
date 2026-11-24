@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from maxima_runner.online_reporting import online_reporter
+from maxima_runner.online_reporting import online_reporter, event_text
 
 
 class reporting_tests(unittest.TestCase):
@@ -37,4 +37,13 @@ class reporting_tests(unittest.TestCase):
             reporter=self.reporter(directory)
             for identity,result in [('win','1-0'),('draw','1/2-1/2'),('loss','0-1'),('unknown','*'),('win','1-0')]:
                 reporter.listen({'type':'game_end','result':result,'headers':{'LearningId':identity,'LearningColor':'white'}})
-            self.assertIn('1-1-1; aborted/unresolved: 1',reporter.summary(reporter.day))
+            self.assertIn('1-1-1 (tracked); aborted/unresolved: 1',reporter.summary(reporter.day))
+
+
+class message_tests(unittest.TestCase):
+    def test_operator_messages_are_readable_without_debug_json(self):
+        message=event_text({'platform':'lichess','kind':'login','message':'Logged in to Lichess as Example','at':12345})
+        self.assertIn('Logged in to Lichess as Example',message)
+        self.assertNotIn('12345',message)
+        self.assertNotIn('{',message)
+        self.assertNotIn('"message"',message)
