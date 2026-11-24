@@ -176,7 +176,7 @@ class online_reporter:
                        'W' if color in ('white','black') and result == ('1-0' if color == 'white' else '0-1') else
                        'L' if color in ('white','black') and result in ('1-0','0-1') else '*')
             games.append(dict(at=event['at'], opponent=headers.get(tag, '?'),
-                              title=headers.get(tag+'Title', ''), result=outcome,
+                              title=headers.get(tag+'Title', ''), rating=headers.get(tag+'Elo'), result=outcome,
                               clock=headers.get('TimeControl', '?'), platform=self.platform))
         return sorted(games, key=lambda row: row['at'], reverse=True)[:limit]
 

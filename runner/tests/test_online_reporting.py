@@ -12,10 +12,12 @@ class reporting_tests(unittest.TestCase):
             reporter = self.reporter(directory)
             for identity, color, result in [('w','white','1-0'), ('b','black','1-0'), ('d','black','1/2-1/2')]:
                 reporter.listen(dict(type='game_end', result=result, headers={
-                    'LearningId':identity, 'LearningColor':color, 'White':'White', 'Black':'Black', 'TimeControl':'180+2'}))
+                    'LearningId':identity, 'LearningColor':color, 'White':'White', 'Black':'Black',
+                    'WhiteElo':'2500', 'BlackElo':'2600', 'TimeControl':'180+2'}))
             rows = reporter.recent_games()
             self.assertEqual([row['result'] for row in rows], ['D', 'L', 'W'])
             self.assertEqual([row['opponent'] for row in rows], ['White', 'White', 'Black'])
+            self.assertEqual([row['rating'] for row in rows], ['2500', '2500', '2600'])
 
     def reporter(self,root):
         settings={'MAXIMA_REPORTING_ENABLED':'1','TELEGRAM_BOT_TOKEN':'fixture-secret','TELEGRAM_CHAT_ID':'123','RESEND_API_KEY':'email-secret','MAXIMA_ALERT_FROM':'sender@example.invalid','MAXIMA_ALERT_TO':'owner@example.invalid'}

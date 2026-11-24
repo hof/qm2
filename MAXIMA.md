@@ -3186,7 +3186,8 @@ can still send notifications. `MAXIMA_RUNNER_ID` is a stable name (default:
 `lichess` or `fics`). `/maxima help` lists commands;
 `/maxima status` and `/maxima today` query all configured runners.
 `/maxima history` displays the ten newest recorded games across those runners,
-with local date/time, opponent, result from Maxima's perspective and clock.
+with local date/time, opponent and recorded Elo, result from Maxima's perspective
+and clock. Unknown ratings display as `?`.
 Add a runner name to restrict the query. `eval`, `book`, `stats` and `name`
 provide game information; `eval` reports the latest completed move evaluation
 without starting another search. `softquit`, `softrestart`, `resign`, `abort`

@@ -31,7 +31,7 @@ help_text = ('Maxima commands:\n/maxima status\n/maxima today\n/maxima history\n
 def history_text(games, zone):
     if not games:
         return 'No recorded games yet.'
-    lines = ['Date/time    Runner     Opponent              Result Clock']
+    lines = ['Date/time    Runner     Opponent               Elo R Clock']
     for row in sorted(games, key=lambda row: row['at'], reverse=True)[:10]:
         when = datetime.fromtimestamp(row['at'], zone).strftime('%d/%m %H:%M')
         opponent = ' '.join((row.get('title', '') + ' ' + row['opponent']).split())[:21]
@@ -40,7 +40,8 @@ def history_text(games, zone):
         if separator and seconds.isdigit():
             clock = f'{int(seconds) / 60:g}+{increment}'
         clock = clock[:8]
-        lines.append(f"{when:12} {row['runner'][:10]:10} {opponent:21} {row['result']:6} {clock}")
+        rating = str(row.get('rating') or '?')
+        lines.append(f"{when:12} {row['runner'][:10]:10} {opponent:21} {rating:>4} {row['result']:1} {clock}")
     return '\n'.join(lines)
 
 

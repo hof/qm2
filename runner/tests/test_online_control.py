@@ -136,7 +136,8 @@ class control_tests(unittest.IsolatedAsyncioTestCase):
         listener.targets = {'fics': {}}
         async def route(target, command, identity, arguments=''):
             return {'games': [dict(at=n, opponent='Player'+str(n), title='', result='W',
-                                   clock='180+2', runner=target) for n in range(12 if target=='fics' else 2)]}
+                                   rating='2450' if n%2 else None, clock='180+2', runner=target)
+                               for n in range(12 if target=='fics' else 2)]}
         listener.route = AsyncMock(side_effect=route)
         text = await listener.handle(self.update('/maxima history'))
         self.assertTrue(listener.monospace)
@@ -144,6 +145,9 @@ class control_tests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('Player11', text)
         self.assertNotIn('Player0 ', text)
         self.assertIn('3+2', text)
+        self.assertIn('Elo R Clock', text)
+        self.assertIn('2450', text)
+        self.assertIn('?', text)
         self.assertIsNone(await listener.handle(self.update('/maxima@OtherBot all pause')))
         self.assertIsNone(await listener.handle(self.update('ordinary group conversation')))
 
