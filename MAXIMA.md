@@ -3168,3 +3168,7 @@ outside move selection. `python -m maxima_runner.online_reporting --platform
 lichess` delivers pending reports without opening a chess connection; `--test`
 sends a clearly labelled delivery test. The same commands accept `--platform
 fics`. `MAXIMA_REPORT_TIMEZONE` selects the summary timezone (default UTC).
+
+Summaries count games observed by reporting, so the first day can be partial.
+`MAXIMA_MIN_FREE_BYTES` optionally drains the client before storage is exhausted;
+`MAXIMA_STOP_AT` sets a Unix timestamp after which no new games are started.

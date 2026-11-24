@@ -1581,7 +1581,15 @@ def run(options, parser):
                                                                  data_root() / "book.bin", learner.records,
                                                                  positions=1, report=show))
         state["bot"] = bot
-        reporter.on_failure = bot.soft_quit
+        reporter.on_stop = bot.soft_quit
+        def reporting_failed(error):
+            bot.stopping, bot.accept, bot.restart = True, False, False
+            bot.matchmaker.enabled = False
+            try:
+                safety.fail(error)
+            except OSError:
+                print('-- incident persistence failed; new games remain blocked', flush=True)
+        reporter.on_failure = reporting_failed
         if controller.requested:
             bot.soft_quit()
         feed = None

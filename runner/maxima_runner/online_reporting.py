@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import shutil
 import time
 import urllib.request
 import uuid
@@ -28,7 +29,9 @@ class online_reporter:
         self.platform, self.root, self.on_line = platform, Path(root), on_line
         self.root.mkdir(parents=True, exist_ok=True)
         self.task = self.heartbeat = None
-        self.on_failure = None
+        self.on_failure = self.on_stop = None
+        self.minimum_free = int(env_value("MAXIMA_MIN_FREE_BYTES") or 0)
+        self.resource_reported = False
         self.stop_at = float(env_value('MAXIMA_STOP_AT') or 0)
         self.stop_requested = False
         enabled = env_value('MAXIMA_REPORTING_ENABLED') == '1'
@@ -102,7 +105,7 @@ class online_reporter:
                 wins += 1
             else:
                 losses += 1
-        return f'{day} W-D-L: {wins}-{draws}-{losses}; aborted/unresolved: {unresolved}'
+        return f'{day} tracked W-D-L: {wins}-{draws}-{losses}; aborted/unresolved: {unresolved}'
 
     def deliver(self, path):
         with writer_lock(self.root / '.delivery.lock'):
@@ -146,8 +149,12 @@ class online_reporter:
             if self.stop_at and time.time() >= self.stop_at and not self.stop_requested:
                 self.stop_requested = True
                 self.event('shutdown', message='Configured stop time reached; finishing current game')
+                if self.on_stop is not None:
+                    self.on_stop()
+            if self.minimum_free and shutil.disk_usage(self.root).free < self.minimum_free and not self.resource_reported:
+                self.resource_reported = True
                 if self.on_failure is not None:
-                    self.on_failure()
+                    self.on_failure(RuntimeError('free disk below configured safety threshold'))
             day = datetime.now(self.zone).date().isoformat()
             if day != self.day:
                 self.event('daily_summary',id=self.platform+'-'+self.day,message=self.summary(self.day))
@@ -168,9 +175,9 @@ class online_reporter:
         self.heartbeat=asyncio.ensure_future(self.health())
         def failed(task):
             if not task.cancelled() and task.exception() is not None:
-                self.on_line('-- reporting failed: '+type(task.exception()).__name__)
                 if self.on_failure is not None:
-                    self.on_failure()
+                    self.on_failure(task.exception())
+                print('-- reporting failed: '+type(task.exception()).__name__, flush=True)
         self.task.add_done_callback(failed)
         service_notify('READY=1')
 
@@ -195,7 +202,7 @@ def main():
     reporter=online_reporter(args.platform,data_root()/'runtime'/args.platform)
     if args.service_failure:
         from .online_safety import engine_safety
-        engine_safety(args.platform, reporter.root, reporter.event).fail(RuntimeError('Runner service failed; inspect the service journal'))
+        engine_safety(args.platform, reporter.root, reporter.event).fail(RuntimeError('Runner service failed: '+os.environ.get('MONITOR_SERVICE_RESULT','unknown')+'; inspect the service journal'))
     if args.test:
         reporter.event('notification_test',message='Notification delivery test; no engine failure has occurred.')
     today=datetime.now(reporter.zone).date().isoformat()

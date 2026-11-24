@@ -1767,9 +1767,16 @@ def run(options, parser):
                                                                   resignation_settings=configured["resignation"])
         state["player"] = player
         if player is not None:
-            def reporting_failed():
+            def request_stop():
                 player.stopping, player.restart = True, False
                 asyncio.ensure_future(player.stop())
+            def reporting_failed(error):
+                request_stop()
+                try:
+                    safety.fail(error)
+                except OSError:
+                    print('-- incident persistence failed; new games remain blocked', flush=True)
+            reporter.on_stop = request_stop
             reporter.on_failure = reporting_failed
         try:
             asyncio.get_running_loop().add_signal_handler(signal.SIGUSR1, lambda: commands.put_nowait('softquit'))
