@@ -1,5 +1,6 @@
 """Engine fault latching and clock-bounded recovery shared by online clients."""
 import asyncio
+from collections.abc import Mapping
 import json
 import time
 import uuid
@@ -33,9 +34,9 @@ class engine_safety:
         protocol = getattr(session, 'protocol', None)
         identity = getattr(protocol, 'id', None)
         options = getattr(protocol, 'config', None)
-        if isinstance(identity, dict):
+        if isinstance(identity, Mapping):
             self.details['engine'] = dict(identity)
-        if isinstance(options, dict):
+        if isinstance(options, Mapping):
             self.details['options'] = {key: options[key] for key in ('Threads','Hash','EvalFile','Wild') if key in options}
 
     def check_start(self):

@@ -4,10 +4,18 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+import chess.engine
 from maxima_runner.online_safety import engine_safety, remaining_clock, search_timeout
 
 
 class safety_tests(unittest.IsolatedAsyncioTestCase):
+    def test_captures_settings_from_the_actual_uci_option_map(self):
+        safety = engine_safety('fixture')
+        safety.describe(SimpleNamespace(protocol=SimpleNamespace(id={'name': 'Maxima'},
+            config=chess.engine.UciOptionMap({'Threads': 2, 'Hash': 128}))))
+        self.assertEqual(safety.details['options'], {'Threads': 2, 'Hash': 128})
+
     async def test_fault_survives_restart_and_cannot_recover_twice(self):
         with tempfile.TemporaryDirectory() as directory:
             events=[]
