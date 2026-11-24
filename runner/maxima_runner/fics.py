@@ -1869,7 +1869,7 @@ def run(options, parser):
 
         return await controller.run(play_session(controller, commands, state), stop)
 
-    return asyncio.run(session())
+    return asyncio.run(online_shutdown.repeat_requested_sessions(session, restart_status))
 
 
 if __name__ == "__main__":

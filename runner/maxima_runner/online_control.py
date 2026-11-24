@@ -18,10 +18,14 @@ from .project import env_value
 
 
 read_commands = ('status', 'today', 'history', 'eval', 'book', 'stats', 'name')
-play_commands = ('pause', 'resume')
+play_commands = ('pause', 'resume', 'softquit', 'softrestart', 'resign', 'abort', 'draw',
+                 'challenge', 'nochallenge', 'reseek', 'seek-pool')
 help_text = ('Maxima commands:\n/maxima status\n/maxima today\n/maxima history\n'
              '/maxima <runner|all> eval|book|stats|name\n'
-             '/maxima <runner|all> status|today|history|pause|resume')
+             '/maxima <runner|all> status|today|history|pause|resume\n'
+             '/maxima <runner|all> softquit|softrestart|resign|abort|draw\n'
+             '/maxima lichess challenge|nochallenge\n'
+             '/maxima fics reseek\n/maxima fics seek-pool <pool>')
 
 
 def history_text(games, zone):
@@ -96,6 +100,8 @@ class runner_control:
         self.task = None
         self.listener = None
         self.connections = set()
+        self.shutdown_requested = None
+        self.shutdown_ack = asyncio.Event()
 
     def status(self):
         player = self.player
@@ -111,11 +117,15 @@ class runner_control:
             text += ' · ' + player.name
         return text
 
-    async def command(self, command, identity):
+    async def command(self, command, identity, arguments=''):
         if command not in read_commands + play_commands:
             raise ValueError('unsupported command')
         if not isinstance(identity, int) or isinstance(identity, bool) or identity < 0:
             raise ValueError('invalid command ID')
+        if not isinstance(arguments, str) or len(arguments) > 512 or '\n' in arguments or '\r' in arguments:
+            raise ValueError('invalid command arguments')
+        if arguments and command != 'seek-pool':
+            raise ValueError('unexpected command arguments')
         if command == 'status':
             return self.status()
         if command == 'today':
@@ -126,22 +136,36 @@ class runner_control:
             return {'games': [dict(row, runner=self.runner_id) for row in rows]}
         if command in ('eval', 'book', 'stats', 'name'):
             return self.runner_id + ': ' + self.game_reply(command)
+        if (command in ('challenge', 'nochallenge') and self.platform != 'lichess'
+                or command in ('reseek', 'seek-pool') and self.platform != 'fics'):
+            return self.runner_id + ': command not available on this server.'
+        if command == 'seek-pool':
+            from .fics import parse_seek_pool
+            try:
+                parse_seek_pool(arguments)
+            except ValueError as error:
+                return self.runner_id + ': ' + str(error)
         async with self.lock:
             if identity <= self.state['command_id']:
                 return self.status() + ' · command already processed'
             player = self.player
-            if command == 'resume' and (player.stopping or player.safety.incident
+            if command in ('resume', 'softrestart') and (player.stopping or player.safety.incident
                     or (player.safety.path is not None and player.safety.path.exists())
                     or self.reporter.stop_requested or self.reporter.resource_reported
                     or (self.reporter.stop_at and time.time() >= self.reporter.stop_at)
                     or (self.reporter.minimum_free and shutil.disk_usage(self.root).free < self.reporter.minimum_free)):
-                return self.status() + ' · resume refused; local review required'
+                return self.status() + ' · ' + command + ' refused; local review required'
             # Commit desired admission state before any network await. Repeated
             # deliveries cannot undo a newer command, including across restarts.
-            state = {'paused': command == 'pause', 'command_id': identity}
+            state = dict(self.state, command_id=identity)
+            if command in ('pause', 'resume'):
+                state['paused'] = command == 'pause'
             atomic_text(self.state_path, json.dumps(state) + '\n')
             self.state = state
             player.paused = state['paused']
+            self.reporter.on_line('-- operator command: ' + self.runner_id + ' ' + command)
+            if command not in ('pause', 'resume'):
+                return self.runner_id + ': ' + await self.native_command(command, arguments, identity)
             if self.platform == 'lichess':
                 if player.paused:
                     await player.cancel_challenge()
@@ -151,8 +175,39 @@ class runner_control:
                 await player.send('unseek')
             else:
                 await player.seek()
-            self.reporter.on_line('-- operator command: ' + self.runner_id + ' ' + command)
             return self.status() + (' · finishing current game' if player.paused and player.game is not None else '')
+
+    async def native_command(self, command, arguments, identity):
+        player = self.player
+        if command in ('softquit', 'softrestart'):
+            self.shutdown_requested = identity
+            restart = command == 'softrestart'
+            if self.platform == 'lichess':
+                player.soft_quit(restart=restart)
+                await player.cancel_challenge()
+            else:
+                player.restart = restart
+                await player.stop()
+            return ('Restarting' if restart else 'Stopping') + (' after this game.' if player.game is not None else '.')
+        if command in ('challenge', 'nochallenge'):
+            return player.set_challenging(command == 'challenge') + '.'
+        if command == 'reseek':
+            if player.game is not None:
+                return 'Game in progress; seeks refresh after this game.'
+            await player.seek()
+            return 'Seeks refreshed.'
+        if command == 'seek-pool':
+            pool = await player.set_seek_pool(arguments)
+            return 'Seek pool set: ' + ', '.join(pool)
+        if player.game is None:
+            return 'No game in progress.'
+        if self.platform == 'lichess':
+            path = 'draw/yes' if command == 'draw' else command
+            if not await player.api.post(player.game.path(path)):
+                return 'Could not ' + command + '.'
+        else:
+            await player.connection.send(command)
+        return command.capitalize() + ' sent.'
 
     def game_reply(self, command):
         player = self.player
@@ -190,7 +245,7 @@ class runner_control:
                 status, result = '403 Forbidden', {'error': 'forbidden'}
             else:
                 payload = json.loads(body)
-                text = await asyncio.wait_for(self.command(payload['command'], payload['id']), 8)
+                text = await asyncio.wait_for(self.command(payload['command'], payload['id'], payload.get('arguments', '')), 8)
                 status, result = '200 OK', text if isinstance(text, dict) else {'text': text}
         except (ValueError, KeyError, TypeError, UnicodeError, asyncio.TimeoutError,
                 asyncio.IncompleteReadError, asyncio.LimitOverrunError):
@@ -207,6 +262,8 @@ class runner_control:
             writer.write(('HTTP/1.1 ' + status + '\r\nContent-Type: application/json\r\n'
                           'Content-Length: ' + str(len(body)) + '\r\nConnection: close\r\n\r\n').encode() + body)
             await asyncio.wait_for(writer.drain(), 2)
+            if status == '200 OK' and self.shutdown_requested == payload.get('id'):
+                self.shutdown_ack.set()
         except (OSError, asyncio.TimeoutError):
             pass
         finally:
@@ -255,8 +312,17 @@ class runner_control:
         self.reporter.on_line('-- runner control: ' + self.runner_id + ('; Telegram listener enabled' if enabled else '; Telegram listener disabled'))
 
     async def close(self):
+        if self.shutdown_requested is not None and not self.shutdown_ack.is_set():
+            try:
+                await asyncio.wait_for(self.shutdown_ack.wait(), 30)
+            except asyncio.TimeoutError:
+                pass
         if self.task is not None:
-            self.task.cancel()
+            self.listener.stopping = True
+            try:
+                await asyncio.wait_for(asyncio.shield(self.task), 27)
+            except asyncio.TimeoutError:
+                self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)
         if self.server is not None:
             self.server.close()
@@ -285,18 +351,19 @@ class telegram_listener:
         self.offset = int(self.cursor.read_text()) if self.cursor.exists() else 0
         self.username = None
         self.monospace = False
+        self.stopping = False
 
     async def api(self, method, payload):
         return await asyncio.get_running_loop().run_in_executor(
             None, lambda: post_json('https://api.telegram.org/bot' + self.token + '/' + method, payload, timeout=25))
 
-    async def route(self, target, command, identity):
+    async def route(self, target, command, identity, arguments=''):
         try:
             if target == self.control.runner_id:
-                return await asyncio.wait_for(self.control.command(command, identity), 8)
+                return await asyncio.wait_for(self.control.command(command, identity, arguments), 8)
             settings = self.targets[target]
             answer = await asyncio.get_running_loop().run_in_executor(None, lambda: post_json(
-                settings['url'], {'command': command, 'id': identity}, settings['token'], settings.get('ca_file')))
+                settings['url'], {'command': command, 'id': identity, 'arguments': arguments}, settings['token'], settings.get('ca_file')))
             return answer if command == 'history' else str(answer['text'])
         except Exception:
             # Do not echo request URLs or headers: they contain private configuration.
@@ -322,11 +389,15 @@ class telegram_listener:
             return help_text
         if len(words) == 1 and words[0] in read_commands:
             target, action = 'all', words[0]
-        elif len(words) == 2:
-            target, action = words
+            arguments = ''
+        elif len(words) >= 2:
+            target, action, *extra = words
+            arguments = ' '.join(extra)
         else:
             return help_text
         if target not in names + ['all'] or action not in read_commands + play_commands:
+            return help_text
+        if arguments and action != 'seek-pool':
             return help_text
         if action in play_commands and abs(time.time() - message.get('date', 0)) > 120:
             return 'Command expired; send a fresh /maxima command.'
@@ -334,7 +405,7 @@ class telegram_listener:
         # Telegram can randomize update IDs after a week without updates. Date
         # keeps desired-state commands ordered across that reset as well.
         identity = int(message.get('date', 0)) * (1 << 32) + update['update_id']
-        answers = await asyncio.gather(*(self.route(name, action, identity) for name in chosen))
+        answers = await asyncio.gather(*(self.route(name, action, identity, arguments) for name in chosen))
         if action == 'history':
             self.monospace = True
             rows = [row for answer in answers if isinstance(answer, dict) for row in answer['games']]
@@ -353,11 +424,13 @@ class telegram_listener:
                 self.control.reporter.on_line('-- Telegram listener could not start; retrying; inspect private configuration')
                 await asyncio.sleep(10)
         self.control.reporter.event('operator_notice', message='Telegram commands enabled. Listener: ' + self.control.runner_id)
-        while True:
+        while not self.stopping:
             try:
                 answer = await self.api('getUpdates', {'offset': self.offset, 'timeout': 15, 'allowed_updates': ['message']})
                 if not answer.get('ok'):
                     raise ValueError('Telegram polling rejected')
+                if self.stopping:
+                    return
                 for update in answer['result']:
                     if update['update_id'] < self.offset:
                         continue
@@ -371,6 +444,9 @@ class telegram_listener:
                             raise ValueError('Telegram reply rejected')
                     self.offset = update['update_id'] + 1
                     atomic_text(self.cursor, str(self.offset) + '\n')
+                    if self.control.shutdown_requested is not None:
+                        self.control.shutdown_ack.set()
+                        return
             except urllib.error.HTTPError as error:
                 if error.code == 409:
                     self.control.reporter.event('operator_notice', message='Telegram listener conflict; commands disabled here. Configure exactly one listener.')

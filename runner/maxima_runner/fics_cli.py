@@ -14,7 +14,7 @@ def parser():
                "  tell <name> <key> follow       explain each move to you by tell\n"
                "  tell <name> unfollow           stop those tells\n"
                "  tell <name> <key> softquit     stop after this game\n"
-               "  tell <name> <key> softrestart  restart after this game (exit 75, for a supervisor loop)\n"
+               "  tell <name> <key> softrestart  reconnect and restart the engine after this game\n"
                "  tell <name> <key> !abort|!resign|!draw   act on the current game now\n"
                "  tell <name> <key> reseek       withdraw ads and draw the pool again\n"
                "  tell <name> <key> seek-pool 5 0 50%, 3 0 w3  replace the mixed weighted pool\n"

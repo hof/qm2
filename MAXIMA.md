@@ -2577,8 +2577,8 @@ whispering. Owners configured in `owner` can steer it by tell without a key.
 Alternatively, `MAXDRONE_KEY` authorizes anyone who supplies that key (never in a
 file it writes or a log: the key is masked in the terminal and wire logs):
 `tell <name> <key> follow` sends the same explanations as tells (`unfollow` stops),
-`softquit` stops after the game, `softrestart` stops after the game with exit status 75
-so a supervisor loop (`while ...; [ $? -eq 75 ]`) starts it again with the latest code,
+`softquit` stops after the game; `softrestart` starts a fresh connection and engine
+session after the game, without an external restart loop.
 `help` lists the commands, and `!abort`, `!resign`,
 `!draw` act on the current game. After each saved game, followers also get what
 Maxima learned: the opening moves it kept, the score against that opponent, and on a
@@ -2942,8 +2942,8 @@ bot into Lichess's rate limit, which would also hold up its moves.
 
 Owners steer the bot from the game chat; the spectator room keeps it out of the
 opponent's sight. Lichess authenticates chat usernames, so no key is needed:
-`!softquit` (stop after this game), `!softrestart` (exit status 75 after this
-game, for a supervisor loop as on FICS), `!resign`, `!abort`, `!draw` (offer or
+`!softquit` (stop after this game), `!softrestart` (reconnect and restart the engine
+after this game), `!resign`, `!abort`, `!draw` (offer or
 accept). These commands from anyone else are logged and ignored. The same
 commands work on the console without the `!`, and each one answers there; `help`
 lists them. `quit` (or `kill -USR1 <pid>`) stops after the game; a second `quit`
@@ -3189,7 +3189,11 @@ can still send notifications. `MAXIMA_RUNNER_ID` is a stable name (default:
 with local date/time, opponent, result from Maxima's perspective and clock.
 Add a runner name to restrict the query. `eval`, `book`, `stats` and `name`
 provide game information; `eval` reports the latest completed move evaluation
-without starting another search. Mutations need
+without starting another search. `softquit`, `softrestart`, `resign`, `abort`
+and `draw` use the online client's normal game controls. Lichess also supports
+`challenge` and `nochallenge`; FICS supports `reseek` and `seek-pool <pool>`.
+Only an explicit soft restart starts a new session; faults still require review.
+Mutations need
 an explicit target: `/maxima fics pause`, `/maxima lichess resume`, or
 `/maxima all pause`. Pause persists across restarts and blocks new games while
 finishing the current game; the client stays connected so it can receive resume.

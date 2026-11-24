@@ -22,6 +22,16 @@ from test_lichess import fake_lichess, game_full, stub_api
 
 
 class controller_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_only_requested_restarts_repeat_the_session(self):
+        from unittest.mock import AsyncMock
+        session = AsyncMock(side_effect=[75, 0])
+        self.assertEqual(await online_shutdown.repeat_requested_sessions(session), 0)
+        self.assertEqual(session.await_count, 2)
+        session = AsyncMock(side_effect=RuntimeError('engine failed'))
+        with self.assertRaisesRegex(RuntimeError, 'engine failed'):
+            await online_shutdown.repeat_requested_sessions(session)
+        self.assertEqual(session.await_count, 1)
+
     async def test_idle_signal_does_not_wait_for_drain_and_restores_handlers(self):
         ready, cleaned = asyncio.Event(), asyncio.Event()
         messages, stops = [], []

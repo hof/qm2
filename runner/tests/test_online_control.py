@@ -134,7 +134,7 @@ class control_tests(unittest.IsolatedAsyncioTestCase):
     async def test_combined_history_selects_ten_newest_games_and_formats_results(self):
         listener = self.listener()
         listener.targets = {'fics': {}}
-        async def route(target, command, identity):
+        async def route(target, command, identity, arguments=''):
             return {'games': [dict(at=n, opponent='Player'+str(n), title='', result='W',
                                    clock='180+2', runner=target) for n in range(12 if target=='fics' else 2)]}
         listener.route = AsyncMock(side_effect=route)
@@ -173,6 +173,44 @@ class control_tests(unittest.IsolatedAsyncioTestCase):
         self.settings.update(MAXIMA_CONTROL_BIND='0.0.0.0:8443', MAXIMA_CONTROL_TOKEN='x'*32)
         with self.assertRaisesRegex(ValueError, 'TLS'):
             await self.control.start()
+
+    async def test_game_actions_use_the_native_lichess_paths(self):
+        self.bot.game = lichess.lichess_game(self.bot, 'actual')
+        for identity, action in enumerate(('draw', 'resign', 'abort'), 1):
+            self.assertIn('sent', await self.control.command(action, identity))
+        self.assertEqual([path for path, data in self.bot.api.posts], [
+            '/api/bot/game/actual/draw/yes', '/api/bot/game/actual/resign', '/api/bot/game/actual/abort'])
+        await self.control.command('abort', 3)
+        self.assertEqual(len(self.bot.api.posts), 3)
+
+    async def test_softrestart_drains_preserves_pause_and_refuses_faults(self):
+        self.bot.game = lichess.lichess_game(self.bot, 'actual')
+        await self.control.command('pause', 1)
+        text = await self.control.command('softrestart', 2)
+        self.assertIn('after this game', text)
+        self.assertTrue(self.bot.restart)
+        self.assertTrue(self.bot.stopping)
+        self.assertTrue(self.bot.paused)
+        self.assertEqual(self.bot.game.id, 'actual')
+        self.bot.stopping = self.bot.restart = False
+        self.bot.safety.incident = {'id': 'review'}
+        self.assertIn('refused', await self.control.command('softrestart', 3))
+        self.assertFalse(self.bot.restart)
+
+    async def test_fics_native_seek_commands_validate_pool_arguments(self):
+        player = fics.engine_player(None, lambda text: None)
+        player.send = AsyncMock()
+        control = runner_control('fics', player, self.reporter)
+        self.assertIn('Seek pool set', await control.command('seek-pool', 1, '3 0, 5 3'))
+        self.assertEqual(player.policy.seek_pool, ['3 0', '5 3'])
+        self.assertIn('not available', await control.command('challenge', 2))
+        with self.assertRaises(ValueError):
+            await control.command('seek-pool', 3, '3 0\nquit')
+
+    async def test_expired_native_actions_are_not_executed(self):
+        listener = self.listener()
+        self.assertIn('expired', await listener.handle(self.update('/maxima all softquit', date=1)))
+        self.assertFalse(self.bot.stopping)
 
     def test_remote_urls_and_tokens_are_validated(self):
         for url in ('http://runner.invalid/command', 'https://user:pass@runner.invalid/command',
