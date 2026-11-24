@@ -450,7 +450,8 @@ class telegram_listener:
             rows = [row for answer in answers if isinstance(answer, dict) for row in answer['games']]
             errors = [answer for answer in answers if isinstance(answer, str)]
             return history_text(rows, self.control.reporter.zone) + ('\n' + '\n'.join(errors) if errors else '')
-        return 'Listener: ' + self.control.runner_id + '\n' + '\n'.join(answers)
+        heading = 'Listener: ' + self.control.runner_id + '\n' if action == 'status' else ''
+        return heading + '\n'.join(answers)
 
     async def run(self):
         while self.username is None:
