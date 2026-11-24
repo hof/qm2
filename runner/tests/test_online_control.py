@@ -117,7 +117,9 @@ class control_tests(unittest.IsolatedAsyncioTestCase):
         listener = self.listener()
         listener.username = 'FixtureBot'
         self.assertIn('Listener: lichess', await listener.handle(self.update('/maxima status')))
-        self.assertIn('Listener: lichess', await listener.handle(self.update('/maxima@FixtureBot help')))
+        self.assertEqual(await listener.handle(self.update('/maxima@FixtureBot help')),
+                         'Maxima commands:\n/maxima status\n/maxima today\n'
+                         '/maxima <runner|all> status|today|pause|resume')
         self.assertIsNone(await listener.handle(self.update('/maxima@OtherBot all pause')))
         self.assertIsNone(await listener.handle(self.update('ordinary group conversation')))
 

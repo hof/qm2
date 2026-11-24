@@ -17,9 +17,7 @@ from .project import env_value
 
 
 help_text = ('Maxima commands:\n/maxima status\n/maxima today\n'
-             '/maxima <runner|all> status|today|pause|resume\n'
-             'Pause blocks new games and finishes the current game. '
-             'Resume cannot clear a fault hold.')
+             '/maxima <runner|all> status|today|pause|resume')
 
 
 def configured_control(platform, player, reporter):
@@ -269,7 +267,7 @@ class telegram_listener:
             return None
         names = [self.control.runner_id, *self.targets]
         if not words or words == ['help']:
-            return help_text + '\nListener: ' + self.control.runner_id + ' · runners: ' + ', '.join(names)
+            return help_text
         if words in (['status'], ['today']):
             target, action = 'all', words[0]
         elif len(words) == 2:
