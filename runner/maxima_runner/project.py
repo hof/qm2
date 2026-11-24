@@ -6,6 +6,7 @@ import re
 
 
 log_days = 7  # log files are deleted after this many days
+network_name = "maxima-200m.nnue"
 
 
 def project_root():
@@ -38,9 +39,9 @@ def data_root():
 
 
 def network_path(root=None):
-    """The default NNUE network: eval.nnue in the data directory, else one in networks/."""
+    """The bundled native model, without falling back to retired bootstrap weights."""
     root = root or project_root()
-    networks = [data_root() / "eval.nnue", *sorted((root / "networks").glob("*.nnue"))]
+    networks = [data_root() / network_name, root / "networks" / network_name]
     network = next((path for path in networks if path.is_file()), None)
     if network is None:
         raise ValueError("no network found; run ./maxima init")

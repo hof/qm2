@@ -8,9 +8,10 @@
 #include <string>
 #include <vector>
 
-// HalfKP and HalfKAv2_hm integer inference, GPL-3.0-or-later.
-// Format/arithmetic reference: third_party/nnue_reference/README.md.
+// Maxima-native HalfKAv2_hm integer inference, GPL-3.0-or-later.
 namespace nnue {
+
+inline constexpr char default_network_name[] = "maxima-200m.nnue";
 
 struct change_t {
     int piece;
@@ -30,7 +31,7 @@ class network_t {
 public:
     static std::shared_ptr<const network_t> load(const std::string & path, std::string & error);
 
-    // Raw Stockfish 13 internal units. Convert before use by Maxima's search.
+    // Raw network units (208 per pawn). Convert before use by Maxima's search.
     int evaluate(const board_t & board, accumulator_t & accumulator) const {
         return evaluate(board, accumulator, {});
     }
@@ -58,7 +59,6 @@ private:
     int32_t _output_bias = 0;
     U64 _fingerprint = 0;
     bool _hidden1_pair_sums_safe = false, _hidden2_pair_sums_safe = false;
-    bool _halfkav2_hm = false;
 
     size_t feature_index(bool color, int king, int piece, int square) const;
     void refresh(const board_t & board, accumulator_t & accumulator, bool color) const;
@@ -74,7 +74,7 @@ int to_centipawns(int raw_score);
 // Snapshots also retain their weights across later reloads or unloads.
 bool set_path(const std::string & path, std::string & error);
 
-// Standard chess requires a network. Discover eval.nnue beside the book/engine.
+// Standard chess requires a network. Discover the native model beside the engine or in networks/.
 bool load_default(std::string & error);
 std::shared_ptr<const network_t> snapshot();
 std::string path();

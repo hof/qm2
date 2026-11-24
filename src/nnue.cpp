@@ -1,5 +1,4 @@
-// GPL-3.0-or-later. Legacy HalfKP format and integer arithmetic described by
-// Stockfish/CFish and the pinned nnue-probe reference; see its README for credit.
+// Maxima-native HalfKAv2_hm integer inference, GPL-3.0-or-later.
 #include "nnue.h"
 #include "score.h"
 #include <algorithm>
@@ -15,8 +14,7 @@
 
 namespace nnue {
 namespace {
-constexpr size_t network_size = 21022697;
-constexpr size_t halfkav2_size = network_size - (41024 - 22528) * 512;
+constexpr size_t network_size = 11552745;
 constexpr size_t transformer_start = 189;
 std::mutex configuration_mutex;
 std::shared_ptr<const network_t> configured_network;
@@ -29,58 +27,48 @@ uint32_t read_u32(const std::vector<uint8_t> & bytes, size_t offset) {
 }
 
 size_t network_t::feature_index(bool color, int king, int piece, int square) const {
-    if (_halfkav2_hm) {
-        static constexpr int piece_buckets[2][13] = {
-            {0, 1, 3, 5, 7, 9, 10, 0, 2, 4, 6, 8, 10},
-            {0, 0, 2, 4, 6, 8, 10, 1, 3, 5, 7, 9, 10}
-        };
-        static constexpr auto king_features = [] {
-            std::array<std::array<uint16_t, 64>, 2> entries{};
-            for (int perspective = 0; perspective < 2; ++perspective) {
-                for (int king_square = 0; king_square < 64; ++king_square) {
-                    const int orientation = (perspective == WHITE ? 0 : 56) ^ ((king_square & 4) ? 0 : 7);
-                    const int oriented = king_square ^ orientation;
-                    const int bucket = (oriented >> 3) * 4 + (oriented & 7) - 4;
-                    entries[perspective][king_square] = uint16_t(bucket * 704 + orientation);
-                }
+    static constexpr int piece_buckets[2][13] = {
+        {0, 1, 3, 5, 7, 9, 10, 0, 2, 4, 6, 8, 10},
+        {0, 0, 2, 4, 6, 8, 10, 1, 3, 5, 7, 9, 10}
+    };
+    static constexpr auto king_features = [] {
+        std::array<std::array<uint16_t, 64>, 2> entries{};
+        for (int perspective = 0; perspective < 2; ++perspective) {
+            for (int king_square = 0; king_square < 64; ++king_square) {
+                const int orientation = (perspective == WHITE ? 0 : 56) ^ ((king_square & 4) ? 0 : 7);
+                const int oriented = king_square ^ orientation;
+                const int bucket = (oriented >> 3) * 4 + (oriented & 7) - 4;
+                entries[perspective][king_square] = uint16_t(bucket * 704 + orientation);
             }
-            return entries;
-        }();
-        const int entry = king_features[color][king];
-        return (entry & ~63) + piece_buckets[color][piece] * 64 + (square ^ (entry & 63));
-    }
-    const int type = (piece - 1) % 6;
-    const int relative_color = (piece <= WKING) == color ? 0 : 1;
-    const int orientation = color == WHITE ? 0 : 63;
-    assert(type < 5 && square >= 0 && square < 64 && king >= 0 && king < 64);
-    return (square ^ orientation) + 1 + 64 * (2 * type + relative_color) + 641 * (king ^ orientation);
+        }
+        return entries;
+    }();
+    const int entry = king_features[color][king];
+    return (entry & ~63) + piece_buckets[color][piece] * 64 + (square ^ (entry & 63));
 }
 
 std::shared_ptr<const network_t> network_t::load(const std::string & path, std::string & error) {
     error.clear();
     std::ifstream stream(path, std::ios::binary | std::ios::ate);
-    if (!stream || (stream.tellg() != static_cast<std::streamoff>(network_size)
-            && stream.tellg() != static_cast<std::streamoff>(halfkav2_size))) {
-        error = "expected a supported HalfKP or Maxima HalfKAv2_hm network";
+    if (!stream || stream.tellg() != static_cast<std::streamoff>(network_size)) {
+        error = "expected a Maxima HalfKAv2_hm network";
         return nullptr;
     }
-    const bool halfkav2_hm = stream.tellg() == static_cast<std::streamoff>(halfkav2_size);
-    const size_t feature_count = halfkav2_hm ? 22528 : 41024;
-    const size_t network_start = transformer_start + 4 + 512 + 512 * feature_count;
-    std::vector<uint8_t> bytes(halfkav2_hm ? halfkav2_size : network_size);
+    constexpr size_t feature_count = 22528;
+    constexpr size_t network_start = transformer_start + 4 + 512 + 512 * feature_count;
+    std::vector<uint8_t> bytes(network_size);
     stream.seekg(0);
     if (!stream.read(reinterpret_cast<char *>(bytes.data()), bytes.size())
             || stream.peek() != std::char_traits<char>::eof()
-            || read_u32(bytes, 0) != (halfkav2_hm ? 0x4d584e31 : 0x7af32f16)
-            || read_u32(bytes, 4) != (halfkav2_hm ? 0x484b4132 : 0x3e5aa6ee)
+            || read_u32(bytes, 0) != 0x4d584e31
+            || read_u32(bytes, 4) != 0x484b4132
             || read_u32(bytes, 8) != 177
-            || read_u32(bytes, transformer_start) != (halfkav2_hm ? 0x484d3031 : 0x5d69d7b8)
+            || read_u32(bytes, transformer_start) != 0x484d3031
             || read_u32(bytes, network_start) != 0x63337156) {
         error = "invalid or unsupported NNUE network format";
         return nullptr;
     }
     auto network = std::make_shared<network_t>();
-    network->_halfkav2_hm = halfkav2_hm;
     U64 fingerprint = 14695981039346656037ULL;
     for (uint8_t byte : bytes) fingerprint = (fingerprint ^ byte) * 1099511628211ULL;
     network->_fingerprint = fingerprint;
@@ -148,8 +136,7 @@ void network_t::refresh(const board_t & board, accumulator_t & accumulator, bool
     // Walking the occupancy avoids an unpredictable test per square.
     [[indeterminate]] const int16_t * features[32];
     size_t count = 0;
-    for (U64 pieces = _halfkav2_hm ? board.bb[ALLPIECES]
-            : board.bb[ALLPIECES] & ~(board.bb[WKING] | board.bb[BKING]); pieces;) {
+    for (U64 pieces = board.bb[ALLPIECES]; pieces;) {
         const int square = pop(pieces);
         const size_t index = feature_index(color, accumulator.kings[color], board.matrix[square], square);
         features[count++] = _features[index].values.data();
@@ -179,7 +166,7 @@ void network_t::refresh(const board_t & board, accumulator_t & accumulator, bool
     accumulator.values[color] = _biases;
     for (int square = 0; square < 64; ++square) {
         const int piece = board.matrix[square];
-        if (piece && (_halfkav2_hm || (piece != WKING && piece != BKING))) {
+        if (piece) {
             add_feature(accumulator.values[color], color, accumulator.kings[color], piece, square, false);
         }
     }
@@ -195,7 +182,7 @@ void network_t::prepare(const board_t & board, const move_t * move, accumulator_
         return; // Null move: unchanged features, exchanged perspectives.
     }
     auto add = [&](int piece, int from, int to) {
-        if (piece && (_halfkav2_hm || (piece != WKING && piece != BKING))) {
+        if (piece) {
             accumulator.changes[accumulator.change_count++] = {piece, from, to};
         }
     };
@@ -230,7 +217,7 @@ void network_t::update(const board_t & board, accumulator_t & accumulator,
 
     // Walk back to the nearest ready state with this king while the
     // incremental work stays below a refresh.
-    const int refresh_cost = popcnt0(board.bb[ALLPIECES]) - (_halfkav2_hm ? 0 : 2);
+    const int refresh_cost = popcnt0(board.bb[ALLPIECES]);
     int cost = change_cost(accumulator);
     size_t first = ancestors.size();
     while (true) {
@@ -386,8 +373,7 @@ int network_t::evaluate(const board_t & board, accumulator_t & accumulator,
 
 int to_centipawns(int raw_score) {
 
-    // Pinned sf_13 UCI::value(): 100 centipawns = PawnValueEg (208 units).
-    // This is a unit conversion, not Stockfish's material/tempo/rule50 scaling.
+    // Network output uses 208 internal units per pawn.
     const int64_t centipawns = int64_t(raw_score) * 100 / 208;
     return static_cast<int>(std::clamp(centipawns, int64_t(-score::TABLEBASE + 1), int64_t(score::TABLEBASE - 1)));
 }
@@ -419,12 +405,13 @@ bool load_default(std::string & error) {
             return set_path(configured, error);
         }
     }
-    std::vector<std::filesystem::path> candidates{"eval.nnue"};
+    std::vector<std::filesystem::path> candidates{default_network_name,
+        std::filesystem::path("networks") / default_network_name};
     std::error_code filesystem_error;
     const auto executable = std::filesystem::read_symlink("/proc/self/exe", filesystem_error);
     if (!filesystem_error) {
-        candidates.push_back(executable.parent_path() / "eval.nnue");
-        candidates.push_back(executable.parent_path().parent_path() / "eval.nnue");
+        candidates.push_back(executable.parent_path() / default_network_name);
+        candidates.push_back(executable.parent_path().parent_path() / default_network_name);
     }
     for (const auto & candidate : candidates) {
         if (std::filesystem::is_regular_file(candidate, filesystem_error)) {
@@ -432,7 +419,7 @@ bool load_default(std::string & error) {
             return set_path(filesystem_error ? candidate.string() : absolute.string(), error);
         }
     }
-    error = "cannot find eval.nnue; place it beside book.bin or set EvalFile";
+    error = "cannot find maxima-200m.nnue; place it beside the engine or set EvalFile";
     return false;
 }
 

@@ -159,7 +159,7 @@ def main():
     parser.add_argument("--metrics-batch-size", type=int, default=256)
     parser.add_argument("--width", type=int, default=8)
     parser.add_argument("--hidden", type=int, default=8)
-    parser.add_argument("--architecture", choices=("halfkp", "halfkav2_hm"), default="halfkp")
+    parser.add_argument("--architecture", choices=("halfkp", "halfkav2_hm"), default="halfkav2_hm")
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--learning-rate", type=float,
                         help="Adam learning rate (default .003, or .0001 with --warm-start)")

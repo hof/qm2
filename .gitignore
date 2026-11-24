@@ -64,3 +64,6 @@ __pycache__/
 /eval.nnue
 /deep.bin
 /deep.json
+
+!/networks/maxima-200m.nnue
+/maxima-200m.nnue

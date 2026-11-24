@@ -127,25 +127,37 @@ int main() {
         && nnue::to_centipawns(-208) == -100 && nnue::to_centipawns(0) == 0
         && nnue::to_centipawns(std::numeric_limits<int>::max()) == score::TABLEBASE - 1
         && nnue::to_centipawns(std::numeric_limits<int>::min()) == -score::TABLEBASE + 1,
-        "Stockfish units must convert to Maxima centipawns without reserved scores or overflow");
+        "Network units must convert to Maxima centipawns without reserved scores or overflow");
     magic::init();
     uci::silent(true);
-    std::vector<uint8_t> bytes(21022697);
-    const size_t network_start = 189 + 4 + 512 + 2 * 256 * 41024;
+    std::vector<uint8_t> bytes(11552745);
+    const size_t network_start = 189 + 4 + 512 + 2 * 256 * 22528;
     const size_t output_bias_offset = bytes.size() - 36;
-    put_u32(bytes, 0, 0x7af32f16);
-    put_u32(bytes, 4, 0x3e5aa6ee);
+    put_u32(bytes, 0, 0x4d584e31);
+    put_u32(bytes, 4, 0x484b4132);
     put_u32(bytes, 8, 177);
-    put_u32(bytes, 189, 0x5d69d7b8);
+    put_u32(bytes, 189, 0x484d3031);
     put_u32(bytes, network_start, 0x63337156);
     put_u32(bytes, output_bias_offset, 16 * 208);
     write_file(path, bytes);
     std::string error;
     bool success = unit_checks;
-    success &= check(nnue::set_path(path.string(), error), "Valid HalfKP model must load");
+    success &= check(nnue::set_path(path.string(), error), "Valid Maxima model must load");
     auto first = nnue::snapshot();
     if (!first) {
         return 1;
+    }
+    {
+        auto retired = bytes;
+        retired.resize(21022697);
+        put_u32(retired, 0, 0x7af32f16);
+        put_u32(retired, 4, 0x3e5aa6ee);
+        put_u32(retired, 189, 0x5d69d7b8);
+        put_u32(retired, 189 + 4 + 512 + 512 * 41024, 0x63337156);
+        write_file(path, retired);
+        success &= check(!nnue::set_path(path.string(), error) && nnue::snapshot() == first,
+            "Retired HalfKP weights must reject without replacing the native model");
+        write_file(path, bytes);
     }
     const char * fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     auto neural_storage = std::make_unique<search_t>(fen);

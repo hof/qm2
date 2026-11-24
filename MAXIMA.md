@@ -2,9 +2,7 @@
 
 This is the main technical documentation for Maxima. Keep it current as the
 engine evolves and keep it short: describe current behavior, not its history.
-`AGENTS.md` is the quick entry for contributors and coding agents; optional
-private context lives in `.context/agents.md`, outside Git. Planning and results
-are indexed in `.context/plan-index.md`; this document describes the engine.
+`AGENTS.md` is the quick entry for contributors and coding agents.
 
 ## Contents
 
@@ -97,7 +95,7 @@ search, NNUE evaluation, Syzygy tablebases, and experimental royal-losers suppor
   boundaries) and small offline Syzygy fixtures.
 - `runner/`: independently packaged Python CLI, UCI orchestration, suites,
   matches, tablebase downloads, experience tooling, and their tests.
-- `tools/download_nnue.py`: fetches and verifies the pinned network.
+- `tools/install_nnue.py`: verifies and installs the bundled native network offline.
 - `networks/`, `tablebases/syzygy/`: downloaded data, ignored by Git.
 
 CMake generates `generated/maxima/version.h` inside each build directory from
@@ -364,16 +362,17 @@ avoiding a separate raw-evaluation store.
 
 ### 4.9 NNUE evaluation
 
-Maxima temporarily uses the borrowed Stockfish 13 NNUE network (legacy HalfKP:
-41024 inputs, two 256-wide accumulators, 512->32->32->1 integer inference).
-Weights are CC0: `nn-62ef826d1a6d.nnue`, SHA-256
-`62ef826d1a6d11b9e814188025aa02a60815c037292e0ef9bbb9bf4f724e5e63`, from
-https://github.com/official-stockfish/networks. `python3 tools/download_nnue.py`
-fetches and verifies it into `networks/`.
+Maxima ships its own 200M HalfKAv2_hm model in `networks/maxima-200m.nnue`.
+SHA-256: `61c2d21510166c79b64bba3fb98b9285f08e922b07487055b4dfb841bd08d3c7`.
+The weights were trained with Maxima’s pipeline using search labels and completed-game
+outcomes through 200 million accepted positions. The file and its lineage are
+included in the repository; builds, tests and normal
+play require no model download. `python3 tools/install_nnue.py` verifies and
+installs the bundled bytes.
 
-The loader also accepts Maxima-native HalfKAv2_hm models: 22,528 inputs per
+The native architecture has 22,528 inputs per
 perspective, including both king pieces, with 256-wide accumulators and the
-same 512->32->32->1 integer layers and score units. Each perspective flips
+512->32->32->1 integer layers. Each perspective flips
 Black vertically, then mirrors files when its king is on a..d. The resulting
 king on e..h selects one of 32 buckets; each has 11 piece buckets of 64 squares,
 with both king colors sharing bucket 10. Feature indices use constant piece-bucket
@@ -382,13 +381,12 @@ orientation. A perspective king move refreshes its
 accumulator; the opposite accumulator incrementally updates the moved king's
 feature. Other move, capture, promotion and castling changes remain incremental.
 
-The native v1 file is 11,552,745 bytes. It retains the 177-byte description and
-dense payload layout, with version `0x4d584e31`, architecture `0x484b4132` and
-transformer `0x484d3031` identifiers. Its 22,528 transformer columns replace the
-legacy 41,024 columns; both formats validate size and identifiers before loading.
-Native models are selected explicitly through `EvalFile`; the default playing
-model is not replaced by training or export. Runtime evaluation scaling remains
-as described below for both formats.
+The native v1 file is 11,552,745 bytes, with a 177-byte description and
+dense payload. It uses version `0x4d584e31`, architecture `0x484b4132` and
+transformer `0x484d3031` identifiers. The loader validates native size and identifiers before loading.
+Other native models can be selected through `EvalFile`. Training and export do
+not activate a model automatically. Runtime evaluation scaling remains calibrated
+to the trained model as described below.
 
 The static evaluation applies the network's own NNUE-path scaling:
 `raw * (641 + material / 32 - 4 * clock) / 1024 + 28`, then
@@ -398,11 +396,14 @@ value per pawn (126/781/825/1276/2538 for P/N/B/R/Q). Correction history is
 added afterwards without clock damping. Scores are side-to-move relative and
 clamped below the tablebase range.
 
-The default model is `eval.nnue` beside `book.bin`. Initial `isready` loads it
+The default model is `maxima-200m.nnue`. Initial `isready` loads it
 before the clock starts; `MAXIMA_EVAL_FILE` overrides discovery, otherwise the
-working directory, the executable directory and its parent are checked. Missing
+working directory, its `networks/` directory, the executable directory and its
+parent are checked. CMake places the verified model beside the built executable
+and installs it beside the binary. Retired `eval.nnue` files are not discovered. Missing
 or invalid models reject standard searches; a failed replacement keeps the
-previous model. Select another compatible model with
+previous model. Existing saved GUI options pointing to retired weights must be
+changed to the native model. Select another compatible model with
 `setoption name EvalFile value /absolute/path/to/network.nnue` and `isready`.
 Model changes stop the worker and clear incompatible TT entries; each search
 holds an immutable model snapshot. Royal losers needs no network.
@@ -435,9 +436,10 @@ the bounds where every possible result already saturates permits 32-bit
 addition and clipping without changing the output, even for extreme file biases.
 A per-search cache keyed by position holds raw network scores; clock-dependent scaling is
 applied on every read.
-The GPL reference probe used for exact inference tests is recorded in
-`third_party/nnue_reference/README.md`. There is no network I/O or Python
-dependency in the engine.
+An independent, fresh-only scalar oracle in `tests/test_nnue_reference.cpp`
+checks native feature accumulators and dense inference against the SIMD and lazy
+incremental paths. It uses ordinary file rows and wide arithmetic, without a
+third-party evaluator. There is no network I/O or Python dependency in the engine.
 
 ### 4.10 UCI boundary and time management
 
@@ -618,7 +620,7 @@ The default build uses C++26 and requires a compiler that supports that mode
 Python 3.7+ with its standard library. Configure with `-DBUILD_TESTING=OFF`
 to build the engine without Python or test targets. The separately packaged
 runner needs Python 3.8+; see chapters 6.1 and 10. Standard-chess tests require
-the pinned network (download with `python3 tools/download_nnue.py`), or an
+the bundled native network, or an
 explicit `-Dmaxima_nnue_test_network=/absolute/path/to/network.nnue`. CTest
 supplies `MAXIMA_EVAL_FILE` to isolate model discovery from its working directory.
 Release builds retain `-O3 -DNDEBUG -march=native`; Debug builds retain assertions
@@ -666,35 +668,6 @@ You can use [Visual Studio Code](https://code.visualstudio.com/) to develop and 
 [Remote Development Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack) and [Docker](https://www.docker.com/).
 
 ![Image of VS Code](vscode.png)
-
-### Windows GUI with the WSL build
-
-The Windows GUI entry point is `C:\dev\maxima\maxima2.exe` (also available
-in `C:\dev\uci-engines`). Add that executable in the GUI's Engines page.
-It bridges UCI through WSL distribution `Ubuntu` to this checkout's canonical
-`build/cpp26/release/src/maxima2`. Every rebuild of `cpp26_release` updates the
-engine used by the GUI automatically. Keep this checkout and its
-`.tools/cpp26/lib` runtime installed. WSL remains required.
-
-Build or reinstall the launcher with MinGW's `x86_64-w64-mingw32-gcc`:
-
-```bash
-python3 tools/install_windows_engine.py             # build the bridge locally
-python3 tools/install_windows_engine.py --install   # install; archive older launchers
-```
-
-The engine runs with `C:\dev\maxima` as its working directory, where the
-NNUE weights, opening book and 290 three/four/five-piece Syzygy WDL/DTZ tables
-remain installed. `eval.nnue` and `book.bin` load automatically. Windows drive
-paths for `EvalFile`, `BookFile` and `SyzygyPath` are translated to Linux
-`/mnt/<drive>/...` paths. Set `SyzygyPath` to `C:\dev\maxima\syzygy`,
-`SyzygyProbeLimit=5` and `SyzygyProbeDepth=1` for the complete five-piece set.
-
-The installer keeps one `maxima2.exe` entry point in each engine directory,
-archives previous Maxima launchers under ignored `.context/releases/`, and
-updates the bundle's README and SHA-256 manifest. Launcher build artifacts stay
-under ignored `.tools/windows/`. The engine is CPU-tuned for this machine.
-GUI interaction itself requires the user's Windows desktop.
 
 ### 5.1 Optional Release LTO and GCC PGO
 
@@ -833,7 +806,7 @@ exercise the executable. No suite-specific UCI command or search hook is needed.
 ./maxima suite:run --suite /path/to/positions.epd --engine /path/to/engine
 ./maxima suite:run --suite /path/to/positions.epd --syzygy-path tablebases/syzygy
 ./maxima suite:run --suite bratko-kopec --nodes 200000 \
-  --model EvalFile=networks/nn-62ef826d1a6d.nnue
+  --model EvalFile=networks/maxima-200m.nnue
 ```
 
 Repeatable `--option NAME=VALUE` and `--model OPTION=PATH` select the evaluator
@@ -1277,7 +1250,6 @@ the restricted workspace runner may require these checks to run outside its
 sandbox. Inspect sanitizer diagnostics and exit codes. Race checking remains a
 separate requirement for concurrency changes.
 
-Private measurement records and benchmark artifacts live under `.context/baselines/`.
 Record the revision, dirty-tree status, binary hashes, positions, limits, build
 configuration, and commands. Complete option/model setup with an `isready` /
 `readyok` barrier before starting search CPU measurements; sending `setoption`
@@ -1374,9 +1346,6 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 
 ## 8. Private project records
 
-Plans, progress, experiments, and optimization results are indexed in
-`.context/plan-index.md`, outside Git.
-
 ## 9. Opening books and persistent experience
 
 ### 9.1 Native Polyglot book
@@ -1387,7 +1356,7 @@ path. `OwnBook=false` and `UCI_AnalyseMode=true` disable book selection for futu
 searches. `<empty>` clears the book path.
 
 ```text
-setoption name BookFile value /home/hermen/dev/qm2/book.bin
+setoption name BookFile value /path/to/book.bin
 setoption name OwnBook value true
 ```
 
@@ -1756,8 +1725,9 @@ current directory. Benchmark positions ship with the installed package.
 ready, so it is safe to rerun and suits CI. In order:
 
 - runner (`.tools/runner` with python-chess, unless the current Python has it)
-- network: `networks/nn-62ef826d1a6d.nnue` (the build registers its tests
-  against it) and its copy `eval.nnue`, through `tools/download_nnue.py`
+- network: `networks/maxima-200m.nnue` (the build registers its tests
+  against it) and its verified data-directory copy `maxima-200m.nnue`, through
+  the offline `tools/install_nnue.py`
 - toolchain: GCC 16+, CMake 3.30+ and Ninja on PATH are used as they are;
   otherwise `.tools/cpp26` is created with micromamba, which is itself
   downloaded (pinned 2.9.0, verified by size and SHA-256) on Linux x86-64
@@ -1790,10 +1760,10 @@ Cache `.tools/`, `build/` and `networks/` between runs; init then finds every
 step ready and only Ninja's incremental build does work.
 
 `MAXIMA_DATA_DIR` moves the data out of the checkout, for example onto a
-persistent volume: books (`book.bin`, `fire.bin`, `draw.bin`), `eval.nnue`,
+persistent volume: books (`book.bin`, `fire.bin`, `draw.bin`), `maxima-200m.nnue`,
 `tablebases/` and `experience/` (PGN games, learning index, player stats).
 `init`, the download and experience commands and `maxima fics` all use it; the
-engine runs in that directory, so its relative `book.bin` and `eval.nnue`
+engine runs in that directory, so its relative `book.bin` and `maxima-200m.nnue`
 resolve there. MaxDrone sets `SyzygyPath` to `tablebases/syzygy` there unless
 configured otherwise. The `.env` token file stays in the checkout.
 
@@ -2302,7 +2272,7 @@ python3 -m venv .tools/training
 .tools/training/bin/python -m pip install --index-url https://download.pytorch.org/whl/cpu \
     -r runner/requirements-training.txt
 .tools/training/bin/python -m pip install -e ./runner
-.tools/training/bin/maxima nnue:train training.mxdata --output .context/training/run-01
+.tools/training/bin/maxima nnue:train training.mxdata --output /path/to/training/run-01
 ```
 
 On hosts without `ensurepip`, create the environment with `--without-pip` and
@@ -2310,9 +2280,10 @@ use `.tools/runner/bin/python -m pip --python .tools/training/bin/python install
 for the same installation commands. Ordinary ops and the native engine do not
 require PyTorch. `nnue:train --help` also works without it.
 
-`--architecture halfkp` (default) uses the legacy inputs;
-`--architecture halfkav2_hm` trains the actual mirrored king-inclusive feature set
-and exports the Maxima-native format. Both use two perspectives, clipped activations
+`--architecture halfkav2_hm` (default) trains the mirrored king-inclusive feature set
+and exports the Maxima-native format. The explicit `--architecture halfkp` option
+remains for archival prototypes; those exports are not accepted by the engine.
+Both use two perspectives, clipped activations
 and two hidden layers; defaults are eight feature lanes and eight hidden units.
 It uses straight-through quantization and integer-domain activations, constrains
 weights to exportable ranges, and minimizes squared error against a blend of
@@ -2344,8 +2315,8 @@ Full-size HalfKAv2_hm students can optionally start from a supported legacy Half
 file instead of random weights:
 
 ```bash
-.tools/training/bin/maxima nnue:train training.mxdata --output .context/training/warm-01 \
-    --architecture halfkav2_hm --width 256 --hidden 32 --warm-start eval.nnue \
+.tools/training/bin/maxima nnue:train training.mxdata --output /path/to/training/warm-01 \
+    --architecture halfkav2_hm --width 256 --hidden 32 --warm-start /archive/teacher.nnue \
     --epochs 3 --batch-size 128
 ```
 
@@ -2392,7 +2363,7 @@ For comparison with Maxima's actual loader and fresh/incremental inference:
 
 ```bash
 cmake --build --preset cpp26_release --parallel 2 --target nnue_probe
-./maxima nnue:verify .context/training/run-01/network.nnue \
+./maxima nnue:verify /path/to/training/run-01/network.nnue \
     --probe build/cpp26/release/tests/nnue_probe --dataset training.mxdata
 ```
 
@@ -2405,10 +2376,7 @@ check needs no PyTorch and adds no engine protocol command.
 
 Update this document in the same change whenever implemented behavior, public
 commands, configuration, architecture, or workflows change. Keep examples runnable
-and describe implemented functionality. Planning, milestone status, decisions,
-and optimization or benchmark results belong under `.context/`, starting at
-`.context/plan-index.md`. Link detailed sub-plans and evidence reports from that
-index; keep this document focused on Maxima. `.context/` is ignored by Git.
+and describe implemented functionality. Keep this document focused on Maxima.
 
 The CLI follows the local Nimbly CLI's concise command summaries and section
 separators, with a left-aligned ASCII crown above the Maxima name. It provides
@@ -2707,7 +2675,7 @@ names (guests, and `(U)` logins such as `zahrani`) are not stable identities, so
 per-opponent learning should skip `Account "unregistered"` opponents; their games
 are kept as a record.
 
-The engine runs in the project root, so its relative `eval.nnue` and `book.bin`
+The engine runs in the project root, so its relative `maxima-200m.nnue` and `book.bin`
 defaults resolve. Login sets `iset ms 1`, so style12 clocks are milliseconds.
 Each style12 board of our own game (relation 1 or -1) is checked and applied to a
 python-chess board holding the whole game, so the engine receives

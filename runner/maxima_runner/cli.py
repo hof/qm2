@@ -177,7 +177,7 @@ def development_command(command, arguments):
     # Fail explicitly rather than silently skipping dependency-dependent tests.
     import chess
     environment = dict(os.environ, MAXIMA_ENGINE=str(binary), MAXIMA_PROJECT_DIR=str(root))
-    # Runner tests start the engine in temporary directories, where it cannot find eval.nnue itself.
+    # Runner tests start the engine in temporary directories, where it cannot find maxima-200m.nnue itself.
     if not environment.get("MAXIMA_EVAL_FILE"):
         environment["MAXIMA_EVAL_FILE"] = str(network_path(root))
     source = str(root / "runner")

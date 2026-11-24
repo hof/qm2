@@ -3,6 +3,7 @@
 Books, network, tablebases and experience go to MAXIMA_DATA_DIR when set, else the checkout."""
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import platform
@@ -15,7 +16,7 @@ import urllib.request
 import zipfile
 
 from . import download_tablebases
-from .project import data_root, project_root
+from .project import data_root, project_root, network_name
 
 # Chris Whittington's polyglot-books collection: Noomen's Rebel book and his gambit-minded Daring.
 polyglot_books = "https://github.com/ChrisWhittington/polyglot-books/releases/download/v1.0/"
@@ -181,22 +182,25 @@ def build_step(mode):
 
 
 def network_step(root, options):
-    """Only engines with NNUE ship tools/download_nnue.py; it prints the verified file.
-
-    The build's tests need networks/ and the engine needs eval.nnue, so both must exist."""
-    script = root / "tools/download_nnue.py"
-    target = options.data / "eval.nnue"
+    """Verify the bundled model and install the same bytes in the data directory."""
+    script = root / "tools/install_nnue.py"
+    target = options.data / network_name
     if not script.is_file():
         return "skipped", "this engine has no network"
-    if target.is_file() and any((root / "networks").glob("*.nnue")):
-        return "ok", "eval.nnue"
+    metadata = json.loads((root / "networks/maxima-200m.json").read_text())
+    source = root / "networks" / network_name
+    expected = metadata["sha256"]
+    if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != expected:
+        return "failed", "bundled native network missing or checksum mismatch"
+    if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == expected:
+        return "ok", network_name
     if options.check:
-        return "missing", "./maxima init downloads it"
-    result = subprocess.run([sys.executable, str(script)], cwd=root, capture_output=True, text=True)
+        return "missing", "./maxima init installs the bundled native network"
+    result = subprocess.run([sys.executable, str(script), "--output", str(target)],
+                            cwd=root, capture_output=True, text=True)
     if result.returncode != 0 or not result.stdout.strip():
-        return "failed", result.stderr.strip() or "tools/download_nnue.py"
-    shutil.copyfile(result.stdout.strip().splitlines()[-1], target)
-    return "done", "eval.nnue"
+        return "failed", result.stderr.strip() or "tools/install_nnue.py"
+    return "done", network_name
 
 
 def book_step(name, url, member, size, sha256, source):

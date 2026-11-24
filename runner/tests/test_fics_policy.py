@@ -68,7 +68,7 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
     def test_engine_name_is_shortened_to_version(self):
         self.assertEqual(fics.short_engine_name("Maxima 2.0.0-feat/nnue-bootstrap-8778e07-Release"), "Maxima 2.0.0")
         self.assertEqual(fics.short_engine_name("Maxima 2.1"), "Maxima 2.1")
-        self.assertEqual(fics.short_engine_name("Stockfish 17.1"), "Stockfish 17.1")
+        self.assertEqual(fics.short_engine_name("FixtureEngine 17.1"), "FixtureEngine 17.1")
         self.assertEqual(fics.short_engine_name("Crafty"), "Crafty")
         self.assertEqual(fics.short_engine_name(None), "UCI engine")
 
@@ -122,11 +122,11 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
     async def test_creating_fingers_opponent_and_reads_titles(self):
         subject = player()
         await subject.on_login("GuestTEST")
-        await subject.handle("Creating: Stockfish (2950) GuestTEST (++++) unrated blitz 3 0")
-        self.assertEqual(subject.connection.sent[-1], "finger Stockfish")
+        await subject.handle("Creating: FixtureEngine (2950) GuestTEST (++++) unrated blitz 3 0")
+        self.assertEqual(subject.connection.sent[-1], "finger FixtureEngine")
         self.assertFalse(subject.opponent_ready.is_set())
-        await subject.handle("Finger of Stockfish(C)(TD):")
-        self.assertEqual(subject.opponent, chess.engine.Opponent("Stockfish", None, 2950, True))
+        await subject.handle("Finger of FixtureEngine(C)(TD):")
+        self.assertEqual(subject.opponent, chess.engine.Opponent("FixtureEngine", None, 2950, True))
         self.assertTrue(subject.opponent_ready.is_set())
         await subject.handle("Creating: GuestTEST (++++) Magnus (2880) unrated blitz 3 0")
         await subject.handle("Finger of Magnus(GM):")

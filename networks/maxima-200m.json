@@ -1,0 +1,26 @@
+{
+  "name": "maxima-200m.nnue",
+  "architecture": "halfkav2_hm",
+  "bytes": 11552745,
+  "sha256": "61c2d21510166c79b64bba3fb98b9285f08e922b07487055b4dfb841bd08d3c7",
+  "cumulative_positions": 200000000,
+  "training": {
+    "dtype": "float64",
+    "epochs": 1,
+    "batch_size": 1024,
+    "learning_rate": 0.0001,
+    "search_weight": 0.7
+  },
+  "verification": {
+    "export_positions": 523,
+    "native_evaluations": 1249
+  },
+  "features_per_perspective": 22528,
+  "accumulator_width": 256,
+  "dense_layers": [
+    512,
+    32,
+    32,
+    1
+  ]
+}

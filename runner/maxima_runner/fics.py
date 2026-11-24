@@ -1707,7 +1707,7 @@ def run(options, parser):
 
     @asynccontextmanager
     async def engine_session():
-        # The data directory resolves the engine's relative eval.nnue and book.bin defaults.
+        # The data directory resolves the engine's relative maxima-200m.nnue and book.bin defaults.
         async with open_engine([str(options.engine or engine_path())], str(data_root()), log=engine_log) as session:
             await session.configure(settings)
             await session.ready()

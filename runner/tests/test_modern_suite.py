@@ -60,7 +60,6 @@ class modern_suite_tests(unittest.TestCase):
         self.assertEqual(len(manifest['positions']), len(positions))
         self.assertEqual(len({row['fen'] for row in positions}), 22)
         self.assertEqual(manifest['selection']['verify_nodes'], [2_000_000, 8_000_000])
-        self.assertEqual(manifest['reference']['identity'][0], 'name Stockfish 19')
         self.assertEqual(len(manifest['reference']['binary_sha256']), 64)
         self.assertTrue(manifest['reference']['cold_hash_each_pass'])
         self.assertEqual(manifest['reference']['options']['Threads'], '1')

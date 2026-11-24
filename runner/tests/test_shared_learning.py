@@ -25,7 +25,7 @@ def game_for(source='fics', group='bots', identity='one', result='1-0', annotate
         game.headers['Event'] = 'Lichess rated blitz game'
     if source == 'local':
         game.headers.update(Event='Maxima offline paired match', Site='offline',
-                            White='A', Black='B', EngineA='name Maxima 2.0', EngineB='name Stockfish 18')
+                            White='A', Black='B', EngineA='name Maxima 2.0', EngineB='name FixtureEngine 18')
         game.headers.pop('WhiteEngine', None)
     return game
 

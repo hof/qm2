@@ -15,6 +15,14 @@ from maxima_runner import nnue_data, nnue_training
 
 
 class resume_tests(unittest.TestCase):
+    def test_default_export_is_native(self):
+        output = self.root / "native-default"
+        argv = ["nnue:train", str(self.dataset), "--output", str(output),
+                "--epochs", "1", "--width", "2", "--hidden", "2", "--batch-size", "3"]
+        with patch("sys.argv", argv), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(nnue_training.main(), 0)
+        self.assertEqual((output / "network.nnue").read_bytes()[:4], bytes.fromhex("314e584d"))
+
     def setUp(self):
         torch.set_num_threads(1)
         self.temporary = tempfile.TemporaryDirectory()

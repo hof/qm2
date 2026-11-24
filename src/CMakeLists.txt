@@ -51,3 +51,4 @@ if(NOT maxima_pgo_mode STREQUAL "off")
 endif()
 
 install (TARGETS maxima2 RUNTIME DESTINATION bin)
+install(FILES "${maxima_network}" DESTINATION bin)

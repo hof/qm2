@@ -136,14 +136,34 @@ class init_tests(unittest.TestCase):
         self.assertEqual(dict(project_init.steps(options(books=False)))["book.bin"](
             self.root, options())[0], "skipped")
 
-    def test_network_needs_both_copies(self):
+    def test_native_network_checks_both_copies_and_ignores_retired_weights(self):
         (self.root / "tools").mkdir()
-        (self.root / "tools/download_nnue.py").write_text("")
-        (self.root / "eval.nnue").write_bytes(b"net")
-        self.assertEqual(project_init.network_step(self.root, options(data=self.root, check=True))[0], "missing")
+        (self.root / "tools/install_nnue.py").write_text("")
+        (self.root / "eval.nnue").write_bytes(b"retired")
         (self.root / "networks").mkdir()
-        (self.root / "networks/nn-test.nnue").write_bytes(b"net")
+        source = self.root / "networks" / project.network_name
+        source.write_bytes(b"native")
+        (self.root / "networks/maxima-200m.json").write_text(json.dumps({
+            "sha256": hashlib.sha256(b"native").hexdigest()}))
+        self.assertEqual(project_init.network_step(self.root, options(data=self.root, check=True))[0], "missing")
+        target = self.root / project.network_name
+        target.write_bytes(b"corrupt")
+        self.assertEqual(project_init.network_step(self.root, options(data=self.root, check=True))[0], "missing")
+        target.write_bytes(b"native")
         self.assertEqual(project_init.network_step(self.root, options(data=self.root, check=True))[0], "ok")
+        source.write_bytes(b"corrupt")
+        self.assertEqual(project_init.network_step(self.root, options(data=self.root, check=True))[0], "failed")
+
+    def test_default_network_does_not_select_retired_or_arbitrary_models(self):
+        (self.root / "networks").mkdir()
+        (self.root / "eval.nnue").write_bytes(b"retired")
+        (self.root / "networks/nn-old.nnue").write_bytes(b"retired")
+        with patch.dict(os.environ, MAXIMA_DATA_DIR=str(self.root)):
+            with self.assertRaisesRegex(ValueError, "no network"):
+                project.network_path(self.root)
+            native = self.root / "networks" / project.network_name
+            native.write_bytes(b"native")
+            self.assertEqual(project.network_path(self.root), native)
 
     def test_path_toolchain_requires_gcc_16(self):
         def versions(gcc):

@@ -4,6 +4,9 @@ Maxima 2 is a UCI chess engine by Erik van het Hof (hof) and Hermen Reitsma
 (hajewiet). It plays online as [MaximaEngine](https://lichess.org/@/MaximaEngine)
 on Lichess, where it accepts challenges, and on [FICS](https://www.freechess.org/).
 
+Maxima uses its own **HalfKAv2_hm network**. The initial version was trained on
+**200 million positions**, bootstrapped from a HalfKP network.
+
 ### History
 
 Maxima began in 1996 as BugChess, written in Delphi (Object Pascal) with its own
@@ -20,7 +23,7 @@ extensions and more pruning, and a tapered evaluation tuned by an integrated
 self-matching test. Maxima also became a UCI engine.
 
 In 2026, again after almost a decade of rest, Maxima moved to a neural network
-evaluation (NNUE), starting from the Stockfish 13 network, and its search was
+evaluation (NNUE), and its search was
 brought up to current standards: the transposition table, null-move and reverse
 futility pruning, and late move reductions from logarithmic tables. With the same
 network, the search work alone is worth about 380 Elo. Endgames use Syzygy

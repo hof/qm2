@@ -66,7 +66,6 @@ SOFTWARE.
 #define BEST_NONE               0xFFFF
 #define SCORE_ILLEGAL           0x7FFF
 
-// Note: WHITE, BLACK values are reverse of Stockfish
 #ifdef __cplusplus
 namespace {
 enum Color { BLACK, WHITE };

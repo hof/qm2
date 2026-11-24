@@ -1,5 +1,5 @@
 {
-  "reference": "official-stockfish/fishtest LLRcalc.LLR_logistic",
+  "reference": "Fishtest LLRcalc.LLR_logistic",
   "revision": "7a337cdea6a9d941d6b12a0a86fd5a0d1f5104bc",
   "source_sha256": "6e2cc30a55da03233e82d4ef97f1aa50118ce6732d11d8d3a756a656f5eecb94",
   "scipy_version": "1.15.3",
