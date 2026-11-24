@@ -32,7 +32,7 @@ def event_text(event, detailed=False):
     elif kind == 'notification_test':
         text = '✅ Maxima Monitor notification test. No engine failure has occurred.'
     elif kind == 'engine_incident':
-        text = '🔴 ' + label + ' engine incident: ' + event.get('reason', 'unexpected engine failure')
+        text = '🔴 ' + label + ' runner incident: ' + event.get('reason', 'unexpected engine failure')
         text += '\nNew games blocked. Recovery is limited to the current game.'
         if event.get('game') is not None:
             text += '\nGame: ' + str(event['game'])

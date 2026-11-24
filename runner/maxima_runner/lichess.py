@@ -620,6 +620,14 @@ class lichess_bot:
             context, self.context, self.session = self.context, None, None
             await context.__aexit__(None, None, None)
 
+    def storage_failure(self, error):
+        self.stopping, self.accept, self.restart = True, False, False
+        self.matchmaker.enabled = False
+        try:
+            self.safety.fail(error, self.game.id if self.game else None)
+        except OSError:
+            print('-- incident persistence failed; new games remain blocked', flush=True)
+
     async def engine_failure(self, error, board, clock):
         self.stopping, self.restart, self.accept = True, False, False
         self.matchmaker.enabled = False
@@ -1407,6 +1415,7 @@ class lichess_game:
         try:
             path = fics_game.save_game(game, bot.pgn_dir, self.record.started)
         except (OSError, ValueError) as error:
+            bot.storage_failure(error)
             bot.on_line(f"-- could not save game {self.id}: {error}")
             return
         bot.on_line(f"-- saved game {self.id} to {path}")
@@ -1414,6 +1423,7 @@ class lichess_game:
             try:
                 record = bot.learner.add(game)
             except (OSError, ValueError) as error:
+                bot.storage_failure(error)
                 bot.on_line(f"-- PGN saved; shared learning update failed: {error}")
                 return
             for text in learning_report(game, record, bot.learner.records):

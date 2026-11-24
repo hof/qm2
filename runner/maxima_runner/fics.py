@@ -737,6 +737,13 @@ class engine_player:
             context, self.context, self.session = self.context, None, None
             await context.__aexit__(None, None, None)
 
+    def storage_failure(self, error):
+        self.stopping, self.restart = True, False
+        try:
+            self.safety.fail(error, self.game)
+        except OSError:
+            print('-- incident persistence failed; new games remain blocked', flush=True)
+
     async def engine_failure(self, error, board, clock):
         self.stopping, self.restart = True, False
         self.safety.fail(error, self.game, board.fen())
@@ -1170,6 +1177,7 @@ class engine_player:
         try:
             path = fics_game.save_game(game, self.game_pgn_dir, self.record.started)
         except (OSError, ValueError) as error:
+            self.storage_failure(error)
             self.on_line(f"-- could not save game {self.game}: {error}")
             return
         self.on_line(f"-- saved game {self.game} to {path}")
@@ -1178,6 +1186,7 @@ class engine_player:
             try:
                 record = learner.add(game)
             except (OSError, ValueError) as error:
+                self.storage_failure(error)
                 self.on_line(f"-- PGN saved; shared learning update failed: {error}")
                 return
             for text in learning_report(game, record, learner.records):
