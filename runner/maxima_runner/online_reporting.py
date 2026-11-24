@@ -30,17 +30,12 @@ def event_text(event, detailed=False):
     if kind == 'login':
         text = '🟢 ' + event.get('message', 'Logged in to ' + label)
         details = event.get('engine_details') or {}
-        engine = (details.get('engine') or {}).get('name')
         options = details.get('options') or {}
-        if engine:
-            text += '\nEngine: ' + str(engine)
         facts = []
         if options.get('Threads') is not None:
             facts.append(str(options['Threads']) + ' threads')
         if options.get('Hash') is not None:
             facts.append(str(options['Hash']) + ' MiB hash')
-        if options.get('EvalFile'):
-            facts.append(str(options['EvalFile']).replace('\\', '/').rsplit('/', 1)[-1])
         if facts:
             text += '\n' + ' · '.join(facts)
     elif kind == 'notification_test':
