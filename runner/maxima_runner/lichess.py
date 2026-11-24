@@ -1643,7 +1643,7 @@ def run(options, parser):
             if controller.requested and bot.game is not None:
                 bot.game.save_interrupted()
             await bot.close()
-            reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Lichess session ended")
+            reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
             await reporter.close()
             if feed is not None:
                 await feed.close()

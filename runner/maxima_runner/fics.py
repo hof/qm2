@@ -1832,7 +1832,7 @@ def run(options, parser):
                 if controller.requested:
                     player.save_interrupted()
                 await player.close()
-            reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "FICS session ended")
+            reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
             await reporter.close()
             if feed is not None:
                 await feed.close()
