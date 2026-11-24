@@ -105,7 +105,8 @@ class runner_control:
         self.connections = set()
         self.shutdown_requested = None
         self.shutdown_ack = asyncio.Event()
-        self.offline = self.process_stop = self.restart_requested = False
+        self.offline = bool(self.state.get('offline', False))
+        self.process_stop = self.restart_requested = False
         self.wake = asyncio.Event()
 
     def stop_process(self):
@@ -114,6 +115,9 @@ class runner_control:
 
     async def wait_offline(self):
         self.offline = True
+        if not self.state.get('offline'):
+            self.state = dict(self.state, offline=True)
+            atomic_text(self.state_path, json.dumps(self.state)+'\n')
         await self.wake.wait()
 
     def status(self):
@@ -177,6 +181,10 @@ class runner_control:
             state = dict(self.state, command_id=identity)
             if command in ('pause', 'resume'):
                 state['paused'] = command == 'pause'
+            if command == 'softquit':
+                state['offline'] = True
+            elif command in ('resume', 'softrestart'):
+                state['offline'] = False
             atomic_text(self.state_path, json.dumps(state) + '\n')
             self.state = state
             player.paused = state['paused']

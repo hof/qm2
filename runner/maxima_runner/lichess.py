@@ -1641,8 +1641,11 @@ def run(options, parser):
                 await control.start()
             if feed is not None:
                 await feed.start()
-            await bot.start()
-            status = await bot.run(commands)
+            if control is not None and control.offline:
+                await control.wait_offline()
+            else:
+                await bot.start()
+                status = await bot.run(commands)
         except (RuntimeError, OSError, AssertionError, chess.engine.EngineError) as error:
             bot.stopping, bot.accept, bot.restart = True, False, False
             safety.fail(error)
@@ -1652,7 +1655,8 @@ def run(options, parser):
                 if controller.requested and bot.game is not None:
                     bot.game.save_interrupted()
                 await bot.close()
-                reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
+                if bot.name is not None or safety.incident:
+                    reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
                 if (control is not None and not control.process_stop and not controller.requested
                         and not safety.incident and bot.stopping and not bot.restart and bot.game is None):
                     await control.wait_offline()

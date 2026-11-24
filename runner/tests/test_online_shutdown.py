@@ -237,7 +237,7 @@ class process_tests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(.02)
         self.fail('native control did not reach '+mode)
 
-    async def exercise_native_softquit_restart(self, process):
+    async def exercise_native_softquit_restart(self, process, launch_again):
         await self.wait_control(process, 'ready')
         first_engine = int(self.pid.read_text())
         reply = await self.control_request(process, 'softquit', 1)
@@ -261,6 +261,18 @@ class process_tests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('Traceback', output.decode())
         with self.assertRaises(ProcessLookupError):
             os.kill(int(self.pid.read_text()), 0)
+        last_engine = int(self.pid.read_text())
+        replacement = await launch_again()
+        await self.wait_control(replacement, 'offline')
+        self.assertEqual(int(self.pid.read_text()), last_engine)
+        self.assertIn('Starting', (await self.control_request(replacement, 'resume', 4))['text'])
+        await self.wait_for(lambda: int(self.pid.read_text()) != last_engine)
+        await self.wait_control(replacement, 'ready')
+        replacement.send_signal(signal.SIGUSR1)
+        output, _ = await asyncio.wait_for(replacement.communicate(), 5)
+        self.assertEqual(replacement.returncode, 0, output.decode())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(int(self.pid.read_text()), 0)
 
     async def test_lichess_softquit_keeps_control_and_softrestart_starts_a_fresh_engine(self):
         server = fake_lichess()
@@ -268,9 +280,10 @@ class process_tests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         self.addCleanup(lambda: [server.close_streams() for _ in range(3)])
-        process = await self.launch('lichess', '--server', f'http://127.0.0.1:{server.server_port}',
-                                    '--no-challenge', control=True)
-        await self.exercise_native_softquit_restart(process)
+        async def launch():
+            return await self.launch('lichess', '--server', f'http://127.0.0.1:{server.server_port}',
+                                     '--no-challenge', control=True)
+        await self.exercise_native_softquit_restart(await launch(), launch)
 
     async def test_fics_softquit_keeps_control_and_softrestart_starts_a_fresh_engine(self):
         async def script(number, writer, read_line):
@@ -278,10 +291,11 @@ class process_tests(unittest.IsolatedAsyncioTestCase):
             while (await read_line()).strip() != 'quit':
                 pass
         async with fake_server(script, timeseal=False) as server:
-            process = await self.launch('fics', '--host', '127.0.0.1', '--port', str(server.port),
-                                        '--no-timeseal', '--no-seek', control=True)
-            await self.exercise_native_softquit_restart(process)
-            self.assertEqual(len(server.connections), 2)
+            async def launch():
+                return await self.launch('fics', '--host', '127.0.0.1', '--port', str(server.port),
+                                         '--no-timeseal', '--no-seek', control=True)
+            await self.exercise_native_softquit_restart(await launch(), launch)
+            self.assertEqual(len(server.connections), 3)
 
     async def wait_for(self, predicate, timeout=5):
         deadline = time.monotonic() + timeout

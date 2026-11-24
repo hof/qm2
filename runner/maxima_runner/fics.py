@@ -1846,9 +1846,12 @@ def run(options, parser):
                 await feed.start()
             if controller.requested:
                 return 0
-            if player is not None:
-                await player.start()
-            status = await run_client(options, commands, show, transcript=transcript, player=player)
+            if control is not None and control.offline:
+                await control.wait_offline()
+            else:
+                if player is not None:
+                    await player.start()
+                status = await run_client(options, commands, show, transcript=transcript, player=player)
             if status == 0 and player is not None and player.restart:
                 status = restart_status
         except (RuntimeError, OSError, AssertionError, chess.engine.EngineError) as error:
@@ -1862,7 +1865,8 @@ def run(options, parser):
                     if controller.requested:
                         player.save_interrupted()
                     await player.close()
-                reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
+                if player is None or player.name is not None or safety.incident:
+                    reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
                 if (control is not None and not control.process_stop and not controller.requested
                         and not safety.incident and player.stopping and not player.restart and player.game is None):
                     await control.wait_offline()
