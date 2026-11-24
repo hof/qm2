@@ -25,7 +25,7 @@ def service_notify(message):
 
 
 def event_text(event, detailed=False):
-    label = 'Lichess' if event['platform'] == 'lichess' else 'FICS'
+    label = {'lichess':'Lichess', 'fics':'FICS', 'telegram':'Monitor'}.get(event['platform'], event['platform'])
     kind = event['kind']
     if kind == 'login':
         text = '🟢 ' + event.get('message', 'Logged in to ' + label)
@@ -72,8 +72,9 @@ def event_text(event, detailed=False):
 
 
 class online_reporter:
-    def __init__(self, platform, root, on_line=print):
+    def __init__(self, platform, root, on_line=print, daily=True):
         self.platform, self.root, self.on_line = platform, Path(root), on_line
+        self.daily = daily
         self.root.mkdir(parents=True, exist_ok=True)
         self.task = self.heartbeat = None
         self.on_failure = self.on_stop = None
@@ -228,7 +229,7 @@ class online_reporter:
                 if self.on_failure is not None:
                     self.on_failure(RuntimeError('free disk below configured safety threshold'))
             day = datetime.now(self.zone).date().isoformat()
-            if day != self.day:
+            if self.daily and day != self.day:
                 self.event('daily_summary',id=self.platform+'-'+self.day,message=self.summary(self.day))
                 self.day=day
                 atomic_text(self.root/'summary_day', day+'\n')
@@ -267,18 +268,18 @@ def main():
     import argparse
     from .project import data_root
     parser=argparse.ArgumentParser(description='Deliver pending private online reports without connecting a chess client.')
-    parser.add_argument('--platform',choices=('lichess','fics'),required=True)
+    parser.add_argument('--platform',choices=('lichess','fics','telegram'),required=True)
     parser.add_argument('--test',action='store_true',help='Send an explicitly labelled notification test')
     parser.add_argument('--service-failure',action='store_true',help='Record an unexpected service exit and notify operators')
     args=parser.parse_args()
-    reporter=online_reporter(args.platform,data_root()/'runtime'/args.platform)
+    reporter=online_reporter(args.platform,data_root()/'runtime'/args.platform,daily=args.platform!='telegram')
     if args.service_failure:
         from .online_safety import engine_safety
         engine_safety(args.platform, reporter.root, reporter.event).fail(RuntimeError('Runner service failed: '+os.environ.get('MONITOR_SERVICE_RESULT','unknown')+'; inspect the service journal'))
     if args.test:
         reporter.event('notification_test',message='Notification delivery test; no engine failure has occurred.')
     today=datetime.now(reporter.zone).date().isoformat()
-    if reporter.day != today:
+    if reporter.daily and reporter.day != today:
         reporter.event('daily_summary',id=reporter.platform+'-'+reporter.day,message=reporter.summary(reporter.day))
         atomic_text(reporter.root/'summary_day',today+'\n')
     for path in (reporter.root/'outbox').glob('*.json'):

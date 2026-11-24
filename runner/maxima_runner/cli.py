@@ -52,6 +52,7 @@ command_groups = (
     ("Online play", (
         ("fics", "Play on FICS as MaxDrone (seek, play, save PGN)"),
         ("lichess", "Play on Lichess as a bot (accept, play, save PGN)"),
+        ("telegram", "Telegram monitor and controls"),
     )),
 )
 
@@ -293,6 +294,9 @@ def main(argv=None):
         elif command == "lichess":
             from . import lichess_cli
             entrypoint = lichess_cli.main
+        elif command == "telegram":
+            from . import online_control
+            entrypoint = online_control.main
         else:
             parser.error(f"unknown command: {command}")
         # Existing subcommands retain their argparse interfaces.

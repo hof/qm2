@@ -152,7 +152,7 @@ class control_tests(unittest.IsolatedAsyncioTestCase):
         listener.targets = {'fics': {'url': 'https://private.invalid/command', 'token': 'private'}}
         with patch('maxima_runner.online_control.post_json', side_effect=OSError('private')):
             text = await listener.handle(self.update('/maxima status'))
-        self.assertIn('fics: unreachable', text)
+        self.assertIn('fics: offline or unavailable', text)
         self.assertNotIn('private', text)
 
     async def test_endpoint_authentication_and_real_cross_runner_routing(self):
@@ -225,6 +225,19 @@ class control_tests(unittest.IsolatedAsyncioTestCase):
         await self.control.start()
         self.assertIsNone(self.control.task)
         self.assertIsNone(self.control.server)
+
+    async def test_standalone_monitor_targets_only_the_chess_runners(self):
+        self.listener()
+        path = Path(self.directory.name)/'targets.json'
+        path.write_text(json.dumps({name: {'url':'https://'+name+'.invalid/command', 'token':'x'*32}
+                                    for name in ('lichess','fics')}))
+        self.settings.update(MAXIMA_RUNNER_ID='monitor', MAXIMA_CONTROL_TARGETS=str(path))
+        control = runner_control('telegram', None, self.reporter)
+        listener = telegram_listener(control)
+        listener.route = AsyncMock(return_value='ready')
+        text = await listener.handle(self.update('/maxima status'))
+        self.assertIn('Listener: monitor', text)
+        self.assertEqual([call.args[0] for call in listener.route.await_args_list], ['lichess','fics'])
 
     async def test_polling_persists_offset_after_reply_and_ignores_processed_update(self):
         listener = self.listener()

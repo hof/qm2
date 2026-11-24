@@ -3217,3 +3217,9 @@ Telegram offsets. Moving the listener means disabling it on the old instance
 before enabling the new one; there is no automatic leader election. Listener
 replacements must not overlap (for example, use a Kubernetes Recreate rollout).
 Listener or remote-control outages do not change the runner's engine safety rules.
+
+`maxima telegram` runs the same listener as a separate runner role, with no
+chess engine. Configure its targets to include both playing clients and disable
+their embedded listeners. This keeps Telegram commands available while either
+chess client restarts or is offline. The monitor uses its own persistent runtime
+directory and reports failures through the normal notification outbox.

@@ -94,7 +94,9 @@ class runner_control:
         self.root.mkdir(exist_ok=True)
         self.state_path = self.root / 'state.json'
         self.state = read_json(self.state_path, {'paused': False, 'command_id': -1})
-        self.player.paused = bool(self.state['paused'])
+        self.local_runner = player is not None
+        if player is not None:
+            self.player.paused = bool(self.state['paused'])
         self.lock = asyncio.Lock()
         self.server = None
         self.task = None
@@ -105,6 +107,8 @@ class runner_control:
 
     def status(self):
         player = self.player
+        if player is None:
+            return self.runner_id + ': Telegram monitor online'
         safety = player.safety
         mode = ('fault hold' if safety.incident else 'stopping' if player.stopping
                 else 'paused' if player.paused else 'playing' if player.game is not None
@@ -118,6 +122,8 @@ class runner_control:
         return text
 
     async def command(self, command, identity, arguments=''):
+        if not self.local_runner:
+            raise ValueError('the monitor has no local chess client')
         if command not in read_commands + play_commands:
             raise ValueError('unsupported command')
         if not isinstance(identity, int) or isinstance(identity, bool) or identity < 0:
@@ -347,6 +353,8 @@ class telegram_listener:
             if not re.fullmatch(r'[a-z][a-z0-9_-]{0,31}', name) or name in ('all', 'help', control.runner_id):
                 raise ValueError('invalid or duplicate target ID')
             validate_target(target)
+        if not control.local_runner and not self.targets:
+            raise ValueError('the Telegram monitor requires configured runner targets')
         self.cursor = control.root / 'telegram_offset'
         self.offset = int(self.cursor.read_text()) if self.cursor.exists() else 0
         self.username = None
@@ -359,7 +367,7 @@ class telegram_listener:
 
     async def route(self, target, command, identity, arguments=''):
         try:
-            if target == self.control.runner_id:
+            if self.control.local_runner and target == self.control.runner_id:
                 return await asyncio.wait_for(self.control.command(command, identity, arguments), 8)
             settings = self.targets[target]
             answer = await asyncio.get_running_loop().run_in_executor(None, lambda: post_json(
@@ -367,7 +375,7 @@ class telegram_listener:
             return answer if command == 'history' else str(answer['text'])
         except Exception:
             # Do not echo request URLs or headers: they contain private configuration.
-            return target + ': unreachable or command unconfirmed; use status to check'
+            return target + (': offline or unavailable.' if command in read_commands else ': command unconfirmed; check status.')
 
     async def handle(self, update):
         self.monospace = False
@@ -384,7 +392,7 @@ class telegram_listener:
         command, _, username = words.pop(0).partition('@')
         if command != '/maxima' or (username and username.lower() != (self.username or '').lower()):
             return None
-        names = [self.control.runner_id, *self.targets]
+        names = ([self.control.runner_id] if self.control.local_runner else []) + list(self.targets)
         if not words or words == ['help']:
             return help_text
         if len(words) == 1 and words[0] in read_commands:
@@ -456,3 +464,58 @@ class telegram_listener:
             except Exception:
                 self.control.reporter.on_line('-- Telegram command delivery pending; retrying')
                 await asyncio.sleep(10)
+
+
+def main():
+    import argparse
+    import signal
+    from .online_reporting import online_reporter
+    from .online_safety import engine_safety
+    from .project import data_root
+    parser = argparse.ArgumentParser(description='Run the Telegram listener independently of chess clients.')
+    parser.parse_args()
+    if env_value('MAXIMA_TELEGRAM_LISTENER') != '1':
+        raise ValueError('enable MAXIMA_TELEGRAM_LISTENER=1 for the Telegram monitor role')
+
+    async def run():
+        reporter = online_reporter('telegram', data_root()/'runtime/telegram', daily=False)
+        safety = engine_safety('telegram', reporter.root, reporter.event)
+        safety.check_start()
+        control = runner_control('telegram', None, reporter)
+        stop = asyncio.Event()
+        reporter.on_stop = stop.set
+        def failed(error):
+            safety.fail(error)
+            stop.set()
+        reporter.on_failure = failed
+        loop = asyncio.get_running_loop()
+        for number in (signal.SIGTERM, signal.SIGINT):
+            try:
+                loop.add_signal_handler(number, stop.set)
+            except NotImplementedError:
+                pass
+        try:
+            reporter.start()
+            await control.start()
+            # A listener error must not leave an apparently online but idle monitor.
+            waiting = asyncio.ensure_future(stop.wait())
+            try:
+                done, _ = await asyncio.wait({waiting, control.task}, return_when=asyncio.FIRST_COMPLETED)
+                if control.task in done:
+                    control.task.result()
+                    raise RuntimeError('Telegram listener stopped unexpectedly')
+            finally:
+                waiting.cancel()
+                await asyncio.gather(waiting, return_exceptions=True)
+        except Exception as error:
+            safety.fail(error)
+            raise
+        finally:
+            await control.close()
+            await reporter.close()
+    asyncio.run(run())
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

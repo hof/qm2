@@ -75,7 +75,7 @@ def main():
     import argparse
     from .project import data_root
     parser=argparse.ArgumentParser(description='Inspect an online engine fault or explicitly clear a reviewed incident.')
-    parser.add_argument('--platform',choices=('lichess','fics'),required=True)
+    parser.add_argument('--platform',choices=('lichess','fics','telegram'),required=True)
     parser.add_argument('--clear-fault',metavar='INCIDENT_ID')
     args=parser.parse_args()
     root=data_root()/'runtime'/args.platform
