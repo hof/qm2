@@ -419,7 +419,7 @@ bool load_default(std::string & error) {
             return set_path(filesystem_error ? candidate.string() : absolute.string(), error);
         }
     }
-    error = "cannot find maxima-200m.nnue; place it beside the engine or set EvalFile";
+    error = "cannot find maxima-halfka.nnue; place it beside the engine or set EvalFile";
     return false;
 }
 

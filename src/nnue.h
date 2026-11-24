@@ -11,7 +11,7 @@
 // Maxima-native HalfKAv2_hm integer inference, GPL-3.0-or-later.
 namespace nnue {
 
-inline constexpr char default_network_name[] = "maxima-200m.nnue";
+inline constexpr char default_network_name[] = "maxima-halfka.nnue";
 
 struct change_t {
     int piece;

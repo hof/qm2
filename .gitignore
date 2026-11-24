@@ -65,5 +65,5 @@ __pycache__/
 /deep.bin
 /deep.json
 
-!/networks/maxima-200m.nnue
-/maxima-200m.nnue
+!/networks/maxima-halfka.nnue
+/maxima-halfka.nnue

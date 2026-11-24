@@ -69,7 +69,7 @@ class nnue_lifecycle_tests(lifecycle.search_lifecycle_tests):
 
     def test_native_network_auto_discovery_and_removed_options(self):
         with tempfile.TemporaryDirectory() as directory:
-            shutil.copyfile(network_path, Path(directory) / "maxima-200m.nnue")
+            shutil.copyfile(network_path, Path(directory) / "maxima-halfka.nnue")
             (Path(directory) / "eval.nnue").write_bytes(b"retired bootstrap weights")
             with patch.dict(os.environ, MAXIMA_EVAL_FILE=""):
                 engine = lifecycle.engine_session(directory)

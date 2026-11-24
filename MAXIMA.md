@@ -362,7 +362,7 @@ avoiding a separate raw-evaluation store.
 
 ### 4.9 NNUE evaluation
 
-Maxima ships its own 200M HalfKAv2_hm model in `networks/maxima-200m.nnue`.
+Maxima ships its own HalfKAv2_hm model in `networks/maxima-halfka.nnue`.
 SHA-256: `61c2d21510166c79b64bba3fb98b9285f08e922b07487055b4dfb841bd08d3c7`.
 The weights were trained with Maxima’s pipeline using search labels and completed-game
 outcomes through 200 million accepted positions. The file and its lineage are
@@ -396,7 +396,7 @@ value per pawn (126/781/825/1276/2538 for P/N/B/R/Q). Correction history is
 added afterwards without clock damping. Scores are side-to-move relative and
 clamped below the tablebase range.
 
-The default model is `maxima-200m.nnue`. Initial `isready` loads it
+The default model is `maxima-halfka.nnue`. Initial `isready` loads it
 before the clock starts; `MAXIMA_EVAL_FILE` overrides discovery, otherwise the
 working directory, its `networks/` directory, the executable directory and its
 parent are checked. CMake places the verified model beside the built executable
@@ -806,7 +806,7 @@ exercise the executable. No suite-specific UCI command or search hook is needed.
 ./maxima suite:run --suite /path/to/positions.epd --engine /path/to/engine
 ./maxima suite:run --suite /path/to/positions.epd --syzygy-path tablebases/syzygy
 ./maxima suite:run --suite bratko-kopec --nodes 200000 \
-  --model EvalFile=networks/maxima-200m.nnue
+  --model EvalFile=networks/maxima-halfka.nnue
 ```
 
 Repeatable `--option NAME=VALUE` and `--model OPTION=PATH` select the evaluator
@@ -1725,8 +1725,8 @@ current directory. Benchmark positions ship with the installed package.
 ready, so it is safe to rerun and suits CI. In order:
 
 - runner (`.tools/runner` with python-chess, unless the current Python has it)
-- network: `networks/maxima-200m.nnue` (the build registers its tests
-  against it) and its verified data-directory copy `maxima-200m.nnue`, through
+- network: `networks/maxima-halfka.nnue` (the build registers its tests
+  against it) and its verified data-directory copy `maxima-halfka.nnue`, through
   the offline `tools/install_nnue.py`
 - toolchain: GCC 16+, CMake 3.30+ and Ninja on PATH are used as they are;
   otherwise `.tools/cpp26` is created with micromamba, which is itself
@@ -1760,10 +1760,10 @@ Cache `.tools/`, `build/` and `networks/` between runs; init then finds every
 step ready and only Ninja's incremental build does work.
 
 `MAXIMA_DATA_DIR` moves the data out of the checkout, for example onto a
-persistent volume: books (`book.bin`, `fire.bin`, `draw.bin`), `maxima-200m.nnue`,
+persistent volume: books (`book.bin`, `fire.bin`, `draw.bin`), `maxima-halfka.nnue`,
 `tablebases/` and `experience/` (PGN games, learning index, player stats).
 `init`, the download and experience commands and `maxima fics` all use it; the
-engine runs in that directory, so its relative `book.bin` and `maxima-200m.nnue`
+engine runs in that directory, so its relative `book.bin` and `maxima-halfka.nnue`
 resolve there. MaxDrone sets `SyzygyPath` to `tablebases/syzygy` there unless
 configured otherwise. The `.env` token file stays in the checkout.
 
@@ -2675,7 +2675,7 @@ names (guests, and `(U)` logins such as `zahrani`) are not stable identities, so
 per-opponent learning should skip `Account "unregistered"` opponents; their games
 are kept as a record.
 
-The engine runs in the project root, so its relative `maxima-200m.nnue` and `book.bin`
+The engine runs in the project root, so its relative `maxima-halfka.nnue` and `book.bin`
 defaults resolve. Login sets `iset ms 1`, so style12 clocks are milliseconds.
 Each style12 board of our own game (relation 1 or -1) is checked and applied to a
 python-chess board holding the whole game, so the engine receives

@@ -72,7 +72,7 @@ add_custom_target(release
 )
 
 add_definitions("-Wall -Wextra")
-set(maxima_network_name "maxima-200m.nnue")
+set(maxima_network_name "maxima-halfka.nnue")
 set(maxima_network "${PROJECT_SOURCE_DIR}/networks/${maxima_network_name}")
 file(SHA256 "${maxima_network}" maxima_network_sha256)
 if(NOT maxima_network_sha256 STREQUAL "61c2d21510166c79b64bba3fb98b9285f08e922b07487055b4dfb841bd08d3c7")

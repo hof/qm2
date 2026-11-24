@@ -6,7 +6,7 @@ import re
 
 
 log_days = 7  # log files are deleted after this many days
-network_name = "maxima-200m.nnue"
+network_name = "maxima-halfka.nnue"
 
 
 def project_root():

@@ -143,7 +143,7 @@ class init_tests(unittest.TestCase):
         (self.root / "networks").mkdir()
         source = self.root / "networks" / project.network_name
         source.write_bytes(b"native")
-        (self.root / "networks/maxima-200m.json").write_text(json.dumps({
+        (self.root / "networks/maxima-halfka.json").write_text(json.dumps({
             "sha256": hashlib.sha256(b"native").hexdigest()}))
         self.assertEqual(project_init.network_step(self.root, options(data=self.root, check=True))[0], "missing")
         target = self.root / project.network_name

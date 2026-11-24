@@ -11,7 +11,7 @@ import tempfile
 
 def main():
     root = Path(__file__).resolve().parents[1]
-    metadata = json.loads((root / "networks/maxima-200m.json").read_text())
+    metadata = json.loads((root / "networks/maxima-halfka.json").read_text())
     source = root / "networks" / metadata["name"]
     if (source.stat().st_size != metadata["bytes"]
             or hashlib.sha256(source.read_bytes()).hexdigest() != metadata["sha256"]):

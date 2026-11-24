@@ -1,5 +1,5 @@
 {
-  "name": "maxima-200m.nnue",
+  "name": "maxima-halfka.nnue",
   "architecture": "halfkav2_hm",
   "bytes": 11552745,
   "sha256": "61c2d21510166c79b64bba3fb98b9285f08e922b07487055b4dfb841bd08d3c7",

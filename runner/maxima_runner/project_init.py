@@ -187,7 +187,7 @@ def network_step(root, options):
     target = options.data / network_name
     if not script.is_file():
         return "skipped", "this engine has no network"
-    metadata = json.loads((root / "networks/maxima-200m.json").read_text())
+    metadata = json.loads((root / "networks/maxima-halfka.json").read_text())
     source = root / "networks" / network_name
     expected = metadata["sha256"]
     if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != expected:
