@@ -27,6 +27,7 @@ from .project import data_root, engine_path, env_value, log_line, project_root
 from .uci import open_engine
 from .online_safety import engine_safety, remaining_clock, search_timeout
 from .online_reporting import online_reporter
+from .online_control import configured_control
 
 timeseal_key = b"Timestamp (FICS) v1.0 - programmed by Henrik Gram."
 timeseal_ping = b"[G]\x00"
@@ -699,6 +700,7 @@ class engine_player:
         self.noplayed = set()  # resting names on our FICS noplay list
         self.streak = self.played = 0
         self.stopping = self.finished = self.restart = False
+        self.paused = False
         self.seeked = time.monotonic()
 
     async def start(self):
@@ -937,10 +939,12 @@ class engine_player:
 
     async def seek(self):
         self.seeked = time.monotonic()
-        if self.stopping or self.game is not None or not (self.policy.seek_pool or self.policy.seeks or self.policy.losers_seeks):
+        if self.stopping or self.paused or self.game is not None or not (self.policy.seek_pool or self.policy.seeks or self.policy.losers_seeks):
             return
         await self.send("unseek")
         for command in self.policy.seek_commands():
+            if self.paused or self.stopping:
+                return
             self.on_line(f"-- posting {command}")
             await self.send(command)
 
@@ -966,7 +970,7 @@ class engine_player:
     async def handle(self, line):
         position = fics_game.style12.parse(line) if line.startswith("<12> ") else None
         if position is not None:
-            if self.stopping and position.game != self.game and position.relation in (fics_game.playing_my_move, fics_game.playing_their_move):
+            if (self.stopping or self.paused) and position.game != self.game and position.relation in (fics_game.playing_my_move, fics_game.playing_their_move):
                 await self.send('abort')
                 return
             try:
@@ -1038,7 +1042,7 @@ class engine_player:
 
     async def on_challenge(self, match):
         name = match["name"]
-        if self.game is not None or self.stopping or not self.policy.accept:
+        if self.game is not None or self.stopping or self.paused or not self.policy.accept:
             await self.send(f"decline {name}")
         elif not playable(match["type"], match["time"], match["increment"], self.policy.losers):
             self.on_line(f"-- declining {match['type']} {match['time']} {match['increment']} from {name}")
@@ -1080,7 +1084,7 @@ class engine_player:
             await self.send("unseek")
             self.finished = True
             return
-        if self.streak <= self.policy.rematches:
+        if not self.paused and self.streak <= self.policy.rematches:
             await self.send("rematch")
         await self.seek()
 
@@ -1788,6 +1792,7 @@ def run(options, parser):
                     print('-- incident persistence failed; new games remain blocked', flush=True)
             reporter.on_stop = request_stop
             reporter.on_failure = reporting_failed
+        control = configured_control("fics", player, reporter)
         try:
             asyncio.get_running_loop().add_signal_handler(signal.SIGUSR1, lambda: commands.put_nowait('softquit'))
         except (NotImplementedError, AttributeError):
@@ -1805,6 +1810,8 @@ def run(options, parser):
             events.subscribe(connectors.pgn_poster(configured["pgn_post"],
                                                    os.environ.get("MAXDRONE_POST_TOKEN") or None, show))
         try:
+            if control is not None:
+                await control.start()
             if feed is not None:
                 await feed.start()
             if controller.requested:
@@ -1819,6 +1826,8 @@ def run(options, parser):
             safety.fail(error)
             raise
         finally:
+            if control is not None:
+                await control.close()
             if player is not None:
                 if controller.requested:
                     player.save_interrupted()

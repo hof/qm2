@@ -3172,3 +3172,32 @@ fics`. `MAXIMA_REPORT_TIMEZONE` selects the summary timezone (default UTC).
 Summaries count games observed by reporting, so the first day can be partial.
 `MAXIMA_MIN_FREE_BYTES` optionally drains the client before storage is exhausted;
 `MAXIMA_STOP_AT` sets a Unix timestamp after which no new games are started.
+
+The runner can optionally receive Telegram commands. Enable
+`MAXIMA_TELEGRAM_LISTENER=1` on exactly one instance per bot token; other runners
+can still send notifications. `MAXIMA_RUNNER_ID` is a stable name (default:
+`lichess` or `fics`). `/maxima help` lists commands and the active listener;
+`/maxima status` and `/maxima today` query all configured runners. Mutations need
+an explicit target: `/maxima fics pause`, `/maxima lichess resume`, or
+`/maxima all pause`. Pause persists across restarts and blocks new games while
+finishing the current game; the client stays connected so it can receive resume.
+Resume preserves configured playing policy and cannot clear a fault hold, undo
+a shutdown, or bypass storage and stop-time limits.
+
+Supply `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and the comma-separated numeric
+`MAXIMA_TELEGRAM_OPERATORS` privately. Only fresh commands from those users in
+that chat can change play; forwarded and anonymous messages are ignored. The
+bot must be a group administrator or have Telegram privacy mode disabled to
+reliably receive `/maxima` without a bot-name suffix. Replies are plain text.
+
+Each remote runner can expose `MAXIMA_CONTROL_BIND=HOST:PORT`, authenticated by
+`MAXIMA_CONTROL_TOKEN` (at least 32 characters). Non-loopback endpoints require
+`MAXIMA_CONTROL_CERT` and `MAXIMA_CONTROL_KEY`; clients verify TLS certificates.
+The listener's `MAXIMA_CONTROL_TARGETS` names a private JSON file mapping runner
+IDs to `url` (ending in `/command`), `token`, and optional `ca_file`. Plain HTTP
+is allowed only on loopback. Addresses, keys and operator IDs are deployment
+configuration. Keep the data directory persistent to retain pause state and
+Telegram offsets. Moving the listener means disabling it on the old instance
+before enabling the new one; there is no automatic leader election. Listener
+replacements must not overlap (for example, use a Kubernetes Recreate rollout).
+Listener or remote-control outages do not change the runner's engine safety rules.
