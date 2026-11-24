@@ -212,6 +212,13 @@ class control_tests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('expired', await listener.handle(self.update('/maxima all softquit', date=1)))
         self.assertFalse(self.bot.stopping)
 
+    async def test_offline_resume_still_cannot_bypass_an_engine_fault(self):
+        self.control.offline = True
+        self.bot.stopping = True
+        self.bot.safety.incident = {'id': 'review'}
+        self.assertIn('refused', await self.control.command('resume', 1))
+        self.assertFalse(self.control.wake.is_set())
+
     def test_remote_urls_and_tokens_are_validated(self):
         for url in ('http://runner.invalid/command', 'https://user:pass@runner.invalid/command',
                     'https://runner.invalid/command?secret', 'https://runner.invalid/other'):

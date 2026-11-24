@@ -1812,8 +1812,14 @@ def run(options, parser):
             reporter.on_stop = request_stop
             reporter.on_failure = reporting_failed
         control = configured_control("fics", player, reporter)
+        state['control'] = control
+        def request_process_stop():
+            if control is not None:
+                control.stop_process()
+            commands.put_nowait('softquit')
+        reporter.on_stop = request_process_stop
         try:
-            asyncio.get_running_loop().add_signal_handler(signal.SIGUSR1, lambda: commands.put_nowait('softquit'))
+            asyncio.get_running_loop().add_signal_handler(signal.SIGUSR1, request_process_stop)
         except (NotImplementedError, AttributeError):
             pass
         if controller.requested and player is not None:
@@ -1828,6 +1834,7 @@ def run(options, parser):
         if configured["pgn_post"]:
             events.subscribe(connectors.pgn_poster(configured["pgn_post"],
                                                    os.environ.get("MAXDRONE_POST_TOKEN") or None, show))
+        status = 0
         try:
             if control is not None:
                 await control.start()
@@ -1838,29 +1845,40 @@ def run(options, parser):
             if player is not None:
                 await player.start()
             status = await run_client(options, commands, show, transcript=transcript, player=player)
-            return restart_status if status == 0 and player is not None and player.restart else status
+            if status == 0 and player is not None and player.restart:
+                status = restart_status
         except (RuntimeError, OSError, AssertionError, chess.engine.EngineError) as error:
             if player is not None:
                 player.stopping, player.restart = True, False
             safety.fail(error)
             raise
         finally:
-            if control is not None:
-                await control.close()
-            if player is not None:
-                if controller.requested:
-                    player.save_interrupted()
-                await player.close()
-            reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
-            await reporter.close()
-            if feed is not None:
-                await feed.close()
+            try:
+                if player is not None:
+                    if controller.requested:
+                        player.save_interrupted()
+                    await player.close()
+                reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
+                if (control is not None and not control.process_stop and not controller.requested
+                        and not safety.incident and player.stopping and not player.restart and player.game is None):
+                    await control.wait_offline()
+            finally:
+                if control is not None:
+                    await control.close()
+                await reporter.close()
+                if feed is not None:
+                    await feed.close()
+        return online_shutdown.session_result(status,
+            restart=control is not None and control.restart_requested,
+            stopping=controller.requested or safety.incident or (control is not None and control.process_stop))
 
     async def session():
         commands, state = asyncio.Queue(), {}
         controller = online_shutdown.shutdown_controller(show, configured["shutdown_grace"])
 
         def stop():
+            if state.get('control') is not None:
+                state['control'].stop_process()
             player = state.get("player")
             if player is not None:
                 player.stopping, player.restart = True, False

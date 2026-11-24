@@ -3193,6 +3193,10 @@ without starting another search. `softquit`, `softrestart`, `resign`, `abort`
 and `draw` use the online client's normal game controls. Lichess also supports
 `challenge` and `nochallenge`; FICS supports `reseek` and `seek-pool <pool>`.
 Only an explicit soft restart starts a new session; faults still require review.
+When control is enabled, a normal soft quit disconnects the chess client and
+stops its engine while keeping history and control available. `resume` or
+`softrestart` starts a fresh session. Process signals still exit the runner for
+service shutdowns and deployments.
 Mutations need
 an explicit target: `/maxima fics pause`, `/maxima lichess resume`, or
 `/maxima all pause`. Pause persists across restarts and blocks new games while

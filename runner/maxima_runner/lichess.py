@@ -1613,6 +1613,12 @@ def run(options, parser):
                 print('-- incident persistence failed; new games remain blocked', flush=True)
         reporter.on_failure = reporting_failed
         control = configured_control("lichess", bot, reporter)
+        state['control'] = control
+        def request_process_stop():
+            if control is not None:
+                control.stop_process()
+            bot.soft_quit()
+        reporter.on_stop = request_process_stop
         if controller.requested:
             bot.soft_quit()
         feed = None
@@ -1624,9 +1630,10 @@ def run(options, parser):
         if configured["pgn_post"]:
             events.subscribe(connectors.pgn_poster(configured["pgn_post"], env_value("MAXDRONE_POST_TOKEN"), show))
         try:
-            loop.add_signal_handler(signal.SIGUSR1, bot.soft_quit)
+            loop.add_signal_handler(signal.SIGUSR1, request_process_stop)
         except (NotImplementedError, AttributeError):
             pass  # no SIGUSR1 on this platform; console quit and chat commands still work
+        status = 0
         try:
             if controller.requested:
                 return 0
@@ -1635,27 +1642,37 @@ def run(options, parser):
             if feed is not None:
                 await feed.start()
             await bot.start()
-            return await bot.run(commands)
+            status = await bot.run(commands)
         except (RuntimeError, OSError, AssertionError, chess.engine.EngineError) as error:
             bot.stopping, bot.accept, bot.restart = True, False, False
             safety.fail(error)
             raise
         finally:
-            if control is not None:
-                await control.close()
-            if controller.requested and bot.game is not None:
-                bot.game.save_interrupted()
-            await bot.close()
-            reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
-            await reporter.close()
-            if feed is not None:
-                await feed.close()
+            try:
+                if controller.requested and bot.game is not None:
+                    bot.game.save_interrupted()
+                await bot.close()
+                reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
+                if (control is not None and not control.process_stop and not controller.requested
+                        and not safety.incident and bot.stopping and not bot.restart and bot.game is None):
+                    await control.wait_offline()
+            finally:
+                if control is not None:
+                    await control.close()
+                await reporter.close()
+                if feed is not None:
+                    await feed.close()
+        return online_shutdown.session_result(status,
+            restart=control is not None and control.restart_requested,
+            stopping=controller.requested or safety.incident or (control is not None and control.process_stop))
 
     async def session():
         commands, state = asyncio.Queue(), {}
         controller = online_shutdown.shutdown_controller(show, configured["shutdown_grace"])
 
         def stop():
+            if state.get('control') is not None:
+                state['control'].stop_process()
             bot = state.get("bot")
             if bot is not None:
                 bot.soft_quit()

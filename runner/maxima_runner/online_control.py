@@ -104,13 +104,23 @@ class runner_control:
         self.connections = set()
         self.shutdown_requested = None
         self.shutdown_ack = asyncio.Event()
+        self.offline = self.process_stop = self.restart_requested = False
+        self.wake = asyncio.Event()
+
+    def stop_process(self):
+        self.process_stop = True
+        self.wake.set()
+
+    async def wait_offline(self):
+        self.offline = True
+        await self.wake.wait()
 
     def status(self):
         player = self.player
         if player is None:
             return self.runner_id + ': Telegram monitor online'
         safety = player.safety
-        mode = ('fault hold' if safety.incident else 'stopping' if player.stopping
+        mode = ('fault hold' if safety.incident else 'offline' if self.offline else 'stopping' if player.stopping
                 else 'paused' if player.paused else 'playing' if player.game is not None
                 else 'ready' if player.session is not None else 'starting')
         text = self.runner_id + ': ' + mode
@@ -155,7 +165,7 @@ class runner_control:
             if identity <= self.state['command_id']:
                 return self.status() + ' · command already processed'
             player = self.player
-            if command in ('resume', 'softrestart') and (player.stopping or player.safety.incident
+            if command in ('resume', 'softrestart') and ((player.stopping and not self.offline) or self.process_stop or player.safety.incident
                     or (player.safety.path is not None and player.safety.path.exists())
                     or self.reporter.stop_requested or self.reporter.resource_reported
                     or (self.reporter.stop_at and time.time() >= self.reporter.stop_at)
@@ -170,6 +180,11 @@ class runner_control:
             self.state = state
             player.paused = state['paused']
             self.reporter.on_line('-- operator command: ' + self.runner_id + ' ' + command)
+            if self.offline and command == 'resume':
+                self.shutdown_requested, self.restart_requested = identity, True
+                self.shutdown_ack.clear()
+                self.wake.set()
+                return self.runner_id + ': Starting.'
             if command not in ('pause', 'resume'):
                 return self.runner_id + ': ' + await self.native_command(command, arguments, identity)
             if self.platform == 'lichess':
@@ -186,8 +201,15 @@ class runner_control:
     async def native_command(self, command, arguments, identity):
         player = self.player
         if command in ('softquit', 'softrestart'):
+            if self.offline and command == 'softquit':
+                return 'Already offline.'
             self.shutdown_requested = identity
             restart = command == 'softrestart'
+            self.restart_requested = restart
+            self.shutdown_ack.clear()
+            if self.offline:
+                self.wake.set()
+                return 'Restarting.'
             if self.platform == 'lichess':
                 player.soft_quit(restart=restart)
                 await player.cancel_challenge()
@@ -196,8 +218,12 @@ class runner_control:
                 await player.stop()
             return ('Restarting' if restart else 'Stopping') + (' after this game.' if player.game is not None else '.')
         if command in ('challenge', 'nochallenge'):
+            if self.offline:
+                return 'Offline; use resume to start playing.'
             return player.set_challenging(command == 'challenge') + '.'
         if command == 'reseek':
+            if self.offline:
+                return 'Offline; use resume to start playing.'
             if player.game is not None:
                 return 'Game in progress; seeks refresh after this game.'
             await player.seek()
@@ -253,6 +279,8 @@ class runner_control:
                 payload = json.loads(body)
                 text = await asyncio.wait_for(self.command(payload['command'], payload['id'], payload.get('arguments', '')), 8)
                 status, result = '200 OK', text if isinstance(text, dict) else {'text': text}
+                excluded = ('challenge', 'nochallenge') if self.platform == 'fics' else ('reseek', 'seek-pool')
+                result['commands'] = [name for name in read_commands + play_commands if name not in excluded]
         except (ValueError, KeyError, TypeError, UnicodeError, asyncio.TimeoutError,
                 asyncio.IncompleteReadError, asyncio.LimitOverrunError):
             pass
@@ -270,6 +298,8 @@ class runner_control:
             await asyncio.wait_for(writer.drain(), 2)
             if status == '200 OK' and self.shutdown_requested == payload.get('id'):
                 self.shutdown_ack.set()
+                if not self.restart_requested:
+                    self.shutdown_requested = None
         except (OSError, asyncio.TimeoutError):
             pass
         finally:
@@ -395,7 +425,7 @@ class telegram_listener:
         names = ([self.control.runner_id] if self.control.local_runner else []) + list(self.targets)
         if not words or words == ['help']:
             return help_text
-        if len(words) == 1 and words[0] in read_commands:
+        if len(words) == 1 and words[0].lstrip('!') in read_commands:
             target, action = 'all', words[0]
             arguments = ''
         elif len(words) >= 2:
@@ -403,6 +433,7 @@ class telegram_listener:
             arguments = ' '.join(extra)
         else:
             return help_text
+        action = action.lstrip('!')
         if target not in names + ['all'] or action not in read_commands + play_commands:
             return help_text
         if arguments and action != 'seek-pool':
@@ -454,7 +485,9 @@ class telegram_listener:
                     atomic_text(self.cursor, str(self.offset) + '\n')
                     if self.control.shutdown_requested is not None:
                         self.control.shutdown_ack.set()
-                        return
+                        if self.control.restart_requested:
+                            return
+                        self.control.shutdown_requested = None
             except urllib.error.HTTPError as error:
                 if error.code == 409:
                     self.control.reporter.event('operator_notice', message='Telegram listener conflict; commands disabled here. Configure exactly one listener.')
