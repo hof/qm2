@@ -7,6 +7,16 @@ from maxima_runner.online_reporting import online_reporter, event_text
 
 
 class reporting_tests(unittest.TestCase):
+    def test_recent_game_results_are_from_our_perspective(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reporter = self.reporter(directory)
+            for identity, color, result in [('w','white','1-0'), ('b','black','1-0'), ('d','black','1/2-1/2')]:
+                reporter.listen(dict(type='game_end', result=result, headers={
+                    'LearningId':identity, 'LearningColor':color, 'White':'White', 'Black':'Black', 'TimeControl':'180+2'}))
+            rows = reporter.recent_games()
+            self.assertEqual([row['result'] for row in rows], ['D', 'L', 'W'])
+            self.assertEqual([row['opponent'] for row in rows], ['White', 'White', 'Black'])
+
     def reporter(self,root):
         settings={'MAXIMA_REPORTING_ENABLED':'1','TELEGRAM_BOT_TOKEN':'fixture-secret','TELEGRAM_CHAT_ID':'123','RESEND_API_KEY':'email-secret','MAXIMA_ALERT_FROM':'sender@example.invalid','MAXIMA_ALERT_TO':'owner@example.invalid'}
         with patch('maxima_runner.online_reporting.env_value',side_effect=lambda k:settings.get(k)):

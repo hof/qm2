@@ -163,6 +163,22 @@ class online_reporter:
                 losses += 1
         return f'{datetime.fromisoformat(day).strftime("%d/%m/%Y")} · W-D-L: {wins}-{draws}-{losses} (tracked); aborted/unresolved: {unresolved}'
 
+    def recent_games(self, limit=10):
+        games = []
+        for path in (self.root/'games').glob('*.json'):
+            event = json.loads(path.read_text())
+            headers = event.get('headers') or {}
+            color = headers.get('LearningColor')
+            tag = 'Black' if color == 'white' else 'White'
+            result = event.get('result', '*')
+            outcome = ('D' if result == '1/2-1/2' else
+                       'W' if color in ('white','black') and result == ('1-0' if color == 'white' else '0-1') else
+                       'L' if color in ('white','black') and result in ('1-0','0-1') else '*')
+            games.append(dict(at=event['at'], opponent=headers.get(tag, '?'),
+                              title=headers.get(tag+'Title', ''), result=outcome,
+                              clock=headers.get('TimeControl', '?'), platform=self.platform))
+        return sorted(games, key=lambda row: row['at'], reverse=True)[:limit]
+
     def deliver(self, path):
         with writer_lock(self.root / '.delivery.lock'):
             self._deliver(path)

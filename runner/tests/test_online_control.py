@@ -117,9 +117,33 @@ class control_tests(unittest.IsolatedAsyncioTestCase):
         listener = self.listener()
         listener.username = 'FixtureBot'
         self.assertIn('Listener: lichess', await listener.handle(self.update('/maxima status')))
-        self.assertEqual(await listener.handle(self.update('/maxima@FixtureBot help')),
-                         'Maxima commands:\n/maxima status\n/maxima today\n'
-                         '/maxima <runner|all> status|today|pause|resume')
+        help_message = await listener.handle(self.update('/maxima@FixtureBot help'))
+        self.assertIn('/maxima history', help_message)
+        self.assertNotIn('Listener:', help_message)
+        self.assertNotIn('fault hold', help_message)
+
+    async def test_eval_uses_the_same_cached_line_as_lichess_chat(self):
+        from types import SimpleNamespace
+        self.bot.game = SimpleNamespace(last_eval='Nf3 +0.35, expecting Nf3 Nc6')
+        self.bot.open_session = AsyncMock()
+        self.assertEqual(await self.control.command('eval', 1), 'lichess: Nf3 +0.35, expecting Nf3 Nc6')
+        self.bot.open_session.assert_not_awaited()
+        self.bot.game = None
+        self.assertIn('No game', await self.control.command('eval', 2))
+
+    async def test_combined_history_selects_ten_newest_games_and_formats_results(self):
+        listener = self.listener()
+        listener.targets = {'fics': {}}
+        async def route(target, command, identity):
+            return {'games': [dict(at=n, opponent='Player'+str(n), title='', result='W',
+                                   clock='180+2', runner=target) for n in range(12 if target=='fics' else 2)]}
+        listener.route = AsyncMock(side_effect=route)
+        text = await listener.handle(self.update('/maxima history'))
+        self.assertTrue(listener.monospace)
+        self.assertEqual(len(text.splitlines()), 11)
+        self.assertIn('Player11', text)
+        self.assertNotIn('Player0 ', text)
+        self.assertIn('3+2', text)
         self.assertIsNone(await listener.handle(self.update('/maxima@OtherBot all pause')))
         self.assertIsNone(await listener.handle(self.update('ordinary group conversation')))
 

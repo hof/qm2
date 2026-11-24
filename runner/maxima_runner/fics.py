@@ -701,6 +701,7 @@ class engine_player:
         self.streak = self.played = 0
         self.stopping = self.finished = self.restart = False
         self.paused = False
+        self.last_eval = self.last_book = self.left_book = None
         self.seeked = time.monotonic()
 
     async def start(self):
@@ -1238,6 +1239,7 @@ class engine_player:
             self.game, self.token, self.history = position.game, object(), history
             self.loss.reset()
             self.record = fics_game.game_record({})
+            self.last_eval = self.last_book = self.left_book = None
             self.opening = None
             self.from_book = self.draw_offered = False
             self.draw_offers.reset()
@@ -1427,6 +1429,9 @@ class engine_player:
             source = book_whisper(numbered, self.opening.why, self.opening, compact=True) if book else f"{numbered} {info['source']}"
             learned = console_learning(board, move, self.opening)
             source += f" | {learned}" if learned else ""
+            self.last_eval = source
+            if book:
+                self.last_book, self.left_book = book_whisper(numbered, self.opening.why, self.opening), None
             self.on_line(styled(f"{source} | {console_time(seconds, clock - seconds)}", "92"))
             if explaining and kind == "book" and self.opening.why:
                 await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
@@ -1439,6 +1444,10 @@ class engine_player:
                     lambda: self.history.board.fen() if self.token is token and self.history is not None else None,
                     self.on_line, game=self.token, opponent=self.opponent, options=search_options)
             return
+        pv = variation(board, info.get('pv', []))
+        self.last_eval = f'{board.san(move)} {describe(info, board.turn)}' + (f', expecting {pv}' if pv else '')
+        if self.last_book and self.left_book is None:
+            self.left_book = numbered
         self.on_line(styled(console_search(board, move, info, seconds, clock, self.policy.pv_plies, self.opening), "92"))
         if explaining:
             note = None

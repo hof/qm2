@@ -3184,7 +3184,12 @@ The runner can optionally receive Telegram commands. Enable
 `MAXIMA_TELEGRAM_LISTENER=1` on exactly one instance per bot token; other runners
 can still send notifications. `MAXIMA_RUNNER_ID` is a stable name (default:
 `lichess` or `fics`). `/maxima help` lists commands;
-`/maxima status` and `/maxima today` query all configured runners. Mutations need
+`/maxima status` and `/maxima today` query all configured runners.
+`/maxima history` displays the ten newest recorded games across those runners,
+with local date/time, opponent, result from Maxima's perspective and clock.
+Add a runner name to restrict the query. `eval`, `book`, `stats` and `name`
+provide game information; `eval` reports the latest completed move evaluation
+without starting another search. Mutations need
 an explicit target: `/maxima fics pause`, `/maxima lichess resume`, or
 `/maxima all pause`. Pause persists across restarts and blocks new games while
 finishing the current game; the client stays connected so it can receive resume.

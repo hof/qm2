@@ -2,6 +2,7 @@
 import asyncio
 from datetime import datetime
 import hmac
+import html
 import json
 from pathlib import Path
 import re
@@ -16,8 +17,27 @@ from .learning_store import atomic_text
 from .project import env_value
 
 
-help_text = ('Maxima commands:\n/maxima status\n/maxima today\n'
-             '/maxima <runner|all> status|today|pause|resume')
+read_commands = ('status', 'today', 'history', 'eval', 'book', 'stats', 'name')
+play_commands = ('pause', 'resume')
+help_text = ('Maxima commands:\n/maxima status\n/maxima today\n/maxima history\n'
+             '/maxima <runner|all> eval|book|stats|name\n'
+             '/maxima <runner|all> status|today|history|pause|resume')
+
+
+def history_text(games, zone):
+    if not games:
+        return 'No recorded games yet.'
+    lines = ['Date/time    Runner     Opponent              R  Clock']
+    for row in sorted(games, key=lambda row: row['at'], reverse=True)[:10]:
+        when = datetime.fromtimestamp(row['at'], zone).strftime('%d/%m %H:%M')
+        opponent = ' '.join((row.get('title', '') + ' ' + row['opponent']).split())[:21]
+        clock = str(row['clock'])
+        seconds, separator, increment = clock.partition('+')
+        if separator and seconds.isdigit():
+            clock = f'{int(seconds) / 60:g}+{increment}'
+        clock = clock[:8]
+        lines.append(f"{when:12} {row['runner'][:10]:10} {opponent:21} {row['result']:1}  {clock}")
+    return '\n'.join(lines)
 
 
 def configured_control(platform, player, reporter):
@@ -92,7 +112,7 @@ class runner_control:
         return text
 
     async def command(self, command, identity):
-        if command not in ('status', 'today', 'pause', 'resume'):
+        if command not in read_commands + play_commands:
             raise ValueError('unsupported command')
         if not isinstance(identity, int) or isinstance(identity, bool) or identity < 0:
             raise ValueError('invalid command ID')
@@ -101,6 +121,11 @@ class runner_control:
         if command == 'today':
             day = datetime.now(self.reporter.zone).date().isoformat()
             return self.runner_id + ': ' + self.reporter.summary(day)
+        if command == 'history':
+            rows = await asyncio.get_running_loop().run_in_executor(None, self.reporter.recent_games)
+            return {'games': [dict(row, runner=self.runner_id) for row in rows]}
+        if command in ('eval', 'book', 'stats', 'name'):
+            return self.runner_id + ': ' + self.game_reply(command)
         async with self.lock:
             if identity <= self.state['command_id']:
                 return self.status() + ' · command already processed'
@@ -129,6 +154,31 @@ class runner_control:
             self.reporter.on_line('-- operator command: ' + self.runner_id + ' ' + command)
             return self.status() + (' · finishing current game' if player.paused and player.game is not None else '')
 
+    def game_reply(self, command):
+        player = self.player
+        if command == 'name':
+            protocol = getattr(player.session, 'protocol', None)
+            return (getattr(protocol, 'id', None) or {}).get('name', 'Maxima')
+        if player.game is None:
+            return 'No game in progress.'
+        game = player.game if self.platform == 'lichess' else player
+        if command == 'eval':
+            return game.last_eval or 'No search yet.'
+        if command == 'book':
+            if game.left_book:
+                return 'Out of book since ' + game.left_book + '.'
+            return game.last_book or 'No book move yet.'
+        if self.platform == 'lichess':
+            return game.stats_line()
+        learner = player.game_learner
+        if learner is None:
+            return 'No stats: learning is off.'
+        from . import learning
+        name = player.opponent.name if player.opponent else '?'
+        stats = learning.player_stats(learner.records, learner.server).get(name.lower(), {})
+        return (f"Vs {name}: {stats.get('games', 0)} games, W/D/L "
+                f"{stats.get('wins', 0)}/{stats.get('draws', 0)}/{stats.get('losses', 0)}.")
+
     async def serve(self, reader, writer):
         task = asyncio.current_task()
         self.connections.add(task)
@@ -141,7 +191,7 @@ class runner_control:
             else:
                 payload = json.loads(body)
                 text = await asyncio.wait_for(self.command(payload['command'], payload['id']), 8)
-                status, result = '200 OK', {'text': text}
+                status, result = '200 OK', text if isinstance(text, dict) else {'text': text}
         except (ValueError, KeyError, TypeError, UnicodeError, asyncio.TimeoutError,
                 asyncio.IncompleteReadError, asyncio.LimitOverrunError):
             pass
@@ -234,6 +284,7 @@ class telegram_listener:
         self.cursor = control.root / 'telegram_offset'
         self.offset = int(self.cursor.read_text()) if self.cursor.exists() else 0
         self.username = None
+        self.monospace = False
 
     async def api(self, method, payload):
         return await asyncio.get_running_loop().run_in_executor(
@@ -246,12 +297,13 @@ class telegram_listener:
             settings = self.targets[target]
             answer = await asyncio.get_running_loop().run_in_executor(None, lambda: post_json(
                 settings['url'], {'command': command, 'id': identity}, settings['token'], settings.get('ca_file')))
-            return str(answer['text'])
+            return answer if command == 'history' else str(answer['text'])
         except Exception:
             # Do not echo request URLs or headers: they contain private configuration.
             return target + ': unreachable or command unconfirmed; use status to check'
 
     async def handle(self, update):
+        self.monospace = False
         message = update.get('message') or {}
         sender = message.get('from') or {}
         if (str((message.get('chat') or {}).get('id')) != self.chat
@@ -268,21 +320,26 @@ class telegram_listener:
         names = [self.control.runner_id, *self.targets]
         if not words or words == ['help']:
             return help_text
-        if words in (['status'], ['today']):
+        if len(words) == 1 and words[0] in read_commands:
             target, action = 'all', words[0]
         elif len(words) == 2:
             target, action = words
         else:
             return help_text
-        if target not in names + ['all'] or action not in ('status', 'today', 'pause', 'resume'):
+        if target not in names + ['all'] or action not in read_commands + play_commands:
             return help_text
-        if action in ('pause', 'resume') and abs(time.time() - message.get('date', 0)) > 120:
+        if action in play_commands and abs(time.time() - message.get('date', 0)) > 120:
             return 'Command expired; send a fresh /maxima command.'
         chosen = names if target == 'all' else [target]
         # Telegram can randomize update IDs after a week without updates. Date
         # keeps desired-state commands ordered across that reset as well.
         identity = int(message.get('date', 0)) * (1 << 32) + update['update_id']
         answers = await asyncio.gather(*(self.route(name, action, identity) for name in chosen))
+        if action == 'history':
+            self.monospace = True
+            rows = [row for answer in answers if isinstance(answer, dict) for row in answer['games']]
+            errors = [answer for answer in answers if isinstance(answer, str)]
+            return history_text(rows, self.control.reporter.zone) + ('\n' + '\n'.join(errors) if errors else '')
         return 'Listener: ' + self.control.runner_id + '\n' + '\n'.join(answers)
 
     async def run(self):
@@ -306,7 +363,10 @@ class telegram_listener:
                         continue
                     text = await self.handle(update)
                     if text:
-                        result = await self.api('sendMessage', {'chat_id': self.chat, 'text': text[:4000]})
+                        formatted = html.escape(text[:3500])
+                        if self.monospace:
+                            formatted = '<pre>' + formatted + '</pre>'
+                        result = await self.api('sendMessage', {'chat_id': self.chat, 'text': formatted, 'parse_mode': 'HTML'})
                         if not result.get('ok'):
                             raise ValueError('Telegram reply rejected')
                     self.offset = update['update_id'] + 1
