@@ -207,6 +207,13 @@ class control_tests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await control.command('seek-pool', 3, '3 0\nquit')
 
+    async def test_fics_softquit_is_safe_before_login_finishes(self):
+        player = fics.engine_player(None, lambda text: None)
+        control = runner_control('fics', player, self.reporter)
+        self.assertIn('Stopping', await control.command('softquit', 1))
+        self.assertTrue(player.stopping)
+        self.assertTrue(player.finished)
+
     async def test_expired_native_actions_are_not_executed(self):
         listener = self.listener()
         self.assertIn('expired', await listener.handle(self.update('/maxima all softquit', date=1)))

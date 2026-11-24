@@ -1321,10 +1321,14 @@ class engine_player:
                 asyncio.ensure_future(self.engine_failure(ValueError("move task failed"), self.history.board.copy(), 0))
 
     async def send(self, line):
+        if self.connection is None:
+            return False
         try:
             await self.connection.send(line)
+            return True
         except (ConnectionError, OSError) as error:
             self.on_line(f"-- could not send {line!r}: {error}")
+            return False
 
     def show_opponent_move(self, ponder_hit=False):
         if self.opponent_line is not None:
