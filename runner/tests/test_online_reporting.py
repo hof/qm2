@@ -41,6 +41,14 @@ class reporting_tests(unittest.TestCase):
 
 
 class message_tests(unittest.TestCase):
+    def test_login_shows_engine_settings_without_local_paths(self):
+        message = event_text(dict(platform='lichess', kind='login', engine_details={
+            'engine': {'name': 'Maxima revision'},
+            'options': {'Threads': 4, 'Hash': 128, 'EvalFile': '/private/models/maxima-halfka.nnue'}}))
+        self.assertIn('Maxima revision', message)
+        self.assertIn('4 threads · 128 MiB hash · maxima-halfka.nnue', message)
+        self.assertNotIn('/private', message)
+
     def test_operator_messages_are_readable_without_debug_json(self):
         message=event_text({'platform':'lichess','kind':'login','message':'Logged in to Lichess as Example','at':12345})
         self.assertIn('Logged in to Lichess as Example',message)

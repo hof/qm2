@@ -811,7 +811,8 @@ class engine_player:
         self.loss.reset()
         self.name = name
         if self.events is not None:
-            self.events.emit("login", message="Logged in to FICS as " + name)
+            self.events.emit("login", message="Logged in to FICS as " + name,
+                             engine_details=self.safety.details)
         self.game = self.history = None
         self.announced_mood = None
         if self.policy.losers:

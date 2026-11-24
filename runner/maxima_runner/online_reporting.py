@@ -29,6 +29,20 @@ def event_text(event, detailed=False):
     kind = event['kind']
     if kind == 'login':
         text = '🟢 ' + event.get('message', 'Logged in to ' + label)
+        details = event.get('engine_details') or {}
+        engine = (details.get('engine') or {}).get('name')
+        options = details.get('options') or {}
+        if engine:
+            text += '\nEngine: ' + str(engine)
+        facts = []
+        if options.get('Threads') is not None:
+            facts.append(str(options['Threads']) + ' threads')
+        if options.get('Hash') is not None:
+            facts.append(str(options['Hash']) + ' MiB hash')
+        if options.get('EvalFile'):
+            facts.append(str(options['EvalFile']).replace('\\', '/').rsplit('/', 1)[-1])
+        if facts:
+            text += '\n' + ' · '.join(facts)
     elif kind == 'notification_test':
         text = '✅ Maxima Monitor notification test. No engine failure has occurred.'
     elif kind == 'engine_incident':
@@ -100,7 +114,7 @@ class online_reporter:
             if not path.exists():
                 atomic_text(path, json.dumps(values) + '\n')
             return
-        if kind not in ('login','shutdown','engine_incident','engine_recovered','recovery_failed','quarantined','daily_summary','notification_test'):
+        if kind not in ('login','shutdown','engine_incident','engine_recovered','recovery_failed','quarantined','daily_summary','notification_test','operator_notice'):
             return
         channels = []
         if self.settings['TELEGRAM_BOT_TOKEN'] and self.settings['TELEGRAM_CHAT_ID']:
@@ -116,7 +130,7 @@ class online_reporter:
 
     def listen(self, event):
         if event['type'] == 'login':
-            self.event('login', message=event['message'])
+            self.event('login', message=event['message'], engine_details=event.get('engine_details'))
         elif event['type'] == 'game_end':
             self.event('game_end', **{k:v for k,v in event.items() if k not in ('type','v','pgn')})
 

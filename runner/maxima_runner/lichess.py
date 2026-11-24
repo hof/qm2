@@ -518,11 +518,12 @@ class lichess_bot:
         if account.get("title") != "BOT":
             raise RuntimeError(f"{account.get('username')} is not a bot account (MAXIMA.md 10.3)")
         self.id, self.name = account["id"], account["username"]
-        if self.events is not None:
-            self.events.emit("login", message="Logged in to Lichess as " + self.name)
         if self.stopping:
             return
         await self.start_engine()
+        if self.events is not None:
+            self.events.emit("login", message="Logged in to Lichess as " + self.name,
+                             engine_details=self.safety.details)
         self.on_line(f"-- logged in as {self.name}; accepting {', '.join(self.speeds)}"
                      + (f"; owners {', '.join(sorted(self.owners))}" if self.owners else "; no owners for commands"))
         self.on_line("-- type help for console commands")
