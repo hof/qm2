@@ -8,7 +8,7 @@ from maxima_runner.online_reporting import online_reporter
 
 class reporting_tests(unittest.TestCase):
     def reporter(self,root):
-        settings={'TELEGRAM_BOT_TOKEN':'fixture-secret','TELEGRAM_CHAT_ID':'123','RESEND_API_KEY':'email-secret','MAXIMA_ALERT_FROM':'sender@example.invalid','MAXIMA_ALERT_TO':'owner@example.invalid'}
+        settings={'MAXIMA_REPORTING_ENABLED':'1','TELEGRAM_BOT_TOKEN':'fixture-secret','TELEGRAM_CHAT_ID':'123','RESEND_API_KEY':'email-secret','MAXIMA_ALERT_FROM':'sender@example.invalid','MAXIMA_ALERT_TO':'owner@example.invalid'}
         with patch('maxima_runner.online_reporting.env_value',side_effect=lambda k:settings.get(k)):
             return online_reporter('fixture',root,lambda line:None)
 

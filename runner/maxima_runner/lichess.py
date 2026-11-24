@@ -27,6 +27,8 @@ from .move_choice import describe, search_summary, variation
 from .project import data_root, engine_path, env_value, log_line
 from . import deep_learning
 from .uci import open_engine
+from .online_safety import engine_safety, remaining_clock, search_timeout
+from .online_reporting import online_reporter
 
 server_url = "https://lichess.org"
 speeds = ("bullet", "blitz", "rapid", "classical")
@@ -460,10 +462,11 @@ class lichess_bot:
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
                  margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, challenge_skip=(), blacklist_file=None, min_clock=90, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None,
-                 deep_idle=0, deep_learn=None):
+                 deep_idle=0, deep_learn=None, safety=None):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
+        self.safety = safety or engine_safety("lichess")
         self.speeds, self.accept, self.games = tuple(speeds), accept, games
         self.owners = {name.lower() for name in owners}
         self.learner, self.pgn_dir, self.events = learner, pgn_dir, events
@@ -477,6 +480,7 @@ class lichess_bot:
         self.accepted = (None, 0.0)  # a challenge accepted whose game has not started yet
         self.played = 0
         self.stopping = self.restart = False
+        self.force_offline = False
         self.matchmaker = matchmaker(challenge_idle, challenge_window, self.speeds, on_line, skip=challenge_skip,
                                      blacklist_file=blacklist_file)
         # Deep book learning after deep_idle minutes without a game: one position at a time, no challenges meanwhile.
@@ -496,7 +500,7 @@ class lichess_bot:
 
     @property
     def finished(self):
-        return (self.stopping and self.game is None and not self.matchmaker.challenging
+        return self.force_offline or (self.stopping and self.game is None and not self.matchmaker.challenging
                 and self.matchmaker.pending is None
                 and (self.accepted[0] is None or time.monotonic() - self.accepted[1] >= 20))
 
@@ -514,6 +518,8 @@ class lichess_bot:
         if account.get("title") != "BOT":
             raise RuntimeError(f"{account.get('username')} is not a bot account (MAXIMA.md 10.3)")
         self.id, self.name = account["id"], account["username"]
+        if self.events is not None:
+            self.events.emit("login", message="Logged in to Lichess as " + self.name)
         if self.stopping:
             return
         await self.start_engine()
@@ -607,11 +613,39 @@ class lichess_bot:
     async def start_engine(self):
         self.context = self.open_session()
         self.session = await self.context.__aenter__()
+        self.safety.describe(self.session)
 
     async def stop_engine(self):
         if self.context is not None:
             context, self.context, self.session = self.context, None, None
             await context.__aexit__(None, None, None)
+
+    async def engine_failure(self, error, board, clock):
+        self.stopping, self.restart, self.accept = True, False, False
+        self.matchmaker.enabled = False
+        self.safety.fail(error, self.game.id if self.game else None, board.fen())
+        self.on_line('-- ENGINE INCIDENT: new games blocked; ' + type(error).__name__)
+        try:
+            await asyncio.wait_for(self.cancel_challenge(), min(1, max(.01, clock / 10)))
+        except (asyncio.TimeoutError, OSError):
+            pass
+        if await self.safety.recover(error, self.stop_engine, self.start_engine, clock):
+            return True
+        if self.game is not None:
+            self.game.loss.sent = True
+            try:
+                action = 'abort' if board.ply() < 2 else 'resign'
+                sent = await asyncio.wait_for(self.api.post(self.game.path(action)), min(2, max(.05, clock / 2)))
+                if not sent and action == 'abort':
+                    sent = await asyncio.wait_for(self.api.post(self.game.path('resign')), 1)
+                if not sent:
+                    self.game.save_interrupted()
+                    self.force_offline = True
+            except (asyncio.TimeoutError, OSError):
+                self.game.save_interrupted()
+                self.force_offline = True
+        await self.stop_engine()
+        return False
 
     async def close(self):
         if self.game is not None:
@@ -766,6 +800,9 @@ class lichess_bot:
             self.matchmaker.declined(event["challenge"])
         elif kind == "gameStart":
             game_id = event["game"]["gameId"]
+            if self.stopping and self.game is None:
+                await self.api.post(f"/api/bot/game/{game_id}/abort")
+                return
             if self.accepted[0] == game_id:
                 self.accepted = (None, 0.0)
             if self.game is None:
@@ -1081,6 +1118,9 @@ class lichess_game:
     def report(self, task):
         if not task.cancelled() and task.exception() is not None:
             self.bot.on_line(f"-- move task failed: {task.exception()!r}")
+            if not self.over and not self.bot.safety.incident:
+                self.bot.stopping, self.bot.accept, self.bot.restart = True, False, False
+                asyncio.ensure_future(self.bot.engine_failure(ValueError("move task failed"), self.board.copy(), 0))
 
     def show_opponent_move(self, ponder_hit=False):
         if self.opponent_line is not None:
@@ -1108,13 +1148,11 @@ class lichess_game:
                 bot.session, board, limit, opening=self.opening,
                 ceiling=self.loss.ceiling(self.full.get("rated")),
                 tablebase=bot.tablebase, game=(self.id, self.generation),
-                opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options=self.search_options(),
+                opponent=self.opponent, timeout=search_timeout(clock, self.state_received_at), options=self.search_options(),
                 on_search_started=self.show_opponent_move)
         except (asyncio.TimeoutError, AssertionError, RuntimeError, OSError, chess.engine.EngineError) as error:
-            bot.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
-            await bot.stop_engine()
-            await bot.start_engine()
-            if retry:
+            left = remaining_clock(clock, self.state_received_at)
+            if await bot.engine_failure(error, board, left) and retry:
                 await self.play(board, state, retry=False)
             return
         finally:
@@ -1122,7 +1160,7 @@ class lichess_game:
         if self.over or self.generation is not generation or self.board.fen() != board.fen():
             return
         if move is None or not board.is_legal(move):
-            bot.on_line(f"-- engine returned no legal move in {board.fen()}")
+            await bot.engine_failure(ValueError("engine returned no legal move"), board, remaining_clock(clock, self.state_received_at))
             return
         fresh = self.loss.on_search(board, move, info, kind)
         latest = self.state or state
@@ -1306,6 +1344,11 @@ class lichess_game:
         else:
             result = "1/2-1/2"
         reason = reasons.get(status, status)
+        our_winner = 'white' if self.color == chess.WHITE else 'black'
+        if status in ('outoftime', 'timeout') and winner in ('white', 'black') and winner != our_winner:
+            bot.stopping, bot.accept, bot.restart = True, False, False
+            bot.matchmaker.enabled = False
+            bot.safety.fail(RuntimeError('our game ended by ' + reason), self.id, self.board.fen())
         bot.on_line(f"-- game {self.id} over: {reason} {result} | server lag {bot.lag.ms()} ms")
         if status not in ("aborted", "noStart"):
             self.chat("player", random.choice(player_farewells))
@@ -1516,9 +1559,14 @@ def run(options, parser):
     async def play_session(controller, commands, state):
         loop = asyncio.get_running_loop()
         read_commands(loop, commands)
-        events = connectors.game_events() if feed_address or configured["pgn_post"] else None
+        events = connectors.game_events()
+        reporter = online_reporter("lichess", data_root() / "runtime/lichess", show)
+        events.subscribe(reporter.listen)
+        safety = engine_safety("lichess", data_root() / "runtime/lichess", reporter.event)
+        safety.check_start()
+        reporter.start()
         api = lichess_api(token, options.server, show)
-        bot = lichess_bot(api, engine_session, show, speeds=configured["speeds"], accept=configured["accept"],
+        bot = lichess_bot(api, engine_session, show, speeds=configured["speeds"], accept=configured["accept"], safety=safety,
                           games=configured["games"], owners=owners, learner=learner, pgn_dir=pgn_dir, events=events,
                           online_tablebase=configured["online_tablebase"],
                           contempt_window=configured["contempt_window"], unknown_contempt=configured["unknown_contempt"],
@@ -1533,6 +1581,7 @@ def run(options, parser):
                                                                  data_root() / "book.bin", learner.records,
                                                                  positions=1, report=show))
         state["bot"] = bot
+        reporter.on_failure = bot.soft_quit
         if controller.requested:
             bot.soft_quit()
         feed = None
@@ -1554,10 +1603,16 @@ def run(options, parser):
                 await feed.start()
             await bot.start()
             return await bot.run(commands)
+        except (RuntimeError, OSError, AssertionError, chess.engine.EngineError) as error:
+            bot.stopping, bot.accept, bot.restart = True, False, False
+            safety.fail(error)
+            raise
         finally:
             if controller.requested and bot.game is not None:
                 bot.game.save_interrupted()
             await bot.close()
+            reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Lichess session ended")
+            await reporter.close()
             if feed is not None:
                 await feed.close()
 

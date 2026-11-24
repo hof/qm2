@@ -365,7 +365,32 @@ class engine_session:
         deadline = self.timeout if timeout is None else timeout
         if ceiling is not None:
             deadline = min(deadline, ceiling + min(self.timeout, 2))
-        return await asyncio.wait_for(play_search(), deadline)
+        searching = asyncio.ensure_future(play_search())
+        try:
+            done, _ = await asyncio.wait({searching}, timeout=deadline)
+            if done:
+                return searching.result()
+            # Cancelling a python-chess command may itself wait for bestmove.
+            # Ask for a move, then kill an unresponsive process before cancelling.
+            self.protocol.send_line("stop")
+            done, _ = await asyncio.wait({searching}, timeout=min(.1, max(.001, deadline * .05)))
+            if done:
+                return searching.result()
+            self.protocol.transport.kill()
+            searching.cancel()
+            await asyncio.wait({searching}, timeout=.1)
+            raise asyncio.TimeoutError("engine ignored stop at the clock safety deadline")
+        except asyncio.CancelledError:
+            searching.cancel()
+            done, _ = await asyncio.wait({searching}, timeout=.1)
+            if not done:
+                self.protocol.transport.kill()
+            raise
+        finally:
+            if searching.done() and not searching.cancelled():
+                searching.exception()
+            elif not searching.done():
+                searching.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
 
     async def stop_pondering(self):
         """Stop background work without changing the game or clearing its hash."""

@@ -25,8 +25,18 @@ class engine_safety:
         self.report = report or (lambda *args, **kwargs: None)
         self.incident = None
         self.recovery_used = False
+        self.details = {}
         if self.path is not None and self.path.exists():
             self.incident = json.loads(self.path.read_text())
+
+    def describe(self, session):
+        protocol = getattr(session, 'protocol', None)
+        identity = getattr(protocol, 'id', None)
+        options = getattr(protocol, 'config', None)
+        if isinstance(identity, dict):
+            self.details['engine'] = dict(identity)
+        if isinstance(options, dict):
+            self.details['options'] = {key: options[key] for key in ('Threads','Hash','EvalFile','Wild') if key in options}
 
     def check_start(self):
         if self.incident is not None:
@@ -36,7 +46,7 @@ class engine_safety:
         first = self.incident is None
         if first:
             self.incident = dict(id=uuid.uuid4().hex, platform=self.platform, time=time.time(),
-                                 error=type(error).__name__, reason=str(error), game=game, fen=fen)
+                                 error=type(error).__name__, reason=str(error), game=game, fen=fen, engine_details=self.details)
             if self.path is not None:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 atomic_text(self.path, json.dumps(self.incident) + '\n')
@@ -44,15 +54,41 @@ class engine_safety:
         return first
 
     async def recover(self, error, stop, start, clock):
-        if self.recovery_used or isinstance(error, (AssertionError, ValueError)) or clock <= .5:
+        if self.recovery_used:
             return False
         self.recovery_used = True
+        if isinstance(error, (AssertionError, ValueError)) or clock <= .5:
+            return False
         deadline = time.monotonic() + min(3.0, clock / 2)
         try:
             await asyncio.wait_for(stop(), min(.5, clock / 4))
             await asyncio.wait_for(start(), max(.001, deadline - time.monotonic()))
-        except (asyncio.TimeoutError, OSError, RuntimeError, AssertionError):
+        except Exception:
             self.report('recovery_failed', incident=self.incident['id'])
             return False
         self.report('engine_recovered', incident=self.incident['id'], message='Current game only; new games remain blocked')
         return True
+
+
+def main():
+    import argparse
+    from .project import data_root
+    parser=argparse.ArgumentParser(description='Inspect an online engine fault or explicitly clear a reviewed incident.')
+    parser.add_argument('--platform',choices=('lichess','fics'),required=True)
+    parser.add_argument('--clear-fault',metavar='INCIDENT_ID')
+    args=parser.parse_args()
+    root=data_root()/'runtime'/args.platform
+    safety=engine_safety(args.platform,root)
+    if args.clear_fault:
+        if safety.incident is None or safety.incident['id'] != args.clear_fault:
+            parser.error('incident ID does not match the current fault')
+        archive=root/'reviewed';archive.mkdir(exist_ok=True)
+        safety.path.replace(archive/(safety.incident['id']+'.json'))
+        print('Reviewed fault cleared; the bot remains offline until explicitly started.')
+    else:
+        print(json.dumps(safety.incident,indent=2))
+    return 0
+
+
+if __name__=='__main__':
+    raise SystemExit(main())

@@ -3146,3 +3146,25 @@ is below the draw score (`DrawContempt`, cp from our side). The move is logged, 
 `"online_tablebase": false`) leaves endgames to the engine and its local tables
 (7). The module is `runner/maxima_runner/online_tablebase.py`; it needs no
 account or token.
+
+
+### Online engine fault handling and reporting
+
+The online runner blocks accepting, seeking and challenging on an engine fault.
+A crash or unresponsive search permits one clock-bounded restart for the current
+game. Illegal moves and assertions stop play without retry. Recovery never
+reenables new games: the runner drains the current game and preserves a fault
+hold under the data directory's `runtime/<platform>/` directory. A reviewed hold
+can be inspected and explicitly cleared using
+`python -m maxima_runner.online_safety --platform lichess` and
+`--clear-fault INCIDENT_ID`; the service must then be started explicitly.
+Normal transport reconnects do not constitute engine faults.
+
+Optional private reporting uses `MAXIMA_REPORTING_ENABLED=1`, Telegram bot/chat
+settings and Resend sender/recipient settings supplied through local environment
+configuration. Login, shutdown, recovery and daily game summaries go to Telegram;
+incidents also go to email. Reports use a durable outbox and delivery retries
+outside move selection. `python -m maxima_runner.online_reporting --platform
+lichess` delivers pending reports without opening a chess connection; `--test`
+sends a clearly labelled delivery test. The same commands accept `--platform
+fics`. `MAXIMA_REPORT_TIMEZONE` selects the summary timezone (default UTC).

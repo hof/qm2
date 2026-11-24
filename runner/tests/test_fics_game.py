@@ -534,21 +534,29 @@ class player_tests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(player.game)
         self.assertEqual(player.connection.sent, [])
 
-    async def test_hung_engine_is_restarted_and_board_refreshed(self):
+    async def test_hung_engine_with_no_recovery_time_blocks_new_games(self):
         player = await self.player("hang", margin=0.3)
         await player.handle(start.replace("180000 180000", "500 500"))
         await self.settle(player)
-        self.assertEqual(player.connection.sent, ["refresh"])
-        self.assertTrue(any("restarting" in line for line in self.lines))
-        self.assertIsNotNone(player.session)
+        self.assertIn("unseek", player.connection.sent)
+        self.assertIn("abort", player.connection.sent)
+        self.assertTrue(player.stopping)
+        self.assertIsNotNone(player.safety.incident)
 
-    async def test_illegal_move_reply_refreshes_once(self):
+    async def test_illegal_move_reply_blocks_new_games(self):
         player = await self.player("play")
         await player.handle(start)
         await self.settle(player)
         await player.handle("Illegal move (e2e4).")
         await player.handle("Illegal move (e2e4).")
-        self.assertEqual(player.connection.sent, ["e2e4", "refresh"])
+        self.assertEqual(player.connection.sent[0], "e2e4")
+        self.assertIn("unseek", player.connection.sent)
+        self.assertTrue(player.stopping)
+        self.assertIsNotNone(player.safety.incident)
+        await player.seek()
+        await player.on_challenge({'name':'Opponent'})
+        self.assertEqual(player.connection.sent[-1], 'decline Opponent')
+        self.assertFalse(any(line.startswith('seek ') for line in player.connection.sent))
 
     async def test_aborts_when_the_opponent_stalls_before_a_first_move(self):
         after_e5 = ("<12> rnbqkbnr pppp-ppp -------- ----p--- ----P--- -------- PPPP-PPP RNBQKBNR W 4 1 1 1 1 0 17 "

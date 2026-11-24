@@ -67,3 +67,4 @@ __pycache__/
 
 !/networks/maxima-halfka.nnue
 /maxima-halfka.nnue
+/runtime/

@@ -609,7 +609,7 @@ class engine_failure_tests(unittest.IsolatedAsyncioTestCase):
         bot.id = "maximaengine"
         move = chess.Move.from_uci("e2e4")
         result = chess.engine.PlayResult(move, None, {})
-        sessions = [AsyncMock(play=AsyncMock(side_effect=AssertionError("NEW"))), AsyncMock(play=AsyncMock(return_value=result))]
+        sessions = [AsyncMock(play=AsyncMock(side_effect=RuntimeError("engine exited"))), AsyncMock(play=AsyncMock(return_value=result))]
         bot.session = sessions[0]
         bot.stop_engine = AsyncMock()
 
@@ -620,6 +620,48 @@ class engine_failure_tests(unittest.IsolatedAsyncioTestCase):
         game.setup(game_full())
         await game.play(game.board.copy(), game_full()["state"])
         self.assertEqual(path_move(api), "e2e4")
+        self.assertTrue(bot.stopping)
+        self.assertFalse(bot.accept)
+        self.assertIsNotNone(bot.safety.incident)
+
+
+    async def test_correctness_fault_does_not_restart_or_accept_more_games(self):
+        api = stub_api()
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot.id = 'maximaengine'
+        bot.session = AsyncMock(play=AsyncMock(side_effect=AssertionError('broken invariant')))
+        bot.stop_engine = AsyncMock()
+        bot.start_engine = AsyncMock()
+        game = bot.game = lichess.lichess_game(bot, 'g1')
+        game.setup(game_full())
+        await game.play(game.board.copy(), game_full()['state'])
+        bot.start_engine.assert_not_awaited()
+        self.assertTrue(bot.stopping)
+        self.assertFalse(bot.accept)
+        self.assertTrue(game.loss.sent)
+        self.assertFalse(any('/move/' in path for path, _ in api.posts))
+
+    async def test_second_failure_cannot_restart_again(self):
+        api = stub_api()
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot.id = 'maximaengine'
+        bot.session = AsyncMock(play=AsyncMock(side_effect=RuntimeError('dead process')))
+        bot.stop_engine = AsyncMock()
+        bot.start_engine = AsyncMock()
+        game = bot.game = lichess.lichess_game(bot, 'g1')
+        game.setup(game_full())
+        await game.play(game.board.copy(), game_full()['state'])
+        self.assertEqual(bot.start_engine.await_count, 1)
+        self.assertTrue(game.loss.sent)
+        self.assertFalse(any('/move/' in path for path, _ in api.posts))
+
+    async def test_late_game_start_after_fault_is_aborted_without_engine(self):
+        api = stub_api()
+        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
+        bot.stopping = True
+        await bot.on_event({'type':'gameStart','game':{'gameId':'late'}})
+        self.assertIsNone(bot.game)
+        self.assertTrue(any(path == '/api/bot/game/late/abort' for path, _ in api.posts))
 
 
 class fake_lichess(http.server.ThreadingHTTPServer):
@@ -697,8 +739,8 @@ class game_tests(unittest.IsolatedAsyncioTestCase):
         server.streams["/api/bot/game/stream/g1"].put(state)
         self.assertEqual(await asyncio.wait_for(running, 10), 0)
         await bot.close()
-        self.assertEqual([event["type"] for event in seen], ["game_start", "move", "move", "game_end"])
-        self.assertEqual(seen[1]["search"]["score"], {"cp": 25})
+        self.assertEqual([event["type"] for event in seen], ["login", "game_start", "move", "move", "game_end"])
+        self.assertEqual(next(event for event in seen if event["type"] == "move")["search"]["score"], {"cp": 25})
         pgn = seen[-1]["pgn"]
         self.assertIn('[Event "Lichess casual blitz game"]', pgn)
         self.assertIn("1. e4", pgn)
