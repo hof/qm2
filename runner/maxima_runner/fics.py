@@ -1290,7 +1290,7 @@ class engine_player:
     def report(self, task):
         if not task.cancelled() and task.exception() is not None:
             self.on_line(f"-- move task failed: {task.exception()!r}")
-            if self.history is not None and not self.safety.incident:
+            if self.history is not None and task is self.task and not self.loss.sent:
                 self.stopping, self.restart = True, False
                 asyncio.ensure_future(self.engine_failure(ValueError("move task failed"), self.history.board.copy(), 0))
 

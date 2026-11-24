@@ -1118,7 +1118,7 @@ class lichess_game:
     def report(self, task):
         if not task.cancelled() and task.exception() is not None:
             self.bot.on_line(f"-- move task failed: {task.exception()!r}")
-            if not self.over and not self.bot.safety.incident:
+            if not self.over and task is self.searching and not self.loss.sent:
                 self.bot.stopping, self.bot.accept, self.bot.restart = True, False, False
                 asyncio.ensure_future(self.bot.engine_failure(ValueError("move task failed"), self.board.copy(), 0))
 
