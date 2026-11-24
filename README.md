@@ -4,8 +4,7 @@ Maxima 2 is a UCI chess engine by Erik van het Hof (hof) and Hermen Reitsma
 (hajewiet). It plays online as [MaximaEngine](https://lichess.org/@/MaximaEngine)
 on Lichess, where it accepts challenges, and on [FICS](https://www.freechess.org/).
 
-Maxima uses its own **HalfKAv2_hm network**. The initial version was trained on
-**200 million positions**, bootstrapped from a HalfKP network.
+Maxima uses its own **HalfKAv2_hm network**.
 
 ### History
 

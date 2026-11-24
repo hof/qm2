@@ -364,10 +364,8 @@ avoiding a separate raw-evaluation store.
 
 Maxima ships its own HalfKAv2_hm model in `networks/maxima-halfka.nnue`.
 SHA-256: `61c2d21510166c79b64bba3fb98b9285f08e922b07487055b4dfb841bd08d3c7`.
-The weights were trained with Maxima’s pipeline using search labels and completed-game
-outcomes through 200 million accepted positions. The file and its lineage are
-included in the repository; builds, tests and normal
-play require no model download. `python3 tools/install_nnue.py` verifies and
+The weights and architecture metadata are included in the repository;
+builds, tests and normal play require no model download. `python3 tools/install_nnue.py` verifies and
 installs the bundled bytes.
 
 The native architecture has 22,528 inputs per
