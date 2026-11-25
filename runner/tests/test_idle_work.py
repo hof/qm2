@@ -173,3 +173,18 @@ class idle_work_tests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(json.loads(self.path.read_text())['allowed'])
         finally:
             await self.scheduler.close()
+
+    async def test_offline_match_session_acknowledges_pause_without_root_pv_mode(self):
+        with patch.dict(os.environ, MAXIMA_BACKGROUND_IDLE_CONTROL=str(self.path)):
+            async with open_engine([sys.executable, str(self.fixture)], self.root, timeout=.3,
+                                   root_pv_only=False) as engine:
+                self.scheduler.publish(True, 'background test')
+                await engine.search(chess.Board(), chess.engine.Limit(nodes=8))
+                self.state = 'game'
+                handoff = asyncio.create_task(self.scheduler.before_game())
+                blocked = asyncio.create_task(engine.search(chess.Board(), chess.engine.Limit(nodes=8)))
+                await asyncio.wait_for(handoff, 1)
+                await asyncio.sleep(.35)
+                self.assertFalse(blocked.done())
+                self.scheduler.publish(True, 'background test')
+                await asyncio.wait_for(blocked, 1)

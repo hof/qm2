@@ -313,9 +313,11 @@ def run(args):
             while state['chunk'] < len(chunks):
                 order = chunk_order(len(train), args.shuffle_size, args.seed, state['epoch'], chunks[state['chunk']])
                 for start in range(state['cursor'], len(order), args.batch_size):
-                    if campaign_deadline is not None and ((campaign_root / 'STOP').exists() or time.time() >= campaign_deadline):
+                    if ((getattr(args, 'stop_at', None) is not None and time.time() >= args.stop_at)
+                            or (campaign_deadline is not None and ((campaign_root / 'STOP').exists() or time.time() >= campaign_deadline))):
                         save()
-                        nnue_campaign.status(campaign_root)
+                        if campaign_deadline is not None:
+                            nnue_campaign.status(campaign_root)
                         print('Campaign scheduling stopped; training checkpoint saved')
                         return 0
                     selected = [train.board_row(i) for i in order[start:start + args.batch_size]]
@@ -382,12 +384,15 @@ def main():
     parser.add_argument('--metrics-positions', type=int, default=8192)
     parser.add_argument('--checkpoint-every', type=int, default=100)
     parser.add_argument('--max-batches', type=int)
+    parser.add_argument('--stop-at', type=float, help='Unix checkpoint deadline; resume preserves model, Adam and RNG')
     parser.add_argument('--width', type=int, default=256)
     parser.add_argument('--hidden', type=int, default=32)
     parser.add_argument('--learning-rate', type=float, default=0.0001)
     parser.add_argument('--search-weight', type=float, default=0.7)
     parser.add_argument('--seed', type=int, default=2026)
     args = parser.parse_args()
+    if args.stop_at is not None and not math.isfinite(args.stop_at):
+        parser.error('checkpoint deadline must be finite')
     # The per-run writer lock lives outside output so validation failures create no run.
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with writer_lock(args.output.parent / f'.{args.output.name}.lock'):
@@ -397,6 +402,8 @@ def main():
 def export_main():
     parser = argparse.ArgumentParser(prog='maxima nnue:export', description='Export a frozen sharded-stage candidate.')
     parser.add_argument('candidate', type=Path)
+    parser.add_argument('--latest-checkpoint', action='store_true',
+                        help='export final weights of a completed recovery checkpoint, retaining its optimizer separately')
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True, help='new directory for network and verification report')
     parser.add_argument('--positions', type=int, default=4096, help='bounded deterministic export comparisons')
@@ -407,6 +414,13 @@ def export_main():
     torch, model_type = nnue_training.training_libraries()
     torch.set_num_threads(1)
     candidate = torch.load(args.candidate, map_location='cpu', weights_only=True)
+    if args.latest_checkpoint:
+        if (candidate.get('format') != 'maxima.nnue.stage' or candidate.get('version') != 1
+                or candidate.get('phase') != 'complete' or not candidate.get('history')
+                or candidate.get('epoch', 0) <= 0):
+            raise ValueError('latest export requires a completed training checkpoint')
+        candidate = dict(candidate, format='maxima.nnue.candidate',
+                         selected_epoch=candidate['epoch'], validation_loss=candidate['history'][-1]['loss'])
     if (candidate.get('format') != 'maxima.nnue.candidate' or candidate.get('version') != 1
             or candidate['contract']['manifest_sha256'] != nnue_data.file_hash(args.manifest)):
         raise ValueError('candidate/manifest mismatch')
@@ -428,7 +442,10 @@ def export_main():
                   candidate_sha256=nnue_data.file_hash(args.candidate),
                   network_sha256=hashlib.sha256(serialized).hexdigest(),
                   export_checked_positions=len(selected), verification='sampled_scalar_and_edge_fixtures',
-                  native_verification_required=True, selected_epoch=candidate['selected_epoch'],
+                  native_verification_required=True, selection='latest_completed' if args.latest_checkpoint else 'validation_best',
+                  source_checkpoint_sha256=nnue_data.file_hash(args.candidate) if args.latest_checkpoint else None,
+                  global_step=candidate['global_step'], parent_sha256=candidate['contract']['parent_sha256'],
+                  selected_epoch=candidate['selected_epoch'],
                   validation_loss=candidate['validation_loss'])
     args.output.mkdir(parents=True, exist_ok=False)
     nnue_training.atomic_write(args.output / 'network.nnue', lambda stream: stream.write(serialized))

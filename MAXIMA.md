@@ -1845,7 +1845,7 @@ Idle-controlled local generation can set `MAXIMA_GENERATION_IDLE_CONTROL` to an
 atomic JSON heartbeat containing `allowed` and Unix `updated_at`. Trusted generation
 waits between searches when disallowed or when the heartbeat is missing/stale
 (30 seconds). Waiting is outside search timeouts and preserves the current game;
-the control file is cached for 0.5 seconds. Normal playing sessions are unaffected.
+generation sessions acknowledge suspension under the shared permission lock. Normal playing sessions are unaffected.
 
 `--diversity` selects the opt-in bounded-v1 recipe: 8–12 opening plies, square-root
 book weights, and a 2% alternative-move probe probability through ply160. At most
@@ -2203,6 +2203,36 @@ in flight. The CLIs deliberately do not schedule another block automatically,
 manage cloud billing, interpret SPRT decisions, or change the champion. The
 controller must enforce the shared budget, backlog and promotion policy; a stop
 file saves current complete games without forcing the next100M to finish.
+
+`nnue:cycle --config <private.json>` coordinates optional permanent training.
+Its JSON configuration selects the stage adapters, service targets, provider
+commands, paths, batch budget and plateau limit; it contains no built-in cloud
+provider or worker addresses. The durable sequence is generation, training,
+native verification, paired SPRT, conditional deployment, then preparation of the
+next batch. Adapters return pending, blocked or complete receipts. Completed
+artifacts are checksum-pinned, and a restart resumes the recorded stage.
+
+A rejected or inconclusive candidate leaves the playing champion unchanged and
+continues the latest completed model, Adam and RNG checkpoint on the next batch.
+Promotion independently replays the test PGNs, recomputes the first whole-pair
+SPRT boundary, and requires matching deployment receipts from every configured
+target. GPU cleanup and verified external backup receipts are required before a
+candidate reaches verification. Missing funding blocks generation/training;
+online play remains available. Stage failures and the configured no-promotion
+position limit latch a review hold and queue incident notifications. Configuration
+changes require explicit state migration. Provider cleanup, immutable cost/time
+limits and between-game model publication belong to the configured adapters.
+
+Offline node-limited matches can set `MAXIMA_BACKGROUND_IDLE_CONTROL` to the
+runner's idle heartbeat. Both test engines acknowledge suspension between
+searches, outside UCI timeouts. Do not set it on the playing runner. With
+`match:run --until-decision --max-pairs N`, openings are sampled with replacement
+and testing stops at the declared whole-pair cap if SPRT remains inconclusive.
+
+`nnue:export --latest-checkpoint` exports the final weights of a completed stage
+recovery checkpoint, preserving its optimizer file. The export report records
+this choice and checkpoint hash. `nnue:stage --stop-at <Unix time>` checkpoints
+at a batch boundary; `--resume` retains the optimizer and random state.
 
 `nnue:stage` is the bounded sharded trainer. It accepts a sealed manifest from
 `nnue:shards` and supports CPU or explicitly requested CUDA with optional PyTorch.

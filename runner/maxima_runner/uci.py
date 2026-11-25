@@ -208,7 +208,7 @@ class engine_session:
         self.ponder_fen = None
         self.nps = None  # the latest search speed, kept across games
         self.last_search_seconds = None
-        self.idle_control = (os.environ.get("MAXIMA_GENERATION_IDLE_CONTROL")
+        self.idle_control = os.environ.get("MAXIMA_BACKGROUND_IDLE_CONTROL") or (os.environ.get("MAXIMA_GENERATION_IDLE_CONTROL")
                              if getattr(protocol, "root_pv_only", False) else None)
         self.generation_permission = None
 

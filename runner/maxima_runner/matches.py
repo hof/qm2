@@ -359,6 +359,9 @@ async def run_match(commands, openings, args, report, pgn_stream):
                 else rng.sample(openings, args.pairs))
     report['selected_openings'] = [] if until_decision else [identifier for identifier, _ in selected]
     for pair, (identifier, position) in enumerate(selected):
+        if until_decision and getattr(args, 'max_pairs', None) is not None and pair >= args.max_pairs:
+            report['stop_reason'] = 'maximum_pairs'
+            return
         if until_decision:
             report['selected_openings'].append(identifier)
         for a_white in (True, False):
@@ -494,6 +497,7 @@ def main():
     parser.add_argument('--sprt-beta', type=float, default=0.05, help='SPRT false-negative target')
     parser.add_argument('--stop-file', type=Path, action='append', default=[])
     parser.add_argument('--stop-at', type=float, help='Unix deadline; finish current game then stop')
+    parser.add_argument('--max-pairs', type=positive_int, help='whole-pair cap for sampling with replacement')
     parser.add_argument('--seed', type=int, default=2026)
     parser.add_argument('--seconds', type=positive_float, help='initial clock seconds (default 10)')
     parser.add_argument('--increment', type=nonnegative_float, help='clock increment seconds (default 0.1)')
@@ -528,6 +532,8 @@ def main():
                 raise ValueError('--until-decision requires plain SPRT without a deadline or futility rule')
         elif args.pairs is None:
             args.pairs = 10
+        if args.max_pairs is not None and not args.until_decision:
+            raise ValueError('--max-pairs requires --until-decision')
         if args.stop_at is not None and not math.isfinite(args.stop_at):
             raise ValueError('stop deadline must be finite')
         if args.syzygy_path is not None:
@@ -572,6 +578,7 @@ def main():
         if args.pgn.exists() or args.json.exists():
             raise ValueError('output files already exist; choose new paths')
         report = {'variant': args.variant, 'seed': args.seed, 'pairs': args.pairs,
+                  'max_pairs': args.max_pairs,
                   'opening_sampling': 'with_replacement' if args.until_decision else 'without_replacement',
                   'syzygy_path': str(args.syzygy_path) if args.syzygy_path is not None else None,
                   'seconds': args.seconds, 'increment': args.increment,
@@ -608,7 +615,8 @@ def main():
             asyncio.run(run_match(commands, openings, args, report, stream))
         report['complete'] = (all(game['result'] != '*' for game in report['games']) and
                               (report['stopped_early'] or
-                               (args.pairs is not None and len(report['games']) == 2 * args.pairs)))
+                               (args.pairs is not None and len(report['games']) == 2 * args.pairs) or
+                               (args.max_pairs is not None and len(report['games']) == 2 * args.max_pairs)))
         if report['stop_reason'] is None and report['complete']:
             report['stop_reason'] = 'maximum_pairs'
             if report['summary'].get('sprt') is not None:

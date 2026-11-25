@@ -26,6 +26,7 @@ command_groups = (
         ("nnue:campaign", "Track campaign backlog, allocations and stops"),
         ("nnue:produce", "Run bounded parallel self-play producers"),
         ("nnue:stage", "Stream CPU/CUDA stages and retain Adam state"),
+        ("nnue:cycle", "Run configured training cycles"),
         ("nnue:export", "Export a frozen training-stage candidate"),
         ("nnue:shards", "Ingest shards with global disk deduplication"),
         ("nnue:convert", "Convert binary and shortfen training datasets"),
@@ -243,6 +244,9 @@ def main(argv=None):
         elif command == "nnue:produce":
             from . import nnue_produce
             entrypoint = nnue_produce.main
+        elif command == "nnue:cycle":
+            from . import nnue_cycle
+            entrypoint = nnue_cycle.main
         elif command == "nnue:stage":
             from . import nnue_stage
             entrypoint = nnue_stage.main

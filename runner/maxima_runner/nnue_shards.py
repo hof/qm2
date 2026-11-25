@@ -1,5 +1,6 @@
 """Disk-indexed immutable NNUE blocks; no corpus-sized Python collections."""
 import argparse
+import hashlib
 from contextlib import closing
 import json
 import os
@@ -18,12 +19,23 @@ def publish_json(path, value):
     nnue_data.publish_jsonl(path, value, [])
 
 
+def source_split(source):
+    """Keep fresh continuations of one played seed game in the same split."""
+    if 'seed_game' not in source:
+        return nnue_data.game_split(source)
+    family = source['seed_game']
+    if not isinstance(family, str) or len(family) != 64 or any(c not in '0123456789abcdef' for c in family):
+        raise ValueError('invalid seed game split identity')
+    digest = hashlib.sha256(('seed:' + family).encode('ascii')).digest()
+    return 'validation' if int.from_bytes(digest[:8], 'big') % 10 == 0 else 'train'
+
+
 def validate_row(row, header):
     board = row['board']
     method = header.get('split_method', 'position')
     if method not in ('position', 'game'):
         raise ValueError('unsupported split method')
-    split = nnue_data.game_split(row['source']) if method == 'game' else nnue_data.position_split(board)
+    split = source_split(row['source']) if method == 'game' else nnue_data.position_split(board)
     if (header.get('variant') != 'standard' or header.get('variant_state_size')
             or header.get('purpose') == 'heldout_evaluation' or board.chess960
             or not board.is_valid() or len(board.piece_map()) > 32
