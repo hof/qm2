@@ -2882,6 +2882,26 @@ any of this. A configured arena is entered again after a restart, one entered by
 command is not. Swiss and team-battle events are not supported.
 
 Bots cannot seek, so MaximaEngine plays challenges, its own and others'.
+Both online clients can optionally coordinate idle CPU work. Set `MAXIMA_IDLE_CONTROL`
+to a private control-file path and set `MAXIMA_GENERATION_IDLE_CONTROL` to that
+same path in the generation processes. The runner grants permission while idle;
+cooperating generation sessions acknowledge suspension at a search boundary.
+Live games have priority over due deep book analysis, which has priority over
+self-play. The runner waits for generation acknowledgements before accepting or
+searching a game, and cancels/reaps deep analysis before handing CPU to play.
+A failed handoff blocks play rather than allowing CPU contention. Paused generation
+waits outside its search deadline and retains its history and engine state.
+
+The permission file carries a heartbeat: a missing or stale owner pauses generation.
+The runner, workers and acknowledgement files must share a local process namespace
+and writable filesystem. Startup, faults and process shutdown suspend generation;
+a normal soft quit can leave generation running. `MAXIMA_IDLE_DEEP_MINUTES` controls
+the shared deep-analysis interval (default 10, 0 disables it). Deep searches use the
+playing engine's configured threads, hash and network. Provider selection, worker
+hosts, credentials, training budgets and external job commands remain configuration
+of the surrounding training workflow; the runner does not provision compute.
+
+Without this optional coordinator, the existing Lichess idle behavior applies:
 After `deep_learning_idle` minutes without a game (default 10, 0 turns it off; needs learning) the bot
 learns one position deeply (see deep book learning below): it sends no challenges and declines incoming
 ones (`later`) meanwhile, a soft quit stops it, and the idle time then restarts, so challenges come first.

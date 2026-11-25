@@ -210,26 +210,14 @@ class engine_session:
         self.last_search_seconds = None
         self.idle_control = (os.environ.get("MAXIMA_GENERATION_IDLE_CONTROL")
                              if getattr(protocol, "root_pv_only", False) else None)
-        self.idle_next_check = 0
-        self.idle_allowed = False
+        self.generation_permission = None
 
     async def wait_for_generation_idle(self):
-        """Wait outside search timeouts; a stale/missing controller pauses generation."""
-        while self.idle_control:
-            now = time.monotonic()
-            if now >= self.idle_next_check:
-                self.idle_allowed = False
-                try:
-                    control = json.loads(Path(self.idle_control).read_text())
-                    if isinstance(control, dict):
-                        age = time.time() - control.get("updated_at", 0)
-                        self.idle_allowed = control.get("allowed") is True and -2 <= age <= 30
-                except (OSError, ValueError, TypeError):
-                    pass
-                self.idle_next_check = now + 0.5
-            if self.idle_allowed:
-                return
-            await asyncio.sleep(0.25)
+        """Pause at a bounded search boundary, outside response deadlines."""
+        if self.generation_permission is None:
+            from .idle_work import generation_permission
+            self.generation_permission = generation_permission(self.idle_control)
+        await self.generation_permission.wait()
 
     @property
     def identity(self):
@@ -444,14 +432,15 @@ async def open_engine(command, directory, timeout=30, log=None, *, root_pv_only=
         if setting not in ("0", "1"):
             raise ValueError("MAXIMA_UCI_ROOT_PV_ONLY must be 0 or 1")
         root_pv_only = setting == "1"
-    transport = protocol = None
+    transport = protocol = session = None
     try:
         # Keep the transport before the handshake so every failure can reap it.
         transport, protocol = await online_protocol.popen(command, cwd=directory)
         protocol.log = log
         protocol.root_pv_only = root_pv_only
         await asyncio.wait_for(protocol.initialize(), timeout)
-        yield engine_session(protocol, timeout)
+        session = engine_session(protocol, timeout)
+        yield session
     except asyncio.TimeoutError as error:
         if protocol is not None and protocol.returncode.done():
             raise RuntimeError(f"engine exited with status {protocol.returncode.result()}") from error
@@ -475,3 +464,5 @@ async def open_engine(command, directory, timeout=30, log=None, *, root_pv_only=
                         pass
                 await asyncio.shield(protocol.returncode)
                 transport.close()
+        if session is not None and session.generation_permission is not None:
+            session.generation_permission.close()

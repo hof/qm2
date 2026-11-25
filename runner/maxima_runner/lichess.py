@@ -482,6 +482,7 @@ class lichess_bot:
         self.played = 0
         self.stopping = self.restart = False
         self.paused = False
+        self.idle_work = None
         self.force_offline = False
         self.matchmaker = matchmaker(challenge_idle, challenge_window, self.speeds, on_line, skip=challenge_skip,
                                      blacklist_file=blacklist_file)
@@ -816,6 +817,8 @@ class lichess_bot:
         elif kind == "challengeDeclined":
             self.matchmaker.declined(event["challenge"])
         elif kind == "gameStart":
+            if self.idle_work is not None:
+                await self.idle_work.before_game()
             game_id = event["game"]["gameId"]
             if (self.stopping or self.paused) and self.game is None:
                 await self.api.post(f"/api/bot/game/{game_id}/abort")
@@ -873,6 +876,8 @@ class lichess_bot:
                  f"{clock.get('show', '')} {'rated' if challenge.get('rated') else 'casual'}").replace("  ", " ")
         reason = self.decline_reason(challenge, compat)
         if reason is None:
+            if self.idle_work is not None:
+                await self.idle_work.before_game()
             self.accepted = (challenge["id"], time.monotonic())
             self.on_line(f"-- accepting {about}")
             if not await self.api.post(f"/api/challenge/{challenge['id']}/accept"):
@@ -1148,6 +1153,8 @@ class lichess_game:
             self.opponent_line = None
 
     async def play(self, board, state, retry=True):
+        if getattr(self.bot, "idle_work", None) is not None:
+            await self.bot.idle_work.before_game()
         bot = self.bot
         generation = self.generation
         if self.over or self.loss.sent:
@@ -1614,6 +1621,18 @@ def run(options, parser):
         reporter.on_failure = reporting_failed
         control = configured_control("lichess", bot, reporter)
         state['control'] = control
+        from .idle_work import configured_scheduler
+        async def idle_deep():
+            return await deep_learning.learn(configured["engine"] or engine_path(), data_root() / "book.bin",
+                learner.records, positions=1, report=show,
+                engine_options={name: value for name, value in settings.items() if name in ('Threads', 'Hash', 'EvalFile')})
+        idle_work = configured_scheduler('lichess', bot, control, controller, reporter,
+                                         idle_deep if learner is not None else None,
+                                         configured['deep_learning_idle'])
+        bot.idle_work = idle_work
+        if idle_work is not None:
+            bot.deep_idle = 0
+            events.subscribe(idle_work.listen)
         def request_process_stop():
             if control is not None:
                 control.stop_process()
@@ -1637,6 +1656,8 @@ def run(options, parser):
         try:
             if controller.requested:
                 return 0
+            if idle_work is not None:
+                idle_work.start()
             if control is not None:
                 await control.start()
             if feed is not None:
@@ -1661,6 +1682,8 @@ def run(options, parser):
                         and not safety.incident and bot.stopping and not bot.restart and bot.game is None):
                     await control.wait_offline()
             finally:
+                if idle_work is not None:
+                    await idle_work.close()
                 if control is not None:
                     await control.close()
                 await reporter.close()

@@ -661,6 +661,7 @@ class engine_player:
         self.safety = safety or engine_safety("fics")
         self.loss = resignation.loss_policy(resignation_settings)
         self.opponent_line = None
+        self.idle_work = None
         self.latest_position = None
         self.position_received_at = None
         self.open_session = open_session
@@ -1021,6 +1022,8 @@ class engine_player:
                               opponent=self.opponent_details())
 
     async def on_creating(self, match):
+        if self.idle_work is not None:
+            await self.idle_work.before_game()
         we_are_white = self.name is not None and match["white"].lower() == self.name.lower()
         name, rating = ((match["black"], match["black_rating"]) if we_are_white
                         else (match["white"], match["white_rating"]))
@@ -1055,6 +1058,8 @@ class engine_player:
             self.on_line(f"-- declining {name}: resting after aborts on move one")
             await self.send(f"decline {name}")
         else:
+            if self.idle_work is not None:
+                await self.idle_work.before_game()
             await self.send(f"accept {name}")
 
     async def on_game_end(self, end):
@@ -1336,6 +1341,8 @@ class engine_player:
             self.opponent_line = None
 
     async def play(self, position, board):
+        if self.idle_work is not None:
+            await self.idle_work.before_game()
         clock = (position.white_ms if board.turn == chess.WHITE else position.black_ms) / 1000
         limit = chess.engine.Limit(white_clock=position.white_ms / 1000, black_clock=position.black_ms / 1000,
                                    white_inc=position.increment_seconds, black_inc=position.increment_seconds)
@@ -1817,6 +1824,18 @@ def run(options, parser):
             reporter.on_failure = reporting_failed
         control = configured_control("fics", player, reporter)
         state['control'] = control
+        from .idle_work import configured_scheduler
+        async def idle_deep():
+            from . import deep_learning
+            return await deep_learning.learn(options.engine or engine_path(), data_root() / 'book.bin',
+                learner.records, positions=1, report=show,
+                engine_options={name: value for name, value in settings.items() if name in ('Threads', 'Hash', 'EvalFile')})
+        idle_work = configured_scheduler('fics', player, control, controller, reporter,
+                                         idle_deep if learner is not None else None)
+        if player is not None:
+            player.idle_work = idle_work
+        if idle_work is not None:
+            events.subscribe(idle_work.listen)
         def request_process_stop():
             if control is not None:
                 control.stop_process()
@@ -1840,6 +1859,8 @@ def run(options, parser):
                                                    os.environ.get("MAXDRONE_POST_TOKEN") or None, show))
         status = 0
         try:
+            if idle_work is not None:
+                idle_work.start()
             if control is not None:
                 await control.start()
             if feed is not None:
@@ -1871,6 +1892,8 @@ def run(options, parser):
                         and not safety.incident and player.stopping and not player.restart and player.game is None):
                     await control.wait_offline()
             finally:
+                if idle_work is not None:
+                    await idle_work.close()
                 if control is not None:
                     await control.close()
                 await reporter.close()
