@@ -150,3 +150,26 @@ class idle_work_tests(unittest.IsolatedAsyncioTestCase):
                     os.kill(pid, 0)
             finally:
                 await self.scheduler.close()
+
+    async def test_admission_hold_pauses_generation_but_keeps_deep_analysis_available(self):
+        permitted = False
+        started = asyncio.Event()
+        async def deep():
+            started.set()
+            await asyncio.sleep(60)
+        self.scheduler.admission = lambda: permitted
+        self.scheduler.start()
+        try:
+            await asyncio.sleep(0.05)
+            self.assertFalse(json.loads(self.path.read_text())['allowed'])
+            permitted = True
+            await asyncio.sleep(0.55)
+            self.assertTrue(json.loads(self.path.read_text())['allowed'])
+            permitted = False
+            self.scheduler.deep = deep
+            self.scheduler.deep_seconds = 0.01
+            self.scheduler.idle_since -= 1
+            await asyncio.wait_for(started.wait(), 1)
+            self.assertFalse(json.loads(self.path.read_text())['allowed'])
+        finally:
+            await self.scheduler.close()

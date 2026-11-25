@@ -66,10 +66,11 @@ class generation_permission:
 
 
 class idle_scheduler:
-    def __init__(self, path, state, deep=None, *, deep_minutes=10, on_line=print, on_failure=None, handoff_timeout=3):
+    def __init__(self, path, state, deep=None, *, deep_minutes=10, on_line=print, on_failure=None, handoff_timeout=3, admission=None):
         self.path, self.state, self.deep = Path(path), state, deep
         self.deep_seconds = max(0, deep_minutes * 60)
         self.on_line, self.on_failure = on_line, on_failure
+        self.admission = admission
         self.task = self.deep_task = None
         self.pending_until = 0
         self.idle_since = time.monotonic()
@@ -149,7 +150,8 @@ class idle_scheduler:
                     if self.state() == 'ready' and time.monotonic() >= self.pending_until:
                         self.deep_task = asyncio.ensure_future(self.deep())
                 else:
-                    self.publish(True, 'generation')
+                    allowed = True if self.admission is None else self.admission()
+                    self.publish(allowed, 'generation' if allowed else 'waiting for training controller')
                 await asyncio.sleep(0.5)
         except asyncio.CancelledError:
             raise
@@ -196,5 +198,12 @@ def configured_scheduler(platform, player, control, shutdown, reporter, deep=Non
     minutes = float(value) if value else deep_minutes
     if not 0 <= minutes <= 1440:
         raise ValueError('idle deep interval must be between 0 and 1440 minutes')
+    admission_path = env_value('MAXIMA_IDLE_ADMISSION')
+    def admitted():
+        try:
+            value = json.loads(Path(admission_path).read_text())
+            return value.get('allowed') is True and time.time() < value.get('expires_at', 0)
+        except (OSError, ValueError, TypeError):
+            return False
     return idle_scheduler(path, state, deep, deep_minutes=minutes, on_line=reporter.on_line,
-                          on_failure=reporter.on_failure)
+                          on_failure=reporter.on_failure, admission=admitted if admission_path else None)

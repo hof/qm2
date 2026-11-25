@@ -2896,7 +2896,11 @@ The permission file carries a heartbeat: a missing or stale owner pauses generat
 The runner, workers and acknowledgement files must share a local process namespace
 and writable filesystem. Startup, faults and process shutdown suspend generation;
 a normal soft quit can leave generation running. `MAXIMA_IDLE_DEEP_MINUTES` controls
-the shared deep-analysis interval (default 10, 0 disables it). Deep searches use the
+the shared deep-analysis interval (default 10, 0 disables it). An optional
+`MAXIMA_IDLE_ADMISSION` JSON file (`allowed`, `expires_at`) lets the training
+controller hold generation for budget, capacity or stage transitions. Missing or
+expired admission pauses generation while live games and due deep analysis remain
+available. Deep searches use the
 playing engine's configured threads, hash and network. Provider selection, worker
 hosts, credentials, training budgets and external job commands remain configuration
 of the surrounding training workflow; the runner does not provision compute.
