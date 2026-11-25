@@ -36,6 +36,20 @@ class reporting_tests(unittest.TestCase):
             reporter.event('engine_incident',id='incident',reason='repeat')
             self.assertEqual(len(list((Path(directory)/'outbox').glob('*.json'))),2)
 
+    def test_training_budget_pause_queues_both_channels_without_engine_failure_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reporter=self.reporter(directory)
+            reporter.event('training_notice',id='budget',message='Self-training paused: waiting for GPU funding.',alert=True)
+            files=list((Path(directory)/'outbox').glob('*.json'))
+            self.assertEqual(len(files),2)
+            event=json.loads(files[0].read_text())['event']
+            message=event_text(event,detailed=True)
+            self.assertIn('waiting for GPU funding',message)
+            self.assertNotIn('New games blocked',message)
+            self.assertNotIn('Incident:',message)
+            reporter.event('training_notice',id='resumed',message='Idle self-play resumed.',alert=False)
+            self.assertEqual(len(list((Path(directory)/'outbox').glob('*.json'))),3)
+
     def test_delivery_failure_keeps_pending_and_does_not_include_token(self):
         with tempfile.TemporaryDirectory() as directory:
             reporter=self.reporter(directory);reporter.event('login',message='connected')

@@ -38,6 +38,8 @@ def event_text(event, detailed=False):
             facts.append(str(options['Hash']) + ' MiB hash')
         if facts:
             text += '\n' + ' · '.join(facts)
+    elif kind == 'training_notice':
+        text = ('⏸ ' if event.get('alert') else '🧠 ') + event.get('message', 'Self-training update')
     elif kind == 'notification_test':
         text = '✅ Maxima Monitor notification test. No engine failure has occurred.'
     elif kind == 'engine_incident':
@@ -61,7 +63,7 @@ def event_text(event, detailed=False):
             text += '\n' + event['url']
     else:
         text = '⚪ ' + label + ' · ' + event.get('message', 'Session ended')
-    if detailed:
+    if detailed and kind != 'training_notice':
         for key, title in [('id','Incident'),('error','Error type'),('fen','Position')]:
             if event.get(key):
                 text += '\n' + title + ': ' + str(event[key])
@@ -116,12 +118,12 @@ class online_reporter:
             if not path.exists():
                 atomic_text(path, json.dumps(values) + '\n')
             return
-        if kind not in ('login','shutdown','engine_incident','engine_recovered','recovery_failed','quarantined','daily_summary','notification_test','operator_notice','titled_opponent'):
+        if kind not in ('login','shutdown','engine_incident','engine_recovered','recovery_failed','quarantined','daily_summary','notification_test','operator_notice','titled_opponent','training_notice'):
             return
         channels = []
         if self.settings['TELEGRAM_BOT_TOKEN'] and self.settings['TELEGRAM_CHAT_ID']:
             channels.append('telegram')
-        if kind in ('engine_incident','quarantined','notification_test') and all(self.settings[k] for k in ('RESEND_API_KEY','MAXIMA_ALERT_FROM','MAXIMA_ALERT_TO')):
+        if (kind in ('engine_incident','quarantined','notification_test') or kind == 'training_notice' and fields.get('alert')) and all(self.settings[k] for k in ('RESEND_API_KEY','MAXIMA_ALERT_FROM','MAXIMA_ALERT_TO')):
             channels.append('email')
         for channel in channels:
             path = self.root / 'outbox' / (str(identity) + '-' + kind + '-' + channel + '.json')
@@ -200,7 +202,7 @@ class online_reporter:
                            **{'Idempotency-Key':hashlib.sha256(path.name.encode()).hexdigest()})
             payload = {'from':self.settings['MAXIMA_ALERT_FROM'],
                        'to':[v.strip() for v in self.settings['MAXIMA_ALERT_TO'].split(',') if v.strip()],
-                       'subject': 'Maxima Monitor — ' + ('notification test' if event['kind']=='notification_test' else self.platform+' incident'), 'text':message}
+                       'subject': 'Maxima Monitor — ' + ('notification test' if event['kind']=='notification_test' else 'training update' if event['kind']=='training_notice' else self.platform+' incident'), 'text':message}
         try:
             request = urllib.request.Request(url,json.dumps(payload).encode(),headers,method='POST')
             with urllib.request.urlopen(request,timeout=3) as response:
