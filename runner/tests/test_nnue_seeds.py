@@ -16,6 +16,48 @@ from test_nnue_selfplay import fools_mate_engine
 
 
 class seed_tests(unittest.TestCase):
+    def test_supplied_position_files_preserve_state_and_exclude_reserved_roots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            initial = chess.Board()
+            initial.halfmove_clock = 17
+            initial.fullmove_number = 9
+            child = initial.copy()
+            child.push_uci('e2e4')
+            reserved = root / 'reserved.mxdata'
+            nnue_data.save_dataset(reserved, dict(variant='standard', score_pov='side_to_move'), [dict(
+                fen=initial.fen(), score_cp=0, split=nnue_data.position_split(initial),
+                source=dict(sha256='a' * 64, game=0, ply=0))])
+            for suffix in ('fen', 'epd'):
+                path = root / ('source.' + suffix)
+                path.write_text(initial.fen(en_passant='fen') + '\n' + child.fen(en_passant='fen') + '\n')
+                report = nnue_seeds.prepare(path, exclude=[reserved], limit=20)
+                output = root / 'starts.json'
+                output.write_text(json.dumps(report))
+                starts = nnue_seeds.load(output)
+                self.assertTrue(starts)
+                for item in starts:
+                    self.assertEqual(item['fen'], child.fen(en_passant='fen'))
+                    self.assertFalse(item['moves'])
+
+    def test_pgn_pool_retains_legal_history_and_one_family_for_related_starts(self):
+        game, _ = self.game()
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'games.pgn'
+            source.write_text(str(game) + '\n\n')
+            report = nnue_seeds.prepare(source, selection='positions', per_game=20, limit=20, min_ply=0)
+            output = Path(directory) / 'starts.json'
+            output.write_text(json.dumps(report))
+            starts = nnue_seeds.load(output)
+            self.assertTrue(starts)
+            self.assertEqual(len({item['source_game'] for item in starts}), 1)
+            for item in starts:
+                board = chess.Board(item['initial_fen'])
+                for move in item['moves']:
+                    self.assertIn(chess.Move.from_uci(move), board.legal_moves)
+                    board.push_uci(move)
+                self.assertEqual(board.fen(en_passant='fen'), item['fen'])
+
     def game(self, color=chess.WHITE, rise=False):
         game=chess.pgn.Game();game.headers['LearningColor']='white' if color else 'black'
         board=game.board();node=game;rng=random.Random(9)

@@ -1906,6 +1906,17 @@ seeds vary the starting offset through the pool. Related continuations retain
 the same source-family split through shard ingestion and training. Starting
 files and generation settings are checksum-pinned for resume.
 
+The same command accepts `.fen` and `.epd` collections with `--selection positions`.
+EPD operations supply position metadata, not training labels. For PGNs,
+`--selection positions --max-pieces N` samples matching positions with full
+available history; `--preceding-plies` can include positions before the selected
+transition. `--selection critical --score-position before|after` makes the
+annotation convention explicit. `--limit`, `--per-game` and `--seed` bound and
+reproduce a pool. `--exclude-dataset` removes reserved roots; also pass those
+datasets to self-play so continuations cannot publish reserved positions.
+FEN/EPD roots preserve their supplied clocks and rights; earlier history is
+unavailable and is never invented.
+
 `nnue:selfplay --exclude-dataset reserved.mxdata` removes every position in a
 reserved dataset from both generated splits, using position identity without
 clocks. Repeat the option to exclude multiple datasets, for example an earlier
