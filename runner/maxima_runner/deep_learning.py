@@ -134,7 +134,7 @@ async def learn(engine_path, book_path, records, minutes=None, positions=None, s
         engine = session.protocol
         options = dict(engine_options or {})
         options.update(OwnBook=False, Ponder=False, DrawContempt=0, ShortDrawOffset=0)
-        await engine.configure({name: value for name, value in options.items() if name in engine.options})
+        await session.configure(options)
         for board in todo:
             if deadline is not None and time.monotonic() + most_moves * seconds > deadline:
                 break

@@ -130,7 +130,10 @@ class idle_work_tests(unittest.IsolatedAsyncioTestCase):
         script = self.root / 'deep_engine'
         pid_path = self.root / 'deep.pid'
         script.write_text('#!' + sys.executable + '\nimport os\n'
-                          + 'open(' + repr(str(pid_path)) + ', "w").write(str(os.getpid()))\n' + fake_engine)
+                          + 'open(' + repr(str(pid_path)) + ', "w").write(str(os.getpid()))\n'
+                          + fake_engine.replace("print('uciok', flush=True)",
+                                                "print('option name Ponder type check default false', flush=True)\n"
+                                                "        print('uciok', flush=True)"))
         script.chmod(0o700)
         started = asyncio.Event()
         async def analyse(*args, **kwargs):
