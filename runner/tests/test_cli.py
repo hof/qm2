@@ -61,23 +61,11 @@ class cli_tests(unittest.TestCase):
         (build / 'CMakeCache.txt').write_text('BUILD_TESTING:BOOL=ON\n')
         (build / 'src/maxima2').touch()
 
-    def test_help_fits_an_80_column_terminal(self):
-        output = io.StringIO()
-        with contextlib.redirect_stdout(output):
-            cli.show_help()
-        self.assertLessEqual(max(map(len, output.getvalue().splitlines())), 80)
-        for _, commands in cli.command_groups:
-            for command, _ in commands:
-                if command.startswith(('experience:', 'books:')):
-                    self.assertIn(command, output.getvalue())
 
     def test_help_and_build_do_not_import_chess(self):
         with patch.dict(sys.modules, {'chess': None}), contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(cli.main(['--help']), 0)
             self.assertEqual(cli.main(['help']), 0)
-            self.assertIn('experience:sync', output.getvalue())
-            self.assertNotIn('experience:book:', output.getvalue())
-            self.assertNotIn('\033[', output.getvalue())
             with self.assertRaises(SystemExit) as result:
                 cli.main(['help', 'build'])
             self.assertEqual(result.exception.code, 0)

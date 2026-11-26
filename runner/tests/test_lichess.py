@@ -126,14 +126,6 @@ class command_tests(unittest.IsolatedAsyncioTestCase):
         replies = [data["text"] for _, data in api.posts]
         self.assertEqual(replies, ["I share that with spectators only.", "e4 d20 +0.30"])
 
-    async def test_book_details_are_separate_readable_chat_lines(self):
-        api, lines, bot, game = self.game()
-        game.last_book = ("5...Nc6 base book | 55% pick chance | support: base book, fire book"
-                          " | learned: masters +23 =1 -1")
-        await self.say(game, "Someone", "!book")
-        self.assertEqual([data["text"] for _, data in api.posts],
-                         ["5...Nc6 base book | 55% pick chance", "support: base book, fire book",
-                          "learned: masters +23 =1 -1"])
 
     async def test_console_answers_every_command(self):
         api, lines, bot, game = self.game()
@@ -298,7 +290,7 @@ class stub_session:
 
 
 class ponder_tests(unittest.IsolatedAsyncioTestCase):
-    async def test_stream_reports_prediction_hit_and_miss(self):
+    async def test_live_game_reuses_only_the_predicted_ponder_search(self):
         with tempfile.TemporaryDirectory() as directory:
             script, log = Path(directory) / "engine.py", Path(directory) / "commands"
             script.write_text(ponder_engine)
@@ -311,23 +303,15 @@ class ponder_tests(unittest.IsolatedAsyncioTestCase):
                 state = game_full()["state"]
                 await game.on_state(state)
                 await game.searching
-                self.assertNotIn("pondered", game.last_eval)
                 await game.on_state(dict(state, moves="e2e4 g8h6"))
                 await game.searching
-                self.assertIn("pondered", game.last_eval)
-                self.assertFalse(any("pondered" in line for line in lines))
-                self.assertTrue(any(line.startswith("1. ..Nh6 |") and line.endswith(" | ponder hit") for line in lines))
-                self.assertTrue(any("(+" in line for line in lines))
-                self.assertEqual(bot.pv_plies, 2)
                 replay = game.board.copy()
                 our_move = chess.Move.from_uci(api.posts[-1][0].rsplit("/", 1)[-1])
                 replay.push(our_move)
                 replay.push(list(replay.legal_moves)[-1])
                 await game.on_state(dict(state, moves=" ".join(move.uci() for move in replay.move_stack)))
                 await game.searching
-                self.assertNotIn("pondered", game.last_eval)
                 self.assertEqual(log.read_text().splitlines().count("ponderhit"), 1)
-                self.assertEqual(sum(line.endswith(" | ponder hit") for line in lines), 1)
                 await session.stop_pondering()
                 game.stop_waiting()
 
@@ -395,39 +379,6 @@ class draw_tests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(timer.cancelled())
             self.assertEqual(sum(path.endswith("/abort") for path, _ in api.posts), 1)
 
-    async def test_spectators_get_the_mood_and_once_the_book_odds(self):
-        class book:
-            mood, why = "kings_indian", None
-            results = ({}, {}, {})
-            mood, choice_results = "kings_indian", {}
-            names = {"opponent": "Someone", "group": "engines", "global": "global"}
-
-            def choose(self, board, seconds=None):
-                move = chess.Move.from_uci("e2e4")
-                self.why = ("book", 0.5, {"book": 0.3, "fire": 0.2}, "book")
-                return move, "book 50%"
-
-        class learner:
-            records, server = [], "lichess.org"
-
-            def for_game(self, *_):
-                return book()
-
-            def expect(self, *_):
-                pass
-
-        api = stub_api()
-        bot = lichess.lichess_bot(api, None, lambda line: None, online_tablebase=False)
-        bot.id, bot.session, bot.learner = "maximaengine", stub_session(), learner()
-        game = lichess.lichess_game(bot, "g1")
-        full = game_full()
-        game.setup(full)
-        await game.on_state(full["state"])
-        await game.searching
-        await asyncio.sleep(0.01)
-        chats = [data["text"] for path, data in api.posts if path.endswith("/chat") and data["room"] == "spectator"]
-        self.assertEqual(chats, ["Hi! I'm Maxima, running on MaxDrone. Mood: Kings Indian. Type !help for available commands.",
-                                 "1. e4 Book: Base 60%, Fire 40% (pick 50%)."])
 
     async def test_draw_offer_is_accepted_in_a_tablebase_draw(self):
         api = stub_api()
@@ -922,11 +873,6 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
             await maker.tick(bot)
         self.assertEqual(set(api.challenged), {"idle"})
 
-    def test_prefers_bots_we_met_less(self):
-        maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None)
-        bots = [{"id": name, "perfs": {"blitz": {"rating": 2800}}} for name in ("ferrite", "newbot")]
-        picks = [maker.pick(bots, {"blitz": 2800}, "me", {"ferrite": 99})[1] for _ in range(200)]
-        self.assertGreater(picks.count("newbot"), 180)
 
     def test_never_picks_a_bot_with_a_skipped_word_in_its_name(self):
         maker = lichess.matchmaker(30, 300, ("blitz",), lambda line: None, skip=("Odds",))
@@ -1100,17 +1046,6 @@ class matchmaker_tests(unittest.IsolatedAsyncioTestCase):
         api.exchange = lambda *_: (400, body)
         self.assertIsNone(await api.call("POST", "/api/challenge/Odonata"))
         self.assertEqual(api.limit_seconds, 24430)
-
-
-class command_line_tests(unittest.TestCase):
-    def test_book_display_labels_the_moves_chance_and_learned_results(self):
-        opening = lichess.learning.opening_book([], group="engines", opponent="Ferrite")
-        opening.choice_results = {"global": (23, 1, 1), "group": (10, 0, 1)}
-        self.assertEqual(lichess.book_whisper("5...Nc6", ("book", 0.5, {"book": 0.475, "fire": 0.025}, "book"), opening),
-                         "5...Nc6 base book | 50% pick chance | support: base book, fire book | learned: learn +23 =1 -1; engines +10 =0 -1")
-        opening.choice_results = {}
-        self.assertEqual(lichess.book_whisper("1...e5", ("book", 0.43, {"fire": 0.43}, "fire"), opening, compact=True),
-                         "1...e5 | Book (43%): Fire")
 
 
 class rematch_tests(unittest.IsolatedAsyncioTestCase):

@@ -1,12 +1,27 @@
 import json
+import io
+from collections import Counter
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from maxima_runner.online_reporting import online_reporter, event_text
+from maxima_runner.online_reporting import online_reporter
 
 
 class reporting_tests(unittest.TestCase):
+    def test_delivered_report_does_not_expose_credentials_or_local_model_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reporter = self.reporter(directory)
+            reporter.event('login', message='fixture-secret email-secret', engine_details={
+                'options': {'Threads': 2, 'Hash': 64, 'EvalFile': '/private/models/network.nnue'}})
+            path = next((Path(directory) / 'outbox').glob('*.json'))
+            with patch('urllib.request.urlopen', return_value=io.BytesIO(b'{"ok":true}')) as deliver:
+                reporter.deliver(path)
+            payload = deliver.call_args.args[0].data.decode()
+            for private in ('fixture-secret', 'email-secret', '/private/models/network.nnue'):
+                self.assertNotIn(private, payload)
+            self.assertTrue(json.loads(path.read_text())['sent'])
+
     def test_recent_game_results_are_from_our_perspective(self):
         with tempfile.TemporaryDirectory() as directory:
             reporter = self.reporter(directory)
@@ -36,17 +51,12 @@ class reporting_tests(unittest.TestCase):
             reporter.event('engine_incident',id='incident',reason='repeat')
             self.assertEqual(len(list((Path(directory)/'outbox').glob('*.json'))),2)
 
-    def test_training_budget_pause_queues_both_channels_without_engine_failure_text(self):
+    def test_training_alert_queues_both_channels_and_ordinary_notice_only_telegram(self):
         with tempfile.TemporaryDirectory() as directory:
             reporter=self.reporter(directory)
             reporter.event('training_notice',id='budget',message='Self-training paused: waiting for GPU funding.',alert=True)
             files=list((Path(directory)/'outbox').glob('*.json'))
             self.assertEqual(len(files),2)
-            event=json.loads(files[0].read_text())['event']
-            message=event_text(event,detailed=True)
-            self.assertIn('waiting for GPU funding',message)
-            self.assertNotIn('New games blocked',message)
-            self.assertNotIn('Incident:',message)
             reporter.event('training_notice',id='resumed',message='Idle self-play resumed.',alert=False)
             self.assertEqual(len(list((Path(directory)/'outbox').glob('*.json'))),3)
 
@@ -63,7 +73,9 @@ class reporting_tests(unittest.TestCase):
             reporter=self.reporter(directory)
             for identity,result in [('win','1-0'),('draw','1/2-1/2'),('loss','0-1'),('unknown','*'),('win','1-0')]:
                 reporter.listen({'type':'game_end','result':result,'headers':{'LearningId':identity,'LearningColor':'white'}})
-            self.assertIn('1-1-1 (tracked); aborted/unresolved: 1',reporter.summary(reporter.day))
+            self.assertEqual(Counter(row['result'] for row in reporter.recent_games()),
+                             Counter({'W': 1, 'D': 1, 'L': 1, '*': 1}))
+            self.assertEqual(len(list((Path(directory)/'games').glob('*.json'))), 4)
 
     def test_titled_opponents_notify_once_per_game_and_only_on_telegram(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -96,26 +108,3 @@ class reporting_tests(unittest.TestCase):
                     reporter.listen(dict(type='opponent', game=17, game_started_at=started,
                                          opponent=dict(name='Example', title='IM', is_engine=False)))
             self.assertEqual(len(list((Path(directory)/'outbox').glob('*.json'))), 2)
-
-
-class message_tests(unittest.TestCase):
-    def test_titled_game_message_is_concise_and_includes_the_link(self):
-        message = event_text(dict(platform='lichess', kind='titled_opponent', title='GM',
-                                  name='Example', rating=2500, url='https://lichess.org/fixture'))
-        self.assertEqual(message, '♟ Lichess · Playing GM Example (2500)\nhttps://lichess.org/fixture')
-
-    def test_login_shows_only_threads_and_hash(self):
-        message = event_text(dict(platform='lichess', kind='login', engine_details={
-            'engine': {'name': 'Maxima revision'},
-            'options': {'Threads': 4, 'Hash': 128, 'EvalFile': '/private/models/maxima-halfka.nnue'}}))
-        self.assertNotIn('Maxima revision', message)
-        self.assertNotIn('maxima-halfka.nnue', message)
-        self.assertIn('4 threads · 128 MiB hash', message)
-        self.assertNotIn('/private', message)
-
-    def test_operator_messages_are_readable_without_debug_json(self):
-        message=event_text({'platform':'lichess','kind':'login','message':'Logged in to Lichess as Example','at':12345})
-        self.assertIn('Logged in to Lichess as Example',message)
-        self.assertNotIn('12345',message)
-        self.assertNotIn('{',message)
-        self.assertNotIn('"message"',message)

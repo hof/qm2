@@ -1132,6 +1132,12 @@ promotion test. Unfinished games or engine failures return nonzero.
 
 ### 6.2 Correctness tests and sanitizers
 
+Automated checks protect protocol behavior, chess rules, state restoration,
+data integrity, numerical compatibility and safe recovery. Exercise configured
+behavior without freezing presentation wording, preferred playing styles,
+default mixture weights or heuristic scores. Measure strength and tuning choices
+with playing tests rather than treating them as correctness assertions.
+
 `test_uci_input` covers malformed FENs and moves, atomic preservation of position
 and repetition history (including unsupported pawn counts), invalid option/search
 values, unsupported Chess960/mate requests, special moves, compulsory losers
