@@ -983,7 +983,7 @@ class engine_player:
                 if self.token is not previous_token and type(self.history.board) is royal_losers_board:
                     opponent = (position.black if self.our_color == chess.WHITE else position.white).casefold()
                     if opponent not in self.greeted_opponents:
-                        await self.send('say Royal losers (w17): captures are compulsory. '
+                        await self.send("say Hi, I'm Maxima(C) on a losers chess test run. Captures are compulsory. "
                                         'Win by losing all pieces except your king, or by getting (stale)mated. '
                                         'Good luck and have fun!')
                         self.greeted_opponents.add(opponent)
