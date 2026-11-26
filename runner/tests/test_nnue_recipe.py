@@ -3,6 +3,7 @@ import base64
 from contextlib import closing
 import hashlib
 import json
+import os
 from pathlib import Path
 import random
 import subprocess
@@ -156,19 +157,22 @@ class recipe_tests(unittest.TestCase):
             source['input']=path.name
         self.write_config()
         args=[sys.executable,'-m','maxima_runner','nnue:generate','--config',str(self.path)]
+        environment=dict(os.environ,PYTHONPATH=str(Path(__file__).resolve().parents[1]))
+        for name in ('MAXIMA_PROJECT_DIR','MAXIMA_DATA_DIR'):environment.pop(name,None)
+        isolated=dict(cwd=self.root,env=environment)
         if external:
-            coordinator=subprocess.Popen(args+['--coordinator'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            coordinator=subprocess.Popen(args+['--coordinator'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,**isolated)
             self.addCleanup(lambda:coordinator.kill() if coordinator.poll() is None else None)
             worker=self.root/'worker.json'
             worker.write_text(json.dumps(dict(version=1,id='separate',output=str(self.root/'worker'),
                 engine=str(self.engine),network=str(self.network),slots=2,coordinator=args+['--rpc'])))
             run=subprocess.run([sys.executable,'-m','maxima_runner','nnue:generate','--worker-config',str(worker)],
-                               capture_output=True,text=True,timeout=30)
+                               capture_output=True,text=True,timeout=30,**isolated)
             self.assertEqual(run.returncode,0,run.stderr)
             stdout,stderr=coordinator.communicate(timeout=15)
             result=subprocess.CompletedProcess(args,coordinator.returncode,stdout,stderr)
         else:
-            result=subprocess.run(args,capture_output=True,text=True,timeout=30)
+            result=subprocess.run(args,capture_output=True,text=True,timeout=30,**isolated)
         self.assertEqual(result.returncode,0,result.stderr)
         status=json.loads(result.stdout)
         self.assertTrue(status['complete'])

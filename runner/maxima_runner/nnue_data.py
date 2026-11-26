@@ -228,8 +228,10 @@ def main():
     parser.add_argument("--stride", type=int, default=8)
     parser.add_argument("--min-ply", type=int, default=16)
     parser.add_argument("--engine", type=Path, default=engine_path())
-    parser.add_argument("--network", type=Path, default=network_path(project_root()))
+    parser.add_argument("--network", type=Path)
     args = parser.parse_args()
+    if args.network is None:
+        args.network = network_path(project_root())
     if min(args.positions, args.nodes, args.stride) <= 0 or args.min_ply < 0:
         parser.error("positions, nodes and stride must be positive; min-ply must be nonnegative")
     if args.output.exists():

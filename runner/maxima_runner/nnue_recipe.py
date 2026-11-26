@@ -533,6 +533,9 @@ class generation_worker:
             if process is not None and process.poll() is None:
                 terminate_generation(process,force=True)
                 process.wait()
+        if not settings.exists() and stopped is not None:
+            pid_file.unlink(missing_ok=True)
+            return dict(status=status)
         cfg=json.loads(settings.read_text());rows,_,games=nnue_selfplay.load_run(directory/'run',cfg)
         archive=directory/'games.tar.gz'
         with tarfile.open(archive,'w:gz') as bundle:

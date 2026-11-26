@@ -316,11 +316,13 @@ def main():
                         help="optional absolute centipawn sampling limit; default: no score filter")
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--engine", type=Path, default=engine_path())
-    parser.add_argument("--network", type=Path, default=network_path(project_root()))
+    parser.add_argument("--network", type=Path)
     parser.add_argument("--book", type=Path, default=(data_root() / "book.bin") if (data_root() / "book.bin").is_file() else None)
     parser.add_argument("--start-positions", type=Path, help="start from histories selected by nnue:seeds")
     parser.add_argument("--no-book", action="store_true", help="disable automatic opening-book lookup")
     args = parser.parse_args()
+    if args.network is None:
+        args.network = network_path(project_root())
     if args.min_ply is None:
         args.min_ply = 0 if args.start_positions else 16
     if args.diversity:
