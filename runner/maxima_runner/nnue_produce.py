@@ -52,6 +52,8 @@ def run_job(args, index, deadline, block_stop):
                book_sha256=nnue_data.file_hash(args.book) if args.book else None)
     if getattr(args, 'diversity', False):
         job['diversity'] = dict(nnue_selfplay.diversity_recipe)
+    if getattr(args, 'start_positions', None):
+        job['start_positions_sha256'] = nnue_data.file_hash(args.start_positions)
     path = directory / 'job.json'
     if path.exists():
         if json.loads(path.read_text()) != job:
@@ -75,6 +77,8 @@ def run_job(args, index, deadline, block_stop):
     command.extend(['--book', str(args.book.resolve())] if args.book else ['--book-plies', '0'])
     if getattr(args, 'diversity', False):
         command.append('--diversity')
+    if getattr(args, 'start_positions', None):
+        command.extend(['--start-positions', str(args.start_positions.resolve())])
     if args.book is None:
         # Selfplay's optional default book is resolved in its own process.
         command.extend(['--no-book'])
@@ -154,6 +158,10 @@ def produce(args):
                   generator_sha256=nnue_data.file_hash(nnue_selfplay.__file__))
     if getattr(args, 'diversity', False):
         recipe['diversity'] = dict(nnue_selfplay.diversity_recipe)
+    if getattr(args, 'start_positions', None):
+        from . import nnue_seeds
+        nnue_seeds.load(args.start_positions)
+        recipe['start_positions_sha256'] = nnue_data.file_hash(args.start_positions)
     with writer_lock(args.output / '.pool.lock'):
         path = args.output / 'pool.json'
         if path.exists():
@@ -229,6 +237,7 @@ def main():
     parser.add_argument('--engine', type=Path, required=True)
     parser.add_argument('--network', type=Path, required=True)
     parser.add_argument('--book', type=Path)
+    parser.add_argument('--start-positions', type=Path, help='replayable starting histories from nnue:seeds')
     parser.add_argument('--exclude', type=Path, action='append', default=[])
     parser.add_argument('--lease', help='required CPU allocation ID when the store has a campaign')
     parser.add_argument('--workers', type=int, default=2)

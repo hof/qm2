@@ -84,7 +84,7 @@ async def alternative_move(engine, board, move, label, config, game_id):
     return best.move, other
 
 
-async def play_game(engine, config, index, seen, book=None):
+async def play_game(engine, config, index, seen, book=None, starts=None):
     board, game, rows, local_seen = chess.Board(), chess.pgn.Game(), [], set()
     counters = collections.Counter()
     game_id = f"maxima-selfplay-{config['seed']}-{index}"
@@ -93,20 +93,32 @@ async def play_game(engine, config, index, seen, book=None):
                         Variant="Standard", NodesPerMove=str(config["nodes"]),
                         EvalFileSHA256=config["network_sha256"])
     node = game
+    start = starts[(config['seed'] + index - 1) % len(starts)] if starts else None
+    if start:
+        board = chess.Board(start['initial_fen'])
+        game.setup(board)
+        node = game
+        game.headers['SeedGame'] = start['source_game']
+        game.headers['SeedPly'] = str(len(start['moves']))
+        for move in start['moves']:
+            board.push_uci(move)
+            node = node.add_variation(board.peek())
+            node.comment = 'starting history'
+    start_ply = board.ply() if start else 0
     diversity = config.get('diversity')
     if diversity:
         game.headers['DiversityRecipe'] = f"bounded-v{diversity['version']}"
     generator = random.Random(f"{config['seed']}:{index}:diversity")
     plies = (generator.randint(diversity['opening_min_plies'], diversity['opening_max_plies'])
              if diversity else config['random_plies'])
-    for move in opening_moves(config["seed"], index, plies, book, config["book_plies"],
-                              diversity['book_weight_power'] if diversity else 1):
+    for move in ([] if start else opening_moves(config["seed"], index, plies, book, config["book_plies"],
+                              diversity['book_weight_power'] if diversity else 1)):
         board.push(move)
         node = node.add_variation(move)
         node.comment = "opening diversity"
         counters["opening"] += 1
     attempts = 0
-    while not board.is_game_over(claim_draw=True) and board.ply() < config["max_plies"]:
+    while not board.is_game_over(claim_draw=True) and board.ply() < start_ply + config["max_plies"]:
         infos = []
         best, _ = await engine.search(board, chess.engine.Limit(nodes=config["nodes"]), game=game_id,
                                       on_info=lambda info, elapsed: infos.append(info))
@@ -118,7 +130,7 @@ async def play_game(engine, config, index, seen, book=None):
             raise RuntimeError("self-play engine exceeded its node budget")
         explored = None
         if (diversity and label is not None and not board.is_check()
-                and board.ply() <= diversity['explore_max_ply']
+                and board.ply() - start_ply <= diversity['explore_max_ply']
                 and attempts < diversity['explore_max_attempts']
                 and generator.random() < diversity['explore_rate']):
             attempts += 1
@@ -164,11 +176,17 @@ async def play_game(engine, config, index, seen, book=None):
         rows = []
     else:
         result = 0.5 if outcome.winner is None else float(outcome.winner)
+        if start:
+            from .nnue_shards import source_split
         for row in rows:
             color = chess.Board(row["fen"]).turn
             row["result_stm"] = result if color else 1 - result
             row["source"] = {"sha256": source_hash, "game": index, "ply": row.pop("ply")}
-            row["split"] = nnue_data.game_split(row["source"])
+            if start:
+                row["source"]["seed_game"] = start["source_game"]
+                row["split"] = source_split(row["source"])
+            else:
+                row["split"] = nnue_data.game_split(row["source"])
     return text, rows, dict(counters), board.ply()
 
 
@@ -192,7 +210,18 @@ def load_run(directory, config, excluded=()):
         if nnue_data.file_hash(path / "positions.mxdata") != report["data_sha256"]:
             raise ValueError("self-play shard hash mismatch")
         if report["positions"]:
-            _, saved = nnue_data.read_dataset(path / "positions.mxdata")
+            if 'start_positions_sha256' in config:
+                from .nnue_binary import binary_dataset
+                from .nnue_shards import validate_row
+                with binary_dataset(path / 'positions.mxdata') as data:
+                    saved = [data[index] for index in range(len(data))]
+                    for row in saved:
+                        validate_row(row, data.header)
+                        board = row.pop("board")
+                        row.pop("variant_state")
+                        row["fen"] = board.fen(en_passant="fen", promoted=True)
+            else:
+                _, saved = nnue_data.read_dataset(path / "positions.mxdata")
             if len(saved) != report["positions"]:
                 raise ValueError("self-play shard count mismatch")
             for row in saved:
@@ -218,6 +247,13 @@ def generation_stopped(args):
 
 
 async def generate(args, config, rows, seen, games):
+    if getattr(args, "start_positions", None):
+        from . import nnue_seeds
+        starts = nnue_seeds.load(args.start_positions)
+        if nnue_data.file_hash(args.start_positions) != config["start_positions_sha256"]:
+            raise ValueError("starting histories changed after run validation")
+    else:
+        starts = None
     book = chess.polyglot.open_reader(args.book) if args.book else None
     try:
         with tempfile.TemporaryDirectory() as working:
@@ -231,7 +267,7 @@ async def generate(args, config, rows, seen, games):
                     if len(rows) >= args.positions or generation_stopped(args):
                         break
                     index = len(games) + 1
-                    text, produced, counters, plies = await play_game(engine, config, index, seen, book)
+                    text, produced, counters, plies = await play_game(engine, config, index, seen, book, starts)
                     staging = Path(tempfile.mkdtemp(prefix=".pending-", dir=args.output))
                     try:
                         (staging / "game.pgn").write_text(text, encoding="utf-8")
@@ -282,6 +318,7 @@ def main():
     parser.add_argument("--engine", type=Path, default=engine_path())
     parser.add_argument("--network", type=Path, default=network_path(project_root()))
     parser.add_argument("--book", type=Path, default=(data_root() / "book.bin") if (data_root() / "book.bin").is_file() else None)
+    parser.add_argument("--start-positions", type=Path, help="start from histories selected by nnue:seeds")
     parser.add_argument("--no-book", action="store_true", help="disable automatic opening-book lookup")
     args = parser.parse_args()
     if args.diversity:
@@ -302,6 +339,11 @@ def main():
               "book_sha256": nnue_data.file_hash(args.book) if args.book else None}
     if args.diversity:
         config['diversity'] = dict(diversity_recipe)
+    if args.start_positions:
+        from . import nnue_seeds
+        nnue_seeds.load(args.start_positions)
+        config["start_positions_sha256"] = nnue_data.file_hash(args.start_positions)
+        config['start_selection'] = 'seed_offset_v1'
     excluded, exclusion_hashes = dataset_exclusions(args.exclude_dataset)
     if exclusion_hashes:
         config["excluded_dataset_sha256"] = exclusion_hashes

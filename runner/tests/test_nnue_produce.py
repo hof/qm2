@@ -6,6 +6,7 @@ import random
 import tempfile
 import threading
 import time
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -15,6 +16,50 @@ from maxima_runner import nnue_data, nnue_produce, nnue_selfplay, nnue_shards
 
 
 class produce_tests(unittest.TestCase):
+    def test_seeded_producer_publishes_fresh_completed_labels_and_seals_a_block(self):
+        script = '''
+import sys
+moves = []
+for line in sys.stdin:
+    if line.strip() == 'uci':
+        print('id name seeded fixture')
+        print('uciok', flush=True)
+    elif line.strip() == 'isready':
+        print('readyok', flush=True)
+    elif line.startswith('position '):
+        moves = line.split(' moves ', 1)[1].split() if ' moves ' in line else []
+    elif line.startswith('go '):
+        move = 'g2g4' if len(moves) == 2 else 'd8h4'
+        score = 'cp 17' if len(moves) == 2 else 'mate 1'
+        print('info depth 3 nodes 8 score ' + score + ' pv ' + move)
+        print('bestmove ' + move, flush=True)
+    elif line.strip() == 'quit':
+        break
+'''
+        self.engine.write_text('#!' + sys.executable + '\n' + script)
+        self.engine.chmod(0o700)
+        initial = chess.Board()
+        initial.fullmove_number = 9
+        board = initial.copy()
+        for move in ('f2f3', 'e7e5'):
+            board.push_uci(move)
+        starts = self.root / 'starts.json'
+        starts.write_text(json.dumps(dict(format='maxima.nnue.starts', version=1, starts=[dict(
+            initial_fen=initial.fen(), moves=['f2f3', 'e7e5'], fen=board.fen(en_passant='fen'),
+            source_game='a' * 64)])))
+        self.args.start_positions = starts
+        self.args.jobs = self.args.workers = self.args.positions_per_job = self.args.target = 1
+        self.args.games_per_job = 1
+        self.args.nodes = 10000
+        self.assertEqual(nnue_produce.produce(self.args), 0)
+        manifest = nnue_shards.read_manifest(self.args.store / 'one.json')
+        self.assertEqual(manifest['positions'], 1)
+        from maxima_runner.nnue_binary import binary_dataset
+        with binary_dataset(self.args.store / manifest['shards'][0]['path']) as data:
+            self.assertEqual(data[0]['source']['seed_game'], 'a' * 64)
+            self.assertEqual(data[0]['score_cp'], 17)
+            self.assertEqual(data[0]['result_stm'], 0)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

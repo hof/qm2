@@ -1894,6 +1894,18 @@ Sampling settings and generator content are fixed for a resumable run. Use a new
 output directory when changing a previous score-limited experiment to uncapped
 generation; existing datasets, settings and checkpoints are not rewritten.
 
+`nnue:seeds <PGN-or-directory> --output starts.json --player <engine-name>`
+selects replayable starting histories near evaluation swings in annotated games.
+Selection thresholds, minimum depth and per-game limits are configurable. This
+selector reads search evaluations attached before the annotated move, as in
+runner experience archives; those scores select starts and never become new
+training labels. `nnue:selfplay --start-positions starts.json` and
+`nnue:produce --start-positions starts.json` generate fresh continuations instead
+of adding a random opening prefix. Full available history is replayed, and job
+seeds vary the starting offset through the pool. Related continuations retain
+the same source-family split through shard ingestion and training. Starting
+files and generation settings are checksum-pinned for resume.
+
 `nnue:selfplay --exclude-dataset reserved.mxdata` removes every position in a
 reserved dataset from both generated splits, using position identity without
 clocks. Repeat the option to exclude multiple datasets, for example an earlier

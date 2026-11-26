@@ -22,6 +22,7 @@ command_groups = (
         ("match:run", "Run offline paired-opening matches"),
         ("nnue:data", "Label PGN positions for NNUE training"),
         ("nnue:selfplay", "Generate resumable self-play training data"),
+        ("nnue:seeds", "Select starting histories from annotated games"),
         ("nnue:candidates", "Verify candidates and record SPRT decisions"),
         ("nnue:campaign", "Track campaign backlog, allocations and stops"),
         ("nnue:produce", "Run bounded parallel self-play producers"),
@@ -235,6 +236,9 @@ def main(argv=None):
         elif command == "nnue:selfplay":
             from . import nnue_selfplay
             entrypoint = nnue_selfplay.main
+        elif command == "nnue:seeds":
+            from . import nnue_seeds
+            entrypoint = nnue_seeds.main
         elif command == "nnue:candidates":
             from . import nnue_candidates
             entrypoint = nnue_candidates.main
