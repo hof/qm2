@@ -63,6 +63,21 @@ def connect(root):
     return db
 
 
+def extend_block(root, block, *, previous_target, target):
+    """Explicitly enlarge an unsealed block without changing any accepted data."""
+    root = Path(root)
+    if (type(previous_target) is not int or type(target) is not int
+            or not 0 < previous_target < target):
+        raise ValueError('block extension requires increasing positive integer targets')
+    with writer_lock(root / '.lock'), closing(connect(root)) as db, db:
+        row = db.execute('SELECT target,sealed FROM blocks WHERE name=?', (block,)).fetchone()
+        if row is None or row[1] or (root / f'{block}.json').exists():
+            raise ValueError('only an existing unsealed block can be extended')
+        if row[0] not in (previous_target, target):
+            raise ValueError('block extension does not match the saved target')
+        db.execute('UPDATE blocks SET target=? WHERE name=?', (target, block))
+
+
 def ingest(root, block, inputs, *, target=100_000_000, shard_size=1_000_000, exclude=(),
            accepted_limit=None):
     """One transaction per input; retry after a crash cannot count rows twice.

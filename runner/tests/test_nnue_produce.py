@@ -15,9 +15,7 @@ import chess
 from maxima_runner import nnue_data, nnue_produce, nnue_selfplay, nnue_shards
 
 
-class produce_tests(unittest.TestCase):
-    def test_seeded_producer_publishes_fresh_completed_labels_and_seals_a_block(self):
-        script = '''
+seeded_engine = '''
 import sys
 moves = []
 for line in sys.stdin:
@@ -36,7 +34,11 @@ for line in sys.stdin:
     elif line.strip() == 'quit':
         break
 '''
-        self.engine.write_text('#!' + sys.executable + '\n' + script)
+
+
+class produce_tests(unittest.TestCase):
+    def test_seeded_producer_publishes_fresh_completed_labels_and_seals_a_block(self):
+        self.engine.write_text('#!' + sys.executable + '\n' + seeded_engine)
         self.engine.chmod(0o700)
         initial = chess.Board()
         initial.fullmove_number = 9

@@ -1917,6 +1917,77 @@ datasets to self-play so continuations cannot publish reserved positions.
 FEN/EPD roots preserve their supplied clocks and rights; earlier history is
 unavailable and is never invented.
 
+**Configured generation recipes.** `maxima nnue:generate --config recipe.json`
+runs a local worker pool and one canonical store. Source names and allocations
+are user choices; the runner has no built-in opening collection, endgame mix,
+server or cloud provider. A minimal recipe is:
+
+```json
+{
+  "version": 1,
+  "output": "generation",
+  "block": "batch_001",
+  "campaign": "my_experiment",
+  "engine": "./maxima2",
+  "network": "./maxima-halfka.nnue",
+  "nodes": 5000,
+  "workers": 2,
+  "sources": [
+    {"id": "base", "positions": 10000},
+    {"id": "positions", "positions": 2000, "input": "positions.epd"},
+    {"id": "experience", "positions": 1000, "input": "games.pgn",
+     "selection": "critical", "options": {"players": ["MyEngine"]}}
+  ]
+}
+```
+
+Paths resolve relative to the configuration file. `--check` validates inputs
+without creating a store or starting engines; `--status` reports accepted counts
+and quotas. `store` optionally selects an existing canonical store. Nonempty
+blocks require an explicit `adopt_existing` source; `existing_sources` can map
+previous input hashes to their source names. Existing data is retained, and
+unaccounted external writers cause an integrity error rather than silently
+changing the mixture.
+For an intentional expansion of an unsealed block, `previous_target` specifies
+its exact old target. The new source quotas determine the larger target; accepted
+rows and deduplication state remain intact. Sealed blocks cannot be expanded.
+
+Each source may configure a book, or an `input` collection with `selection`,
+`options`, `limit`, `per_game` and `seed`. `diversity` enables bounded alternative
+continuations. Supplied starts sample from their root by default; ordinary
+self-play retains its opening warmup. Quotas count accepted, deduplicated rows.
+The coordinator fills sources in declared order, retains surplus input, and
+seals only when every quota is satisfied. Models, input pools and generation
+code are pinned; source changes require a new recipe output or explicit migration.
+Worker count can change without changing the data recipe.
+
+For separate machines, run the same command with `--coordinator`. Each worker
+runs `maxima nnue:generate --worker-config worker.json`; its configuration contains
+`version: 1`, a unique `id`, local `output` and `engine` paths, a `coordinator`
+command argument array, and optional `slots`, `network` and `book` paths.
+The command invokes the coordinator's `--config recipe.json --rpc` entry point
+through an authenticated transport chosen by the operator, such as SSH. No
+network listener or infrastructure is provisioned. Workers fetch checksum-pinned
+assets, retain partial work, and upload completed labels and compressed PGN
+archives. A verified archive receipt precedes removal of duplicate worker files.
+Additional workers need their own IDs and an approved engine artifact; `engines`
+can list additional binaries for other worker platforms alongside `engine`. Each
+assignment and resulting shard pins the worker's selected binary hash. Workers
+do not own or write the canonical index. The coordinator heartbeat fails closed
+if its supervising process disappears.
+
+On a playing host, worker `idle_control` selects the runner's existing idle gate;
+use the same OS user so generation acknowledgements participate in game handoff.
+`admission_file` can share funding permission with the playing scheduler.
+`admission_command` optionally returns JSON with `allowed` or `funded` to pause
+generation; `notify_command` receives queued human-readable notices as JSON on
+stdin. These are configured adapters, not dependencies of ordinary play.
+`stop_at` and `stop_file` bound generation. Failures retain progress and latch a
+review hold; `--clear-hold INCIDENT_ID` clears only the explicitly reviewed
+incident. Interrupted submissions reconcile against committed shards, and
+repeated submissions cannot count twice. The recipe changes data generation,
+not the training objective or optimizer state.
+
 `nnue:selfplay --exclude-dataset reserved.mxdata` removes every position in a
 reserved dataset from both generated splits, using position identity without
 clocks. Repeat the option to exclude multiple datasets, for example an earlier

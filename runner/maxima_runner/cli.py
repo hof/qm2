@@ -26,6 +26,7 @@ command_groups = (
         ("nnue:candidates", "Verify candidates and record SPRT decisions"),
         ("nnue:campaign", "Track campaign backlog, allocations and stops"),
         ("nnue:produce", "Run bounded parallel self-play producers"),
+        ("nnue:generate", "Run a configured generation recipe and workers"),
         ("nnue:stage", "Stream CPU/CUDA stages and retain Adam state"),
         ("nnue:cycle", "Run configured training cycles"),
         ("nnue:export", "Export a frozen training-stage candidate"),
@@ -248,6 +249,9 @@ def main(argv=None):
         elif command == "nnue:produce":
             from . import nnue_produce
             entrypoint = nnue_produce.main
+        elif command == "nnue:generate":
+            from . import nnue_recipe
+            entrypoint = nnue_recipe.main
         elif command == "nnue:cycle":
             from . import nnue_cycle
             entrypoint = nnue_cycle.main

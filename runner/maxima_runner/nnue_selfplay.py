@@ -311,7 +311,7 @@ def main():
                         help="bounded-v1: 8-12 opening plies, flatter book weights, bounded alternative moves")
     parser.add_argument("--book-plies", type=int, default=4,
                         help="book-guided prefix within the opening plies; the remainder are random")
-    parser.add_argument("--min-ply", type=int, default=16)
+    parser.add_argument("--min-ply", type=int, help="first sampled ply (default: 16, or 0 for supplied starts)")
     parser.add_argument("--score-limit", type=int,
                         help="optional absolute centipawn sampling limit; default: no score filter")
     parser.add_argument("--seed", type=int, default=2026)
@@ -321,6 +321,8 @@ def main():
     parser.add_argument("--start-positions", type=Path, help="start from histories selected by nnue:seeds")
     parser.add_argument("--no-book", action="store_true", help="disable automatic opening-book lookup")
     args = parser.parse_args()
+    if args.min_ply is None:
+        args.min_ply = 0 if args.start_positions else 16
     if args.diversity:
         args.random_plies = diversity_recipe['opening_max_plies']
     if args.no_book:
@@ -328,7 +330,9 @@ def main():
     if ((args.stop_at is not None and not math.isfinite(args.stop_at))
             or min(args.positions, args.nodes, args.games_per_run) <= 0
             or (args.score_limit is not None and args.score_limit <= 0)
-            or not 0 <= args.book_plies <= args.random_plies <= args.min_ply < args.max_plies <= 65535):
+            or not 0 <= args.book_plies <= args.random_plies < args.max_plies <= 65535
+            or not 0 <= args.min_ply < args.max_plies
+            or (not args.start_positions and args.random_plies > args.min_ply)):
         parser.error("invalid generation bounds")
     config = {"format": "maxima.nnue.selfplay", "version": 1, "nodes": args.nodes,
               "generator_sha256": nnue_data.file_hash(__file__),

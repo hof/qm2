@@ -59,6 +59,18 @@ class shard_tests(unittest.TestCase):
         self.assertEqual(nnue_shards.ingest(self.store, 'one', [smaller], target=8, shard_size=2), 8)
         self.assertEqual(nnue_shards.read_manifest(nnue_shards.seal(self.store, 'one'))['positions'], 8)
 
+    def test_explicit_extension_retains_rows_and_rejects_sealed_or_changed_targets(self):
+        source = self.dataset('source', self.rows)
+        self.assertEqual(nnue_shards.ingest(self.store, 'one', [source], target=5), 5)
+        with self.assertRaises(ValueError):
+            nnue_shards.extend_block(self.store, 'one', previous_target=4, target=12)
+        nnue_shards.extend_block(self.store, 'one', previous_target=5, target=12)
+        nnue_shards.extend_block(self.store, 'one', previous_target=5, target=12)
+        self.assertEqual(nnue_shards.ingest(self.store, 'one', [source], target=12), 12)
+        nnue_shards.seal(self.store, 'one')
+        with self.assertRaises(ValueError):
+            nnue_shards.extend_block(self.store, 'one', previous_target=12, target=13)
+
     def test_block_boundary_preserves_input_tail_for_next_block(self):
         source = self.dataset('source', self.rows)
         self.assertEqual(nnue_shards.ingest(self.store, 'one', [source], target=5), 5)
