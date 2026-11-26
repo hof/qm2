@@ -36,6 +36,22 @@ def losers_game():
 
 
 class losers_policy_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_game_start_explains_losers_once_and_does_not_greet_standard_games(self):
+        from test_fics_policy import board_as_black
+        subject = player(losers=True)
+        board = board_as_black.replace('GuestOPPO', 'Alpha').replace('GuestTEST', 'Beta')
+        await subject.handle('Creating: Alpha (1500) Beta (1500) unrated losers 3 0')
+        await subject.handle(board)
+        await subject.handle(board)
+        notices = [line for line in subject.connection.sent if line.startswith('say ')]
+        self.assertEqual(len(notices), 1)
+        self.assertIn('captures are compulsory', notices[0])
+        self.assertIn('help losers', notices[0])
+        self.assertIn('request an abort', notices[0])
+        await subject.handle('Creating: Alpha (1500) Beta (1500) unrated blitz 3 0')
+        await subject.handle(board.replace(' 0 7 ', ' 0 8 '))
+        self.assertEqual([line for line in subject.connection.sent if line.startswith('say ')], notices)
+
     def test_example_configuration_and_invalid_pool_settings(self):
         example = Path(__file__).resolve().parents[2] / 'docs' / 'fics-mixed.json'
         settings = fics.load_settings(example)
