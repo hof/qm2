@@ -788,11 +788,14 @@ class engine_player:
         self.waiting_position = None
 
     def watch_first_move(self, position):
-        """Watch each eligible opening turn once; clock-only updates must not restart its timer."""
+        """Watch opening hesitations once per position; clock updates keep the timer."""
         board = self.history.board
         fen = board.fen()
         eligible = board.ply() < 2 or (board.fullmove_number <= 4 and fen == self.abort_position)
-        if position.relation != fics_game.playing_their_move or not eligible:
+        opponent = (position.black if self.our_color == chess.WHITE else position.white).casefold()
+        greet = (type(board) is royal_losers_board and board.fullmove_number <= 4
+                 and opponent not in self.greeted_opponents and any(board.generate_legal_captures()))
+        if position.relation != fics_game.playing_their_move or not (eligible or greet):
             self.stop_waiting()
         else:
             if self.waiting_position != fen:
@@ -801,10 +804,23 @@ class engine_player:
                 return
             wait = self.policy.opening_wait(position.initial_seconds)
             self.waiting_position = fen
-            self.waiting = asyncio.ensure_future(self.abort_unless_moved(self.game, board.ply(), wait))
+            self.waiting = asyncio.ensure_future(self.abort_unless_moved(
+                self.game, board.ply(), wait, greet=opponent if greet else None, abort=eligible))
 
-    async def abort_unless_moved(self, game, ply, wait):
-        await asyncio.sleep(wait)
+    async def abort_unless_moved(self, game, ply, wait, *, greet=None, abort=True):
+        delay = 0
+        if greet is not None:
+            delay = min(15, wait / 2)
+            await asyncio.sleep(delay)
+            if (self.game == game and self.history is not None and self.history.board.ply() == ply
+                    and greet not in self.greeted_opponents):
+                if await self.send("say Hi, I'm Maxima(C) on a losers chess test run. Captures are compulsory. "
+                                   'Win by losing all pieces except your king, or by getting (stale)mated. '
+                                   'Good luck and have fun!'):
+                    self.greeted_opponents.add(greet)
+        if not abort:
+            return
+        await asyncio.sleep(wait - delay)
         if self.game == game and self.history is not None and self.history.board.ply() == ply:
             reason = "no first move" if ply < 2 else "no opening reply"
             self.on_line(f"-- requesting abort of game {game}: {reason} from the opponent in {wait:.0f}s")
@@ -980,13 +996,6 @@ class engine_player:
             try:
                 previous_token = self.token
                 self.on_board(position)
-                if self.token is not previous_token and type(self.history.board) is royal_losers_board:
-                    opponent = (position.black if self.our_color == chess.WHITE else position.white).casefold()
-                    if opponent not in self.greeted_opponents:
-                        await self.send("say Hi, I'm Maxima(C) on a losers chess test run. Captures are compulsory. "
-                                        'Win by losing all pieces except your king, or by getting (stale)mated. '
-                                        'Good luck and have fun!')
-                        self.greeted_opponents.add(opponent)
                 if self.token is not previous_token and position.relation == fics_game.playing_their_move \
                         and self.session is not None and hasattr(self.session, "stop_pondering"):
                     await self.session.stop_pondering()
