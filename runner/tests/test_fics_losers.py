@@ -46,8 +46,8 @@ class losers_policy_tests(unittest.IsolatedAsyncioTestCase):
         notices = [line for line in subject.connection.sent if line.startswith('say ')]
         self.assertEqual(len(notices), 1)
         self.assertIn('captures are compulsory', notices[0])
-        self.assertIn('help losers', notices[0])
-        self.assertIn('request an abort', notices[0])
+        self.assertIn('except your king', notices[0])
+        self.assertIn('Good luck and have fun!', notices[0])
         await subject.handle('Creating: Alpha (1500) Beta (1500) unrated blitz 3 0')
         await subject.handle(board.replace(' 0 7 ', ' 0 8 '))
         self.assertEqual([line for line in subject.connection.sent if line.startswith('say ')], notices)

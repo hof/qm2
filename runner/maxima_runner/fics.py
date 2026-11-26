@@ -979,9 +979,9 @@ class engine_player:
                 previous_token = self.token
                 self.on_board(position)
                 if self.token is not previous_token and type(self.history.board) is royal_losers_board:
-                    await self.send('say Royal losers (w17): captures are compulsory; king safety still applies. '
-                                    'Lose all pieces except your king, or be mated/stalemated, to win. '
-                                    'For rules: help losers. Wrong variant? Please request an abort.')
+                    await self.send('say Royal losers (w17): captures are compulsory. '
+                                    'Win by losing all pieces except your king, or by getting (stale)mated. '
+                                    'Good luck and have fun!')
                 if self.token is not previous_token and position.relation == fics_game.playing_their_move \
                         and self.session is not None and hasattr(self.session, "stop_pondering"):
                     await self.session.stop_pondering()
