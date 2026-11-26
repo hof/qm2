@@ -694,6 +694,7 @@ class engine_player:
         self.game = self.history = self.token = None
         self.task = self.searched = self.retried = self.waiting = None
         self.name = self.opponent = self.last_opponent = None
+        self.greeted_opponents = set()
         self.opponent_ready = asyncio.Event()
         self.opponent_ready.set()
         self.opponent_aborted = False
@@ -814,6 +815,7 @@ class engine_player:
         self.cancel()
         self.loss.reset()
         self.name = name
+        self.greeted_opponents.clear()
         if self.events is not None:
             self.events.emit("login", message="Logged in to FICS as " + name,
                              engine_details=self.safety.details)
@@ -979,9 +981,12 @@ class engine_player:
                 previous_token = self.token
                 self.on_board(position)
                 if self.token is not previous_token and type(self.history.board) is royal_losers_board:
-                    await self.send('say Royal losers (w17): captures are compulsory. '
-                                    'Win by losing all pieces except your king, or by getting (stale)mated. '
-                                    'Good luck and have fun!')
+                    opponent = (position.black if self.our_color == chess.WHITE else position.white).casefold()
+                    if opponent not in self.greeted_opponents:
+                        await self.send('say Royal losers (w17): captures are compulsory. '
+                                        'Win by losing all pieces except your king, or by getting (stale)mated. '
+                                        'Good luck and have fun!')
+                        self.greeted_opponents.add(opponent)
                 if self.token is not previous_token and position.relation == fics_game.playing_their_move \
                         and self.session is not None and hasattr(self.session, "stop_pondering"):
                     await self.session.stop_pondering()

@@ -2530,7 +2530,8 @@ W17 supports FICS **royal losers**: kings remain royal, captures are compulsory,
 and king-only, checkmate and stalemate win. It retains material-only evaluation;
 protocol/correctness checks do not establish current competitive strength.
 At the start of a losers game, the runner sends the opponent one short rules
-explanation and greeting through FICS game chat.
+explanation and greeting through FICS game chat, once per opponent handle in
+the current login session. Reconnecting guests cannot be linked across different handles.
 Lichess offers [antichess](https://lichess.org/variant/antichess), where kings can
 be captured, castling is absent, and promotion to a king is allowed. W17 cannot
 play that ruleset. The Lichess client continues to accept standard games only;
