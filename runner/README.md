@@ -1,5 +1,11 @@
 # Maxima runner
 
+Optional NNUE development commands are `nnue:selfplay`, `nnue:data`, `nnue:convert`, `nnue:train`
+and `nnue:verify`. Datasets default to binary; shortfen JSONL remains available
+for inspection. Training alone uses PyTorch in a separate environment; ordinary
+ops and dataset/export verification retain the lightweight dependencies. See
+[NNUE training tooling](../MAXIMA.md#nnue-training-tooling) for setup and usage.
+
 Python CLI and chess orchestration package, kept separate from the C++ engine
 within the Maxima repository. Requires Python 3.8+ and pins python-chess via
 `chess==1.11.2`. Engine communication uses asyncio; boards, notation, PGN, EPD,

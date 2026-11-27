@@ -10,6 +10,7 @@ from pathlib import Path
 import random
 import sys
 import tempfile
+import time
 import uuid
 
 from .match_options import (engine_profile, file_identity, option_assignment,
@@ -98,6 +99,9 @@ def match_summary(games, args):
         summary = paired_summary(games, args.pairs)
         summary.update(confidence=None, score_interval=None, interval_method=None,
                        sprt=sprt_summary(games, *bounds, args.sprt_alpha, args.sprt_beta))
+        if getattr(args, 'futility_alpha', None) is not None:
+            from .strength import futility_summary
+            summary['futility'] = futility_summary(games, args.pairs, args.futility_alpha)
         return summary
     cadence = getattr(args, 'sequential_check_pairs', None)
     if cadence is None:
@@ -185,9 +189,14 @@ class win_adjudicator:
 
 async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
                     pair, opening, variant, adjudicate_win_cp=None,
-                    adjudicate_win_plies=6, adjudicate_min_move=20):
+                    adjudicate_win_plies=6, adjudicate_min_move=20, nodes=None,
+                    clock_source='wire'):
     import chess
     import chess.engine
+    if nodes is not None and (type(nodes) is not int or nodes <= 0):
+        raise ValueError('node limit must be a positive integer')
+    if clock_source not in ('wire', 'reported') or (nodes is not None and clock_source != 'wire'):
+        raise ValueError('invalid or conflicting clock source')
     adjudicator = None
     if adjudicate_win_cp is not None:
         if variant != 'standard':
@@ -203,16 +212,21 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
                         GameId=uuid.uuid4().hex, LearningSource='local',
                         White='A' if a_white else 'B', Black='B' if a_white else 'A',
                         Variant='Royal losers' if variant == 'losers' else 'Standard',
-                        Opening=opening, TimeControl=f'{seconds:g}+{increment:g}')
+                        Opening=opening, TimeControl='-' if nodes is not None else f'{seconds:g}+{increment:g}')
+    if nodes is not None:
+        game.headers['NodeLimit'] = str(nodes)
+    else:
+        game.headers['ClockSource'] = clock_source
     if initial.fen() != chess.STARTING_FEN:
         game.headers.update(SetUp='1', FEN=initial.fen(en_passant='fen'))
     node = game
     for move in board.move_stack:
         node = node.add_variation(move)
-    clocks = {chess.WHITE: seconds, chess.BLACK: seconds}
+    clocks = {color: seconds if nodes is None else None for color in (chess.WHITE, chess.BLACK)}
     token = object()
     search_work = {color: {'nodes': 0, 'searches': 0, 'reported_searches': 0,
-                           'wall_seconds': 0.0} for color in (chess.WHITE, chess.BLACK)}
+                           'wall_seconds': 0.0, 'wire_seconds': 0.0,
+                           'clock_seconds': 0.0} for color in (chess.WHITE, chess.BLACK)}
     search_samples = []
     result, reason = '*', 'ply limit'
     failure = None
@@ -241,10 +255,12 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
                 search_info.update(info)
 
         engine = engines[0 if color == a_white else 1]
-        limit = chess.engine.Limit(white_clock=clocks[chess.WHITE],
+        limit = (chess.engine.Limit(nodes=nodes) if nodes is not None else
+                 chess.engine.Limit(white_clock=clocks[chess.WHITE],
                                    black_clock=clocks[chess.BLACK],
-                                   white_inc=increment, black_inc=increment)
-        # Charge protocol/readiness and runner overhead, not engine-reported time.
+                                   white_inc=increment, black_inc=increment))
+        # The engine's clock runs from UCI go to bestmove receipt. Keep setup and
+        # Python board/history work in wall telemetry, outside its search clock.
         started = asyncio.get_running_loop().time()
         try:
             best, _ = await engine.search(board, limit, game=token, on_info=collect_info)
@@ -253,18 +269,36 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
             reason = 'engine failure'
             break
         elapsed = asyncio.get_running_loop().time() - started
+        wire_elapsed = getattr(engine, 'last_search_seconds', elapsed)
+        if (not isinstance(wire_elapsed, (int, float)) or not math.isfinite(wire_elapsed)
+                or wire_elapsed < 0 or wire_elapsed > elapsed + 0.001):
+            failure = 'invalid or missing UCI search timing'
+            reason = 'engine failure'
+            break
+        clock_elapsed = wire_elapsed if nodes is None else 0.0
+        if nodes is None and clock_source == 'reported':
+            clock_elapsed = search_data.get('time')
+            if (type(clock_elapsed) not in (int, float) or not math.isfinite(clock_elapsed)
+                    or clock_elapsed < 0):
+                failure = 'invalid or missing engine-reported search time'
+                reason = 'engine failure'
+                break
         work = search_work[color]
         work['searches'] += 1
         work['wall_seconds'] += elapsed
+        work['wire_seconds'] += wire_elapsed
+        work['clock_seconds'] += clock_elapsed
         search_samples.append(dict(search_data, ply=len(board.move_stack) + 1,
                                    engine='A' if color == a_white else 'B',
                                    color='white' if color else 'black',
-                                   nodes=search_nodes, wall_seconds=elapsed))
+                                   nodes=search_nodes, wall_seconds=elapsed,
+                                   wire_seconds=wire_elapsed, clock_seconds=clock_elapsed))
         if search_nodes is not None:
             work['nodes'] += search_nodes
             work['reported_searches'] += 1
-        clocks[color] -= elapsed
-        if clocks[color] <= 0:
+        if nodes is None:
+            clocks[color] -= clock_elapsed
+        if nodes is None and clocks[color] <= 0:
             winner = not color
             result = ('1/2-1/2' if board.has_insufficient_material(winner)
                       else '1-0' if winner else '0-1')
@@ -275,12 +309,13 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
             reason = 'engine failure'
             break
         board.push(best.move)
-        clocks[color] += increment
         node = node.add_variation(best.move)
-        remaining = clocks[color]
-        hours, rest = divmod(remaining, 3600)
-        minutes, rest = divmod(rest, 60)
-        node.comment = f'[%clk {int(hours)}:{int(minutes):02}:{rest:06.3f}]'
+        if nodes is None:
+            clocks[color] += increment
+            remaining = clocks[color]
+            hours, rest = divmod(remaining, 3600)
+            minutes, rest = divmod(rest, 60)
+            node.comment = f'[%clk {int(hours)}:{int(minutes):02}:{rest:06.3f}]'
         if search_nodes is not None:
             node.comment += f' [%nodes {search_nodes}]'
         if 'depth' in search_data:
@@ -305,6 +340,7 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
     record = {'pair': pair, 'opening': opening, 'a_color': 'white' if a_white else 'black',
                   'result': result, 'termination': reason, 'error': failure, 'plies': len(board.move_stack),
                   'clocks': {'white': clocks[chess.WHITE], 'black': clocks[chess.BLACK]}}
+    record['clock_source'] = 'none_fixed_nodes' if nodes is not None else clock_source
     record['search_work'] = {'white': search_work[chess.WHITE], 'black': search_work[chess.BLACK]}
     record['search_samples'] = search_samples
     if adjudicator:
@@ -317,10 +353,22 @@ async def play_game(engines, board, *, a_white, seconds, increment, max_plies,
 async def run_match(commands, openings, args, report, pgn_stream):
     from .uci import open_engine
     profiles = getattr(args, 'profiles', [engine_profile([], []), engine_profile([], [])])
-    selected = random.Random(args.seed).sample(openings, args.pairs)
-    report['selected_openings'] = [identifier for identifier, _ in selected]
+    rng = random.Random(args.seed)
+    until_decision = getattr(args, 'until_decision', False)
+    selected = (iter(lambda: rng.choice(openings), None) if until_decision
+                else rng.sample(openings, args.pairs))
+    report['selected_openings'] = [] if until_decision else [identifier for identifier, _ in selected]
     for pair, (identifier, position) in enumerate(selected):
+        if until_decision and getattr(args, 'max_pairs', None) is not None and pair >= args.max_pairs:
+            report['stop_reason'] = 'maximum_pairs'
+            return
+        if until_decision:
+            report['selected_openings'].append(identifier)
         for a_white in (True, False):
+            if (any(path.exists() for path in getattr(args, 'stop_file', []))
+                    or (getattr(args, 'stop_at', None) is not None and time.time() >= args.stop_at)):
+                report['stop_reason'] = 'scheduling_stop'
+                return
             async with AsyncExitStack() as stack:
                 engines = []
                 for command in commands:
@@ -358,6 +406,8 @@ async def run_match(commands, openings, args, report, pgn_stream):
                 game, record = await play_game(
                     engines, position.copy(), a_white=a_white, seconds=args.seconds,
                     increment=args.increment, max_plies=args.max_plies, pair=pair,
+                    nodes=getattr(args, 'nodes', None),
+                    clock_source=getattr(args, 'clock_source', 'wire'),
                     opening=identifier, variant=args.variant,
                     adjudicate_win_cp=getattr(args, 'adjudicate_win_cp', None),
                     adjudicate_win_plies=getattr(args, 'adjudicate_win_plies', 6),
@@ -381,22 +431,26 @@ async def run_match(commands, openings, args, report, pgn_stream):
                 if (getattr(args, 'sequential_check_pairs', None) is not None and
                         interval is not None and (interval[0] > 0.5 or interval[1] < 0.5)):
                     report['stop_reason'] = 'a_stronger' if interval[0] > 0.5 else 'b_stronger'
-                    report['stopped_early'] = pair + 1 < args.pairs
+                    report['stopped_early'] = until_decision or pair + 1 < args.pairs
                 sprt = report['summary'].get('sprt')
                 strength = report['summary'].get('minimum_gain')
                 if strength is not None and strength['decision'] != 'continue':
                     report['stop_reason'] = strength['decision']
-                    report['stopped_early'] = pair + 1 < args.pairs
+                    report['stopped_early'] = until_decision or pair + 1 < args.pairs
                 if sprt is not None and sprt['decision'] != 'continue':
                     report['stop_reason'] = sprt['decision']
-                    report['stopped_early'] = pair + 1 < args.pairs
+                    report['stopped_early'] = until_decision or pair + 1 < args.pairs
+                futility = report['summary'].get('futility')
+                if futility is not None and futility['decision'] == 'futility_rejection':
+                    report['stop_reason'] = 'futility_rejection'
+                    report['stopped_early'] = until_decision or pair + 1 < args.pairs
                 args.json.write_text(json.dumps(report, indent=2) + '\n')
                 if record['error'] is not None:
                     raise RuntimeError(record['error'])
                 print(f"Pair {pair + 1} A={'White' if a_white else 'Black'} "
                       f"{record['result']} ({record['termination']})", flush=True)
                 if report.get('stop_reason') in ('a_stronger', 'b_stronger', 'accept_h0', 'accept_h1',
-                                               'minimum_gain_established', 'below_minimum_gain'):
+                                               'minimum_gain_established', 'below_minimum_gain', 'futility_rejection'):
                     return
 
 
@@ -426,7 +480,11 @@ def main():
                             default=[], metavar='OPTION=PATH', help='set and hash an external model file')
     parser.add_argument('--variant', choices=('standard', 'losers'), default='standard')
     parser.add_argument('--openings', required=True, type=Path, help='variant-labeled JSON opening file')
-    parser.add_argument('--pairs', type=positive_int, default=10)
+    sampling = parser.add_mutually_exclusive_group()
+    sampling.add_argument('--pairs', type=positive_int,
+                          help='maximum distinct opening pairs (default 10 unless --until-decision)')
+    sampling.add_argument('--until-decision', action='store_true',
+                          help='SPRT without a time or pair cap; sample opening pairs with replacement')
     stopping = parser.add_mutually_exclusive_group()
     stopping.add_argument('--sprt', type=float, nargs=2, metavar=('ELO0', 'ELO1'),
                           help='paired logistic GSPRT bounds for engine A versus B')
@@ -434,11 +492,19 @@ def main():
                           help='stop when simultaneous 95%% bounds establish A above or below this minimum gain')
     stopping.add_argument('--sequential-check-pairs', type=positive_int, metavar='N',
                         help='check significance every N pairs with a 95%% joint Bonferroni bound')
+    parser.add_argument('--futility-alpha', type=float, help='extra rejection error budget for early inferiority checks; requires SPRT')
     parser.add_argument('--sprt-alpha', type=float, default=0.05, help='SPRT false-positive target')
     parser.add_argument('--sprt-beta', type=float, default=0.05, help='SPRT false-negative target')
+    parser.add_argument('--stop-file', type=Path, action='append', default=[])
+    parser.add_argument('--stop-at', type=float, help='Unix deadline; finish current game then stop')
+    parser.add_argument('--max-pairs', type=positive_int, help='whole-pair cap for sampling with replacement')
     parser.add_argument('--seed', type=int, default=2026)
-    parser.add_argument('--seconds', type=positive_float, default=10)
-    parser.add_argument('--increment', type=nonnegative_float, default=0.1)
+    parser.add_argument('--seconds', type=positive_float, help='initial clock seconds (default 10)')
+    parser.add_argument('--increment', type=nonnegative_float, help='clock increment seconds (default 0.1)')
+    parser.add_argument('--nodes', type=positive_int,
+                        help='equal nodes per move, without chess clocks; excludes --seconds/--increment')
+    parser.add_argument('--clock-source', choices=('wire', 'reported'), default='wire',
+                        help='charge UCI wire elapsed time or trust engine info time for offline self-play')
     parser.add_argument('--max-plies', type=positive_int, default=600)
     parser.add_argument('--adjudicate-win-cp', type=positive_int, metavar='CP',
                         help='enable early wins when both engines consistently agree at this cp threshold')
@@ -455,6 +521,21 @@ def main():
     args = parser.parse_args()
     report = None
     try:
+        if args.nodes is not None:
+            if args.seconds is not None or args.increment is not None or args.clock_source != 'wire':
+                raise ValueError('--nodes cannot be combined with clock settings')
+        else:
+            args.seconds = 10 if args.seconds is None else args.seconds
+            args.increment = 0.1 if args.increment is None else args.increment
+        if args.until_decision:
+            if args.sprt is None or args.futility_alpha is not None or args.stop_at is not None:
+                raise ValueError('--until-decision requires plain SPRT without a deadline or futility rule')
+        elif args.pairs is None:
+            args.pairs = 10
+        if args.max_pairs is not None and not args.until_decision:
+            raise ValueError('--max-pairs requires --until-decision')
+        if args.stop_at is not None and not math.isfinite(args.stop_at):
+            raise ValueError('stop deadline must be finite')
         if args.syzygy_path is not None:
             args.syzygy_path = args.syzygy_path.resolve()
             if args.variant != 'standard':
@@ -467,6 +548,11 @@ def main():
             win_adjudicator(args.adjudicate_win_cp, args.adjudicate_win_plies, args.adjudicate_min_move)
         elif args.adjudicate_win_plies != 6 or args.adjudicate_min_move != 20:
             raise ValueError('win adjudication settings require --adjudicate-win-cp')
+        if args.futility_alpha is not None:
+            from .strength import validate_min_elo
+            if args.sprt is None:
+                raise ValueError('futility checks require SPRT')
+            validate_min_elo(0, args.pairs, args.futility_alpha)
         if args.sprt is not None:
             from .sprt import validate_sprt
             validate_sprt(*args.sprt, args.sprt_alpha, args.sprt_beta)
@@ -478,7 +564,7 @@ def main():
         openings = read_openings(args.openings, args.variant)
         if args.sequential_check_pairs is not None and args.sequential_check_pairs > args.pairs:
             raise ValueError('sequential checkpoint cadence cannot exceed maximum pairs')
-        if args.pairs > len(openings):
+        if args.pairs is not None and args.pairs > len(openings):
             raise ValueError('pairs cannot exceed distinct openings (sampling without replacement)')
         args.profiles = [engine_profile(args.option_a, args.model_a),
                          engine_profile(args.option_b, args.model_b)]
@@ -492,9 +578,15 @@ def main():
         if args.pgn.exists() or args.json.exists():
             raise ValueError('output files already exist; choose new paths')
         report = {'variant': args.variant, 'seed': args.seed, 'pairs': args.pairs,
+                  'max_pairs': args.max_pairs,
+                  'opening_sampling': 'with_replacement' if args.until_decision else 'without_replacement',
                   'syzygy_path': str(args.syzygy_path) if args.syzygy_path is not None else None,
                   'seconds': args.seconds, 'increment': args.increment,
+                  'nodes': args.nodes, 'hash_mb': args.hash_mb,
                   'max_plies': args.max_plies, 'timeout': args.timeout,
+                  'clock_timing': ('none_fixed_nodes' if args.nodes is not None else
+                                   'engine_reported_search_time' if args.clock_source == 'reported' else
+                                   'uci_go_to_bestmove_monotonic'),
                   'win_adjudication': {'threshold_cp': args.adjudicate_win_cp,
                                        'plies': args.adjudicate_win_plies,
                                        'min_move': args.adjudicate_min_move}
@@ -510,6 +602,7 @@ def main():
                   'stopping_mode': 'minimum_gain' if args.min_elo is not None else
                                    'sprt' if args.sprt is not None else
                                    'sequential_checkpoints' if args.sequential_check_pairs else 'fixed_sample',
+                  'futility_alpha': args.futility_alpha,
                   'sprt': {'elo0': args.sprt[0], 'elo1': args.sprt[1],
                            'alpha': args.sprt_alpha, 'beta': args.sprt_beta,
                            'elo_model': 'logistic', 'upstream': 'Disservin/fast-chess',
@@ -521,13 +614,17 @@ def main():
             output.flush()
             asyncio.run(run_match(commands, openings, args, report, stream))
         report['complete'] = (all(game['result'] != '*' for game in report['games']) and
-                              (len(report['games']) == 2 * args.pairs or report['stopped_early']))
+                              (report['stopped_early'] or
+                               (args.pairs is not None and len(report['games']) == 2 * args.pairs) or
+                               (args.max_pairs is not None and len(report['games']) == 2 * args.max_pairs)))
         if report['stop_reason'] is None and report['complete']:
             report['stop_reason'] = 'maximum_pairs'
             if report['summary'].get('sprt') is not None:
                 report['summary']['sprt']['decision'] = 'inconclusive'
             if report['summary'].get('minimum_gain') is not None:
                 report['summary']['minimum_gain']['decision'] = 'inconclusive'
+        if 'summary' not in report:
+            report['summary'] = match_summary(report['games'], args)
         args.json.write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report['summary'], indent=2))
         return 0 if report['complete'] else 1

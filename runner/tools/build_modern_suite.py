@@ -94,8 +94,6 @@ async def build(args):
     rows = candidates(sources)
     selected, rejected, games, rounds = [], [], {}, {}
     async with open_engine([str(args.engine.resolve())], args.engine.resolve().parent, timeout=120) as engine:
-        if engine.identity[0] != "name Stockfish 19":
-            raise ValueError("this corpus freeze requires Stockfish 19")
         options = await engine.configure({"Threads": 1, "Hash": 64, "SyzygyPath": "",
                                           "SyzygyProbeLimit": 0, "UCI_LimitStrength": False})
         for index, row in enumerate(rows):
@@ -133,8 +131,7 @@ async def build(args):
         manifest = {"suite": "modern_2026", "generated_on": args.date,
                     "source_license": "CC-BY-SA-4.0", "source_license_url": "https://database.lichess.org/#broadcasts",
                     "sources": source_info,
-                    "reference": {"identity": engine.identity, "binary_sha256": engine_hash,
-                                  "release_url": "https://github.com/official-stockfish/Stockfish/releases/tag/sf_19",
+                    "reference": {"binary_sha256": engine_hash,
                                   "options": options, "multipv": 2, "cold_hash_each_pass": True},
                     "selection": {"plies": sample_plies, "screen_nodes": node_budgets[0],
                                   "verify_nodes": node_budgets[1:], "minimum_gap_cp": minimum_gap_cp,
@@ -144,7 +141,7 @@ async def build(args):
     if (sha256(args.engine) != engine_hash
             or any(sha256(path) != source["sha256"] for path, source in zip(sources, source_info))):
         raise ValueError("source PGNs or reference executable changed during generation")
-    lines = ["# Recent 2026 games; Stockfish 19 targets, see modern_2026.json and README.md."]
+    lines = ["# Recent 2026 games; reference targets, see modern_2026.json and README.md."]
     for row in selected:
         board = chess.Board(row["fen"])
         lines.append(board.epd(bm=[chess.Move.from_uci(row["expected_move"])], id=row["id"],

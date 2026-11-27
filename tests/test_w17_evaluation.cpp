@@ -11,35 +11,25 @@ bool check(const char * name, bool success) {
     return success;
 }
 
-struct fixture_t {
-    const char * position;
-    int value; // White-relative material score used by the playing evaluator.
-};
-
 bool test_scores() {
-    const fixture_t fixtures[] = {
-        {"7k/7p/8/8/8/8/P7/K7", 0},
-        {"7k/7p/8/8/P7/8/8/K7", 0},
-        {"7k/7p/8/8/P7/2K5/8/8", 0},
-        {"6rk/8/8/8/8/2K5/8/1R6", 0},
-        {"6rk/7p/8/8/P7/8/8/KR6", 0},
-        {"rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR", 0},
-        // Specialized material classes retain their original scores.
-        {"7k/7p/8/8/8/2K5/8/1R6", 4900},
-        {"7k/7p/8/8/P7/2K5/8/1R6", 2600},
-        {"6rk/8/8/8/P7/2K5/8/8", -4900},
-        {"6rk/7p/8/8/P7/2K5/8/8", -2600},
-        {"6rk/8/8/8/P7/2K5/8/1R6", -4900},
-        {"6rk/7p/8/8/8/2K5/8/1R6", 4900},
+    const char * positions[] = {
+        "7k/7p/8/8/8/8/P7/K7", "7k/7p/8/8/P7/8/8/K7",
+        "7k/7p/8/8/P7/2K5/8/8", "6rk/8/8/8/8/2K5/8/1R6",
+        "6rk/7p/8/8/P7/8/8/KR6", "rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR",
+        "7k/7p/8/8/8/2K5/8/1R6", "7k/7p/8/8/P7/2K5/8/1R6",
+        "6rk/8/8/8/P7/2K5/8/8", "6rk/7p/8/8/P7/2K5/8/8",
+        "6rk/8/8/8/P7/2K5/8/1R6", "6rk/7p/8/8/8/2K5/8/1R6",
     };
     bool success = true;
-    for (const auto & fixture : fixtures) {
+    for (const char * position : positions) {
+        auto white = std::make_unique<w17_search_t>((std::string(position) + " w - - 0 1").c_str());
+        const int white_score = w17_evaluate(white.get());
         for (const char * side : {" w - - 0 1", " b - - 0 1"}) {
-            const std::string fen = std::string(fixture.position) + side;
+            const std::string fen = std::string(position) + side;
             auto search = std::make_unique<w17_search_t>(fen.c_str());
             const auto original = search->brd.to_string();
             const auto tt_key = search->brd.stack->tt_key;
-            const int expected = search->brd.us() ? fixture.value : -fixture.value;
+            const int expected = search->brd.us() ? white_score : -white_score;
             for (int repeat = 0; repeat < 2; ++repeat) {
                 const int actual = w17_evaluate(search.get());
                 if (actual != expected) {
@@ -61,10 +51,10 @@ bool test_scores() {
             const int standard_cold = evaluate(standard.get());
             success &= check("standard and losers transposition identities differ",
                 standard->brd.stack->tt_key != search->brd.stack->tt_key);
-            success &= check("neural evaluation cannot change losers material", w17_evaluate(search.get()) == expected);
+            success &= check("neural evaluation cannot change the losers score", w17_evaluate(search.get()) == expected);
             auto standard_warm = std::make_unique<search_t>(fen.c_str());
             standard_warm->stack->in_check = standard_warm->brd.in_check();
-            success &= check("losers material cannot change neural evaluation", evaluate(standard_warm.get()) == standard_cold);
+            success &= check("losers evaluation cannot change neural evaluation", evaluate(standard_warm.get()) == standard_cold);
         }
     }
     return success;

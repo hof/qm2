@@ -121,7 +121,7 @@ def book_moves(path, board, moves, margin=margin_cp):
 
 
 async def learn(engine_path, book_path, records, minutes=None, positions=None, seconds=classical_seconds,
-                margin=margin_cp, report=print):
+                margin=margin_cp, report=print, engine_options=None):
     """Learn queued positions until the time or position budget runs out; returns the positions learned."""
     path = deep_path(book_path)
     todo = queue(records, known_keys(path))[:positions]
@@ -129,10 +129,12 @@ async def learn(engine_path, book_path, records, minutes=None, positions=None, s
     learned = 0
     if not todo:
         return 0
-    _, engine = await chess.engine.popen_uci(str(engine_path))
-    try:
-        await engine.configure({name: value for name, value in (("OwnBook", False),)
-                                if name in engine.options})
+    from .uci import open_engine
+    async with open_engine([str(Path(engine_path).resolve())], str(Path(book_path).parent), timeout=5) as session:
+        engine = session.protocol
+        options = dict(engine_options or {})
+        options.update(OwnBook=False, Ponder=False, DrawContempt=0, ShortDrawOffset=0)
+        await session.configure(options)
         for board in todo:
             if deadline is not None and time.monotonic() + most_moves * seconds > deadline:
                 break
@@ -144,8 +146,6 @@ async def learn(engine_path, book_path, records, minutes=None, positions=None, s
                 learned += 1
                 report(f"deep book: {board.fen()} -> " + ", ".join(
                     f"{board.san(move)} {score / 100:+.2f}" for move, score in moves))
-    finally:
-        await engine.quit()
     return learned
 
 

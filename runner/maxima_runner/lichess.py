@@ -27,6 +27,9 @@ from .move_choice import describe, search_summary, variation
 from .project import data_root, engine_path, env_value, log_line
 from . import deep_learning
 from .uci import open_engine
+from .online_safety import engine_safety, remaining_clock, search_timeout
+from .online_reporting import online_reporter
+from .online_control import configured_control
 
 server_url = "https://lichess.org"
 speeds = ("bullet", "blitz", "rapid", "classical")
@@ -280,14 +283,14 @@ class matchmaker:
         seconds, unless the game was a rematch already, something else started, or the bot declined recently."""
         await asyncio.sleep(delay)
         if (not self.enabled or self.streak >= 2 or self.pending is not None or bot.game is not None
-                or bot.stopping or bot.in_tournament or bot.accepted[0] or self.resting(opponent, speed)
+                or bot.stopping or bot.paused or bot.in_tournament or bot.accepted[0] or self.resting(opponent, speed)
                 or bot.games is not None and bot.played >= bot.games):
             return
         await self.challenge(bot, name, opponent, speed, limit, increment, rated, "rematch", color)
 
     async def challenge(self, bot, name, opponent, speed, limit, increment, rated=True, why="challenging",
                         color="random"):
-        if bot.stopping or bot.in_tournament:
+        if bot.stopping or bot.paused or bot.in_tournament:
             return
         self.challenging = True
         try:
@@ -391,7 +394,7 @@ class matchmaker:
                 self.on_line(f"-- no answer from {opponent}; challenge cancelled")
                 await bot.api.post(f"/api/challenge/{challenge_id}/cancel")
             return
-        if (not self.due(now) or bot.game is not None or bot.stopping or bot.in_tournament or bot.accepted[0]
+        if (not self.due(now) or bot.game is not None or bot.stopping or bot.paused or bot.in_tournament or bot.accepted[0]
                 or bot.deep_task is not None):
             return
         if self.retry is not None:
@@ -460,10 +463,11 @@ class lichess_bot:
     def __init__(self, api, open_session, on_line, *, speeds=("bullet", "blitz", "rapid"), accept=True, games=None,
                  owners=(), learner=None, pgn_dir=None, events=None, online_tablebase=True, contempt_window=100, unknown_contempt=-10,
                  margin=5, local_pieces=0, challenge_idle=0, challenge_window=300, challenge_skip=(), blacklist_file=None, min_clock=90, max_clock=60, resignation_settings=None, pv_plies=2, teams=(), tournament=None,
-                 deep_idle=0, deep_learn=None):
+                 deep_idle=0, deep_learn=None, safety=None):
         self.resignation_settings = resignation.validate_settings(
             {} if resignation_settings is None else resignation_settings)
         self.api, self.open_session, self.on_line = api, open_session, on_line
+        self.safety = safety or engine_safety("lichess")
         self.speeds, self.accept, self.games = tuple(speeds), accept, games
         self.owners = {name.lower() for name in owners}
         self.learner, self.pgn_dir, self.events = learner, pgn_dir, events
@@ -477,6 +481,9 @@ class lichess_bot:
         self.accepted = (None, 0.0)  # a challenge accepted whose game has not started yet
         self.played = 0
         self.stopping = self.restart = False
+        self.paused = False
+        self.idle_work = None
+        self.force_offline = False
         self.matchmaker = matchmaker(challenge_idle, challenge_window, self.speeds, on_line, skip=challenge_skip,
                                      blacklist_file=blacklist_file)
         # Deep book learning after deep_idle minutes without a game: one position at a time, no challenges meanwhile.
@@ -496,7 +503,7 @@ class lichess_bot:
 
     @property
     def finished(self):
-        return (self.stopping and self.game is None and not self.matchmaker.challenging
+        return self.force_offline or (self.stopping and self.game is None and not self.matchmaker.challenging
                 and self.matchmaker.pending is None
                 and (self.accepted[0] is None or time.monotonic() - self.accepted[1] >= 20))
 
@@ -517,6 +524,9 @@ class lichess_bot:
         if self.stopping:
             return
         await self.start_engine()
+        if self.events is not None:
+            self.events.emit("login", message="Logged in to Lichess as " + self.name,
+                             engine_details=self.safety.details)
         self.on_line(f"-- logged in as {self.name}; accepting {', '.join(self.speeds)}"
                      + (f"; owners {', '.join(sorted(self.owners))}" if self.owners else "; no owners for commands"))
         self.on_line("-- type help for console commands")
@@ -544,6 +554,8 @@ class lichess_bot:
 
     async def join_tournament(self, tournament, password=None):
         """Stop taking and sending challenges now; tournament_tick joins once no game can overlap."""
+        if self.paused:
+            return
         self.tournament, self.tournament_password, self.tournament_joined = tournament, password, False
         self.tournament_ends = time.monotonic() + tournament_limit
         self.next_tournament_call = 0.0
@@ -563,6 +575,10 @@ class lichess_bot:
 
     async def tournament_tick(self):
         """Keep a tournament going while idle: notice its end and ask again to be paired."""
+        if self.paused:
+            if self.tournament_joined:
+                await self.leave_tournament()
+            return
         if not self.in_tournament:
             return
         if self.stopping:
@@ -607,11 +623,47 @@ class lichess_bot:
     async def start_engine(self):
         self.context = self.open_session()
         self.session = await self.context.__aenter__()
+        self.safety.describe(self.session)
 
     async def stop_engine(self):
         if self.context is not None:
             context, self.context, self.session = self.context, None, None
             await context.__aexit__(None, None, None)
+
+    def storage_failure(self, error):
+        self.stopping, self.accept, self.restart = True, False, False
+        self.matchmaker.enabled = False
+        try:
+            self.safety.fail(error, self.game.id if self.game else None)
+        except OSError:
+            print('-- incident persistence failed; new games remain blocked', flush=True)
+
+    async def engine_failure(self, error, board, clock):
+        self.stopping, self.restart, self.accept = True, False, False
+        self.matchmaker.enabled = False
+        self.safety.fail(error, self.game.id if self.game else None, board.fen())
+        self.on_line('-- ENGINE INCIDENT: new games blocked; ' + type(error).__name__)
+        try:
+            await asyncio.wait_for(self.cancel_challenge(), min(1, max(.01, clock / 10)))
+        except (asyncio.TimeoutError, OSError):
+            pass
+        if await self.safety.recover(error, self.stop_engine, self.start_engine, clock):
+            return True
+        if self.game is not None:
+            self.game.loss.sent = True
+            try:
+                action = 'abort' if board.ply() < 2 else 'resign'
+                sent = await asyncio.wait_for(self.api.post(self.game.path(action)), min(2, max(.05, clock / 2)))
+                if not sent and action == 'abort':
+                    sent = await asyncio.wait_for(self.api.post(self.game.path('resign')), 1)
+                if not sent:
+                    self.game.save_interrupted()
+                    self.force_offline = True
+            except (asyncio.TimeoutError, OSError):
+                self.game.save_interrupted()
+                self.force_offline = True
+        await self.stop_engine()
+        return False
 
     async def close(self):
         if self.game is not None:
@@ -677,13 +729,13 @@ class lichess_bot:
         command = asyncio.ensure_future(commands.get())
         try:
             while not self.finished:
-                if self.stopping and self.matchmaker.pending is not None:
+                if (self.stopping or self.paused) and self.matchmaker.pending is not None:
                     await self.cancel_challenge()
                 done, _ = await asyncio.wait({events, command}, timeout=1, return_when=asyncio.FIRST_COMPLETED)
                 if events in done:
                     events.result()
                 await self.tournament_tick()
-                if not self.stopping and (self.games is None or self.played < self.games):
+                if not self.stopping and not self.paused and (self.games is None or self.played < self.games):
                     try:
                         await self.matchmaker.tick(self)
                     except OSError as error:
@@ -765,7 +817,12 @@ class lichess_bot:
         elif kind == "challengeDeclined":
             self.matchmaker.declined(event["challenge"])
         elif kind == "gameStart":
+            if self.idle_work is not None:
+                await self.idle_work.before_game()
             game_id = event["game"]["gameId"]
+            if (self.stopping or self.paused) and self.game is None:
+                await self.api.post(f"/api/bot/game/{game_id}/abort")
+                return
             if self.accepted[0] == game_id:
                 self.accepted = (None, 0.0)
             if self.game is None:
@@ -803,7 +860,7 @@ class lichess_bot:
         if "limit" in clock and estimate < self.min_clock:
             return "tooFast"  # the 0.25s Lichess charges per move eats a clock without increment
         accepted, when = self.accepted
-        if (not self.accept or self.stopping or self.game is not None or self.deep_task is not None
+        if (not self.accept or self.stopping or self.paused or self.game is not None or self.deep_task is not None
                 or accepted and time.monotonic() - when < 20):
             return "later"
         if self.games is not None and self.played >= self.games:
@@ -819,6 +876,8 @@ class lichess_bot:
                  f"{clock.get('show', '')} {'rated' if challenge.get('rated') else 'casual'}").replace("  ", " ")
         reason = self.decline_reason(challenge, compat)
         if reason is None:
+            if self.idle_work is not None:
+                await self.idle_work.before_game()
             self.accepted = (challenge["id"], time.monotonic())
             self.on_line(f"-- accepting {about}")
             if not await self.api.post(f"/api/challenge/{challenge['id']}/accept"):
@@ -971,6 +1030,9 @@ class lichess_game:
         bot.on_line(f"-- game {self.id}: {full['white'].get('name')} vs {full['black'].get('name')}, "
                     f"{full['speed']} {'rated' if full.get('rated') else 'casual'} {bot.api.server}/{self.id}")
         self.emit("game_start", white=full["white"].get("name"), black=full["black"].get("name"),
+                  opponent={"name": self.opponent.name, "title": self.opponent.title,
+                            "rating": self.opponent.rating, "is_engine": self.opponent.is_engine},
+                  url=bot.api.server + '/' + self.id,
                   white_elo=full["white"].get("rating"), black_elo=full["black"].get("rating"),
                   initial_seconds=clock.get("initial", 0) // 1000, increment_seconds=clock.get("increment", 0) // 1000,
                   rated=full.get("rated"), variant=full["speed"],
@@ -1081,6 +1143,9 @@ class lichess_game:
     def report(self, task):
         if not task.cancelled() and task.exception() is not None:
             self.bot.on_line(f"-- move task failed: {task.exception()!r}")
+            if not self.over and task is self.searching and not self.loss.sent:
+                self.bot.stopping, self.bot.accept, self.bot.restart = True, False, False
+                asyncio.ensure_future(self.bot.engine_failure(ValueError("move task failed"), self.board.copy(), 0))
 
     def show_opponent_move(self, ponder_hit=False):
         if self.opponent_line is not None:
@@ -1088,6 +1153,8 @@ class lichess_game:
             self.opponent_line = None
 
     async def play(self, board, state, retry=True):
+        if getattr(self.bot, "idle_work", None) is not None:
+            await self.bot.idle_work.before_game()
         bot = self.bot
         generation = self.generation
         if self.over or self.loss.sent:
@@ -1108,13 +1175,11 @@ class lichess_game:
                 bot.session, board, limit, opening=self.opening,
                 ceiling=self.loss.ceiling(self.full.get("rated")),
                 tablebase=bot.tablebase, game=(self.id, self.generation),
-                opponent=self.opponent, timeout=max(clock, 1) + bot.margin, options=self.search_options(),
+                opponent=self.opponent, timeout=search_timeout(clock, self.state_received_at), options=self.search_options(),
                 on_search_started=self.show_opponent_move)
         except (asyncio.TimeoutError, AssertionError, RuntimeError, OSError, chess.engine.EngineError) as error:
-            bot.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
-            await bot.stop_engine()
-            await bot.start_engine()
-            if retry:
+            left = remaining_clock(clock, self.state_received_at)
+            if await bot.engine_failure(error, board, left) and retry:
                 await self.play(board, state, retry=False)
             return
         finally:
@@ -1122,7 +1187,7 @@ class lichess_game:
         if self.over or self.generation is not generation or self.board.fen() != board.fen():
             return
         if move is None or not board.is_legal(move):
-            bot.on_line(f"-- engine returned no legal move in {board.fen()}")
+            await bot.engine_failure(ValueError("engine returned no legal move"), board, remaining_clock(clock, self.state_received_at))
             return
         fresh = self.loss.on_search(board, move, info, kind)
         latest = self.state or state
@@ -1306,6 +1371,11 @@ class lichess_game:
         else:
             result = "1/2-1/2"
         reason = reasons.get(status, status)
+        our_winner = 'white' if self.color == chess.WHITE else 'black'
+        if status in ('outoftime', 'timeout') and winner in ('white', 'black') and winner != our_winner:
+            bot.stopping, bot.accept, bot.restart = True, False, False
+            bot.matchmaker.enabled = False
+            bot.safety.fail(RuntimeError('our game ended by ' + reason), self.id, self.board.fen())
         bot.on_line(f"-- game {self.id} over: {reason} {result} | server lag {bot.lag.ms()} ms")
         if status not in ("aborted", "noStart"):
             self.chat("player", random.choice(player_farewells))
@@ -1364,6 +1434,7 @@ class lichess_game:
         try:
             path = fics_game.save_game(game, bot.pgn_dir, self.record.started)
         except (OSError, ValueError) as error:
+            bot.storage_failure(error)
             bot.on_line(f"-- could not save game {self.id}: {error}")
             return
         bot.on_line(f"-- saved game {self.id} to {path}")
@@ -1371,6 +1442,7 @@ class lichess_game:
             try:
                 record = bot.learner.add(game)
             except (OSError, ValueError) as error:
+                bot.storage_failure(error)
                 bot.on_line(f"-- PGN saved; shared learning update failed: {error}")
                 return
             for text in learning_report(game, record, bot.learner.records):
@@ -1507,7 +1579,7 @@ def run(options, parser):
 
     @asynccontextmanager
     async def engine_session():
-        # The data directory resolves the engine's relative eval.nnue and book.bin defaults.
+        # The data directory resolves the engine's relative maxima-halfka.nnue and book.bin defaults.
         async with open_engine([str(configured["engine"] or engine_path())], str(data_root()), log=engine_log) as session:
             await session.configure(settings)
             await session.ready()
@@ -1516,9 +1588,14 @@ def run(options, parser):
     async def play_session(controller, commands, state):
         loop = asyncio.get_running_loop()
         read_commands(loop, commands)
-        events = connectors.game_events() if feed_address or configured["pgn_post"] else None
+        events = connectors.game_events()
+        reporter = online_reporter("lichess", data_root() / "runtime/lichess", show)
+        events.subscribe(reporter.listen)
+        safety = engine_safety("lichess", data_root() / "runtime/lichess", reporter.event)
+        safety.check_start()
+        reporter.start()
         api = lichess_api(token, options.server, show)
-        bot = lichess_bot(api, engine_session, show, speeds=configured["speeds"], accept=configured["accept"],
+        bot = lichess_bot(api, engine_session, show, speeds=configured["speeds"], accept=configured["accept"], safety=safety,
                           games=configured["games"], owners=owners, learner=learner, pgn_dir=pgn_dir, events=events,
                           online_tablebase=configured["online_tablebase"],
                           contempt_window=configured["contempt_window"], unknown_contempt=configured["unknown_contempt"],
@@ -1533,6 +1610,34 @@ def run(options, parser):
                                                                  data_root() / "book.bin", learner.records,
                                                                  positions=1, report=show))
         state["bot"] = bot
+        reporter.on_stop = bot.soft_quit
+        def reporting_failed(error):
+            bot.stopping, bot.accept, bot.restart = True, False, False
+            bot.matchmaker.enabled = False
+            try:
+                safety.fail(error)
+            except OSError:
+                print('-- incident persistence failed; new games remain blocked', flush=True)
+        reporter.on_failure = reporting_failed
+        control = configured_control("lichess", bot, reporter)
+        state['control'] = control
+        from .idle_work import configured_scheduler
+        async def idle_deep():
+            return await deep_learning.learn(configured["engine"] or engine_path(), data_root() / "book.bin",
+                learner.records, positions=1, report=show,
+                engine_options={name: value for name, value in settings.items() if name in ('Threads', 'Hash', 'EvalFile')})
+        idle_work = configured_scheduler('lichess', bot, control, controller, reporter,
+                                         idle_deep if learner is not None else None,
+                                         configured['deep_learning_idle'])
+        bot.idle_work = idle_work
+        if idle_work is not None:
+            bot.deep_idle = 0
+            events.subscribe(idle_work.listen)
+        def request_process_stop():
+            if control is not None:
+                control.stop_process()
+            bot.soft_quit()
+        reporter.on_stop = request_process_stop
         if controller.requested:
             bot.soft_quit()
         feed = None
@@ -1544,28 +1649,57 @@ def run(options, parser):
         if configured["pgn_post"]:
             events.subscribe(connectors.pgn_poster(configured["pgn_post"], env_value("MAXDRONE_POST_TOKEN"), show))
         try:
-            loop.add_signal_handler(signal.SIGUSR1, bot.soft_quit)
+            loop.add_signal_handler(signal.SIGUSR1, request_process_stop)
         except (NotImplementedError, AttributeError):
             pass  # no SIGUSR1 on this platform; console quit and chat commands still work
+        status = 0
         try:
             if controller.requested:
                 return 0
+            if idle_work is not None:
+                idle_work.start()
+            if control is not None:
+                await control.start()
             if feed is not None:
                 await feed.start()
-            await bot.start()
-            return await bot.run(commands)
+            if control is not None and control.offline:
+                await control.wait_offline()
+            else:
+                await bot.start()
+                status = await bot.run(commands)
+        except (RuntimeError, OSError, AssertionError, chess.engine.EngineError) as error:
+            bot.stopping, bot.accept, bot.restart = True, False, False
+            safety.fail(error)
+            raise
         finally:
-            if controller.requested and bot.game is not None:
-                bot.game.save_interrupted()
-            await bot.close()
-            if feed is not None:
-                await feed.close()
+            try:
+                if controller.requested and bot.game is not None:
+                    bot.game.save_interrupted()
+                await bot.close()
+                if bot.name is not None or safety.incident:
+                    reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
+                if (control is not None and not control.process_stop and not controller.requested
+                        and not safety.incident and bot.stopping and not bot.restart and bot.game is None):
+                    await control.wait_offline()
+            finally:
+                if idle_work is not None:
+                    await idle_work.close()
+                if control is not None:
+                    await control.close()
+                await reporter.close()
+                if feed is not None:
+                    await feed.close()
+        return online_shutdown.session_result(status,
+            restart=control is not None and control.restart_requested,
+            stopping=controller.requested or safety.incident or (control is not None and control.process_stop))
 
     async def session():
         commands, state = asyncio.Queue(), {}
         controller = online_shutdown.shutdown_controller(show, configured["shutdown_grace"])
 
         def stop():
+            if state.get('control') is not None:
+                state['control'].stop_process()
             bot = state.get("bot")
             if bot is not None:
                 bot.soft_quit()
@@ -1575,4 +1709,4 @@ def run(options, parser):
 
         return await controller.run(play_session(controller, commands, state), stop)
 
-    return asyncio.run(session())
+    return asyncio.run(online_shutdown.repeat_requested_sessions(session, restart_status))

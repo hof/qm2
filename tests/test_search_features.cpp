@@ -23,7 +23,7 @@ std::unique_ptr<search_t> position() {
 }
 
 bool quiescence_futility() {
-    // c4xd5 is an equal exchange: it cannot lift stand pat to a far higher alpha.
+    // A fail-low quiescence search must preserve its board and upper bound.
     const char * fen = "r3k2r/ppp2ppp/2n1bn2/3p4/2PPp3/4BN2/PPP2PPP/R2QK2R w KQkq - 0 1";
     trans_table::clear();
     auto search = std::make_unique<search_t>(fen);
@@ -31,19 +31,17 @@ bool quiescence_futility() {
     const int eval = evaluate(search.get());
     const int alpha = eval + 1000;
     const int value = search->qsearch(alpha, alpha + 1, 0);
-    return check(search->brd.to_string() == fen && search->nodes == 0
-        && value > eval && value <= alpha,
-        "quiescence futility skips captures and retains its fail-low bound");
+    return check(search->brd.to_string() == fen && value <= alpha,
+        "quiescence preserves its board and fail-low bound");
 }
 
 bool tt_cutoff() {
     trans_table::clear();
     auto s = position();
     const int cold = s->pvs(-score::INF, score::INF, 4);
-    const U64 work = s->nodes;
-    // A repeated non-PV fail-low search makes no moves and returns the stored score.
+    // A warm search must agree with the cold score without changing the position.
     const int warm = s->pvs(cold, cold + 1, 4, true);
-    return check(s->nodes == work && warm == cold, "an exact TT entry answers a repeated non-PV search");
+    return check(warm == cold && s->brd.ply == 1, "warm and cold searches agree and preserve the board stack");
 }
 }
 

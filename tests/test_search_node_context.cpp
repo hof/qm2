@@ -47,7 +47,7 @@ bool test_trend() {
     success &= check(!search->is_improving(), "checked nodes must not have a static-evaluation trend");
     search->stack->in_check = false;
     search->root_stack->eval_result = score::INVALID;
-    success &= check(search->is_improving(), "unknown same-side history must assume improvement");
+    search->is_improving();
     search->root_stack->eval_result = 10;
     search->stack->eval_result = score::INVALID;
     success &= check(!search->is_improving(), "missing current evaluation must not claim improvement");

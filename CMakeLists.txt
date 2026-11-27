@@ -72,17 +72,32 @@ add_custom_target(release
 )
 
 add_definitions("-Wall -Wextra")
+set(maxima_network_name "maxima-halfka.nnue")
+set(maxima_network "${PROJECT_SOURCE_DIR}/networks/${maxima_network_name}")
+file(SHA256 "${maxima_network}" maxima_network_sha256)
+if(NOT maxima_network_sha256 STREQUAL "61c2d21510166c79b64bba3fb98b9285f08e922b07487055b4dfb841bd08d3c7")
+    message(FATAL_ERROR "Bundled Maxima network checksum mismatch; restore networks/${maxima_network_name}")
+endif()
+configure_file("${maxima_network}" "${PROJECT_BINARY_DIR}/src/${maxima_network_name}" COPYONLY)
 add_subdirectory(src)
 include(CTest)
 if(BUILD_TESTING)
-    set(maxima_nnue_test_network "${PROJECT_SOURCE_DIR}/networks/nn-62ef826d1a6d.nnue"
-        CACHE FILEPATH "HalfKP network for standard search and reference checks")
+    set(maxima_nnue_test_network "${maxima_network}"
+        CACHE FILEPATH "Native network for standard search and reference checks")
     if(NOT maxima_nnue_test_network)
-        set(maxima_nnue_test_network "${PROJECT_SOURCE_DIR}/networks/nn-62ef826d1a6d.nnue"
-            CACHE FILEPATH "HalfKP network for standard search and reference checks" FORCE)
+        set(maxima_nnue_test_network "${maxima_network}"
+            CACHE FILEPATH "Native network for standard search and reference checks" FORCE)
+    endif()
+    if(EXISTS "${maxima_nnue_test_network}")
+        file(READ "${maxima_nnue_test_network}" maxima_test_header LIMIT 8 HEX)
+        if(maxima_test_header STREQUAL "162ff37aeea65a3e")
+            # Upgrade existing build caches containing an unsupported network format.
+            set(maxima_nnue_test_network "${maxima_network}"
+                CACHE FILEPATH "Native network for standard search and reference checks" FORCE)
+        endif()
     endif()
     if(NOT EXISTS "${maxima_nnue_test_network}")
-        message(FATAL_ERROR "Search tests require maxima_nnue_test_network; run tools/download_nnue.py or set BUILD_TESTING=OFF")
+        message(FATAL_ERROR "Search tests require a native maxima_nnue_test_network")
     endif()
     add_subdirectory(tests)
 endif()

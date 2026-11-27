@@ -5,6 +5,22 @@ import math
 import signal
 
 
+async def repeat_requested_sessions(session, restart_status=75):
+    """Only an explicit soft restart starts a fresh session; failures propagate."""
+    while True:
+        result = await session()
+        if result != restart_status:
+            return result
+
+
+def session_result(status, restart=False, stopping=False, restart_status=75):
+    if status not in (0, restart_status):
+        return status
+    if stopping:
+        return 0
+    return restart_status if restart or status == restart_status else 0
+
+
 def grace_seconds(value):
     if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
         raise ValueError('shutdown_grace must be finite, nonnegative seconds')

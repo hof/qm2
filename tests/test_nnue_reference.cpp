@@ -1,48 +1,130 @@
 #include "engine.h"
 #include "movegen.h"
 #include "nnue.h"
+#include <bit>
+#include <fstream>
 #include <random>
 
-#include "../third_party/nnue_reference/nnue.h"
-
 namespace {
+// Independent, fresh-only scalar oracle. File rows and wide dot products are
+// deliberately kept separate from the engine's feature tables and packed SIMD.
+struct reference_t {
+    std::array<int16_t, 256> biases;
+    std::vector<int16_t> features;
+    std::array<int32_t, 32> bias1, bias2;
+    std::array<int8_t, 512 * 32> weights1;
+    std::array<int8_t, 32 * 32> weights2;
+    std::array<int8_t, 32> output_weights;
+    int32_t output_bias;
+
+    explicit reference_t(const char * path) : features(22528 * 256) {
+        std::ifstream file(path, std::ios::binary);
+        auto read = [&]<typename value_t>(value_t & value) {
+            using unsigned_t = std::make_unsigned_t<value_t>;
+            unsigned_t bits = 0;
+            for (size_t i = 0; i < sizeof(value_t); ++i) {
+                const int byte = file.get();
+                if (byte == std::char_traits<char>::eof()) {
+                    throw std::runtime_error("Truncated reference model");
+                }
+                bits |= unsigned_t(byte) << (8 * i);
+            }
+            value = std::bit_cast<value_t>(bits);
+        };
+        auto row = [&](auto & values) {
+            for (auto & value : values) {
+                read(value);
+            }
+        };
+        file.seekg(193);
+        row(biases);
+        row(features);
+        file.seekg(4, std::ios::cur);
+        row(bias1);
+        row(weights1);
+        row(bias2);
+        row(weights2);
+        read(output_bias);
+        row(output_weights);
+        if (file.peek() != std::char_traits<char>::eof()) {
+            throw std::runtime_error("Trailing reference model bytes");
+        }
+    }
+
+    auto refresh(const board_t & board) const {
+        std::array<std::array<int16_t, 256>, 2> result;
+        for (int perspective = 0; perspective < 2; ++perspective) {
+            result[perspective] = biases;
+            const int king = board.get_sq(perspective == WHITE ? WKING : BKING);
+            const int vertical = perspective == WHITE ? 0 : 56;
+            const int horizontal = king % 8 < 4 ? 7 : 0;
+            const int oriented_king = king ^ vertical ^ horizontal;
+            const int bucket = oriented_king / 8 * 4 + oriented_king % 8 - 4;
+            for (int square = 0; square < 64; ++square) {
+                const int piece = board.matrix[square];
+                if (!piece) {
+                    continue;
+                }
+                const int type = (piece - 1) % 6;
+                const bool friendly = (piece <= WKING) == (perspective == WHITE);
+                const int piece_bucket = type == 5 ? 10 : 2 * type + !friendly;
+                const int index = bucket * 704 + piece_bucket * 64 + (square ^ vertical ^ horizontal);
+                for (size_t lane = 0; lane < 256; ++lane) {
+                    const uint16_t sum = uint16_t(result[perspective][lane])
+                        + uint16_t(features[index * 256 + lane]);
+                    result[perspective][lane] = std::bit_cast<int16_t>(sum);
+                }
+            }
+        }
+        return result;
+    }
+
+    template<size_t count>
+    static auto dense(const std::array<int, count> & inputs,
+            const std::array<int8_t, count * 32> & weights, const std::array<int32_t, 32> & biases) {
+        std::array<int, 32> output;
+        for (size_t row = 0; row < 32; ++row) {
+            int64_t sum = biases[row];
+            for (size_t column = 0; column < count; ++column) {
+                sum += int64_t(inputs[column]) * weights[row * count + column];
+            }
+            output[row] = static_cast<int>(std::clamp<int64_t>(sum / 64, 0, 127));
+        }
+        return output;
+    }
+
+    int evaluate(const board_t & board, const std::array<std::array<int16_t, 256>, 2> & values) const {
+        std::array<int, 512> inputs;
+        for (size_t i = 0; i < inputs.size(); ++i) {
+            const int color = i < 256 ? board.us() : !board.us();
+            inputs[i] = std::clamp<int>(values[color][i % 256], 0, 127);
+        }
+        const auto first = dense(inputs, weights1, bias1);
+        const auto second = dense(first, weights2, bias2);
+        int64_t sum = output_bias;
+        for (size_t i = 0; i < 32; ++i) {
+            sum += int64_t(second[i]) * output_weights[i];
+        }
+        return static_cast<int>(sum / 16);
+    }
+};
+
+std::unique_ptr<reference_t> reference;
 size_t comparisons = 0;
 
 bool compare(search_t & search) {
     const auto fen = search.brd.to_string();
-    const int reference_score = nnue_evaluate_fen(fen.c_str());
+    const auto reference_values = reference->refresh(search.brd);
+    const int reference_score = reference->evaluate(search.brd, reference_values);
     nnue::accumulator_t fresh;
     const int recomputed = search.evaluation_network->evaluate(search.brd, fresh);
     auto & accumulator = search.evaluation_accumulators[search.brd.ply];
     const int incremental = search.evaluation_network->evaluate(search.brd, accumulator,
         std::span<nnue::accumulator_t>(search.evaluation_accumulators.data(), search.brd.ply));
     ++comparisons;
-    // Independently refreshed reference accumulators also check the feature map
-    // and every loaded feature weight, rather than only the final score.
-    constexpr int piece_map[] = {0, 6, 5, 4, 3, 2, 1, 12, 11, 10, 9, 8, 7};
-    int pieces[33] = {wking, bking};
-    int squares[33] = {search.brd.get_sq(WKING), search.brd.get_sq(BKING)};
-    int count = 2;
-    for (int square = 0; square < 64; ++square) {
-        const int piece = search.brd.matrix[square];
-        if (!piece || piece == WKING || piece == BKING) {
-            continue;
-        }
-        pieces[count] = piece_map[piece];
-        squares[count++] = square;
-    }
-    NNUEdata reference_data{};
-    NNUEdata * reference_states[] = {&reference_data, nullptr, nullptr};
-    const int reference_refresh = nnue_evaluate_incremental(
-        search.brd.us() ? white : black, pieces, squares, reference_states);
     bool success = reference_score == recomputed && reference_score == incremental
-        && reference_score == reference_refresh && fresh.values == accumulator.values;
-    for (int color = 0; color < 2; ++color)
-        for (int lane = 0; lane < 256; ++lane)
-            success &= fresh.values[color][lane] == reference_data.accumulator.accumulation[!color][lane];
+        && reference_values == fresh.values && fresh.values == accumulator.values;
     if (!search.brd.in_check()) {
-        // Compare raw inference after real searches too: learned correction is
-        // deliberately separate from this independent network oracle.
         success &= evaluate(&search)
             == search.corrected_static_eval(scale_network_score(reference_score,
                 search.brd, search.brd.stack->fifty_count));
@@ -101,7 +183,7 @@ int main(int argc, char ** argv) {
         std::cerr << error << '\n';
         return 1;
     }
-    nnue_init(argv[1]);
+    reference = std::make_unique<reference_t>(argv[1]);
     options::get_option("OwnBook")->value = 0;
     bool success = true;
     const char * start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -113,8 +195,9 @@ int main(int argc, char ** argv) {
             "7k/8/8/8/3Pp3/8/8/K7 b - d3 0 1",
             "1r5k/P7/8/8/8/8/8/K7 w - - 0 1",
             "7k/8/8/8/8/8/p7/1R5K b - - 0 1",
-            "7k/8/8/8/8/8/3R4/K7 w - - 0 1"})
+            "7k/8/8/8/8/8/3R4/K7 w - - 0 1"}) {
         success &= test_moves(fen);
+    }
     std::mt19937 random(20261013);
     for (int game = 0; game < 16; ++game) {
         auto storage = std::make_unique<search_t>(start);
@@ -131,10 +214,11 @@ int main(int argc, char ** argv) {
             move::gen_quiet_moves(&search.brd, &moves);
             move::gen_castles(&search.brd, &moves);
             std::vector<move_t> legal;
-            for (auto move = moves.first; move != moves.last; ++move)
+            for (auto move = moves.first; move != moves.last; ++move) {
                 if (search.brd.legal(move)) {
                     legal.push_back(*move);
                 }
+            }
             if (legal.empty()) {
                 break;
             }
@@ -216,13 +300,5 @@ int main(int argc, char ** argv) {
     search.go();
     success &= !search.stop_all && search.completed_depth == 3 && search.brd.ply == 0;
     success &= compare(search);
-    // Isolate dense inference throughput with a warmed accumulator.
-    const auto began = std::chrono::steady_clock::now();
-    int64_t checksum = 0;
-    for (int i = 0; i < 20000; ++i)
-        checksum += search.evaluation_network->evaluate(search.brd, search.evaluation_accumulators[0]);
-    const auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count();
-    std::cout << comparisons << " comparisons; 20000 warm evaluations in " << elapsed
-        << " s; checksum " << checksum << '\n';
     return success ? 0 : 1;
 }

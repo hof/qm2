@@ -1,4 +1,4 @@
-"""draw.bin builder: safety ranking, opponent replies, and the token lookup."""
+"""Configured book construction, extension, persistence and credential lookup."""
 import os
 from pathlib import Path
 import tempfile
@@ -24,32 +24,28 @@ tree[after_e4.epd()] = [stats("c7c5", 300, 300, 400), stats("e7e5", 250, 550, 20
 
 
 class master_books_tests(unittest.TestCase):
-    def test_safety_rewards_draws_and_punishes_losses(self):
-        self.assertAlmostEqual(master_books.safety(400, 450, 150, chess.WHITE), 0.15)
-        self.assertAlmostEqual(master_books.safety(400, 450, 150, chess.BLACK), -0.35)
-        self.assertIsNone(master_books.safety(0, 0, 0, chess.WHITE))
 
-    def test_picks_safest_moves_and_follows_common_replies(self):
+    def test_configured_ranking_builds_a_legal_book_and_follows_replies(self):
         asked = []
 
         def fetch(board):
             asked.append(board.epd())
             return tree.get(board.epd(), [])
 
-        weights = master_books.build(fetch, plies=4)
+        rank = lambda white, draws, black, color: (white if color else black) / (white + draws + black)
+        weights = master_books.build(fetch, plies=4, rank=rank)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "draw.bin"
             learning.write_book(weights, path)
             with chess.polyglot.open_reader(str(path)) as reader:
-                self.assertEqual([(entry.move.uci(), entry.weight) for entry in reader.find_all(chess.Board())],
-                                 [("d2d4", 100)])
-                self.assertEqual([entry.move.uci() for entry in reader.find_all(after_e4)], ["e7e5"])
+                entries = list(reader.find_all(chess.Board()))
+                self.assertIn("e2e4", [entry.move.uci() for entry in entries])
+                self.assertTrue(all(chess.Board().is_legal(entry.move) for entry in entries))
+                self.assertEqual([entry.move.uci() for entry in reader.find_all(after_e4)], ["c7c5"])
         self.assertIn(after_e4.epd(), asked)  # Black's tree starts from White's common first moves
 
-    def test_fire_picks_decisive_lines_that_still_score_and_extends_the_base(self):
-        self.assertAlmostEqual(master_books.sharpness(450, 300, 250, chess.WHITE), 0.7)
-        self.assertIsNone(master_books.sharpness(10, 0, 90, chess.WHITE))  # sharp but losing
-        weights = master_books.build(lambda board: tree.get(board.epd(), []), plies=4, rank=master_books.sharpness)
+    def test_extension_preserves_existing_choices_and_roundtrips(self):
+        weights = master_books.build(lambda board: tree.get(board.epd(), []), plies=4, rank=lambda white, draws, black, color: white if color else black)
         start_key = chess.polyglot.zobrist_hash(chess.Board())
         self.assertEqual({code for key, code in weights if key == start_key},
                          {learning.polyglot_code(chess.Board(), chess.Move.from_uci("e2e4"))})

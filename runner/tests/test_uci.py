@@ -8,7 +8,7 @@ import unittest
 import chess
 import chess.engine
 
-from maxima_runner.uci import open_engine
+from maxima_runner.uci import open_engine, root_pv_info
 
 
 fake_engine = '''
@@ -89,6 +89,101 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("< uciok", lines)
         self.assertIn("< bestmove e2e4", lines)
 
+    async def test_root_pv_mode_preserves_search_evidence_and_original_log(self):
+        from maxima_runner.nnue_data import completed_label
+        from unittest.mock import patch
+
+        self.script.write_text(fake_engine.replace('pv e2e4', 'pv e2e4 e7e5 g1f3 b8c6'))
+        for root_only, setting, expected_plies in ((False, '1', 4), (True, '0', 1),
+                                                  (None, '1', 1), (None, '0', 4)):
+            infos, lines = [], []
+            with patch.dict('os.environ', MAXIMA_UCI_ROOT_PV_ONLY=setting):
+                async with open_engine(self.command, self.directory.name, 2, log=lines.append,
+                                   root_pv_only=root_only) as engine:
+                    best, _ = await engine.search(chess.Board(), chess.engine.Limit(nodes=8),
+                                              on_info=lambda info, elapsed: infos.append(info))
+            self.assertEqual(best.move, chess.Move.from_uci('e2e4'))
+            self.assertEqual(completed_label(infos), dict(score_cp=12, depth=2, nodes=8))
+            report = next(info for info in infos if 'pv' in info)
+            self.assertEqual(len(report['pv']), expected_plies)
+            self.assertIn('< info depth 2 score cp 12 nodes 8 pv e2e4 e7e5 g1f3 b8c6', lines)
+
+    def test_root_pv_keeps_bounds_statistics_and_non_pv_fields(self):
+        board = chess.Board()
+        for suffix in ('', ' nodes 10000 time 12', ' refutation d2d4 d7d5'):
+            line = 'info depth 5 score cp 13 lowerbound pv e2e4 e7e5 g1f3' + suffix
+            full = chess.engine._parse_uci_info(line[5:], board, chess.engine.INFO_ALL)
+            root = chess.engine._parse_uci_info(root_pv_info(line)[5:], board, chess.engine.INFO_ALL)
+            full['pv'] = full['pv'][:1]
+            self.assertEqual(root, full)
+        for line in ('info string search_result complete completed_depth 5 attempted_depth 6',
+                     'info string example pv e2e4 e7e5', 'bestmove e2e4 ponder e7e5'):
+            self.assertEqual(root_pv_info(line), line)
+
+    async def test_generation_decodes_moves_without_legality_checks(self):
+        from unittest.mock import patch
+
+        async with open_engine(self.command, self.directory.name, 2, root_pv_only=True) as engine:
+            with patch.object(chess.Board, 'parse_uci', side_effect=AssertionError('redundant move validation')):
+                infos = []
+                best, _ = await engine.search(chess.Board(), chess.engine.Limit(nodes=8),
+                                              on_info=lambda info, elapsed: infos.append(info))
+            self.assertEqual(best.move, chess.Move.from_uci('e2e4'))
+            self.assertEqual(next(info['pv'] for info in infos if 'pv' in info), [best.move])
+
+    async def test_generation_cancellation_keeps_session_usable(self):
+        async with open_engine(self.command, self.directory.name, 2, root_pv_only=True) as engine:
+            task = asyncio.create_task(engine.search(chess.Board(), chess.engine.Limit(nodes=8), game='g'))
+            await asyncio.sleep(0.02)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            await engine.ready()
+            best, _ = await engine.search(chess.Board(), chess.engine.Limit(nodes=8), game='g')
+            self.assertEqual(best.move, chess.Move.from_uci('e2e4'))
+
+    async def test_generation_rejects_malformed_move_encoding_and_reaps(self):
+        self.script.write_text(fake_engine.replace('bestmove e2e4', 'bestmove malformed'))
+        with self.assertRaisesRegex(RuntimeError, 'uci'):
+            async with open_engine(self.command, self.directory.name, 2, root_pv_only=True) as engine:
+                protocol = engine.protocol
+                await engine.search(chess.Board(), chess.engine.Limit(nodes=8))
+        self.assertTrue(protocol.returncode.done())
+
+    async def test_idle_pause_outlasts_search_timeout_and_resumes_same_session(self):
+        import json
+        import time
+        from unittest.mock import patch
+
+        control = Path(self.directory.name) / 'idle.json'
+        for allowed, age in ((False, 0), (True, 60)):
+            control.write_text(json.dumps(dict(allowed=allowed, updated_at=time.time()-age)))
+            lines = []
+            with patch.dict('os.environ', MAXIMA_GENERATION_IDLE_CONTROL=str(control)):
+                async with open_engine(self.command, self.directory.name, 0.3, log=lines.append,
+                                       root_pv_only=True) as engine:
+                    task = asyncio.create_task(engine.search(chess.Board(), chess.engine.Limit(nodes=8)))
+                    await asyncio.sleep(0.4)
+                    self.assertFalse(task.done())
+                    self.assertFalse(any(line.startswith('> go ') for line in lines))
+                    control.write_text(json.dumps(dict(allowed=True, updated_at=time.time())))
+                    best, _ = await asyncio.wait_for(task, 2)
+                    self.assertEqual(best.move, chess.Move.from_uci('e2e4'))
+
+    async def test_missing_idle_controller_pauses_and_cancellation_reaps(self):
+        from unittest.mock import patch
+
+        with patch.dict('os.environ', MAXIMA_GENERATION_IDLE_CONTROL=str(Path(self.directory.name)/'missing')):
+            async with open_engine(self.command, self.directory.name, 0.3, root_pv_only=True) as engine:
+                protocol = engine.protocol
+                task = asyncio.create_task(engine.search(chess.Board(), chess.engine.Limit(nodes=8)))
+                await asyncio.sleep(0.05)
+                self.assertFalse(task.done())
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+        self.assertTrue(protocol.returncode.done())
+
     async def test_search_leaves_event_loop_responsive(self):
         async with open_engine(self.command, self.directory.name, 2) as engine:
             protocol = engine.protocol
@@ -100,6 +195,14 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
             self.assertGreater(elapsed_ms, 0)
         self.assertTrue(protocol.returncode.done())
         self.assertEqual(protocol.returncode.result(), 0)
+
+    async def test_search_clock_starts_after_readiness(self):
+        self.script.write_text(fake_engine.replace("elif command == 'isready':", "elif command == 'isready':\n        time.sleep(0.2)"))
+        async with open_engine(self.command, self.directory.name, 2) as engine:
+            _, wall_ms = await engine.search(chess.Board(), chess.engine.Limit(nodes=8), game='clock-test')
+            self.assertGreaterEqual(wall_ms, 290)
+            self.assertGreaterEqual(engine.last_search_seconds, 0.09)
+            self.assertLess(engine.last_search_seconds, wall_ms / 1000 - 0.15)
 
     async def test_hung_search_is_stopped_and_reaped(self):
         self.script.write_text(fake_engine.replace('time.sleep(0.1)', 'time.sleep(30)'))
@@ -170,6 +273,34 @@ class uci_tests(unittest.IsolatedAsyncioTestCase):
         lines = transcript.read_text().splitlines()
         self.assertIn('position startpos moves g1f3 g8f6 f3g1 f6g8', lines)
         self.assertEqual(lines.count('ucinewgame'), 2)
+
+    async def test_restricted_search_forwards_legal_moves_and_rejects_invalid_input(self):
+        lines = []
+        async with open_engine(self.command, self.directory.name, 2, log=lines.append) as engine:
+            board = chess.Board()
+            for moves in ([], [chess.Move.from_uci('e2e5')]):
+                with self.assertRaises(ValueError):
+                    await engine.search(board, chess.engine.Limit(nodes=8), root_moves=moves)
+            self.assertFalse(any(line.startswith('> go ') for line in lines))
+            best, _ = await engine.search(board, chess.engine.Limit(nodes=8),
+                                         root_moves=[chess.Move.from_uci('e2e4')])
+        self.assertEqual(best.move.uci(), 'e2e4')
+        self.assertTrue(any(line.startswith('> go ') and 'searchmoves e2e4' in line for line in lines))
+
+    async def test_native_restricted_analysis_stays_inside_root_subset(self):
+        import os
+        engine_path = os.environ.get('MAXIMA_ENGINE')
+        if not engine_path:
+            self.skipTest('MAXIMA_ENGINE is unset')
+        move = chess.Move.from_uci('a2a3')
+        infos = []
+        async with open_engine([engine_path], None, 10) as engine:
+            await engine.configure({'OwnBook': False, 'UseExperience': False, 'Threads': 1})
+            best, _ = await engine.search(chess.Board(), chess.engine.Limit(nodes=10000),
+                root_moves=[move], on_info=lambda info, elapsed: infos.append(info))
+        self.assertEqual(best.move, move)
+        self.assertTrue(any(info.get('pv') for info in infos))
+        self.assertTrue(all(info['pv'][0] == move for info in infos if info.get('pv')))
 
 
 class variant_session_tests(unittest.IsolatedAsyncioTestCase):

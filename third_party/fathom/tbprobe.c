@@ -330,8 +330,7 @@ static FD open_tb(const char *str, const char *suffix)
     size_t len;
     mbstowcs_s(&len, ucode_name, 4096, file, _TRUNCATE);
     /* use FILE_FLAG_RANDOM_ACCESS because we are likely to access this file
-       randomly, so prefetch is not helpful. See
-       https://github.com/official-stockfish/Stockfish/pull/1829 */
+       randomly, so prefetch is not helpful. */
     fd = CreateFile(ucode_name, GENERIC_READ, FILE_SHARE_READ, NULL,
 			  OPEN_EXISTING, FILE_FLAG_RANDOM_ACCESS, NULL);
 #else
@@ -374,8 +373,7 @@ static void *map_file(FD fd, map_t *mapping)
   }
 #ifdef POSIX_MADV_RANDOM
   /* Advise the kernel that we are likely to access this data
-     region randomly, so prefetch is not helpful. See
-     https://github.com/official-stockfish/Stockfish/pull/1829 */
+     region randomly, so prefetch is not helpful. */
   posix_madvise(data, statbuf.st_size, POSIX_MADV_RANDOM);
 #endif
 #else
@@ -1781,7 +1779,6 @@ static int probe_table(const Pos *pos, int s, int *success, const int type)
   uint64_t key = calc_key(pos,false);
 
   // Test for KvK
-  // Note: Cfish has key == 2ULL for KvK but we have 0
   if (type == WDL && key == 0ULL)
     return 0;
 

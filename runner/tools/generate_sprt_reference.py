@@ -35,7 +35,7 @@ def main():
             cases.append({'counts': counts, 'bounds': bounds,
                           'llr': reference.LLR_logistic(*bounds, counts)})
     metadata = {
-        'reference': 'official-stockfish/fishtest LLRcalc.LLR_logistic',
+        'reference': 'Fishtest LLRcalc.LLR_logistic',
         'revision': '7a337cdea6a9d941d6b12a0a86fd5a0d1f5104bc',
         'source_sha256': source_hash, 'scipy_version': scipy.__version__,
         'numpy_version': numpy.__version__, 'seed': 20261014,

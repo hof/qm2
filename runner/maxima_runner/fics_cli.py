@@ -14,7 +14,7 @@ def parser():
                "  tell <name> <key> follow       explain each move to you by tell\n"
                "  tell <name> unfollow           stop those tells\n"
                "  tell <name> <key> softquit     stop after this game\n"
-               "  tell <name> <key> softrestart  restart after this game (exit 75, for a supervisor loop)\n"
+               "  tell <name> <key> softrestart  reconnect and restart the engine after this game\n"
                "  tell <name> <key> !abort|!resign|!draw   act on the current game now\n"
                "  tell <name> <key> reseek       withdraw ads and draw the pool again\n"
                "  tell <name> <key> seek-pool 5 0 50%, 3 0 w3  replace the mixed weighted pool\n"
@@ -51,11 +51,11 @@ def parser():
     parser.add_argument("--no-engine", action="store_true", help="connect without playing games")
     parser.add_argument("--seek", action="append", metavar="SPEC",
                         help='seek pool entry, repeatable (e.g. "3 0", "3 0 losers", "3 0 w3"; default pool 3 0, 3 1, 5 0)')
-    parser.add_argument("--seeks-at-once", type=int, help="seeks posted at a time, drawn from the pool (default: 2)")
+    parser.add_argument("--seeks-at-once", type=int, help="total seeks posted at a time, at most 3 (default: 2)")
     parser.add_argument("--losers", action="store_true", default=None, help="also accept FICS royal-losers challenges")
     parser.add_argument("--losers-seek", action="append", metavar="SPEC",
-                        help='enable losers and add a time control to its separate pool, e.g. "3 0 u"')
-    parser.add_argument("--losers-seeks-at-once", type=int, help="losers seeks posted alongside standard seeks (default: 1)")
+                        help='enable losers and add a time control to the shared pool, e.g. "3 0 u"')
+    parser.add_argument("--losers-seeks-at-once", type=int, help="legacy option accepted for compatibility; seeks-at-once controls the total")
     parser.add_argument("--no-seek", action="store_true", help="do not seek; only accept challenges")
     parser.add_argument("--whisper", action="store_true",
                         help="whisper each move's reason to observers: book layer and mix, or depth, score, "

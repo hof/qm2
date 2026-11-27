@@ -45,7 +45,7 @@ namespace options {
         { "SyzygyProbeLimit", INT, 5, "type spin default 5 min 0 max 5", true },
         { "SyzygyProbeDepth", INT, 1, "type spin default 1 min 0 max 64", true },
         { "BookFile", STRING, 0, "type string default book.bin" },
-        { "EvalFile", STRING, 0, "type string default eval.nnue" }
+        { "EvalFile", STRING, 0, "type string default maxima-halfka.nnue" }
     };
     
     option_t * get_option(const char * key) {

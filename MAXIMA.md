@@ -2,9 +2,7 @@
 
 This is the main technical documentation for Maxima. Keep it current as the
 engine evolves and keep it short: describe current behavior, not its history.
-`AGENTS.md` is the quick entry for contributors and coding agents; optional
-private context lives in `.context/agents.md`, outside Git. Planning and results
-are indexed in `.context/plan-index.md`; this document describes the engine.
+`AGENTS.md` is the quick entry for contributors and coding agents.
 
 ## Contents
 
@@ -97,7 +95,7 @@ search, NNUE evaluation, Syzygy tablebases, and experimental royal-losers suppor
   boundaries) and small offline Syzygy fixtures.
 - `runner/`: independently packaged Python CLI, UCI orchestration, suites,
   matches, tablebase downloads, experience tooling, and their tests.
-- `tools/download_nnue.py`: fetches and verifies the pinned network.
+- `tools/install_nnue.py`: verifies and installs the bundled native network offline.
 - `networks/`, `tablebases/syzygy/`: downloaded data, ignored by Git.
 
 CMake generates `generated/maxima/version.h` inside each build directory from
@@ -364,12 +362,29 @@ avoiding a separate raw-evaluation store.
 
 ### 4.9 NNUE evaluation
 
-Maxima temporarily uses the borrowed Stockfish 13 NNUE network (legacy HalfKP:
-41024 inputs, two 256-wide accumulators, 512->32->32->1 integer inference).
-Weights are CC0: `nn-62ef826d1a6d.nnue`, SHA-256
-`62ef826d1a6d11b9e814188025aa02a60815c037292e0ef9bbb9bf4f724e5e63`, from
-https://github.com/official-stockfish/networks. `python3 tools/download_nnue.py`
-fetches and verifies it into `networks/`.
+Maxima ships its own HalfKAv2_hm model in `networks/maxima-halfka.nnue`.
+SHA-256: `61c2d21510166c79b64bba3fb98b9285f08e922b07487055b4dfb841bd08d3c7`.
+The weights and architecture metadata are included in the repository;
+builds, tests and normal play require no model download. `python3 tools/install_nnue.py` verifies and
+installs the bundled bytes.
+
+The native architecture has 22,528 inputs per
+perspective, including both king pieces, with 256-wide accumulators and the
+512->32->32->1 integer layers. Each perspective flips
+Black vertically, then mirrors files when its king is on a..d. The resulting
+king on e..h selects one of 32 buckets; each has 11 piece buckets of 64 squares,
+with both king colors sharing bucket 10. Feature indices use constant piece-bucket
+and king-orientation tables; the king entry combines its bucket offset and square
+orientation. A perspective king move refreshes its
+accumulator; the opposite accumulator incrementally updates the moved king's
+feature. Other move, capture, promotion and castling changes remain incremental.
+
+The native v1 file is 11,552,745 bytes, with a 177-byte description and
+dense payload. It uses version `0x4d584e31`, architecture `0x484b4132` and
+transformer `0x484d3031` identifiers. The loader validates native size and identifiers before loading.
+Other native models can be selected through `EvalFile`. Training and export do
+not activate a model automatically. Runtime evaluation scaling remains calibrated
+to the trained model as described below.
 
 The static evaluation applies the network's own NNUE-path scaling:
 `raw * (641 + material / 32 - 4 * clock) / 1024 + 28`, then
@@ -379,11 +394,14 @@ value per pawn (126/781/825/1276/2538 for P/N/B/R/Q). Correction history is
 added afterwards without clock damping. Scores are side-to-move relative and
 clamped below the tablebase range.
 
-The default model is `eval.nnue` beside `book.bin`. Initial `isready` loads it
+The default model is `maxima-halfka.nnue`. Initial `isready` loads it
 before the clock starts; `MAXIMA_EVAL_FILE` overrides discovery, otherwise the
-working directory, the executable directory and its parent are checked. Missing
+working directory, its `networks/` directory, the executable directory and its
+parent are checked. CMake places the verified model beside the built executable
+and installs it beside the binary. Retired `eval.nnue` files are not discovered. Missing
 or invalid models reject standard searches; a failed replacement keeps the
-previous model. Select another compatible model with
+previous model. Existing saved GUI options pointing to retired weights must be
+changed to the native model. Select another compatible model with
 `setoption name EvalFile value /absolute/path/to/network.nnue` and `isready`.
 Model changes stop the worker and clear incompatible TT entries; each search
 holds an immutable model snapshot. Royal losers needs no network.
@@ -416,9 +434,10 @@ the bounds where every possible result already saturates permits 32-bit
 addition and clipping without changing the output, even for extreme file biases.
 A per-search cache keyed by position holds raw network scores; clock-dependent scaling is
 applied on every read.
-The GPL reference probe used for exact inference tests is recorded in
-`third_party/nnue_reference/README.md`. There is no network I/O or Python
-dependency in the engine.
+An independent, fresh-only scalar oracle in `tests/test_nnue_reference.cpp`
+checks native feature accumulators and dense inference against the SIMD and lazy
+incremental paths. It uses ordinary file rows and wide arithmetic, without a
+third-party evaluator. There is no network I/O or Python dependency in the engine.
 
 ### 4.10 UCI boundary and time management
 
@@ -599,7 +618,7 @@ The default build uses C++26 and requires a compiler that supports that mode
 Python 3.7+ with its standard library. Configure with `-DBUILD_TESTING=OFF`
 to build the engine without Python or test targets. The separately packaged
 runner needs Python 3.8+; see chapters 6.1 and 10. Standard-chess tests require
-the pinned network (download with `python3 tools/download_nnue.py`), or an
+the bundled native network, or an
 explicit `-Dmaxima_nnue_test_network=/absolute/path/to/network.nnue`. CTest
 supplies `MAXIMA_EVAL_FILE` to isolate model discovery from its working directory.
 Release builds retain `-O3 -DNDEBUG -march=native`; Debug builds retain assertions
@@ -647,35 +666,6 @@ You can use [Visual Studio Code](https://code.visualstudio.com/) to develop and 
 [Remote Development Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack) and [Docker](https://www.docker.com/).
 
 ![Image of VS Code](vscode.png)
-
-### Windows GUI with the WSL build
-
-The Windows GUI entry point is `C:\dev\maxima\maxima2.exe` (also available
-in `C:\dev\uci-engines`). Add that executable in the GUI's Engines page.
-It bridges UCI through WSL distribution `Ubuntu` to this checkout's canonical
-`build/cpp26/release/src/maxima2`. Every rebuild of `cpp26_release` updates the
-engine used by the GUI automatically. Keep this checkout and its
-`.tools/cpp26/lib` runtime installed. WSL remains required.
-
-Build or reinstall the launcher with MinGW's `x86_64-w64-mingw32-gcc`:
-
-```bash
-python3 tools/install_windows_engine.py             # build the bridge locally
-python3 tools/install_windows_engine.py --install   # install; archive older launchers
-```
-
-The engine runs with `C:\dev\maxima` as its working directory, where the
-NNUE weights, opening book and 290 three/four/five-piece Syzygy WDL/DTZ tables
-remain installed. `eval.nnue` and `book.bin` load automatically. Windows drive
-paths for `EvalFile`, `BookFile` and `SyzygyPath` are translated to Linux
-`/mnt/<drive>/...` paths. Set `SyzygyPath` to `C:\dev\maxima\syzygy`,
-`SyzygyProbeLimit=5` and `SyzygyProbeDepth=1` for the complete five-piece set.
-
-The installer keeps one `maxima2.exe` entry point in each engine directory,
-archives previous Maxima launchers under ignored `.context/releases/`, and
-updates the bundle's README and SHA-256 manifest. Launcher build artifacts stay
-under ignored `.tools/windows/`. The engine is CPU-tuned for this machine.
-GUI interaction itself requires the user's Windows desktop.
 
 ### 5.1 Optional Release LTO and GCC PGO
 
@@ -814,7 +804,7 @@ exercise the executable. No suite-specific UCI command or search hook is needed.
 ./maxima suite:run --suite /path/to/positions.epd --engine /path/to/engine
 ./maxima suite:run --suite /path/to/positions.epd --syzygy-path tablebases/syzygy
 ./maxima suite:run --suite bratko-kopec --nodes 200000 \
-  --model EvalFile=networks/nn-62ef826d1a6d.nnue
+  --model EvalFile=networks/maxima-halfka.nnue
 ```
 
 Repeatable `--option NAME=VALUE` and `--model OPTION=PATH` select the evaluator
@@ -987,9 +977,12 @@ Replay every PGN independently and inspect terminations, applied options and
 pair uncertainty before using the corrected binary to judge strength candidates.
 A completed small baseline match is not a strength promotion result.
 
-Clocks use seconds plus a per-move increment. Wall time from the search request
-through its response is charged, including readiness and runner overhead;
-initial process startup/configuration is excluded. A late move loses on time,
+Clocks use seconds plus a per-move increment. The charged time is measured on a
+monotonic clock from sending UCI `go` until receiving `bestmove`, including engine
+execution and transport delay. Readiness and Python position/history preparation
+are outside that clock. Reports retain both total request wall time and charged
+search time; engine-reported time is telemetry, never the clock authority.
+A late move loses on time,
 except when the opponent has insufficient material under the selected variant.
 Legal moves are verified before being pushed. Terminal outcomes and available
 threefold/fifty-move claims are adjudicated by the independent board. Optional
@@ -1038,16 +1031,23 @@ For strength testing, use paired-result SPRT with bounds selected before play:
 
 ```bash
 ./maxima match:run --engine-a /path/to/candidate --engine-b /path/to/baseline \
-    --openings openings.json --pairs 1000 --sprt 0 5 \
+    --openings openings.json --until-decision --sprt 0 5 \
     --seconds 10 --increment 0.1 --pgn sprt.pgn --json sprt.json
 ```
 
 `--sprt ELO0 ELO1` uses logistic Elo for A relative to B, with nominal false-positive
 and false-negative targets of 0.05 each (`--sprt-alpha` and `--sprt-beta`). Bounds
 must be finite with `ELO0 < ELO1`; error targets must be
-positive with sum less than one. Declare all parameters and the maximum number
-of pairs before results. `--pairs` is a cap, and requires at least that many
-unique opening entries. Each completed color-swapped pair contributes to one
+positive with sum less than one. Declare all parameters before results.
+`--until-decision` runs plain SPRT without a time or game-count cutoff, drawing
+opening pairs uniformly with replacement from the supplied book. Reports retain
+the sampling mode and every selected opening; this measures performance on that
+book, and repeated entries are not evidence of broader opening coverage.
+This mode rejects deadlines, pair caps and extra futility rules. An explicit
+stop file can interrupt it without producing a statistical decision.
+For a deliberately bounded experiment, `--pairs` is a cap and requires at least
+that many unique opening entries, sampled without replacement.
+Each completed color-swapped pair contributes to one
 of five buckets: LL, LD/DL, DD/WL/LW, WD/DW, WW, from A's perspective. Incomplete
 pairs, engine failures and a lone first game cannot trigger a decision.
 
@@ -1071,6 +1071,26 @@ Minimum gains must be finite within [0, 200] logistic Elo, always A relative
 to B; put the candidate in A. Reports identify the mode, target score, minimum
 Elo, allocated budgets, declared number of checks, bounds and stop reason.
 A cap without a crossing is inconclusive; incomplete/failing pairs cannot stop.
+
+For a network comparison at equal search budget, use `--nodes 10000` instead of
+`--seconds` and `--increment`. Each move sends only a UCI node limit, without
+chess clocks. Scheduling delays remain in wire/wall telemetry and cannot cause
+a time-forfeit result. PGNs declare `TimeControl "-"` and `NodeLimit`; JSON records
+the budget, null clocks and zero charged clock time. The engine-response watchdog
+still reports a stalled engine as an unfinished error, never an opponent win.
+This mode can use `--sprt ... --until-decision` without a match duration or game
+count cutoff. Start a new test when changing search budgets; do not combine its
+evidence with timed games. Node-limited results measure strength at that node
+budget; they do not measure time management or strength per second.
+
+For timed offline self-play that excludes interface and scheduling delays, add
+`--clock-source reported`. This explicitly trusts the current search's final UCI
+`info time` as elapsed seconds when charging the chess clock. Wire and total wall
+time remain recorded separately. Missing, negative or nonfinite reported time is
+an unfinished engine error; an engine that reports exhausting its chess clock
+still loses on time. PGN `ClockSource` and JSON `clock_timing` identify this policy
+so it cannot be confused with ordinary wire-timed results. The default remains
+`--clock-source wire`; neither option changes online bot clock accounting.
 
 The confidence rule uses pair scores in [0, 1] and radius
 `sqrt(log(2 * maximum_pairs / bound_alpha) / (2 * completed_pairs))`.
@@ -1111,6 +1131,12 @@ have broad bounds; in fixed-sample mode these are score intervals, not Elo estim
 promotion test. Unfinished games or engine failures return nonzero.
 
 ### 6.2 Correctness tests and sanitizers
+
+Automated checks protect protocol behavior, chess rules, state restoration,
+data integrity, numerical compatibility and safe recovery. Exercise configured
+behavior without freezing presentation wording, preferred playing styles,
+default mixture weights or heuristic scores. Measure strength and tuning choices
+with playing tests rather than treating them as correctness assertions.
 
 `test_uci_input` covers malformed FENs and moves, atomic preservation of position
 and repetition history (including unsupported pawn counts), invalid option/search
@@ -1228,7 +1254,6 @@ the restricted workspace runner may require these checks to run outside its
 sandbox. Inspect sanitizer diagnostics and exit codes. Race checking remains a
 separate requirement for concurrency changes.
 
-Private measurement records and benchmark artifacts live under `.context/baselines/`.
 Record the revision, dirty-tree status, binary hashes, positions, limits, build
 configuration, and commands. Complete option/model setup with an `isready` /
 `readyok` barrier before starting search CPU measurements; sending `setoption`
@@ -1325,9 +1350,6 @@ live in `src/tablebase.*` and `src/search.*` and follow project conventions.
 
 ## 8. Private project records
 
-Plans, progress, experiments, and optimization results are indexed in
-`.context/plan-index.md`, outside Git.
-
 ## 9. Opening books and persistent experience
 
 ### 9.1 Native Polyglot book
@@ -1338,7 +1360,7 @@ path. `OwnBook=false` and `UCI_AnalyseMode=true` disable book selection for futu
 searches. `<empty>` clears the book path.
 
 ```text
-setoption name BookFile value /home/hermen/dev/qm2/book.bin
+setoption name BookFile value /path/to/book.bin
 setoption name OwnBook value true
 ```
 
@@ -1556,6 +1578,8 @@ searched positions from the experience, the most frequent first, at a classical 
 best, then with UCI `searchmoves` the best of the rest, kept while within `--margin` (30 cp) of
 the best; a singular move is booked alone. The moves go to `deep.bin` beside `book.bin`, the best
 at weight 100 and a move at the margin at 10. `--minutes` and `--positions` bound a run.
+Deep analysis uses the shared UCI session configuration, leaving managed options such as
+Ponder to python-chess.
 `deep.json` beside it says how deep the book is (its weakest search: nodes, depth, seconds, engine).
 The book plays `deep.bin` only while that search clearly beats our own for the move (the same
 rule as a remembered search: 1.5 × our speed × the move's time × 2/3), so a faster machine or a
@@ -1707,8 +1731,9 @@ current directory. Benchmark positions ship with the installed package.
 ready, so it is safe to rerun and suits CI. In order:
 
 - runner (`.tools/runner` with python-chess, unless the current Python has it)
-- network: `networks/nn-62ef826d1a6d.nnue` (the build registers its tests
-  against it) and its copy `eval.nnue`, through `tools/download_nnue.py`
+- network: `networks/maxima-halfka.nnue` (the build registers its tests
+  against it) and its verified data-directory copy `maxima-halfka.nnue`, through
+  the offline `tools/install_nnue.py`
 - toolchain: GCC 16+, CMake 3.30+ and Ninja on PATH are used as they are;
   otherwise `.tools/cpp26` is created with micromamba, which is itself
   downloaded (pinned 2.9.0, verified by size and SHA-256) on Linux x86-64
@@ -1741,10 +1766,10 @@ Cache `.tools/`, `build/` and `networks/` between runs; init then finds every
 step ready and only Ninja's incremental build does work.
 
 `MAXIMA_DATA_DIR` moves the data out of the checkout, for example onto a
-persistent volume: books (`book.bin`, `fire.bin`, `draw.bin`), `eval.nnue`,
+persistent volume: books (`book.bin`, `fire.bin`, `draw.bin`), `maxima-halfka.nnue`,
 `tablebases/` and `experience/` (PGN games, learning index, player stats).
 `init`, the download and experience commands and `maxima fics` all use it; the
-engine runs in that directory, so its relative `book.bin` and `eval.nnue`
+engine runs in that directory, so its relative `book.bin` and `maxima-halfka.nnue`
 resolve there. MaxDrone sets `SyzygyPath` to `tablebases/syzygy` there unless
 configured otherwise. The `.env` token file stays in the checkout.
 
@@ -1796,14 +1821,692 @@ orchestration, automation, and PGN capture follow the transport. ICC, legacy
 database migration, remote control, and notifications are deferred. Learning
 and online book selection stay in Python; native Polyglot probing stays in Maxima.
 
+#### NNUE training tooling
+
+Generation status reads wait through SQLite writer commits and permit SQLite's
+normal recovery of an interrupted transaction; they require an existing index
+and do not change its journal mode.
+
+`maxima nnue:selfplay --output RUN --positions 10000 --nodes 10000` generates
+fresh standard games using the selected engine and network (the existing model
+by default). One engine plays both sides with one worker, Hash32, no pondering,
+native book or tablebases, and zero draw contempt. Opening diversity defaults to
+eight plies: the first four are seeded weighted base-book choices (random legal
+moves where the book is absent), and the remainder are random legal moves.
+`--book-plies` controls that prefix within `--random-plies`; the selected engine
+searches every later move. `--book` selects the opening
+book; its hash, teacher hashes, generator hash and settings must match on resume.
+Self-play decodes only the root move of each reported principal variation;
+continuation moves are unused by the label and tactical filters. Search limits,
+score bounds, completed-iteration reports and engine position history are retained.
+Other UCI sessions keep full principal variations, and wire logs retain the
+original engine output.
+For generation analysis, the UCI adapter trusts the selected engine's move
+legality and decodes move syntax directly, without replaying reported PV or
+best moves on validation boards. It retains scalar search evidence and score
+bounds while python-chess still owns readiness, cancellation and process cleanup.
+Generation-only services using an older pinned self-play module can opt in with
+`MAXIMA_UCI_ROOT_PV_ONLY=1`; explicit session options override this environment
+setting. This retains the pinned generator identity while the helper-library
+revision is recorded separately in deployment evidence.
+Idle-controlled local generation can set `MAXIMA_GENERATION_IDLE_CONTROL` to an
+atomic JSON heartbeat containing `allowed` and Unix `updated_at`. Trusted generation
+waits between searches when disallowed or when the heartbeat is missing/stale
+(30 seconds). Waiting is outside search timeouts and preserves the current game;
+generation sessions acknowledge suspension under the shared permission lock. Normal playing sessions are unaffected.
+
+`--diversity` selects the opt-in bounded-v1 recipe: 8–12 opening plies, square-root
+book weights, and a 2% alternative-move probe probability through ply160. At most
+three probes per game each use the ordinary node budget, searching legal root
+moves other than the teacher's first choice. An alternative is played only with
+a completed exact score within 80cp of the unrestricted score and matching PV.
+Exploration roots are not training samples; later positions retain unrestricted
+teacher labels and the actual completed-game result. The full recipe is pinned
+in settings. Use new jobs/pools for changed recipes; existing data is preserved.
+
+Samples start at ply16 and exclude checked positions, captures/promotions by
+either the played move or the completed iteration's best move, missing exact
+centipawn labels, and duplicate positions ignoring clocks. There is no score-based
+sampling limit by default: quiet positions in clear wins/losses remain eligible
+through conversion. `--score-limit CP` optionally restores an absolute-score filter
+for a deliberately restricted experiment. Ordinary finite labels are retained
+through the dataset reader too; there is no separate +/-10000cp sampling cutoff.
+The current record stores signed16 centipawns (-32768..32767); scores outside that
+representation fail explicitly instead of being clipped or silently discarded.
+Mate scores stay in PGN/search annotations and are not fabricated CP labels.
+Only completed games supply training samples; final
+win/draw/loss is attached from the side-to-move perspective. Games reaching
+`--max-plies` (default512) remain unfinished PGNs and supply no training rows.
+There is no score-based win adjudication. Whole-game splits and global position
+deduplication cover the saved run. Each game directory atomically publishes its
+PGN, binary shard and hash report. Completed-game hashes are checked on resume;
+an interrupted in-progress game is replayed rather than assigned a result.
+
+Each invocation plays at most `--games-per-run` games (default5); repeat the same
+command to continue. At the position target it publishes `dataset-N.mxdata`,
+containing exactly the first N usable positions from complete games. Game shards
+remain available for later targets. This bounded generator currently loads its
+saved rows and deduplication keys into memory; it is intended for initial
+experiments, with large-corpus indexing still separate work. It never publishes
+to online experience or replaces the playing network.
+
+Sampling settings and generator content are fixed for a resumable run. Use a new
+output directory when changing a previous score-limited experiment to uncapped
+generation; existing datasets, settings and checkpoints are not rewritten.
+
+`nnue:seeds <PGN-or-directory> --output starts.json --player <engine-name>`
+selects replayable starting histories near evaluation swings in annotated games.
+Selection thresholds, minimum depth and per-game limits are configurable. This
+selector reads search evaluations attached before the annotated move, as in
+runner experience archives; those scores select starts and never become new
+training labels. `nnue:selfplay --start-positions starts.json` and
+`nnue:produce --start-positions starts.json` generate fresh continuations instead
+of adding a random opening prefix. Full available history is replayed, and job
+seeds vary the starting offset through the pool. Related continuations retain
+the same source-family split through shard ingestion and training. Starting
+files and generation settings are checksum-pinned for resume.
+
+The same command accepts `.fen` and `.epd` collections with `--selection positions`.
+EPD operations supply position metadata, not training labels. For PGNs,
+`--selection positions --max-pieces N` samples matching positions with full
+available history; `--preceding-plies` can include positions before the selected
+transition. `--selection critical --score-position before|after` makes the
+annotation convention explicit. `--limit`, `--per-game` and `--seed` bound and
+reproduce a pool. `--exclude-dataset` removes reserved roots; also pass those
+datasets to self-play so continuations cannot publish reserved positions.
+FEN/EPD roots preserve their supplied clocks and rights; earlier history is
+unavailable and is never invented.
+
+**Configured generation recipes.** `maxima nnue:generate --config recipe.json`
+runs a local worker pool and one canonical store. Source names and allocations
+are user choices; the runner has no built-in opening collection, endgame mix,
+server or cloud provider. A minimal recipe is:
+
+```json
+{
+  "version": 1,
+  "output": "generation",
+  "block": "batch_001",
+  "campaign": "my_experiment",
+  "engine": "./maxima2",
+  "network": "./maxima-halfka.nnue",
+  "nodes": 5000,
+  "workers": 2,
+  "sources": [
+    {"id": "base", "positions": 10000},
+    {"id": "positions", "positions": 2000, "input": "positions.epd"},
+    {"id": "experience", "positions": 1000, "input": "games.pgn",
+     "selection": "critical", "options": {"players": ["MyEngine"]}}
+  ]
+}
+```
+
+Paths resolve relative to the configuration file. `--check` validates inputs
+without creating a store or starting engines; `--status` reports accepted counts
+and quotas. `store` optionally selects an existing canonical store. Nonempty
+blocks require an explicit `adopt_existing` source; `existing_sources` can map
+previous input hashes to their source names. Existing data is retained, and
+unaccounted external writers cause an integrity error rather than silently
+changing the mixture.
+For an intentional expansion of an unsealed block, `previous_target` specifies
+its exact old target. The new source quotas determine the larger target; accepted
+rows and deduplication state remain intact. Sealed blocks cannot be expanded.
+
+Each source may configure a book, or an `input` collection with `selection`,
+`options`, `limit`, `per_game` and `seed`. `diversity` enables bounded alternative
+continuations. Supplied starts sample from their root by default; ordinary
+self-play retains its opening warmup. Quotas count accepted, deduplicated rows.
+The coordinator fills sources in declared order, retains surplus input, and
+seals only when every quota is satisfied. Models, input pools and generation
+code are pinned; source changes require a new recipe output or explicit migration.
+Worker count can change without changing the data recipe.
+
+For separate machines, run the same command with `--coordinator`. Each worker
+runs `maxima nnue:generate --worker-config worker.json`; its configuration contains
+`version: 1`, a unique `id`, local `output` and `engine` paths, a `coordinator`
+command argument array, and optional `slots`, `network` and `book` paths.
+The command invokes the coordinator's `--config recipe.json --rpc` entry point
+through an authenticated transport chosen by the operator, such as SSH. No
+network listener or infrastructure is provisioned. Workers fetch checksum-pinned
+assets, retain partial work, and upload completed labels and compressed PGN
+archives. A verified archive receipt precedes removal of duplicate worker files.
+Additional workers need their own IDs and an approved engine artifact; `engines`
+can list additional binaries for other worker platforms alongside `engine`. Each
+assignment and resulting shard pins the worker's selected binary hash. Workers
+do not own or write the canonical index. The coordinator heartbeat fails closed
+if its supervising process disappears.
+
+On a playing host, worker `idle_control` selects the runner's existing idle gate;
+use the same OS user so generation acknowledgements participate in game handoff.
+`admission_file` can share funding permission with the playing scheduler.
+`admission_command` optionally returns JSON with `allowed` or `funded` to pause
+generation; `notify_command` receives queued human-readable notices as JSON on
+stdin. These are configured adapters, not dependencies of ordinary play.
+`stop_at` and `stop_file` bound generation. Failures retain progress and latch a
+review hold; `--clear-hold INCIDENT_ID` clears only the explicitly reviewed
+incident. Interrupted submissions reconcile against committed shards, and
+repeated submissions cannot count twice. The recipe changes data generation,
+not the training objective or optimizer state.
+
+`nnue:selfplay --exclude-dataset reserved.mxdata` removes every position in a
+reserved dataset from both generated splits, using position identity without
+clocks. Repeat the option to exclude multiple datasets, for example an earlier
+training corpus that will be reused. Excluded dataset content hashes become
+immutable resume settings; saved shards are also checked against these keys.
+
+The teacher/student workflow has separate CLI stages, usable from a terminal:
+
+| Stage | Command | Responsibility |
+|---|---|---|
+| Teacher data | `./maxima nnue:selfplay` | Select `--engine`/`--network`, play games and save searched labels/results |
+| PGN labeling | `./maxima nnue:data` | Search selected PGN positions with the chosen teacher |
+| Student training/export | `.tools/training/bin/maxima nnue:train` | Optional supported HalfKP warm start, validation selection, recovery and verified export |
+| Native verification | `./maxima nnue:verify` | Compare exported inference with the built native probe |
+| Playing comparison | `./maxima match:run` | Select explicit models for each engine and record paired games |
+
+Use `--help` on each stage for its arguments. Training uses the optional PyTorch
+environment described below; generation and native verification do not need it.
+These commands do not require an interactive assistant. There is currently no
+single named-run command coordinating every stage, dataset merging, experiment
+audits and benchmark reporting, or automatically promoting the student to teacher
+or to the playing model. Training currently supports CPU execution; the existing
+in-memory row loading and run-level indexing are not a billion-position pipeline.
+
+`maxima nnue:data games.pgn --output training.mxdata --positions 256 --nodes 2000`
+replays standard PGNs and freshly labels sampled positions with one engine worker,
+Hash32, native book disabled, analysis mode and zero draw contempt. PGN eval
+annotations are not reused. Sampling starts at ply 16, about every eight plies by
+default; even strides alternate one-ply offsets to cover both sides to move.
+Checked and terminal/claimable-draw positions are excluded. Input games
+are legally replayed before their positions are used. Mate and tablebase scores
+are excluded from the ordinary centipawn labels.
+Labels use the exact score from the last completed iteration; node-limited
+searches can also report an unfinished root or a bound, which is not used as a
+training target. Recorded nodes include total search effort, while depth names
+the completed iteration used for the label.
+
+The versioned dataset records positions, side-to-move centipawns, actual depth/nodes,
+reported game result from that side (unknown for unfinished games), PGN hash and
+game/ply provenance, engine/network hashes and labeling settings. Game results
+are metadata, not independently verified training labels. Duplicate positions
+are removed ignoring clocks. A deterministic source/game hash assigns about 10%
+of games to validation, keeping each game's samples together; global position
+deduplication also prevents transpositions crossing that boundary within a file.
+Older datasets without `split_method` retain their original position-hash split.
+Deduplication and split checks apply within each dataset, not across separate files.
+Existing output files are never
+overwritten; a completed dataset is published atomically. The command needs
+only the ordinary runner dependencies and does not change online learning,
+books or the active model. Dataset creation is bounded by `--positions` and
+per-position `--nodes`; large input PGNs still require replay work.
+
+Binary is the default output; `--format shortfen` selects readable JSONL.
+`maxima nnue:convert INPUT --output OUTPUT --format binary|shortfen` converts
+existing standard datasets without relabeling. All readers auto-detect the
+binary signature and retain compatibility with both text versions.
+
+Binary version 1 has an explicit little-endian 24-byte prefix (`MXNNUEB\0`,
+uint32 version, uint32 JSON-metadata length, uint64 record count), followed by
+metadata and fixed-size records. Source/game provenance is indexed once in the
+metadata. The default record is 64 bytes:
+
+| Field | Bytes |
+|---|---:|
+| Board: 4 bits per square, a1..h8, low nibble first | 32 |
+| Castling rights as a bitboard of eligible rook squares | 8 |
+| Halfmove clock and fullmove number, uint16 each | 4 |
+| Side-to-move score, int16 | 2 |
+| Result (loss/draw/win/unknown), flags (turn/split/Chess960), en passant, depth | 4 |
+| Searched nodes, uint64 | 8 |
+| Source/game table index, uint32; source ply, uint16 | 6 |
+
+Piece codes are 0 empty, 1..6 white pawn through king, 7..12 black pawn through
+king; 13..15 are reserved. Storage permits 64 occupied squares, without imposing
+standard-chess legality or king counts. Variant identity belongs in the metadata.
+An optional promoted-origin uint64 mask and a fixed-width opaque variant-state
+extension increase record size explicitly. Extra state requires a schema name;
+callers supply generic boards and separately encoded variant state. Storage does
+not implement those variants' rules. Unsupported versions, invalid codes/flags,
+truncated files and size/count inconsistencies fail. Values outside field ranges
+are rejected rather than truncated. Metadata is limited to 64 MiB per shard.
+The writer spools records before atomic no-overwrite publication, and
+`nnue_binary.binary_dataset` provides memory-mapped indexed access. Current
+`nnue:train` still loads its prototype dataset into memory and rejects other
+variants, Chess960, extra variant state and boards beyond its standard limits.
+
+Text dataset version 2 stores `position` using `shortfen`: scan a8 through h1,
+write ordinary piece letters, count empty runs across rank boundaries, and omit
+the final empty run. The remaining five FEN fields are unchanged. For example,
+the initial board is `rnbqkbnrpppppppp32PPPPPPPPRNBQKBNR w KQkq - 0 1`;
+`28k27R3K w - - 0 1` leaves the final three squares implicitly empty. Readers
+also accept `1K1k5P38r9R w - - 0 1`, with five implicit trailing empties. They
+validate runs and board state, reconstruct standard FEN for training/inference,
+and still accept version-1 datasets with ordinary `fen` fields. This encoding
+is internal to training data; PGNs and engine UCI positions retain standard FEN.
+
+`nnue:shards` ingests bounded binary producer chunks into a shared campaign
+store. Manifests record the global store identity and reserved dataset hashes.
+SQLite keeps global position keys on disk across blocks and teacher
+versions. Install all reserved benchmark exclusions before ingesting any data:
+
+```bash
+./maxima nnue:shards --store /data/campaign --block block-001 \
+  --exclude benchmark.mxdata worker-001/positions.mxdata
+./maxima nnue:shards --store /data/campaign --block block-001 \
+  worker-002/positions.mxdata --seal
+```
+
+The default block target is100M accepted positions; shards contain at most1M
+records. Repeat ingestion with more producer chunks until the target is reached.
+Inputs must contain standard positions, valid splits and completed game results.
+An optional `--accepted-limit` pauses ingestion below the physical block target
+without sealing it. The unconsumed input cursor is preserved; raising the limit
+continues the same immutable input without recounting rows. Producers accept the
+same option, obey any lower campaign `generation_limit`, and drain completed
+games when the limit is reached. This bounds data backlog independently of the
+physical block size and leaves the shared campaign STOP signal unchanged.
+Each input is transactional and content-hash deduplicated; cross-worker and
+cross-block transpositions are removed. Shards retain source teacher/config
+metadata and are immutable, checksummed files. A sealed JSON manifest lists only
+committed shards. A failed input rolls back its index entries; unreferenced shard
+files may remain and can be reused on retry. At a block boundary a persistent input-record cursor preserves the unconsumed
+tail. Ingest the same input into the next block to continue; committed prefixes
+are never recounted. `--seal --partial` explicitly publishes the accepted
+portion after a stop. Sealed blocks cannot accept new inputs. Use local POSIX
+storage, one shared store for all campaign ingestion, and retain the SQLite index.
+This command does not launch producers or allocate cloud resources.
+
+Freeze an accepted row range while ingestion continues with
+`nnue:shards --store /data/campaign --block block-001
+--snapshot /data/checkpoints/first --snapshot-positions 25000000`.
+`--snapshot-start` selects a zero-based offset, allowing disjoint training batches.
+For a batch crossing physical blocks, repeat `--snapshot-range BLOCK:START:COUNT`
+instead of the single-block options. For example, `--snapshot-range
+block-001:75000000:25000000 --snapshot-range block-002:0:25000000` freezes the
+next 50M positions after cumulative 75M. All ranges are read from one consistent
+index transaction, must be committed and nonoverlapping, and retain their source
+block identities in the manifest, training checkpoints and continuation admission.
+Freezing neither seals nor stops the generating blocks.
+The output is a new directory containing `manifest.json` and immutable shards;
+whole shards use hard links on the same filesystem, and boundary shards are
+streamed into new files. This reads committed index entries without sealing or
+changing the source block. Store identity, exclusions, teacher metadata and split
+assignments are retained. Snapshot creation does not admit training or allocate
+budget; campaign readiness and GPU admission remain separate requirements.
+For a prepaid GPU trial, `nnue_campaign.initialize_training_snapshot` creates an
+independent ledger beside a frozen `manifest.json`, preserving its global store
+identity and original teacher. Its explicit funding evidence, GPU-only cost cap
+and deadline are required before reserving a training lease. The default maximum
+duration is one hour; a longer funded stage requires an explicit positive
+`maximum_seconds` at admission, recorded in its funding ledger. Allocation
+deadlines and the GPU cost cap still bound the lease.
+The trial's expiry stops that training ledger without signalling the generating
+campaign or changing its promotional budget. Retain the ledger and training
+checkpoints with the snapshot for subsequent review and continuation.
+Continuation admission takes both the parent checkpoint and its completed receipt;
+their checksum and global store identity must agree before the new ledger pins
+the latest experimental checkpoint. Prior source-range history must also prove
+that the new trial is disjoint before any allocation; a legacy first-stage receipt
+requires its checksum-pinned parent manifest.
+
+`nnue:campaign --store /data/campaign` manages persistent campaign admission
+and an allocation ledger. `init --teacher teacher.nnue` pins independent immutable
+teacher bytes; no network is activated. Billable allocation requires explicit
+`--credit-expiry` (ISO8601 with timezone) and `--credit-evidence` recording verified
+eligibility. Omit both for preparation without spend authorization. The ledger
+uses integer cents and preserves the $250 envelopes: online20, CPU170, GPU25,
+storage18, tests10, margin7. The existing $20 online allocation is committed;
+the deposited $5 is excluded. This records budget decisions, not provider billing.
+
+`block NAME` admits one generating/ready block behind active training. Starting
+training opens that slot immediately, independently of candidate testing.
+For logical snapshot training across physical blocks, `nnue_generation` provides
+an explicit controller API. `register_completed` verifies the completed receipt,
+latest checkpoint, selected candidate, checksum-pinned manifest and contiguous
+canonical source-range history. Register the first stage before its descendants;
+each descendant must continue the latest registered experimental checkpoint.
+`configure_schedule` chooses the next cumulative checkpoint and subsequent step.
+Both must fit the permitted backlog. Recording training progress does not promote
+the student or change the generation teacher.
+
+After producers drain and the full physical block is sealed and marked ready,
+`advance` admits the next physical block and moves the same CPU allocation to it.
+The original allocation deadline, maximum cost and category remain unchanged.
+Accepted data defaults to one physical block beyond completed training, using
+an intra-block `generation_limit` when necessary. An explicit
+`configure_capacity_floor` can allow generation ahead to a chosen cumulative
+count without changing completed training, teacher, allocation costs or deadlines.
+`configure_capacity_ceiling` sets a persistent cumulative upper bound on accepted
+generation, taking precedence over that floor and later training progress. It
+cannot discard accepted rows. Ingestion respects it immediately; block handoff
+cannot admit another block at the boundary, and snapshots beyond it are disabled.
+`ingest_current` serializes
+imports with campaign handoff and preserves the global deduplication index and
+unconsumed input cursors. Reaching the backlog limit pauses ingestion without
+sealing a partial block or setting the shared STOP signal. A later verified
+completed stage can open more backlog within the existing allocation.
+
+`prepare_snapshot` freezes the next disjoint logical batch once its accepted rows
+exist, including ranges crossing physical blocks. It records readiness and the
+latest parent checkpoint; it does not rent compute, admit paid training or remove
+any artifacts. These APIs require a caller that enforces worker ownership, disk
+guards and independent service lifecycle management. A training ledger or a
+conversation-bound watcher does not enforce provider compute shutdown or billing.
+
+`ready NAME` validates the full100M manifest and shared store identity. Allocation
+`reserve ID --category cpu --work NAME --maximum-cents 100 --seconds 3600`
+requires sufficient category funds and an admitted task. GPU allocations require
+ready data and only one may remain reserved. Allocations must end at least48h
+before verified credit expiry. `settle ID --actual-cents N` records actual cost,
+including overruns; overruns persist a campaign stop. `status` reports remaining
+funds and reserved compute requiring release. `stop --reason TEXT` saves a stop
+and touches the store's STOP file. Stops remain persistent after restart.
+
+Campaign stores require `nnue:produce --lease ID`; admission is checked before
+new jobs and between games, and the allocation deadline limits scheduling. New
+jobs must use the registered champion; already pinned jobs retain their original
+teacher. Expired allocations or the credit safety deadline persist STOP. Finishing
+games and settling actual costs remain possible. No cloud instances are provisioned
+or destroyed by this ledger: callers must release the compute it identifies.
+Standalone stores without campaign.json retain the independent CLI workflows.
+
+Campaign stages require `nnue:stage --lease ID`. The first stage must warm-start
+from the original teacher; later stages must continue the latest experimental
+checkpoint. Completion writes `complete.json` with checkpoint/candidate hashes,
+validation history and global counters, then marks the block trained. Each
+invocation records wall time and presentation throughput under `invocations/`;
+these metrics stay outside deterministic recovery checkpoints. STOP/deadline saves
+training state at a batch boundary. GPU availability remains separately validated.
+
+`nnue:candidates --store STORE recipe` freezes the engine, opening file, pair cap,
+clock and explicit `--sprt ELO0 ELO1` hypotheses before tests. No production gate
+is chosen implicitly. `register --block NAME --export DIR --probe EXE` matches the
+export to its completed stage and runs native fresh/incremental checks on frozen
+network bytes. `prepare --candidate SHA --test ID --lease ID` reserves the sole
+active comparison against the current champion and records its exact command.
+`run --test ID` executes it; `finish --test ID` imports a separately executed
+saved command. Reports must match pinned inputs, clocks, options and opening order.
+PGNs are replayed and SPRT is recomputed, including the first stopping boundary.
+Changed, flagged or nonterminal completed games cannot authorize promotion.
+A campaign `promotion_hold` records an outstanding review requirement, such as
+phase-specific regression checks. A statistical pass is still recorded, but the
+candidate waits for review and cannot replace the champion while that hold exists.
+Campaign recipes enable an early inferiority rejection check by default. It uses
+the existing simultaneous opening-pair Hoeffding bound at zero Elo and can only
+reject, never promote. `--beta` is the total rejection allowance: default0.05 is
+split into0.04 for SPRT and `--futility-alpha`0.01 for the inferiority check.
+Hypotheses remain explicit and nonnegative for promotion. Setting futility alpha
+to0 disables this check. Thresholds are frozen before results. At a5000-pair cap,
+28all-loss pairs trigger early rejection in the synthetic rule check; actual
+stopping time depends on results. Near parity, the ordinary SPRT and pair/cost
+caps still apply. Standalone `match:run --futility-alpha` adds a separate rejection
+allowance; use an appropriately reduced `--sprt-beta` to preserve a total budget.
+The report records both components and `futility_rejection` explicitly.
+
+Rejection/inconclusive keeps the champion. A passing result against the original
+teacher updates only the campaign registry and persists STOP, preserving the
+partial next block. Active bot configuration is never changed. `abandon --test ID`
+closes an interrupted/invalid comparison without promoting. Settle/release test
+compute separately; command execution does not manage provider resources.
+
+Campaign state contains a sequenced audit of mutations and safety stops; read-only
+checks do not create events or rewrite state. `nnue:campaign review --block NAME`
+collects the stage, allocations, candidates, test decisions and invocation metrics,
+and explicitly lists missing evidence. Producer invocation metrics record completed-game yield, elapsed time, teacher
+identity, exit status and cumulative filter counts. Raw yield includes any deferred
+block tail; it is not the globally accepted rate. The block review includes these
+metrics. Retain producer PGNs, filters and logs,
+export reports, native output and match JSON/PGN for the first-block review.
+Match `--stop-file` and `--stop-at` checks prevent scheduling another game while
+allowing the current one to finish; incomplete pairs cannot promote a candidate.
+
+`nnue:produce` runs bounded independent one-thread self-play jobs and ingests
+completed-game chunks into that store. Each pool has an immutable recipe; campaign
+name and job index determine unique seeds. Each job pins teacher/engine/book hashes;
+resuming it with changed inputs fails. New job IDs may use a promoted teacher.
+`nnue:produce --diversity` passes the opt-in recipe to jobs and pins it in pool
+and job metadata. The default generation recipe remains unchanged.
+
+```bash
+maxima nnue:produce --output /data/producers --store /data/campaign \
+  --campaign halfka-01 --block block-001 --engine /data/maxima \
+  --network /data/teacher.nnue --book /data/book.bin \
+  --exclude benchmark.mxdata --workers 32 --start-job 0 --jobs 32 \
+  --max-seconds 7200
+```
+
+This explicit invocation schedules only the selected job range, with at most
+`--workers` child processes (default2), each generating at most
+`--positions-per-job` positions (default100k, maximum1M, plus a final complete
+game) and `--games-per-job` games per invocation (default1000). Repeat unfinished
+job IDs to resume, then assign fresh IDs. Raw PGNs and label chunks remain in the
+pool; completed inputs are skipped by indexed hash lookup. Overshoot beyond an
+exact block boundary remains available for the next block, including games that
+finish while workers drain. The pool automatically seals a full block.
+`--max-seconds` stops scheduling after the deadline; current games finish, so it
+is not a hard process wall timeout. Touch `/data/campaign/STOP` (or `--stop-file`)
+to stop new jobs and games after target strength or a budget decision. Completed
+partial data remains available; seal it explicitly with `nnue:shards --seal --partial`.
+On a worker failure, other workers drain and the command returns nonzero. A later
+explicit invocation retries the selected IDs. Use one pool directory per
+campaign/job namespace; do not reuse IDs for different games.
+
+The book is explicit for producer pools: `--book` uses the four-ply book prefix
+within eight opening plies; omission uses eight random plies. Selfplay also
+accepts `--no-book` to suppress automatic lookup, repeated `--stop-file` paths,
+and an absolute Unix `--stop-at` scheduling deadline. Operational stop flags do
+not alter immutable teacher settings. Ingestion verifies PGN/data hashes and
+retains existing exact-score/quiet/completed-result filters; it does not rescore
+games or claim an independent PGN audit.
+
+Run the next block's producer invocation concurrently with `nnue:stage` and
+candidate export/native/playing tests. Keep at most one additional block ready or
+in flight. The CLIs deliberately do not schedule another block automatically,
+manage cloud billing, interpret SPRT decisions, or change the champion. The
+controller must enforce the shared budget, backlog and promotion policy; a stop
+file saves current complete games without forcing the next100M to finish.
+
+`nnue:cycle --config <private.json>` coordinates optional permanent training.
+Its JSON configuration selects the stage adapters, service targets, provider
+commands, paths, batch budget and plateau limit; it contains no built-in cloud
+provider or worker addresses. The durable sequence is generation, training,
+native verification, paired SPRT, conditional deployment, then preparation of the
+next batch. Adapters return pending, blocked or complete receipts. Completed
+artifacts are checksum-pinned, and a restart resumes the recorded stage.
+
+A rejected or inconclusive candidate leaves the playing champion unchanged and
+continues the latest completed model, Adam and RNG checkpoint on the next batch.
+Promotion independently replays the test PGNs, recomputes the first whole-pair
+SPRT boundary, and requires matching deployment receipts from every configured
+target. GPU cleanup and verified external backup receipts are required before a
+candidate reaches verification. Missing funding blocks generation/training;
+online play remains available. Stage failures and the configured no-promotion
+position limit latch a review hold and queue incident notifications. Configuration
+changes require explicit state migration. Provider cleanup, immutable cost/time
+limits and between-game model publication belong to the configured adapters.
+
+Offline node-limited matches can set `MAXIMA_BACKGROUND_IDLE_CONTROL` to the
+runner's idle heartbeat. Both test engines acknowledge suspension between
+searches, outside UCI timeouts. Do not set it on the playing runner. With
+`match:run --until-decision --max-pairs N`, openings are sampled with replacement
+and testing stops at the declared whole-pair cap if SPRT remains inconclusive.
+
+`nnue:export --latest-checkpoint` exports the final weights of a completed stage
+recovery checkpoint, preserving its optimizer file. The export report records
+this choice and checkpoint hash. `nnue:stage --stop-at <Unix time>` checkpoints
+at a batch boundary; `--resume` retains the optimizer and random state.
+
+`nnue:stage` is the bounded sharded trainer. It accepts a sealed manifest from
+`nnue:shards` and supports CPU or explicitly requested CUDA with optional PyTorch.
+The default geometry is full HalfKAv2_hm256/32/32/1. Install a CUDA-capable Torch
+build on the GPU host; the CPU wheel above cannot execute CUDA. CUDA requests
+fail if unavailable. This path uses float64, deterministic Torch operations and
+one CPU Torch thread; unsupported deterministic GPU kernels fail explicitly.
+CUDA throughput and parity require validation on the target hardware.
+
+```bash
+maxima nnue:stage /data/campaign/block-001.json --output /data/stage-001 \
+  --warm-start /data/teacher.nnue --device cuda --epochs 1 --batch-size 1024
+maxima nnue:stage /data/campaign/block-002.json --output /data/stage-002 \
+  --parent /data/stage-001/training.pt --device cuda --epochs 1 --batch-size 1024
+maxima nnue:export /data/stage-001/candidate.pt \
+  --manifest /data/campaign/block-001.json --output /data/candidate-001
+```
+
+Training maps at most sixteen shards, retaining compact split indices, and shuffles
+windows of at most `--shuffle-size` positions (default65536, maximum1M) in seeded
+window and row order. This bounded shuffle is a declared block-local sampling
+recipe, not a full corpus permutation. Training batches use decoded binary boards
+directly, avoiding FEN serialization and reparsing; FEN-based callers and export
+checks retain their existing interface. `--epochs` counts passes over the current
+block only. Validation selects a candidate using at most `--metrics-positions`
+rows (default8192), sampled deterministically across this block's validation
+split. It is a monitoring sample, not an untouched strength test. Corpus checksums
+are verified on stage entry; no previous blocks are rescanned during continuation.
+
+Recovery `training.pt` keeps the latest student paired with its Adam moments,
+FT bounds, RNG, constant learning rate, global optimizer step, presentations,
+accepted training-position count, epoch/window/row cursor and lineage hashes.
+`--parent` requires a completed stage, matching implementation/optimizer recipe,
+fresh shard hashes and disjoint canonical source-row ranges across all preceding
+stages. Rewriting a boundary shard cannot hide overlapping training rows.
+Legacy first-stage checkpoints require `--parent-manifest`; its bytes must match
+the checksum pinned in the checkpoint. Older multi-stage histories without range
+proof fail closed. `--allow-parent-reader-update`, together with that verified
+manifest, explicitly permits changes to stage/shard reader and control code between
+stages; neural model, objective, encoding and warm-start implementations must still
+match. Same-stage resume always requires identical implementation and settings.
+Parent continuation restores the latest experimental state, independently
+of the validation-selected candidate. Parent continuation requires the same global ingest-store identity, preserving
+global position deduplication across blocks. No implicit replay or LR restart occurs.
+`--resume` requires identical inputs and settings, including original parent or
+warm-start arguments. `--max-batches` and `--checkpoint-every` bound optimization
+work/checkpoint intervals; validation and initialization are outside that budget.
+A process lock serializes writers. CPU/CUDA device is part of the immutable recipe.
+
+A completed stage freezes `candidate.pt`; it never replaces the active playing
+network. Export runs separately on CPU, comparing serialized integer inference
+against the model on at most `--positions` sampled rows (default4096), plus edge
+fixtures. The JSON report explicitly records sampled verification and the remaining
+native-check requirement. Unlike the prototype, this does not check every corpus
+row. Run `nnue:verify` with the native probe before playing tests. Export failure
+publishes no network. Training can continue from `training.pt` while an earlier
+candidate is exported and tested, and producers can fill the next block in parallel.
+These CLIs do not rent resources, schedule producers, run matches, or promote models.
+
+`nnue:train` trains a small CPU NNUE model using optional PyTorch. Install it
+in a separate environment (Python 3.11+ for the pinned training dependencies):
+
+```bash
+python3 -m venv .tools/training
+.tools/training/bin/python -m pip install --index-url https://download.pytorch.org/whl/cpu \
+    -r runner/requirements-training.txt
+.tools/training/bin/python -m pip install -e ./runner
+.tools/training/bin/maxima nnue:train training.mxdata --output /path/to/training/run-01
+```
+
+On hosts without `ensurepip`, create the environment with `--without-pip` and
+use `.tools/runner/bin/python -m pip --python .tools/training/bin/python install`
+for the same installation commands. Ordinary ops and the native engine do not
+require PyTorch. `nnue:train --help` also works without it.
+
+`--architecture halfkav2_hm` (default) trains the mirrored king-inclusive feature set
+and exports the Maxima-native format. The explicit `--architecture halfkp` option
+remains for archival prototypes; those exports are not accepted by the engine.
+Both use two perspectives, clipped activations
+and two hidden layers; defaults are eight feature lanes and eight hidden units.
+It uses straight-through quantization and integer-domain activations, constrains
+weights to exportable ranges, and minimizes squared error against a blend of
+sigmoid centipawn scores (`sigmoid(cp * ln(10) / 400)`) and final game results.
+`--search-weight` defaults to0.7 (70%search/30%result); unknown results use the
+search target alone. Both blended loss and pure search-score loss are recorded.
+Training runs on one CPU thread, with seeded initialization
+and batch order. Training/validation loss, centipawn error and float/quantized
+differences are recorded each epoch. Validation selects the exported epoch;
+it is not an independent final test set. Metrics and export inference use bounded
+`--metrics-batch-size` batches (default256), with position-weighted aggregates.
+The dataset rows are still loaded into memory;
+this command is for bounded prototypes, not large-scale training yet.
+The report also compares the selected model with zero-centipawn and constant
+training-mean target predictions on the same splits. The latter is fitted only
+on training targets. `beats_constant_baselines` records whether the selected
+validation loss beats both; failure is printed while retaining the experimental
+artifacts for diagnosis. This comparison does not establish playing strength.
+
+Each new output directory contains a versioned PyTorch state checkpoint,
+`network.nnue`, and a JSON report with dataset/teacher/network hashes, training
+settings and metrics. The compact model is padded into the currently supported
+256x2 -> 32 -> 32 -> 1 format. A scalar evaluator reads the actual serialized
+bytes and must match quantized model scores for every dataset position before
+the artifacts are saved. This establishes export consistency, not playing strength.
+Models remain in the requested directory and are never activated automatically.
+
+Full-size HalfKAv2_hm students can optionally start from a supported legacy HalfKP
+file instead of random weights:
+
+```bash
+.tools/training/bin/maxima nnue:train training.mxdata --output /path/to/training/warm-01 \
+    --architecture halfkav2_hm --width 256 --hidden 32 --warm-start /archive/teacher.nnue \
+    --epochs 3 --batch-size 128
+```
+
+`--warm-start` copies the dense layers and transformer bias, averages horizontally
+reflected HalfKP piece columns for each canonical king bucket (nearest integer,
+ties to even), and initializes the new king columns to zero. This is an approximate
+initialization, not an equivalent network conversion. All student weights then
+train normally. The default learning rate becomes .0001; an explicit
+`--learning-rate` overrides it. Random-start defaults remain unchanged.
+Warm starts require the full 256/32/32/1 geometry and use transformer weight/bias
+bounds of +/-508 integer units instead of +/-127. Even with 32 active pieces,
+these bounds keep transformer sums inside signed16 range. Incompatible formats,
+dimensions or source values beyond the supported bounds fail before changing the
+student. Checkpoint/report metadata includes the initialization method, source
+hash and `ft_bound`. Importing a checkpoint for further training must restore
+`ft_bound` as well as its parameters. The CLI restores this bound when resuming.
+The initial warm-start model is eligible for validation selection as epoch0, so
+fine tuning cannot force export of an epoch worse than that initialization.
+Datasets reserved for a separate inference-only evaluation may carry metadata
+`purpose: heldout_evaluation`; `nnue:train` rejects these files before loading
+PyTorch or creating artifacts. Their rows never enter epoch selection or fitting.
+
+Training writes an atomic `training.pt` recovery checkpoint before optimization,
+at epoch boundaries, and every `--checkpoint-every` batches (default100). It saves
+parameters, transformer bounds, Adam state, Torch random state, shuffled order,
+epoch/batch cursor, validation history and the selected best model. To resume,
+repeat the original command with `--resume` and the same output directory. Input
+contents, warm-start contents, training settings, Torch version and training source
+hashes must match; changed inputs fail without overwriting the checkpoint. Recovery
+checkpoints are separate from the selected `model.pt` used for inference/export.
+
+`--max-batches N` pauses cleanly after at most N optimization/export batches in
+one invocation, retaining a resumable checkpoint. It prints `Paused` and returns
+success; final `report.json` appears only after complete export verification.
+Metric evaluation, initialization and serialization are outside that batch budget;
+use an external process-group timeout for a wall-clock limit. Abrupt termination
+loses only work since the latest saved checkpoint. Export verification saves its
+position cursor and selected network hash, so it also resumes in bounded batches.
+The final model, network and report are each written through atomic replacement;
+these files belong exclusively to the requested experiment directory. Use only
+one writer for a run. Existing output directories require explicit `--resume`.
+
+For comparison with Maxima's actual loader and fresh/incremental inference:
+
+```bash
+cmake --build --preset cpp26_release --parallel 2 --target nnue_probe
+./maxima nnue:verify /path/to/training/run-01/network.nnue \
+    --probe build/cpp26/release/tests/nnue_probe --dataset training.mxdata
+```
+
+The test-only probe compares raw and centipawn outputs for sampled roots and all
+legal children, plus explicit both-color castling, en passant and promotion
+fixtures. Every incremental accumulator must equal a fresh accumulator. This
+check needs no PyTorch and adds no engine protocol command.
+
 ### 10.1 Documentation and CLI interface
 
 Update this document in the same change whenever implemented behavior, public
 commands, configuration, architecture, or workflows change. Keep examples runnable
-and describe implemented functionality. Planning, milestone status, decisions,
-and optimization or benchmark results belong under `.context/`, starting at
-`.context/plan-index.md`. Link detailed sub-plans and evidence reports from that
-index; keep this document focused on Maxima. `.context/` is ignored by Git.
+and describe implemented functionality. Keep this document focused on Maxima.
 
 The CLI follows the local Nimbly CLI's concise command summaries and section
 separators, with a left-aligned ASCII crown above the Maxima name. It provides
@@ -1906,8 +2609,10 @@ or `tell <bot> <key> reseek`. This withdraws the current ads and draws the pool
 again. During a game it reports that seeking resumes after the game, without
 interrupting play. Typing `reseek` in the local console also refreshes idle ads. Typing `seek-pool 3 0, 5 3, 3 0 w3, 3 1 losers` there
 replaces the pool, as the remote `seek-pool` tell does.
-Older `losers_seeks`, `losers_seeks_at_once`, and their CLI flags remain accepted
-for compatibility; a single mixed `seeks` pool is sufficient. `--no-seek`
+Older `losers_seeks` entries join this same weighted pool; their percentages remain
+local sampling weights. `losers_seeks_at_once` and its CLI flag remain accepted
+for compatibility but do not reserve extra slots. The total, including operator
+pools and legacy losers entries, never exceeds three. `--no-seek`
 suppresses all advertisements while retaining challenge support.
 
 On login, enabled losers support sends `set f3 losers`, required for computer
@@ -1924,6 +2629,11 @@ logged rather than searched with guessed rules.
 W17 supports FICS **royal losers**: kings remain royal, captures are compulsory,
 and king-only, checkmate and stalemate win. It retains material-only evaluation;
 protocol/correctness checks do not establish current competitive strength.
+During the opening of a losers game, an opponent who hesitates when a capture
+is compulsory can receive a short rules explanation through FICS game chat.
+It is sent at most once per opponent handle in the current login session;
+reconnecting guests cannot be linked across different handles. The hint timer
+is cancelled when the position changes or the session ends.
 Lichess offers [antichess](https://lichess.org/variant/antichess), where kings can
 be captured, castling is absent, and promotion to a king is allowed. W17 cannot
 play that ruleset. The Lichess client continues to accept standard games only;
@@ -2004,8 +2714,8 @@ whispering. Owners configured in `owner` can steer it by tell without a key.
 Alternatively, `MAXDRONE_KEY` authorizes anyone who supplies that key (never in a
 file it writes or a log: the key is masked in the terminal and wire logs):
 `tell <name> <key> follow` sends the same explanations as tells (`unfollow` stops),
-`softquit` stops after the game, `softrestart` stops after the game with exit status 75
-so a supervisor loop (`while ...; [ $? -eq 75 ]`) starts it again with the latest code,
+`softquit` stops after the game; `softrestart` starts a fresh connection and engine
+session after the game, without an external restart loop.
 `help` lists the commands, and `!abort`, `!resign`,
 `!draw` act on the current game. After each saved game, followers also get what
 Maxima learned: the opening moves it kept, the score against that opponent, and on a
@@ -2100,7 +2810,7 @@ names (guests, and `(U)` logins such as `zahrani`) are not stable identities, so
 per-opponent learning should skip `Account "unregistered"` opponents; their games
 are kept as a record.
 
-The engine runs in the project root, so its relative `eval.nnue` and `book.bin`
+The engine runs in the project root, so its relative `maxima-halfka.nnue` and `book.bin`
 defaults resolve. Login sets `iset ms 1`, so style12 clocks are milliseconds.
 Each style12 board of our own game (relation 1 or -1) is checked and applied to a
 python-chess board holding the whole game, so the engine receives
@@ -2309,6 +3019,30 @@ any of this. A configured arena is entered again after a restart, one entered by
 command is not. Swiss and team-battle events are not supported.
 
 Bots cannot seek, so MaximaEngine plays challenges, its own and others'.
+Both online clients can optionally coordinate idle CPU work. Set `MAXIMA_IDLE_CONTROL`
+to a private control-file path and set `MAXIMA_GENERATION_IDLE_CONTROL` to that
+same path in the generation processes. The runner grants permission while idle;
+cooperating generation sessions acknowledge suspension at a search boundary.
+Live games have priority over due deep book analysis, which has priority over
+self-play. The runner waits for generation acknowledgements before accepting or
+searching a game, and cancels/reaps deep analysis before handing CPU to play.
+A failed handoff blocks play rather than allowing CPU contention. Paused generation
+waits outside its search deadline and retains its history and engine state.
+
+The permission file carries a heartbeat: a missing or stale owner pauses generation.
+The runner, workers and acknowledgement files must share a local process namespace
+and writable filesystem. Startup, faults and process shutdown suspend generation;
+a normal soft quit can leave generation running. `MAXIMA_IDLE_DEEP_MINUTES` controls
+the shared deep-analysis interval (default 10, 0 disables it). An optional
+`MAXIMA_IDLE_ADMISSION` JSON file (`allowed`, `expires_at`) lets the training
+controller hold generation for budget, capacity or stage transitions. Missing or
+expired admission pauses generation while live games and due deep analysis remain
+available. Deep searches use the
+playing engine's configured threads, hash and network. Provider selection, worker
+hosts, credentials, training budgets and external job commands remain configuration
+of the surrounding training workflow; the runner does not provision compute.
+
+Without this optional coordinator, the existing Lichess idle behavior applies:
 After `deep_learning_idle` minutes without a game (default 10, 0 turns it off; needs learning) the bot
 learns one position deeply (see deep book learning below): it sends no challenges and declines incoming
 ones (`later`) meanwhile, a soft quit stops it, and the idle time then restarts, so challenges come first.
@@ -2369,8 +3103,8 @@ bot into Lichess's rate limit, which would also hold up its moves.
 
 Owners steer the bot from the game chat; the spectator room keeps it out of the
 opponent's sight. Lichess authenticates chat usernames, so no key is needed:
-`!softquit` (stop after this game), `!softrestart` (exit status 75 after this
-game, for a supervisor loop as on FICS), `!resign`, `!abort`, `!draw` (offer or
+`!softquit` (stop after this game), `!softrestart` (reconnect and restart the engine
+after this game), `!resign`, `!abort`, `!draw` (offer or
 accept). These commands from anyone else are logged and ignored. The same
 commands work on the console without the `!`, and each one answers there; `help`
 lists them. `quit` (or `kill -USR1 <pid>`) stops after the game; a second `quit`
@@ -2461,9 +3195,14 @@ Lichess game id (a string such as `"pG3WSP96"`); colors are
 | type | when | fields |
 |---|---|---|
 | `game_start` | our game begins | `game`, `white`, `black`, `white_elo`, `black_elo` (null when unknown), `initial_seconds`, `increment_seconds`, `rated`, `variant` (FICS type or Lichess speed, e.g. `blitz`), `our_color`, `fen`, `clock_ms` |
+| `opponent` | FICS opponent details arrive after login or game creation | `game`, `game_started_at`, `opponent` |
 | `move` | after each move, ours or theirs | `game`, `ply` (after the move), `san`, `uci`, `fen` (after), `by` (`"us"`/`"them"`), `clock_ms`, `search` |
 | `position` | takeback or resync | `game`, `ply`, `fen`, `reason` (`"takeback"`/`"reset"`), `clock_ms`; drop moves after `ply` |
 | `game_end` | game over | `game`, `result` (`1-0`, `0-1`, `1/2-1/2`, `*`), `reason`, `headers`, `pgn` (null when aborted before both sides moved) |
+
+`game_start` can also carry `opponent` (`name`, `title`, `rating`, `is_engine`),
+`url` (Lichess), and `game_started_at` (FICS). The latter distinguishes games
+when FICS reuses a game number; an `opponent` event updates late title details.
 
 `search` is null for the opponent's moves. For our book moves it is
 `{"book": "<reason>"}`, for online tablebase moves `{"tablebase": {...}}` (11.4); for searched moves it is `{"depth", "seldepth", "nodes",
@@ -2573,3 +3312,82 @@ is below the draw score (`DrawContempt`, cp from our side). The move is logged, 
 `"online_tablebase": false`) leaves endgames to the engine and its local tables
 (7). The module is `runner/maxima_runner/online_tablebase.py`; it needs no
 account or token.
+
+
+### Online engine fault handling and reporting
+
+The online runner blocks accepting, seeking and challenging on an engine fault.
+A crash or unresponsive search permits one clock-bounded restart for the current
+game. Illegal moves and assertions stop play without retry. Recovery never
+reenables new games: the runner drains the current game and preserves a fault
+hold under the data directory's `runtime/<platform>/` directory. A reviewed hold
+can be inspected and explicitly cleared using
+`python -m maxima_runner.online_safety --platform lichess` and
+`--clear-fault INCIDENT_ID`; the service must then be started explicitly.
+Normal transport reconnects do not constitute engine faults.
+
+Optional private reporting uses `MAXIMA_REPORTING_ENABLED=1`, Telegram bot/chat
+settings and Resend sender/recipient settings supplied through local environment
+configuration. Login, shutdown, recovery and daily game summaries go to Telegram;
+games against an FM, IM or GM also announce the opponent's title and name once
+per game (with a game link on Lichess).
+Incidents also go to email. Reports use a durable outbox and delivery retries
+outside move selection. `python -m maxima_runner.online_reporting --platform
+lichess` delivers pending reports without opening a chess connection; `--test`
+sends a clearly labelled delivery test. The same commands accept `--platform
+fics`. `MAXIMA_REPORT_TIMEZONE` selects the summary timezone (default UTC).
+
+Summaries count games observed by reporting, so the first day can be partial.
+`MAXIMA_MIN_FREE_BYTES` optionally drains the client before storage is exhausted;
+`MAXIMA_STOP_AT` sets a Unix timestamp after which no new games are started.
+
+The runner can optionally receive Telegram commands. Enable
+`MAXIMA_TELEGRAM_LISTENER=1` on exactly one instance per bot token; other runners
+can still send notifications. `MAXIMA_RUNNER_ID` is a stable name (default:
+`lichess` or `fics`). `/maxima help` lists commands;
+`/maxima status` and `/maxima today` query all configured runners.
+`/maxima history` displays the ten newest recorded games across those runners,
+with local date/time, opponent and recorded Elo, result from Maxima's perspective
+and clock. Unknown ratings display as `?`.
+`/maxima history lichess` and `/maxima history fics` restrict the query;
+the target-first form is also accepted. `eval`, `book`, `stats` and `name`
+provide game information; `eval` reports the latest completed move evaluation
+without starting another search. `softquit`, `softrestart`, `resign`, `abort`
+and `draw` use the online client's normal game controls. Lichess also supports
+`challenge` and `nochallenge`; FICS supports `reseek` and `seek-pool <pool>`.
+Only an explicit soft restart starts a new session; faults still require review.
+When control is enabled, a normal soft quit disconnects the chess client and
+stops its engine while keeping history and control available. `resume` or
+`softrestart` starts a fresh session. The offline choice persists across process
+restarts. Process signals still exit the runner for
+service shutdowns and deployments.
+Mutations need
+an explicit target: `/maxima fics pause`, `/maxima lichess resume`, or
+`/maxima all pause`. Pause persists across restarts and blocks new games while
+finishing the current game; the client stays connected so it can receive resume.
+Resume preserves configured playing policy and cannot clear a fault hold, undo
+a shutdown, or bypass storage and stop-time limits.
+
+Supply `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and the comma-separated numeric
+`MAXIMA_TELEGRAM_OPERATORS` privately. Only fresh commands from those users in
+that chat can change play; forwarded and anonymous messages are ignored. The
+bot must be a group administrator or have Telegram privacy mode disabled to
+reliably receive `/maxima` without a bot-name suffix. Replies are plain text.
+
+Each remote runner can expose `MAXIMA_CONTROL_BIND=HOST:PORT`, authenticated by
+`MAXIMA_CONTROL_TOKEN` (at least 32 characters). Non-loopback endpoints require
+`MAXIMA_CONTROL_CERT` and `MAXIMA_CONTROL_KEY`; clients verify TLS certificates.
+The listener's `MAXIMA_CONTROL_TARGETS` names a private JSON file mapping runner
+IDs to `url` (ending in `/command`), `token`, and optional `ca_file`. Plain HTTP
+is allowed only on loopback. Addresses, keys and operator IDs are deployment
+configuration. Keep the data directory persistent to retain pause state and
+Telegram offsets. Moving the listener means disabling it on the old instance
+before enabling the new one; there is no automatic leader election. Listener
+replacements must not overlap (for example, use a Kubernetes Recreate rollout).
+Listener or remote-control outages do not change the runner's engine safety rules.
+
+`maxima telegram` runs the same listener as a separate runner role, with no
+chess engine. Configure its targets to include both playing clients and disable
+their embedded listeners. This keeps Telegram commands available while either
+chess client restarts or is offline. The monitor uses its own persistent runtime
+directory and reports failures through the normal notification outbox.

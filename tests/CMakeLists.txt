@@ -74,14 +74,12 @@ target_link_libraries(test_search_review MAX2SRC)
 add_executable(test_nnue test_nnue.cpp)
 target_link_libraries(test_nnue MAX2SRC)
 
+add_executable(nnue_probe nnue_probe.cpp)
+target_link_libraries(nnue_probe MAX2SRC)
+
 if(maxima_nnue_test_network)
-    add_library(nnue_reference STATIC
-        ../third_party/nnue_reference/nnue.cpp
-        ../third_party/nnue_reference/misc.cpp)
-    # Scalar reference deliberately differs from Maxima's native SIMD path.
-    target_compile_definitions(nnue_reference PRIVATE IS_64BIT)
     add_executable(test_nnue_reference test_nnue_reference.cpp)
-    target_link_libraries(test_nnue_reference MAX2SRC nnue_reference)
+    target_link_libraries(test_nnue_reference MAX2SRC)
     add_test(NAME test_nnue_reference COMMAND test_nnue_reference "${maxima_nnue_test_network}")
 endif()
 

@@ -22,6 +22,21 @@ from test_lichess import fake_lichess, game_full, stub_api
 
 
 class controller_tests(unittest.IsolatedAsyncioTestCase):
+    def test_a_late_shutdown_or_fault_cancels_a_previously_requested_restart(self):
+        self.assertEqual(online_shutdown.session_result(75, restart=True, stopping=True), 0)
+        self.assertEqual(online_shutdown.session_result(1, restart=True), 1)
+        self.assertEqual(online_shutdown.session_result(0, restart=True), 75)
+
+    async def test_only_requested_restarts_repeat_the_session(self):
+        from unittest.mock import AsyncMock
+        session = AsyncMock(side_effect=[75, 0])
+        self.assertEqual(await online_shutdown.repeat_requested_sessions(session), 0)
+        self.assertEqual(session.await_count, 2)
+        session = AsyncMock(side_effect=RuntimeError('engine failed'))
+        with self.assertRaisesRegex(RuntimeError, 'engine failed'):
+            await online_shutdown.repeat_requested_sessions(session)
+        self.assertEqual(session.await_count, 1)
+
     async def test_idle_signal_does_not_wait_for_drain_and_restores_handlers(self):
         ready, cleaned = asyncio.Event(), asyncio.Event()
         messages, stops = [], []
@@ -179,10 +194,18 @@ class process_tests(unittest.IsolatedAsyncioTestCase):
                 process.kill()
             await process.wait()
 
-    async def launch(self, service, *extra, grace='0.15', startup=''):
+    async def launch(self, service, *extra, grace='0.15', startup='', control=False):
         environment = dict(os.environ, MAXIMA_DATA_DIR=str(self.root),
                            LICHESS_BOT_TOKEN='fixture-token', SHUTDOWN_FIXTURE_LOG=str(self.log),
                            SHUTDOWN_FIXTURE_PID=str(self.pid), SHUTDOWN_FIXTURE_STARTUP=startup)
+        port = None
+        if control:
+            import socket
+            with socket.socket() as reservation:
+                reservation.bind(('127.0.0.1', 0))
+                port = reservation.getsockname()[1]
+            environment.update(MAXIMA_CONTROL_BIND=f'127.0.0.1:{port}',
+                               MAXIMA_CONTROL_TOKEN='x'*32, MAXIMA_TELEGRAM_LISTENER='0')
         command = [sys.executable, '-m', 'maxima_runner', service, '--engine', str(self.engine),
                    '--no-learning', '--no-online-tablebase', '--shutdown-grace', grace]
         # Keep user auto-discovered configuration out of the fake-server fixtures.
@@ -193,7 +216,84 @@ class process_tests(unittest.IsolatedAsyncioTestCase):
         process = await asyncio.create_subprocess_exec(*command, env=environment, stdin=asyncio.subprocess.DEVNULL,
                                                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
         self.processes.append(process)
+        process.control_port = port
         return process
+
+    async def control_request(self, process, command, identity=0):
+        from maxima_runner.online_control import post_json
+        return await asyncio.get_running_loop().run_in_executor(None, lambda: post_json(
+            f'http://127.0.0.1:{process.control_port}/command',
+            dict(command=command, id=identity), 'x'*32))
+
+    async def wait_control(self, process, mode):
+        deadline = time.monotonic()+5
+        while time.monotonic()<deadline:
+            try:
+                reply = await self.control_request(process, 'status')
+                if ': '+mode in reply['text']:
+                    return
+            except OSError:
+                pass
+            await asyncio.sleep(.02)
+        self.fail('native control did not reach '+mode)
+
+    async def exercise_native_softquit_restart(self, process, launch_again):
+        await self.wait_control(process, 'ready')
+        first_engine = int(self.pid.read_text())
+        reply = await self.control_request(process, 'softquit', 1)
+        self.assertIn('softrestart', reply['commands'])
+        await self.wait_control(process, 'offline')
+        self.assertIsNone(process.returncode)
+        with self.assertRaises(ProcessLookupError):
+            os.kill(first_engine, 0)
+        self.assertIn('games', await self.control_request(process, 'history'))
+        reply = await self.control_request(process, 'softrestart', 2)
+        await self.wait_for(lambda: self.pid.exists() and int(self.pid.read_text()) != first_engine)
+        await self.wait_control(process, 'ready')
+        self.assertIsNone(process.returncode)
+        await self.control_request(process, 'softquit', 3)
+        await self.wait_control(process, 'offline')
+        process.send_signal(signal.SIGUSR1)
+        output, _ = await asyncio.wait_for(process.communicate(), 5)
+        self.assertEqual(process.returncode, 0, output.decode())
+        self.assertNotIn('Traceback', output.decode())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(int(self.pid.read_text()), 0)
+        last_engine = int(self.pid.read_text())
+        replacement = await launch_again()
+        await self.wait_control(replacement, 'offline')
+        self.assertEqual(int(self.pid.read_text()), last_engine)
+        await self.control_request(replacement, 'resume', 4)
+        await self.wait_for(lambda: int(self.pid.read_text()) != last_engine)
+        await self.wait_control(replacement, 'ready')
+        replacement.send_signal(signal.SIGUSR1)
+        output, _ = await asyncio.wait_for(replacement.communicate(), 5)
+        self.assertEqual(replacement.returncode, 0, output.decode())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(int(self.pid.read_text()), 0)
+
+    async def test_lichess_softquit_keeps_control_and_softrestart_starts_a_fresh_engine(self):
+        server = fake_lichess()
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(lambda: [server.close_streams() for _ in range(3)])
+        async def launch():
+            return await self.launch('lichess', '--server', f'http://127.0.0.1:{server.server_port}',
+                                     '--no-challenge', control=True)
+        await self.exercise_native_softquit_restart(await launch(), launch)
+
+    async def test_fics_softquit_keeps_control_and_softrestart_starts_a_fresh_engine(self):
+        async def script(number, writer, read_line):
+            await guest_login(writer, read_line)
+            while (await read_line()).strip() != 'quit':
+                pass
+        async with fake_server(script, timeseal=False) as server:
+            async def launch():
+                return await self.launch('fics', '--host', '127.0.0.1', '--port', str(server.port),
+                                         '--no-timeseal', '--no-seek', control=True)
+            await self.exercise_native_softquit_restart(await launch(), launch)
+            self.assertEqual(len(server.connections), 3)
 
     async def wait_for(self, predicate, timeout=5):
         deadline = time.monotonic() + timeout

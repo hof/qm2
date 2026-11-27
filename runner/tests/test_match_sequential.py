@@ -74,3 +74,27 @@ class sequential_match_tests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(report.get('stop_reason'), {'win': 'a_stronger',
                                  'loss': 'b_stronger', 'draw': None}[result])
                 self.assertEqual(json.loads(args.json.read_text())['games'], report['games'])
+
+    async def test_replacement_sprt_stops_at_declared_whole_pair_cap(self):
+        class session:
+            identity = ['name fixture']
+            protocol = SimpleNamespace(options={})
+            async def configure(self, settings):
+                return {}
+        @asynccontextmanager
+        async def open_fixture(*unused):
+            yield session()
+        async def play_fixture(*unused, **settings):
+            game = match_game_type()()
+            game.headers['Result'] = '1/2-1/2'
+            return game,dict(pair=settings['pair'],a_color='white' if settings['a_white'] else 'black',
+                             result='1/2-1/2',error=None,termination='fixture')
+        with tempfile.TemporaryDirectory() as directory:
+            args=SimpleNamespace(pairs=None,until_decision=True,max_pairs=3,sprt=(0,10),sprt_alpha=.05,sprt_beta=.05,
+                                 seed=1,timeout=1,hash_mb=1,variant='standard',seconds=1,increment=0,max_plies=1,
+                                 json=Path(directory)/'report.json')
+            report={'games':[]}
+            with patch('maxima_runner.uci.open_engine',open_fixture),patch('maxima_runner.matches.play_game',play_fixture):
+                await run_match([['a'],['b']],[('only',chess.Board())],args,report,io.StringIO())
+            self.assertEqual(len(report['games']),6)
+            self.assertEqual(report['stop_reason'],'maximum_pairs')

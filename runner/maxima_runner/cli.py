@@ -20,6 +20,20 @@ command_groups = (
         ("test", "Run engine and runner checks"),
         ("suite:run", "Evaluate a position suite"),
         ("match:run", "Run offline paired-opening matches"),
+        ("nnue:data", "Label PGN positions for NNUE training"),
+        ("nnue:selfplay", "Generate resumable self-play training data"),
+        ("nnue:seeds", "Select starting histories from annotated games"),
+        ("nnue:candidates", "Verify candidates and record SPRT decisions"),
+        ("nnue:campaign", "Track campaign backlog, allocations and stops"),
+        ("nnue:produce", "Run bounded parallel self-play producers"),
+        ("nnue:generate", "Run a configured generation recipe and workers"),
+        ("nnue:stage", "Stream CPU/CUDA stages and retain Adam state"),
+        ("nnue:cycle", "Run configured training cycles"),
+        ("nnue:export", "Export a frozen training-stage candidate"),
+        ("nnue:shards", "Ingest shards with global disk deduplication"),
+        ("nnue:convert", "Convert binary and shortfen training datasets"),
+        ("nnue:train", "Train and export a small CPU NNUE model"),
+        ("nnue:verify", "Check exported NNUE inference against Maxima"),
     )),
     ("Online learning (FICS / Lichess)", (
         ("experience:sync", "Upload PGNs into shared online learning"),
@@ -41,6 +55,7 @@ command_groups = (
     ("Online play", (
         ("fics", "Play on FICS as MaxDrone (seek, play, save PGN)"),
         ("lichess", "Play on Lichess as a bot (accept, play, save PGN)"),
+        ("telegram", "Telegram monitor and controls"),
     )),
 )
 
@@ -166,7 +181,7 @@ def development_command(command, arguments):
     # Fail explicitly rather than silently skipping dependency-dependent tests.
     import chess
     environment = dict(os.environ, MAXIMA_ENGINE=str(binary), MAXIMA_PROJECT_DIR=str(root))
-    # Runner tests start the engine in temporary directories, where it cannot find eval.nnue itself.
+    # Runner tests start the engine in temporary directories, where it cannot find maxima-halfka.nnue itself.
     if not environment.get("MAXIMA_EVAL_FILE"):
         environment["MAXIMA_EVAL_FILE"] = str(network_path(root))
     source = str(root / "runner")
@@ -216,6 +231,48 @@ def main(argv=None):
         elif command == "match:run":
             from . import matches
             entrypoint = matches.main
+        elif command == "nnue:data":
+            from . import nnue_data
+            entrypoint = nnue_data.main
+        elif command == "nnue:selfplay":
+            from . import nnue_selfplay
+            entrypoint = nnue_selfplay.main
+        elif command == "nnue:seeds":
+            from . import nnue_seeds
+            entrypoint = nnue_seeds.main
+        elif command == "nnue:candidates":
+            from . import nnue_candidates
+            entrypoint = nnue_candidates.main
+        elif command == "nnue:campaign":
+            from . import nnue_campaign
+            entrypoint = nnue_campaign.main
+        elif command == "nnue:produce":
+            from . import nnue_produce
+            entrypoint = nnue_produce.main
+        elif command == "nnue:generate":
+            from . import nnue_recipe
+            entrypoint = nnue_recipe.main
+        elif command == "nnue:cycle":
+            from . import nnue_cycle
+            entrypoint = nnue_cycle.main
+        elif command == "nnue:stage":
+            from . import nnue_stage
+            entrypoint = nnue_stage.main
+        elif command == "nnue:export":
+            from . import nnue_stage
+            entrypoint = nnue_stage.export_main
+        elif command == "nnue:shards":
+            from . import nnue_shards
+            entrypoint = nnue_shards.main
+        elif command == "nnue:convert":
+            from . import nnue_data
+            entrypoint = nnue_data.convert_main
+        elif command == "nnue:train":
+            from . import nnue_training
+            entrypoint = nnue_training.main
+        elif command == "nnue:verify":
+            from . import nnue_training
+            entrypoint = nnue_training.verify_main
         elif command == "experience:sync":
             from . import learning
             entrypoint = learning.sync_main
@@ -249,6 +306,9 @@ def main(argv=None):
         elif command == "lichess":
             from . import lichess_cli
             entrypoint = lichess_cli.main
+        elif command == "telegram":
+            from . import online_control
+            entrypoint = online_control.main
         else:
             parser.error(f"unknown command: {command}")
         # Existing subcommands retain their argparse interfaces.

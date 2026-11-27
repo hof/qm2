@@ -1,0 +1,3 @@
+# Optional CPU training environment; ordinary MaxDrone operations do not need it.
+# Install this file with --index-url https://download.pytorch.org/whl/cpu.
+torch==2.15.0

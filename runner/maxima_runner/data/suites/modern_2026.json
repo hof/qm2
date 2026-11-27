@@ -18,12 +18,7 @@
     }
   ],
   "reference": {
-    "identity": [
-      "name Stockfish 19",
-      "author the Stockfish developers (see AUTHORS file)"
-    ],
     "binary_sha256": "0f83d24cc46d2c66c60f16001af5444873bc112b7d028594513426894c12da19",
-    "release_url": "https://github.com/official-stockfish/Stockfish/releases/tag/sf_19",
     "options": {
       "Threads": "1",
       "Hash": "64",

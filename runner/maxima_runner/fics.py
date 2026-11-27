@@ -10,6 +10,7 @@ import random
 import hmac
 import re
 import socket
+import signal
 import sys
 import threading
 import time
@@ -24,6 +25,9 @@ from .learning import draw_contempt
 from .move_choice import describe, search_summary, speed, variation
 from .project import data_root, engine_path, env_value, log_line, project_root
 from .uci import open_engine
+from .online_safety import engine_safety, remaining_clock, search_timeout
+from .online_reporting import online_reporter
+from .online_control import configured_control
 
 timeseal_key = b"Timestamp (FICS) v1.0 - programmed by Henrik Gram."
 timeseal_ping = b"[G]\x00"
@@ -361,6 +365,16 @@ def sample_seeks(entries, count):
     return chosen
 
 
+def combined_seeks(seeks, losers_seeks):
+    """Legacy losers entries join the same weighted pool as every other variant."""
+    pool = list(seeks)
+    for entry in losers_seeks:
+        spec, weight = seek_entry(entry)
+        suffix = f" {weight}%" if weight is not None else ""
+        pool.append(f"{spec} losers{suffix}")
+    return pool
+
+
 def parse_seek_pool(text):
     """Validate the complete replacement before changing the running policy."""
     pool = []
@@ -422,11 +436,8 @@ class play_policy:
 
     def seek_commands(self):
         """A random draw from the pool; guests can only play unrated."""
-        chosen = sample_seeks(self.seeks, self.seeks_at_once)
-        chosen += [f"{spec} losers" for spec in sample_seeks(self.losers_seeks, self.losers_seeks_at_once)]
-        if self.seek_pool is not None:
-            count = max(self.seeks_at_once, self.losers_seeks_at_once, 1)
-            chosen = sample_seeks(self.seek_pool, count)
+        pool = self.seek_pool if self.seek_pool is not None else combined_seeks(self.seeks, self.losers_seeks)
+        chosen = sample_seeks(pool, min(self.seeks_at_once, 3))
         commands = []
         for spec in chosen:
             if self.guest:
@@ -646,9 +657,11 @@ class engine_player:
 
     def __init__(self, open_session, on_line, margin=5, policy=None, finger_wait=2, pgn_dir=None,
                  site="freechess.org", learner=None, events=None, online_tablebase=False, local_pieces=0,
-                 resignation_settings=None, losers_learner=None):
+                 resignation_settings=None, losers_learner=None, safety=None):
+        self.safety = safety or engine_safety("fics")
         self.loss = resignation.loss_policy(resignation_settings)
         self.opponent_line = None
+        self.idle_work = None
         self.latest_position = None
         self.position_received_at = None
         self.open_session = open_session
@@ -681,6 +694,7 @@ class engine_player:
         self.game = self.history = self.token = None
         self.task = self.searched = self.retried = self.waiting = None
         self.name = self.opponent = self.last_opponent = None
+        self.greeted_opponents = set()
         self.opponent_ready = asyncio.Event()
         self.opponent_ready.set()
         self.opponent_aborted = False
@@ -688,11 +702,14 @@ class engine_player:
         self.noplayed = set()  # resting names on our FICS noplay list
         self.streak = self.played = 0
         self.stopping = self.finished = self.restart = False
+        self.paused = False
+        self.last_eval = self.last_book = self.left_book = None
         self.seeked = time.monotonic()
 
     async def start(self):
         self.context = self.open_session()
         self.session = await self.context.__aenter__()
+        self.safety.describe(self.session)
         if self.policy.losers:
             try:
                 self.session.variant_settings(royal_losers_board())
@@ -725,6 +742,34 @@ class engine_player:
             context, self.context, self.session = self.context, None, None
             await context.__aexit__(None, None, None)
 
+    def storage_failure(self, error):
+        self.stopping, self.restart = True, False
+        try:
+            self.safety.fail(error, self.game)
+        except OSError:
+            print('-- incident persistence failed; new games remain blocked', flush=True)
+
+    async def engine_failure(self, error, board, clock):
+        self.stopping, self.restart = True, False
+        self.safety.fail(error, self.game, board.fen())
+        self.on_line('-- ENGINE INCIDENT: new games blocked; ' + type(error).__name__)
+        try:
+            await asyncio.wait_for(self.send('unseek'), min(1, max(.01, clock / 10)))
+        except (asyncio.TimeoutError, OSError):
+            pass
+        if await self.safety.recover(error, self.stop_engine, self.start, clock):
+            return True
+        self.loss.sent = True
+        try:
+            if board.ply() < 2:
+                await asyncio.wait_for(self.send('abort'), 1)
+            await asyncio.wait_for(self.send('resign'), 1)
+        except (asyncio.TimeoutError, OSError):
+            self.save_interrupted()
+            self.finished = True
+        await self.stop_engine()
+        return False
+
     async def close(self):
         self.cancel()
         if self.teller is not None:
@@ -743,11 +788,14 @@ class engine_player:
         self.waiting_position = None
 
     def watch_first_move(self, position):
-        """Watch each eligible opening turn once; clock-only updates must not restart its timer."""
+        """Watch opening hesitations once per position; clock updates keep the timer."""
         board = self.history.board
         fen = board.fen()
         eligible = board.ply() < 2 or (board.fullmove_number <= 4 and fen == self.abort_position)
-        if position.relation != fics_game.playing_their_move or not eligible:
+        opponent = (position.black if self.our_color == chess.WHITE else position.white).casefold()
+        greet = (type(board) is royal_losers_board and board.fullmove_number <= 4
+                 and opponent not in self.greeted_opponents and any(board.generate_legal_captures()))
+        if position.relation != fics_game.playing_their_move or not (eligible or greet):
             self.stop_waiting()
         else:
             if self.waiting_position != fen:
@@ -756,10 +804,23 @@ class engine_player:
                 return
             wait = self.policy.opening_wait(position.initial_seconds)
             self.waiting_position = fen
-            self.waiting = asyncio.ensure_future(self.abort_unless_moved(self.game, board.ply(), wait))
+            self.waiting = asyncio.ensure_future(self.abort_unless_moved(
+                self.game, board.ply(), wait, greet=opponent if greet else None, abort=eligible))
 
-    async def abort_unless_moved(self, game, ply, wait):
-        await asyncio.sleep(wait)
+    async def abort_unless_moved(self, game, ply, wait, *, greet=None, abort=True):
+        delay = 0
+        if greet is not None:
+            delay = min(15, wait / 2)
+            await asyncio.sleep(delay)
+            if (self.game == game and self.history is not None and self.history.board.ply() == ply
+                    and greet not in self.greeted_opponents):
+                if await self.send("say Hi, I'm Maxima(C) on a losers chess test run. Captures are compulsory. "
+                                   'Win by losing all pieces except your king, or by getting (stale)mated. '
+                                   'Good luck and have fun!'):
+                    self.greeted_opponents.add(greet)
+        if not abort:
+            return
+        await asyncio.sleep(wait - delay)
         if self.game == game and self.history is not None and self.history.board.ply() == ply:
             reason = "no first move" if ply < 2 else "no opening reply"
             self.on_line(f"-- requesting abort of game {game}: {reason} from the opponent in {wait:.0f}s")
@@ -770,6 +831,10 @@ class engine_player:
         self.cancel()
         self.loss.reset()
         self.name = name
+        self.greeted_opponents.clear()
+        if self.events is not None:
+            self.events.emit("login", message="Logged in to FICS as " + name,
+                             engine_details=self.safety.details)
         self.game = self.history = None
         self.announced_mood = None
         if self.policy.losers:
@@ -894,10 +959,12 @@ class engine_player:
 
     async def seek(self):
         self.seeked = time.monotonic()
-        if self.stopping or self.game is not None or not (self.policy.seek_pool or self.policy.seeks or self.policy.losers_seeks):
+        if self.stopping or self.paused or self.game is not None or not (self.policy.seek_pool or self.policy.seeks or self.policy.losers_seeks):
             return
         await self.send("unseek")
         for command in self.policy.seek_commands():
+            if self.paused or self.stopping:
+                return
             self.on_line(f"-- posting {command}")
             await self.send(command)
 
@@ -923,6 +990,9 @@ class engine_player:
     async def handle(self, line):
         position = fics_game.style12.parse(line) if line.startswith("<12> ") else None
         if position is not None:
+            if (self.stopping or self.paused) and position.game != self.game and position.relation in (fics_game.playing_my_move, fics_game.playing_their_move):
+                await self.send('abort')
+                return
             try:
                 previous_token = self.token
                 self.on_board(position)
@@ -935,9 +1005,8 @@ class engine_player:
         end = fics_game.game_end_pattern.match(line)
         if end and int(end["game"]) == self.game:
             await self.on_game_end(end)
-        elif line.startswith("Illegal move") and self.game is not None and self.retried != self.searched:
-            self.retried = self.searched
-            await self.send("refresh")
+        elif line.startswith("Illegal move") and self.game is not None and self.history is not None:
+            await self.engine_failure(ValueError("server rejected our move"), self.history.board.copy(), 0)
         elif draw_offer_pattern.match(line) and self.game is not None:
             self.draw_offered = True
             self.on_line("-- draw offered; judged on our move")
@@ -966,8 +1035,13 @@ class engine_player:
                 self.opponent_unregistered = "U" in titles
                 self.fingered = True
                 self.opponent_ready.set()
+                if self.game is not None and self.record is not None:
+                    self.emit("opponent", game=self.game, game_started_at=self.record.started.isoformat(),
+                              opponent=self.opponent_details())
 
     async def on_creating(self, match):
+        if self.idle_work is not None:
+            await self.idle_work.before_game()
         we_are_white = self.name is not None and match["white"].lower() == self.name.lower()
         name, rating = ((match["black"], match["black_rating"]) if we_are_white
                         else (match["white"], match["white_rating"]))
@@ -993,7 +1067,7 @@ class engine_player:
 
     async def on_challenge(self, match):
         name = match["name"]
-        if self.game is not None or self.stopping or not self.policy.accept:
+        if self.game is not None or self.stopping or self.paused or not self.policy.accept:
             await self.send(f"decline {name}")
         elif not playable(match["type"], match["time"], match["increment"], self.policy.losers):
             self.on_line(f"-- declining {match['type']} {match['time']} {match['increment']} from {name}")
@@ -1002,12 +1076,19 @@ class engine_player:
             self.on_line(f"-- declining {name}: resting after aborts on move one")
             await self.send(f"decline {name}")
         else:
+            if self.idle_work is not None:
+                await self.idle_work.before_game()
             await self.send(f"accept {name}")
 
     async def on_game_end(self, end):
         self.cancel()
         if self.session is not None and hasattr(self.session, "stop_pondering"):
             await self.session.stop_pondering()
+        lost = end['result'] == ('0-1' if self.our_color == chess.WHITE else '1-0')
+        if lost and any(word in end['reason'].lower() for word in ('forfeit', 'time')):
+            self.stopping, self.restart = True, False
+            self.safety.fail(RuntimeError('our game ended by ' + end['reason']), self.game,
+                             self.history.board.fen() if self.history else None)
         self.on_line(f"-- game {self.game} over: {end['reason']} {end['result']}")
         opponent = end["black"] if self.name and end["white"].lower() == self.name.lower() else end["white"]
         if self.count_abort(opponent, end["result"]):
@@ -1030,7 +1111,7 @@ class engine_player:
             await self.send("unseek")
             self.finished = True
             return
-        if self.streak <= self.policy.rematches:
+        if not self.paused and self.streak <= self.policy.rematches:
             await self.send("rematch")
         await self.seek()
 
@@ -1128,6 +1209,7 @@ class engine_player:
         try:
             path = fics_game.save_game(game, self.game_pgn_dir, self.record.started)
         except (OSError, ValueError) as error:
+            self.storage_failure(error)
             self.on_line(f"-- could not save game {self.game}: {error}")
             return
         self.on_line(f"-- saved game {self.game} to {path}")
@@ -1136,6 +1218,7 @@ class engine_player:
             try:
                 record = learner.add(game)
             except (OSError, ValueError) as error:
+                self.storage_failure(error)
                 self.on_line(f"-- PGN saved; shared learning update failed: {error}")
                 return
             for text in learning_report(game, record, learner.records):
@@ -1179,6 +1262,7 @@ class engine_player:
             self.game, self.token, self.history = position.game, object(), history
             self.loss.reset()
             self.record = fics_game.game_record({})
+            self.last_eval = self.last_book = self.left_book = None
             self.opening = None
             self.from_book = self.draw_offered = False
             self.draw_offers.reset()
@@ -1222,10 +1306,17 @@ class engine_player:
         self.task = asyncio.ensure_future(self.play(position, board.copy()))
         self.task.add_done_callback(self.report)
 
+    def opponent_details(self):
+        if self.opponent is None or not self.fingered or self.opponent_unregistered:
+            return {}
+        return {"name": self.opponent.name, "title": self.opponent.title,
+                "rating": self.opponent.rating, "is_engine": self.opponent.is_engine}
+
     def emit_start(self, position):
         created = self.created if self.created and {self.created["white"], self.created["black"]} == {
             position.white, position.black} else {}
         self.emit("game_start", game=self.game, white=position.white, black=position.black,
+                  opponent=self.opponent_details(), game_started_at=self.record.started.isoformat(),
                   white_elo=rating_of(created.get("white_rating", "")) or None,
                   black_elo=rating_of(created.get("black_rating", "")) or None,
                   initial_seconds=position.initial_seconds, increment_seconds=position.increment_seconds,
@@ -1248,12 +1339,19 @@ class engine_player:
     def report(self, task):
         if not task.cancelled() and task.exception() is not None:
             self.on_line(f"-- move task failed: {task.exception()!r}")
+            if self.history is not None and task is self.task and not self.loss.sent:
+                self.stopping, self.restart = True, False
+                asyncio.ensure_future(self.engine_failure(ValueError("move task failed"), self.history.board.copy(), 0))
 
     async def send(self, line):
+        if self.connection is None:
+            return False
         try:
             await self.connection.send(line)
+            return True
         except (ConnectionError, OSError) as error:
             self.on_line(f"-- could not send {line!r}: {error}")
+            return False
 
     def show_opponent_move(self, ponder_hit=False):
         if self.opponent_line is not None:
@@ -1261,6 +1359,8 @@ class engine_player:
             self.opponent_line = None
 
     async def play(self, position, board):
+        if self.idle_work is not None:
+            await self.idle_work.before_game()
         clock = (position.white_ms if board.turn == chess.WHITE else position.black_ms) / 1000
         limit = chess.engine.Limit(white_clock=position.white_ms / 1000, black_clock=position.black_ms / 1000,
                                    white_inc=position.increment_seconds, black_inc=position.increment_seconds)
@@ -1272,7 +1372,7 @@ class engine_player:
         if not self.opponent_ready.is_set():
             # The first search waits briefly for finger, so UCI_Opponent carries title and engine flag.
             try:
-                await asyncio.wait_for(self.opponent_ready.wait(), self.finger_wait)
+                await asyncio.wait_for(self.opponent_ready.wait(), min(self.finger_wait, search_timeout(clock, self.position_received_at)))
             except asyncio.TimeoutError:
                 self.opponent_ready.set()
         learner = self.game_learner
@@ -1302,20 +1402,19 @@ class engine_player:
                 self.session, board, limit, opening=self.opening,
                 ceiling=ceiling,
                 tablebase=self.tablebase,
-                game=self.token, opponent=self.opponent, timeout=max(clock, 1) + self.margin,
+                game=self.token, opponent=self.opponent, timeout=search_timeout(clock, self.position_received_at),
                 options=search_options, on_search_started=self.show_opponent_move)
         except (asyncio.TimeoutError, AssertionError, RuntimeError, OSError, chess.engine.EngineError) as error:
-            self.on_line(f"-- engine failed ({error or type(error).__name__}); restarting it")
-            await self.stop_engine()
-            await self.start()
-            await self.send("refresh")
+            left = remaining_clock(clock, self.position_received_at)
+            if await self.engine_failure(error, board, left):
+                await self.play(position, board)
             return
         finally:
             self.show_opponent_move()
         if self.token is not token or self.history is None or self.history.board.fen() != board.fen():
             return
         if move is None or not board.is_legal(move):
-            self.on_line(f"-- engine returned no legal move in {board.fen()}")
+            await self.engine_failure(ValueError("engine returned no legal move"), board, remaining_clock(clock, self.position_received_at))
             return
         fresh = self.loss.on_search(board, move, info, kind) if not self.is_losers else False
         latest = self.latest_position
@@ -1359,6 +1458,9 @@ class engine_player:
             source = book_whisper(numbered, self.opening.why, self.opening, compact=True) if book else f"{numbered} {info['source']}"
             learned = console_learning(board, move, self.opening)
             source += f" | {learned}" if learned else ""
+            self.last_eval = source
+            if book:
+                self.last_book, self.left_book = book_whisper(numbered, self.opening.why, self.opening), None
             self.on_line(styled(f"{source} | {console_time(seconds, clock - seconds)}", "92"))
             if explaining and kind == "book" and self.opening.why:
                 await self.explain(book_whisper(board.variation_san([move]), self.opening.why, self.opening))
@@ -1371,6 +1473,10 @@ class engine_player:
                     lambda: self.history.board.fen() if self.token is token and self.history is not None else None,
                     self.on_line, game=self.token, opponent=self.opponent, options=search_options)
             return
+        pv = variation(board, info.get('pv', []))
+        self.last_eval = f'{board.san(move)} {describe(info, board.turn)}' + (f', expecting {pv}' if pv else '')
+        if self.last_book and self.left_book is None:
+            self.left_book = numbered
         self.on_line(styled(console_search(board, move, info, seconds, clock, self.policy.pv_plies, self.opening), "92"))
         if explaining:
             note = None
@@ -1635,8 +1741,8 @@ def run(options, parser):
             parser.error(f"{name} must be a nonnegative integer")
     supported_wild = {kind.replace("wild/", "w") for kind in wild_types}
     try:
+        seek_weights(combined_seeks(configured["seeks"], configured["losers_seeks"]))
         for pool in ("seeks", "losers_seeks"):
-            seek_weights(configured[pool])
             for entry in configured[pool]:
                 spec, _ = seek_entry(entry)
                 variants = [word for word in spec.split()[2:]
@@ -1700,7 +1806,7 @@ def run(options, parser):
 
     @asynccontextmanager
     async def engine_session():
-        # The data directory resolves the engine's relative eval.nnue and book.bin defaults.
+        # The data directory resolves the engine's relative maxima-halfka.nnue and book.bin defaults.
         async with open_engine([str(options.engine or engine_path())], str(data_root()), log=engine_log) as session:
             await session.configure(settings)
             await session.ready()
@@ -1708,8 +1814,13 @@ def run(options, parser):
 
     async def play_session(controller, commands, state):
         read_commands(asyncio.get_event_loop(), commands)
-        events = connectors.game_events() if feed_address or configured["pgn_post"] else None
-        player = None if options.no_engine else engine_player(engine_session, show, policy=policy,
+        events = connectors.game_events()
+        reporter = online_reporter("fics", data_root() / "runtime/fics", show)
+        events.subscribe(reporter.listen)
+        safety = engine_safety("fics", data_root() / "runtime/fics", reporter.event)
+        safety.check_start()
+        reporter.start()
+        player = None if options.no_engine else engine_player(engine_session, show, policy=policy, safety=safety,
                                                                   pgn_dir=pgn_dir, site=options.host, learner=learner,
                                                                   losers_learner=losers_learner,
                                                                   events=events,
@@ -1717,6 +1828,41 @@ def run(options, parser):
                                                                   local_pieces=local_pieces,
                                                                   resignation_settings=configured["resignation"])
         state["player"] = player
+        if player is not None:
+            def request_stop():
+                player.stopping, player.restart = True, False
+                asyncio.ensure_future(player.stop())
+            def reporting_failed(error):
+                request_stop()
+                try:
+                    safety.fail(error)
+                except OSError:
+                    print('-- incident persistence failed; new games remain blocked', flush=True)
+            reporter.on_stop = request_stop
+            reporter.on_failure = reporting_failed
+        control = configured_control("fics", player, reporter)
+        state['control'] = control
+        from .idle_work import configured_scheduler
+        async def idle_deep():
+            from . import deep_learning
+            return await deep_learning.learn(options.engine or engine_path(), data_root() / 'book.bin',
+                learner.records, positions=1, report=show,
+                engine_options={name: value for name, value in settings.items() if name in ('Threads', 'Hash', 'EvalFile')})
+        idle_work = configured_scheduler('fics', player, control, controller, reporter,
+                                         idle_deep if learner is not None else None)
+        if player is not None:
+            player.idle_work = idle_work
+        if idle_work is not None:
+            events.subscribe(idle_work.listen)
+        def request_process_stop():
+            if control is not None:
+                control.stop_process()
+            commands.put_nowait('softquit')
+        reporter.on_stop = request_process_stop
+        try:
+            asyncio.get_running_loop().add_signal_handler(signal.SIGUSR1, request_process_stop)
+        except (NotImplementedError, AttributeError):
+            pass
         if controller.requested and player is not None:
             player.stopping = True
         feed = None
@@ -1729,28 +1875,59 @@ def run(options, parser):
         if configured["pgn_post"]:
             events.subscribe(connectors.pgn_poster(configured["pgn_post"],
                                                    os.environ.get("MAXDRONE_POST_TOKEN") or None, show))
+        status = 0
         try:
+            if idle_work is not None:
+                idle_work.start()
+            if control is not None:
+                await control.start()
             if feed is not None:
                 await feed.start()
             if controller.requested:
                 return 0
+            if control is not None and control.offline:
+                await control.wait_offline()
+            else:
+                if player is not None:
+                    await player.start()
+                status = await run_client(options, commands, show, transcript=transcript, player=player)
+            if status == 0 and player is not None and player.restart:
+                status = restart_status
+        except (RuntimeError, OSError, AssertionError, chess.engine.EngineError) as error:
             if player is not None:
-                await player.start()
-            status = await run_client(options, commands, show, transcript=transcript, player=player)
-            return restart_status if status == 0 and player is not None and player.restart else status
+                player.stopping, player.restart = True, False
+            safety.fail(error)
+            raise
         finally:
-            if player is not None:
-                if controller.requested:
-                    player.save_interrupted()
-                await player.close()
-            if feed is not None:
-                await feed.close()
+            try:
+                if player is not None:
+                    if controller.requested:
+                        player.save_interrupted()
+                    await player.close()
+                if player is None or player.name is not None or safety.incident:
+                    reporter.event("quarantined" if safety.incident else "shutdown", message="Offline; review required" if safety.incident else "Session ended")
+                if (control is not None and not control.process_stop and not controller.requested
+                        and not safety.incident and player.stopping and not player.restart and player.game is None):
+                    await control.wait_offline()
+            finally:
+                if idle_work is not None:
+                    await idle_work.close()
+                if control is not None:
+                    await control.close()
+                await reporter.close()
+                if feed is not None:
+                    await feed.close()
+        return online_shutdown.session_result(status,
+            restart=control is not None and control.restart_requested,
+            stopping=controller.requested or safety.incident or (control is not None and control.process_stop))
 
     async def session():
         commands, state = asyncio.Queue(), {}
         controller = online_shutdown.shutdown_controller(show, configured["shutdown_grace"])
 
         def stop():
+            if state.get('control') is not None:
+                state['control'].stop_process()
             player = state.get("player")
             if player is not None:
                 player.stopping, player.restart = True, False
@@ -1759,7 +1936,7 @@ def run(options, parser):
 
         return await controller.run(play_session(controller, commands, state), stop)
 
-    return asyncio.run(session())
+    return asyncio.run(online_shutdown.repeat_requested_sessions(session, restart_status))
 
 
 if __name__ == "__main__":

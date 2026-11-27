@@ -65,16 +65,6 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
         await guest.on_login("GuestTEST")
         self.assertEqual(guest.connection.sent, ["unseek", "seek 3 0 u"])
 
-    def test_engine_name_is_shortened_to_version(self):
-        self.assertEqual(fics.short_engine_name("Maxima 2.0.0-feat/nnue-bootstrap-8778e07-Release"), "Maxima 2.0.0")
-        self.assertEqual(fics.short_engine_name("Maxima 2.1"), "Maxima 2.1")
-        self.assertEqual(fics.short_engine_name("Stockfish 17.1"), "Stockfish 17.1")
-        self.assertEqual(fics.short_engine_name("Crafty"), "Crafty")
-        self.assertEqual(fics.short_engine_name(None), "UCI engine")
-
-    def test_cpu_model_is_shortened(self):
-        model = fics.cpu_model()
-        self.assertNotRegex(model, r"\(R\)|\(TM\)|@")
 
     async def test_no_rematch_by_default(self):
         subject = player(seeks=["3 0"])
@@ -122,11 +112,11 @@ class policy_tests(unittest.IsolatedAsyncioTestCase):
     async def test_creating_fingers_opponent_and_reads_titles(self):
         subject = player()
         await subject.on_login("GuestTEST")
-        await subject.handle("Creating: Stockfish (2950) GuestTEST (++++) unrated blitz 3 0")
-        self.assertEqual(subject.connection.sent[-1], "finger Stockfish")
+        await subject.handle("Creating: FixtureEngine (2950) GuestTEST (++++) unrated blitz 3 0")
+        self.assertEqual(subject.connection.sent[-1], "finger FixtureEngine")
         self.assertFalse(subject.opponent_ready.is_set())
-        await subject.handle("Finger of Stockfish(C)(TD):")
-        self.assertEqual(subject.opponent, chess.engine.Opponent("Stockfish", None, 2950, True))
+        await subject.handle("Finger of FixtureEngine(C)(TD):")
+        self.assertEqual(subject.opponent, chess.engine.Opponent("FixtureEngine", None, 2950, True))
         self.assertTrue(subject.opponent_ready.is_set())
         await subject.handle("Creating: GuestTEST (++++) Magnus (2880) unrated blitz 3 0")
         await subject.handle("Finger of Magnus(GM):")
@@ -214,7 +204,7 @@ class settings_tests(unittest.TestCase):
         path.write_text(json.dumps(value))
         return str(path)
 
-    def test_wild_config_reaches_startup_and_posts_each_variant(self):
+    def test_wild_config_accepts_each_variant_and_caps_posted_seeks(self):
         from maxima_runner.fics_cli import parser
         specs = ['3 0 ' + kind for kind in ('w2', 'w3', 'w4', 'w5', 'w8', 'losers')]
         arguments = parser()
@@ -239,8 +229,10 @@ class settings_tests(unittest.TestCase):
                 patch.object(fics, 'data_root', return_value=Path(root.name)), \
                 patch.object(fics.asyncio, 'run', side_effect=without_connecting), patch('builtins.print'):
             self.assertEqual(fics.run(options, arguments), 0)
-        self.assertCountEqual(policies[0].seek_commands(),
-                              ['seek ' + spec + ' u' for spec in specs])
+        self.assertCountEqual(policies[0].seeks, specs)
+        commands = policies[0].seek_commands()
+        self.assertEqual(len(commands), 3)
+        self.assertTrue(set(commands) <= {'seek ' + spec + ' u' for spec in specs})
         self.assertTrue(policies[0].losers)
         self.assertTrue(policies[0].guest)
         self.assertEqual(options.guest_name, "GuestFLAG")

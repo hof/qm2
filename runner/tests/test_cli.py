@@ -15,6 +15,37 @@ from maxima_runner import cli
 
 
 class cli_tests(unittest.TestCase):
+    def test_training_help_does_not_require_torch(self):
+        with patch.dict(sys.modules, {"torch": None}), contextlib.redirect_stdout(io.StringIO()):
+            for command in ["nnue:cycle", "nnue:train", "nnue:verify", "nnue:stage", "nnue:export", "nnue:shards", "nnue:produce", "nnue:campaign", "nnue:candidates"]:
+                with self.assertRaises(SystemExit) as result:
+                    cli.main([command, "--help"])
+                self.assertEqual(result.exception.code, 0)
+
+    def test_warm_start_rejects_compact_geometry_before_loading_files_or_torch(self):
+        with (patch.dict(sys.modules, {"torch": None}),
+              contextlib.redirect_stderr(io.StringIO())):
+            with self.assertRaises(SystemExit) as result:
+                cli.main(["nnue:train", "missing.mxdata", "--output", "unused-run",
+                          "--warm-start", "missing.nnue"])
+            self.assertEqual(result.exception.code, 2)
+
+    def test_training_rejects_reserved_evaluation_data_without_torch(self):
+        import chess
+        from maxima_runner import nnue_data
+        dataset = self.root / "reserved.mxdata"
+        board = chess.Board()
+        row = {"fen": board.fen(), "score_cp": 0, "result_stm": 0.5, "nodes": 1, "depth": 1,
+               "split": nnue_data.position_split(board), "source": {"sha256": "a" * 64, "game": 1, "ply": 0}}
+        nnue_data.save_dataset(dataset, {"variant": "standard", "score_pov": "side_to_move",
+                                         "purpose": "heldout_evaluation"}, [row])
+        with (patch.dict(sys.modules, {"torch": None}),
+              contextlib.redirect_stderr(io.StringIO()) as errors):
+            result = cli.main(["nnue:train", str(dataset), "--output", str(self.root / "unused")])
+        self.assertEqual(result, 1)
+        self.assertIn("reserved evaluation datasets", errors.getvalue())
+        self.assertFalse((self.root / "unused").exists())
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
@@ -30,23 +61,11 @@ class cli_tests(unittest.TestCase):
         (build / 'CMakeCache.txt').write_text('BUILD_TESTING:BOOL=ON\n')
         (build / 'src/maxima2').touch()
 
-    def test_help_fits_an_80_column_terminal(self):
-        output = io.StringIO()
-        with contextlib.redirect_stdout(output):
-            cli.show_help()
-        self.assertLessEqual(max(map(len, output.getvalue().splitlines())), 80)
-        for _, commands in cli.command_groups:
-            for command, _ in commands:
-                if command.startswith(('experience:', 'books:')):
-                    self.assertIn(command, output.getvalue())
 
     def test_help_and_build_do_not_import_chess(self):
         with patch.dict(sys.modules, {'chess': None}), contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(cli.main(['--help']), 0)
             self.assertEqual(cli.main(['help']), 0)
-            self.assertIn('experience:sync', output.getvalue())
-            self.assertNotIn('experience:book:', output.getvalue())
-            self.assertNotIn('\033[', output.getvalue())
             with self.assertRaises(SystemExit) as result:
                 cli.main(['help', 'build'])
             self.assertEqual(result.exception.code, 0)

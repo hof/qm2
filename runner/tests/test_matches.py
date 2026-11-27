@@ -244,6 +244,119 @@ for line in sys.stdin:
         self.assertEqual(record['termination'], 'time forfeit')
         self.assertEqual(len(list(game.mainline_moves())), 0)
 
+    async def test_reported_clock_ignores_one_second_delivery_delay(self):
+        class delayed_reported_engine:
+            async def search(self, board, limit, **kwargs):
+                await asyncio.sleep(1.01)
+                kwargs['on_info']({'time': .005}, 1010)
+                return chess.engine.BestMove(chess.Move.from_uci('f7g7'), None), 1010
+
+        game, record = await self.play([delayed_reported_engine(), scripted_engine([])],
+            chess.Board('7k/5Q2/6K1/8/8/8/8/8 w - - 0 1'),
+            seconds=.01, increment=0, clock_source='reported')
+        self.assertEqual(record['result'], '1-0')
+        self.assertEqual(record['termination'], 'checkmate')
+        self.assertEqual(game.headers['ClockSource'], 'reported')
+        self.assertAlmostEqual(record['clocks']['white'], .005)
+        sample = record['search_samples'][0]
+        self.assertEqual(sample['clock_seconds'], .005)
+        self.assertGreaterEqual(sample['wire_seconds'], 1)
+
+    async def test_reported_clock_requires_valid_current_search_time(self):
+        class reported_engine:
+            async def search(self, board, limit, **kwargs):
+                if self.value is not None:
+                    kwargs['on_info']({'time': self.value}, 0)
+                return chess.engine.BestMove(chess.Move.from_uci('e2e4'), None), 0
+
+        for value in (None, -1, float('nan'), float('inf'), True):
+            engine = reported_engine()
+            engine.value = value
+            _, record = await self.play([engine, scripted_engine([])], clock_source='reported')
+            self.assertEqual(record['result'], '*')
+            self.assertIn('engine-reported search time', record['error'])
+
+    async def test_reported_clock_still_forfeits_when_engine_reports_exhausted_budget(self):
+        class over_budget_engine:
+            async def search(self, board, limit, **kwargs):
+                kwargs['on_info']({'time': 2}, 0)
+                return chess.engine.BestMove(chess.Move.from_uci('e2e4'), None), 0
+
+        _, record = await self.play([over_budget_engine(), scripted_engine([])],
+                                   seconds=1, clock_source='reported')
+        self.assertEqual(record['result'], '0-1')
+        self.assertEqual(record['termination'], 'time forfeit')
+
+    async def test_fixed_nodes_has_no_clock_forfeits_and_keeps_wire_telemetry(self):
+        board = chess.Board()
+        for move in ['e2e4', 'f7f6', 'd2d4']:
+            board.push_uci(move)
+        engines = [scripted_engine(['g7g5'], .02), scripted_engine(['d1h5'], .02)]
+        game, record = await self.play(engines, board, a_white=False, seconds=.001,
+                                      increment=0, max_plies=2, nodes=10000)
+        self.assertEqual(record['result'], '1-0')
+        self.assertEqual(record['termination'], 'checkmate')
+        self.assertEqual(record['clocks'], {'white': None, 'black': None})
+        self.assertEqual(game.headers['TimeControl'], '-')
+        self.assertEqual(game.headers['NodeLimit'], '10000')
+        self.assertNotIn('[%clk', str(game))
+        for engine in engines:
+            self.assertEqual(engine.limits[0].nodes, 10000)
+            self.assertIsNone(engine.limits[0].white_clock)
+            self.assertIsNone(engine.limits[0].black_clock)
+        for sample in record['search_samples']:
+            self.assertEqual(sample['clock_seconds'], 0)
+            self.assertGreaterEqual(sample['wire_seconds'], .02)
+
+    async def test_fixed_nodes_still_rejects_illegal_moves_and_reports_timeouts_as_errors(self):
+        _, record = await self.play([scripted_engine(['e2e5']), scripted_engine([])], nodes=100)
+        self.assertEqual(record['result'], '*')
+        self.assertIn('no legal move', record['error'])
+
+        class stalled_engine:
+            async def search(self, *args, **kwargs):
+                raise asyncio.TimeoutError('watchdog')
+
+        _, record = await self.play([stalled_engine(), scripted_engine([])], nodes=100)
+        self.assertEqual(record['result'], '*')
+        self.assertEqual(record['termination'], 'engine failure')
+        self.assertEqual(record['error'], 'watchdog')
+
+    def test_cli_rejects_mixing_node_and_clock_limits(self):
+        arguments = ['match:run', '--engine-a', sys.executable, '--engine-b', sys.executable,
+                     '--openings', str(self.path), '--pgn', str(self.path.with_suffix('.pgn')),
+                     '--json', str(self.path.with_suffix('.report')), '--nodes', '10000']
+        for extra in (['--seconds', '1'], ['--increment', '.01'], ['--clock-source', 'reported']):
+            with patch.object(sys, 'argv', arguments + extra), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(main(), 1)
+
+    async def test_clock_excludes_client_setup_but_keeps_wall_telemetry(self):
+        engine = scripted_engine(['e2e4'], 0.03)
+        engine.last_search_seconds = 0.001
+        game, record = await self.play([engine, scripted_engine([])], seconds=0.01,
+                                       increment=0, max_plies=1)
+        self.assertEqual(list(game.mainline_moves()), [chess.Move.from_uci('e2e4')])
+        self.assertAlmostEqual(record['clocks']['white'], 0.009)
+        sample = record['search_samples'][0]
+        self.assertGreaterEqual(sample['wall_seconds'], 0.03)
+        self.assertEqual(sample['clock_seconds'], 0.001)
+
+    async def test_wire_deadline_still_rejects_a_late_reply(self):
+        engine = scripted_engine(['e2e4'], 0.03)
+        engine.last_search_seconds = 0.02
+        game, record = await self.play([engine, scripted_engine([])], seconds=0.01)
+        self.assertEqual(record['termination'], 'time forfeit')
+        self.assertEqual(list(game.mainline_moves()), [])
+
+    async def test_missing_real_protocol_timing_is_an_error(self):
+        engine = scripted_engine(['e2e4'])
+        engine.last_search_seconds = None
+        game, record = await self.play([engine, scripted_engine([])])
+        self.assertEqual(record['termination'], 'engine failure')
+        self.assertIn('timing', record['error'])
+        self.assertEqual(list(game.mainline_moves()), [])
+
     async def test_illegal_move_is_not_pushed(self):
         board = chess.Board()
         game, record = await self.play([scripted_engine(['e2e5']), scripted_engine([])], board)
@@ -314,6 +427,17 @@ for line in sys.stdin:
         self.assertFalse(pgn.exists())
         self.assertFalse(report.exists())
 
+    async def test_stop_signal_prevents_starting_another_game(self):
+        stop_file = Path(self.directory.name) / 'STOP'
+        stop_file.touch()
+        args = SimpleNamespace(seed=17, pairs=1, stop_file=[stop_file], stop_at=None)
+        report = {'games': []}
+        with patch('maxima_runner.uci.open_engine') as start:
+            await run_match([['a'], ['b']], [('fixture', chess.Board())], args, report, io.StringIO())
+        start.assert_not_called()
+        self.assertEqual(report['games'], [])
+        self.assertEqual(report['stop_reason'], 'scheduling_stop')
+
     async def test_selection_is_repeatable_and_records_survive_engine_failure(self):
         openings = self.openings('standard', [
             {'id': str(i), 'fen': '7k/8/8/8/8/8/8/K7 w - - 0 1'} for i in range(5)])
@@ -348,6 +472,45 @@ for line in sys.stdin:
             self.assertEqual(report['games'][0]['result'], '*')
             self.assertEqual(json.loads(args.json.read_text())['games'], report['games'])
             self.assertEqual(read_match_pgn(io.StringIO(stream.getvalue())).headers['Result'], '*')
+
+    async def test_uncapped_sprt_runs_past_book_size_until_statistical_boundary(self):
+        openings = self.openings('standard', [
+            {'id': 'draw', 'fen': '7k/8/8/8/8/8/8/K7 w - - 0 1'}])
+        args = SimpleNamespace(seed=17, pairs=None, until_decision=True,
+            sprt=(-100, 0), sprt_alpha=.05, sprt_beta=.05,
+            seconds=1, increment=0, max_plies=2, variant='standard',
+            timeout=1, hash_mb=1, json=Path(self.directory.name) / 'report.json')
+
+        class fake_session:
+            identity = ['name fixture']
+            protocol = SimpleNamespace(options={})
+
+            async def configure(self, settings):
+                return {}
+
+        @asynccontextmanager
+        async def fake_open(*args):
+            yield fake_session()
+
+        report = {'games': []}
+        with patch('maxima_runner.uci.open_engine', fake_open):
+            await run_match([['a'], ['b']], openings, args, report, io.StringIO())
+        self.assertEqual(report['stop_reason'], 'accept_h1')
+        self.assertGreater(report['summary']['completed_pairs'], len(openings))
+        self.assertEqual(len(report['games']), 2 * report['summary']['completed_pairs'])
+        self.assertEqual(len(report['selected_openings']), report['summary']['completed_pairs'])
+        self.assertGreaterEqual(report['summary']['sprt']['llr'],
+                                report['summary']['sprt']['upper_bound'])
+
+    def test_uncapped_mode_rejects_deadlines_and_other_stopping_rules(self):
+        arguments = ['match:run', '--engine-a', sys.executable, '--engine-b', sys.executable,
+                     '--openings', str(self.path), '--pgn', str(self.path.with_suffix('.pgn')),
+                     '--json', str(self.path.with_suffix('.report')), '--until-decision']
+        for extra in ([], ['--sprt', '-100', '0', '--stop-at', '2000000000'],
+                      ['--sprt', '-100', '0', '--futility-alpha', '.05']):
+            with patch.object(sys, 'argv', arguments + extra), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(main(), 1)
 
     async def test_repetition_history_claim_precedes_search(self):
         board = chess.Board()

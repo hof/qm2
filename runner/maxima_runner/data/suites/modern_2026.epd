@@ -1,4 +1,4 @@
-# Recent 2026 games; Stockfish 19 targets, see modern_2026.json and README.md.
+# Recent 2026 games; reference targets, see modern_2026.json and README.md.
 r3k2r/pp3pp1/2p5/2bpP2P/4nP1q/5B2/PPP3KP/R1B1QR2 b kq - bm Rxh5; id "MG26.01"; hmvc 4; fmvn 16;
 2kr3r/1p2bppp/p3b3/2pN4/8/2N1BP2/PPP3PP/R4RK1 b - - bm Bxd5; id "MG26.02"; hmvc 0; fmvn 16;
 r1b1k2r/ppp1nppp/3q4/b7/2B5/1Q3N1P/PP3PP1/R1B2RK1 b kq - bm O-O; id "MG26.03"; hmvc 3; fmvn 16;

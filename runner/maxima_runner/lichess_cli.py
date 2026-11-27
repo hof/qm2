@@ -14,7 +14,7 @@ def parser():
                "commands for anyone, in the game's chat: !help, !name; !eval, !stats, !book (spectator room only)\n"
                "commands from an owner, typed in the game's chat (spectator room is best):\n"
                "  !softquit      stop after this game\n"
-               "  !softrestart   restart after this game (exit 75, for a supervisor loop)\n"
+               "  !softrestart   reconnect and restart the engine after this game\n"
                "  !resign, !abort, !draw   act on the game now\n"
                "  !challenge, !nochallenge   challenge other bots when idle, or only accept\n"
                "the same commands work typed here, without the !; help lists them; only here:\n"

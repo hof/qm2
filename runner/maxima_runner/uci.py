@@ -1,6 +1,10 @@
 """Asynchronous UCI sessions using python-chess, with bounded process cleanup."""
 import asyncio
 from contextlib import asynccontextmanager
+import json
+import os
+from pathlib import Path
+import re
 import time
 
 import chess.engine
@@ -9,6 +13,21 @@ from .variants import royal_losers_board, orthodox_wild_board
 
 
 guess_seconds = 0.2  # the quick search that guesses a reply outside the book, on the opponent's clock
+uci_move = re.compile(r"(?:[a-h][1-8]){2}[nbrq]?|0000")
+
+
+def root_pv_info(line):
+    """Keep the root move without decoding unused continuation moves in self-play."""
+    if not line.startswith("info ") or " pv " not in line:
+        return line
+    tokens = line.split()
+    pv = tokens.index("pv")
+    if "string" in tokens[:pv] or pv + 1 == len(tokens):
+        return line
+    end = pv + 2
+    while end < len(tokens) and uci_move.fullmatch(tokens[end]):
+        end += 1
+    return " ".join(tokens[:pv + 2] + tokens[end:])
 
 
 class online_protocol(chess.engine.UciProtocol):
@@ -28,6 +47,7 @@ class online_protocol(chess.engine.UciProtocol):
         self.search_started = None
         self.search_seconds = None
         self.log = None  # takes every line to and from the engine
+        self.root_pv_only = False
 
     def send_line(self, line):
         if self.log is not None:
@@ -40,6 +60,7 @@ class online_protocol(chess.engine.UciProtocol):
         elif line.startswith("go ") or line == "ponderhit":
             self.collecting = True
             self.search_started = time.monotonic()
+            self.search_seconds = None
             self.ponder_seconds = (self.search_started - self.ponder_started
                                    if line == "ponderhit" and self.ponder_started is not None else None)
             self.hit_info = dict(self.ponder_info) if line == "ponderhit" else {}
@@ -55,8 +76,6 @@ class online_protocol(chess.engine.UciProtocol):
             self.on_search_started(line == "ponderhit")
 
     def line_received(self, line):
-        if self.log is not None:
-            self.log("< " + line)
         if line.startswith("bestmove ") and self.collecting and self.search_started is not None:
             self.search_seconds = time.monotonic() - self.search_started
         if line.startswith("info ") and (not self.collecting or self.evidence is not None):
@@ -74,6 +93,38 @@ class online_protocol(chess.engine.UciProtocol):
         super().line_received(line)
 
     def _line_received(self, line):
+        if self.log is not None:
+            self.log("< " + line)
+        if self.root_pv_only:
+            line = root_pv_info(line)
+            analysis = getattr(self.command, "analysis", None)
+            if analysis is not None and line.startswith(("info ", "bestmove ")):
+                # The pinned generator trusts engine moves. Keep python-chess's
+                # command lifecycle, but skip its repeated board copies and legality checks.
+                self.line_received(line)
+                command = self.command
+                try:
+                    if line.startswith("info "):
+                        report = chess.engine._parse_uci_info(
+                            line[5:], self.board, chess.engine.INFO_BASIC | chess.engine.INFO_SCORE)
+                        if " pv " in line and "string" not in report:
+                            report["pv"] = [chess.Move.from_uci(line.split(" pv ", 1)[1].split()[0])]
+                        analysis.post(report)
+                    else:
+                        if not self.command.result.done():
+                            raise chess.engine.EngineError("bestmove before search readiness")
+                        tokens = line.split()
+                        move = None if tokens[1] in ("(none)", "NULL") else chess.Move.from_uci(tokens[1])
+                        ponder = chess.Move.from_uci(tokens[3]) if len(tokens) > 3 and tokens[2] == "ponder" else None
+                        command.set_finished()
+                        analysis.set_finished(chess.engine.BestMove(move, ponder))
+                except (ValueError, IndexError, chess.engine.EngineError) as error:
+                    failure = chess.engine.EngineError(str(error))
+                    analysis.set_exception(failure)
+                    if not command.result.done():
+                        command.result.set_exception(failure)
+                    command.set_finished()
+                return
         # Setup notes (NNUE loaded, Syzygy pieces) arrive outside a search: the log keeps them,
         # python-chess would warn about them. Failures still warn.
         setup = self.command is None or type(self.command).__name__ in (
@@ -156,6 +207,17 @@ class engine_session:
         self.pondering = False
         self.ponder_fen = None
         self.nps = None  # the latest search speed, kept across games
+        self.last_search_seconds = None
+        self.idle_control = os.environ.get("MAXIMA_BACKGROUND_IDLE_CONTROL") or (os.environ.get("MAXIMA_GENERATION_IDLE_CONTROL")
+                             if getattr(protocol, "root_pv_only", False) else None)
+        self.generation_permission = None
+
+    async def wait_for_generation_idle(self):
+        """Pause at a bounded search boundary, outside response deadlines."""
+        if self.generation_permission is None:
+            from .idle_work import generation_permission
+            self.generation_permission = generation_permission(self.idle_control)
+        await self.generation_permission.wait()
 
     @property
     def identity(self):
@@ -291,7 +353,32 @@ class engine_session:
         deadline = self.timeout if timeout is None else timeout
         if ceiling is not None:
             deadline = min(deadline, ceiling + min(self.timeout, 2))
-        return await asyncio.wait_for(play_search(), deadline)
+        searching = asyncio.ensure_future(play_search())
+        try:
+            done, _ = await asyncio.wait({searching}, timeout=deadline)
+            if done:
+                return searching.result()
+            # Cancelling a python-chess command may itself wait for bestmove.
+            # Ask for a move, then kill an unresponsive process before cancelling.
+            self.protocol.send_line("stop")
+            done, _ = await asyncio.wait({searching}, timeout=min(.1, max(.001, deadline * .05)))
+            if done:
+                return searching.result()
+            self.protocol.transport.kill()
+            searching.cancel()
+            await asyncio.wait({searching}, timeout=.1)
+            raise asyncio.TimeoutError("engine ignored stop at the clock safety deadline")
+        except asyncio.CancelledError:
+            searching.cancel()
+            done, _ = await asyncio.wait({searching}, timeout=.1)
+            if not done:
+                self.protocol.transport.kill()
+            raise
+        finally:
+            if searching.done() and not searching.cancelled():
+                searching.exception()
+            elif not searching.done():
+                searching.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
 
     async def stop_pondering(self):
         """Stop background work without changing the game or clearing its hash."""
@@ -299,14 +386,23 @@ class engine_session:
             self.pondering = False
             await asyncio.wait_for(self.protocol.ping(), self.timeout)
 
-    async def search(self, board, limit, *, game=None, on_info=None):
+    async def search(self, board, limit, *, game=None, on_info=None, root_moves=None):
+        if self.idle_control:
+            await self.wait_for_generation_idle()
+        self.last_search_seconds = None
         settings = self.variant_settings(board)
+        arguments = {}
+        if root_moves is not None:
+            moves = list(root_moves)
+            if not moves or any(move not in board.legal_moves for move in moves):
+                raise ValueError("search root moves must be a nonempty legal subset")
+            arguments['root_moves'] = moves
         started = time.monotonic()
         analysis = None
 
         async def consume():
             nonlocal analysis
-            analysis = await self.protocol.analysis(board, limit, game=game, options=settings)
+            analysis = await self.protocol.analysis(board, limit, game=game, options=settings, **arguments)
             async for info in analysis:
                 if info.get("multipv", 1) == 1 and on_info is not None:
                     on_info(info, (time.monotonic() - started) * 1000)
@@ -314,6 +410,7 @@ class engine_session:
 
         try:
             best = await asyncio.wait_for(consume(), self.timeout)
+            self.last_search_seconds = self.protocol.search_seconds
             return best, (time.monotonic() - started) * 1000
         finally:
             if analysis is not None:
@@ -329,14 +426,21 @@ class engine_session:
 
 
 @asynccontextmanager
-async def open_engine(command, directory, timeout=30, log=None):
-    transport = protocol = None
+async def open_engine(command, directory, timeout=30, log=None, *, root_pv_only=None):
+    if root_pv_only is None:
+        setting = os.environ.get("MAXIMA_UCI_ROOT_PV_ONLY", "0")
+        if setting not in ("0", "1"):
+            raise ValueError("MAXIMA_UCI_ROOT_PV_ONLY must be 0 or 1")
+        root_pv_only = setting == "1"
+    transport = protocol = session = None
     try:
         # Keep the transport before the handshake so every failure can reap it.
         transport, protocol = await online_protocol.popen(command, cwd=directory)
         protocol.log = log
+        protocol.root_pv_only = root_pv_only
         await asyncio.wait_for(protocol.initialize(), timeout)
-        yield engine_session(protocol, timeout)
+        session = engine_session(protocol, timeout)
+        yield session
     except asyncio.TimeoutError as error:
         if protocol is not None and protocol.returncode.done():
             raise RuntimeError(f"engine exited with status {protocol.returncode.result()}") from error
@@ -360,3 +464,5 @@ async def open_engine(command, directory, timeout=30, log=None):
                         pass
                 await asyncio.shield(protocol.returncode)
                 transport.close()
+        if session is not None and session.generation_permission is not None:
+            session.generation_permission.close()

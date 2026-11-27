@@ -41,3 +41,10 @@ def min_elo_summary(games, elo, maximum_pairs, alpha=0.05):
             'alpha': alpha, 'confidence': 1 - alpha, 'planned_checks': maximum_pairs,
             'completed_pairs': pairs, 'pentanomial': counts, 'a_score': score,
             'score_interval': interval, 'decision_eligible': eligible, 'decision': decision}
+
+
+def futility_summary(games, maximum_pairs, alpha):
+    """Reject clear inferiority only; never authorize promotion from this bound."""
+    result = min_elo_summary(games, 0, maximum_pairs, alpha)
+    result['decision'] = 'futility_rejection' if result['decision'] == 'below_minimum_gain' else 'continue'
+    return result
