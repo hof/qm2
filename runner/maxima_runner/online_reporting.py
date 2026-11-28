@@ -155,7 +155,7 @@ class online_reporter:
                        game=event['game'], url=event.get('url'))
 
     def summary(self, day):
-        wins = draws = losses = 0
+        totals = {}
         for path in (self.root/'games').glob('*.json'):
             row = json.loads(path.read_text())
             if datetime.fromtimestamp(row['at'],self.zone).date().isoformat() != day:
@@ -163,15 +163,20 @@ class online_reporter:
             headers = row.get('headers') or {}
             result = row.get('result')
             color = headers.get('LearningColor')
-            if result == '*' or color not in ('white','black'):
+            if result not in ('1-0','0-1','1/2-1/2') or color not in ('white','black'):
                 continue
-            elif result == '1/2-1/2':
-                draws += 1
-            elif result == ('1-0' if color == 'white' else '0-1'):
-                wins += 1
-            else:
-                losses += 1
-        return f'{datetime.fromisoformat(day).strftime("%d/%m/%y")} +{wins} ={draws} -{losses}'
+            variant = headers.get('Variant', 'Standard')
+            label = ('W17' if variant.casefold() in ('royal losers','fics losers','losers','wild/17') else
+                     'Chess' if variant.casefold() in ('standard','normal','chess') else variant)
+            counts = totals.setdefault(label, [0, 0, 0])
+            outcome = 1 if result == '1/2-1/2' else 0 if result == ('1-0' if color == 'white' else '0-1') else 2
+            counts[outcome] += 1
+        date = datetime.fromisoformat(day).strftime('%d/%m/%y')
+        if self.platform == 'fics' and any(label != 'Chess' for label in totals):
+            return date + ''.join(f'\n{label}: +{counts[0]} ={counts[1]} -{counts[2]}'
+                                  for label, counts in sorted(totals.items(), key=lambda item: (item[0] != 'Chess', item[0])))
+        wins, draws, losses = (sum(counts[index] for counts in totals.values()) for index in range(3))
+        return f'{date} +{wins} ={draws} -{losses}'
 
     def recent_games(self, limit=10):
         games = []
