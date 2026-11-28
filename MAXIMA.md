@@ -2317,6 +2317,14 @@ provider or worker addresses. The durable sequence is generation, training,
 native verification, paired SPRT, conditional deployment, then preparation of the
 next batch. Adapters return pending, blocked or complete receipts. Completed
 artifacts are checksum-pinned, and a restart resumes the recorded stage.
+The notification adapter receives short progress updates at generation milestones
+(every 10 million accepted positions by default; `policy.progress_positions`
+changes the interval), stage completion, confirmed training/test starts, and
+promotion decisions. Pending generation responses can include
+`progress: {"positions": N, "target": N}`; pending training/test responses set
+`started: true` once work has launched. Notices are queued durably and deduplicated
+across restarts. Training completion is announced only after backup and GPU
+shutdown receipts pass validation.
 
 A rejected or inconclusive candidate leaves the playing champion unchanged and
 continues the latest completed model, Adam and RNG checkpoint on the next batch.

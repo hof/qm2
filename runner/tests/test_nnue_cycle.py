@@ -24,7 +24,7 @@ class cycle_tests(unittest.TestCase):
         self.file = file
         initial = {key: file(key, {'initial': key}) for key in ('champion', 'checkpoint', 'parent_manifest')}
         self.config = dict(version=1, state_dir=str(self.root/'state'),
-                           policy=dict(batch_positions=50, plateau_positions=100),
+                           policy=dict(batch_positions=50, plateau_positions=100, progress_positions=10),
                            initial=initial, promotion_targets=['first', 'second'],
                            commands={key: ['unused'] for key in (*cycle.stages, 'notify')},
                            test=dict(elo0=0, elo1=10, alpha=.05, beta=.05, nodes=5000, hash_mb=16,
@@ -55,6 +55,49 @@ class cycle_tests(unittest.TestCase):
             with patch.object(recovered, 'invoke', side_effect=RuntimeError('delivery unavailable')):
                 self.assertFalse(recovered.tick())
                 self.assertIsNotNone(recovered.state['notice'])
+
+    def test_notification_queue_survives_outage_and_deduplicates_after_restart(self):
+        self.worker.notify('first event', key='first')
+        self.worker.notify('incident', alert=True, key='second')
+        recovered = cycle.training_cycle(self.path)
+        with patch.object(recovered, 'invoke', side_effect=RuntimeError('delivery unavailable')):
+            recovered.flush_notice()
+        recovered = cycle.training_cycle(self.path)
+        recovered.notify('first event', key='first')
+        received = []
+        def deliver(stage):
+            self.assertEqual(stage, 'notify')
+            received.append(recovered.state['notice'].copy())
+            return {'status': 'complete'}
+        with patch.object(recovered, 'invoke', side_effect=deliver):
+            recovered.flush_notice()
+            recovered.flush_notice()
+        recovered.notify('incident', alert=True, key='second')
+        self.assertIsNone(recovered.state['notice'])
+        self.assertEqual(len({notice['id'] for notice in received}), 2)
+        self.assertTrue(received[1]['alert'])
+
+    def test_progress_skips_old_milestones_and_survives_restart(self):
+        self.worker.report_progress('generate', {'progress': {'positions': 35, 'target': 50}})
+        recovered = cycle.training_cycle(self.path)
+        recovered.report_progress('generate', {'progress': {'positions': 36, 'target': 50}})
+        self.assertEqual(len(recovered.state['notice_ids']), 1)
+        recovered.report_progress('generate', {'progress': {'positions': 41, 'target': 50}})
+        self.assertEqual(len(recovered.state['notice_ids']), 2)
+        self.assertEqual(recovered.state['stage'], 'generate')
+        with self.assertRaises(ValueError):
+            recovered.report_progress('generate', {'progress': {'positions': 51, 'target': 50}})
+
+    def test_stage_start_is_announced_once_without_completing_work(self):
+        for stage in ('train', 'test'):
+            self.worker.state['stage'] = stage
+            for _ in range(2):
+                self.worker.report_progress(stage, {'started': True})
+        recovered = cycle.training_cycle(self.path)
+        recovered.report_progress('test', {'started': True})
+        self.assertEqual(len(recovered.state['notice_ids']), 2)
+        self.assertEqual(recovered.state['receipts'], {})
+        self.assertEqual(recovered.state['stage'], 'test')
 
     def test_rejection_keeps_champion_and_continues_latest_optimizer_then_plateau(self):
         state = self.worker.state

@@ -138,7 +138,9 @@ class training_cycle:
         self.path = self.root / 'state.json'
         policy = self.config['policy']
         if (type(policy['batch_positions']) is not int or policy['batch_positions'] <= 0
-                or policy['plateau_positions'] < policy['batch_positions']):
+                or policy['plateau_positions'] < policy['batch_positions']
+                or type(policy.get('progress_positions', 10_000_000)) is not int
+                or policy.get('progress_positions', 10_000_000) <= 0):
             raise ValueError('invalid training or plateau budget')
         test = self.config['test']
         sprt.validate_sprt(test['elo0'], test['elo1'], test['alpha'], test['beta'])
@@ -181,9 +183,18 @@ class training_cycle:
             raise ValueError('invalid cycle adapter response')
         return result
 
-    def notify(self, message, alert=False):
-        self.state['notice'] = dict(message=message, alert=alert,
-                                    id=f"cycle-{self.state['iteration']}-{self.state['stage']}-{hashlib.sha256(message.encode()).hexdigest()[:12]}")
+    def notify(self, message, alert=False, key=None):
+        key = key or self.state['stage'] + '-' + hashlib.sha256(message.encode()).hexdigest()[:12]
+        identity = f"cycle-{self.state['iteration']}-{key}"
+        identities = self.state.setdefault('notice_ids', [])
+        if identity in identities:
+            return
+        identities.append(identity)
+        notice = dict(message=message, alert=alert, id=identity)
+        if self.state['notice']:
+            self.state.setdefault('notice_queue', []).append(notice)
+        else:
+            self.state['notice'] = notice
         self.persist()
 
     def flush_notice(self):
@@ -191,10 +202,27 @@ class training_cycle:
             try:
                 result = self.invoke('notify')
                 if result['status'] == 'complete':
-                    self.state['notice'] = None
+                    queue = self.state.setdefault('notice_queue', [])
+                    self.state['notice'] = queue.pop(0) if queue else None
                     self.persist()
             except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
                 pass  # Notice is durable; a delivery outage never loses the incident.
+
+    def report_progress(self, stage, result):
+        if stage == 'generate' and 'progress' in result:
+            progress = result['progress']
+            positions, target = progress['positions'], progress['target']
+            if (type(positions) is not int or type(target) is not int
+                    or target != self.config['policy']['batch_positions'] or not 0 <= positions <= target):
+                raise ValueError('invalid generation progress')
+            milestone = positions // self.config['policy'].get('progress_positions', 10_000_000)
+            if milestone > self.state.get('generation_milestone', 0) and positions < target:
+                self.state['generation_milestone'] = milestone
+                self.notify(f'Self-play: {positions:,} / {target:,} positions ({positions / target:.0%}).',
+                            key=f'generate-progress-{milestone}')
+        elif stage in ('train', 'test') and result.get('started') is True:
+            self.notify('GPU training started.' if stage == 'train' else 'SPRT started against the current champion.',
+                        key=stage + '-started')
 
     def validate(self, stage, receipt):
         state = self.state
@@ -253,6 +281,7 @@ class training_cycle:
         try:
             result = self.invoke(stage)
             if result['status'] != 'complete':
+                self.report_progress(stage, result)
                 reason = result.get('reason') if result['status'] == 'blocked' else None
                 if reason and state.get('blocked') != reason:
                     state['blocked'] = reason
@@ -265,6 +294,7 @@ class training_cycle:
             save(self.root / f"iteration-{state['iteration']:06d}-{stage}.json", receipt)
             if stage == 'test' and receipt['decision'] != 'accept_h1':
                 state['stage'] = 'advance'
+                self.notify('SPRT finished: the candidate did not pass. Keeping the current champion.', key='test-finished')
             elif stage == 'promote':
                 state['champion'] = state['receipts']['train']['network']
                 state['without_promotion'] = 0
@@ -280,6 +310,7 @@ class training_cycle:
                                                decision=state['receipts']['test']['decision']))
                 state['iteration'] += 1
                 state['stage'], state['receipts'] = 'generate', {}
+                state.pop('generation_milestone', None)
                 if state['without_promotion'] >= self.config['policy']['plateau_positions']:
                     state['hold'] = 'plateau'
                     self.notify('Self-training paused for plateau review; online play continues.', alert=True)
@@ -287,6 +318,13 @@ class training_cycle:
                     self.notify('Training iteration finished; the next fresh position batch is starting.')
             else:
                 state['stage'] = stages[stages.index(stage) + 1]
+                messages = {
+                    'generate': f"Position batch ready: {self.config['policy']['batch_positions']:,} positions. Preparing GPU training.",
+                    'train': 'Training finished. Backup verified and GPU shut down. Checking the candidate.',
+                    'verify': 'Candidate verified. Waiting for SPRT to start.',
+                    'test': 'SPRT passed. Promoting the new champion.',
+                }
+                self.notify(messages[stage], key=stage + '-finished')
             self.persist()
             return True
         except (OSError, ValueError, KeyError, RuntimeError, subprocess.TimeoutExpired):
