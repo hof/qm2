@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import random
+import signal
 import subprocess
 import sys
 import tempfile
@@ -31,6 +32,21 @@ class recipe_tests(unittest.TestCase):
 
     def write_config(self):
         self.path.write_text(json.dumps(self.config))
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX process-group shutdown')
+    def test_requested_stop_reaps_a_process_which_ignores_termination(self):
+        process = subprocess.Popen([sys.executable, '-u', '-c',
+            'import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); print("ready",flush=True); time.sleep(60)'],
+            stdout=subprocess.PIPE, text=True, start_new_session=True)
+        def cleanup():
+            if process.poll() is None:
+                nnue_recipe.terminate_generation(process, force=True)
+                process.wait(timeout=5)
+            process.stdout.close()
+        self.addCleanup(cleanup)
+        self.assertEqual(process.stdout.readline().strip(), 'ready')
+        nnue_recipe.stop_generation(process, timeout=.05)
+        self.assertEqual(process.returncode, -signal.SIGKILL)
 
     def chunk(self, controller, job, rows):
         path=self.root/(job['id']+'.mxdata')

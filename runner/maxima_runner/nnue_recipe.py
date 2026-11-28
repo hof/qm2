@@ -429,6 +429,16 @@ def terminate_generation(process, force=False):
         pass
 
 
+def stop_generation(process, timeout=5):
+    """Escalate a requested background stop and confirm that its child is reaped."""
+    terminate_generation(process)
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        terminate_generation(process, force=True)
+        process.wait(timeout=5)
+
+
 class generation_worker:
     def __init__(self, config, stopping=None):
         self.config=config
@@ -525,14 +535,13 @@ class generation_worker:
                         if time.monotonic()-stopped>30:break
                     time.sleep(.5)
                 if process.poll() is None:
-                    terminate_generation(process)
-                    process.wait(timeout=5)
+                    stop_generation(process)
                 if process.returncode and stopped is None:
                     raise RuntimeError('generation process failed; completed game files are retained')
         finally:
             if process is not None and process.poll() is None:
                 terminate_generation(process,force=True)
-                process.wait()
+                process.wait(timeout=5)
         if not settings.exists() and stopped is not None:
             pid_file.unlink(missing_ok=True)
             return dict(status=status)
