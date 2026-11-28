@@ -87,7 +87,7 @@ search, NNUE evaluation, Syzygy tablebases, and experimental royal-losers suppor
 
 - `src/`: engine, UCI handling, board state, move generation, search, NNUE
   evaluation, hash tables, time management, and Polyglot opening-book support.
-- `src/w17/`: royal-losers search and material-only evaluation.
+- `src/w17/`: royal-losers search and handcrafted evaluation.
 - `src/tablebase.*`: Maxima's Syzygy adapter and probing policies.
 - `third_party/fathom/`: pinned MIT-licensed table decoder.
 - `tests/`: native correctness tests and raw-UCI lifecycle tests.
@@ -109,6 +109,10 @@ proven bound. Royal losers (`Wild=losers`) has its own search in `src/w17/` and
 shares only the root driver; the rules in this chapter apply to standard chess.
 
 The losers search is one PVS tree for both sides with a material evaluation.
+When only one side has non-pawn pieces, the usual large piece bonus is withheld
+if every pawn is blocked head-on by an enemy pawn and neither side has a pawn
+capture. The remaining material score is a heuristic; search still decides
+forced wins and rule draws.
 Every move costs a ply. Captures are compulsory past the horizon too, and in check
 every evasion is searched. A quiet node past the horizon stands pat, unless its
 side is in a streak: its last quiet move was answered by forced moves only. That
@@ -2631,7 +2635,7 @@ by that move uses the atomic FICS `draw <move>` command. An immediate winning
 move takes precedence over a draw claim.
 
 W17 supports FICS **royal losers**: kings remain royal, captures are compulsory,
-and king-only, checkmate and stalemate win. It retains material-only evaluation;
+and king-only, checkmate and stalemate win. It uses handcrafted evaluation;
 protocol/correctness checks do not establish current competitive strength.
 During the opening of a losers game, an opponent who hesitates when a capture
 is compulsory can receive a short rules explanation through FICS game chat.

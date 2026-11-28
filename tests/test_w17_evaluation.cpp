@@ -19,6 +19,9 @@ bool test_scores() {
         "7k/7p/8/8/8/2K5/8/1R6", "7k/7p/8/8/P7/2K5/8/1R6",
         "6rk/8/8/8/P7/2K5/8/8", "6rk/7p/8/8/P7/2K5/8/8",
         "6rk/8/8/8/P7/2K5/8/1R6", "6rk/7p/8/8/8/2K5/8/1R6",
+        "8/5B2/8/8/p7/P3k3/6K1/8", "8/5B2/8/p7/8/P3k3/6K1/8",
+        "8/5B2/8/8/pp6/PP2k3/6K1/8", "8/5B2/8/1p6/pP6/P3k3/6K1/8",
+        "8/5B2/7p/8/p7/P3k3/6K1/8",
     };
     bool success = true;
     for (const char * position : positions) {

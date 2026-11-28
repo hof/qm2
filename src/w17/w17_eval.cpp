@@ -27,6 +27,16 @@
 
 int w17_eval_material(w17_search_t * s);
 
+namespace {
+
+bool pawns_locked(board_t & brd) {
+    return UP1(brd.bb[WPAWN]) == brd.bb[BPAWN]
+        && !(brd.pawn_attacks(WHITE) & brd.bb[BPAWN])
+        && !(brd.pawn_attacks(BLACK) & brd.bb[WPAWN]);
+}
+
+}
+
 int w17_evaluate(w17_search_t * s) {
     const bool us = s->brd.us();
     const int result = w17_eval_material(s);
@@ -80,7 +90,9 @@ int w17_eval_material(w17_search_t * s) {
             result = score::WIN - wpieces * 100;
             break;
         case 7: //wpawns + bpawns + wpieces
-            result = score::WIN / 2 + 100 * (bpawns + wpieces - wpawns);
+            // Locked pawns cannot promote without first breaking the blockade.
+            // A spare piece alone does not establish forced progress here.
+            result = (pawns_locked(*brd) ? 0 : score::WIN / 2) + 100 * (bpawns + wpieces - wpawns);
             break;
         case 8: //only bpieces
             assert(false);
@@ -94,7 +106,7 @@ int w17_eval_material(w17_search_t * s) {
             result = -score::WIN;
             break;
         case 11: //wpawns + bpawns + bpieces
-            result = -score::WIN / 2 - 100 * (wpawns + bpieces - bpawns);
+            result = (pawns_locked(*brd) ? 0 : -score::WIN / 2) - 100 * (wpawns + bpieces - bpawns);
             break;
         case 12: //wpieces + bpieces
             result = (wpieces - bpieces) * 100;
