@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import shutil
 import time
@@ -54,7 +55,13 @@ def event_text(event, detailed=False):
     elif kind == 'quarantined':
         text = '⛔ ' + label + ' is offline and awaiting review.'
     elif kind == 'daily_summary':
-        text = '📊 ' + label + ' · ' + event.get('message', '')
+        message = event.get('message', '')
+        previous = re.fullmatch(r'(\d{2}/\d{2}/\d{4}) · W-D-L: (\d+)-(\d+)-(\d+) \(tracked\); aborted/unresolved: \d+', message)
+        if previous:
+            day, wins, draws, losses = previous.groups()
+            day = datetime.strptime(day, '%d/%m/%Y').strftime('%d/%m/%y')
+            message = f'{day} +{wins} ={draws} -{losses}'
+        text = label + ' ' + message
     elif kind == 'titled_opponent':
         text = '♟ ' + label + ' · Playing ' + event['title'] + ' ' + event['name']
         if event.get('rating') is not None:
@@ -148,7 +155,7 @@ class online_reporter:
                        game=event['game'], url=event.get('url'))
 
     def summary(self, day):
-        wins = draws = losses = unresolved = 0
+        wins = draws = losses = 0
         for path in (self.root/'games').glob('*.json'):
             row = json.loads(path.read_text())
             if datetime.fromtimestamp(row['at'],self.zone).date().isoformat() != day:
@@ -157,14 +164,14 @@ class online_reporter:
             result = row.get('result')
             color = headers.get('LearningColor')
             if result == '*' or color not in ('white','black'):
-                unresolved += 1
+                continue
             elif result == '1/2-1/2':
                 draws += 1
             elif result == ('1-0' if color == 'white' else '0-1'):
                 wins += 1
             else:
                 losses += 1
-        return f'{datetime.fromisoformat(day).strftime("%d/%m/%Y")} · W-D-L: {wins}-{draws}-{losses} (tracked); aborted/unresolved: {unresolved}'
+        return f'{datetime.fromisoformat(day).strftime("%d/%m/%y")} +{wins} ={draws} -{losses}'
 
     def recent_games(self, limit=10):
         games = []
