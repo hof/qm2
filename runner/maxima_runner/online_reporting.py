@@ -172,11 +172,12 @@ class online_reporter:
             outcome = 1 if result == '1/2-1/2' else 0 if result == ('1-0' if color == 'white' else '0-1') else 2
             counts[outcome] += 1
         date = datetime.fromisoformat(day).strftime('%d/%m/%y')
-        if self.platform == 'fics' and any(label != 'Chess' for label in totals):
-            return date + ''.join(f'\n{label}: +{counts[0]} ={counts[1]} -{counts[2]}'
-                                  for label, counts in sorted(totals.items(), key=lambda item: (item[0] != 'Chess', item[0])))
         wins, draws, losses = (sum(counts[index] for counts in totals.values()) for index in range(3))
-        return f'{date} +{wins} ={draws} -{losses}'
+        text = f'{date} +{wins} ={draws} -{losses}'
+        if self.platform == 'fics':
+            text += ''.join(f' {label}: +{counts[0]} ={counts[1]} -{counts[2]}'
+                            for label, counts in sorted(totals.items()) if label != 'Chess')
+        return text
 
     def recent_games(self, limit=10):
         games = []
