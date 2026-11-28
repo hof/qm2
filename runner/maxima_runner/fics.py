@@ -1416,6 +1416,7 @@ class engine_player:
         if move is None or not board.is_legal(move):
             await self.engine_failure(ValueError("engine returned no legal move"), board, remaining_clock(clock, self.position_received_at))
             return
+        claim = fics_game.draw_claim(board, move)
         fresh = self.loss.on_search(board, move, info, kind) if not self.is_losers else False
         latest = self.latest_position
         received_at = self.position_received_at if self.position_received_at is not None else started
@@ -1430,22 +1431,32 @@ class engine_player:
             speed=created.get("type"),
             ours=ours_left, theirs=theirs_left,
             increment=latest.increment_seconds, info=info, board=board) if fresh and not self.is_losers else None
-        if evidence is not None:
+        if evidence is not None and claim is None:
             self.loss.sent = True
             self.on_line(f"-- resigning game {self.game}: {json.dumps(evidence)}")
             await self.send("resign")
             return
         ahead = move_choice.winning_on_time(ours_left, theirs_left, latest.increment_seconds,
                                             bool(self.opponent and self.opponent.is_engine))
-        accepting = self.draw_offered and move_choice.accept_draw(board, info, self.draw_score, ahead)
-        offering = self.draw_offers.due(info, self.draw_score, ahead, board=board) and not accepting and not self.is_losers
+        accepting = claim is None and self.draw_offered and move_choice.accept_draw(board, info, self.draw_score, ahead)
+        offering = claim is None and self.draw_offers.due(info, self.draw_score, ahead, board=board) and not accepting and not self.is_losers
         if accepting:
             # Accept, and move too: a withdrawn offer must not leave our clock running.
             self.on_line("-- accepting the draw offer")
             await self.send("draw")
         self.draw_offered = False
         self.abort_position = move_choice.opening_abort_position(board, move, info, kind, self.draw_score)
-        await self.send(fics_game.ics_move(move))
+        if claim is not None:
+            self.on_line('-- claiming a rule draw')
+            await self.send(claim)
+            if self.token is not token:
+                return
+        if claim is None or claim == 'draw':
+            # A rejected claim must not leave our clock running. FICS processes
+            # the claim first; if granted, the fallback move is harmless.
+            if self.token is not token:
+                return
+            await self.send(fics_game.ics_move(move))
         if offering:
             self.on_line("-- offering a draw")
             await self.send("draw")

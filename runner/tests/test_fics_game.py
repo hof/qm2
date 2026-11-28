@@ -15,6 +15,7 @@ import chess.polyglot
 
 from maxima_runner import connectors, fics, fics_game, learning, move_choice, online_tablebase
 from maxima_runner.uci import open_engine
+from maxima_runner.variants import royal_losers_board
 
 observed = (Path(__file__).parent / "data" / "fics_observed_game.txt").read_text().splitlines()
 start = ("<12> rnbqkbnr pppppppp -------- -------- -------- -------- PPPPPPPP RNBQKBNR W -1 1 1 1 1 0 17 "
@@ -24,6 +25,35 @@ after_e4 = ("<12> rnbqkbnr pppppppp -------- -------- ----P--- -------- PPPP-PPP
 
 
 class style12_tests(unittest.TestCase):
+    def test_rule_claim_precedes_a_compulsory_losing_capture(self):
+        board = royal_losers_board('8/8/5k2/8/p7/P2K4/8/3B4 w - - 105 83')
+        move = chess.Move.from_uci('d1a4')
+        self.assertEqual(list(board.legal_moves), [move])
+        self.assertEqual(fics_game.draw_claim(board, move), 'draw')
+        self.assertEqual(board.halfmove_clock, 105)
+        board.halfmove_clock = 99
+        self.assertIsNone(fics_game.draw_claim(board, move))
+
+    def test_intended_rule_claim_requires_the_selected_move_to_draw(self):
+        board = royal_losers_board('8/5B2/8/8/p2K4/P4k2/8/8 w - - 99 80')
+        self.assertEqual(fics_game.draw_claim(board, chess.Move.from_uci('f7h5')), 'draw f7h5')
+        self.assertEqual(board.halfmove_clock, 99)
+        normal = chess.Board()
+        for word in 'g1f3 g8f6 f3g1 f6g8 g1f3 g8f6 f3g1'.split():
+            normal.push_uci(word)
+        self.assertEqual(fics_game.draw_claim(normal, chess.Move.from_uci('f6g8')), 'draw f6g8')
+        self.assertIsNone(fics_game.draw_claim(normal, chess.Move.from_uci('e7e5')))
+        normal.push_uci('f6g8')
+        self.assertEqual(fics_game.draw_claim(normal, chess.Move.from_uci('e2e4')), 'draw')
+
+    def test_an_immediate_win_is_not_replaced_with_a_claim(self):
+        board = chess.Board('7k/8/5KQ1/8/8/8/8/8 w - - 100 1')
+        move = chess.Move.from_uci('g6g7')
+        self.assertTrue(board.is_legal(move))
+        after = board.copy(); after.push(move)
+        self.assertTrue(after.is_checkmate())
+        self.assertIsNone(fics_game.draw_claim(board, move))
+
     def test_parses_recorded_game(self):
         boards = [fics_game.style12.parse(line) for line in observed if line.startswith("<12>")]
         self.assertEqual(len(boards), 16)

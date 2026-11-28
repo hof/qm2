@@ -2625,6 +2625,10 @@ These commands and the server-dependent ad limit are described in
 The runner uses `Creating:` metadata to select the rules because style12 has no
 variant field. In mixed mode, an unidentified resumed board is ignored and
 logged rather than searched with guessed rules.
+The runner claims fifty-move and threefold-repetition draws in standard and
+royal-losers games. An existing claim precedes the selected move; a claim reached
+by that move uses the atomic FICS `draw <move>` command. An immediate winning
+move takes precedence over a draw claim.
 
 W17 supports FICS **royal losers**: kings remain royal, captures are compulsory,
 and king-only, checkmate and stalemate win. It retains material-only evaluation;

@@ -193,3 +193,21 @@ def ics_move(move):
     if move.promotion:
         text = text[:4] + "=" + chess.piece_symbol(move.promotion).upper()
     return text
+
+
+def draw_claim(board, move):
+    """Claim an existing rule draw, or announce the chosen drawing move atomically."""
+    if board.is_variant_end() or not any(board.legal_moves):
+        return None
+    after = board.copy()
+    after.push(move)
+    outcome = after.outcome(claim_draw=False)
+    if outcome is not None and outcome.winner == board.turn:
+        return None
+    if board.is_fifty_moves() or board.is_repetition(3):
+        return 'draw'
+    if after.is_variant_end() or not any(after.legal_moves):
+        return None
+    if after.is_fifty_moves() or after.is_repetition(3):
+        return 'draw ' + ics_move(move)
+    return None

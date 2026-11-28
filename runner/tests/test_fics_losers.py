@@ -36,6 +36,35 @@ def losers_game():
 
 
 class losers_policy_tests(unittest.IsolatedAsyncioTestCase):
+    async def test_rule_claims_are_sent_before_a_losing_move_or_with_the_intended_move(self):
+        cases = (
+            ('8/8/5k2/8/p7/P2K4/8/3B4 w - - 105 83', 'd1a4', ['draw', 'd1a4']),
+            ('8/5B2/8/8/p2K4/P4k2/8/8 w - - 99 80', 'f7h5', ['draw f7h5']),
+        )
+        for fen, word, commands in cases:
+            for accepted in (False, True):
+                with self.subTest(fen=fen, accepted=accepted):
+                    subject = player(losers=True)
+                    await subject.handle('Creating: Alpha (1500) Beta (1500) unrated losers 3 0')
+                    subject.on_board(position(royal_losers_board(fen)))
+                    subject.our_color = chess.WHITE
+                    subject.opponent_ready.set()
+                    subject.connection.sent.clear()
+                    original_send = subject.connection.send
+
+                    async def send(line, secret=False):
+                        await original_send(line, secret=secret)
+                        if accepted and line.startswith('draw'):
+                            subject.token = object()
+
+                    subject.connection.send = send
+                    move = chess.Move.from_uci(word)
+                    info = {'depth': 20, 'score': chess.engine.PovScore(chess.engine.Cp(0), chess.WHITE)}
+                    with patch.object(fics.move_choice, 'choose_move', AsyncMock(return_value=(move, info, 'engine'))):
+                        await subject.play(subject.latest_position, subject.history.board.copy())
+                    self.assertEqual(subject.connection.sent, commands[:1] if accepted else commands)
+                    self.assertEqual(subject.history.board.fen(), fen)
+
     def test_example_configuration_and_invalid_pool_settings(self):
         example = Path(__file__).resolve().parents[2] / 'docs' / 'fics-mixed.json'
         fics.load_settings(example)
